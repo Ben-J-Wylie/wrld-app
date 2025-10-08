@@ -1,23 +1,123 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# ────────────────────────────────
+#  WRLD MONOREPO .gitignore
+# ────────────────────────────────
 
-# dependencies
-/node_modules
-/.pnp
-.pnp.js
-
-# testing
-/coverage
-
-# production
-/build
-
-# misc
-.DS_Store
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
+### Node ###
+node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+*.log
+*.pid
+*.seed
+*.tsbuildinfo
+
+### Build output ###
+dist/
+build/
+out/
+.next/
+.cache/
+.temp/
+.turbo/
+.pnpm-store/
+
+### Environment ###
+.env
+.env.local
+.env.*.local
+.envrc
+*.env.backup
+
+### OS ###
+.DS_Store
+Thumbs.db
+Icon?
+ehthumbs.db
+Desktop.ini
+
+### IDEs & Editors ###
+.vscode/
+.idea/
+*.swp
+*.swo
+*.swn
+*.bak
+
+### TypeScript ###
+*.tsbuildinfo
+
+### Turborepo / pnpm ###
+.turbo/
+.pnpm-store/
+.pnpm-debug.log
+
+### React Native ###
+# Metro / Gradle / Xcode
+.expo/
+.expo-shared/
+android/.gradle/
+android/.idea/
+android/.cxx/
+android/local.properties
+android/app/build/
+android/build/
+ios/Pods/
+ios/build/
+ios/DerivedData/
+*.xcworkspace
+*.xcodeproj/project.xcworkspace/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/xcshareddata/
+*.xcuserstate
+*.xcuserdata/
+
+# React Native logs
+*.packager
+*.watchmanconfig
+*.keystore
+*.iml
+
+### Media server ###
+recordings/
+sessions/
+dumps/
+debug.log
+*.pcap
+*.trace
+
+### Prisma ###
+prisma/dev.db
+prisma/dev.db-journal
+prisma/migrations/.DS_Store
+
+### API uploads or temp ###
+uploads/
+tmp/
+temp/
+logs/
+coverage/
+
+# Local SSL certificates
+certs/
+*.pem
+*.key
+*.crt
+*.csr
+*.p12
+
+### Misc ###
+*.local
+*.bak
+*.tmp
+*.orig
+*.rej
+
+# lockfiles (you’ll have only one at root)
+package-lock.json
+yarn.lock
+
+# keep pnpm lock
+!pnpm-lock.yaml
