@@ -1,16 +1,22 @@
 import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
 import fs from 'fs'
 import path from 'path'
 
+const certDir = path.resolve(__dirname, '../../certs')
+const keyPath = path.join(certDir, 'localhost-key.pem')
+const certPath = path.join(certDir, 'localhost-cert.pem')
+
+const useHttps =
+  fs.existsSync(keyPath) && fs.existsSync(certPath)
+    ? {
+        key: fs.readFileSync(keyPath),
+        cert: fs.readFileSync(certPath),
+      }
+    : false
+
 export default defineConfig({
-  plugins: [react()],
   server: {
-    host: true, // allows LAN access
-    port: 5173,
-    https: {
-      key: fs.readFileSync(path.resolve(__dirname, '../../certs/localhost-key.pem')),
-      cert: fs.readFileSync(path.resolve(__dirname, '../../certs/localhost.pem')),
-    },
+    port: 3000,
+    https: useHttps,
   },
 })
