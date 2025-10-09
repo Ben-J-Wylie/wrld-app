@@ -1,3 +1,4 @@
+// apps/web/src/components/LoginForm.tsx
 import React, { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { useAuthModal } from "../context/AuthModalContext";
@@ -10,13 +11,12 @@ export default function LoginForm({
 }: {
   onLogin: (user: any) => void;
 }) {
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState(""); // 👈 can be email OR username
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const { openSignup, close } = useAuthModal(); // 👈 include close()
+  const { openSignup, close } = useAuthModal();
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -27,18 +27,22 @@ export default function LoginForm({
       const res = await fetch(`${API_BASE_URL}/api/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: identifier, password }), // 👈 backend checks if it's an email or username
       });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Login failed");
 
-      // ✅ Store token locally
       localStorage.setItem("wrld_token", data.token);
       localStorage.setItem("wrld_user", JSON.stringify(data.user));
 
-      onLogin(data.user); // 👈 updates App state
-      close(); // 👈 hides the modal
+      onLogin(data.user);
+      close();
+
+      // redirect new users to profile setup
+      if (!data.user.username) {
+        window.location.href = "/profile";
+      }
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -51,11 +55,12 @@ export default function LoginForm({
       <h2 className="form-title">Log In</h2>
 
       <input
-        type="email"
-        placeholder="Email address"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
+        type="text" // 👈 changed from "email"
+        placeholder="Email or username"
+        value={identifier}
+        onChange={(e) => setIdentifier(e.target.value)}
         className="form-input"
+        required // only checks non-empty, not email format
       />
 
       <div className="password-wrapper">
@@ -65,6 +70,7 @@ export default function LoginForm({
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           className="form-input password-input"
+          required
         />
         <button
           type="button"

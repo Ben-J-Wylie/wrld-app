@@ -46,25 +46,33 @@ authRouter.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
     if (!email || !password)
-      return res.status(400).json({ error: "Email and password are required." });
+      return res.status(400).json({ error: "Email or username and password required." });
 
-    // find user by email
-    const user = await prisma.user.findUnique({ where: { email } });
+    // detect if it's an email or username
+    const queryField = email.includes("@") ? { email } : { username: email };
+    const user = await prisma.user.findUnique({ where: queryField });
+
     if (!user)
-      return res.status(401).json({ error: "Invalid email or password." });
+      return res.status(401).json({ error: "Invalid credentials." });
 
-    // compare password
     const isMatch = await comparePassword(password, user.passwordHash);
     if (!isMatch)
-      return res.status(401).json({ error: "Invalid email or password." });
+      return res.status(401).json({ error: "Invalid credentials." });
 
-    // create JWT
     const token = createToken({ userId: user.id, email: user.email });
 
     res.json({
       message: "Login successful",
       token,
-      user: { id: user.id, email: user.email, username: user.username },
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        dob: user.dob,
+        avatarUrl: user.avatarUrl,
+      },
     });
   } catch (err) {
     console.error("❌ Login error:", err);

@@ -38,7 +38,7 @@ export default function Header({
               className="user-button"
               onClick={() => setMenuOpen((o) => !o)}
             >
-              <span className="user-email">{user.email}</span>
+              <span className="user-email">{user.username || user.email}</span>
               <ChevronDown size={16} style={{ marginLeft: 6 }} />
             </button>
 

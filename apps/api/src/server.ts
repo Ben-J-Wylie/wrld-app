@@ -9,6 +9,8 @@ import { authRouter } from "./routes/auth.js";
 import usersRouter from "./routes/users.js";
 import { PrismaClient } from "@prisma/client";
 import { fileURLToPath } from "url";
+import profileRouter from "./routes/profile.js";
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -34,6 +36,7 @@ app.use(express.json());
 // ✅ Routes
 app.use("/api/users", usersRouter);
 app.use("/api", authRouter);
+app.use("/api/profile", profileRouter);
 
 // ✅ Root endpoint
 app.get("/", (req, res) => {
