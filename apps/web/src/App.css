@@ -1,7 +1,443 @@
-body {
+/* --------------------------------------------------
+   WRLD – App Global Styles
+   Cinematic Dark Theme with Neon Accent
+-------------------------------------------------- */
+
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap");
+
+:root {
+  --bg-dark: #0a0c10;
+  --bg-gradient: radial-gradient(circle at 30% 10%, #0f2027 0%, #203a43 40%, #2c5364 100%);
+  --accent: #00e0ff;
+  --accent-dim: rgba(0, 224, 255, 0.25);
+  --text-light: #e0f7fa;
+  --text-muted: #9db4c0;
+  --white: #ffffff;
+  --glass-bg: rgba(255, 255, 255, 0.06);
+  --glass-border: rgba(255, 255, 255, 0.12);
+  --blur: blur(12px);
+  --transition: 0.25s ease-in-out;
+}
+
+/* --------------------------------------------------
+   Base Layout
+-------------------------------------------------- */
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
   margin: 0;
   padding: 0;
-  background-color: #0f2027;
-  color: white;
-  font-family: Inter, system-ui, sans-serif;
+  font-family: "Inter", sans-serif;
+  color: var(--text-light);
+  background: var(--bg-gradient);
+  overflow: hidden;
+}
+
+.app-container {
+  position: relative;
+  height: 100vh;
+  width: 100vw;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* --------------------------------------------------
+   Animated Background Glow
+-------------------------------------------------- */
+
+.background-glow {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 60% 40%, rgba(0, 224, 255, 0.08), transparent 60%),
+              radial-gradient(circle at 20% 80%, rgba(0, 224, 255, 0.06), transparent 60%);
+  filter: blur(120px);
+  z-index: 0;
+  pointer-events: none;
+  animation: pulseGlow 12s infinite alternate ease-in-out;
+}
+
+@keyframes pulseGlow {
+  from { opacity: 0.8; transform: scale(1); }
+  to { opacity: 0.5; transform: scale(1.05); }
+}
+
+/* --------------------------------------------------
+   Header
+-------------------------------------------------- */
+
+.header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  padding: 1.5rem 2rem;
+  display: flex;
+  justify-content: flex-start;
+  gap: 1.5rem;
+  z-index: 10;
+  box-sizing: border-box;
+}
+
+.nav-link {
+  background: none;
+  border: none;
+  color: var(--text-light);
+  font-weight: 600;
+  font-size: 1rem;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: color var(--transition);
+}
+
+.nav-link:hover {
+  color: var(--accent);
+}
+
+/* --------------------------------------------------
+   Hero Section
+-------------------------------------------------- */
+
+.hero {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+  position: relative;
+  text-align: center;
+}
+
+.hero-content {
+  width: 100%;
+  padding: 0 2rem;
+  box-sizing: border-box;
+}
+
+.hero-title {
+  font-size: clamp(2.5rem, 6vw, 5rem);
+  font-weight: 700;
+  margin-bottom: 1rem;
+  letter-spacing: -1px;
+  color: var(--white);
+}
+
+.hero-title span {
+  color: var(--accent);
+  text-shadow: 0 0 15px var(--accent-dim);
+}
+
+.hero-subtitle {
+  font-size: clamp(1rem, 2vw, 1.5rem);
+  color: var(--text-muted);
+  line-height: 1.6;
+  margin: 0 auto;
+}
+
+/* --------------------------------------------------
+   Modal Overlay
+-------------------------------------------------- */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(5, 8, 10, 0.8);
+  backdrop-filter: var(--blur);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* --------------------------------------------------
+   Modal Container
+-------------------------------------------------- */
+
+.modal {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 18px;
+  padding: 2rem;
+  width: 100%;
+  max-width: 420px;
+  box-shadow: 0 0 25px rgba(0, 224, 255, 0.1);
+  backdrop-filter: var(--blur);
+  animation: scaleUp 0.25s ease;
+  position: relative;
+}
+
+@keyframes scaleUp {
+  from { opacity: 0; transform: scale(0.92); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.modal-close {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+  transition: color var(--transition);
+}
+
+.modal-close:hover {
+  color: var(--accent);
+}
+
+/* --------------------------------------------------
+   Form Styling (Modern Dark Motif)
+-------------------------------------------------- */
+
+.form-container {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  background: rgba(18, 24, 28, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 2rem;
+  box-shadow: 0 0 25px rgba(0, 224, 255, 0.08);
+  backdrop-filter: blur(12px);
+  animation: fadeInUp 0.3s ease;
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.form-title {
+  text-align: center;
+  font-size: 1.75rem;
+  font-weight: 600;
+  margin-bottom: 1.5rem;
+  color: var(--white);
+  letter-spacing: 0.5px;
+}
+
+.form-input {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+  font-size: 1rem;
+  color: var(--white);
+  margin-bottom: 1.25rem;
+  outline: none;
+  transition: border-color var(--transition), box-shadow var(--transition);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.form-input::placeholder {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.form-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 10px rgba(0, 224, 255, 0.25);
+}
+
+/* Password field with vertically centered eye */
+.password-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.password-input {
+  flex: 1;
+  padding-right: 2.5rem;
+}
+
+.eye-button {
+  position: absolute;
+  right: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.4);
+  cursor: pointer;
+  transition: color var(--transition);
+}
+
+.eye-button:hover {
+  color: var(--accent);
+}
+
+/* Checkbox row */
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  font-size: 0.9rem;
+  margin: 0.5rem 0 1.5rem 0;
+  color: var(--text-muted);
+}
+
+.checkbox-row input {
+  margin-right: 8px;
+  accent-color: var(--accent);
+}
+
+/* Buttons */
+.form-button {
+  background: var(--accent);
+  color: var(--bg-dark);
+  border: none;
+  border-radius: 10px;
+  padding: 0.9rem;
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all var(--transition);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.form-button:hover {
+  box-shadow: 0 0 18px rgba(0, 224, 255, 0.45);
+  transform: translateY(-1px);
+}
+
+.form-button.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Footer links */
+.form-footer {
+  text-align: center;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  margin-top: 1.25rem;
+}
+
+.link-button {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity var(--transition);
+}
+
+.link-button:hover {
+  opacity: 0.8;
+}
+/* -------------------------------
+   Header Layout
+---------------------------------*/
+.header {
+  width: 100%;
+  height: 64px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 2rem;
+  background: rgba(12, 14, 18, 0.9);
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 200;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(8px);
+}
+
+.wrld-logo {
+  font-size: 1.25rem;
+  color: #00e0ff;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.nav-link {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  color: #e0e0e0;
+  font-size: 0.9rem;
+  padding: 0.45rem 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.nav-link:hover {
+  border-color: #00e0ff;
+  color: #00e0ff;
+}
+
+/* -------------------------------
+   Dropdown
+---------------------------------*/
+.user-dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.user-button {
+  background: transparent;
+  border: none;
+  color: #00e0ff;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  font-size: 0.95rem;
+  transition: opacity 0.2s ease;
+}
+
+.user-button:hover {
+  opacity: 0.8;
+}
+
+.dropdown-menu {
+  position: absolute;
+  top: 120%;
+  right: 0;
+  background: #1c1f25;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  border-radius: 8px;
+  overflow: hidden;
+  z-index: 100;
+  min-width: 160px;
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: #e0e0e0;
+  font-size: 0.9rem;
+  padding: 0.6rem 1rem;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.dropdown-item:hover {
+  background: rgba(0, 224, 255, 0.08);
+  color: #00e0ff;
 }

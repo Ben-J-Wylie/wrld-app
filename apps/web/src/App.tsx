@@ -1,32 +1,39 @@
 // apps/web/src/App.tsx
-import React from "react";
+import React, { useState, useEffect } from "react";
 import "./App.css";
+import Header from "./components/Header";
+import AuthModal from "./components/AuthModal";
+import { AuthModalProvider } from "./context/AuthModalContext";
 
 export default function App() {
+  const [user, setUser] = useState<any | null>(null);
+
+  useEffect(() => {
+    const stored = localStorage.getItem("wrld_user");
+    if (stored) setUser(JSON.parse(stored));
+  }, []);
+
+  function handleLogout() {
+    setUser(null);
+  }
+
   return (
-    <div
-      style={{
-        height: "100vh",
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "center",
-        alignItems: "center",
-        background:
-          "radial-gradient(circle at 50% 20%, #0f2027, #203a43, #2c5364)",
-        color: "white",
-        fontFamily: "Inter, system-ui, sans-serif",
-        textAlign: "center",
-      }}
-    >
-      <h1 style={{ fontSize: "3rem", marginBottom: "1rem" }}>
-        🌐 Welcome to WRLD
-      </h1>
-      <p style={{ fontSize: "1.25rem", opacity: 0.85 }}>
-        Your livestreaming universe starts here.
-      </p>
-      <p style={{ marginTop: "2rem", fontSize: "0.9rem", opacity: 0.6 }}>
-        Built with React + Vite + Turborepo
-      </p>
-    </div>
+    <AuthModalProvider>
+      <div className="app-container">
+        <Header user={user} onLogout={handleLogout} />
+        <main className="hero">
+          <div className="hero-content">
+            <h1 className="hero-title">
+              Welcome to <span>WRLD</span>
+            </h1>
+            <p className="hero-subtitle">
+              A new dimension of livestreaming, connection, and discovery.
+            </p>
+          </div>
+        </main>
+        <AuthModal onLogin={(u) => setUser(u)} />
+        <div className="background-glow"></div>
+      </div>
+    </AuthModalProvider>
   );
 }
