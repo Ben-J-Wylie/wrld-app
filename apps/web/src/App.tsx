@@ -15,32 +15,33 @@ import { AuthModalProvider } from "./context/AuthModalContext";
 
 export default function App() {
   const [user, setUser] = useState<any | null>(null);
-  const [checkingUser, setCheckingUser] = useState(true); // 👈 NEW
+  const [checkingUser, setCheckingUser] = useState(true);
 
+  // ✅ Load user from localStorage and listen for updates
   useEffect(() => {
-    const stored = localStorage.getItem("wrld_user");
-    if (stored) setUser(JSON.parse(stored));
-    setCheckingUser(false); // ✅ Done checking
+    const loadUser = () => {
+      const stored = localStorage.getItem("wrld_user");
+      setUser(stored ? JSON.parse(stored) : null);
+    };
+
+    loadUser();
+    setCheckingUser(false);
+
+    // ✅ Listen for profile updates
+    window.addEventListener("userUpdated", loadUser);
+    return () => window.removeEventListener("userUpdated", loadUser);
   }, []);
 
   function handleLogout() {
     setUser(null);
+    localStorage.removeItem("wrld_user");
+    localStorage.removeItem("wrld_token");
   }
 
   if (checkingUser) {
-    // 👀 optional loading screen
     return (
-      <div
-        style={{
-          height: "100vh",
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-          color: "#00e0ff",
-          background: "#0f2027",
-        }}
-      >
-        Loading...
+      <div className="loading-screen">
+        <p>Loading...</p>
       </div>
     );
   }
@@ -50,8 +51,8 @@ export default function App() {
       <AuthModalProvider>
         <div className="app-container">
           <Header user={user} onLogout={handleLogout} />
+
           <Routes>
-            {/* Home */}
             <Route
               path="/"
               element={
@@ -68,8 +69,6 @@ export default function App() {
                 </main>
               }
             />
-
-            {/* Profile */}
             <Route
               path="/profile"
               element={user ? <ProfilePage /> : <Navigate to="/" replace />}
@@ -81,7 +80,6 @@ export default function App() {
           </Routes>
 
           <AuthModal onLogin={(u) => setUser(u)} />
-          <div className="background-glow"></div>
         </div>
       </AuthModalProvider>
     </Router>

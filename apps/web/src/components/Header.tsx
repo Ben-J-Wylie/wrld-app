@@ -1,81 +1,80 @@
 // apps/web/src/components/Header.tsx
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { useAuthModal } from "../context/AuthModalContext";
-import { ChevronDown, LogOut, User } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
-export default function Header({
-  user,
-  onLogout,
-}: {
+interface HeaderProps {
   user: any;
-  onLogout?: () => void;
-}) {
+  onLogout: () => void;
+}
+
+export default function Header({ user, onLogout }: HeaderProps) {
   const { openLogin, openSignup } = useAuthModal();
   const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
 
-  // close dropdown on outside click
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setMenuOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  function handleProfileClick() {
+    navigate("/profile");
+    setMenuOpen(false);
+  }
+
+  function handleLogoutClick() {
+    localStorage.removeItem("wrld_token");
+    localStorage.removeItem("wrld_user");
+    onLogout();
+    setMenuOpen(false);
+  }
 
   return (
     <header className="header">
-      <div className="header-left">
-        <h1 className="wrld-logo">WRLD</h1>
-      </div>
+      <div className="logo">🌐 WRLD</div>
 
-      <div className="header-right">
+      <div className="nav-right">
         {user ? (
-          <div className="user-dropdown" ref={menuRef}>
-            <button
-              className="user-button"
-              onClick={() => setMenuOpen((o) => !o)}
-            >
-              <span className="user-email">{user.username || user.email}</span>
-              <ChevronDown size={16} style={{ marginLeft: 6 }} />
-            </button>
+          <div className="user-menu">
+            <div className="user-info" onClick={() => setMenuOpen(!menuOpen)}>
+              {/* ✅ Avatar or Initial */}
+              {user.avatarUrl ? (
+                <img
+                  src={user.avatarUrl}
+                  alt="avatar"
+                  className="user-avatar"
+                />
+              ) : (
+                <div className="user-initial">
+                  {user.username?.[0]?.toUpperCase() ||
+                    user.email?.[0]?.toUpperCase() ||
+                    "?"}
+                </div>
+              )}
+
+              <span className="user-name">{user.username || user.email}</span>
+              <ChevronDown
+                size={16}
+                style={{
+                  marginLeft: "6px",
+                  opacity: 0.6,
+                }}
+              />
+            </div>
 
             {menuOpen && (
               <div className="dropdown-menu">
-                <button
-                  className="dropdown-item"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    window.location.href = "/profile";
-                  }}
-                >
-                  <User size={14} style={{ marginRight: 8 }} /> Profile
-                </button>
-                <button
-                  className="dropdown-item"
-                  onClick={() => {
-                    localStorage.removeItem("wrld_user");
-                    localStorage.removeItem("wrld_token");
-                    setMenuOpen(false);
-                    if (onLogout) onLogout();
-                  }}
-                >
-                  <LogOut size={14} style={{ marginRight: 8 }} /> Sign Out
-                </button>
+                <button onClick={handleProfileClick}>Profile</button>
+                <button onClick={handleLogoutClick}>Sign Out</button>
               </div>
             )}
           </div>
         ) : (
-          <>
+          <div className="auth-links">
             <button onClick={openSignup} className="nav-link">
               Sign Up
             </button>
             <button onClick={openLogin} className="nav-link">
               Log In
             </button>
-          </>
+          </div>
         )}
       </div>
     </header>

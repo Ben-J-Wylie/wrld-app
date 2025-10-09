@@ -10,6 +10,7 @@ import usersRouter from "./routes/users.js";
 import { PrismaClient } from "@prisma/client";
 import { fileURLToPath } from "url";
 import profileRouter from "./routes/profile.js";
+import uploadRouter from "./routes/upload.js";
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -33,10 +34,14 @@ app.use(
 // ✅ Body parser
 app.use(express.json());
 
+// Serve static uploads
+app.use("/uploads", express.static(path.resolve("./uploads")));
+
 // ✅ Routes
 app.use("/api/users", usersRouter);
 app.use("/api", authRouter);
 app.use("/api/profile", profileRouter);
+app.use("/api/upload", uploadRouter)
 
 // ✅ Root endpoint
 app.get("/", (req, res) => {

@@ -5,6 +5,8 @@ import { useNavigate } from "react-router-dom";
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "https://localhost:4000";
 
+console.log("API_BASE_URL", API_BASE_URL);
+
 export default function ProfilePage() {
   const storedUser = localStorage.getItem("wrld_user");
   const user = storedUser ? JSON.parse(storedUser) : null;
@@ -21,6 +23,9 @@ export default function ProfilePage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  const [avatarPreview, setAvatarPreview] = useState(form.avatarUrl || "");
+  const [uploading, setUploading] = useState(false);
 
   // 👇 Username availability state
   const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(
@@ -79,8 +84,13 @@ export default function ProfilePage() {
       if (!res.ok) throw new Error(data.error || "Update failed");
 
       localStorage.setItem("wrld_user", JSON.stringify(data.user));
+
+      // 🔔 Notify app about profile change (refreshes header instantly)
+      window.dispatchEvent(new Event("userUpdated"));
+
       setSuccess(true);
 
+      // ✅ Redirect to setup page after successful profile update
       setTimeout(() => {
         navigate("/setup");
       }, 2000);
@@ -88,6 +98,31 @@ export default function ProfilePage() {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  }
+
+  // 👇 Handle avatar file upload
+  async function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append("avatar", file);
+
+    setUploading(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/upload/avatar`, {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Upload failed");
+      setAvatarPreview(data.url);
+      setForm({ ...form, avatarUrl: data.url });
+    } catch (err: any) {
+      alert(err.message || "Upload failed");
+    } finally {
+      setUploading(false);
     }
   }
 
@@ -153,13 +188,35 @@ export default function ProfilePage() {
           required
         />
 
-        <label>Avatar URL (optional)</label>
-        <input
-          type="url"
-          placeholder="https://example.com/avatar.jpg"
-          value={form.avatarUrl}
-          onChange={(e) => setForm({ ...form, avatarUrl: e.target.value })}
-        />
+        <label>Avatar</label>
+        <div className="avatar-section">
+          {avatarPreview ? (
+            <img
+              src={avatarPreview}
+              alt="Avatar preview"
+              className="avatar-preview"
+            />
+          ) : (
+            <div className="avatar-initial">
+              {user.username?.[0]?.toUpperCase() ||
+                user.email?.[0]?.toUpperCase() ||
+                "?"}
+            </div>
+          )}
+
+          <div className="avatar-upload">
+            <input
+              type="file"
+              accept="image/*"
+              id="avatarFile"
+              onChange={handleAvatarUpload}
+              style={{ display: "none" }}
+            />
+            <label htmlFor="avatarFile" className="form-button small">
+              {uploading ? "Uploading..." : "Choose File"}
+            </label>
+          </div>
+        </div>
 
         <label>Change Password (optional)</label>
         <input
