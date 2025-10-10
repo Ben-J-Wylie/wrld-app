@@ -24,9 +24,13 @@
 -------------------------------------------------- */
 
 html,
-body,
-#root {
+body {
   height: 100%;
+  width: 100%;
+}
+
+#root {
+  min-height: 100%;
   width: 100%;
   margin: 0;
   padding: 0;
@@ -459,7 +463,6 @@ body {
   border-radius: 12px;
   color: #e0e0e0;
   box-shadow: 0 4px 25px rgba(0, 0, 0, 0.3);
-  overflow-y: auto; /* ✅ scroll if content is long */
 }
 
 .profile-note {

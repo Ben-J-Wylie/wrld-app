@@ -12,6 +12,7 @@ import {
 import L, { Map as LeafletMap, Marker as LeafletMarker } from "leaflet";
 import "leaflet/dist/leaflet.css";
 import Chart from "chart.js/auto";
+import { useIsMobile } from "../hooks/useIsMobile";
 import "../App.css";
 
 type Toggles = {
@@ -36,6 +37,7 @@ export default function SetupPage() {
   });
 
   const [isLive, setIsLive] = useState(false);
+  const isMobile = useIsMobile();
 
   const toggle = (key: keyof Toggles) => {
     setSettings((prev) => {
@@ -76,24 +78,37 @@ export default function SetupPage() {
       </div>
 
       <div className="toggle-grid">
-        <FeatureCard
-          label="Front Camera"
-          icon={<Camera />}
-          active={settings.frontCamera}
-          onClick={() => toggle("frontCamera")}
-          preview={settings.frontCamera && <CameraPreview facing="user" />}
-        />
+        {/* CAMERA */}
+        {isMobile ? (
+          <>
+            <FeatureCard
+              label="Front Camera"
+              icon={<Camera />}
+              active={settings.frontCamera}
+              onClick={() => toggle("frontCamera")}
+              preview={settings.frontCamera && <CameraPreview facing="user" />}
+            />
+            <FeatureCard
+              label="Back Camera"
+              icon={<Video />}
+              active={settings.backCamera}
+              onClick={() => toggle("backCamera")}
+              preview={
+                settings.backCamera && <CameraPreview facing="environment" />
+              }
+            />
+          </>
+        ) : (
+          <FeatureCard
+            label="Camera"
+            icon={<Camera />}
+            active={settings.frontCamera}
+            onClick={() => toggle("frontCamera")}
+            preview={settings.frontCamera && <CameraPreview facing="user" />}
+          />
+        )}
 
-        <FeatureCard
-          label="Back Camera"
-          icon={<Video />}
-          active={settings.backCamera}
-          onClick={() => toggle("backCamera")}
-          preview={
-            settings.backCamera && <CameraPreview facing="environment" />
-          }
-        />
-
+        {/* MIC */}
         <FeatureCard
           label="Microphone"
           icon={<Mic />}
@@ -102,14 +117,7 @@ export default function SetupPage() {
           preview={settings.mic && <MicFFTPreview />}
         />
 
-        <FeatureCard
-          label="Screen Share"
-          icon={<ScreenShare />}
-          active={settings.screenShare}
-          onClick={() => toggle("screenShare")}
-          preview={settings.screenShare && <ScreenSharePreview />}
-        />
-
+        {/* LOCATION */}
         <FeatureCard
           label="Location"
           icon={<MapPin />}
@@ -118,21 +126,34 @@ export default function SetupPage() {
           preview={settings.location && <LocationPreview />}
         />
 
+        {/* SCREEN SHARE */}
         <FeatureCard
-          label="Gyroscope"
-          icon={<RotateCw />}
-          active={settings.gyro}
-          onClick={() => toggle("gyro")}
-          preview={settings.gyro && <GyroPreview />}
+          label="Screen Share"
+          icon={<ScreenShare />}
+          active={settings.screenShare}
+          onClick={() => toggle("screenShare")}
+          preview={settings.screenShare && <ScreenSharePreview />}
         />
 
-        <FeatureCard
-          label="Torch"
-          icon={<Lightbulb />}
-          active={settings.torch}
-          onClick={() => toggle("torch")}
-          preview={settings.torch && <TorchPreview />}
-        />
+        {/* MOBILE-ONLY FEATURES */}
+        {isMobile && (
+          <>
+            <FeatureCard
+              label="Gyroscope"
+              icon={<RotateCw />}
+              active={settings.gyro}
+              onClick={() => toggle("gyro")}
+              preview={settings.gyro && <GyroPreview />}
+            />
+            <FeatureCard
+              label="Torch"
+              icon={<Lightbulb />}
+              active={settings.torch}
+              onClick={() => toggle("torch")}
+              preview={settings.torch && <TorchPreview />}
+            />
+          </>
+        )}
       </div>
 
       <div className="go-live-wrapper">
