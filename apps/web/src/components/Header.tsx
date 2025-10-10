@@ -1,11 +1,14 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuthModal } from "../context/AuthModalContext";
+import { Settings, User, LogOut } from "lucide-react";
 
 export default function Header({ user, onLogout }: any) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [fadeOut, setFadeOut] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
+  const { openLogin, openSignup } = useAuthModal();
 
   // ✅ handle outside click
   useEffect(() => {
@@ -76,6 +79,7 @@ export default function Header({ user, onLogout }: any) {
                     handleCloseDropdown();
                   }}
                 >
+                  <Settings size={18} />
                   Setup
                 </button>
                 <button
@@ -84,6 +88,7 @@ export default function Header({ user, onLogout }: any) {
                     handleCloseDropdown();
                   }}
                 >
+                  <User size={18} />
                   Profile
                 </button>
                 <button
@@ -92,6 +97,7 @@ export default function Header({ user, onLogout }: any) {
                     handleCloseDropdown();
                   }}
                 >
+                  <LogOut size={18} />
                   Sign Out
                 </button>
               </div>
@@ -99,8 +105,8 @@ export default function Header({ user, onLogout }: any) {
           </div>
         ) : (
           <>
-            <button className="nav-link">Sign Up</button>
-            <button className="nav-link">Log In</button>
+            <button onClick={openLogin}>Login</button>
+            <button onClick={openSignup}>Sign Up</button>
           </>
         )}
       </div>

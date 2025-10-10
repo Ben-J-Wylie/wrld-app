@@ -24,21 +24,15 @@
 -------------------------------------------------- */
 
 html,
-body {
-  height: 100%;
-  width: 100%;
-}
-
+body,
 #root {
-  min-height: 100%;
+  height: 100%;
   width: 100%;
   margin: 0;
   padding: 0;
+  background: var(--bg-gradient); /* ✅ extend gradient all the way up */
   font-family: "Inter", sans-serif;
   color: var(--text-light);
-  background: var(--bg-gradient);
-  overflow-x: hidden; /* ✅ allow vertical scroll */
-  overflow-y: auto;   /* ✅ make page scrollable */
 }
 
 body {
@@ -95,6 +89,36 @@ body {
   box-sizing: border-box;
 }
 
+/* Header Login/Signup buttons (match WRLD accent style) */
+.header .nav-right button {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-light);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 0.45rem 1rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.header .nav-right button:hover {
+  background: rgba(0, 224, 255, 0.12);
+  border-color: rgba(0, 224, 255, 0.25);
+  color: var(--accent);
+}
+
+.header .nav-right button + button {
+  margin-left: 0.5rem;
+}
+
+/* On systems with always-visible scrollbars, add a safe area */
+@media (hover: hover) {
+  .header {
+    padding-right: calc(1.5rem + 8px); /* ✅ 8px buffer for scrollbar width */
+  }
+}
+
+
 /* --------------------------------------------------
    Hero Section
 -------------------------------------------------- */
@@ -150,7 +174,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: 9999;
   animation: fadeIn 0.3s ease;
 }
 
@@ -413,6 +437,7 @@ body {
   gap: 0.4rem;
   cursor: pointer;
   transition: opacity 0.2s ease;
+  position: relative;
 }
 
 .user-info:hover {
@@ -424,33 +449,80 @@ body {
   font-weight: 500;
 }
 
+
+/* -------------------------------
+   Dropdown Menu (Header)
+---------------------------------*/
+
+
 .dropdown-menu {
   position: absolute;
-  right: 1rem;
-  top: 60px;
-  background: #1c1f25;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 180px;
+  background: rgba(28, 31, 37, 0.95);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
   display: flex;
   flex-direction: column;
-  min-width: 140px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-  animation: fadeIn 0.15s ease-out;
+  align-items: stretch;
+  padding: 0;
+  margin: 0;
+  z-index: 1000;
+  font-family: "Inter", sans-serif;
 }
 
 .dropdown-menu button {
+  all: unset;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.65rem;
+  width: 100%;
+  box-sizing: border-box;
   padding: 0.7rem 1rem;
-  background: none;
-  border: none;
-  color: white;
-  text-align: left;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
+  font-weight: 500;
+  line-height: 1;             /* ✅ force identical vertical rhythm */
+  letter-spacing: 0.3px;
+  color: var(--text-light);
   cursor: pointer;
-  transition: background 0.15s ease;
+  background: transparent;
+  border: none;
+  margin: 0;
+  text-align: left;
+  transition: background 0.15s ease, color 0.15s ease, transform 0.1s ease;
+}
+
+.dropdown-menu button svg {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  color: var(--accent);
+  opacity: 0.9;
+  margin: 0;
+  padding: 0;
+  transform: translateY(1px); /* ✅ optical balance with text baseline */
+}
+
+.dropdown-menu button + button {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .dropdown-menu button:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(0, 224, 255, 0.1);
+  color: var(--accent);
+  transform: translateX(2px);
+}
+
+.dropdown-menu button:first-child {
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+}
+.dropdown-menu button:last-child {
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
 }
 
 @keyframes fadeIn {
@@ -464,12 +536,6 @@ body {
   }
 }
 
-/* On systems with always-visible scrollbars, add a safe area */
-@media (hover: hover) {
-  .header {
-    padding-right: calc(1.5rem + 8px); /* ✅ 8px buffer for scrollbar width */
-  }
-}
 
 /* -------------------------------
    Profile
