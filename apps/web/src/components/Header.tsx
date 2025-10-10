@@ -79,25 +79,33 @@ export default function Header({ user, onLogout }: any) {
                     handleCloseDropdown();
                   }}
                 >
-                  <Settings size={18} />
                   Setup
                 </button>
+
+                <button
+                  onClick={() => {
+                    navigate("/broadcast");
+                    handleCloseDropdown();
+                  }}
+                >
+                  Broadcast
+                </button>
+
                 <button
                   onClick={() => {
                     navigate("/profile");
                     handleCloseDropdown();
                   }}
                 >
-                  <User size={18} />
                   Profile
                 </button>
+
                 <button
                   onClick={() => {
                     onLogout();
                     handleCloseDropdown();
                   }}
                 >
-                  <LogOut size={18} />
                   Sign Out
                 </button>
               </div>

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Camera,
   Video,
@@ -56,9 +57,19 @@ export default function SetupPage() {
     });
   };
 
+  const navigate = useNavigate();
+
   const handleGoLive = () => {
     if (!hasAnyEnabled) return;
+
+    // Toggle local "live" state
     setIsLive((prev) => !prev);
+
+    // ✅ Redirect to Broadcast page
+    if (!isLive) {
+      navigate("/broadcast");
+      setTimeout(() => setIsLive(false), 500);
+    }
   };
 
   // ✅ disable Go Live unless one toggle is active
