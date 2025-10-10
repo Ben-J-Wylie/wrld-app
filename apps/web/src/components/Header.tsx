@@ -1,80 +1,107 @@
-// apps/web/src/components/Header.tsx
-import React, { useState } from "react";
-import { ChevronDown } from "lucide-react";
-import { useAuthModal } from "../context/AuthModalContext";
+import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
-interface HeaderProps {
-  user: any;
-  onLogout: () => void;
-}
-
-export default function Header({ user, onLogout }: HeaderProps) {
-  const { openLogin, openSignup } = useAuthModal();
-  const [menuOpen, setMenuOpen] = useState(false);
+export default function Header({ user, onLogout }: any) {
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [fadeOut, setFadeOut] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
-  function handleProfileClick() {
-    navigate("/profile");
-    setMenuOpen(false);
+  // ✅ handle outside click
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
+        handleCloseDropdown();
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  function handleCloseDropdown() {
+    // trigger fade-out before closing
+    setFadeOut(true);
+    setTimeout(() => {
+      setDropdownOpen(false);
+      setFadeOut(false);
+    }, 150); // matches CSS animation time
   }
 
-  function handleLogoutClick() {
-    localStorage.removeItem("wrld_token");
-    localStorage.removeItem("wrld_user");
-    onLogout();
-    setMenuOpen(false);
+  function handleOpenDropdown() {
+    setDropdownOpen(true);
+    setFadeOut(false);
   }
 
   return (
     <header className="header">
-      <div className="logo">🌐 WRLD</div>
+      <div className="logo">WRLD</div>
 
       <div className="nav-right">
         {user ? (
-          <div className="user-menu">
-            <div className="user-info" onClick={() => setMenuOpen(!menuOpen)}>
-              {/* ✅ Avatar or Initial */}
-              {user.avatarUrl ? (
-                <img
-                  src={user.avatarUrl}
-                  alt="avatar"
-                  className="user-avatar"
-                />
-              ) : (
-                <div className="user-initial">
-                  {user.username?.[0]?.toUpperCase() ||
-                    user.email?.[0]?.toUpperCase() ||
-                    "?"}
-                </div>
-              )}
+          <div className="user-info" ref={dropdownRef}>
+            {user.avatarUrl ? (
+              <img src={user.avatarUrl} alt="Avatar" className="user-avatar" />
+            ) : (
+              <div className="user-initial">
+                {(user.username?.[0] || user.email?.[0] || "?").toUpperCase()}
+              </div>
+            )}
+            <span className="user-name">{user.username || user.email}</span>
 
-              <span className="user-name">{user.username || user.email}</span>
-              <ChevronDown
-                size={16}
-                style={{
-                  marginLeft: "6px",
-                  opacity: 0.6,
-                }}
-              />
-            </div>
+            <button
+              onClick={() =>
+                dropdownOpen ? handleCloseDropdown() : handleOpenDropdown()
+              }
+              className="nav-link"
+              style={{
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                fontSize: "1rem",
+              }}
+            >
+              ▾
+            </button>
 
-            {menuOpen && (
-              <div className="dropdown-menu">
-                <button onClick={handleProfileClick}>Profile</button>
-                <button onClick={handleLogoutClick}>Sign Out</button>
+            {dropdownOpen && (
+              <div
+                className={`dropdown-menu ${fadeOut ? "fade-out" : "fade-in"}`}
+              >
+                <button
+                  onClick={() => {
+                    navigate("/setup");
+                    handleCloseDropdown();
+                  }}
+                >
+                  Setup
+                </button>
+                <button
+                  onClick={() => {
+                    navigate("/profile");
+                    handleCloseDropdown();
+                  }}
+                >
+                  Profile
+                </button>
+                <button
+                  onClick={() => {
+                    onLogout();
+                    handleCloseDropdown();
+                  }}
+                >
+                  Sign Out
+                </button>
               </div>
             )}
           </div>
         ) : (
-          <div className="auth-links">
-            <button onClick={openSignup} className="nav-link">
-              Sign Up
-            </button>
-            <button onClick={openLogin} className="nav-link">
-              Log In
-            </button>
-          </div>
+          <>
+            <button className="nav-link">Sign Up</button>
+            <button className="nav-link">Log In</button>
+          </>
         )}
       </div>
     </header>
