@@ -75,10 +75,10 @@ body {
 -------------------------------------------------- */
 
 .header {
-  position: fixed; /* ✅ stays fixed while scrolling */
+  position: fixed;
   top: 0;
   left: 0;
-  width: 100%;
+  right: 0; /* ✅ replaces width:100% for more accurate layout */
   padding: 0.75rem 1.5rem;
   display: flex;
   justify-content: space-between;
@@ -88,6 +88,7 @@ body {
   z-index: 50;
   color: #fff;
   font-family: "Inter", sans-serif;
+  box-sizing: border-box;
 }
 
 /* --------------------------------------------------
@@ -357,6 +358,7 @@ body {
   display: flex;
   align-items: center;
   gap: 1rem;
+  padding-right: 0.75rem; /* ✅ small buffer */
 }
 
 /* Avatar / Initial Circle */
@@ -438,6 +440,13 @@ body {
   }
 }
 
+/* On systems with always-visible scrollbars, add a safe area */
+@media (hover: hover) {
+  .header {
+    padding-right: calc(1.5rem + 8px); /* ✅ 8px buffer for scrollbar width */
+  }
+}
+
 /* -------------------------------
    Profile
 ---------------------------------*/
@@ -496,30 +505,102 @@ body {
 }
 
 /* -------------------------------
-   Setup
+   Setup Page
 ---------------------------------*/
 
 .setup-container {
-  max-width: 600px;
+  max-width: 800px;
   margin: 120px auto;
   padding: 2rem;
   text-align: center;
   color: #e0e0e0;
-  background: #1a1d24;
-  border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  background: rgba(28, 31, 37, 0.85);
+  border-radius: 16px;
+  box-shadow: 0 0 30px rgba(0, 224, 255, 0.1);
+  backdrop-filter: blur(12px);
+}
+
+.setup-title {
+  font-size: 2rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+  color: #fff;
 }
 
 .setup-subtitle {
-  margin-top: 0.75rem;
+  color: #9db4c0;
   margin-bottom: 2rem;
-  color: #bbb;
 }
 
-.setup-actions {
+.toggle-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 1.25rem;
+  margin-bottom: 2rem;
+}
+
+.toggle-button {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  color: #ccc;
+  padding: 1rem;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.25s ease;
   display: flex;
-  justify-content: center;
-  gap: 1rem;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.toggle-button:hover {
+  background: rgba(0, 224, 255, 0.08);
+  border-color: rgba(0, 224, 255, 0.2);
+}
+
+.toggle-button.active {
+  background: rgba(0, 224, 255, 0.15);
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow: 0 0 15px rgba(0, 224, 255, 0.25);
+}
+
+.toggle-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.go-live-wrapper {
+  margin-top: 2rem;
+}
+
+.go-live-button {
+  background: none;
+  border: 2px solid var(--accent);
+  border-radius: 50px;
+  padding: 0.9rem 2rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--accent);
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.go-live-button:hover {
+  box-shadow: 0 0 20px rgba(0, 224, 255, 0.4);
+  transform: translateY(-1px);
+}
+
+.go-live-button.active {
+  background: var(--accent);
+  color: #0a0c10;
+  box-shadow: 0 0 25px rgba(0, 224, 255, 0.6);
 }
 
 /* -------------------------------
@@ -553,3 +634,224 @@ body {
   padding: 0.4rem 0.75rem;
   font-size: 0.85rem;
 }
+
+/* -------------------------------
+   Custom File Upload for Avatar
+---------------------------------*/
+
+.custom-file-upload {
+  position: relative;
+  display: inline-block;
+}
+
+.custom-file-upload input[type="file"] {
+  position: absolute;
+  left: 0;
+  top: 0;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+}
+
+.custom-file-upload label {
+  background: #e0f7fa; /* light cyan background */
+  color: #111; /* ✅ dark readable text */
+  border-radius: 8px;
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-block;
+  transition: all 0.25s ease;
+  box-shadow: 0 0 0 rgba(0, 224, 255, 0);
+}
+
+.custom-file-upload label:hover {
+  background: #c8eef0;
+  transform: translateY(-1px);
+  box-shadow: 0 0 8px rgba(0, 224, 255, 0.35);
+}
+
+
+/* -------------------------------
+   Setup Page
+---------------------------------*/
+
+
+/* Feature card + preview area */
+.feature-card {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 12px;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.feature-card.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 14px rgba(0,224,255,0.15);
+}
+
+/* Grid already present; if not: */
+.toggle-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
+.preview {
+  background: rgba(0,0,0,0.25);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px;
+  padding: 0.75rem;
+}
+
+/* Video & canvases */
+.preview-video {
+  width: 100%;
+  border-radius: 8px;
+  background: #000;
+}
+.preview-canvas {
+  width: 100%;
+  display: block;
+  border-radius: 8px;
+  background: #0c0f14;
+}
+
+/* Leaflet map container */
+.preview-map {
+  width: 100%;
+  height: 220px;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* Torch */
+.torch-preview .torch-controls {
+  margin-bottom: 0.5rem;
+}
+.form-button.secondary {
+  background: transparent;
+  color: var(--accent);
+  border: 2px solid var(--accent);
+}
+
+/* Gyro */
+.gyro-box {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.25rem;
+  font-size: 0.95rem;
+  color: #d8f7ff;
+}
+
+/* -------------------------------
+   Setup Page Header & Go Live
+---------------------------------*/
+
+.setup-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 2rem;
+  position: relative;
+}
+
+/* reuse the button style, but add disabled state & top positioning */
+.go-live-button {
+  background: none;
+  border: 2px solid var(--accent);
+  border-radius: 50px;
+  padding: 0.9rem 2rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--accent);
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.go-live-button:hover:not(:disabled) {
+  box-shadow: 0 0 20px rgba(0, 224, 255, 0.4);
+  transform: translateY(-1px);
+}
+
+.go-live-button.active {
+  background: var(--accent);
+  color: #0a0c10;
+  box-shadow: 0 0 25px rgba(0, 224, 255, 0.6);
+}
+
+.go-live-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
+
+/* -------------------------------
+   Expandable Map Preview
+---------------------------------*/
+
+.preview-map {
+  position: relative;
+  width: 100%;
+  height: 220px;
+  border-radius: 8px;
+  overflow: hidden;
+  transition: all 0.3s ease;
+  z-index: 10;
+}
+
+.preview-map.expanded {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  width: 90vw;
+  height: 70vh;
+  transform: translate(-50%, -50%);
+  border-radius: 12px;
+  box-shadow: 0 0 25px rgba(0, 224, 255, 0.3);
+  z-index: 1001;
+}
+
+.map-expand-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #fff;
+  border-radius: 6px;
+  width: 28px;
+  height: 28px;
+  line-height: 1;
+  font-size: 1rem;
+  cursor: pointer;
+  z-index: 1002;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.map-expand-btn:hover {
+  background: var(--accent);
+  color: #000;
+  transform: scale(1.1);
+}
+
+.map-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(6px);
+  z-index: 1000;
+  animation: fadeIn 0.3s ease;
+}
+

@@ -204,17 +204,16 @@ export default function ProfilePage() {
             </div>
           )}
 
-          <div className="avatar-upload">
-            <input
-              type="file"
-              accept="image/*"
-              id="avatarFile"
-              onChange={handleAvatarUpload}
-              style={{ display: "none" }}
-            />
-            <label htmlFor="avatarFile" className="form-button small">
+          <div className="custom-file-upload">
+            <label htmlFor="avatarFile">
               {uploading ? "Uploading..." : "Choose File"}
             </label>
+            <input
+              id="avatarFile"
+              type="file"
+              accept="image/*"
+              onChange={handleAvatarUpload}
+            />
           </div>
         </div>
 
