@@ -8,6 +8,7 @@ import {
   RotateCw,
   Lightbulb,
   Power,
+  MessageSquare,
 } from "lucide-react";
 import L, { Map as LeafletMap, Marker as LeafletMarker } from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -23,6 +24,7 @@ type Toggles = {
   screenShare: boolean;
   gyro: boolean;
   torch: boolean;
+  chat?: boolean;
 };
 
 export default function SetupPage() {
@@ -34,10 +36,13 @@ export default function SetupPage() {
     screenShare: false,
     gyro: false,
     torch: false,
+    chat: false,
   });
 
   const [isLive, setIsLive] = useState(false);
   const isMobile = useIsMobile();
+  const [chatEnabled, setChatEnabled] = useState(false);
+  const [messages, setMessages] = useState<string[]>([]);
 
   const toggle = (key: keyof Toggles) => {
     setSettings((prev) => {
@@ -124,6 +129,19 @@ export default function SetupPage() {
           active={settings.location}
           onClick={() => toggle("location")}
           preview={settings.location && <LocationPreview />}
+        />
+
+        {/* ✅ CHAT */}
+        <FeatureCard
+          label="Chat"
+          icon={<MessageSquare />}
+          active={settings.chat || false}
+          onClick={() => toggle("chat")}
+          preview={
+            settings.chat && (
+              <ChatPreview messages={messages} setMessages={setMessages} />
+            )
+          }
         />
 
         {/* SCREEN SHARE */}
@@ -434,6 +452,59 @@ function LocationPreview() {
 
       {expanded && <div className="map-overlay" />}
     </>
+  );
+}
+
+/* -----------------------------
+   Chat Preview (auto-scroll)
+------------------------------ */
+function ChatPreview({
+  messages,
+  setMessages,
+}: {
+  messages: string[];
+  setMessages: React.Dispatch<React.SetStateAction<string[]>>;
+}) {
+  const [input, setInput] = useState("");
+  const chatEndRef = useRef<HTMLDivElement | null>(null); // ✅ new ref
+
+  const handleSend = () => {
+    if (!input.trim()) return;
+    setMessages((prev) => [...prev, input.trim()]);
+    setInput("");
+  };
+
+  // ✅ scroll to bottom when messages change
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  return (
+    <div className="chat-preview">
+      <div className="chat-window">
+        {messages.length === 0 ? (
+          <p className="chat-placeholder">No messages yet...</p>
+        ) : (
+          <>
+            {messages.map((m, i) => (
+              <div key={i} className="chat-message">
+                {m}
+              </div>
+            ))}
+            <div ref={chatEndRef} /> {/* ✅ anchor for auto-scroll */}
+          </>
+        )}
+      </div>
+      <div className="chat-input-row">
+        <input
+          className="chat-input"
+          placeholder="Type a message..."
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && handleSend()}
+        />
+      </div>
+    </div>
   );
 }
 

@@ -878,3 +878,63 @@ body {
   animation: fadeIn 0.3s ease;
 }
 
+/* -------------------------------
+   Chat Preview
+---------------------------------*/
+
+.chat-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 0.75rem;
+  color: #e0f7fa;
+  max-height: 200px;
+}
+
+.chat-window {
+  flex: 1;
+  overflow-y: auto;
+  font-size: 0.9rem;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 6px;
+  padding: 0.5rem;
+  height: 100px;
+}
+
+.chat-message {
+  padding: 0.25rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.chat-placeholder {
+  opacity: 0.5;
+  text-align: center;
+  font-style: italic;
+}
+
+.chat-input-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.chat-input {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: white;
+  padding: 0.4rem 0.6rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
+}
+
+.chat-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 8px rgba(0, 224, 255, 0.25);
+  outline: none;
+}
+
+
