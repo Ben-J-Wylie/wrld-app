@@ -243,9 +243,20 @@ function CameraPreview({ facing }: { facing: "user" | "environment" }) {
           audio: false,
         });
         streamRef.current = stream;
+
         if (vidRef.current) {
           vidRef.current.srcObject = stream;
-          await vidRef.current.play();
+
+          // ✅ Safe playback start (avoids AbortError spam)
+          const playPromise = vidRef.current.play();
+          if (playPromise !== undefined) {
+            playPromise.catch((err) => {
+              // Ignore AbortError, only log real ones
+              if (err.name !== "AbortError") {
+                console.warn("Video play error:", err);
+              }
+            });
+          }
         }
       } catch (e) {
         console.error("Camera error:", e);

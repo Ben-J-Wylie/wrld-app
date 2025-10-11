@@ -1,7 +1,12 @@
 // apps/web/src/components/SelfPreview.tsx
-import React, { useRef, useEffect } from "react";
+import React, {
+  useRef,
+  useEffect,
+  useImperativeHandle,
+  forwardRef,
+} from "react";
 
-export default function SelfPreview() {
+const SelfPreview = forwardRef((_, ref) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
@@ -13,9 +18,19 @@ export default function SelfPreview() {
           audio: false,
         });
         streamRef.current = stream;
+
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
-          await videoRef.current.play();
+
+          // ✅ Safe playback start to suppress AbortError noise
+          const playPromise = videoRef.current.play();
+          if (playPromise !== undefined) {
+            playPromise.catch((err) => {
+              if (err.name !== "AbortError") {
+                console.warn("Video play error:", err);
+              }
+            });
+          }
         }
       } catch (err) {
         console.error("Camera access denied or error:", err);
@@ -27,6 +42,13 @@ export default function SelfPreview() {
     };
   }, []);
 
+  // ✅ Expose stopStream() to parent
+  useImperativeHandle(ref, () => ({
+    stopStream: () => {
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+    },
+  }));
+
   return (
     <video
       ref={videoRef}
@@ -36,4 +58,6 @@ export default function SelfPreview() {
       muted
     />
   );
-}
+});
+
+export default SelfPreview;

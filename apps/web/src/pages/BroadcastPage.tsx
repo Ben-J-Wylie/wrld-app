@@ -1,8 +1,10 @@
 // apps/web/src/pages/BroadcastPage.tsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import PeerList from "../components/PeerList";
 import VideoPlayer from "../components/VideoPlayer";
-import SelfPreview from "../components/SelfPreview"; // ✅ new
+import SelfPreview from "../components/SelfPreview";
+import { Power } from "lucide-react";
 import "../App.css";
 
 export default function BroadcastPage() {
@@ -10,6 +12,8 @@ export default function BroadcastPage() {
   const [isPeerListOpen, setIsPeerListOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
   const [autoLive, setAutoLive] = useState(false);
+  const navigate = useNavigate();
+  const selfPreviewRef = useRef<{ stopStream: () => void } | null>(null); // ✅ new
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
@@ -19,8 +23,7 @@ export default function BroadcastPage() {
   }, []);
 
   useEffect(() => {
-    // If navigated here from setup (Go Live), auto-activate preview
-    setAutoLive(true);
+    setAutoLive(true); // ✅ auto start camera if coming from setup
   }, []);
 
   const mockPeers = [
@@ -29,8 +32,20 @@ export default function BroadcastPage() {
     { id: "3", displayName: "Charlie" },
   ];
 
+  // ✅ End stream: stop camera and go back to setup
+  const handleEndStream = () => {
+    selfPreviewRef.current?.stopStream();
+    navigate("/setup");
+  };
+
   return (
     <div className="broadcast-page">
+      {/* ✅ End Stream Button */}
+      <button className="end-stream-btn" onClick={handleEndStream}>
+        <Power size={20} />
+        End Stream
+      </button>
+
       {/* Hamburger for mobile */}
       {isMobile && (
         <button
@@ -79,7 +94,7 @@ export default function BroadcastPage() {
             <h2 className="broadcast-title">
               <span>{autoLive ? "You're Live" : "Your Camera"}</span>
             </h2>
-            <SelfPreview />
+            <SelfPreview ref={selfPreviewRef} /> {/* ✅ forwardRef for stop */}
           </>
         )}
       </div>
