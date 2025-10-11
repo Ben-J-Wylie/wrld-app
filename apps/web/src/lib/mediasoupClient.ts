@@ -3,7 +3,7 @@ import { io, Socket } from "socket.io-client";
 import * as mediasoupClient from "mediasoup-client";
 
 const MEDIASERVER_URL =
-  import.meta.env.VITE_MEDIASERVER_URL || "https://192.168.1.74:4002"; // 👈 adjust for your LAN/public IP
+  import.meta.env.VITE_MEDIASERVER_URL || "https://10.0.0.84:4002"; // 👈 adjust for your LAN/public IP
 
 export class MediaSoupClient {
   socket: Socket;
@@ -20,13 +20,21 @@ export class MediaSoupClient {
   // ✅ Event hooks for React
   onNewStream?: (stream: MediaStream, id: string) => void;
   onRemoveStream?: (id: string) => void;
-  onPeerList?: (peers: string[]) => void;
+  onPeerList?: (peers: { id: string; name: string }[] | string[]) => void;
+
+  // ✅ Buffer for last known peers (handles race conditions)
+  private lastPeerList: { id: string; name: string }[] | string[] = [];
 
   constructor() {
     this.socket = io(MEDIASERVER_URL, { transports: ["websocket"] });
 
-    this.socket.on("connect", () => console.log("✅ Connected to mediaserver"));
-    this.socket.on("disconnect", () => console.log("❌ Disconnected from mediaserver"));
+    this.socket.on("connect", () => {
+      console.log("✅ Connected to mediaserver");
+    });
+
+    this.socket.on("disconnect", () => {
+      console.log("❌ Disconnected from mediaserver");
+    });
 
     // 🔹 New producer (another user's published stream)
     this.socket.on("newProducer", async ({ producerId, kind }) => {
@@ -34,11 +42,26 @@ export class MediaSoupClient {
       await this.consume(producerId);
     });
 
-    // 🔹 Peer list updates
-    this.socket.on("peerList", (peers: string[]) => {
+    // 🔹 Peer list updates (buffered replay)
+    this.socket.on("peerList", (peers: any[]) => {
       console.log("👥 Active peers:", peers);
-      if (this.onPeerList) this.onPeerList(peers);
+      this.lastPeerList = peers;
+      if (this.onPeerList) {
+        console.log("🧩 Calling onPeerList callback immediately");
+        this.onPeerList(peers);
+      } else {
+        console.log("⚠️ onPeerList not set yet — buffering until ready");
+      }
     });
+  }
+
+  // ✅ React sets this later — replay last list immediately
+  set onPeerListCallback(cb: (peers: any[]) => void) {
+    this.onPeerList = cb;
+    if (this.lastPeerList.length > 0) {
+      console.log("🧠 Replaying last buffered peerList:", this.lastPeerList);
+      cb(this.lastPeerList);
+    }
   }
 
   // --- Core setup ---

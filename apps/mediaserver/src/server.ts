@@ -29,50 +29,78 @@ const activePeers = new Set<string>();
 io.on("connection", (socket) => {
   console.log(`🔌 [Socket] connected: ${socket.id}`);
   activePeers.add(socket.id);
-
-  // Send updated peer list to everyone
   io.emit("peerList", Array.from(activePeers));
 
-  // Send router capabilities to client
-  socket.on("getRouterRtpCapabilities", (cb) => {
-    cb(router.rtpCapabilities);
+  // --- Router capabilities ---
+  socket.on("getRouterRtpCapabilities", async (_: any, cb: any) => {
+    if (typeof cb === "function") cb(router.rtpCapabilities);
+    else socket.emit("routerRtpCapabilities", router.rtpCapabilities);
   });
 
-  // Create a WebRTC transport
-  socket.on("createTransport", async (cb) => {
-    const transport = await peers.createTransport(socket.id);
-    cb(transport.params);
+  // --- Create WebRTC transport ---
+  socket.on("createTransport", async (_: any, cb: any) => {
+    try {
+      const transport = await peers.createTransport(socket.id);
+      if (typeof cb === "function") cb(transport.params);
+      else socket.emit("transportCreated", transport.params);
+    } catch (err) {
+      console.error("❌ createTransport error:", err);
+    }
   });
 
-  // Connect the transport
-  socket.on("connectTransport", async ({ transportId, dtlsParameters }, cb) => {
-    await peers.connectTransport(socket.id, transportId, dtlsParameters);
-    cb();
+  // --- Connect transport ---
+  socket.on("connectTransport", async (data: any, cb: any) => {
+    try {
+      await peers.connectTransport(socket.id, data.transportId, data.dtlsParameters);
+      if (typeof cb === "function") cb();
+    } catch (err) {
+      console.error("❌ connectTransport error:", err);
+    }
   });
 
-  // Produce (publish) a track
-  socket.on("produce", async ({ kind, rtpParameters }, cb) => {
-    const producer = await peers.createProducer(socket.id, kind, rtpParameters);
-    socket.broadcast.emit("newProducer", { producerId: producer.id, kind });
-    cb({ id: producer.id });
+  // --- Produce (publish) ---
+  socket.on("produce", async (data: any, cb: any) => {
+    try {
+      const producer = await peers.createProducer(socket.id, data.kind, data.rtpParameters);
+      socket.broadcast.emit("newProducer", { producerId: producer.id, kind: data.kind });
+      if (typeof cb === "function") cb({ id: producer.id });
+    } catch (err) {
+      console.error("❌ produce error:", err);
+    }
   });
 
-  // Consume (view) a producer
-  socket.on("consume", async ({ producerId, rtpCapabilities }, cb) => {
-    const consumer = await peers.createConsumer(socket.id, producerId, rtpCapabilities);
-    if (!consumer) return cb({ error: "Cannot consume" });
-    cb({
-      id: consumer.id,
-      producerId,
-      kind: consumer.kind,
-      rtpParameters: consumer.rtpParameters,
-    });
+  // --- Consume (view) ---
+  socket.on("consume", async (data: any, cb: any) => {
+    try {
+      const consumer = await peers.createConsumer(socket.id, data.producerId, data.rtpCapabilities);
+      if (!consumer) {
+        if (typeof cb === "function") cb({ error: "Cannot consume" });
+        return;
+      }
+      const payload = {
+        id: consumer.id,
+        producerId: data.producerId,
+        kind: consumer.kind,
+        rtpParameters: consumer.rtpParameters,
+      };
+      if (typeof cb === "function") cb(payload);
+      else socket.emit("consumerCreated", payload);
+    } catch (err) {
+      console.error("❌ consume error:", err);
+    }
   });
 
-  socket.on("resume", async ({ consumerId }) => {
-    await peers.resumeConsumer(socket.id, consumerId);
+  // --- Resume consumer ---
+  socket.on("resume", async (data: any, cb: any) => {
+    try {
+      await peers.resumeConsumer(socket.id, data.consumerId);
+      if (typeof cb === "function") cb();
+    } catch (err) {
+      console.error("❌ resume error:", err);
+    }
   });
 
+  // --- Disconnect ---
   socket.on("disconnect", () => {
     console.log(`❌ [Socket] disconnected: ${socket.id}`);
     peers.removePeer(socket.id);
@@ -80,6 +108,7 @@ io.on("connection", (socket) => {
     io.emit("peerList", Array.from(activePeers));
   });
 });
+
 
 const PORT = process.env.PORT || 4002;
 server.listen(PORT, () => console.log(`🚀 WRLD mediaserver running on port ${PORT}`));
