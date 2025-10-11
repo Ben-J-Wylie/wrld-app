@@ -44,6 +44,7 @@ export default function SetupPage() {
   const isMobile = useIsMobile();
   const [chatEnabled, setChatEnabled] = useState(false);
   const [messages, setMessages] = useState<string[]>([]);
+  const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
 
   const toggle = (key: keyof Toggles) => {
     setSettings((prev) => {
@@ -71,6 +72,28 @@ export default function SetupPage() {
       setTimeout(() => setIsLive(false), 500);
     }
   };
+
+  async function handleToggleScreenShare() {
+    // stop if already sharing
+    if (screenStream) {
+      screenStream.getTracks().forEach((t) => t.stop());
+      setScreenStream(null);
+      setSettings((prev) => ({ ...prev, screenShare: false }));
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+      });
+      setScreenStream(stream);
+      setSettings((prev) => ({ ...prev, screenShare: true }));
+    } catch (err) {
+      console.warn("User cancelled or screen share failed:", err);
+      setScreenStream(null);
+      setSettings((prev) => ({ ...prev, screenShare: false }));
+    }
+  }
 
   // ✅ disable Go Live unless one toggle is active
   const hasAnyEnabled = Object.values(settings).some(Boolean);
@@ -159,9 +182,9 @@ export default function SetupPage() {
         <FeatureCard
           label="Screen Share"
           icon={<ScreenShare />}
-          active={settings.screenShare}
-          onClick={() => toggle("screenShare")}
-          preview={settings.screenShare && <ScreenSharePreview />}
+          active={!!screenStream}
+          onClick={handleToggleScreenShare}
+          preview={screenStream && <ScreenSharePreview stream={screenStream} />}
         />
 
         {/* MOBILE-ONLY FEATURES */}
@@ -347,33 +370,29 @@ function MicFFTPreview() {
 }
 
 /* -----------------------------
-   Screen Share Preview
+   Screen Share Preview (strict-mode safe)
 ------------------------------ */
-function ScreenSharePreview() {
+/* -----------------------------
+   Screen Share Preview (controlled)
+------------------------------ */
+function ScreenSharePreview({ stream }: { stream: MediaStream }) {
   const vidRef = useRef<HTMLVideoElement | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const stream = await (navigator.mediaDevices as any).getDisplayMedia({
-          video: true,
-          audio: false,
-        });
-        streamRef.current = stream;
-        if (vidRef.current) {
-          vidRef.current.srcObject = stream;
-          await vidRef.current.play();
+    if (!vidRef.current) return;
+    vidRef.current.srcObject = stream;
+    const playPromise = vidRef.current.play();
+    if (playPromise) {
+      playPromise.catch((err) => {
+        if (err.name !== "AbortError") {
+          console.warn("Screen share play error:", err);
         }
-      } catch (e) {
-        console.error("Screen share error:", e);
-      }
-    })();
-
+      });
+    }
     return () => {
-      streamRef.current?.getTracks().forEach((t) => t.stop());
+      vidRef.current && (vidRef.current.srcObject = null);
     };
-  }, []);
+  }, [stream]);
 
   return <video ref={vidRef} className="preview-video" playsInline muted />;
 }
