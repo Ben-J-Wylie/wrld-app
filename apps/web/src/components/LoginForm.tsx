@@ -37,6 +37,10 @@ export default function LoginForm({
 
       localStorage.setItem("wrld_token", data.token);
       localStorage.setItem("wrld_user", JSON.stringify(data.user));
+      localStorage.setItem(
+        "username",
+        data.user.username || data.user.email || "Guest"
+      ); // ✅ NEW
 
       onLogin(data.user);
       close();

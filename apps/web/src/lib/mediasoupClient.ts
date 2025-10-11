@@ -29,8 +29,11 @@ export class MediaSoupClient {
     this.socket = io(MEDIASERVER_URL, { transports: ["websocket"] });
 
     this.socket.on("connect", () => {
-      console.log("✅ Connected to mediaserver");
+      const name = localStorage.getItem("username") || "Guest";
+      console.log("🧠 Registering as:", name);
+      this.socket.emit("register", { name });
     });
+
 
     this.socket.on("disconnect", () => {
       console.log("❌ Disconnected from mediaserver");

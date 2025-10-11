@@ -26,29 +26,64 @@ app.get("/", (req, res) => {
 
 const activePeers = new Set<string>();
 
+const usernames = new Map<string, string>();
+
+function broadcastPeerList() {
+  const list = Array.from(io.sockets.sockets.keys()).map((id) => ({
+    id,
+    name: usernames.get(id) || "Anonymous",
+  }));
+  io.emit("peerList", list);
+  console.log("📣 Broadcasting peer list:", list);
+}
+
 io.on("connection", (socket) => {
   console.log(`🔌 [Socket] connected: ${socket.id}`);
-  activePeers.add(socket.id);
-  io.emit("peerList", Array.from(activePeers));
 
-  // --- Router capabilities ---
-  socket.on("getRouterRtpCapabilities", async (_: any, cb: any) => {
-    if (typeof cb === "function") cb(router.rtpCapabilities);
-    else socket.emit("routerRtpCapabilities", router.rtpCapabilities);
+  // --- Default entry
+  usernames.set(socket.id, "Anonymous");
+  broadcastPeerList();
+
+  // --- Register username
+  socket.on("register", ({ name }) => {
+    const clean = (name || "").trim() || "Anonymous";
+    usernames.set(socket.id, clean);
+    console.log(`👤 Registered ${socket.id} as "${clean}"`);
+    broadcastPeerList();
   });
 
-  // --- Create WebRTC transport ---
+  // --- Handle disconnect
+  socket.on("disconnect", (reason) => {
+    console.log(`❌ Disconnected: ${socket.id} (${reason})`);
+    usernames.delete(socket.id);
+    broadcastPeerList();
+  });
+
+  // --- Helper: Rebuild live list directly from socket.io's state
+  function broadcastPeerList() {
+    const peers = [];
+    for (const [id, socketInstance] of io.sockets.sockets) {
+      const name = usernames.get(id) || "Anonymous";
+      peers.push({ id, name });
+    }
+    io.emit("peerList", peers);
+    console.log("📡 peerList broadcast:", peers);
+  }
+
+  // --- Mediasoup signaling (unchanged)
+  socket.on("getRouterRtpCapabilities", async (_: any, cb: any) => {
+    if (typeof cb === "function") cb(router.rtpCapabilities);
+  });
+
   socket.on("createTransport", async (_: any, cb: any) => {
     try {
       const transport = await peers.createTransport(socket.id);
       if (typeof cb === "function") cb(transport.params);
-      else socket.emit("transportCreated", transport.params);
     } catch (err) {
       console.error("❌ createTransport error:", err);
     }
   });
 
-  // --- Connect transport ---
   socket.on("connectTransport", async (data: any, cb: any) => {
     try {
       await peers.connectTransport(socket.id, data.transportId, data.dtlsParameters);
@@ -58,7 +93,6 @@ io.on("connection", (socket) => {
     }
   });
 
-  // --- Produce (publish) ---
   socket.on("produce", async (data: any, cb: any) => {
     try {
       const producer = await peers.createProducer(socket.id, data.kind, data.rtpParameters);
@@ -69,43 +103,28 @@ io.on("connection", (socket) => {
     }
   });
 
-  // --- Consume (view) ---
   socket.on("consume", async (data: any, cb: any) => {
     try {
       const consumer = await peers.createConsumer(socket.id, data.producerId, data.rtpCapabilities);
-      if (!consumer) {
-        if (typeof cb === "function") cb({ error: "Cannot consume" });
-        return;
-      }
-      const payload = {
+      if (!consumer) return cb?.({ error: "Cannot consume" });
+      cb?.({
         id: consumer.id,
         producerId: data.producerId,
         kind: consumer.kind,
         rtpParameters: consumer.rtpParameters,
-      };
-      if (typeof cb === "function") cb(payload);
-      else socket.emit("consumerCreated", payload);
+      });
     } catch (err) {
       console.error("❌ consume error:", err);
     }
   });
 
-  // --- Resume consumer ---
   socket.on("resume", async (data: any, cb: any) => {
     try {
       await peers.resumeConsumer(socket.id, data.consumerId);
-      if (typeof cb === "function") cb();
+      cb?.();
     } catch (err) {
       console.error("❌ resume error:", err);
     }
-  });
-
-  // --- Disconnect ---
-  socket.on("disconnect", () => {
-    console.log(`❌ [Socket] disconnected: ${socket.id}`);
-    peers.removePeer(socket.id);
-    activePeers.delete(socket.id);
-    io.emit("peerList", Array.from(activePeers));
   });
 });
 

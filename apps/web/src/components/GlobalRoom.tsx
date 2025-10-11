@@ -1,26 +1,27 @@
-// apps/web/src/components/GlobalRoom.tsx
 import React, { useEffect, useRef, useState } from "react";
 import { MediaSoupClient } from "../lib/mediasoupClient";
 
 export default function GlobalRoom() {
-  // ✅ Create the mediasoup client ONCE
   const [msc] = useState(() => new MediaSoupClient());
-
-  // ✅ State for peers + streams
-  const [peerList, setPeerList] = useState<string[]>([]);
+  const [peerList, setPeerList] = useState<any[]>([]); // ✅ now supports {id,name} objects
   const [remoteStreams, setRemoteStreams] = useState<Map<string, MediaStream>>(
     new Map()
   );
   const selfVideo = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
-    let cancelled = false; // 🧩 guard for React Strict Mode double-mounts
+    let cancelled = false;
 
-    // ✅ Attach socket event handlers *immediately*
+    // ✅ peerList callback
     msc.onPeerListCallback = (peers) => {
-      if (cancelled) return;
-      console.log("🔁 setPeerList called with:", peers);
-      setPeerList(peers);
+      console.log("👀 React sees peerList update:", peers);
+
+      // ✅ Deduplicate by id and sort for stable ordering
+      const unique = Array.from(
+        new Map(peers.map((p: any) => [p.id, p])).values()
+      );
+
+      setPeerList(unique);
     };
 
     msc.onNewStream = (stream, id) => {
@@ -36,41 +37,41 @@ export default function GlobalRoom() {
       });
     };
 
-    // ✅ Start async init AFTER wiring listeners
+    // ✅ Register username when connected
+    const username =
+      localStorage.getItem("username") ||
+      JSON.parse(localStorage.getItem("wrld_user") || "{}")?.username ||
+      "Guest";
+
+    msc.socket.on("connect", () => {
+      console.log("🧠 Registering user:", username);
+      msc.socket.emit("register", { name: username });
+    });
+
+    // ✅ Start camera/mic
     (async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: true,
           audio: true,
         });
-
         if (selfVideo.current) {
           selfVideo.current.srcObject = stream;
-          try {
-            await selfVideo.current.play();
-          } catch (err: any) {
-            if (err.name !== "AbortError") {
-              console.warn("Video play error:", err);
-            }
-          }
+          await selfVideo.current.play().catch(() => {});
         }
-
         await msc.publishLocalStream(stream);
       } catch (err) {
         console.error("Error starting local stream:", err);
       }
     })();
 
-    // 🧹 Cleanup
     return () => {
       cancelled = true;
       console.log("🧹 Cleaning up GlobalRoom");
 
-      // ⚙️ Don’t close in dev strict mode’s fake unmount
       if (process.env.NODE_ENV !== "development") {
         msc.close();
       } else {
-        // 🧩 Delay close slightly to survive double-mount
         setTimeout(() => {
           if (cancelled) msc.close();
         }, 500);
@@ -78,7 +79,7 @@ export default function GlobalRoom() {
     };
   }, [msc]);
 
-  // ✅ Log to confirm React sees the updates
+  // ✅ Debug — confirm state updates
   useEffect(() => {
     console.log("👀 React sees peerList update:", peerList);
   }, [peerList]);
@@ -93,11 +94,17 @@ export default function GlobalRoom() {
             No one else is here yet
           </li>
         ) : (
-          peerList.map((p) => (
-            <li key={p} className="text-sm">
-              {p}
-            </li>
-          ))
+          peerList.map((p: any, idx) => {
+            // ✅ Support both string[] and {id,name}[]
+            const id = typeof p === "string" ? p : p.id;
+            const name =
+              typeof p === "string" ? p.slice(0, 6) : p.name || "Anonymous";
+            return (
+              <li key={id || idx} className="text-sm">
+                {name} ({id?.slice?.(0, 5) ?? "----"})
+              </li>
+            );
+          })
         )}
       </ul>
 
