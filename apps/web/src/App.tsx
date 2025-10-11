@@ -13,6 +13,7 @@ import ProfilePage from "./pages/ProfilePage";
 import SetupPage from "./pages/SetupPage";
 import BroadcastPage from "./pages/BroadcastPage";
 import { AuthModalProvider } from "./context/AuthModalContext";
+import GlobalRoom from "./components/GlobalRoom";
 
 export default function App() {
   const [user, setUser] = useState<any | null>(null);
@@ -79,6 +80,7 @@ export default function App() {
               element={user ? <SetupPage /> : <Navigate to="/" replace />}
             />
             <Route path="/broadcast" element={<BroadcastPage />} />{" "}
+            <Route path="/global-room" element={<GlobalRoom />} />
           </Routes>
 
           <AuthModal onLogin={(u) => setUser(u)} />
