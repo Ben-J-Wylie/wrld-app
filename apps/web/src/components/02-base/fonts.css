@@ -1,1 +1,27 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap"); 
+
+@font-face {
+    font-family: 'Monoid';
+    src: url('../../fonts/Monoid/Monoid-Regular.woff2') format('woff2'),
+         url('../../fonts/Monoid/Monoid-Regular.woff') format('woff');
+    font-weight: normal;
+    font-style: normal;
+    font-display: fallback;
+ }
+
+ @font-face {
+    font-family: 'Monoid';
+    src: url('../../fonts/Monoid/Monoid-Bold.woff2') format('woff2'),
+         url('../../fonts/Monoid/Monoid-Bold.woff') format('woff');
+    font-weight: bold;
+    font-style: normal;
+ }
+
+ @font-face {
+    font-family: 'Monoid';
+    src: url('../../fonts/Monoid/Monoid-Italic.woff2') format('woff2'),
+         url('../../fonts/Monoid/Monoid-Italic.woff') format('woff');
+    font-weight: normal;
+    font-style: italic;
+ }
+
+

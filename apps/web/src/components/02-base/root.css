@@ -1,0 +1,38 @@
+:root {
+  --bg-dark: #0a0c10;
+  --bg-gradient: radial-gradient(circle at 30% 10%, #0f2027 0%, #203a43 40%, #2c5364 100%);
+  --accent: #00e0ff;
+  --accent-dim: rgba(0, 224, 255, 0.25);
+  --text-light: #e0f7fa;
+  --text-muted: #9db4c0;
+  --white: #ffffff;
+  --glass-bg: rgba(255, 255, 255, 0.06);
+  --glass-border: rgba(255, 255, 255, 0.12);
+  --blur: blur(12px);
+  --transition: 0.25s ease-in-out;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  background: var(--bg-gradient); /* ✅ extend gradient all the way up */
+  font-family: "Monoid", sans-serif;
+  color: var(--text-light);
+}
+
+body {
+  padding-top: 70px; /* ✅ offset for fixed header */
+}
+
+.app-container {
+  position: relative;
+  min-height: 100vh; /* ✅ allow app to grow */
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: visible; /* ✅ don't clip children */
+}
