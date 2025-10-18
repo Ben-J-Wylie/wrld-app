@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 import React, { useEffect, useRef, useState } from "react";
 import {
   Camera,
@@ -13,8 +15,8 @@ import {
 import L, { Map as LeafletMap, Marker as LeafletMarker } from "leaflet";
 import "leaflet/dist/leaflet.css";
 import Chart from "chart.js/auto";
-import { useIsMobile } from "../hooks/useIsMobile";
-import "../App.css";
+import { useIsMobile } from "../../hooks/useIsMobile";
+import "../01-main/main.css";
 
 type Toggles = {
   frontCamera: boolean;

@@ -31,17 +31,12 @@ h3 {
 
 p {
     color: var(--color-primary);
+    font-size: 0.8rem;
     text-transform: none;
     text-align: left;
-    letter-spacing: 0em;
-    font-weight: normal;
-    font-style: italic;
+    letter-spacing: 0rem;
 }
 
-
-
-
-/* of course i need this */
 li {
     color: var(--color-primary);
     text-transform: none;
@@ -55,7 +50,7 @@ li {
 
 /* Desktop */
 
-/* @media screen and (min-width: 1024px) {
+@media screen and (min-width: 1024px) {
     body {
         font-size: 1.5rem;
     }
@@ -71,4 +66,8 @@ li {
     h3 {
         font-size: 1.5rem;
     }
-} */
+
+    p {
+        font-size: 1rem;
+    }   
+}

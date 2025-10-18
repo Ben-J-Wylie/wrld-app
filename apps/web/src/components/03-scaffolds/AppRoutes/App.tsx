@@ -1,4 +1,5 @@
-// src/App.tsx
+// @ts-nocheck
+
 import React, { useState } from "react";
 import { BrowserRouter as Router } from "react-router-dom";
 import AppRoutes from "../src/components/03-scaffolds/AppRoutes/AppRoutes";

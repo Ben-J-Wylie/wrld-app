@@ -10,6 +10,7 @@
   --glass-border: rgba(255, 255, 255, 0.12);
   --blur: blur(12px);
   --transition: 0.25s ease-in-out;
+  --color-primary: #ff0000;
 }
 
 html,

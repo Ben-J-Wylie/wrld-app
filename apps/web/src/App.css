@@ -3,7 +3,7 @@
    Cinematic Dark Theme with Neon Accent
 -------------------------------------------------- */
 
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap");
+/* @import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap");
 
 :root {
   --bg-dark: #0a0c10;
@@ -17,36 +17,36 @@
   --glass-border: rgba(255, 255, 255, 0.12);
   --blur: blur(12px);
   --transition: 0.25s ease-in-out;
-}
+} */
 
 /* --------------------------------------------------
    Base Layout
 -------------------------------------------------- */
 
-html,
+/* html,
 body,
 #root {
   height: 100%;
   width: 100%;
   margin: 0;
   padding: 0;
-  background: var(--bg-gradient); /* ✅ extend gradient all the way up */
+  background: var(--bg-gradient);
   font-family: "Inter", sans-serif;
   color: var(--text-light);
 }
 
 body {
-  padding-top: 70px; /* ✅ offset for fixed header */
+  padding-top: 70px; 
 }
 
 .app-container {
   position: relative;
-  min-height: 100vh; /* ✅ allow app to grow */
+  min-height: 100vh;
   width: 100%;
   display: flex;
   flex-direction: column;
-  overflow: visible; /* ✅ don't clip children */
-}
+  overflow: visible; 
+} */
 
 /* --------------------------------------------------
    Animated Background Glow
