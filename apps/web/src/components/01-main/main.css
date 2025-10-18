@@ -17,11 +17,13 @@
 
 @import "../04-elements/Avatar/Avatar.css";
 @import "../04-elements/DropdownMenu/DropdownMenu.css";
+@import "../04-elements/Logo/Logo.css";
 
 /* Manifolds */
 
 @import "../05-manifolds/HeroSection/HeroSection.css";
 @import "../05-manifolds/LoadingScreen/LoadingScreen.css";
+@import "../05-manifolds/UserDropdown/UserDropdown.css";
 
 /* Structures */
 

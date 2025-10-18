@@ -1,82 +1,65 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState } from "react";
+import Avatar from "../../04-elements/Avatar/Avatar";
+import DropdownMenu from "../../04-elements/DropdownMenu/DropdownMenu";
 import { Settings, User, LogOut } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import "../../01-main/main.css";
 
-export default function UserDropdown({ user, onLogout }: any) {
-  const [open, setOpen] = useState(false);
-  const [fadeOut, setFadeOut] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const navigate = useNavigate();
+interface UserDropdownProps {
+  user: {
+    username?: string;
+    email?: string;
+    avatarUrl?: string;
+  };
+  onLogout: () => void;
+  onProfile?: () => void;
+  onSetup?: () => void;
+}
 
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) close();
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+export default function UserDropdown({
+  user,
+  onLogout,
+  onProfile,
+  onSetup,
+}: UserDropdownProps) {
+  const [menuOpen, setMenuOpen] = useState(false);
 
-  function openMenu() {
-    setOpen(true);
-    setFadeOut(false);
-  }
-
-  function close() {
-    setFadeOut(true);
-    setTimeout(() => {
-      setOpen(false);
-      setFadeOut(false);
-    }, 150);
-  }
+  const items = [
+    {
+      label: "Setup",
+      icon: <Settings size={18} />,
+      onClick: onSetup,
+    },
+    {
+      label: "Profile",
+      icon: <User size={18} />,
+      onClick: onProfile,
+    },
+    {
+      label: "Sign Out",
+      icon: <LogOut size={18} />,
+      onClick: onLogout,
+    },
+  ];
 
   return (
-    <div className="user-info" ref={ref}>
-      {user.avatarUrl ? (
-        <img src={user.avatarUrl} alt="Avatar" className="user-avatar" />
-      ) : (
-        <div className="user-initial">
-          {(user.username?.[0] || user.email?.[0] || "?").toUpperCase()}
-        </div>
-      )}
-      <span className="user-name">{user.username || user.email}</span>
-
-      <button
-        onClick={() => (open ? close() : openMenu())}
-        className="nav-link"
-        style={{ background: "none", border: "none", cursor: "pointer" }}
+    <div className="user-dropdown">
+      <div
+        className="user-dropdown-trigger"
+        onClick={() => setMenuOpen((prev) => !prev)}
       >
-        ▾
-      </button>
+        <Avatar
+          avatarUrl={user.avatarUrl}
+          username={user.username}
+          email={user.email}
+          size={40}
+        />
+        <span className="user-name">{user.username || user.email}</span>
+        <span className="caret">▾</span>
+      </div>
 
-      {open && (
-        <div className={`dropdown-menu ${fadeOut ? "fade-out" : "fade-in"}`}>
-          <button
-            onClick={() => {
-              navigate("/setup");
-              close();
-            }}
-          >
-            <Settings size={18} />
-            Setup
-          </button>
-          <button
-            onClick={() => {
-              navigate("/profile");
-              close();
-            }}
-          >
-            <User size={18} />
-            Profile
-          </button>
-          <button
-            onClick={() => {
-              onLogout();
-              close();
-            }}
-          >
-            <LogOut size={18} />
-            Sign Out
-          </button>
+      {menuOpen && (
+        <div className="user-dropdown-menu">
+          <DropdownMenu label="" items={items} />
         </div>
       )}
     </div>

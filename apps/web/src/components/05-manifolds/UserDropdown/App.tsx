@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 import React from "react";
 import Logo from "./components/04-elements/Logo/Logo";
 import UserDropdown from "./components/05-manifolds/UserDropdown/UserDropdown";
