@@ -1,5 +1,5 @@
 import React from "react";
-import "./LoadingScreen.css";
+import "../../01-main/main.css";
 
 export default function LoadingScreen() {
   return (
