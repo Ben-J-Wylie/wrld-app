@@ -1,15 +1,15 @@
-.text-input-wrapper {
+.input-text-wrapper {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
 }
 
-.text-input-label {
+.input-text-label {
   font-size: 0.9rem;
   color: rgba(255, 255, 255, 0.8);
 }
 
-.text-input-field {
+.input-text-field {
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 6px;
@@ -19,12 +19,12 @@
   transition: border-color 0.2s ease, background 0.2s ease;
 }
 
-.text-input-field:focus {
+.input-text-field:focus {
   border-color: #0ff;
   background: rgba(255, 255, 255, 0.15);
 }
 
-.text-input-error {
+.input-text-error {
   font-size: 0.8rem;
   color: #ff6666;
   margin-top: 0.1rem;

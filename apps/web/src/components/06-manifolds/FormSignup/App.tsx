@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 import React, { useState } from "react";
 import FormSignup from "./components/06-manifolds/FormSignup/FormSignup";
 import "./App.css";

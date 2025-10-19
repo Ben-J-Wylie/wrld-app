@@ -1,8 +1,7 @@
 // @ts-nocheck
 
 import React, { useState } from "react";
-import TextInput from "./components/05-elements/TextInput/TextInput";
-import "./App.css";
+import InputText from "./components/05-elements/InputText/InputText";
 
 export default function App() {
   const [email, setEmail] = useState("");
@@ -21,10 +20,10 @@ export default function App() {
 
   return (
     <div className="app-wrapper">
-      <h1>Text Input Demo</h1>
+      <h1>InputText Demo</h1>
 
       <form className="input-demo" onSubmit={handleSubmit}>
-        <TextInput
+        <InputText
           label="Email Address"
           placeholder="you@example.com"
           type="email"
@@ -33,7 +32,7 @@ export default function App() {
           error={error}
         />
 
-        <TextInput
+        <InputText
           label="Username"
           placeholder="Enter your username"
           value={username}

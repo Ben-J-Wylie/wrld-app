@@ -24,11 +24,15 @@
 @import "../05-elements/FormContainer/FormContainer.css";
 @import "../05-elements/FormFooter/FormFooter.css";
 @import "../05-elements/FormTitle/FormTitle.css";
+@import "../05-elements/InputPassword/InputPassword.css";
+@import "../05-elements/InputText/InputText.css";
 @import "../05-elements/Logo/Logo.css";
-@import "../05-elements/TextInput/TextInput.css";
 
 /* Manifolds */
 
+@import "../06-manifolds/FormForgotPassword/FormForgotPassword.css";
+@import "../06-manifolds/FormLogin/FormLogin.css";
+@import "../06-manifolds/FormSignup/FormSignup.css";
 @import "../06-manifolds/HeroSection/HeroSection.css";
 @import "../06-manifolds/LoadingScreen/LoadingScreen.css";
 @import "../06-manifolds/UserDropdown/UserDropdown.css";
