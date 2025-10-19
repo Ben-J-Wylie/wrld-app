@@ -1,7 +1,7 @@
 // @ts-nocheck
 
 import React from "react";
-import Avatar from "./components/04-elements/Avatar/Avatar"; // adjust path if needed
+import Avatar from "./components/05-elements/Avatar/Avatar"; // adjust path if needed
 
 export default function App() {
   const mockUser = {

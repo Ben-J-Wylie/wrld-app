@@ -1,7 +1,7 @@
 // @ts-nocheck
 
 import React from "react";
-import DropdownMenu from "./components/04-elements/DropdownMenu/DropdownMenu";
+import DropdownMenu from "./components/05-elements/DropdownMenu/DropdownMenu";
 import { Settings, User, LogOut } from "lucide-react";
 
 export default function App() {

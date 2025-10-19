@@ -1,7 +1,7 @@
 // @ts-nocheck
 
 import React from "react";
-import Logo from "./components/04-elements/Logo/Logo";
+import Logo from "./components/05-elements/Logo/Logo";
 
 export default function App() {
   return (

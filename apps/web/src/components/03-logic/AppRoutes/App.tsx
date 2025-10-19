@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { BrowserRouter as Router } from "react-router-dom";
-import AppRoutes from "../src/components/03-scaffolds/AppRoutes/AppRoutes";
+import AppRoutes from "../src/components/04-scaffolds/AppRoutes/AppRoutes";
 import "./App.css";
 
 export default function App() {

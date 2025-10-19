@@ -1,6 +1,6 @@
 import React, { useState } from "react";
-import Avatar from "../../04-elements/Avatar/Avatar";
-import DropdownMenu from "../../04-elements/DropdownMenu/DropdownMenu";
+import Avatar from "../../05-elements/Avatar/Avatar";
+import DropdownMenu from "../../05-elements/DropdownMenu/DropdownMenu";
 import { Settings, User, LogOut } from "lucide-react";
 import "../../01-main/main.css";
 
