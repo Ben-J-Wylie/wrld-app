@@ -1,46 +1,31 @@
-import React, { useState } from "react";
-import Header from "./components/07-structures/Header/Header";
+import React from "react";
+import Avatar from "./components/05-elements/Avatar/Avatar"; // adjust path if needed
 
 export default function App() {
-  const [user, setUser] = useState<any | null>({
+  const mockUser = {
     username: "BenWylie",
     email: "ben@example.com",
-    avatarUrl: "https://i.pravatar.cc/150?img=12",
-  });
-
-  function handleLogout() {
-    alert("Logging out...");
-    setUser(null);
-  }
-
-  function handleLogin() {
-    alert("Logging in...");
-    setUser({
-      username: "BenWylie",
-      email: "ben@example.com",
-      avatarUrl: "https://i.pravatar.cc/150?img=12",
-    });
-  }
+    avatarUrl: "https://api.dicebear.com/8.x/adventurer/svg?seed=ben", // try replacing with a real image URL to test
+  };
 
   return (
     <div className="app-container">
-      <Header user={user} onLogout={handleLogout} />
+      <h1>Avatar Component Demo</h1>
 
-      <main className="demo-main">
-        <h1>Header Component Demo</h1>
-        <p>
-          This page shows your new <strong>Header</strong> built with
-          <br /> <em>Logo, Avatar, DropdownMenu, and UserDropdown</em>.
-        </p>
-
-        <div className="demo-controls">
-          {user ? (
-            <button onClick={handleLogout}>Simulate Logout</button>
-          ) : (
-            <button onClick={handleLogin}>Simulate Login</button>
-          )}
-        </div>
-      </main>
+      <div className="avatar-demo">
+        <Avatar
+          avatarUrl={mockUser.avatarUrl}
+          username={mockUser.username}
+          email={mockUser.email}
+          size={40}
+        />
+        <Avatar username="Alice" size={60} />
+        <Avatar email="charlie@example.com" size={80} />
+        <Avatar
+          avatarUrl="https://api.dicebear.com/8.x/adventurer/svg?seed=ben"
+          size={100}
+        />
+      </div>
     </div>
   );
 }
