@@ -122,3 +122,16 @@ export default function SignupForm() {
     </form>
   );
 }
+
+//  Where we are at here is assessing whether or not we need to isolate this form
+// into a collection of elements, and then import...
+
+// import React, { useState } from "react";
+// import { useAuthModal } from "../context/AuthModalContext";
+// import FormContainer from "../04-elements/Form/FormContainer";
+// import FormTitle from "../04-elements/Form/FormTitle";
+// import TextInput from "../04-elements/Form/TextInput";
+// import PasswordInput from "../04-elements/Form/PasswordInput";
+// import PrimaryButton from "../04-elements/Form/PrimaryButton";
+// import FormFooter from "../04-elements/Form/FormFooter";
+// import ErrorMessage from "../04-elements/Form/ErrorMessage";

@@ -4,12 +4,13 @@
 
 /* Main */
 
-/* Base */
+/* Foundation */
 
-@import "../02-base/normalize.css";
-@import "../02-base/root.css";
-@import "../02-base/fonts.css";
-@import "../02-base/typography.css";
+@import "../02-foundation/base.css";
+@import "../02-foundation/fonts.css";
+@import "../02-foundation/normalize.css";
+@import "../02-foundation/typography.css";
+@import "../02-foundation/var.css";
 
 /* Logic */
 
@@ -19,6 +20,8 @@
 
 @import "../05-elements/Avatar/Avatar.css";
 @import "../05-elements/DropdownMenu/DropdownMenu.css";
+@import "../05-elements/FormContainer/FormContainer.css";
+@import "../05-elements/FormTitle/FormTitle.css";
 @import "../05-elements/Logo/Logo.css";
 
 /* Manifolds */
