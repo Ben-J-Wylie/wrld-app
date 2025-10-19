@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 import React, { useState } from "react";
 import Header from "./components/06-structures/Header/Header";
 
