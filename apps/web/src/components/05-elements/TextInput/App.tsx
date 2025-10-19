@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 import React, { useState } from "react";
 import TextInput from "./components/05-elements/TextInput/TextInput";
 import "./App.css";

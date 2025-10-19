@@ -19,10 +19,13 @@
 /* Elements */
 
 @import "../05-elements/Avatar/Avatar.css";
+@import "../05-elements/ButtonPrimary/ButtonPrimary.css";
 @import "../05-elements/DropdownMenu/DropdownMenu.css";
 @import "../05-elements/FormContainer/FormContainer.css";
+@import "../05-elements/FormFooter/FormFooter.css";
 @import "../05-elements/FormTitle/FormTitle.css";
 @import "../05-elements/Logo/Logo.css";
+@import "../05-elements/TextInput/TextInput.css";
 
 /* Manifolds */
 
