@@ -2,7 +2,7 @@ import React from "react";
 import "../../01-main/main.css";
 
 interface InputTextProps extends React.InputHTMLAttributes<HTMLInputElement> {
-  label?: string;
+  label?: React.ReactNode; // ✅ allows JSX or string
   error?: string;
 }
 

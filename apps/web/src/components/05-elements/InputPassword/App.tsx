@@ -2,7 +2,6 @@
 
 import React, { useState } from "react";
 import InputPassword from "./components/05-elements/InputPassword/InputPassword";
-import "./App.css";
 
 export default function App() {
   const [password, setPassword] = useState("");

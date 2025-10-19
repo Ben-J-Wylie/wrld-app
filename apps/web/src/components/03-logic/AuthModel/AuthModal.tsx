@@ -1,8 +1,8 @@
 // apps/web/src/components/AuthModal.tsx
 import React from "react";
 import { useAuthModal } from "../../../context/AuthModalContext";
-import SignupForm from "../../SignupForm";
-import LoginForm from "../../LoginForm";
+import SignupForm from "../../06-manifolds/FormSignup/FormSignup";
+import LoginForm from "../../06-manifolds/FormLogin/FormLogin";
 
 interface AuthModalProps {
   onLogin?: (user: any) => void;
