@@ -1,0 +1,41 @@
+.go-live-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(90deg, #111, #1a1a1a);
+  border: 1px solid #444;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 500;
+  border-radius: 8px;
+  padding: 10px 18px;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  box-shadow: 0 0 6px rgba(0, 224, 255, 0);
+}
+
+.go-live-button:hover:not(:disabled) {
+  border-color: #00e0ff;
+  box-shadow: 0 0 12px rgba(0, 224, 255, 0.3);
+  transform: scale(1.03);
+}
+
+.go-live-button.active {
+  background: linear-gradient(90deg, #ff004c, #ff0080);
+  border-color: #ff0066;
+  box-shadow: 0 0 12px rgba(255, 0, 120, 0.5);
+}
+
+.go-live-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.go-live-button .icon {
+  margin-right: 4px;
+  transition: transform 0.25s ease;
+}
+
+.go-live-button.active .icon {
+  transform: rotate(180deg);
+}

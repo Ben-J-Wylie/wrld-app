@@ -20,8 +20,10 @@
 
 @import "../05-elements/Avatar/Avatar.css";
 @import "../05-elements/AvatarUploader/AvatarUploader.css";
+@import "../05-elements/ButtonGoLive/ButtonGoLive.css";
 @import "../05-elements/ButtonPrimary/ButtonPrimary.css";
 @import "../05-elements/DropdownMenu/DropdownMenu.css";
+@import "../05-elements/FeatureCard/FeatureCard.css";
 @import "../05-elements/FormContainer/FormContainer.css";
 @import "../05-elements/FormFooter/FormFooter.css";
 @import "../05-elements/FormMessage/FormMessage.css";
@@ -30,6 +32,8 @@
 @import "../05-elements/InputText/InputText.css";
 @import "../05-elements/InputUsername/InputUsername.css";
 @import "../05-elements/Logo/Logo.css";
+@import "../05-elements/SetupHeader/SetupHeader.css";
+@import "../05-elements/ToggleGrid/ToggleGrid.css";
 
 /* Manifolds */
 
