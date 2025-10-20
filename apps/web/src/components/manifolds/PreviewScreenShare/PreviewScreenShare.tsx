@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import "../../01-main/main.css";
+import "../../_main/main.css";
 
 export default function PreviewScreenShare() {
   const videoRef = useRef<HTMLVideoElement | null>(null);

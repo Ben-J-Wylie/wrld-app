@@ -1,6 +1,6 @@
 import React from "react";
 import Avatar from "../Avatar/Avatar";
-import "../../01-main/main.css";
+import "../../_main/main.css";
 
 interface AvatarUploaderProps {
   avatarUrl: string;

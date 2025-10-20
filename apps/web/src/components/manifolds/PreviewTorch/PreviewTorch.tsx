@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import Chart from "chart.js/auto";
-import "../../01-main/main.css";
+import "../../_main/main.css";
 
 export default function PreviewTorch() {
   const [supported, setSupported] = useState<boolean | null>(null);

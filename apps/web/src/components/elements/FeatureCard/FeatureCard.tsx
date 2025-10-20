@@ -1,5 +1,5 @@
 import React from "react";
-import "../../01-main/main.css";
+import "../../_main/main.css";
 
 interface FeatureCardProps {
   icon: React.ReactNode;

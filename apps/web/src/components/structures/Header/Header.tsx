@@ -1,5 +1,5 @@
 import React from "react";
-import "../../01-main/main.css";
+import "../../_main/main.css";
 import { useAuthModal } from "../../../context/AuthModalContext";
 import Logo from "../../elements/Logo/Logo";
 import UserDropdown from "../../manifolds/UserDropdown/UserDropdown";

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, ReactNode } from "react";
-import "../../01-main/main.css";
+import "../../_main/main.css";
 
 interface DropdownItem {
   label: string;

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import L, { Map as LeafletMap, Marker as LeafletMarker } from "leaflet";
 import "leaflet/dist/leaflet.css";
-import "../../01-main/main.css";
+import "../../_main/main.css";
 
 export default function PreviewLocation() {
   const mapRef = useRef<LeafletMap | null>(null);

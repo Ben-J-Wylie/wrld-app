@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import Avatar from "../../elements/Avatar/Avatar";
 import DropdownMenu from "../../elements/DropdownMenu/DropdownMenu";
 import { Settings, User, LogOut } from "lucide-react";
-import "../../01-main/main.css";
+import "../../_main/main.css";
 
 interface UserDropdownProps {
   user: {

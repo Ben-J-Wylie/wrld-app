@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
-import "../../01-main/main.css";
+import "../../_main/main.css";
 
 interface InputPasswordProps
   extends React.InputHTMLAttributes<HTMLInputElement> {

@@ -1,6 +1,6 @@
 import React from "react";
 import InputText from "../InputText/InputText";
-import "../../01-main/main.css";
+import "../../_main/main.css";
 
 interface InputUsernameProps {
   label?: string;

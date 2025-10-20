@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from "react";
-import "../../01-main/main.css";
+import "../../_main/main.css";
 
 interface PreviewCameraProps {
   facing?: "user" | "environment";

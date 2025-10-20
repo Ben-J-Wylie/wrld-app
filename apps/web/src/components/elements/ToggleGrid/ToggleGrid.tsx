@@ -1,6 +1,6 @@
 import React from "react";
 import FeatureCard from "../FeatureCard/FeatureCard";
-import "../../01-main/main.css";
+import "../../_main/main.css";
 
 interface ToggleItem {
   label: string;

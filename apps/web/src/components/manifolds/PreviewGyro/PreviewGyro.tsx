@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import "../../01-main/main.css";
+import "../../_main/main.css";
 
 export default function PreviewGyro() {
   const [alpha, setAlpha] = useState<number | null>(null);
