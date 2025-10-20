@@ -2,14 +2,14 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
 // 🧩 Components
-import FormContainer from "../../05-elements/FormContainer/FormContainer";
-import FormTitle from "../../05-elements/FormTitle/FormTitle";
-import InputUsername from "../../05-elements/InputUsername/InputUsername";
-import InputText from "../../05-elements/InputText/InputText";
-import InputPassword from "../../05-elements/InputPassword/InputPassword";
-import FormMessage from "../../05-elements/FormMessage/FormMessage";
-import ButtonPrimary from "../../05-elements/ButtonPrimary/ButtonPrimary";
-import AvatarUploader from "../../05-elements/AvatarUploader/AvatarUploader";
+import FormContainer from "../../elements/FormContainer/FormContainer";
+import FormTitle from "../../elements/FormTitle/FormTitle";
+import InputUsername from "../../elements/InputUsername/InputUsername";
+import InputText from "../../elements/InputText/InputText";
+import InputPassword from "../../elements/InputPassword/InputPassword";
+import FormMessage from "../../elements/FormMessage/FormMessage";
+import ButtonPrimary from "../../elements/ButtonPrimary/ButtonPrimary";
+import AvatarUploader from "../../elements/AvatarUploader/AvatarUploader";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "https://localhost:4000";

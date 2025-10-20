@@ -1,6 +1,6 @@
 import React from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
-import HeroSection from "../../06-manifolds/HeroSection/HeroSection";
+import HeroSection from "../../manifolds/HeroSection/HeroSection";
 import ProfilePage from "../../08-pages/ProfilePage/ProfilePage";
 import SetupPage from "../../08-pages/SetupPage/SetupPage";
 

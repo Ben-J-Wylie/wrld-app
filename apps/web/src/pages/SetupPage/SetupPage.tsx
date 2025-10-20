@@ -14,19 +14,19 @@ import { useIsMobile } from "../../../hooks/useIsMobile";
 import "../../01-main/main.css";
 
 // Core components
-import SetupHeader from "../../05-elements/SetupHeader/SetupHeader";
-import ButtonGoLive from "../../05-elements/ButtonGoLive/ButtonGoLive";
-import ToggleGrid from "../../05-elements/ToggleGrid/ToggleGrid";
-import FeatureCard from "../../05-elements/FeatureCard/FeatureCard";
+import SetupHeader from "../../elements/SetupHeader/SetupHeader";
+import ButtonGoLive from "../../elements/ButtonGoLive/ButtonGoLive";
+import ToggleGrid from "../../elements/ToggleGrid/ToggleGrid";
+import FeatureCard from "../../elements/FeatureCard/FeatureCard";
 
 // Previews
-import PreviewCamera from "../../06-manifolds/PreviewCamera/PreviewCamera";
-import PreviewMicFFT from "../../06-manifolds/PreviewMicFFT/PreviewMicFFT";
-import PreviewLocation from "../../06-manifolds/PreviewLocation/PreviewLocation";
-import PreviewChat from "../../06-manifolds/PreviewChat/PreviewChat";
-import PreviewScreenShare from "../../06-manifolds/PreviewScreenShare/PreviewScreenShare";
-import PreviewTorch from "../../06-manifolds/PreviewTorch/PreviewTorch";
-import PreviewGyro from "../../06-manifolds/PreviewGyro/PreviewGyro";
+import PreviewCamera from "../../manifolds/PreviewCamera/PreviewCamera";
+import PreviewMicFFT from "../../manifolds/PreviewMicFFT/PreviewMicFFT";
+import PreviewLocation from "../../manifolds/PreviewLocation/PreviewLocation";
+import PreviewChat from "../../manifolds/PreviewChat/PreviewChat";
+import PreviewScreenShare from "../../manifolds/PreviewScreenShare/PreviewScreenShare";
+import PreviewTorch from "../../manifolds/PreviewTorch/PreviewTorch";
+import PreviewGyro from "../../manifolds/PreviewGyro/PreviewGyro";
 
 type Toggles = {
   frontCamera: boolean;

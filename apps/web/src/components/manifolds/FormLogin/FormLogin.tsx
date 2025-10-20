@@ -1,11 +1,11 @@
 import React, { useState } from "react";
 import { useAuthModal } from "../../../context/AuthModalContext";
-import FormContainer from "../../05-elements/FormContainer/FormContainer";
-import FormTitle from "../../05-elements/FormTitle/FormTitle";
-import InputText from "../../05-elements/InputText/InputText";
-import ButtonPrimary from "../../05-elements/ButtonPrimary/ButtonPrimary";
-import FormFooter from "../../05-elements/FormFooter/FormFooter";
-import InputPassword from "../../05-elements/InputPassword/InputPassword"; // ✅ corrected folder path + naming
+import FormContainer from "../../elements/FormContainer/FormContainer";
+import FormTitle from "../../elements/FormTitle/FormTitle";
+import InputText from "../../elements/InputText/InputText";
+import ButtonPrimary from "../../elements/ButtonPrimary/ButtonPrimary";
+import FormFooter from "../../elements/FormFooter/FormFooter";
+import InputPassword from "../../elements/InputPassword/InputPassword"; // ✅ corrected folder path + naming
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "https://localhost:4000";

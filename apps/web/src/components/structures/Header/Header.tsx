@@ -1,8 +1,8 @@
 import React from "react";
 import "../../01-main/main.css";
 import { useAuthModal } from "../../../context/AuthModalContext";
-import Logo from "../../05-elements/Logo/Logo";
-import UserDropdown from "../../06-manifolds/UserDropdown/UserDropdown";
+import Logo from "../../elements/Logo/Logo";
+import UserDropdown from "../../manifolds/UserDropdown/UserDropdown";
 
 interface HeaderProps {
   user: any;
