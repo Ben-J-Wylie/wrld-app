@@ -42,6 +42,13 @@
 @import "../06-manifolds/FormSignup/FormSignup.css";
 @import "../06-manifolds/HeroSection/HeroSection.css";
 @import "../06-manifolds/LoadingScreen/LoadingScreen.css";
+@import "../06-manifolds/PreviewCamera/PreviewCamera.css";
+@import "../06-manifolds/PreviewChat//PreviewChat.css";
+@import "../06-manifolds/PreviewGyro//PreviewGyro.css";
+@import "../06-manifolds/PreviewLocation/PreviewLocation.css";
+@import "../06-manifolds/PreviewMicFFT/PreviewMicFFT.css";
+@import "../06-manifolds/PreviewScreenShare/PreviewScreenShare.css";
+@import "../06-manifolds/PreviewTorch/PreviewTorch.css";
 @import "../06-manifolds/UserDropdown/UserDropdown.css";
 
 /* Structures */

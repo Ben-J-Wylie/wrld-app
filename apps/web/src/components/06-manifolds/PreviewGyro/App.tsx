@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 import React from "react";
 import PreviewGyro from "./components/06-manifolds/PreviewGyro/PreviewGyro";
 

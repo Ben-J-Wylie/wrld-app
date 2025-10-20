@@ -1,5 +1,7 @@
+// @ts-nocheck
+
 import React from "react";
-import PreviewGyro from "./components/06-manifolds/PreviewGyro/PreviewGyro";
+import PreviewScreenShare from "./components/06-manifolds/PreviewScreenShare/PreviewScreenShare";
 
 export default function App() {
   return (
@@ -16,15 +18,15 @@ export default function App() {
         padding: "20px",
       }}
     >
-      <h2 style={{ fontWeight: 500 }}>Gyroscope Preview Demo</h2>
+      <h2 style={{ fontWeight: 500 }}>Screen Share Preview Demo</h2>
 
-      <div style={{ width: "80%", maxWidth: "400px" }}>
-        <PreviewGyro />
+      <div style={{ width: "80%", maxWidth: "500px" }}>
+        <PreviewScreenShare />
       </div>
 
       <p style={{ color: "#777", fontSize: "0.9rem", textAlign: "center" }}>
-        Move or rotate your device to see live orientation values. On iOS, tap
-        “Enable Motion Access” to grant permission.
+        Click “Start Screen Share” and select a window or screen. The preview
+        will appear below.
       </p>
     </div>
   );

@@ -1,7 +1,11 @@
-import React from "react";
-import PreviewGyro from "./components/06-manifolds/PreviewGyro/PreviewGyro";
+// @ts-nocheck
+
+import React, { useState } from "react";
+import PreviewChat from "./components/06-manifolds/PreviewChat/PreviewChat";
 
 export default function App() {
+  const [messages, setMessages] = useState<string[]>([]);
+
   return (
     <div
       style={{
@@ -16,15 +20,14 @@ export default function App() {
         padding: "20px",
       }}
     >
-      <h2 style={{ fontWeight: 500 }}>Gyroscope Preview Demo</h2>
+      <h2 style={{ fontWeight: 500 }}>Chat Preview Demo</h2>
 
       <div style={{ width: "80%", maxWidth: "400px" }}>
-        <PreviewGyro />
+        <PreviewChat messages={messages} setMessages={setMessages} />
       </div>
 
       <p style={{ color: "#777", fontSize: "0.9rem", textAlign: "center" }}>
-        Move or rotate your device to see live orientation values. On iOS, tap
-        “Enable Motion Access” to grant permission.
+        Type messages and press Enter or click Send.
       </p>
     </div>
   );

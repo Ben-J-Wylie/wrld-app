@@ -1,0 +1,14 @@
+.preview-micfft {
+  width: 100%;
+  background: #111;
+  border: 1px solid #333;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 0 10px rgba(0, 224, 255, 0.15);
+}
+
+.preview-micfft canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+}

@@ -1,0 +1,51 @@
+.preview-torch {
+  width: 100%;
+  background: #111;
+  border: 1px solid #333;
+  border-radius: 10px;
+  overflow: hidden;
+  text-align: center;
+  box-shadow: 0 0 10px rgba(0, 224, 255, 0.15);
+  padding: 16px;
+}
+
+.torch-controls {
+  margin-bottom: 12px;
+}
+
+.form-button {
+  background: #00e0ff;
+  border: none;
+  color: #000;
+  font-weight: 600;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.form-button.secondary {
+  background: #ff0066;
+  color: #fff;
+}
+
+.form-button:hover {
+  transform: scale(1.05);
+}
+
+.preview-canvas {
+  width: 100%;
+  border-radius: 6px;
+  background: #0e0e0e;
+}
+
+.torch-unsupported {
+  color: #999;
+  font-size: 0.9rem;
+}
+
+.error-text {
+  color: #ff5555;
+  margin-top: 8px;
+  font-size: 0.85rem;
+}
