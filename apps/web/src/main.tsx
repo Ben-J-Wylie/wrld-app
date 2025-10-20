@@ -1,23 +1,15 @@
-// import React from "react";
-// import ReactDOM from "react-dom/client";
-// import App from "./App";
-// import { AuthModalProvider } from "./context/AuthModalContext";
-
-// ReactDOM.createRoot(document.getElementById("root")!).render(
-//   <React.StrictMode>
-//     <AuthModalProvider>
-//       <App />
-//     </AuthModalProvider>
-//   </React.StrictMode>
-// );
-
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
-import "./components/_main/main.css"; // your global styles
+import { AuthModalProvider } from "./context/AuthModalContext";
+import { BroadcastProvider } from "./context/BroadcastContext"; // 👈 new
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
+  //<React.StrictMode>
+  <AuthModalProvider>
+    <BroadcastProvider>
+      <App />
+    </BroadcastProvider>
+  </AuthModalProvider>
+  //</React.StrictMode>
 );

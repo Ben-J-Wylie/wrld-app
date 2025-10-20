@@ -1,21 +1,41 @@
 {
-  "name": "@wrld/web",
-  "version": "0.0.0",
+  "name": "wrld-app",
+  "version": "1.0.0",
   "private": true,
+  "packageManager": "npm@9.9.4",
+  "description": "",
+  "main": "index.js",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
+    "dev": "turbo run dev --parallel",
+    "dev:api": "npm run dev --workspace=@wrld/api",
+    "dev:web": "npm run dev --workspace=@wrld/web",
+    "build": "turbo run build",
+    "clean": "rimraf node_modules apps/**/node_modules packages/**/node_modules",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "reinstall": "npm run clean && npm cache clean --force && npm install"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^24.7.0",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.1",
+    "@vitejs/plugin-react": "^5.0.4",
+    "rimraf": "^5.0.10",
+    "turbo": "^2.0.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.1.9"
   },
   "dependencies": {
-    "chart.js": "^4.5.0",
-    "leaflet": "^1.9.4",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "react-router-dom": "^7.9.4"
-  },
-  "devDependencies": {
-    "@types/leaflet": "^1.9.21",
-    "typescript": "^5.9.3"
+    "express": "^5.1.0",
+    "lucide-react": "^0.545.0",
+    "mediasoup": "^3.19.3",
+    "socket.io": "^4.8.1",
+    "uuid": "^13.0.0"
   }
 }

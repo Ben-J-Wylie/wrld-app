@@ -3,7 +3,7 @@
    Cinematic Dark Theme with Neon Accent
 -------------------------------------------------- */
 
-/* @import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap");
 
 :root {
   --bg-dark: #0a0c10;
@@ -17,36 +17,36 @@
   --glass-border: rgba(255, 255, 255, 0.12);
   --blur: blur(12px);
   --transition: 0.25s ease-in-out;
-} */
+}
 
 /* --------------------------------------------------
    Base Layout
 -------------------------------------------------- */
 
-/* html,
+html,
 body,
 #root {
   height: 100%;
   width: 100%;
   margin: 0;
   padding: 0;
-  background: var(--bg-gradient);
+  background: var(--bg-gradient); /* ✅ extend gradient all the way up */
   font-family: "Inter", sans-serif;
   color: var(--text-light);
 }
 
 body {
-  padding-top: 70px; 
+  padding-top: 70px; /* ✅ offset for fixed header */
 }
 
 .app-container {
   position: relative;
-  min-height: 100vh;
+  min-height: 100vh; /* ✅ allow app to grow */
   width: 100%;
   display: flex;
   flex-direction: column;
-  overflow: visible; 
-} */
+  overflow: visible; /* ✅ don't clip children */
+}
 
 /* --------------------------------------------------
    Animated Background Glow
@@ -1004,3 +1004,245 @@ body {
 }
 
 
+/* -------------------------------
+   Broadcast Page
+---------------------------------*/
+
+.broadcast-page {
+  display: flex;
+  height: calc(100vh - 70px);
+  overflow: hidden;
+  background: #0a0c10;
+  color: #e0f7fa;
+}
+
+/* Sidebar */
+.peerlist-sidebar {
+  position: relative;
+  background: rgba(28, 31, 37, 0.95);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  transition: width 0.3s ease;
+  overflow: hidden;
+}
+
+.peerlist-sidebar.open {
+  width: 260px;
+}
+
+.peerlist-sidebar.closed {
+  width: 40px;
+}
+
+/* Toggle button */
+.peerlist-toggle {
+  position: absolute;
+  top: 10px;
+  right: -16px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: none;
+  background: var(--accent);
+  color: #000;
+  cursor: pointer;
+  font-size: 1rem;
+  box-shadow: 0 0 6px rgba(0, 224, 255, 0.5);
+}
+
+/* Peer list content */
+.peerlist {
+  padding: 1rem;
+}
+
+.peerlist-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+
+.peerlist-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.peerlist-item:hover {
+  background: rgba(0, 224, 255, 0.1);
+}
+
+.peerlist-item.active {
+  background: rgba(0, 224, 255, 0.2);
+  color: var(--accent);
+}
+
+.peerlist-avatar {
+  width: 32px;
+  height: 32px;
+  background: linear-gradient(135deg, #007aff, #00e0ff);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+}
+
+.peerlist-name {
+  font-size: 0.95rem;
+}
+
+/* Broadcast main area */
+.broadcast-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  position: relative;
+}
+
+.broadcast-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+
+.broadcast-title span {
+  color: var(--accent);
+}
+
+.broadcast-placeholder {
+  opacity: 0.6;
+  font-size: 1rem;
+}
+
+.broadcast-video {
+  max-width: 100%;
+  max-height: 80vh;
+  border-radius: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 0 25px rgba(0, 224, 255, 0.1);
+}
+
+.self-preview {
+  border: 2px solid rgba(0, 224, 255, 0.3);
+  box-shadow: 0 0 20px rgba(0, 224, 255, 0.15);
+  border-radius: 12px;
+}
+
+
+/* -------------------------------
+   Responsive Sidebar (Mobile)
+---------------------------------*/
+
+/* Hamburger button (mobile only) */
+.hamburger-btn {
+  position: fixed;
+  top: 80px;
+  left: 16px;
+  z-index: 1200;
+  background: rgba(0, 224, 255, 0.2);
+  color: var(--accent);
+  border: 1px solid rgba(0, 224, 255, 0.3);
+  border-radius: 6px;
+  font-size: 1.25rem;
+  padding: 0.4rem 0.6rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(6px);
+}
+
+.hamburger-btn:hover {
+  background: rgba(0, 224, 255, 0.3);
+  transform: scale(1.05);
+}
+
+/* Sidebar when on mobile */
+.peerlist-sidebar.mobile {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 100vh;
+  transition: transform 0.3s ease;
+  z-index: 1100;
+}
+
+.peerlist-sidebar.mobile.open {
+  transform: translateX(0);
+}
+
+.peerlist-sidebar.mobile.closed {
+  transform: translateX(-100%);
+  box-shadow: none;
+}
+
+/* Overlay when mobile sidebar open */
+.peerlist-sidebar.mobile.open::after {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: -1;
+  backdrop-filter: blur(2px);
+}
+/* -------------------------------------------
+   End Stream Button (matches Go Live button)
+--------------------------------------------*/
+.end-stream-btn {
+  position: fixed;
+  top: 80px;
+  right: 20px;
+  border-radius: 50px;
+  padding: 0.9rem 2rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  z-index: 100;
+  border: 2px solid #ff3b3b;
+  background: none;
+  color: #ff3b3b;
+  transition: all 0.3s ease;
+}
+
+.end-stream-btn:hover:not(:disabled) {
+  background: #ff3b3b;
+  color: #0a0c10;
+  box-shadow: 0 0 25px rgba(255, 59, 59, 0.5);
+  transform: translateY(-1px);
+}
+
+.end-stream-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
+.end-stream-btn {
+  animation: fadeInUp 0.4s ease;
+}
+
+/* --- Force PiP visibility --- */
+video.pip {
+  position: fixed !important;
+  bottom: 24px !important;
+  right: 24px !important;
+  width: 240px !important;
+  height: 180px !important;
+  border-radius: 12px !important;
+  border: 2px solid var(--accent) !important;
+  background: #000 !important;
+  z-index: 9999 !important;
+  box-shadow: 0 0 25px rgba(0, 224, 255, 0.4);
+}
