@@ -1,7 +1,7 @@
 // @ts-nocheck
 
 import React, { useState } from "react";
-import InputPassword from "./components/05-elements/InputPassword/InputPassword";
+import InputPassword from "./components/elements/InputPassword/InputPassword";
 
 export default function App() {
   const [password, setPassword] = useState("");

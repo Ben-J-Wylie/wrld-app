@@ -1,7 +1,7 @@
 // @ts-nocheck
 
 import React from "react";
-import PreviewLocation from "./components/06-manifolds/PreviewLocation/PreviewLocation";
+import PreviewLocation from "./components/manifolds/PreviewLocation/PreviewLocation";
 
 export default function App() {
   return (

@@ -1,7 +1,7 @@
 // @ts-nocheck
 
 import React, { useState } from "react";
-import PreviewCamera from "./components/06-manifolds/PreviewCamera/PreviewCamera";
+import PreviewCamera from "./components/manifolds/PreviewCamera/PreviewCamera";
 
 export default function App() {
   const [facing, setFacing] = useState<"user" | "environment">("user");

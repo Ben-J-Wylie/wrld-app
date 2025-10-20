@@ -2,9 +2,9 @@
 
 import React, { useState } from "react";
 import { Camera, Mic, MapPin, MessageSquare } from "lucide-react";
-import SetupHeader from "./components/05-elements/SetupHeader/SetupHeader";
-import ButtonGoLive from "./components/05-elements/ButtonGoLive/ButtonGoLive";
-import ToggleGrid from "./components/05-elements/ToggleGrid/ToggleGrid";
+import SetupHeader from "./components/elements/SetupHeader/SetupHeader";
+import ButtonGoLive from "./components/elements/ButtonGoLive/ButtonGoLive";
+import ToggleGrid from "./components/elements/ToggleGrid/ToggleGrid";
 
 export default function App() {
   const [isLive, setIsLive] = useState(false);

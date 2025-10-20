@@ -1,7 +1,7 @@
 // @ts-nocheck
 
 import React, { useState } from "react";
-import InputText from "./components/05-elements/InputText/InputText";
+import InputText from "./components/elements/InputText/InputText";
 
 export default function App() {
   const [email, setEmail] = useState("");

@@ -1,7 +1,7 @@
 // @ts-nocheck
 
 import React from "react";
-import PreviewTorch from "./components/06-manifolds/PreviewTorch/PreviewTorch";
+import PreviewTorch from "./components/manifolds/PreviewTorch/PreviewTorch";
 
 export default function App() {
   return (

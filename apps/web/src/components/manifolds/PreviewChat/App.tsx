@@ -1,7 +1,7 @@
 // @ts-nocheck
 
 import React, { useState } from "react";
-import PreviewChat from "./components/06-manifolds/PreviewChat/PreviewChat";
+import PreviewChat from "./components/manifolds/PreviewChat/PreviewChat";
 
 export default function App() {
   const [messages, setMessages] = useState<string[]>([]);

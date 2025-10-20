@@ -1,7 +1,7 @@
 // @ts-nocheck
 
 import React, { useState } from "react";
-import Header from "./components/07-structures/Header/Header";
+import Header from "./components/structures/Header/Header";
 
 export default function App() {
   const [user, setUser] = useState<any | null>({

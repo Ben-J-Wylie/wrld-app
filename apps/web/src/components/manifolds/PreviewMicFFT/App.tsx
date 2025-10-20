@@ -1,7 +1,7 @@
 // @ts-nocheck
 
 import React, { useState } from "react";
-import PreviewMicFFT from "./components/06-manifolds/PreviewMicFFT/PreviewMicFFT";
+import PreviewMicFFT from "./components/manifolds/PreviewMicFFT/PreviewMicFFT";
 
 export default function App() {
   const [visible, setVisible] = useState(false);

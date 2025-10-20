@@ -1,7 +1,7 @@
 // @ts-nocheck
 
 import React from "react";
-import FormFooter from "./components/05-elements/FormFooter/FormFooter";
+import FormFooter from "./components/elements/FormFooter/FormFooter";
 
 export default function App() {
   function handleClick() {

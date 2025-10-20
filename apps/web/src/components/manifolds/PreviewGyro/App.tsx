@@ -1,7 +1,7 @@
 // @ts-nocheck
 
 import React from "react";
-import PreviewGyro from "./components/06-manifolds/PreviewGyro/PreviewGyro";
+import PreviewGyro from "./components/manifolds/PreviewGyro/PreviewGyro";
 
 export default function App() {
   return (

@@ -1,7 +1,7 @@
 // @ts-nocheck
 
 import React, { useState } from "react";
-import FormMessage from "./components/05-elements/FormMessage/FormMessage";
+import FormMessage from "./components/elements/FormMessage/FormMessage";
 
 export default function App() {
   const [messageType, setMessageType] = useState<"success" | "error">(

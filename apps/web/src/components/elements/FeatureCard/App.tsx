@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { Camera, Mic, MapPin } from "lucide-react";
-import FeatureCard from "./components/05-elements/FeatureCard/FeatureCard";
+import FeatureCard from "./components/elements/FeatureCard/FeatureCard";
 
 export default function App() {
   const [activeFeature, setActiveFeature] = useState<string | null>(null);

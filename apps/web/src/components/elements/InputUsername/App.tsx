@@ -1,7 +1,7 @@
 // @ts-nocheck
 
 import React, { useState, useEffect } from "react";
-import InputUsername from "./components/05-elements/InputUsername/InputUsername";
+import InputUsername from "./components/elements/InputUsername/InputUsername";
 
 export default function App() {
   const [username, setUsername] = useState("");

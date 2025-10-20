@@ -1,7 +1,7 @@
 // @ts-nocheck
 
 import React, { useState } from "react";
-import AvatarUploader from "./components/05-elements/AvatarUploader/AvatarUploader";
+import AvatarUploader from "./components/elements/AvatarUploader/AvatarUploader";
 
 export default function App() {
   const [avatarUrl, setAvatarUrl] = useState("");

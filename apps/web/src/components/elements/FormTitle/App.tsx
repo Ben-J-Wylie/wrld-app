@@ -1,8 +1,8 @@
 // @ts-nocheck
 
 import React from "react";
-import FormContainer from "./components/05-elements/FormContainer/FormContainer";
-import FormTitle from "./components/05-elements/FormTitle/FormTitle";
+import FormContainer from "./components/elements/FormContainer/FormContainer";
+import FormTitle from "./components/elements/FormTitle/FormTitle";
 
 export default function App() {
   return (

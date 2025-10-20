@@ -1,7 +1,7 @@
 // @ts-nocheck
 
 import React from "react";
-import PreviewScreenShare from "./components/06-manifolds/PreviewScreenShare/PreviewScreenShare";
+import PreviewScreenShare from "./components/manifolds/PreviewScreenShare/PreviewScreenShare";
 
 export default function App() {
   return (

@@ -1,31 +1,45 @@
-import React from "react";
-import Avatar from "./components/elements/Avatar/Avatar"; // adjust path if needed
+import React, { useState } from "react";
+import PreviewCamera from "./components/manifolds/PreviewCamera/PreviewCamera";
 
 export default function App() {
-  const mockUser = {
-    username: "BenWylie",
-    email: "ben@example.com",
-    avatarUrl: "https://api.dicebear.com/8.x/adventurer/svg?seed=ben", // try replacing with a real image URL to test
-  };
+  const [facing, setFacing] = useState<"user" | "environment">("user");
 
   return (
-    <div className="app-container">
-      <h1>Avatar Component Demo</h1>
+    <div
+      style={{
+        background: "#0e0e0e",
+        color: "#fff",
+        minHeight: "100vh",
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "center",
+        alignItems: "center",
+        gap: "20px",
+        padding: "20px",
+      }}
+    >
+      <h2 style={{ fontWeight: 500 }}>Camera Preview Demo</h2>
 
-      <div className="avatar-demo">
-        <Avatar
-          avatarUrl={mockUser.avatarUrl}
-          username={mockUser.username}
-          email={mockUser.email}
-          size={40}
-        />
-        <Avatar username="Alice" size={60} />
-        <Avatar email="charlie@example.com" size={80} />
-        <Avatar
-          avatarUrl="https://api.dicebear.com/8.x/adventurer/svg?seed=ben"
-          size={100}
-        />
+      <div style={{ width: "80%", maxWidth: "400px" }}>
+        <PreviewCamera facing={facing} />
       </div>
+
+      <button
+        onClick={() =>
+          setFacing((prev) => (prev === "user" ? "environment" : "user"))
+        }
+        style={{
+          background: "#00e0ff",
+          border: "none",
+          color: "#000",
+          padding: "10px 20px",
+          borderRadius: "8px",
+          cursor: "pointer",
+          fontWeight: 600,
+        }}
+      >
+        Switch Camera ({facing})
+      </button>
     </div>
   );
 }

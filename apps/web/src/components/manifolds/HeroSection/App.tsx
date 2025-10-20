@@ -1,7 +1,7 @@
 // @ts-nocheck
 
 import React from "react";
-import HeroSection from "./components/06-manifolds/HeroSection/HeroSection";
+import HeroSection from "./components/manifolds/HeroSection/HeroSection";
 
 export default function App() {
   return (

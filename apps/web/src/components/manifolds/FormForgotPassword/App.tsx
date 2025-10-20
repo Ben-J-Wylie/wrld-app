@@ -1,7 +1,7 @@
 // @ts-nocheck
 
 import React, { useState } from "react";
-import ForgotPasswordForm from "./components/06-manifolds/FormForgotPassword/FormForgotPassword";
+import ForgotPasswordForm from "./components/manifolds/FormForgotPassword/FormForgotPassword";
 
 // Mock AuthModalContext replacement for testing
 const MockAuthModalContext = React.createContext({ openLogin: () => {} });

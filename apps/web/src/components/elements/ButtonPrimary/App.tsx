@@ -1,7 +1,7 @@
 // @ts-nocheck
 
 import React, { useState } from "react";
-import PrimaryButton from "./components/05-elements/ButtonPrimary/ButtonPrimary";
+import PrimaryButton from "./components/elements/ButtonPrimary/ButtonPrimary";
 
 export default function App() {
   const [loading, setLoading] = useState(false);

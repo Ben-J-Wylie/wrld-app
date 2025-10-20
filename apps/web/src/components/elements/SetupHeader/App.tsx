@@ -1,8 +1,8 @@
 // @ts-nocheck
 
 import React, { useState } from "react";
-import SetupHeader from "./components/05-elements/SetupHeader/SetupHeader";
-import ButtonGoLive from "./components/05-elements/ButtonGoLive/ButtonGoLive";
+import SetupHeader from "./components/elements/SetupHeader/SetupHeader";
+import ButtonGoLive from "./components/elements/ButtonGoLive/ButtonGoLive";
 
 export default function App() {
   const [isLive, setIsLive] = useState(false);
