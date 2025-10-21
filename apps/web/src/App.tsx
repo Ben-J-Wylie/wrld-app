@@ -1,25 +1,44 @@
-import React from "react";
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
-import SetupPage from "../src/components/pages/SetupPage/SetupPage";
+import React, { useState } from "react";
+import PeerList from "../src/components/features/PeerList/PeerList";
 
 export default function App() {
+  const [selectedPeer, setSelectedPeer] = useState<any>(null);
+
+  const peers = [
+    {
+      id: "1",
+      displayName: "Ben",
+      settings: { mic: true, camera: true },
+    },
+    {
+      id: "2",
+      displayName: "Aaron",
+      settings: { mic: false, camera: false },
+    },
+    {
+      id: "3",
+      displayName: "Norman",
+      settings: { mic: true, backCamera: true },
+    },
+  ];
+
   return (
-    <Router>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "flex-start",
-          minHeight: "100vh",
-          background: "#0e0e0e",
-          color: "#fff",
-          paddingTop: "40px",
-        }}
-      >
-        <Routes>
-          <Route path="/" element={<SetupPage />} />
-        </Routes>
-      </div>
-    </Router>
+    <div
+      style={{
+        minHeight: "100vh",
+        background: "#0e0e0e",
+        color: "#fff",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "flex-start",
+        paddingTop: "60px",
+      }}
+    >
+      <PeerList
+        peers={peers}
+        selectedPeer={selectedPeer}
+        onSelectPeer={setSelectedPeer}
+      />
+    </div>
   );
 }

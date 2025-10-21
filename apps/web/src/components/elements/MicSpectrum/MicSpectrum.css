@@ -1,0 +1,22 @@
+.mic-spectrum {
+  position: relative;
+  width: 100%;
+  text-align: center;
+  margin-bottom: 1rem;
+}
+
+.mic-spectrum p {
+  font-size: 0.9rem;
+  color: #0ff;
+  margin-bottom: 0.5rem;
+}
+
+.mic-spectrum canvas {
+  width: 100%;
+  max-width: 420px;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 8px;
+  border: 1px solid rgba(0, 255, 255, 0.3);
+  display: block;
+  margin: 0 auto;
+}

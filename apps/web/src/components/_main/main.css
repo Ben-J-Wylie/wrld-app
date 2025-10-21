@@ -27,16 +27,20 @@
 @import "../elements/AvatarUploader/AvatarUploader.css";
 @import "../elements/ButtonGoLive/ButtonGoLive.css";
 @import "../elements/ButtonPrimary/ButtonPrimary.css";
+@import "../elements/ChatWindow//ChatWindow.css";
 @import "../elements/DropdownMenu/DropdownMenu.css";
 @import "../elements/FeatureCard/FeatureCard.css";
 @import "../elements/FormContainer/FormContainer.css";
 @import "../elements/FormFooter/FormFooter.css";
 @import "../elements/FormMessage/FormMessage.css";
 @import "../elements/FormTitle/FormTitle.css";
+@import "../elements/GyroVisualizer/GyroVisualizer.css";
 @import "../elements/InputPassword/InputPassword.css";
 @import "../elements/InputText/InputText.css";
 @import "../elements/InputUsername/InputUsername.css";
+@import "../elements/LocationMap/LocationMap.css";
 @import "../elements/Logo/Logo.css";
+@import "../elements/MicSpectrum/MicSpectrum.css";
 @import "../elements/SetupHeader/SetupHeader.css";
 @import "../elements/ToggleGrid/ToggleGrid.css";
 
@@ -48,6 +52,7 @@
 @import "../features/FormSignup/FormSignup.css";
 @import "../features/HeroSection/HeroSection.css";
 @import "../features/LoadingScreen/LoadingScreen.css";
+@import "../features/PeerList/PeerList.css";
 @import "../features/PreviewCamera/PreviewCamera.css";
 @import "../features/PreviewChat//PreviewChat.css";
 @import "../features/PreviewGyro//PreviewGyro.css";

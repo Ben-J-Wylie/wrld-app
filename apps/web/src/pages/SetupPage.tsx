@@ -14,7 +14,7 @@ import {
 import L, { Map as LeafletMap, Marker as LeafletMarker } from "leaflet";
 import "leaflet/dist/leaflet.css";
 import Chart from "chart.js/auto";
-import { useBroadcast } from "../context/BroadcastContext";
+import { useBroadcast } from "../context/_BroadcastContext";
 import { useIsMobile } from "../hooks/useIsMobile";
 import { socket } from "../lib/socket";
 import { MediaSoupClient } from "../lib/mediasoupClient";

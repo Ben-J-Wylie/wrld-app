@@ -1,0 +1,78 @@
+.peerlist {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  color: #fff;
+}
+
+.peerlist-title {
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 0.5rem;
+  color: #aaa;
+}
+
+.peerlist-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.peerlist-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.peerlist-item.active {
+  background: rgba(0, 255, 255, 0.15);
+  border: 1px solid rgba(0, 255, 255, 0.5);
+}
+
+.peerlist-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  color: #0ff;
+}
+
+.peerlist-avatar-img {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.peerlist-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex: 1;
+}
+
+.peerlist-name {
+  font-weight: 500;
+  font-size: 0.95rem;
+  color: #fff;
+}
+
+.peerlist-icons {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.peerlist.empty {
+  text-align: center;
+  color: #aaa;
+  padding: 1rem;
+}

@@ -1,7 +1,7 @@
 // apps/web/src/components/SignupForm.tsx
 import React, { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
-import { useAuthModal } from "../context/AuthModalContext";
+import { useAuthModal } from "../context/_AuthModalContext";
 
 // const API_BASE_URL =
 //   import.meta.env.VITE_API_BASE_URL || "https://localhost:4000";

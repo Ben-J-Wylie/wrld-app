@@ -1,8 +1,8 @@
 import React from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
-import HeroSection from "../../features/HeroSection/HeroSection";
-import ProfilePage from "../../08-pages/ProfilePage/ProfilePage";
-import SetupPage from "../../08-pages/SetupPage/SetupPage";
+import HeroSection from "../features/HeroSection/HeroSection";
+import ProfilePage from "../pages/ProfilePage/ProfilePage";
+import SetupPage from "../pages/SetupPage/SetupPage";
 
 export default function AppRoutes({ user }: { user: any }) {
   return (
