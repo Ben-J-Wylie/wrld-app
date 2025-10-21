@@ -1,0 +1,39 @@
+.preview-gyro {
+  width: 100%;
+  background: #111;
+  border: 1px solid #333;
+  border-radius: 10px;
+  overflow: hidden;
+  text-align: center;
+  padding: 20px;
+  box-shadow: 0 0 10px rgba(0, 224, 255, 0.15);
+  color: #00e0ff;
+}
+
+.form-button {
+  background: #00e0ff;
+  border: none;
+  color: #000;
+  font-weight: 600;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.form-button:hover {
+  transform: scale(1.05);
+}
+
+.error-text {
+  color: #ff5555;
+  font-size: 0.9rem;
+}
+
+.gyro-values {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 1rem;
+  letter-spacing: 0.5px;
+}

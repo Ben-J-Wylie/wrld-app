@@ -1,0 +1,67 @@
+.avatar-uploader {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin: 0.5rem 0 1rem;
+}
+
+/* Avatar inherits from your existing Avatar.css */
+.avatar-uploader .avatar {
+  flex-shrink: 0;
+}
+
+/* Custom file upload button */
+.custom-file-upload {
+  position: relative;
+  display: inline-block;
+}
+
+.custom-file-upload label {
+  display: inline-block;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.1s ease;
+  user-select: none;
+}
+
+.custom-file-upload label:hover {
+  background: rgba(255, 255, 255, 0.15);
+  transform: scale(1.03);
+}
+
+/* Hide the actual input */
+.custom-file-upload input[type="file"] {
+  display: none;
+}
+
+/* Uploading state (text color / subtle pulse) */
+.custom-file-upload label.uploading {
+  color: #00e0ff;
+  animation: pulse 1s infinite alternate;
+}
+
+@keyframes pulse {
+  from {
+    opacity: 0.6;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Responsive adjustments */
+@media (max-width: 480px) {
+  .avatar-uploader {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .custom-file-upload label {
+    width: 100%;
+    text-align: center;
+  }
+}

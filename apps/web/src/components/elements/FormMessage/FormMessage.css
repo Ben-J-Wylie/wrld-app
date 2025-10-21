@@ -1,0 +1,39 @@
+.form-message {
+  margin-top: 0.75rem;
+  padding: 0.6rem 0.9rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  text-align: center;
+  line-height: 1.4;
+  transition: all 0.3s ease;
+}
+
+/* ✅ Success state */
+.form-message.success {
+  background: rgba(0, 255, 170, 0.08);
+  border: 1px solid rgba(0, 255, 170, 0.3);
+  color: #00ffaa;
+}
+
+/* ⚠️ Error state */
+.form-message.error {
+  background: rgba(255, 99, 71, 0.08);
+  border: 1px solid rgba(255, 99, 71, 0.3);
+  color: tomato;
+}
+
+/* Optional subtle fade-in for better UX */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.form-message {
+  animation: fadeIn 0.25s ease forwards;
+}

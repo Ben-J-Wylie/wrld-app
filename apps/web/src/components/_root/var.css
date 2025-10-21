@@ -1,0 +1,15 @@
+:root {
+  --bg-dark: #12af22;
+  --bg-gradient: radial-gradient(circle at 30% 10%, #0f2027 0%, #203a43 40%, #2c5364 100%);
+  --accent: #00ff22;
+  --accent-dim: rgba(0, 224, 255, 0.25);
+  --text-light: #1fe384;
+  --text-muted: #9db4c0;
+  --white: #ffffff;
+  --glass-bg: rgba(255, 255, 255, 0.06);
+  --glass-border: rgba(255, 255, 255, 0.12);
+  --blur: blur(12px);
+  --transition: 0.25s ease-in-out;
+  --color-primary: #4c00ff;
+}
+

@@ -1,0 +1,24 @@
+html,
+body,
+#root {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  background: var(--bg-gradient); /* ✅ extend gradient all the way up */
+  font-family: "Monoid", sans-serif;
+  color: var(--text-light);
+}
+
+body {
+  padding-top: 70px; /* ✅ offset for fixed header */
+}
+
+.app-container {
+  position: relative;
+  min-height: 100vh; /* ✅ allow app to grow */
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: visible; /* ✅ don't clip children */
+}

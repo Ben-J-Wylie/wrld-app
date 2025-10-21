@@ -11,7 +11,10 @@ import Header from "./components/Header";
 import AuthModal from "./components/AuthModal";
 import ProfilePage from "./pages/ProfilePage";
 import SetupPage from "./pages/SetupPage";
+import BroadcastPage from "./pages/BroadcastPage";
 import { AuthModalProvider } from "./context/AuthModalContext";
+import GlobalRoom from "./components/GlobalRoom";
+import BroadcastPresence from "./components/BroadcastPresence";
 
 export default function App() {
   const [user, setUser] = useState<any | null>(null);
@@ -48,6 +51,7 @@ export default function App() {
 
   return (
     <Router>
+      <BroadcastPresence />
       <AuthModalProvider>
         <div className="app-container">
           <Header user={user} onLogout={handleLogout} />
@@ -77,6 +81,8 @@ export default function App() {
               path="/setup"
               element={user ? <SetupPage /> : <Navigate to="/" replace />}
             />
+            <Route path="/broadcast" element={<BroadcastPage />} />{" "}
+            <Route path="/global-room" element={<GlobalRoom />} />
           </Routes>
 
           <AuthModal onLogin={(u) => setUser(u)} />

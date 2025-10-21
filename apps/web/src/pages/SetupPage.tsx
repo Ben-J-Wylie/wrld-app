@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Camera,
   Video,
@@ -13,7 +14,10 @@ import {
 import L, { Map as LeafletMap, Marker as LeafletMarker } from "leaflet";
 import "leaflet/dist/leaflet.css";
 import Chart from "chart.js/auto";
+import { useBroadcast } from "../context/BroadcastContext";
 import { useIsMobile } from "../hooks/useIsMobile";
+import { socket } from "../lib/socket";
+import { MediaSoupClient } from "../lib/mediasoupClient";
 import "../App.css";
 
 type Toggles = {
@@ -28,38 +32,145 @@ type Toggles = {
 };
 
 export default function SetupPage() {
-  const [settings, setSettings] = useState<Toggles>({
-    frontCamera: false,
-    backCamera: false,
-    mic: false,
-    location: false,
-    screenShare: false,
-    gyro: false,
-    torch: false,
-    chat: false,
-  });
-
+  const { settings, setSettings, msc } = useBroadcast();
   const [isLive, setIsLive] = useState(false);
   const isMobile = useIsMobile();
-  const [chatEnabled, setChatEnabled] = useState(false);
   const [messages, setMessages] = useState<string[]>([]);
+  const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
+  //const msc = new MediaSoupClient();
 
-  const toggle = (key: keyof Toggles) => {
-    setSettings((prev) => {
-      const updated = { ...prev, [key]: !prev[key] };
-      // single camera enforcement
-      if (key === "frontCamera" && updated.frontCamera)
-        updated.backCamera = false;
-      if (key === "backCamera" && updated.backCamera)
-        updated.frontCamera = false;
-      return updated;
+  async function publishTrack(kind: "audio" | "video") {
+    const constraints =
+      kind === "audio"
+        ? { audio: true, video: false }
+        : { audio: false, video: true };
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      await msc.publishLocalStream(stream);
+      console.log(`📡 Published ${kind} stream`);
+    } catch (err) {
+      console.error(`❌ Failed to publish ${kind}:`, err);
+    }
+  }
+
+  const toggle = async (key: keyof typeof settings) => {
+    const updated = { ...settings, [key]: !settings[key] };
+
+    // --- single-camera rule for mobile ---
+    if (key === "frontCamera" && updated.frontCamera) {
+      updated.backCamera = false;
+      updated.camera = true; // ✅ mirror unified camera flag
+    }
+
+    if (key === "backCamera" && updated.backCamera) {
+      updated.frontCamera = false;
+      updated.camera = true; // ✅ mirror unified camera flag
+    }
+
+    // If both cameras are now off, also turn off the unified flag
+    if (!updated.frontCamera && !updated.backCamera) {
+      updated.camera = false;
+    }
+
+    // --- desktop toggle ---
+    if (key === "camera") {
+      updated.camera = !settings.camera;
+    }
+
+    setSettings(updated);
+
+    console.log("🔸 Updated settings:", updated);
+
+    socket.emit("updateStreamState", {
+      isStreaming: isLive,
+      settings: updated,
+      platform: isMobile ? "mobile" : "desktop",
     });
+
+    // --- independent mic / camera logic ---
+
+    // 🎤 MIC toggle
+    if (key === "mic") {
+      if (updated.mic) {
+        console.log("🎙️ Turning mic ON...");
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+        });
+        const track = stream.getAudioTracks()[0];
+        if (track) await msc.publishTrack(track); // 👈 this publishes audio-only
+      } else {
+        console.log("🔇 Turning mic OFF...");
+        msc.stopProducerByKind("audio");
+      }
+    }
+
+    // 🎥 CAMERA toggle (includes front/back)
+    if (key === "camera" || key === "frontCamera" || key === "backCamera") {
+      if (updated.camera || updated.frontCamera || updated.backCamera) {
+        console.log("📸 Turning camera ON (video-only)...");
+        await publishTrack("video");
+      } else {
+        console.log("🛑 Turning camera OFF...");
+        msc.stopProducerByKind("video");
+      }
+    }
   };
+
+  const navigate = useNavigate();
 
   const handleGoLive = () => {
     if (!hasAnyEnabled) return;
-    setIsLive((prev) => !prev);
+
+    const goingLive = !isLive;
+    setIsLive(goingLive);
+
+    // ✅ Tell backend you’re now streaming
+    socket.emit("updateStreamState", {
+      isStreaming: goingLive,
+      settings,
+      platform: isMobile ? "mobile" : "desktop",
+    });
+
+    if (goingLive) {
+      navigate("/broadcast");
+      setTimeout(() => setIsLive(false), 500);
+    } else {
+      // optional cleanup if they hit "End Stream"
+      socket.emit("updateStreamState", {
+        isStreaming: false,
+        settings,
+        platform: isMobile ? "mobile" : "desktop",
+      });
+    }
   };
+  async function handleToggleScreenShare() {
+    // stop if already sharing
+    if (screenStream) {
+      screenStream.getTracks().forEach((t) => t.stop());
+      setScreenStream(null);
+      setSettings((prev) => ({ ...prev, screenShare: false }));
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+      });
+      setScreenStream(stream);
+      setSettings((prev) => ({ ...prev, screenShare: true }));
+    } catch (err) {
+      console.warn("User cancelled or screen share failed:", err);
+      setScreenStream(null);
+      setSettings((prev) => ({ ...prev, screenShare: false }));
+    }
+  }
+
+  useEffect(() => {
+    return () => {
+      msc?.localStream?.getTracks().forEach((t) => t.stop());
+    };
+  }, [msc]);
 
   // ✅ disable Go Live unless one toggle is active
   const hasAnyEnabled = Object.values(settings).some(Boolean);
@@ -107,9 +218,9 @@ export default function SetupPage() {
           <FeatureCard
             label="Camera"
             icon={<Camera />}
-            active={settings.frontCamera}
-            onClick={() => toggle("frontCamera")}
-            preview={settings.frontCamera && <CameraPreview facing="user" />}
+            active={settings.camera}
+            onClick={() => toggle("camera")}
+            preview={settings.camera && <CameraPreview facing="user" />}
           />
         )}
 
@@ -148,9 +259,9 @@ export default function SetupPage() {
         <FeatureCard
           label="Screen Share"
           icon={<ScreenShare />}
-          active={settings.screenShare}
-          onClick={() => toggle("screenShare")}
-          preview={settings.screenShare && <ScreenSharePreview />}
+          active={!!screenStream}
+          onClick={handleToggleScreenShare}
+          preview={screenStream && <ScreenSharePreview stream={screenStream} />}
         />
 
         {/* MOBILE-ONLY FEATURES */}
@@ -232,9 +343,20 @@ function CameraPreview({ facing }: { facing: "user" | "environment" }) {
           audio: false,
         });
         streamRef.current = stream;
+
         if (vidRef.current) {
           vidRef.current.srcObject = stream;
-          await vidRef.current.play();
+
+          // ✅ Safe playback start (avoids AbortError spam)
+          const playPromise = vidRef.current.play();
+          if (playPromise !== undefined) {
+            playPromise.catch((err) => {
+              // Ignore AbortError, only log real ones
+              if (err.name !== "AbortError") {
+                console.warn("Video play error:", err);
+              }
+            });
+          }
         }
       } catch (e) {
         console.error("Camera error:", e);
@@ -325,33 +447,29 @@ function MicFFTPreview() {
 }
 
 /* -----------------------------
-   Screen Share Preview
+   Screen Share Preview (strict-mode safe)
 ------------------------------ */
-function ScreenSharePreview() {
+/* -----------------------------
+   Screen Share Preview (controlled)
+------------------------------ */
+function ScreenSharePreview({ stream }: { stream: MediaStream }) {
   const vidRef = useRef<HTMLVideoElement | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const stream = await (navigator.mediaDevices as any).getDisplayMedia({
-          video: true,
-          audio: false,
-        });
-        streamRef.current = stream;
-        if (vidRef.current) {
-          vidRef.current.srcObject = stream;
-          await vidRef.current.play();
+    if (!vidRef.current) return;
+    vidRef.current.srcObject = stream;
+    const playPromise = vidRef.current.play();
+    if (playPromise) {
+      playPromise.catch((err) => {
+        if (err.name !== "AbortError") {
+          console.warn("Screen share play error:", err);
         }
-      } catch (e) {
-        console.error("Screen share error:", e);
-      }
-    })();
-
+      });
+    }
     return () => {
-      streamRef.current?.getTracks().forEach((t) => t.stop());
+      vidRef.current && (vidRef.current.srcObject = null);
     };
-  }, []);
+  }, [stream]);
 
   return <video ref={vidRef} className="preview-video" playsInline muted />;
 }

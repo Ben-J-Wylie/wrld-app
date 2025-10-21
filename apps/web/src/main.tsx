@@ -2,11 +2,14 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import { AuthModalProvider } from "./context/AuthModalContext";
+import { BroadcastProvider } from "./context/BroadcastContext"; // 👈 new
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    <AuthModalProvider>
+  //<React.StrictMode>
+  <AuthModalProvider>
+    <BroadcastProvider>
       <App />
-    </AuthModalProvider>
-  </React.StrictMode>
+    </BroadcastProvider>
+  </AuthModalProvider>
+  //</React.StrictMode>
 );
