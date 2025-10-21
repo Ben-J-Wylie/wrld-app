@@ -26,7 +26,9 @@
     "@types/node": "^24.7.0",
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.1",
+    "@types/react-router-dom": "^5.3.3",
     "@vitejs/plugin-react": "^5.0.4",
+    "prisma": "^6.17.1",
     "rimraf": "^5.0.10",
     "turbo": "^2.0.0",
     "typescript": "^5.9.3",
@@ -34,6 +36,7 @@
   },
   "dependencies": {
     "leaflet": "^1.9.4",
-    "lucide-react": "^0.545.0"
+    "lucide-react": "^0.545.0",
+    "react-router-dom": "^7.9.4"
   }
 }

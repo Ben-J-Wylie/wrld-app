@@ -12,7 +12,7 @@ export const authRouter = Router();
  */
 authRouter.post("/signup", async (req, res) => {
   try {
-    const { email, password, username } = req.body;
+    const { email, password } = req.body;
 
     if (!email || !password)
       return res.status(400).json({ error: "Email and password are required." });
@@ -27,7 +27,7 @@ authRouter.post("/signup", async (req, res) => {
 
     // create user
     const user = await prisma.user.create({
-      data: { email, passwordHash, username },
+      data: { email, passwordHash },
       select: { id: true, email: true, username: true, createdAt: true },
     });
 

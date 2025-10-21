@@ -1,41 +1,24 @@
 {
-  "name": "wrld-app",
+  "name": "@wrld/web",
   "version": "1.0.0",
   "private": true,
-  "packageManager": "npm@9.9.4",
-  "description": "",
-  "main": "index.js",
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ],
   "scripts": {
-    "dev": "turbo run dev --parallel",
-    "dev:api": "npm run dev --workspace=@wrld/api",
-    "dev:web": "npm run dev --workspace=@wrld/web",
-    "build": "turbo run build",
-    "clean": "rimraf node_modules apps/**/node_modules packages/**/node_modules",
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "reinstall": "npm run clean && npm cache clean --force && npm install"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "devDependencies": {
-    "@types/node": "^24.7.0",
-    "@types/react": "^19.2.2",
-    "@types/react-dom": "^19.2.1",
-    "@vitejs/plugin-react": "^5.0.4",
-    "rimraf": "^5.0.10",
-    "turbo": "^2.0.0",
-    "typescript": "^5.9.3",
-    "vite": "^7.1.9"
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
   },
   "dependencies": {
-    "express": "^5.1.0",
-    "lucide-react": "^0.545.0",
-    "mediasoup": "^3.19.3",
-    "socket.io": "^4.8.1",
-    "uuid": "^13.0.0"
+    "chart.js": "^4.5.1",
+    "mediasoup-client": "^3.17.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^7.0.0",
+    "socket.io-client": "^4.8.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.1",
+    "typescript": "^5.9.3",
+    "vite": "^7.1.9"
   }
 }

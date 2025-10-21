@@ -94,7 +94,10 @@ export const BroadcastProvider = ({
       if (alreadyRegistered) return;
       alreadyRegistered = true;
 
-      await safeRegister(user, userId); // ✅ wait for acknowledgment
+      // await safeRegister(user, userId); // ✅ wait for acknowledgment
+      await new Promise((resolve) => {
+        socket.emit("register", { user, userId }, resolve);
+      });
 
       // ✅ now safe to send streaming state
       socket.emit("updateStreamState", {

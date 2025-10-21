@@ -3,8 +3,11 @@ import React, { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { useAuthModal } from "../context/AuthModalContext";
 
+// const API_BASE_URL =
+//   import.meta.env.VITE_API_BASE_URL || "https://localhost:4000";
+
 const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || "https://localhost:4000";
+  import.meta.env.VITE_API_BASE_URL || "https://10.0.0.197:4000";
 
 export default function SignupForm() {
   const [email, setEmail] = useState("");
