@@ -1,10 +1,13 @@
 // @ts-nocheck
 
 import React, { useState } from "react";
-import ForgotPasswordForm from "./components/manifolds/FormForgotPassword/FormForgotPassword";
+import FormSignup from "./components/features/FormSignup/FormSignup";
+import "./App.css";
 
-// Mock AuthModalContext replacement for testing
-const MockAuthModalContext = React.createContext({ openLogin: () => {} });
+// 🧩 Mock AuthModalContext so useAuthModal() won’t break
+const MockAuthModalContext = React.createContext({
+  openLogin: () => {},
+});
 
 export default function App() {
   const [showLoginAlert, setShowLoginAlert] = useState(false);
@@ -16,10 +19,10 @@ export default function App() {
   return (
     <MockAuthModalContext.Provider value={mockAuthModal}>
       <div className="app-wrapper">
-        <h1>Forgot Password Form Demo</h1>
+        <h1>Signup Form Demo</h1>
 
         <div className="form-demo">
-          <ForgotPasswordForm />
+          <FormSignup />
         </div>
 
         {showLoginAlert && (

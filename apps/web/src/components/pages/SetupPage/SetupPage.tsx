@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 
 import { useIsMobile } from "../../../hooks/useIsMobile";
-import "../../01-main/main.css";
+import "../../_main/main.css";
 
 // Core components
 import SetupHeader from "../../elements/SetupHeader/SetupHeader";
@@ -20,13 +20,13 @@ import ToggleGrid from "../../elements/ToggleGrid/ToggleGrid";
 import FeatureCard from "../../elements/FeatureCard/FeatureCard";
 
 // Previews
-import PreviewCamera from "../../manifolds/PreviewCamera/PreviewCamera";
-import PreviewMicFFT from "../../manifolds/PreviewMicFFT/PreviewMicFFT";
-import PreviewLocation from "../../manifolds/PreviewLocation/PreviewLocation";
-import PreviewChat from "../../manifolds/PreviewChat/PreviewChat";
-import PreviewScreenShare from "../../manifolds/PreviewScreenShare/PreviewScreenShare";
-import PreviewTorch from "../../manifolds/PreviewTorch/PreviewTorch";
-import PreviewGyro from "../../manifolds/PreviewGyro/PreviewGyro";
+import PreviewCamera from "../../features/PreviewCamera/PreviewCamera";
+import PreviewMicFFT from "../../features/PreviewMicFFT/PreviewMicFFT";
+import PreviewLocation from "../../features/PreviewLocation/PreviewLocation";
+import PreviewChat from "../../features/PreviewChat/PreviewChat";
+import PreviewScreenShare from "../../features/PreviewScreenShare/PreviewScreenShare";
+import PreviewTorch from "../../features/PreviewTorch/PreviewTorch";
+import PreviewGyro from "../../features/PreviewGyro/PreviewGyro";
 
 type Toggles = {
   frontCamera: boolean;

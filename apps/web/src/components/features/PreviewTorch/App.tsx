@@ -1,7 +1,7 @@
 // @ts-nocheck
 
 import React from "react";
-import PreviewGyro from "./components/manifolds/PreviewGyro/PreviewGyro";
+import PreviewTorch from "./components/features/PreviewTorch/PreviewTorch";
 
 export default function App() {
   return (
@@ -18,15 +18,15 @@ export default function App() {
         padding: "20px",
       }}
     >
-      <h2 style={{ fontWeight: 500 }}>Gyroscope Preview Demo</h2>
+      <h2 style={{ fontWeight: 500 }}>Torch Preview Demo</h2>
 
-      <div style={{ width: "80%", maxWidth: "400px" }}>
-        <PreviewGyro />
+      <div style={{ width: "80%", maxWidth: "500px" }}>
+        <PreviewTorch />
       </div>
 
       <p style={{ color: "#777", fontSize: "0.9rem", textAlign: "center" }}>
-        Move or rotate your device to see live orientation values. On iOS, tap
-        “Enable Motion Access” to grant permission.
+        If your device supports torch control (usually mobile), you can toggle
+        the flashlight and see it logged on the chart below.
       </p>
     </div>
   );

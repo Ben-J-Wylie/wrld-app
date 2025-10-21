@@ -1,9 +1,11 @@
 // @ts-nocheck
 
-import React from "react";
-import PreviewScreenShare from "./components/manifolds/PreviewScreenShare/PreviewScreenShare";
+import React, { useState } from "react";
+import PreviewChat from "./components/features/PreviewChat/PreviewChat";
 
 export default function App() {
+  const [messages, setMessages] = useState<string[]>([]);
+
   return (
     <div
       style={{
@@ -18,15 +20,14 @@ export default function App() {
         padding: "20px",
       }}
     >
-      <h2 style={{ fontWeight: 500 }}>Screen Share Preview Demo</h2>
+      <h2 style={{ fontWeight: 500 }}>Chat Preview Demo</h2>
 
-      <div style={{ width: "80%", maxWidth: "500px" }}>
-        <PreviewScreenShare />
+      <div style={{ width: "80%", maxWidth: "400px" }}>
+        <PreviewChat messages={messages} setMessages={setMessages} />
       </div>
 
       <p style={{ color: "#777", fontSize: "0.9rem", textAlign: "center" }}>
-        Click “Start Screen Share” and select a window or screen. The preview
-        will appear below.
+        Type messages and press Enter or click Send.
       </p>
     </div>
   );

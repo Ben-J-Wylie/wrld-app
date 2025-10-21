@@ -1,7 +1,7 @@
 // @ts-nocheck
 
 import React from "react";
-import PreviewTorch from "./components/manifolds/PreviewTorch/PreviewTorch";
+import PreviewScreenShare from "./components/features/PreviewScreenShare/PreviewScreenShare";
 
 export default function App() {
   return (
@@ -18,15 +18,15 @@ export default function App() {
         padding: "20px",
       }}
     >
-      <h2 style={{ fontWeight: 500 }}>Torch Preview Demo</h2>
+      <h2 style={{ fontWeight: 500 }}>Screen Share Preview Demo</h2>
 
       <div style={{ width: "80%", maxWidth: "500px" }}>
-        <PreviewTorch />
+        <PreviewScreenShare />
       </div>
 
       <p style={{ color: "#777", fontSize: "0.9rem", textAlign: "center" }}>
-        If your device supports torch control (usually mobile), you can toggle
-        the flashlight and see it logged on the chart below.
+        Click “Start Screen Share” and select a window or screen. The preview
+        will appear below.
       </p>
     </div>
   );

@@ -2,7 +2,7 @@
 
 import React from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
-import ProfilePage from "./components/08-pages/ProfilePage/ProfilePage";
+import ProfilePage from "./components/pages/ProfilePage/ProfilePage";
 
 export default function App() {
   return (

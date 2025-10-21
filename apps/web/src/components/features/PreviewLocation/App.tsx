@@ -1,11 +1,9 @@
 // @ts-nocheck
 
-import React, { useState } from "react";
-import PreviewChat from "./components/manifolds/PreviewChat/PreviewChat";
+import React from "react";
+import PreviewLocation from "./components/features/PreviewLocation/PreviewLocation";
 
 export default function App() {
-  const [messages, setMessages] = useState<string[]>([]);
-
   return (
     <div
       style={{
@@ -20,14 +18,13 @@ export default function App() {
         padding: "20px",
       }}
     >
-      <h2 style={{ fontWeight: 500 }}>Chat Preview Demo</h2>
-
-      <div style={{ width: "80%", maxWidth: "400px" }}>
-        <PreviewChat messages={messages} setMessages={setMessages} />
+      <h2 style={{ fontWeight: 500 }}>Location Preview Demo</h2>
+      <div style={{ width: "80%", maxWidth: "500px" }}>
+        <PreviewLocation />
       </div>
-
       <p style={{ color: "#777", fontSize: "0.9rem", textAlign: "center" }}>
-        Type messages and press Enter or click Send.
+        Click the expand icon (⤢) to enlarge the map. It will track your real
+        location if permission is granted.
       </p>
     </div>
   );

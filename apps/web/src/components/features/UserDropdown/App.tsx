@@ -2,7 +2,7 @@
 
 import React from "react";
 import Logo from "./components/elements/Logo/Logo";
-import UserDropdown from "./components/manifolds/UserDropdown/UserDropdown";
+import UserDropdown from "./components/features/UserDropdown/UserDropdown";
 
 export default function App() {
   const mockUser = {

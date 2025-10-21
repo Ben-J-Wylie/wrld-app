@@ -2,7 +2,7 @@
 
 import React from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
-import SetupPage from "../src/components/08-pages/SetupPage/SetupPage";
+import SetupPage from "../src/components/pages/SetupPage/SetupPage";
 
 export default function App() {
   return (

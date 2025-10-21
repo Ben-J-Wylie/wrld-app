@@ -1,7 +1,7 @@
 // @ts-nocheck
 
 import React from "react";
-import PreviewLocation from "./components/manifolds/PreviewLocation/PreviewLocation";
+import PreviewGyro from "./components/features/PreviewGyro/PreviewGyro";
 
 export default function App() {
   return (
@@ -18,13 +18,15 @@ export default function App() {
         padding: "20px",
       }}
     >
-      <h2 style={{ fontWeight: 500 }}>Location Preview Demo</h2>
-      <div style={{ width: "80%", maxWidth: "500px" }}>
-        <PreviewLocation />
+      <h2 style={{ fontWeight: 500 }}>Gyroscope Preview Demo</h2>
+
+      <div style={{ width: "80%", maxWidth: "400px" }}>
+        <PreviewGyro />
       </div>
+
       <p style={{ color: "#777", fontSize: "0.9rem", textAlign: "center" }}>
-        Click the expand icon (⤢) to enlarge the map. It will track your real
-        location if permission is granted.
+        Move or rotate your device to see live orientation values. On iOS, tap
+        “Enable Motion Access” to grant permission.
       </p>
     </div>
   );

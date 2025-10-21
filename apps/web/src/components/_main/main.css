@@ -2,7 +2,12 @@
 
 /* Sandbox */
 
+
+/* Logic */
+
+
 /* Main */
+
 
 /* Root */
 
@@ -12,9 +17,9 @@
 @import "../_root/typography.css";
 @import "../_root/var.css";
 
-/* Logic */
 
-/* Scaffolds */
+/* Containers */
+
 
 /* Elements */
 
@@ -35,25 +40,27 @@
 @import "../elements/SetupHeader/SetupHeader.css";
 @import "../elements/ToggleGrid/ToggleGrid.css";
 
-/* Manifolds */
 
-@import "../manifolds/FormForgotPassword/FormForgotPassword.css";
-@import "../manifolds/FormLogin/FormLogin.css";
-@import "../manifolds/FormSignup/FormSignup.css";
-@import "../manifolds/HeroSection/HeroSection.css";
-@import "../manifolds/LoadingScreen/LoadingScreen.css";
-@import "../manifolds/PreviewCamera/PreviewCamera.css";
-@import "../manifolds/PreviewChat//PreviewChat.css";
-@import "../manifolds/PreviewGyro//PreviewGyro.css";
-@import "../manifolds/PreviewLocation/PreviewLocation.css";
-@import "../manifolds/PreviewMicFFT/PreviewMicFFT.css";
-@import "../manifolds/PreviewScreenShare/PreviewScreenShare.css";
-@import "../manifolds/PreviewTorch/PreviewTorch.css";
-@import "../manifolds/UserDropdown/UserDropdown.css";
+/* Features */
 
-/* Structures */
+@import "../features/FormForgotPassword/FormForgotPassword.css";
+@import "../features/FormLogin/FormLogin.css";
+@import "../features/FormSignup/FormSignup.css";
+@import "../features/HeroSection/HeroSection.css";
+@import "../features/LoadingScreen/LoadingScreen.css";
+@import "../features/PreviewCamera/PreviewCamera.css";
+@import "../features/PreviewChat//PreviewChat.css";
+@import "../features/PreviewGyro//PreviewGyro.css";
+@import "../features/PreviewLocation/PreviewLocation.css";
+@import "../features/PreviewMicFFT/PreviewMicFFT.css";
+@import "../features/PreviewScreenShare/PreviewScreenShare.css";
+@import "../features/PreviewTorch/PreviewTorch.css";
+@import "../features/UserDropdown/UserDropdown.css";
 
-@import "../structures/Header/Header.css";
+
+/* Sections */
+
+@import "../sections/Header/Header.css";
 
 
 

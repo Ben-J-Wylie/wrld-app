@@ -1,7 +1,7 @@
 // @ts-nocheck
 
 import React, { useState } from "react";
-import LoginForm from "./components/manifolds/FormLogin/FormLogin";
+import LoginForm from "./components/features/FormLogin/FormLogin";
 
 // 🧩 Mock AuthModalContext Provider (so useAuthModal() won't break)
 const MockAuthModalContext = React.createContext({
