@@ -1,0 +1,39 @@
+.video-player {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  background: #000;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.video-player__video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.video-player__waiting {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #aaa;
+  background: rgba(0, 0, 0, 0.5);
+  font-size: 0.9rem;
+  letter-spacing: 0.3px;
+}
+
+.video-player__label {
+  position: absolute;
+  bottom: 0.5rem;
+  left: 0.5rem;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  color: #fff;
+  font-size: 0.85rem;
+  letter-spacing: 0.2px;
+}

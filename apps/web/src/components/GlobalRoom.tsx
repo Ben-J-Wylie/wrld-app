@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { MediaSoupClient } from "../lib/mediasoupClient";
 import { socket } from "../lib/socket";
-import { useBroadcast } from "../context/_BroadcastContext";
+import { useBroadcast } from "../context/BroadcastContext";
 
 export default function GlobalRoom() {
   const [msc] = useState(() => new MediaSoupClient());

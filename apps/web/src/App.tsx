@@ -1,26 +1,20 @@
-import React, { useState } from "react";
-import PeerList from "../src/components/features/PeerList/PeerList";
+import React from "react";
+import VideoPlayer from "./components/elements/VideoPlayer/VideoPlayer";
+
+// Mock MediasoupClient for demo
+const mockMSC = {
+  device: true,
+  socket: { connected: true },
+  recvTransport: true,
+  createRecvTransport: async () => {},
+  request: async () => [{ id: "mockVideo" }],
+  consume: async () => ({
+    track: new MediaStreamTrack(), // placeholder (no actual feed)
+  }),
+} as any;
 
 export default function App() {
-  const [selectedPeer, setSelectedPeer] = useState<any>(null);
-
-  const peers = [
-    {
-      id: "1",
-      displayName: "Ben",
-      settings: { mic: true, camera: true },
-    },
-    {
-      id: "2",
-      displayName: "Aaron",
-      settings: { mic: false, camera: false },
-    },
-    {
-      id: "3",
-      displayName: "Norman",
-      settings: { mic: true, backCamera: true },
-    },
-  ];
+  const mockPeer = { id: "123", displayName: "Ben" };
 
   return (
     <div
@@ -30,15 +24,11 @@ export default function App() {
         color: "#fff",
         display: "flex",
         justifyContent: "center",
-        alignItems: "flex-start",
-        paddingTop: "60px",
+        alignItems: "center",
+        padding: "40px",
       }}
     >
-      <PeerList
-        peers={peers}
-        selectedPeer={selectedPeer}
-        onSelectPeer={setSelectedPeer}
-      />
+      <VideoPlayer peer={mockPeer} msc={mockMSC} />
     </div>
   );
 }

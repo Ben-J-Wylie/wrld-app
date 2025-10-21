@@ -1,6 +1,6 @@
 // apps/web/src/components/AuthModal.tsx
 import React from "react";
-import { useAuthModal } from "../../context/_AuthModalContext";
+import { useAuthModal } from "../../context/AuthModalContext";
 import SignupForm from "../features/FormSignup/FormSignup";
 import LoginForm from "../features/FormLogin/FormLogin";
 

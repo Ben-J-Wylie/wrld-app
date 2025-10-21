@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
-import { useAuthModal } from "../context/_AuthModalContext";
-import { useBroadcast } from "../context/_BroadcastContext";
+import { useAuthModal } from "../context/AuthModalContext";
+import { useBroadcast } from "../context/BroadcastContext";
 import { useNavigate } from "react-router-dom";
 import { socket } from "../lib/socket";
 

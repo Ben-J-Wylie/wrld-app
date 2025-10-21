@@ -1,6 +1,6 @@
 import React from "react";
 import "../../_main/main.css";
-import { useAuthModal } from "../../../context/_AuthModalContext";
+import { useAuthModal } from "../../../context/AuthModalContext";
 import Logo from "../../elements/Logo/Logo";
 import UserDropdown from "../../features/UserDropdown/UserDropdown";
 

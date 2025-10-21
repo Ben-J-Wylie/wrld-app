@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useAuthModal } from "../../../context/_AuthModalContext";
+import { useAuthModal } from "../../../context/AuthModalContext";
 import FormContainer from "../../elements/FormContainer/FormContainer";
 import FormTitle from "../../elements/FormTitle/FormTitle";
 import InputText from "../../elements/InputText/InputText";

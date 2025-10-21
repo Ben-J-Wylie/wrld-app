@@ -1,16 +1,16 @@
 // apps/web/src/pages/BroadcastPage.tsx
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import PeerList from "../components/_PeerList";
+import PeerList from "../components/PeerList";
 import VideoPlayer from "../components/VideoPlayer";
-import ChatWindow from "../components/_ChatWindow";
-import GyroVisualizer from "../components/_GyroVisualizer";
-import LocationMap from "../components/_LocationMap";
-import MicSpectrum from "../components/_MicSpectrum";
+import ChatWindow from "../components/ChatWindow";
+import GyroVisualizer from "../components/GyroVisualizer";
+import LocationMap from "../components/LocationMap";
+import MicSpectrum from "../components/MicSpectrum";
 import ScreenShareView from "../components/ScreenShareView";
 import TorchIndicator from "../components/TorchIndicator";
 import SelfPreview from "../components/SelfPreview";
-import { useBroadcast } from "../context/_BroadcastContext";
+import { useBroadcast } from "../context/BroadcastContext";
 import { useIsMobile } from "../hooks/useIsMobile";
 import { socket } from "../lib/socket";
 import { MediaSoupClient } from "../lib/mediasoupClient";

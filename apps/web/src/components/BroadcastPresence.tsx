@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useBroadcast } from "../context/_BroadcastContext";
+import { useBroadcast } from "../context/BroadcastContext";
 import { socket } from "../lib/socket";
 
 export default function BroadcastPresence() {

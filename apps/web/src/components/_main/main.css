@@ -41,8 +41,12 @@
 @import "../elements/LocationMap/LocationMap.css";
 @import "../elements/Logo/Logo.css";
 @import "../elements/MicSpectrum/MicSpectrum.css";
+@import "../elements/ScreenShareView/ScreenShareView.css";
+@import "../elements/SelfPreview/SelfPreview.css";
 @import "../elements/SetupHeader/SetupHeader.css";
 @import "../elements/ToggleGrid/ToggleGrid.css";
+@import "../elements/TorchIndicator/TorchIndicator.css";
+@import "../elements/VideoPlayer/VideoPlayer.css";
 
 
 /* Features */

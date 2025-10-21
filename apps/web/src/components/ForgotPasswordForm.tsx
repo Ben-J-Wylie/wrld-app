@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useAuthModal } from "../context/_AuthModalContext";
+import { useAuthModal } from "../context/AuthModalContext";
 import "../styles/auth.css";
 
 export default function ForgotPasswordForm() {
