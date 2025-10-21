@@ -9,28 +9,49 @@ export default function Header({ user, onLogout }: any) {
   const [fadeOut, setFadeOut] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const { openLogin, openSignup } = useAuthModal();
-  const { settings, setSettings, startLocal, stopLocal } = useBroadcast();
+  const { settings, setSettings } = useBroadcast();
   const navigate = useNavigate();
 
-  // ✅ derived streaming state
-  const isLive = settings.__live ?? false;
+  // ✅ derived streaming and readiness states
+  const isStreaming =
+    settings.frontCamera ||
+    settings.backCamera ||
+    settings.mic ||
+    settings.screenShare ||
+    settings.location ||
+    settings.chat ||
+    settings.gyro ||
+    settings.torch;
 
-  // ✅ Go Live handler
-  const handleGoLiveClick = async () => {
-    try {
-      if (!isLive) {
-        console.log("🚀 Going live...");
-        await startLocal();
-        setSettings((prev) => ({ ...prev, __live: true }));
-      } else {
-        console.log("🛑 Stopping live stream...");
-        await stopLocal();
-        setSettings((prev) => ({ ...prev, __live: false }));
-      }
-    } catch (err) {
-      console.error("❌ Error toggling live state:", err);
-    }
+  const hasAnySourceSelected =
+    settings.frontCamera ||
+    settings.backCamera ||
+    settings.mic ||
+    settings.screenShare;
+
+  // ✅ Toggle stream ON/OFF
+  const handleGoLiveClick = () => {
+    if (!hasAnySourceSelected) return; // disabled until user selects source
+    setSettings((prev) => {
+      const currentlyLive = prev.__live ?? false;
+      const next = { ...prev, __live: !currentlyLive };
+      return next;
+    });
   };
+
+  useEffect(() => {
+    if (!isStreaming && settings.__live) {
+      setSettings((prev) => ({ ...prev, __live: false }));
+    }
+  }, [isStreaming]);
+
+  useEffect(() => {
+    socket.emit("updateStreamState", {
+      isStreaming: settings.__live,
+      settings,
+      platform: "desktop",
+    });
+  }, [settings.__live, isStreaming]);
 
   // ✅ handle dropdown logic
   useEffect(() => {
@@ -65,12 +86,13 @@ export default function Header({ user, onLogout }: any) {
       </div>
 
       <div className="nav-right">
-        {/* 🎬 Go Live / Stop button */}
+        {/* 👇 Toggle-only Live button */}
         <button
           onClick={handleGoLiveClick}
-          className={`go-live-btn ${isLive ? "live" : ""}`}
+          className={`go-live-btn ${settings.__live ? "live" : ""}`}
+          disabled={!hasAnySourceSelected}
         >
-          {isLive ? "● LIVE" : "Go Live"}
+          {settings.__live ? "● LIVE" : "Go Live"}
         </button>
 
         {user ? (
@@ -194,6 +216,11 @@ export default function Header({ user, onLogout }: any) {
 
         .go-live-btn:hover:not(:disabled) {
           background-color: #4b5563;
+        }
+
+        .go-live-btn:disabled {
+          opacity: 0.4;
+          cursor: not-allowed;
         }
 
         .go-live-btn.live {
