@@ -392,7 +392,7 @@ export default function BroadcastPage() {
   // ✅ UI
   return (
     <div className="broadcast-page">
-      {/* 👥 Sidebar */}
+      {/* 👥 Peerlist Sidebar */}
       <div
         className={`peerlist-sidebar ${isPeerListOpen ? "open" : "closed"} ${
           isMobile ? "mobile" : ""
@@ -403,15 +403,17 @@ export default function BroadcastPage() {
           selectedPeer={selectedPeer}
           onSelectPeer={handleSelectPeer}
         />
-        {!isMobile && (
-          <button
-            className="peerlist-toggle"
-            onClick={() => setIsPeerListOpen(!isPeerListOpen)}
-          >
-            {isPeerListOpen ? "⟨" : "⟩"}
-          </button>
-        )}
       </div>
+
+      {/* ✅ Tab is now outside and independent */}
+      {isMobile && (
+        <div
+          className="peerlist-tab"
+          onClick={() => setIsPeerListOpen((prev) => !prev)}
+        >
+          {isPeerListOpen ? "⟨" : "⟩"}
+        </div>
+      )}
 
       {/* 🎥 Main View */}
       <div className="broadcast-main">

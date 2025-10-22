@@ -1247,3 +1247,55 @@ video.pip {
   z-index: 9999 !important;
   box-shadow: 0 0 25px rgba(0, 224, 255, 0.4);
 }
+
+/* -------------------------------
+   Mobile Peerlist + Always-Visible Tab
+---------------------------------*/
+@media (max-width: 1024px) {
+  .peerlist-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    width: 260px;
+    background: rgba(20, 24, 30, 0.98);
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 4px 0 12px rgba(0, 0, 0, 0.4);
+    transition: transform 0.3s ease;
+    z-index: 2000; /* ✅ above everything else */
+    transform: translateX(-220px); /* leaves tab visible */
+  }
+
+  .peerlist-sidebar.open {
+    transform: translateX(0);
+  }
+
+  /* ✅ the toggle tab — always visible */
+  .peerlist-tab {
+    position: fixed;       /* fixed so it stays on screen */
+    top: 50%;
+    left: 0;
+    transform: translateY(-50%);
+    width: 36px;
+    height: 72px;
+    background: var(--accent);
+    border-radius: 0 8px 8px 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #000;
+    font-weight: 700;
+    font-size: 1.2rem;
+    cursor: pointer;
+    box-shadow: 0 0 10px rgba(0, 224, 255, 0.5);
+    z-index: 3000; /* ✅ higher than sidebar */
+    transition: transform 0.2s ease, background 0.2s ease;
+  }
+
+  .peerlist-tab:hover {
+    background: #00ffff;
+    transform: translateY(-50%) scale(1.05);
+  }
+}
+
+
