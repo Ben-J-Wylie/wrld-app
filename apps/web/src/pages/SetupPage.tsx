@@ -33,85 +33,97 @@ type Toggles = {
 
 export default function SetupPage() {
   const { settings, setSettings, msc } = useBroadcast();
-  const [isLive, setIsLive] = useState(false);
+  //const [isLive, setIsLive] = useState(false);
   const isMobile = useIsMobile();
   const [messages, setMessages] = useState<string[]>([]);
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
   //const msc = new MediaSoupClient();
 
   async function publishTrack(kind: "audio" | "video") {
-    const constraints =
-      kind === "audio"
-        ? { audio: true, video: false }
-        : { audio: false, video: true };
-
     try {
+      const constraints =
+        kind === "audio"
+          ? { audio: true, video: false }
+          : { audio: false, video: true };
+
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      await msc.publishLocalStream(stream);
-      console.log(`📡 Published ${kind} stream`);
+      const track =
+        kind === "audio"
+          ? stream.getAudioTracks()[0]
+          : stream.getVideoTracks()[0];
+
+      if (!track) {
+        console.warn(`⚠️ No ${kind} track found`);
+        return;
+      }
+
+      await msc.publishTrack(track, kind);
+      console.log(`📡 Published ${kind} track`);
     } catch (err) {
       console.error(`❌ Failed to publish ${kind}:`, err);
     }
   }
 
   const toggle = async (key: keyof typeof settings) => {
-    const updated = { ...settings, [key]: !settings[key] };
+    // Step 1: build the next settings state synchronously
+    let next = { ...settings, [key]: !settings[key] };
 
-    // --- single-camera rule for mobile ---
-    if (key === "frontCamera" && updated.frontCamera) {
-      updated.backCamera = false;
-      updated.camera = true; // ✅ mirror unified camera flag
+    // --- mobile-specific camera logic ---
+    if (key === "frontCamera") {
+      if (next.frontCamera) {
+        next.backCamera = false;
+        next.camera = true;
+      } else if (!next.backCamera) {
+        next.camera = false;
+      }
     }
 
-    if (key === "backCamera" && updated.backCamera) {
-      updated.frontCamera = false;
-      updated.camera = true; // ✅ mirror unified camera flag
+    if (key === "backCamera") {
+      if (next.backCamera) {
+        next.frontCamera = false;
+        next.camera = true;
+      } else if (!next.frontCamera) {
+        next.camera = false;
+      }
     }
 
-    // If both cameras are now off, also turn off the unified flag
-    if (!updated.frontCamera && !updated.backCamera) {
-      updated.camera = false;
-    }
-
-    // --- desktop toggle ---
     if (key === "camera") {
-      updated.camera = !settings.camera;
+      next.camera = !settings.camera;
+      next.frontCamera = false;
+      next.backCamera = false;
     }
 
-    setSettings(updated);
+    // Step 2: commit state
+    setSettings(next);
 
-    console.log("🔸 Updated settings:", updated);
-
+    // Step 3: emit to server (non-blocking)
     socket.emit("updateStreamState", {
-      isStreaming: isLive,
-      settings: updated,
+      isStreaming: next.__live,
+      settings: next,
       platform: isMobile ? "mobile" : "desktop",
     });
 
-    // --- independent mic / camera logic ---
-
-    // 🎤 MIC toggle
+    // Step 4: handle independent media actions
     if (key === "mic") {
-      if (updated.mic) {
-        console.log("🎙️ Turning mic ON...");
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-        });
-        const track = stream.getAudioTracks()[0];
-        if (track) await msc.publishTrack(track); // 👈 this publishes audio-only
+      if (next.mic) {
+        try {
+          await publishTrack("audio");
+        } catch (err) {
+          console.error("🎙️ mic error:", err);
+        }
       } else {
-        console.log("🔇 Turning mic OFF...");
         msc.stopProducerByKind("audio");
       }
     }
 
-    // 🎥 CAMERA toggle (includes front/back)
-    if (key === "camera" || key === "frontCamera" || key === "backCamera") {
-      if (updated.camera || updated.frontCamera || updated.backCamera) {
-        console.log("📸 Turning camera ON (video-only)...");
-        await publishTrack("video");
+    if (["camera", "frontCamera", "backCamera"].includes(key)) {
+      if (next.camera || next.frontCamera || next.backCamera) {
+        try {
+          await publishTrack("video");
+        } catch (err) {
+          console.error("📸 camera error:", err);
+        }
       } else {
-        console.log("🛑 Turning camera OFF...");
         msc.stopProducerByKind("video");
       }
     }
@@ -122,26 +134,12 @@ export default function SetupPage() {
   const handleGoLive = () => {
     if (!hasAnyEnabled) return;
 
-    const goingLive = !isLive;
-    setIsLive(goingLive);
+    // flip the global context flag
+    setSettings((prev) => ({ ...prev, __live: !prev.__live }));
 
-    // ✅ Tell backend you’re now streaming
-    socket.emit("updateStreamState", {
-      isStreaming: goingLive,
-      settings,
-      platform: isMobile ? "mobile" : "desktop",
-    });
-
-    if (goingLive) {
+    // if turning on, go to broadcast page
+    if (!settings.__live) {
       navigate("/broadcast");
-      setTimeout(() => setIsLive(false), 500);
-    } else {
-      // optional cleanup if they hit "End Stream"
-      socket.emit("updateStreamState", {
-        isStreaming: false,
-        settings,
-        platform: isMobile ? "mobile" : "desktop",
-      });
     }
   };
   async function handleToggleScreenShare() {
@@ -172,21 +170,31 @@ export default function SetupPage() {
     };
   }, [msc]);
 
+  useEffect(() => {
+    const anyOn = [
+      settings.camera,
+      settings.frontCamera,
+      settings.backCamera,
+      settings.mic,
+      settings.location,
+      settings.screenShare,
+      settings.chat,
+      settings.gyro,
+      settings.torch,
+    ].some(Boolean);
+
+    if (!anyOn && settings.__live) {
+      console.log("🧹 All toggles off — stopping live stream");
+      setSettings((prev) => ({ ...prev, __live: false }));
+    }
+  }, [settings]);
+
   // ✅ disable Go Live unless one toggle is active
   const hasAnyEnabled = Object.values(settings).some(Boolean);
 
   return (
     <div className="setup-container">
       <div className="setup-header">
-        <button
-          className={`go-live-button ${isLive ? "active" : ""}`}
-          onClick={handleGoLive}
-          disabled={!hasAnyEnabled}
-        >
-          <Power size={20} />
-          {isLive ? "End Stream" : "Go Live"}
-        </button>
-
         <h1 className="setup-title">Setup Your Stream</h1>
         <p className="setup-subtitle">
           Choose what you’ll share before going live.
@@ -283,16 +291,6 @@ export default function SetupPage() {
             />
           </>
         )}
-      </div>
-
-      <div className="go-live-wrapper">
-        <button
-          className={`go-live-button ${isLive ? "active" : ""}`}
-          onClick={handleGoLive}
-        >
-          <Power size={20} />
-          {isLive ? "End Stream" : "Go Live"}
-        </button>
       </div>
     </div>
   );
@@ -449,9 +447,7 @@ function MicFFTPreview() {
 /* -----------------------------
    Screen Share Preview (strict-mode safe)
 ------------------------------ */
-/* -----------------------------
-   Screen Share Preview (controlled)
------------------------------- */
+
 function ScreenSharePreview({ stream }: { stream: MediaStream }) {
   const vidRef = useRef<HTMLVideoElement | null>(null);
 

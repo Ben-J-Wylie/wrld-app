@@ -30,6 +30,9 @@ type Peer = {
   recvTransportId?: string;
   producers: Map<string, Producer>;
   consumers: Map<string, Consumer>;
+  settings?: Record<string, any>;
+  platform?: string;
+  isStreaming?: boolean; // ✅ NEW
 };
 
 // Global state
@@ -261,6 +264,9 @@ io.on("connection", (socket) => {
       producers: new Map(),
       consumers: new Map(),
       userId: stableId,
+      settings: {},
+      platform: "desktop",
+      isStreaming: false, // ✅ NEW default
     };
     peers.set(socket.id, peer);
 
@@ -296,87 +302,98 @@ io.on("connection", (socket) => {
 
 
 
-// apps/mediaserver/src/server.ts
-socket.on("createRecvTransport", async (_, cb) => {
-  let peer = peers.get(socket.id);
-  if (!peer) {
-    console.warn("⚠️ createRecvTransport called before register — creating peer entry.");
-    peer = {
-      id: socket.id,
-      name: "Anonymous",
-      transports: new Map(),
-      producers: new Map(),
-      consumers: new Map(),
-    };
-    peers.set(socket.id, peer);
-  }
+  // apps/mediaserver/src/server.ts
+  socket.on("createRecvTransport", async (_, cb) => {
+    let peer = peers.get(socket.id);
+    if (!peer) {
+      console.warn("⚠️ createRecvTransport called before register — creating peer entry.");
+      peer = {
+        id: socket.id,
+        name: "Anonymous",
+        transports: new Map(),
+        producers: new Map(),
+        consumers: new Map(),
+      };
+      peers.set(socket.id, peer);
+    }
 
-  // 🔒 Avoid creating multiple recv transports
-  if (peer.recvTransportId && peer.transports.has(peer.recvTransportId)) {
-    const existing = peer.transports.get(peer.recvTransportId)!;
-    console.log(`ℹ️ Reusing existing recv transport for ${socket.id}: ${existing.id}`);
-    return cb({
-      id: existing.id,
-      iceParameters: existing.iceParameters,
-      iceCandidates: existing.iceCandidates,
-      dtlsParameters: existing.dtlsParameters,
+    // 🔒 Avoid creating multiple recv transports
+    if (peer.recvTransportId && peer.transports.has(peer.recvTransportId)) {
+      const existing = peer.transports.get(peer.recvTransportId)!;
+      console.log(`ℹ️ Reusing existing recv transport for ${socket.id}: ${existing.id}`);
+      return cb({
+        id: existing.id,
+        iceParameters: existing.iceParameters,
+        iceCandidates: existing.iceCandidates,
+        dtlsParameters: existing.dtlsParameters,
+      });
+    }
+
+    const routerIp = PUBLIC_IP || "127.0.0.1";
+    const transport = await router.createWebRtcTransport({
+      listenIps: [{ ip: "0.0.0.0", announcedIp: routerIp }],
+      enableUdp: true,
+      enableTcp: true,
+      preferUdp: true,
     });
-  }
 
-  const routerIp = PUBLIC_IP || "127.0.0.1";
-  const transport = await router.createWebRtcTransport({
-    listenIps: [{ ip: "0.0.0.0", announcedIp: routerIp }],
-    enableUdp: true,
-    enableTcp: true,
-    preferUdp: true,
+    peer.transports.set(transport.id, transport);
+    peer.recvTransportId = transport.id;
+
+    socket.emit("recvTransportReady", { id: transport.id });
+
+    console.log(`🚚 Created recv transport for ${socket.id}: ${transport.id}`);
+
+    cb({
+      id: transport.id,
+      iceParameters: transport.iceParameters,
+      iceCandidates: transport.iceCandidates,
+      dtlsParameters: transport.dtlsParameters,
+    });
   });
-
-  peer.transports.set(transport.id, transport);
-  peer.recvTransportId = transport.id;
-
-  socket.emit("recvTransportReady", { id: transport.id });
-
-  console.log(`🚚 Created recv transport for ${socket.id}: ${transport.id}`);
-
-  cb({
-    id: transport.id,
-    iceParameters: transport.iceParameters,
-    iceCandidates: transport.iceCandidates,
-    dtlsParameters: transport.dtlsParameters,
-  });
-});
 
 
 
   socket.on("updateStreamState", ({ isStreaming, settings, platform }) => {
-    const userId = (socket as any).userId;
-    const username = usernames.get(socket.id);
+    const peer = peers.get(socket.id);
+    if (!peer) return;
 
-    // 🛑 Ignore updates from sockets that haven't registered yet
-    if (!userId || !username) {
-      console.warn(
-        `⚠️ updateStreamState ignored — socket ${socket.id} not registered yet`
-      );
-      return;
-    }
+    peer.isStreaming = !!isStreaming;
+    peer.settings = settings;
+    peer.platform = platform;
 
-    // ✅ Update or create a proper entry
+    // ✅ Update streamStates to reflect this peer's current live status
     streamStates.set(socket.id, {
       id: socket.id,
-      userId,
-      name: username,
-      displayName: username,
+      userId: (socket as any).userId || socket.id,
+      name: peer.name,
+      displayName: peer.name,
       isStreaming: !!isStreaming,
-      settings: settings || {},
+      settings,
       platform: platform || "desktop",
     });
 
     console.log(
-      `📶 Stream state updated for ${username} (${socket.id}) → isStreaming=${isStreaming}`
+      `📡 ${peer.name || socket.id} is now ${
+        isStreaming ? "LIVE" : "OFFLINE"
+      } [${platform}]`
     );
 
+    // ✅ Tell all clients this peer changed
+    socket.broadcast.emit("peerUpdated", {
+      id: socket.id,
+      name: peer.name,
+      settings,
+      isStreaming,
+    });
+
+    // ✅ Rebroadcast full peer list (will now include only live users)
     broadcastPeerList();
   });
+
+
+
+
 
   // --- RTP Capabilities ---
   socket.on("getRouterRtpCapabilities", (_: any, cb: any) => {
@@ -548,35 +565,6 @@ socket.on("createRecvTransport", async (_, cb) => {
     }
   });
 
-
-
-  socket.on("updateStreamState", (data) => {
-    const prev = streamStates.get(socket.id) || {};
-    const displayName =
-      prev.displayName ||
-      prev.name ||
-      usernames.get(socket.id) ||
-      "Anonymous";
-
-    const updated = {
-      id: socket.id,
-      displayName,
-      name: displayName,
-      platform: data.platform || prev.platform || "desktop",
-      settings: { ...prev.settings, ...data.settings },
-      isStreaming: data.isStreaming ?? prev.isStreaming ?? false,
-    };
-
-    streamStates.set(socket.id, updated);
-
-    console.log("🟡 Peer updated:", updated);
-
-    // ✅ Broadcast to everyone else
-    socket.broadcast.emit("peerUpdated", updated);
-
-    // ✅ Keep global peer list accurate
-    safeBroadcastPeerList();
-  });
 
 
   socket.on("recvTransportReady", ({ id }, ack) => {

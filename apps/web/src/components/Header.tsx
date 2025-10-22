@@ -12,48 +12,36 @@ export default function Header({ user, onLogout }: any) {
   const { settings, setSettings } = useBroadcast();
   const navigate = useNavigate();
 
-  // ✅ derived streaming and readiness states
-  const isStreaming =
-    settings.frontCamera ||
-    settings.backCamera ||
-    settings.mic ||
-    settings.screenShare ||
-    settings.location ||
-    settings.chat ||
-    settings.gyro ||
-    settings.torch;
+  // ✅ True if any streaming input is selected
+  const hasAnySourceSelected = [
+    settings.camera,
+    settings.frontCamera,
+    settings.backCamera,
+    settings.mic,
+    settings.location,
+    settings.chat,
+    settings.screenShare,
+    settings.gyro,
+    settings.torch,
+  ].some(Boolean);
 
-  const hasAnySourceSelected =
-    settings.frontCamera ||
-    settings.backCamera ||
-    settings.mic ||
-    settings.screenShare;
+  // ✅ Disable Go Live button until something is toggled
+  const disabled = !hasAnySourceSelected;
+  const isLive = settings.__live;
 
-  // ✅ Toggle stream ON/OFF
   const handleGoLiveClick = () => {
-    if (!hasAnySourceSelected) return; // disabled until user selects source
-    setSettings((prev) => {
-      const currentlyLive = prev.__live ?? false;
-      const next = { ...prev, __live: !currentlyLive };
-      return next;
-    });
+    if (disabled) return;
+    setSettings((prev) => ({ ...prev, __live: !prev.__live }));
   };
 
+  // 🔄 Auto-reset if user deselects all toggles mid-stream
   useEffect(() => {
-    if (!isStreaming && settings.__live) {
+    if (!hasAnySourceSelected && settings.__live) {
       setSettings((prev) => ({ ...prev, __live: false }));
     }
-  }, [isStreaming]);
+  }, [hasAnySourceSelected]);
 
-  useEffect(() => {
-    socket.emit("updateStreamState", {
-      isStreaming: settings.__live,
-      settings,
-      platform: "desktop",
-    });
-  }, [settings.__live, isStreaming]);
-
-  // ✅ handle dropdown logic
+  // 🧭 Dropdown open/close logic
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (
@@ -86,15 +74,17 @@ export default function Header({ user, onLogout }: any) {
       </div>
 
       <div className="nav-right">
-        {/* 👇 Toggle-only Live button */}
+        {/* 🎥 Go Live button */}
         <button
           onClick={handleGoLiveClick}
-          className={`go-live-btn ${settings.__live ? "live" : ""}`}
-          disabled={!hasAnySourceSelected}
+          className={`go-live-btn ${isLive ? "live" : ""}`}
+          disabled={disabled}
+          title={disabled ? "Select a source to go live" : ""}
         >
-          {settings.__live ? "● LIVE" : "Go Live"}
+          {isLive ? "● LIVE" : "Go Live"}
         </button>
 
+        {/* 👤 User menu */}
         {user ? (
           <div className="user-info" ref={dropdownRef}>
             {user.avatarUrl ? (
@@ -133,7 +123,6 @@ export default function Header({ user, onLogout }: any) {
                 >
                   Setup
                 </button>
-
                 <button
                   onClick={() => {
                     navigate("/broadcast");
@@ -142,7 +131,6 @@ export default function Header({ user, onLogout }: any) {
                 >
                   Broadcast
                 </button>
-
                 <button
                   onClick={() => {
                     navigate("/global-room");
@@ -151,7 +139,6 @@ export default function Header({ user, onLogout }: any) {
                 >
                   Global Room
                 </button>
-
                 <button
                   onClick={() => {
                     navigate("/profile");
@@ -160,7 +147,6 @@ export default function Header({ user, onLogout }: any) {
                 >
                   Profile
                 </button>
-
                 <button
                   onClick={() => {
                     onLogout();
@@ -189,20 +175,17 @@ export default function Header({ user, onLogout }: any) {
           background-color: #111827;
           color: white;
         }
-
         .logo {
           font-weight: 700;
           letter-spacing: 0.05em;
           font-size: 1.25rem;
           cursor: pointer;
         }
-
         .nav-right {
           display: flex;
           align-items: center;
           gap: 1rem;
         }
-
         .go-live-btn {
           background-color: #374151;
           color: #f9fafb;
@@ -213,22 +196,18 @@ export default function Header({ user, onLogout }: any) {
           cursor: pointer;
           border: none;
         }
-
         .go-live-btn:hover:not(:disabled) {
           background-color: #4b5563;
         }
-
         .go-live-btn:disabled {
           opacity: 0.4;
           cursor: not-allowed;
         }
-
         .go-live-btn.live {
           background-color: #dc2626;
           color: white;
           animation: pulse 1.6s infinite;
         }
-
         @keyframes pulse {
           0% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.6); }
           70% { box-shadow: 0 0 0 8px rgba(220, 38, 38, 0); }
