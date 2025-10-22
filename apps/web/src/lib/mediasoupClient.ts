@@ -44,9 +44,19 @@ export class MediaSoupClient {
     });
 
     // 🔹 New producer (another user's published stream)
-    this.socket.on("newProducer", async ({ producerId, kind }) => {
+    this.socket.on("newProducer", async ({ producerId, kind, peerId }) => {
       console.log("🆕 New producer:", producerId, kind);
-      await this.consume(producerId);
+
+      // ✅ Skip if already consuming this producer
+      if (this.consumers.has(producerId)) {
+        console.log(`⚠️ Already consuming ${producerId}, skipping`);
+        return;
+      }
+
+      // Optional: only auto-consume if viewing this peer
+      if (this.currentViewingPeer && this.currentViewingPeer === peerId) {
+        await this.consume(producerId, peerId);
+      }
     });
 
     // 🔹 Peer list updates (buffered replay)
@@ -258,6 +268,7 @@ async createRecvTransport() {
             reject(res.error);
           } else {
             console.log("✅ [createRecvTransport] Recv transport connected!");
+            this.socket.emit("recvTransportReady", { id: data.id });
             callback();
             resolve();
           }
@@ -302,25 +313,47 @@ async publishTrack(track: MediaStreamTrack) {
   // --- Consuming remote producers ---
 
   async consume(producerId: string, peerId?: string) {
-    if (!this.device) await this.initDevice();
-
-    let tries = 3;
-    while (!this.recvTransport && tries > 0) {
-      console.log(`⏳ Waiting for recv transport... (${4 - tries}/3)`);
-      await new Promise((r) => setTimeout(r, 300));
-      tries--;
-    }
 
     if (!this.recvTransport) {
-      console.warn("🚫 Cannot consume — recv transport not ready");
-      return;
+      console.warn("No recv transport yet, creating...");
+      await this.createRecvTransport();
+      // wait briefly for DTLS handshake
+      await new Promise((r) => setTimeout(r, 300));
     }
+
+    if (this.consumers.has(producerId)) {
+      console.log(`⚠️ Already consuming producer ${producerId}, skipping`);
+      return this.consumers.get(producerId);
+    }
+    if (!this.device) await this.initDevice();
+
+    // 🧩 Ensure recv transport exists
+    if (!this.recvTransport) {
+      console.warn("No recv transport yet, creating...");
+      await this.createRecvTransport();
+    }
+
+    // 🕐 Wait briefly for DTLS handshake to finish before consuming
+    await new Promise((r) => setTimeout(r, 300));
 
     const { rtpCapabilities } = this.device!;
     console.log("🛰️ consume() request:", producerId);
 
-    const data = await this.request("consume", { producerId, rtpCapabilities });
-    console.log("🛰️ consume() response:", data);
+    let data;
+    try {
+      data = await this.request("consume", { producerId, rtpCapabilities });
+    } catch (err) {
+      console.error("❌ Consume request failed:", err);
+      // Reset the recv transport to recover from broken SDP
+      this.recvTransport?.close();
+      this.recvTransport = null;
+      await this.createRecvTransport();
+      return;
+    }
+
+
+
+      console.log("🛰️ consume() response:", data);
 
     if (data.error) {
       console.warn("⚠️ Consume failed:", data.error);
@@ -431,29 +464,43 @@ async publishTrack(track: MediaStreamTrack) {
   }
 
   // --- Request peer producers ---
-  async viewPeer(peerId: string) {
-    if (!this.device) await this.initDevice();
-    if (!this.recvTransport) {
-      console.log("🎯 Creating recv transport on-demand...");
-      await this.createRecvTransport();
-    }
-
-    const producers = await this.request("getPeerProducers", { peerId });
-    if (!producers?.length) {
-      console.warn(`⚠️ No active producers for peer: ${peerId}`);
-      return;
-    }
-
-    await Promise.all(
-      producers.map(async (p) => {
-        const id = p.id || p.producerId;
-        if (!id) return;
-        console.log(`🎥 Consuming ${p.kind} producer: ${id}`);
-        return this.consume(id);
-      })
-    );
-
+  // apps/web/src/lib/mediasoupClient.ts
+async viewPeer(peerId: string) {
+  if (!this.device) await this.initDevice();
+  if (!this.recvTransport) {
+    console.log("🎯 Creating recv transport on-demand...");
+    await this.createRecvTransport();
   }
+
+  // apps/web/src/lib/mediasoupClient.ts
+  let producers: any[] = [];
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    producers = await this.request("getPeerProducers", { peerId });
+    if (producers?.length) break;
+    console.warn(
+      `⚠️ No producers for ${peerId} (attempt ${attempt}/5) — retrying...`
+    );
+    await new Promise((r) => setTimeout(r, 500));
+  }
+
+  if (!producers?.length) {
+    console.warn(`🚫 Still no producers for ${peerId} after retries.`);
+    return;
+  }
+
+
+  // ✅ Consume producers sequentially to avoid SDP collision
+  for (const [index, p] of producers.entries()) {
+    const id = p.id || p.producerId;
+    if (!id) continue;
+    console.log(`🎥 Consuming ${p.kind} producer: ${id}`);
+    await this.consume(id);
+
+    // 🕐 Tiny delay to let the SDP negotiation finish before next consume
+    await new Promise((r) => setTimeout(r, 250 * (index + 1)));
+  }
+}
+
 
   // --- Cleanup ---
   close() {

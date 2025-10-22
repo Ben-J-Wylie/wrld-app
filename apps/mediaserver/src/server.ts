@@ -296,77 +296,55 @@ io.on("connection", (socket) => {
 
 
 
+// apps/mediaserver/src/server.ts
+socket.on("createRecvTransport", async (_, cb) => {
+  let peer = peers.get(socket.id);
+  if (!peer) {
+    console.warn("⚠️ createRecvTransport called before register — creating peer entry.");
+    peer = {
+      id: socket.id,
+      name: "Anonymous",
+      transports: new Map(),
+      producers: new Map(),
+      consumers: new Map(),
+    };
+    peers.set(socket.id, peer);
+  }
 
-  socket.on("createRecvTransport", async (_, cb) => {
-  const peer = peers.get(socket.id);
-    if (!peer) {
-      console.warn("⚠️ createRecvTransport called before register, creating peer entry.");
-      peers.set(socket.id, {
-        id: socket.id,
-        name: "Anonymous",
-        transports: new Map(),
-        producers: new Map(),
-        consumers: new Map(),
-      });
-    }
-
-    const routerIp = PUBLIC_IP || "127.0.0.1";
-
-    const transport = await router.createWebRtcTransport({
-      listenIps: [{ ip: "0.0.0.0", announcedIp: routerIp }],
-      enableUdp: true,
-      enableTcp: true,
-      preferUdp: true,
+  // 🔒 Avoid creating multiple recv transports
+  if (peer.recvTransportId && peer.transports.has(peer.recvTransportId)) {
+    const existing = peer.transports.get(peer.recvTransportId)!;
+    console.log(`ℹ️ Reusing existing recv transport for ${socket.id}: ${existing.id}`);
+    return cb({
+      id: existing.id,
+      iceParameters: existing.iceParameters,
+      iceCandidates: existing.iceCandidates,
+      dtlsParameters: existing.dtlsParameters,
     });
+  }
 
-    // ⚡️ Save it on the existing peer
-    const currentPeer = peers.get(socket.id)!;
-    currentPeer.transports.set(transport.id, transport);
-    currentPeer.recvTransportId = transport.id; // ✅ THE MISSING LINE
-
-    console.log(`🚚 Created recv transport for ${socket.id}: ${transport.id}`);
-
-    cb({
-      id: transport.id,
-      iceParameters: transport.iceParameters,
-      iceCandidates: transport.iceCandidates,
-      dtlsParameters: transport.dtlsParameters,
-    });
+  const routerIp = PUBLIC_IP || "127.0.0.1";
+  const transport = await router.createWebRtcTransport({
+    listenIps: [{ ip: "0.0.0.0", announcedIp: routerIp }],
+    enableUdp: true,
+    enableTcp: true,
+    preferUdp: true,
   });
 
-  socket.on("createSendTransport", async (_, cb) => {
-    const peer = peers.get(socket.id);
-    if (!peer) {
-      console.warn(`⚠️ createSendTransport: creating peer entry for ${socket.id}`);
-      peers.set(socket.id, {
-        id: socket.id,
-        name: usernames.get(socket.id) || "Anonymous",
-        transports: new Map(),
-        producers: new Map(),
-        consumers: new Map(),
-      });
-    }
+  peer.transports.set(transport.id, transport);
+  peer.recvTransportId = transport.id;
 
-    const transport = await router.createWebRtcTransport({
-      listenIps: [{ ip: "0.0.0.0", announcedIp: PUBLIC_IP }],
-      enableUdp: true,
-      enableTcp: true,
-      preferUdp: true,
-    });
+  socket.emit("recvTransportReady", { id: transport.id });
 
-    const currentPeer = peers.get(socket.id)!;
-    currentPeer.transports.set(transport.id, transport);
-    currentPeer.sendTransportId = transport.id; // ✅ important
+  console.log(`🚚 Created recv transport for ${socket.id}: ${transport.id}`);
 
-    console.log(`🚚 Created send transport for ${socket.id}: ${transport.id}`);
-
-    cb({
-      id: transport.id,
-      iceParameters: transport.iceParameters,
-      iceCandidates: transport.iceCandidates,
-      dtlsParameters: transport.dtlsParameters,
-    });
+  cb({
+    id: transport.id,
+    iceParameters: transport.iceParameters,
+    iceCandidates: transport.iceCandidates,
+    dtlsParameters: transport.dtlsParameters,
   });
+});
 
 
 
@@ -431,76 +409,61 @@ io.on("connection", (socket) => {
   });
 
   // --- CREATE TRANSPORT (client must send direction: "send" | "recv") ---
-  socket.on("createTransport", async ({ direction }: { direction: "send" | "recv" }, cb) => {
-    try {
-      // 🧩 Ensure peer is registered
-      const peer = peers.get(socket.id);
-      if (!peer) {
-        console.warn(`⚠️ createTransport called but peer not found for ${socket.id}`);
-        return cb?.({ error: "Peer not ready yet" });
-      }
+  socket.on("createTransport", async ({ direction }, cb) => {
+    const peer = peers.get(socket.id);
+    if (!peer) {
+      console.warn(`⚠️ No peer found for socket ${socket.id}`);
+      return cb({ error: "Peer not registered" });
+    }
 
-      // 🛰️ Create mediasoup transport
+    try {
       const transport = await router.createWebRtcTransport({
         listenIps: [{ ip: "0.0.0.0", announcedIp: PUBLIC_IP }],
         enableUdp: true,
         enableTcp: true,
         preferUdp: true,
         initialAvailableOutgoingBitrate: 1_000_000,
-        appData: { direction },
       });
 
-      // 🧠 Track transports
+      // ✅ Register this transport so it’s found later during connect
       peer.transports.set(transport.id, transport);
-      transports.set(transport.id, transport);
 
       if (direction === "send") peer.sendTransportId = transport.id;
       else peer.recvTransportId = transport.id;
 
-      console.log(`🚚 Created ${direction} transport for ${socket.id}: ${transport.id}`);
+      console.log(`✅ Created ${direction} transport for ${socket.id}: ${transport.id}`);
 
-      // ✅ Return the full transport data to the client
-      cb?.({
+      // Return transport parameters to client
+      cb({
         id: transport.id,
         iceParameters: transport.iceParameters,
         iceCandidates: transport.iceCandidates,
         dtlsParameters: transport.dtlsParameters,
-        // optional extras for debugging / future usage
-        sctpParameters: transport.sctpParameters ?? null,
-        appData: transport.appData,
       });
-
-      // 🧹 Handle transport close cleanup
-      transport.on("dtlsstatechange", (state) => {
-        if (state === "closed" || state === "failed") {
-          console.log(`⚠️ Transport ${transport.id} (${direction}) closed`);
-          transport.close();
-          peer.transports.delete(transport.id);
-          transports.delete(transport.id);
-        }
-      });
-    } catch (err: any) {
-      console.error(`❌ Failed to create ${direction} transport:`, err);
-      cb?.({ error: err.message || "Internal error creating transport" });
+    } catch (err) {
+      console.error("❌ createTransport failed:", err);
+      cb({ error: err.message });
     }
   });
+
 
 
   // --- CONNECT TRANSPORT ---
   socket.on("connectTransport", async ({ transportId, dtlsParameters }, cb) => {
     const peer = peers.get(socket.id);
-    if (!peer) return cb?.({ error: "Peer not ready yet" });
+    if (!peer) return cb({ error: "Peer not found" });
 
     const transport = peer.transports.get(transportId);
     if (!transport) {
-      console.warn(`⚠️ connectTransport: transport not found ${transportId}`);
-      return cb?.({ error: "Transport not found" });
+      console.warn(`⚠️ connectTransport: transport not found for ${socket.id}`);
+      return cb({ error: "Transport not found" });
     }
 
     await transport.connect({ dtlsParameters });
-    console.log(`🔗 Transport connected for ${socket.id} (${transport.appData?.direction})`);
-    cb?.({ ok: true });
+    console.log(`🔗 Transport ${transportId} connected for ${socket.id}`);
+    cb({ ok: true });
   });
+
 
   // --- PRODUCE ---
   socket.on("produce", async ({ kind, rtpParameters }, cb) => {
@@ -574,6 +537,17 @@ io.on("connection", (socket) => {
     console.log("🔍 Producers summary:", all);
   });
 
+  socket.on("debugTransports", () => {
+    const peer = peers.get(socket.id);
+    if (peer) {
+      console.log({
+        id: socket.id,
+        transports: [...peer.transports.keys()],
+        recvTransportId: peer.recvTransportId,
+      });
+    }
+  });
+
 
 
   socket.on("updateStreamState", (data) => {
@@ -643,10 +617,24 @@ io.on("connection", (socket) => {
     try {
       const peer = peers.get(socket.id);
       if (!peer) throw new Error("Peer not found");
-      if (!peer.recvTransportId) throw new Error("No recv transport");
+      let recvTransport: WebRtcTransport | undefined;
 
-      const recvTransport = peer.transports.get(peer.recvTransportId);
-      if (!recvTransport) throw new Error("Recv transport missing");
+      if (peer.recvTransportId) {
+        recvTransport = peer.transports.get(peer.recvTransportId);
+      }
+
+      if (!recvTransport) {
+        console.warn(`⚠️ No recv transport found for ${socket.id} — creating fallback one`);
+        const newTransport = await router.createWebRtcTransport({
+          listenIps: [{ ip: "0.0.0.0", announcedIp: PUBLIC_IP }],
+          enableUdp: true,
+          enableTcp: true,
+          preferUdp: true,
+        });
+        peer.transports.set(newTransport.id, newTransport);
+        peer.recvTransportId = newTransport.id;
+        recvTransport = newTransport;
+      }
 
       const producerPeer = Array.from(peers.values()).find((p) =>
         p.producers.has(producerId)

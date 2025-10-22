@@ -1,3 +1,4 @@
+// apps/web/src/components/MicSpectrum.tsx
 import React, { useEffect, useRef } from "react";
 import { socket } from "../lib/socket";
 
@@ -15,15 +16,17 @@ export default function MicSpectrum({ peer }: MicSpectrumProps) {
   useEffect(() => {
     if (!peer) return;
 
-    // 🧹 Always stop any existing analyzer before creating a new one
+    // 🔇 Clean up any old analyser/context
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    if (audioCtxRef.current) {
+    if (audioCtxRef.current && audioCtxRef.current.state !== "closed") {
       try {
         audioCtxRef.current.close();
-      } catch {}
+      } catch (err) {
+        console.warn("AudioContext cleanup error:", err);
+      }
     }
 
-    // 🎧 Choose the correct audio stream
+    // 🎧 Pick the correct audio stream
     let stream: MediaStream | null = null;
     if (peer?.id === socket.id) {
       stream = (window as any).localStreamRef || null;
@@ -36,7 +39,9 @@ export default function MicSpectrum({ peer }: MicSpectrumProps) {
     console.log("🎧 MicSpectrum init for", peer.displayName, stream);
 
     if (!stream) {
-      console.warn(`⚠️ No valid audio stream for ${peer.displayName}`);
+      console.warn(
+        `⚠️ No valid audio stream for ${peer.displayName} (id: ${peer.id})`
+      );
       return;
     }
 
@@ -47,11 +52,12 @@ export default function MicSpectrum({ peer }: MicSpectrumProps) {
     }
 
     const audioTrack = audioTracks[0];
+    let active = true; // used to stop retries on unmount
 
     // 🕐 Wait until the audio track is live and ready
-    let retries = 20; // 2 seconds max (20 * 100ms)
     const waitForLiveTrack = async (): Promise<boolean> => {
-      while (retries > 0) {
+      for (let i = 0; i < 20; i++) {
+        if (!active) return false;
         if (
           audioTrack.readyState === "live" &&
           audioTrack.enabled &&
@@ -60,32 +66,31 @@ export default function MicSpectrum({ peer }: MicSpectrumProps) {
           return true;
         }
         await new Promise((r) => setTimeout(r, 100));
-        retries--;
       }
       return false;
     };
 
-    (async () => {
+    const setup = async () => {
       const ready = await waitForLiveTrack();
-      if (!ready) {
+      if (!ready || !active) {
         console.warn(
           `⚠️ Audio track never became live for ${peer.displayName}`
         );
         return;
       }
 
-      // 🧠 Setup AudioContext + Analyser
+      // 🎚️ Create AudioContext + Analyser
       const audioCtx = new (window.AudioContext ||
         (window as any).webkitAudioContext)();
       audioCtxRef.current = audioCtx;
+
       const analyser = audioCtx.createAnalyser();
       analyser.fftSize = 512;
       analyserRef.current = analyser;
 
-      // 👂 Connect MediaStreamSource
-      let source: MediaStreamAudioSourceNode | null = null;
+      // 🎛️ Connect MediaStreamSource
       try {
-        source = audioCtx.createMediaStreamSource(stream!);
+        const source = audioCtx.createMediaStreamSource(stream!);
         source.connect(analyser);
         sourceRef.current = source;
       } catch (err) {
@@ -93,6 +98,7 @@ export default function MicSpectrum({ peer }: MicSpectrumProps) {
         return;
       }
 
+      // 🖼️ Setup drawing
       const canvas = canvasRef.current!;
       const ctx = canvas.getContext("2d")!;
       const bufferLength = analyser.frequencyBinCount;
@@ -100,6 +106,7 @@ export default function MicSpectrum({ peer }: MicSpectrumProps) {
       let lastDraw = performance.now();
 
       const draw = (now: number) => {
+        if (!active) return;
         rafRef.current = requestAnimationFrame(draw);
         if (now - lastDraw < 33) return; // ~30fps
         lastDraw = now;
@@ -118,7 +125,7 @@ export default function MicSpectrum({ peer }: MicSpectrumProps) {
           x += barWidth + 1;
         }
 
-        // optional average level line
+        // Optional average level line
         const avg = dataArray.reduce((a, b) => a + b, 0) / bufferLength;
         ctx.fillStyle = "rgba(0,255,200,0.25)";
         ctx.fillRect(0, canvas.height - avg / 2, canvas.width, 2);
@@ -126,25 +133,38 @@ export default function MicSpectrum({ peer }: MicSpectrumProps) {
 
       draw(performance.now());
 
-      // 🔊 Resume audioCtx if suspended (tab switch / user gesture)
+      // 🧩 Resume audio context on user gesture
       const handleResume = () => {
         if (audioCtx.state === "suspended") audioCtx.resume();
       };
       document.addEventListener("click", handleResume);
       document.addEventListener("keydown", handleResume);
 
-      // 🧹 Cleanup
+      // ✅ Proper cleanup returned to React
       return () => {
+        active = false;
         if (rafRef.current) cancelAnimationFrame(rafRef.current);
         try {
-          source?.disconnect();
+          sourceRef.current?.disconnect();
           analyser.disconnect();
-          audioCtx.close();
-        } catch {}
+          if (audioCtx.state !== "closed") audioCtx.close();
+        } catch (err) {
+          console.warn("Cleanup error:", err);
+        }
         document.removeEventListener("click", handleResume);
         document.removeEventListener("keydown", handleResume);
       };
-    })();
+    };
+
+    // ⚙️ Run setup
+    const teardownPromise = setup();
+
+    // ✅ Return proper cleanup
+    return () => {
+      active = false;
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      teardownPromise.then((cleanup) => cleanup?.());
+    };
   }, [peer?.id, peer?.audioStream]);
 
   return (
