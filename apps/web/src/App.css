@@ -778,6 +778,7 @@ body {
   flex-direction: column;
   gap: 0.75rem;
 }
+
 .feature-card.active {
   border-color: var(--accent);
   box-shadow: 0 0 14px rgba(0,224,255,0.15);
