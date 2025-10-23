@@ -557,7 +557,27 @@ async viewPeer(peerId: string) {
 
     // stop media tracks first
     this.localStream?.getTracks().forEach((t) => t.stop());
-    this.remoteStreams.forEach((s) => s.getTracks().forEach((t) => t.stop()));
+
+
+
+    console.log("🧹 Closing mediasoup client...");
+
+    this.remoteStreams.forEach((entry) => {
+    if (!entry) return;
+
+    // Handle old style (direct MediaStream)
+    if (entry instanceof MediaStream) {
+      entry.getTracks().forEach((t) => t.stop());
+    }
+
+    // Handle new style (object with audio/video streams)
+    if (entry.videoStream instanceof MediaStream) {
+      entry.videoStream.getTracks().forEach((t) => t.stop());
+    }
+    if (entry.audioStream instanceof MediaStream) {
+      entry.audioStream.getTracks().forEach((t) => t.stop());
+    }
+  });
 
     // close transports cleanly
     try {
