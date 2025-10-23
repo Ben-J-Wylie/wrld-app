@@ -16,6 +16,23 @@ export default function MicSpectrum({ peer }: MicSpectrumProps) {
   useEffect(() => {
     if (!peer) return;
 
+    // 🎧 Wait for a valid stream before proceeding
+    let stream: MediaStream | null = null;
+    if (peer.id === socket.id) {
+      stream = (window as any).localStreamRef || null;
+    } else if (peer.audioStream instanceof MediaStream) {
+      stream = peer.audioStream;
+    } else if (peer.stream instanceof MediaStream) {
+      stream = peer.stream;
+    }
+
+    if (!stream) {
+      console.log(
+        `⏳ Waiting for audio stream for ${peer.displayName || peer.name}`
+      );
+      return; // skip setup until we have one
+    }
+
     // 🔇 Clean up any old analyser/context
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
     if (audioCtxRef.current && audioCtxRef.current.state !== "closed") {
@@ -24,16 +41,6 @@ export default function MicSpectrum({ peer }: MicSpectrumProps) {
       } catch (err) {
         console.warn("AudioContext cleanup error:", err);
       }
-    }
-
-    // 🎧 Pick the correct audio stream
-    let stream: MediaStream | null = null;
-    if (peer?.id === socket.id) {
-      stream = (window as any).localStreamRef || null;
-    } else if (peer?.audioStream instanceof MediaStream) {
-      stream = peer.audioStream;
-    } else if (peer?.stream instanceof MediaStream) {
-      stream = peer.stream;
     }
 
     console.log("🎧 MicSpectrum init for", peer.displayName, stream);
@@ -165,7 +172,7 @@ export default function MicSpectrum({ peer }: MicSpectrumProps) {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       teardownPromise.then((cleanup) => cleanup?.());
     };
-  }, [peer?.id, peer?.audioStream]);
+  }, [peer?.id, peer?.audioStream?.id]);
 
   return (
     <div

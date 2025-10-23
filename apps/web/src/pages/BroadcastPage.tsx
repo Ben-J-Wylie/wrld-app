@@ -11,7 +11,8 @@ import { socket } from "../lib/socket";
 import "../App.css";
 
 export default function BroadcastPage() {
-  const { settings, localStream, msc } = useBroadcast();
+  const { settings, msc } = useBroadcast();
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
 
   const [selectedPeer, setSelectedPeer] = useState<any>(null);
   const [peers, setPeers] = useState<any[]>([]);
@@ -40,6 +41,69 @@ export default function BroadcastPage() {
     socket.emit("getPeersList", (list: any[]) => setPeers(list));
     return () => socket.off("peersList", updatePeers);
   }, []);
+
+  // ✅ When user goes live or toggles mic/camera, publish selected sources
+  useEffect(() => {
+    const goLive = async () => {
+      const { __live, mic, frontCamera, backCamera, camera } = settings;
+      if (!__live) {
+        console.log("🧹 User went offline, stopping local tracks");
+        localStream?.getTracks().forEach((t) => t.stop());
+        setLocalStream(null);
+        return;
+      }
+
+      const wantVideo = frontCamera || backCamera || camera;
+      const wantAudio = mic;
+
+      if (!wantVideo && !wantAudio) {
+        console.log("⚠️ No media sources selected — not publishing anything");
+        return;
+      }
+
+      try {
+        const constraints: MediaStreamConstraints = {
+          audio: wantAudio,
+          video: wantVideo,
+        };
+
+        console.log("🎙️ getUserMedia constraints:", constraints);
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        setLocalStream(stream);
+        (window as any).localStreamRef = stream;
+
+        const tracks = stream.getTracks().map((t) => `${t.kind}:${t.enabled}`);
+        console.log("📡 Local stream tracks:", tracks);
+
+        await msc.publishLocalStream(stream);
+        console.log("✅ Published local stream via MediasoupClient");
+
+        if (pipRef.current) {
+          pipRef.current.srcObject = stream;
+          const playPromise = pipRef.current.play();
+          if (playPromise !== undefined) {
+            playPromise.catch((err) => {
+              if (err.name !== "AbortError") {
+                console.warn("🎬 pip play() failed:", err);
+              }
+            });
+          }
+        }
+
+        socket.emit("updateSettings", settings);
+      } catch (err) {
+        console.error("❌ Live stream error:", err);
+      }
+    };
+
+    goLive();
+  }, [
+    settings.__live,
+    settings.mic,
+    settings.frontCamera,
+    settings.backCamera,
+    settings.camera,
+  ]);
 
   // 🧩 Handle remote stream updates
   useEffect(() => {
