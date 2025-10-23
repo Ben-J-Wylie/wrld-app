@@ -65,65 +65,65 @@ export default function SetupPage() {
   }
 
   const toggle = async (key: keyof typeof settings) => {
-    // Step 1: build the next settings state synchronously
-    let next = { ...settings, [key]: !settings[key] };
+    // create updated settings copy
+    const updated = { ...settings, [key]: !settings[key] };
 
-    // --- mobile-specific camera logic ---
-    if (key === "frontCamera") {
-      if (next.frontCamera) {
-        next.backCamera = false;
-        next.camera = true;
-      } else if (!next.backCamera) {
-        next.camera = false;
-      }
+    // --- single-camera rule for mobile ---
+    if (key === "frontCamera" && updated.frontCamera) {
+      updated.backCamera = false;
+      updated.camera = true;
     }
 
-    if (key === "backCamera") {
-      if (next.backCamera) {
-        next.frontCamera = false;
-        next.camera = true;
-      } else if (!next.frontCamera) {
-        next.camera = false;
-      }
+    if (key === "backCamera" && updated.backCamera) {
+      updated.frontCamera = false;
+      updated.camera = true;
     }
 
+    // if both cameras off, also disable unified camera flag
+    if (!updated.frontCamera && !updated.backCamera) {
+      updated.camera = false;
+    }
+
+    // --- desktop toggle (no front/back distinction) ---
     if (key === "camera") {
-      next.camera = !settings.camera;
-      next.frontCamera = false;
-      next.backCamera = false;
+      updated.camera = !settings.camera;
     }
 
-    // Step 2: commit state
-    setSettings(next);
+    // ✅ apply to React state
+    setSettings(updated);
+    console.log("🔸 Updated settings:", updated);
 
-    // Step 3: emit to server (non-blocking)
+    // ✅ tell server immediately about this change
+    const hasAnySourceSelected = Object.values(updated).some(Boolean);
+
     socket.emit("updateStreamState", {
-      isStreaming: next.__live,
-      settings: next,
+      isStreaming: updated.__live && hasAnySourceSelected,
+      settings: updated,
       platform: isMobile ? "mobile" : "desktop",
     });
 
-    // Step 4: handle independent media actions
+    // 🎤 handle mic toggle
     if (key === "mic") {
-      if (next.mic) {
-        try {
-          await publishTrack("audio");
-        } catch (err) {
-          console.error("🎙️ mic error:", err);
-        }
+      if (updated.mic) {
+        console.log("🎙️ Turning mic ON...");
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+        });
+        const track = stream.getAudioTracks()[0];
+        if (track) await msc.publishTrack(track);
       } else {
+        console.log("🔇 Turning mic OFF...");
         msc.stopProducerByKind("audio");
       }
     }
 
-    if (["camera", "frontCamera", "backCamera"].includes(key)) {
-      if (next.camera || next.frontCamera || next.backCamera) {
-        try {
-          await publishTrack("video");
-        } catch (err) {
-          console.error("📸 camera error:", err);
-        }
+    // 🎥 handle camera toggles
+    if (key === "camera" || key === "frontCamera" || key === "backCamera") {
+      if (updated.camera || updated.frontCamera || updated.backCamera) {
+        console.log("📸 Turning camera ON...");
+        await publishTrack("video");
       } else {
+        console.log("🛑 Turning camera OFF...");
         msc.stopProducerByKind("video");
       }
     }

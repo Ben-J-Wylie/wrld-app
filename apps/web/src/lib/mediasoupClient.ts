@@ -254,7 +254,7 @@ async createRecvTransport() {
     throw new Error("Invalid transport creation response: missing id");
   }
 
-  console.log("📡 [createRecvTransport] Creating recv transport with id:", data.id);
+    console.log("📡 [createRecvTransport] Creating recv transport with id:", data.id);
   this.recvTransport = this.device.createRecvTransport(data);
 
   // 🧩 Connect handshake
@@ -273,19 +273,25 @@ async createRecvTransport() {
             errback?.(new Error(res.error));
             reject(res.error);
           } else {
-            console.log("✅ [createRecvTransport] Recv transport connected!");
-            this.socket.emit("recvTransportReady", { id: data.id });
-            callback();
-            resolve();
+            console.log("✅ [createRecvTransport] Recv transport connected (client ack)");
+            this.socket.emit("recvTransportReady", { id: data.id }, () => {
+              console.log("📨 [createRecvTransport] Server acknowledged recvTransportReady");
+              callback();
+              resolve();
+            });
           }
         }
       );
     });
   });
 
-  console.log("🎯 [createRecvTransport] Ready to consume streams");
+  // 🕐 Allow DTLS handshake to settle fully before first consume
+  await new Promise((r) => setTimeout(r, 300));
+
+  console.log("🎯 [createRecvTransport] Fully ready to consume streams");
   return this.recvTransport;
 }
+
 
 
 
@@ -318,36 +324,30 @@ async publishTrack(track: MediaStreamTrack) {
 
   // --- Consuming remote producers ---
 
-  async consume(producerId: string, peerId?: string) {
-    if (!this.recvTransport) {
-      console.warn("No recv transport yet, creating...");
-      await this.createRecvTransport();
-      // wait briefly for DTLS handshake
-      await new Promise((r) => setTimeout(r, 300));
+ async consume(producerId: string, peerId?: string) {
+  if (!this.recvTransport) {
+    console.warn("⚠️ No recv transport, creating new one...");
+    await this.createRecvTransport();
+    await new Promise((r) => setTimeout(r, 250));
+  }
+
+  if (this.consumers.has(producerId)) {
+    console.log(`⚠️ Already consuming producer ${producerId}, re-emitting existing stream`);
+    const consumer = this.consumers.get(producerId)!;
+    const tagId = peerId || (consumer as any).peerId || producerId;
+    const existing = this.remoteStreams.get(tagId);
+    if (existing) {
+      if (existing.videoStream)
+        this.onNewStream?.(existing.videoStream, tagId, "video");
+      if (existing.audioStream)
+        this.onNewStream?.(existing.audioStream, tagId, "audio");
     }
+    return consumer;
+  }
 
-    if (this.consumers.has(producerId)) {
-      console.log(`⚠️ Already consuming producer ${producerId}, re-emitting existing stream`);
-
-      const consumer = this.consumers.get(producerId)!;
-      const tagId = peerId || (consumer as any).peerId || producerId;
-      const existing = this.remoteStreams.get(tagId);
-
-      if (existing) {
-        // 🔄 Safely re-emit both if they exist
-        if (existing.videoStream)
-          this.onNewStream?.(existing.videoStream, tagId, "video");
-        if (existing.audioStream)
-          this.onNewStream?.(existing.audioStream, tagId, "audio");
-      }
-
-      return consumer;
-    }
-
-    if (!this.device) await this.initDevice();
-
-    const { rtpCapabilities } = this.device!;
-    console.log("🛰️ consume() request:", producerId);
+  if (!this.device) await this.initDevice();
+  const { rtpCapabilities } = this.device!;
+  console.log("🛰️ consume() request:", producerId);
 
     let data;
     try {

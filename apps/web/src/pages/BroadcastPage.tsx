@@ -139,20 +139,20 @@ export default function BroadcastPage() {
   // 🧩 Selecting a peer
   const handleSelectPeer = async (peer: any) => {
     setSelectedPeer(peer);
-
-    // show own video instantly
     if (peer.id === socket.id && localStream && remoteVideoRef.current) {
       remoteVideoRef.current.srcObject = localStream;
       await remoteVideoRef.current.play().catch(console.warn);
       return;
     }
 
-    // otherwise, request peer producers
     try {
       const producers = await msc.request("getPeerProducers", {
         peerId: peer.id,
       });
       if (producers?.length) {
+        // 👇 wait briefly to ensure transport handshake completes
+        await new Promise((r) => setTimeout(r, 200));
+
         for (const p of producers) {
           const id = p.id || p.producerId;
           if (id) await msc.consume(id, peer.id);
