@@ -80,10 +80,12 @@ export default function SetupPage() {
     }
 
     // if both cameras off, also disable unified camera flag
-    if (!updated.frontCamera && !updated.backCamera) {
-      updated.camera = false;
+    if (key === "frontCamera" || key === "backCamera" || key === "camera") {
+      // If both cameras are off, disable the unified flag
+      if (!updated.frontCamera && !updated.backCamera) {
+        updated.camera = false;
+      }
     }
-
     // --- desktop toggle (no front/back distinction) ---
     if (key === "camera") {
       updated.camera = !settings.camera;
