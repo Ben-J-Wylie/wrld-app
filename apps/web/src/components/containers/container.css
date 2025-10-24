@@ -1,0 +1,5 @@
+.container {
+  padding: 20px;
+  margin: auto;             
+  box-sizing: border-box;    /* ensures padding doesn’t add extra size */
+}

@@ -14,12 +14,14 @@
 @import "../_root/base.css";
 @import "../_root/fonts.css";
 @import "../_root/normalize.css";
-@import "../_root/typography.css";
+@import "../_root/Typograpgy/Typography.css";
 @import "../_root/var.css";
 
 
 /* Containers */
 
+@import "../containers/container.css";
+@import "../containers/grids.css";
 
 /* Elements */
 

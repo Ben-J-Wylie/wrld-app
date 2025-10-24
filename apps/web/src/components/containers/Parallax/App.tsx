@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 import React from "react";
 import { ParallaxScene } from "./components/containers/Parallax/ParallaxScene";
 import CircleStack from "./components/containers/Parallax/CircleStack";
