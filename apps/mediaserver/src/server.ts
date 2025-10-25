@@ -426,14 +426,24 @@ io.on("connection", (socket) => {
   });
 
   // --- CREATE TRANSPORT (client must send direction: "send" | "recv") ---
+  // apps/mediaserver/src/server.ts
   socket.on("createTransport", async ({ direction }, cb) => {
-    const peer = peers.get(socket.id);
-    if (!peer) {
-      console.warn(`⚠️ No peer found for socket ${socket.id}`);
-      return cb({ error: "Peer not registered" });
-    }
-
     try {
+      // ✅ Ensure peer exists
+      let peer = peers.get(socket.id);
+      if (!peer) {
+        console.warn(`⚠️ [createTransport] No peer found for ${socket.id}, creating one`);
+        peer = {
+          id: socket.id,
+          name: usernames.get(socket.id) || "Anonymous",
+          transports: new Map(),
+          producers: new Map(),
+          consumers: new Map(),
+        };
+        peers.set(socket.id, peer);
+      }
+
+      // ✅ Create WebRTC transport
       const transport = await router.createWebRtcTransport({
         listenIps: [{ ip: "0.0.0.0", announcedIp: PUBLIC_IP }],
         enableUdp: true,
@@ -442,23 +452,28 @@ io.on("connection", (socket) => {
         initialAvailableOutgoingBitrate: 1_000_000,
       });
 
-      // ✅ Register this transport so it’s found later during connect
+      // ✅ Register the transport on the peer before responding
       peer.transports.set(transport.id, transport);
 
       if (direction === "send") peer.sendTransportId = transport.id;
       else peer.recvTransportId = transport.id;
 
-      console.log(`✅ Created ${direction} transport for ${socket.id}: ${transport.id}`);
+      console.log(
+        `✅ [createTransport] ${direction} transport created for ${socket.id}: ${transport.id}`
+      );
+      console.log(
+        `📦 Peer ${socket.id} transports now:`,
+        [...peer.transports.keys()]
+      );
 
-      // Return transport parameters to client
       cb({
         id: transport.id,
         iceParameters: transport.iceParameters,
         iceCandidates: transport.iceCandidates,
         dtlsParameters: transport.dtlsParameters,
       });
-    } catch (err) {
-      console.error("❌ createTransport failed:", err);
+    } catch (err: any) {
+      console.error("❌ [createTransport] failed:", err);
       cb({ error: err.message });
     }
   });
@@ -468,17 +483,36 @@ io.on("connection", (socket) => {
   // --- CONNECT TRANSPORT ---
   socket.on("connectTransport", async ({ transportId, dtlsParameters }, cb) => {
     const peer = peers.get(socket.id);
-    if (!peer) return cb({ error: "Peer not found" });
+    if (!peer) {
+      console.error(`❌ [connectTransport] Peer not found for ${socket.id}`);
+      return cb({ error: "Peer not found" });
+    }
 
     const transport = peer.transports.get(transportId);
     if (!transport) {
-      console.warn(`⚠️ connectTransport: transport not found for ${socket.id}`);
+      console.error(
+        `❌ [connectTransport] Transport not found for ${transportId} (peer ${socket.id})`
+      );
+      console.log("Known transports:", [...peer.transports.keys()]);
       return cb({ error: "Transport not found" });
     }
 
     await transport.connect({ dtlsParameters });
-    console.log(`🔗 Transport ${transportId} connected for ${socket.id}`);
+    console.log(`🔗 [connectTransport] Transport ${transportId} connected for ${socket.id}`);
     cb({ ok: true });
+  });
+
+  socket.on("join", ({ name }, cb) => {
+    peers.set(socket.id, {
+      id: socket.id,
+      name,
+      transports: new Map(),
+      producers: new Map(),
+      consumers: new Map(),
+    });
+    usernames.set(socket.id, name);
+    console.log(`👋 ${name} joined as ${socket.id}`);
+    cb?.({ ok: true });
   });
 
 
@@ -486,14 +520,8 @@ io.on("connection", (socket) => {
   socket.on("produce", async ({ kind, rtpParameters }, cb) => {
     const peer = peers.get(socket.id);
     if (!peer) {
-      console.warn(`⚠️ No peer found for ${socket.id} — creating fallback entry`);
-      peers.set(socket.id, {
-        id: socket.id,
-        name: usernames.get(socket.id) || "Anonymous",
-        transports: new Map(),
-        producers: new Map(),
-        consumers: new Map(),
-      });
+      console.error(`❌ Cannot produce — no peer found for ${socket.id}`);
+      return cb?.({ error: "Peer not registered" });
     }
 
     const currentPeer = peers.get(socket.id)!;
@@ -511,7 +539,7 @@ io.on("connection", (socket) => {
     // ✅ Track producers locally and globally
     currentPeer.producers.set(producer.id, producer);
     producers.set(producer.id, producer);
-
+    
     console.log(`📡 New ${kind} producer from ${socket.id}: ${producer.id}`);
 
     // ✅ Notify others immediately
@@ -527,20 +555,20 @@ io.on("connection", (socket) => {
 
 
   // --- LIST PRODUCERS FOR A PEER (payload: { peerId }) ---
-  socket.on("getPeerProducers", ({ peerId }, callback) => {
-    const peer = peers.get(peerId);
-    if (!peer) {
-      console.warn(`❌ No peer found for ${peerId}`);
-      return callback([]);
+  socket.on("getPeerProducers", ({ peerId }, cb) => {
+    const targetPeer = peers.get(peerId);
+    if (!targetPeer) {
+      console.warn(`⚠️ No peer found for getPeerProducers(${peerId})`);
+      return cb([]);
     }
 
-    const list = Array.from(peer.producers.values()).map((p) => ({
+    const producers = Array.from(targetPeer.producers.values()).map((p) => ({
       id: p.id,
       kind: p.kind,
     }));
 
-    console.log(`📡 Returning ${list.length} producers for ${peerId}`);
-    callback(list);
+    console.log(`📡 Returning ${producers.length} producers for ${peerId}`);
+    cb(producers);
   });
 
   socket.on("debugListProducers", () => {
@@ -605,12 +633,12 @@ io.on("connection", (socket) => {
     try {
       const peer = peers.get(socket.id);
       if (!peer) throw new Error("Peer not found");
-      let recvTransport: WebRtcTransport | undefined;
 
+      // 1️⃣ Ensure a recv transport exists
+      let recvTransport: WebRtcTransport | undefined;
       if (peer.recvTransportId) {
         recvTransport = peer.transports.get(peer.recvTransportId);
       }
-
       if (!recvTransport) {
         console.warn(`⚠️ No recv transport found for ${socket.id} — creating fallback one`);
         const newTransport = await router.createWebRtcTransport({
@@ -624,6 +652,7 @@ io.on("connection", (socket) => {
         recvTransport = newTransport;
       }
 
+      // 2️⃣ Locate the peer that owns this producer
       const producerPeer = Array.from(peers.values()).find((p) =>
         p.producers.has(producerId)
       );
@@ -632,43 +661,61 @@ io.on("connection", (socket) => {
       const producer = producerPeer.producers.get(producerId);
       if (!producer) throw new Error("Producer not found");
 
-      // ✅ make sure router.canConsume() passes
+      const targetPeerId = producerPeer.id; // ✅ define this properly
+
+      // 3️⃣ Check router compatibility
       if (!router.canConsume({ producerId, rtpCapabilities })) {
-        throw new Error("cannot consume");
+        throw new Error("Cannot consume");
       }
 
+      // 4️⃣ Create the consumer
       const consumer = await recvTransport.consume({
         producerId,
         rtpCapabilities,
-        paused: true, // will resume later
+        paused: true, // resume later
       });
 
       peer.consumers.set(consumer.id, consumer);
 
-      // ✅ Forward track data back to client
+      // 5️⃣ Clean the MID for browser compatibility
+      if (consumer.rtpParameters.mid) {
+        consumer.rtpParameters.mid = String(consumer.rtpParameters.mid).slice(0, 12);
+      } else {
+        consumer.rtpParameters.mid = `${consumer.kind}-${consumer.id.slice(0, 6)}`;
+      }
+      if (consumer.rtpParameters.mid.length > 16) {
+        consumer.rtpParameters.mid = consumer.rtpParameters.mid.slice(0, 16);
+      }
+
+      // 6️⃣ Send parameters back to the client
       cb({
         id: consumer.id,
         producerId,
-        kind: consumer.kind,
+        kind: producer.kind,
         rtpParameters: consumer.rtpParameters,
-        peerId: producerPeer.id, // 👈 include this!
+        peerId: targetPeerId, // ✅ now valid
       });
 
-      // Optional: auto-resume a moment later
+      // 7️⃣ Resume consumer shortly after creation
       setTimeout(async () => {
         try {
           await consumer.resume();
-        } catch {}
+          console.log(`▶️ Resumed consumer ${consumer.id}`);
+        } catch (err) {
+          console.warn("⚠️ Failed to resume consumer:", err);
+        }
       }, 200);
 
       console.log(
         `📦 Consumer ${consumer.kind} created for peer ${socket.id} from producer ${producerPeer.id}`
       );
-    } catch (err) {
+    } catch (err: any) {
       console.error("❌ consume error:", err);
       cb({ error: err.message });
     }
   });
+
+
 
   // --- RESUME (client may call, but we already resume above) ---
   socket.on("resume", async ({ consumerId }, cb) => {

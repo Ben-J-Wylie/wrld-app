@@ -103,7 +103,9 @@ export const BroadcastProvider = ({
       console.log("✅ Registration acknowledged");
 
       if (!mscRef.current?.recvTransport) {
+        await mscRef.current.initDevice(); // ✅ ensure device ready first
         await mscRef.current.createRecvTransport();
+
         console.log("📡 Created recv transport");
       }
 
