@@ -1,7 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import { useParallaxScene } from "./ParallaxScene";
 import { useParallaxLight } from "./ParallaxLight";
-import { useParallaxDepth } from "./ParallaxDepthController";
 
 type Props = {
   depth?: number;
@@ -13,7 +12,7 @@ type Props = {
 
 const ParallaxItem: React.FC<Props> = ({
   depth = 0,
-  strength = 80,
+  strength = 8,
   scaleFactor = 0.005,
   style,
   children,
@@ -22,14 +21,13 @@ const ParallaxItem: React.FC<Props> = ({
   const innerRef = useRef<HTMLDivElement>(null);
   const { scrollY, vw, vh } = useParallaxScene();
   const { x: lx, y: ly, intensity, color } = useParallaxLight();
-  const { focalDepth } = useParallaxDepth(); // 🟢 new global depth reference
 
   useEffect(() => {
     const outer = outerRef.current;
     const inner = innerRef.current;
     if (!outer || !inner) return;
 
-    // --- Parallax movement (unchanged) ---
+    // --- Parallax movement ---
     const rect = outer.getBoundingClientRect();
     const cx = vw / 2;
     const cy = vh / 2;
@@ -41,22 +39,15 @@ const ParallaxItem: React.FC<Props> = ({
     const ty = normY * depth * strength;
     const scale = 1 + depth * scaleFactor;
 
-    // --- Relative depth for shadow physics ---
-    const relativeDepth = depth - focalDepth;
-
     // --- Shadow physics ---
     let shadow = "none";
-    if (relativeDepth !== 0) {
-      // Nearer to focal plane = sharper & darker
-      const absDepth = Math.abs(relativeDepth);
-      const offset = absDepth * 10;
-      const blur = 2 + absDepth * 4;
-      const baseOpacity = Math.max(0, 0.6 - absDepth * 0.1);
+    if (depth > 0) {
+      const offset = depth * 10;
+      const blur = 2 + depth * 4;
+      const baseOpacity = Math.max(0, 0.6 - depth * 0.1);
 
-      // Reverse shadow direction depending on side of focal plane
-      const dir = relativeDepth > 0 ? -1 : 1;
-      const sx = dir * lx * offset * intensity;
-      const sy = dir * ly * offset * intensity;
+      const sx = -lx * offset * intensity;
+      const sy = -ly * offset * intensity;
 
       const shadowColor = color.replace(/rgba?\(([^)]+)\)/, (_, inner) => {
         const rgb = inner.split(",").slice(0, 3).join(",");
@@ -66,22 +57,9 @@ const ParallaxItem: React.FC<Props> = ({
       shadow = `${sx}px ${sy}px ${blur}px ${shadowColor}`;
     }
 
-    // --- Apply transforms and shadow ---
     inner.style.transform = `translate3d(${tx}px, ${ty}px, 0) scale(${scale})`;
     inner.style.filter = shadow === "none" ? "none" : `drop-shadow(${shadow})`;
-  }, [
-    scrollY,
-    vw,
-    vh,
-    depth,
-    strength,
-    scaleFactor,
-    lx,
-    ly,
-    intensity,
-    color,
-    focalDepth, // 🟢 ensure re-render when focal plane changes
-  ]);
+  }, [scrollY, vw, vh, depth, strength, scaleFactor, lx, ly, intensity, color]);
 
   // ✅ Automatically center if both `top` and `left` are provided
   const centeredStyle =

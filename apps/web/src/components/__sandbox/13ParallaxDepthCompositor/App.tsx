@@ -9,6 +9,8 @@ import {
   ParallaxDepthController,
   useParallaxDepth,
 } from "./components/containers/Parallax/ParallaxDepthController";
+import ShadowProjection from "./components/containers/Parallax/ShadowProjection";
+import ParallaxBackground from "./components/containers/Parallax/ParallaxBackground";
 
 /** 🔧 Live controller for testing focal depth */
 const DepthSlider: React.FC = () => {
@@ -50,6 +52,7 @@ export default function App() {
     <ParallaxLight>
       <ParallaxDepthController>
         <ParallaxScene>
+          <ShadowProjection /> {/* 🟤 imported component */}
           <DepthSlider /> {/* 🟢 focal depth controller */}
           <div
             style={{
@@ -62,6 +65,7 @@ export default function App() {
               overflow: "hidden",
             }}
           >
+            <ParallaxBackground />
             <CircleStack top="40vh" left="10vw" color="#55f" />
             <CircleStack top="80vh" left="60vw" color="#f55" />
             <CircleStack top="140vh" left="30vw" color="#5f5" />

@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from "react";
 import { useParallaxScene } from "./ParallaxScene";
 import { useParallaxLight } from "./ParallaxLight";
 import { useParallaxDepth } from "./ParallaxDepthController";
+import { v4 as uuidv4 } from "uuid"; // npm install uuid
 
 type Props = {
   depth?: number;
@@ -13,17 +14,37 @@ type Props = {
 
 const ParallaxItem: React.FC<Props> = ({
   depth = 0,
-  strength = 80,
+  strength = 8,
   scaleFactor = 0.005,
   style,
   children,
 }) => {
   const outerRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
-  const { scrollY, vw, vh } = useParallaxScene();
-  const { x: lx, y: ly, intensity, color } = useParallaxLight();
-  const { focalDepth } = useParallaxDepth(); // 🟢 new global depth reference
+  const idRef = useRef<string>(uuidv4());
 
+  const { scrollY, vw, vh, registerItem, unregisterItem, updateItemRect } =
+    useParallaxScene();
+
+  const { x: lx, y: ly, intensity, color } = useParallaxLight();
+  const { focalDepth } = useParallaxDepth();
+
+  // --- Register this item with the scene on mount/unmount ---
+  useEffect(() => {
+    const el = outerRef.current;
+    if (!el) return;
+    registerItem({ id: idRef.current, depth, element: el });
+    return () => unregisterItem(idRef.current);
+  }, [registerItem, unregisterItem, depth]);
+
+  // --- Update bounding rect when scroll or resize changes ---
+  useEffect(() => {
+    const el = outerRef.current;
+    if (!el) return;
+    updateItemRect(idRef.current, el.getBoundingClientRect());
+  }, [scrollY, vw, vh, updateItemRect]);
+
+  // --- Main effect: apply parallax transform & shadow ---
   useEffect(() => {
     const outer = outerRef.current;
     const inner = innerRef.current;
@@ -47,7 +68,6 @@ const ParallaxItem: React.FC<Props> = ({
     // --- Shadow physics ---
     let shadow = "none";
     if (relativeDepth !== 0) {
-      // Nearer to focal plane = sharper & darker
       const absDepth = Math.abs(relativeDepth);
       const offset = absDepth * 10;
       const blur = 2 + absDepth * 4;
@@ -68,7 +88,7 @@ const ParallaxItem: React.FC<Props> = ({
 
     // --- Apply transforms and shadow ---
     inner.style.transform = `translate3d(${tx}px, ${ty}px, 0) scale(${scale})`;
-    inner.style.filter = shadow === "none" ? "none" : `drop-shadow(${shadow})`;
+    inner.style.filter = "none";
   }, [
     scrollY,
     vw,
@@ -80,7 +100,7 @@ const ParallaxItem: React.FC<Props> = ({
     ly,
     intensity,
     color,
-    focalDepth, // 🟢 ensure re-render when focal plane changes
+    focalDepth,
   ]);
 
   // ✅ Automatically center if both `top` and `left` are provided

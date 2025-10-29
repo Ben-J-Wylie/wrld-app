@@ -20,7 +20,6 @@ export default function CircleStack({
     </svg>
   );
 
-  // A helper so depth only needs to be declared once
   const CircleLayer = ({
     opacity,
     depth,
@@ -35,8 +34,8 @@ export default function CircleStack({
 
   return (
     <>
-      <CircleLayer opacity={1} depth={1} />
-      <CircleLayer opacity={1} depth={2} />
+      <CircleLayer opacity={1} depth={5} />
+      <CircleLayer opacity={1} depth={9} />
     </>
   );
 }

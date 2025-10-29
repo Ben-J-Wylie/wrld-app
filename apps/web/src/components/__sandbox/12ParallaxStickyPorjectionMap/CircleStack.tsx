@@ -35,8 +35,8 @@ export default function CircleStack({
 
   return (
     <>
-      <CircleLayer opacity={1} depth={1} />
-      <CircleLayer opacity={1} depth={2} />
+      <CircleLayer opacity={1} depth={4} />
+      <CircleLayer opacity={1} depth={5} />
     </>
   );
 }
