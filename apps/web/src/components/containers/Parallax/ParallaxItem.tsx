@@ -13,7 +13,7 @@ type Props = {
 
 const ParallaxItem: React.FC<Props> = ({
   depth = 0,
-  strength = 80,
+  strength = 10,
   scaleFactor = 0.005,
   style,
   children,
