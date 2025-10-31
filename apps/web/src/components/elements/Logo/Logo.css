@@ -1,44 +1,31 @@
 .logo {
-  font-family: "Orbitron", "Segoe UI", system-ui, sans-serif;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  cursor: default;
-  display: inline-flex;
-  align-items: baseline;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   user-select: none;
-  transition: transform 0.25s ease, opacity 0.25s ease;
+  pointer-events: none;
+  position: relative;
 }
 
-.logo:hover {
-  transform: scale(1.05);
+.logo.inline {
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
 }
 
-.logo.light {
-  color: #fff;
+.logo.stacked {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
 }
 
-.logo.dark {
-  color: #111;
-}
-
-.logo.accent {
-  color: #0ff; /* cyan accent */
-  text-shadow: 0 0 12px rgba(0, 255, 255, 0.4);
-}
-
-.logo-dot {
-  color: #0ff;
-  margin-left: 4px;
-  animation: pulse 2s infinite ease-in-out;
-}
-
-@keyframes pulse {
-  0%, 100% {
-    opacity: 0.8;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1.4);
-  }
+.logo-text {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 200;
+  letter-spacing: 0.05em;
+  line-height: 1;
+  margin: 0;
+  text-transform: uppercase;
 }

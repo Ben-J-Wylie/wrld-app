@@ -25,7 +25,7 @@
 
 /* Elements */
 
-@import "../elements/Avatar/Avatar.css";
+/* @import "../elements/Avatar/Avatar.css";
 @import "../elements/AvatarUploader/AvatarUploader.css";
 @import "../elements/ButtonGoLive/ButtonGoLive.css";
 @import "../elements/ButtonPrimary/ButtonPrimary.css";
@@ -48,12 +48,14 @@
 @import "../elements/SetupHeader/SetupHeader.css";
 @import "../elements/ToggleGrid/ToggleGrid.css";
 @import "../elements/TorchIndicator/TorchIndicator.css";
-@import "../elements/VideoPlayer/VideoPlayer.css";
+@import "../elements/VideoPlayer/VideoPlayer.css"; */
+
+@import "../elements/Logo/Logo.css";
 
 
 /* Features */
 
-@import "../features/FormForgotPassword/FormForgotPassword.css";
+/* @import "../features/FormForgotPassword/FormForgotPassword.css";
 @import "../features/FormLogin/FormLogin.css";
 @import "../features/FormSignup/FormSignup.css";
 @import "../features/HeroSection/HeroSection.css";
@@ -66,12 +68,12 @@
 @import "../features/PreviewMicFFT/PreviewMicFFT.css";
 @import "../features/PreviewScreenShare/PreviewScreenShare.css";
 @import "../features/PreviewTorch/PreviewTorch.css";
-@import "../features/UserDropdown/UserDropdown.css";
+@import "../features/UserDropdown/UserDropdown.css"; */
 
 
 /* Sections */
 
-@import "../sections/Header/Header.css";
+/* @import "../sections/Header/Header.css"; */
 
 
 

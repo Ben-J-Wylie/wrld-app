@@ -29,7 +29,7 @@ const ParallaxItem: React.FC<Props> = ({
     const inner = innerRef.current;
     if (!outer || !inner) return;
 
-    // --- Parallax movement (unchanged) ---
+    // --- Parallax movement ---
     const rect = outer.getBoundingClientRect();
     const cx = vw / 2;
     const cy = vh / 2;
@@ -90,13 +90,13 @@ const ParallaxItem: React.FC<Props> = ({
       : style;
 
   return (
-    <div ref={outerRef} style={{ position: "absolute", ...centeredStyle }}>
+    <div ref={outerRef} style={{ position: "relative", ...style }}>
       <div
         ref={innerRef}
         style={{
+          transformOrigin: "center center",
           willChange: "transform, filter",
           transition: "transform 0.15s ease-out, filter 0.3s ease-out",
-          transformOrigin: "center center",
         }}
       >
         {children}
@@ -106,3 +106,20 @@ const ParallaxItem: React.FC<Props> = ({
 };
 
 export default ParallaxItem;
+
+//   ref={innerRef}
+//   style={{
+//     position: "absolute",     // 👈 nested absolute in local space
+//     top: 0,
+//     left: 0,
+//     right: 0,
+//     bottom: 0,
+//     display: "flex",
+//     alignItems: "center",
+//     justifyContent: "center",
+//     transformOrigin: "center center",
+//     willChange: "transform, filter",
+//     transition: "transform 0.15s ease-out, filter 0.3s ease-out",
+//   }}
+// >
+//   {children}

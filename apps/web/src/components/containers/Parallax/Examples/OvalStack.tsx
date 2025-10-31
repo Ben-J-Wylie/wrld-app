@@ -1,6 +1,6 @@
 import React from "react";
-import ParallaxItem from "./ParallaxItem";
-import { useParallaxShadow } from "./useParallaxShadow";
+import ParallaxItem from "../ParallaxItem";
+import { useParallaxShadow } from "../useParallaxShadow";
 
 type Props = {
   top: string;

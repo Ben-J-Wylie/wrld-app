@@ -1,5 +1,5 @@
 import React from "react";
-import ParallaxItem from "./ParallaxItem";
+import ParallaxItem from "../ParallaxItem";
 
 type Props = {
   top: string;

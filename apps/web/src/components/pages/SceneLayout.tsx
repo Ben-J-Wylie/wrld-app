@@ -1,6 +1,6 @@
 import React from "react";
-import CircleStack from "./CircleStack";
-import ParallaxCardStack from "./ParallaxCardStack";
+import CircleStack from "../containers/Parallax/Examples/CircleStack";
+import ParallaxCardStack from "../containers/Parallax/Examples/ParallaxCardStack";
 
 export default function SceneLayout() {
   return (

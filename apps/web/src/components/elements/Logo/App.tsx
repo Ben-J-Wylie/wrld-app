@@ -1,24 +1,54 @@
 // @ts-nocheck
 
 import React from "react";
-import Logo from "./components/elements/Logo/Logo";
+import { ParallaxScene } from "./components/containers/Parallax/ParallaxScene";
+import { ParallaxLight } from "./components/containers/Parallax/ParallaxLight";
+import WrldLogo from "./components/elements/Logo/Logo";
+import DebugOverlay from "./components/containers/DebugOverlay";
+import "./components/_main/main.css";
 
 export default function App() {
-  return (
-    <div className="app-container">
-      <h1>Logo Component Demo</h1>
+  const showDebug = true; // 🔹 toggle here
 
-      <div className="logo-demo">
-        <Logo />
-        <Logo text="WRLD" variant="accent" />
-        <Logo text="WRLD" variant="dark" size={48} />
-        <Logo
-          text="WRLD"
-          size={64}
-          onClick={() => alert("Logo clicked!")}
-          variant="accent"
-        />
-      </div>
-    </div>
+  return (
+    <ParallaxLight>
+      <ParallaxScene>
+        <div
+          style={{
+            height: "200vh",
+            width: "100vw",
+            overflow: "scroll",
+          }}
+        ></div>
+
+        {/* Inline Logo */}
+        <div
+          style={{
+            position: "absolute",
+            top: "20%",
+            left: "50%",
+            transform: "translate(-50%, -50%)",
+          }}
+        >
+          <DebugOverlay show={showDebug}>
+            <WrldLogo layout="inline" iconDepth={0} textDepth={1} size={100} />
+          </DebugOverlay>
+        </div>
+
+        {/* Stacked Logo */}
+        <div
+          style={{
+            position: "absolute",
+            top: "60%",
+            left: "50%",
+            transform: "translate(-50%, -50%)",
+          }}
+        >
+          <DebugOverlay show={showDebug}>
+            <WrldLogo layout="stacked" iconDepth={3} textDepth={2} size={180} />
+          </DebugOverlay>
+        </div>
+      </ParallaxScene>
+    </ParallaxLight>
   );
 }

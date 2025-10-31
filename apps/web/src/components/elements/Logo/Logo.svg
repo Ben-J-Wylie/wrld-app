@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img" aria-label="Wrld planet logo">
+  <defs>
+    <radialGradient id="planetGrad" cx="35%" cy="35%" r="70%">
+      <stop offset="0%" stop-color="currentColor" stop-opacity="0.6"></stop>
+      <stop offset="60%" stop-color="currentColor" stop-opacity="0.4"></stop>
+      <stop offset="100%" stop-color="currentColor" stop-opacity="0.2"></stop>
+    </radialGradient>
+
+    <clipPath id="planetClip">
+      <circle cx="100" cy="100" r="56"></circle>
+    </clipPath>
+  </defs>
+
+  <!-- Glow -->
+  <circle cx="100" cy="100" r="72" fill="currentColor" opacity="0.15"></circle>
+
+  <!-- Planet body -->
+  <circle cx="100" cy="100" r="56" fill="url(#planetGrad)"></circle>
+
+  <!-- Day/Night arc -->
+  <path d="M44,100 a56,56 0 1,0 112,0 a42,56 0 1,1 -112,0" fill="currentColor" opacity="0.18"></path>
+
+  <!-- Lat/long lines -->
+  <g clip-path="url(#planetClip)" stroke="currentColor" stroke-width="1.25" opacity="0.25" fill="none">
+    <ellipse cx="100" cy="100" rx="52" ry="18"></ellipse>
+    <ellipse cx="100" cy="100" rx="52" ry="10" transform="rotate(25 100 100)"></ellipse>
+    <ellipse cx="100" cy="100" rx="52" ry="10" transform="rotate(-25 100 100)"></ellipse>
+    <circle cx="100" cy="100" r="30"></circle>
+    <circle cx="100" cy="100" r="44"></circle>
+  </g>
+
+  <!-- Simple ring -->
+  <ellipse cx="100" cy="100" rx="84" ry="26" fill="none" stroke="currentColor" stroke-width="4" opacity="0.35"></ellipse>
+
+  <!-- Tiny moon -->
+  <circle cx="160" cy="88" r="5" fill="currentColor" opacity="0.7"></circle>
+
+  <!-- Planet outline -->
+  <circle cx="100" cy="100" r="56" fill="none" stroke="currentColor" stroke-width="0.8" opacity="0.6"></circle>
+</svg>
