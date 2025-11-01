@@ -1,48 +1,45 @@
 // @ts-nocheck
 
-import React, { useState } from "react";
+import React from "react";
+import { ResponsiveProvider } from "./components/containers/Responsive/ResponsiveContext";
+import { ParallaxScene } from "./components/containers/Parallax/ParallaxScene";
+import { ParallaxLight } from "./components/containers/Parallax/ParallaxLight";
+import WrldLogo from "./components/elements/Logo/Logo";
+import DebugOverlay from "./components/containers/DebugOverlay";
+import "./components/_main/main.css";
 import Header from "./components/sections/Header/Header";
 
 export default function App() {
-  const [user, setUser] = useState<any | null>({
-    username: "BenWylie",
-    email: "ben@example.com",
-    avatarUrl: "https://i.pravatar.cc/150?img=12",
-  });
-
-  function handleLogout() {
-    alert("Logging out...");
-    setUser(null);
-  }
-
-  function handleLogin() {
-    alert("Logging in...");
-    setUser({
-      username: "BenWylie",
-      email: "ben@example.com",
-      avatarUrl: "https://i.pravatar.cc/150?img=12",
-    });
-  }
+  const showDebug = false;
 
   return (
-    <div className="app-container">
-      <Header user={user} onLogout={handleLogout} />
-
-      <main className="demo-main">
-        <h1>Header Component Demo</h1>
-        <p>
-          This page shows your new <strong>Header</strong> built with
-          <br /> <em>Logo, Avatar, DropdownMenu, and UserDropdown</em>.
-        </p>
-
-        <div className="demo-controls">
-          {user ? (
-            <button onClick={handleLogout}>Simulate Logout</button>
-          ) : (
-            <button onClick={handleLogin}>Simulate Login</button>
-          )}
-        </div>
-      </main>
-    </div>
+    <ResponsiveProvider>
+      <ParallaxLight>
+        <ParallaxScene>
+          <Header /> {/* 👈 new header */}
+          <div
+            style={{
+              height: "200vh",
+              width: "100vw",
+              position: "relative",
+            }}
+          >
+            {/* Inline logo test */}
+            <div
+              style={{
+                position: "absolute",
+                top: "40%",
+                left: "50%",
+                transform: "translate(-50%, -50%)",
+              }}
+            >
+              <DebugOverlay show={showDebug}>
+                <WrldLogo layout="inline" iconDepth={0} textDepth={1} />
+              </DebugOverlay>
+            </div>
+          </div>
+        </ParallaxScene>
+      </ParallaxLight>
+    </ResponsiveProvider>
   );
 }

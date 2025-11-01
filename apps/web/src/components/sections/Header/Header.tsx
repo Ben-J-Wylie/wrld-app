@@ -1,48 +1,37 @@
 import React from "react";
-import "../../_main/main.css";
-import { useAuthModal } from "../../../context/AuthModalContext";
-import Logo from "../../elements/Logo/Logo";
-import UserDropdown from "../../features/UserDropdown/UserDropdown";
+import { useResponsiveContext } from "../../containers/Responsive/ResponsiveContext";
+import WrldLogo from "../../elements/Logo/Logo";
+import "./Header.css";
 
-interface HeaderProps {
-  user: any;
-  onLogout: () => void;
-}
+export default function Header() {
+  const { scale, device } = useResponsiveContext();
 
-export default function Header({ user, onLogout }: HeaderProps) {
-  const { openLogin, openSignup } = useAuthModal();
+  // 🔹 Basic responsive sizing
+  const headerHeight = 100 * scale;
+  const logoSize = 100; // base size; logo handles its own scale internally
+
+  // 🔹 Example spacing or layout variation
+  const paddingX = device === "mobile" ? 16 : 32;
+  const paddingY = device === "mobile" ? 8 : 16;
 
   return (
-    <header className="header">
-      {/* Left side — logo */}
+    <header
+      className="header"
+      style={{
+        height: `${headerHeight}px`,
+        padding: `${paddingY}px ${paddingX}px`,
+      }}
+    >
       <div className="header-left">
-        <Logo
-          text="WRLD"
-          variant="accent"
-          size={28}
-          onClick={() => (window.location.href = "/")}
-        />
+        <WrldLogo layout="inline" iconDepth={0} textDepth={1} size={logoSize} />
       </div>
 
-      {/* Right side — user or auth buttons */}
       <div className="header-right">
-        {user ? (
-          <UserDropdown
-            user={user}
-            onLogout={onLogout}
-            onProfile={() => (window.location.href = "/profile")}
-            onSetup={() => (window.location.href = "/setup")}
-          />
-        ) : (
-          <div className="auth-buttons">
-            <button className="auth-btn" onClick={openLogin}>
-              Login
-            </button>
-            <button className="auth-btn signup" onClick={openSignup}>
-              Sign Up
-            </button>
-          </div>
-        )}
+        <nav className="nav">
+          <a href="#">Home</a>
+          <a href="#">About</a>
+          <a href="#">Contact</a>
+        </nav>
       </div>
     </header>
   );
