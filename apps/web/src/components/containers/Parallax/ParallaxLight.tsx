@@ -12,7 +12,7 @@ const defaultLight: LightSource = {
   x: -1,
   y: -1,
   intensity: 1,
-  color: "rgba(0, 0, 0, 0.5)",
+  color: "rgba(0, 0, 0, 0)",
 };
 
 // Context with the default light

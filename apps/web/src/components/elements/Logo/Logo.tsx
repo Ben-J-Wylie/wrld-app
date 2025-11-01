@@ -72,65 +72,136 @@
 
 // WITHOUT BASE SIZE
 
+// import React from "react";
+// import ParallaxItem from "../../containers/Parallax/ParallaxItem";
+// import "../../_main/main.css";
+// import WrldSVG from "./Logo.svg?react";
+
+// type WrldLogoProps = {
+//   layout?: "stacked" | "inline";
+//   iconDepth?: number;
+//   textDepth?: number;
+//   size?: number; // overall logo scale
+// };
+
+// export default function WrldLogo({
+//   layout = "inline",
+//   iconDepth = 0,
+//   textDepth = 0,
+//   size = 100,
+// }: WrldLogoProps) {
+//   const isInline = layout === "inline";
+
+//   // independent internal ratios
+//   const iconToTextRatioStacked = 0.25;
+//   const iconToTextRatioInline = 0.3;
+//   const iconToTextRatio = isInline
+//     ? iconToTextRatioInline
+//     : iconToTextRatioStacked;
+
+//   const textSize = size * iconToTextRatio;
+//   const gap = isInline ? size * 0 : size * 0;
+
+//   return (
+//     <div
+//       className={`logo ${isInline ? "inline" : "stacked"}`}
+//       style={{
+//         display: "flex",
+//         flexDirection: isInline ? "row" : "column",
+//         alignItems: "center",
+//         justifyContent: "center",
+//         gap,
+//       }}
+//     >
+//       {/* Icon Layer */}
+//       <ParallaxItem depth={iconDepth}>
+//         <WrldSVG
+//           width={size}
+//           height={size}
+//           style={{
+//             color: "var(--logo-color, rgba(0, 0, 0, 1))",
+//             display: "block",
+//           }}
+//         />
+//       </ParallaxItem>
+
+//       {/* Text Layer */}
+//       <ParallaxItem depth={textDepth}>
+//         <h1
+//           className="logo-text"
+//           style={{
+//             fontSize: textSize,
+//           }}
+//         >
+//           WRLD
+//         </h1>
+//       </ParallaxItem>
+//     </div>
+//   );
+// }
+
+// RESPONSIVE
+
 import React from "react";
 import ParallaxItem from "../../containers/Parallax/ParallaxItem";
-import "../../_main/main.css";
+import { useResponsiveContext } from "../../containers/Responsive/ResponsiveContext";
+import "./Logo.css";
 import WrldSVG from "./Logo.svg?react";
 
 type WrldLogoProps = {
-  layout?: "stacked" | "inline";
+  layout?: "inline" | "stacked";
   iconDepth?: number;
   textDepth?: number;
-  size?: number; // overall logo scale
+  size?: number;
 };
 
 export default function WrldLogo({
   layout = "inline",
   iconDepth = 0,
   textDepth = 0,
-  size = 100,
+  size = 200,
 }: WrldLogoProps) {
+  const { scale, parallaxStrength } = useResponsiveContext();
+
   const isInline = layout === "inline";
 
-  // independent internal ratios
+  // 🔹 Independent internal ratios for layout types
   const iconToTextRatioStacked = 0.25;
   const iconToTextRatioInline = 0.3;
   const iconToTextRatio = isInline
     ? iconToTextRatioInline
     : iconToTextRatioStacked;
 
-  const textSize = size * iconToTextRatio;
-  const gap = isInline ? size * 0 : size * 0;
+  // 🔹 Apply global responsive scaling
+  const responsiveSize = size * scale;
+  const iconDepthAdjusted = iconDepth * parallaxStrength;
+  const textDepthAdjusted = textDepth * parallaxStrength;
+
+  // 🔹 Text size derived from icon-to-text ratio
+  const textSize = responsiveSize * iconToTextRatio;
 
   return (
     <div
-      className={`logo ${isInline ? "inline" : "stacked"}`}
+      className={`logo ${layout}`}
       style={{
-        display: "flex",
         flexDirection: isInline ? "row" : "column",
-        alignItems: "center",
-        justifyContent: "center",
-        gap,
       }}
     >
-      {/* Icon Layer */}
-      <ParallaxItem depth={iconDepth}>
+      {/* Icon */}
+      <ParallaxItem depth={iconDepthAdjusted}>
         <WrldSVG
-          width={size}
-          height={size}
-          style={{
-            color: "var(--logo-color, rgba(0, 0, 0, 1))",
-            display: "block",
-          }}
+          width={responsiveSize}
+          height={responsiveSize}
+          style={{ display: "block" }}
         />
       </ParallaxItem>
 
-      {/* Text Layer */}
-      <ParallaxItem depth={textDepth}>
+      {/* Text */}
+      <ParallaxItem depth={textDepthAdjusted}>
         <h1
           className="logo-text"
           style={{
-            fontSize: textSize,
+            fontSize: `${textSize}px`,
           }}
         >
           WRLD

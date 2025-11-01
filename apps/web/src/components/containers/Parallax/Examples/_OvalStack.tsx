@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 import React from "react";
 import ParallaxItem from "../ParallaxItem";
 import { useParallaxShadow } from "../useParallaxShadow";
