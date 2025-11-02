@@ -1,7 +1,7 @@
-import React from "react";
+import React, { useState } from "react";
 import ParallaxItem from "../../containers/Parallax/ParallaxItem";
 import { useResponsiveContext } from "../../containers/Responsive/ResponsiveContext";
-import "./Logo.css";
+import "../../_main/main.css";
 import WrldSVG from "./Logo.svg?react";
 
 type WrldLogoProps = {
@@ -9,6 +9,8 @@ type WrldLogoProps = {
   iconDepth?: number;
   textDepth?: number;
   size?: number;
+  hoverDepthShift?: number;
+  style?: React.CSSProperties;
 };
 
 export default function WrldLogo({
@@ -16,24 +18,22 @@ export default function WrldLogo({
   iconDepth = 0,
   textDepth = 0,
   size = 200,
+  hoverDepthShift = 0.1,
+  style = {},
 }: WrldLogoProps) {
   const { scale, parallaxStrength } = useResponsiveContext();
+  const [hovered, setHovered] = useState(false);
 
   const isInline = layout === "inline";
 
-  // 🔹 Independent internal ratios for layout types
-  const iconToTextRatioStacked = 0.25;
-  const iconToTextRatioInline = 0.3;
-  const iconToTextRatio = isInline
-    ? iconToTextRatioInline
-    : iconToTextRatioStacked;
-
-  // 🔹 Apply global responsive scaling
+  const iconToTextRatio = isInline ? 0.3 : 0.25;
   const responsiveSize = size * scale;
-  const iconDepthAdjusted = iconDepth * parallaxStrength;
-  const textDepthAdjusted = textDepth * parallaxStrength;
-
-  // 🔹 Text size derived from icon-to-text ratio
+  const iconDepthAdjusted = hovered
+    ? iconDepth + hoverDepthShift
+    : iconDepth * parallaxStrength;
+  const textDepthAdjusted = hovered
+    ? textDepth + hoverDepthShift
+    : textDepth * parallaxStrength;
   const textSize = responsiveSize * iconToTextRatio;
 
   return (
@@ -41,7 +41,14 @@ export default function WrldLogo({
       className={`logo ${layout}`}
       style={{
         flexDirection: isInline ? "row" : "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: isInline ? "0.5em" : "0.25em",
+        cursor: "pointer",
+        ...style,
       }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
     >
       {/* Icon */}
       <ParallaxItem depth={iconDepthAdjusted}>
@@ -58,6 +65,9 @@ export default function WrldLogo({
           className="logo-text"
           style={{
             fontSize: `${textSize}px`,
+            margin: 0,
+            letterSpacing: "0.05em",
+            fontWeight: 200,
           }}
         >
           WRLD

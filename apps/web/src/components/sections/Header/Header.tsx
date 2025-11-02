@@ -23,7 +23,12 @@ export default function Header() {
       }}
     >
       <div className="header-left">
-        <WrldLogo layout="inline" iconDepth={0} textDepth={1} size={logoSize} />
+        <WrldLogo
+          layout="inline"
+          iconDepth={0}
+          textDepth={0.1}
+          size={logoSize}
+        />
       </div>
 
       <div className="header-right">

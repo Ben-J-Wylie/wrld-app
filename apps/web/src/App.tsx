@@ -2,40 +2,33 @@ import React from "react";
 import { ResponsiveProvider } from "./components/containers/Responsive/ResponsiveContext";
 import { ParallaxScene } from "./components/containers/Parallax/ParallaxScene";
 import { ParallaxLight } from "./components/containers/Parallax/ParallaxLight";
-import WrldLogo from "./components/elements/Logo/Logo";
-import DebugOverlay from "./components/containers/DebugOverlay";
-import "./components/_main/main.css";
-import Header from "./components/sections/Header/Header";
+import Avatar from "./components/elements/Avatar/Avatar";
 
-export default function App() {
-  const showDebug = false;
-
+export default function AvatarDemoScene() {
   return (
     <ResponsiveProvider>
       <ParallaxLight>
         <ParallaxScene>
-          <Header /> {/* 👈 new header */}
           <div
             style={{
               height: "200vh",
               width: "100vw",
-              position: "relative",
+              overflow: "scroll",
             }}
-          >
-            {/* Inline logo test */}
-            <div
-              style={{
-                position: "absolute",
-                top: "40%",
-                left: "50%",
-                transform: "translate(-50%, -50%)",
-              }}
-            >
-              <DebugOverlay show={showDebug}>
-                <WrldLogo layout="inline" iconDepth={0} textDepth={1} />
-              </DebugOverlay>
-            </div>
-          </div>
+          ></div>
+          <Avatar
+            avatarUrl="https://api.dicebear.com/8.x/adventurer/svg?seed=ben"
+            username="Ben"
+            size={100}
+            depth={0}
+            style={{ top: "30%", left: "50%", position: "absolute" }}
+          />
+          <Avatar
+            username="Alice"
+            size={100}
+            depth={0.1}
+            style={{ top: "150%", left: "50%", position: "absolute" }}
+          />
         </ParallaxScene>
       </ParallaxLight>
     </ResponsiveProvider>

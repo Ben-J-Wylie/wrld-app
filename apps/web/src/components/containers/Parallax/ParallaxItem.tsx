@@ -3,20 +3,22 @@ import { useParallaxScene } from "./ParallaxScene";
 import { useParallaxLight } from "./ParallaxLight";
 import { useResponsiveContext } from "../Responsive/ResponsiveContext";
 
+// Extend to allow native HTML div attributes like onMouseEnter, onClick, etc.
 type Props = {
   depth?: number;
   strength?: number;
   scaleFactor?: number;
   style?: React.CSSProperties;
   children: React.ReactNode;
-};
+} & React.HTMLAttributes<HTMLDivElement>;
 
 const ParallaxItem: React.FC<Props> = ({
   depth = 0,
-  strength = 3,
+  strength = 30,
   scaleFactor = 0.005,
   style,
   children,
+  ...rest // capture DOM handlers (hover, click, etc.)
 }) => {
   const outerRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
@@ -52,9 +54,7 @@ const ParallaxItem: React.FC<Props> = ({
     let shadow = "none";
     if (depth !== 0) {
       const absDepth = Math.abs(depth);
-
-      // Device-scaled parameters
-      const offset = absDepth * shadowOffsetScale * 3;
+      const offset = absDepth * shadowOffsetScale * 30;
       const blur = shadowBlur + absDepth * shadowGrowth * 1.4;
       const baseOpacity = Math.max(
         0,
@@ -96,14 +96,18 @@ const ParallaxItem: React.FC<Props> = ({
     shadowFalloff,
   ]);
 
-  // ✅ Automatically center if both `top` and `left` are defined
+  // ✅ Automatically center if both top/left are defined
   const centeredStyle =
     style?.top !== undefined && style?.left !== undefined
       ? { transform: "translate(-50%, -50%)", ...style }
       : style;
 
   return (
-    <div ref={outerRef} style={{ position: "relative", ...centeredStyle }}>
+    <div
+      ref={outerRef}
+      style={{ position: "relative", ...centeredStyle }}
+      {...rest} // ✅ forward event handlers, classes, etc.
+    >
       <div
         ref={innerRef}
         style={{

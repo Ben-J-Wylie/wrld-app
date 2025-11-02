@@ -25,7 +25,7 @@
 
 /* Elements */
 
-/* @import "../elements/Avatar/Avatar.css";
+/* 
 @import "../elements/AvatarUploader/AvatarUploader.css";
 @import "../elements/ButtonGoLive/ButtonGoLive.css";
 @import "../elements/ButtonPrimary/ButtonPrimary.css";
@@ -48,8 +48,10 @@
 @import "../elements/SetupHeader/SetupHeader.css";
 @import "../elements/ToggleGrid/ToggleGrid.css";
 @import "../elements/TorchIndicator/TorchIndicator.css";
-@import "../elements/VideoPlayer/VideoPlayer.css"; */
+@import "../elements/VideoPlayer/VideoPlayer.css"; 
+*/
 
+@import "../elements/Avatar/Avatar.css";
 @import "../elements/Logo/Logo.css";
 
 
