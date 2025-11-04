@@ -8,12 +8,12 @@ import ScreenShareView from "../components/ScreenShareView";
 import TorchIndicator from "../components/TorchIndicator";
 import { useBroadcast } from "../context/BroadcastContext";
 import { socket } from "../lib/socket";
+import { chatSocket } from "../lib/chatSocket";
 import "../App.css";
 
 export default function BroadcastPage() {
   const { settings, msc } = useBroadcast();
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
-
   const [selectedPeer, setSelectedPeer] = useState<any>(null);
   const [peers, setPeers] = useState<any[]>([]);
   const [isPeerListOpen, setIsPeerListOpen] = useState(true);
@@ -22,11 +22,16 @@ export default function BroadcastPage() {
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const pipRef = useRef<HTMLVideoElement>(null);
 
-  // 👤 Get local user info
   const userInfo = JSON.parse(localStorage.getItem("wrld_user") || "{}");
   const selfDisplayName = userInfo.username || userInfo.email || "You";
 
-  // 🧩 Handle responsive UI
+  const threadId =
+    (selectedPeer?.userId as string) ||
+    (selectedPeer?.stableId as string) ||
+    (selectedPeer?.id as string) ||
+    null;
+
+  // 🧩 Responsive
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768);
     check();
@@ -42,12 +47,11 @@ export default function BroadcastPage() {
     return () => socket.off("peersList", updatePeers);
   }, []);
 
-  // ✅ When user goes live or toggles mic/camera, publish selected sources
+  // ✅ Live stream setup
   useEffect(() => {
     const goLive = async () => {
       const { __live, mic, frontCamera, backCamera, camera } = settings;
       if (!__live) {
-        console.log("🧹 User went offline, stopping local tracks");
         localStream?.getTracks().forEach((t) => t.stop());
         setLocalStream(null);
         return;
@@ -56,38 +60,20 @@ export default function BroadcastPage() {
       const wantVideo = frontCamera || backCamera || camera;
       const wantAudio = mic;
 
-      if (!wantVideo && !wantAudio) {
-        console.log("⚠️ No media sources selected — not publishing anything");
-        return;
-      }
+      if (!wantVideo && !wantAudio) return;
 
       try {
         const constraints: MediaStreamConstraints = {
           audio: wantAudio,
           video: wantVideo,
         };
-
-        console.log("🎙️ getUserMedia constraints:", constraints);
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
         setLocalStream(stream);
-        (window as any).localStreamRef = stream;
-
-        const tracks = stream.getTracks().map((t) => `${t.kind}:${t.enabled}`);
-        console.log("📡 Local stream tracks:", tracks);
-
         await msc.publishLocalStream(stream);
-        console.log("✅ Published local stream via MediasoupClient");
 
         if (pipRef.current) {
           pipRef.current.srcObject = stream;
-          const playPromise = pipRef.current.play();
-          if (playPromise !== undefined) {
-            playPromise.catch((err) => {
-              if (err.name !== "AbortError") {
-                console.warn("🎬 pip play() failed:", err);
-              }
-            });
-          }
+          pipRef.current.play().catch(console.warn);
         }
 
         socket.emit("updateSettings", settings);
@@ -105,22 +91,19 @@ export default function BroadcastPage() {
     settings.camera,
   ]);
 
-  // 🧩 Handle remote stream updates
+  // 🧩 Remote stream handling
   useEffect(() => {
     msc.onNewStream = (stream: MediaStream, peerId: string, kind?: string) => {
-      setPeers((prev) => {
-        const updated = prev.map((p) =>
+      setPeers((prev) =>
+        prev.map((p) =>
           p.id === peerId
             ? {
                 ...p,
                 [kind === "audio" ? "audioStream" : "videoStream"]: stream,
               }
             : p
-        );
-        return updated;
-      });
-
-      // auto-play video for selected peer
+        )
+      );
       if (
         kind === "video" &&
         selectedPeer?.id === peerId &&
@@ -130,13 +113,12 @@ export default function BroadcastPage() {
         remoteVideoRef.current.play().catch(console.warn);
       }
     };
-
     return () => {
       msc.onNewStream = undefined;
     };
   }, [msc, selectedPeer]);
 
-  // 🧩 Selecting a peer
+  // 🧩 Peer selection
   const handleSelectPeer = async (peer: any) => {
     setSelectedPeer(peer);
     if (peer.id === socket.id && localStream && remoteVideoRef.current) {
@@ -150,9 +132,7 @@ export default function BroadcastPage() {
         peerId: peer.id,
       });
       if (producers?.length) {
-        // 👇 wait briefly to ensure transport handshake completes
         await new Promise((r) => setTimeout(r, 200));
-
         for (const p of producers) {
           const id = p.id || p.producerId;
           if (id) await msc.consume(id, peer.id);
@@ -163,7 +143,7 @@ export default function BroadcastPage() {
     }
   };
 
-  // 🧩 Keep main video synced
+  // 🧩 Keep video synced
   useEffect(() => {
     if (!remoteVideoRef.current) return;
     const stream =
@@ -173,7 +153,7 @@ export default function BroadcastPage() {
     remoteVideoRef.current.srcObject = stream;
   }, [selectedPeer, localStream]);
 
-  // 🧩 Remove peer from view when offline
+  // 🧩 Remove offline peer
   useEffect(() => {
     if (selectedPeer && !peers.find((p) => p.id === selectedPeer.id)) {
       setSelectedPeer(null);
@@ -194,7 +174,6 @@ export default function BroadcastPage() {
     settings.gyro ||
     settings.torch;
 
-  // Merge self and peers into one list
   const peersToDisplay = [
     ...(settings.__live
       ? [
@@ -214,8 +193,8 @@ export default function BroadcastPage() {
   ];
 
   return (
-    <div className="broadcast-page">
-      {/* 👥 Sidebar */}
+    <div className={`broadcast-page ${isMobile ? "mobile" : "desktop"}`}>
+      {/* 👥 Peer Sidebar */}
       <div
         className={`peerlist-sidebar ${isPeerListOpen ? "open" : "closed"} ${
           isMobile ? "mobile" : ""
@@ -238,19 +217,37 @@ export default function BroadcastPage() {
         </div>
       )}
 
-      {/* 🎥 Main display */}
+      {/* 🎥 Main + Chat layout */}
       <div className="broadcast-main">
-        <video
-          ref={remoteVideoRef}
-          autoPlay
-          playsInline
-          muted={false}
-          className="main-video"
-        />
-        {isUserLive && (
-          <video ref={pipRef} autoPlay muted playsInline className="pip" />
-        )}
+        <div className="video-section">
+          <video
+            ref={remoteVideoRef}
+            autoPlay
+            playsInline
+            muted={false}
+            className="main-video"
+          />
+          {isUserLive && (
+            <video ref={pipRef} autoPlay muted playsInline className="pip" />
+          )}
+        </div>
 
+        {/* 💬 Chat window: thread = selected peer (public thread about that peer) */}
+        <div className="chat-section">
+          <ChatWindow
+            threadId={threadId}
+            selfId={chatSocket.id || ""} // ✅ correct id for bubble alignment + debugging
+            title={
+              selectedPeer
+                ? `Chat about ${
+                    selectedPeer.displayName || selectedPeer.name || "Peer"
+                  }`
+                : "Select a peer to chat"
+            }
+          />
+        </div>
+
+        {/* Extra interactive overlays */}
         {selectedPeer && (
           <div className="controls-vertical">
             <MicSpectrum
@@ -264,7 +261,6 @@ export default function BroadcastPage() {
             {selectedPeer.settings?.location && (
               <LocationMap peer={selectedPeer} />
             )}
-            {selectedPeer.settings?.chat && <ChatWindow peer={selectedPeer} />}
             {selectedPeer.settings?.screenShare && (
               <ScreenShareView peer={selectedPeer} />
             )}
@@ -278,6 +274,7 @@ export default function BroadcastPage() {
         )}
       </div>
 
+      {/* ✨ Styling */}
       <style>{`
         .broadcast-page {
           display: flex;
@@ -286,35 +283,47 @@ export default function BroadcastPage() {
           background: #000;
           color: #fff;
         }
+
+        /* Sidebar */
         .peerlist-sidebar {
           width: 16rem;
-          background: rgba(17,24,39,0.95);
+          background: rgba(17, 24, 39, 0.95);
           border-right: 1px solid #222;
           padding: 1rem;
         }
-        @media (max-width: 1024px) {
-          .peerlist-sidebar {
-            background: rgba(17,24,39,0.98);
-          }
-          .pip {
-            display: none;
-          }
-        }
+
+        /* Layout container */
         .broadcast-main {
           flex: 1;
-          position: relative;
           display: flex;
-          flex-direction: column;
+          flex-direction: row;
+          position: relative;
+        }
+
+        .video-section {
+          flex: 3;
+          display: flex;
           align-items: center;
           justify-content: center;
+          position: relative;
         }
+
+        .chat-section {
+          flex: 1;
+          border-left: 1px solid rgba(255, 255, 255, 0.1);
+          display: flex;
+          flex-direction: column;
+          background: rgba(17, 24, 39, 0.7);
+        }
+
         .main-video {
           width: 100%;
-          height: 70%;
+          height: 100%;
           object-fit: contain;
           background: #000;
           border-radius: 8px;
         }
+
         .pip {
           position: absolute;
           bottom: 1rem;
@@ -326,13 +335,34 @@ export default function BroadcastPage() {
           border-radius: 8px;
           box-shadow: 0 0 20px rgba(0,255,255,0.3);
         }
+
+        /* 📱 Mobile: stack video + chat vertically */
+        .broadcast-page.mobile .broadcast-main {
+          flex-direction: column;
+        }
+
+        .broadcast-page.mobile .video-section {
+          flex: none;
+          height: 60vh;
+        }
+
+        .broadcast-page.mobile .chat-section {
+          flex: 1;
+          height: 40vh;
+          border-left: none;
+          border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
         .controls-vertical {
+          position: absolute;
+          bottom: 0;
+          left: 0;
           width: 100%;
           display: flex;
           flex-direction: column;
           gap: 1rem;
           padding: 1rem;
-          background: rgba(17,24,39,0.7);
+          background: rgba(17, 24, 39, 0.7);
         }
       `}</style>
     </div>

@@ -6,6 +6,7 @@ import { Server as SocketServer } from "socket.io";
 import { createMediasoupCore } from "./mediasoup";
 import type { WebRtcTransport, Producer, Consumer } from "mediasoup/node/lib/types";
 import path from "path";
+import { wireChat } from "./chat";
 
 const app = express();
 
@@ -21,6 +22,8 @@ const server = https.createServer(options, app);
 const io = new SocketServer(server, { cors: { origin: "*" } });
 
 const { worker, router } = await createMediasoupCore();
+
+wireChat(io, { namespace: "/chat" });
 
 type Peer = {
   id: string;
@@ -751,22 +754,22 @@ io.on("connection", (socket) => {
 
   // --- DISCONNECT CLEANUP ---
   socket.on("disconnect", (reason) => {
-  const userId = (socket as any).userId || socket.id;
-  console.log(`❌ Disconnected: ${socket.id} (userId: ${userId}, reason: ${reason})`);
+    const userId = (socket as any).userId || socket.id;
+    console.log(`❌ Disconnected: ${socket.id} (userId: ${userId}, reason: ${reason})`);
 
-  // Remove this socket’s live references
-  usernames.delete(socket.id);
-  peers.delete(socket.id);
-  streamStates.delete(socket.id);
-
-  // 🧹 Clean mediasoup resources for this peer
-  const peer = peers.get(socket.id);
-  if (peer) {
-    for (const c of peer.consumers.values()) try { c.close(); } catch {}
-    for (const p of peer.producers.values()) try { p.close(); } catch {}
-    for (const t of peer.transports.values()) try { t.close(); } catch {}
+    // Remove this socket’s live references
+    usernames.delete(socket.id);
     peers.delete(socket.id);
-  }
+    streamStates.delete(socket.id);
+
+    // 🧹 Clean mediasoup resources for this peer
+    const peer = peers.get(socket.id);
+    if (peer) {
+      for (const c of peer.consumers.values()) try { c.close(); } catch {}
+      for (const p of peer.producers.values()) try { p.close(); } catch {}
+      for (const t of peer.transports.values()) try { t.close(); } catch {}
+      peers.delete(socket.id);
+    }
 
   // 🚨 Notify others instantly
   emitPeerLeave(socket.id);
