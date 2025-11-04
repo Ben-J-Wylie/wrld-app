@@ -47,12 +47,14 @@ type BroadcastCtx = {
   settings: Toggles;
   setSettings: React.Dispatch<React.SetStateAction<Toggles>>;
   msc: MediaSoupClient;
+  localStream: MediaStream | null;
 };
 
 const BroadcastContext = createContext<BroadcastCtx>({
   settings: defaultSettings,
   setSettings: () => {},
   msc: new MediaSoupClient(),
+  localStream: null,
 });
 
 export const BroadcastProvider = ({
@@ -65,43 +67,51 @@ export const BroadcastProvider = ({
     return saved ? JSON.parse(saved) : defaultSettings;
   });
 
-  // ✅ persistent MediaSoupClient instance
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const mscRef = useRef<MediaSoupClient | null>(null);
+  const isRegisteredRef = useRef(false);
+
   if (!mscRef.current) {
     mscRef.current = new MediaSoupClient();
   }
 
-  // --- reset screenShare on load ---
+  // ✅ Reset screenShare on load
   useEffect(() => setSettings((p) => ({ ...p, screenShare: false })), []);
 
-  // --- persist locally (omit screenShare) ---
+  // ✅ Persist settings locally (except screenShare)
   useEffect(() => {
     const { screenShare, ...rest } = settings;
     localStorage.setItem("wrld_stream_settings", JSON.stringify(rest));
   }, [settings]);
 
-  // --- single registration guard ---
-  // ✅ Register once, with debouncing against reconnects
+  // ✅ Register with server once
   useEffect(() => {
     const user =
       JSON.parse(localStorage.getItem("wrld_user") || "{}")?.username ||
       "Anonymous";
     const userId = getOrCreateUserId();
 
-    let alreadyRegistered = false;
-
     const register = async () => {
-      if (alreadyRegistered) return;
-      alreadyRegistered = true;
+      if (isRegisteredRef.current) return;
+      isRegisteredRef.current = true;
 
-      // await safeRegister(user, userId); // ✅ wait for acknowledgment
+      console.log("👤 Registering with mediaserver:", user, userId);
       await new Promise((resolve) => {
-        socket.emit("register", { user, userId }, resolve);
+        socket.emit("register", { name: user, userId }, resolve);
       });
 
-      // ✅ now safe to send streaming state
+      console.log("✅ Registration acknowledged");
+
+      if (!mscRef.current?.recvTransport) {
+        await mscRef.current.initDevice(); // ✅ ensure device ready first
+        await mscRef.current.createRecvTransport();
+
+        console.log("📡 Created recv transport");
+      }
+
+      // sync initial state
       socket.emit("updateStreamState", {
-        isStreaming: settings.__live && Object.values(settings).some(Boolean),
+        isStreaming: false,
         settings,
         platform: /mobile|android|iphone/.test(
           navigator.userAgent.toLowerCase()
@@ -109,8 +119,6 @@ export const BroadcastProvider = ({
           ? "mobile"
           : "desktop",
       });
-
-      console.log("✅ Stream state sent after confirmed registration");
     };
 
     if (socket.connected) register();
@@ -123,56 +131,107 @@ export const BroadcastProvider = ({
     };
   }, []);
 
-  // --- emit stream state changes ---
+  // ✅ Unified streaming effect — handles localStorage + local stream
   useEffect(() => {
-    const isStreaming =
-      settings.__live && Object.values(settings).some(Boolean);
+    if (!isRegisteredRef.current) return;
+
+    const hasAnySourceSelected =
+      settings.camera ||
+      settings.frontCamera ||
+      settings.backCamera ||
+      settings.mic ||
+      settings.screenShare ||
+      settings.location ||
+      settings.chat ||
+      settings.gyro ||
+      settings.torch;
+
+    const isStreaming = settings.__live && hasAnySourceSelected;
+
+    if (!hasAnySourceSelected && settings.__live) {
+      setSettings((prev) => ({ ...prev, __live: false }));
+      localStorage.removeItem("wrld_isLive");
+    }
 
     const ua = navigator.userAgent.toLowerCase();
     const platform = /iphone|ipad|android|mobile|samsung|huawei|pixel/.test(ua)
       ? "mobile"
       : "desktop";
 
-    if (socket.connected) {
-      const isStreaming =
-        settings.__live &&
-        (settings.camera ||
-          settings.frontCamera ||
-          settings.backCamera ||
-          settings.mic);
+    // 🚀 Notify server
+    socket.emit("updateStreamState", { isStreaming, settings, platform });
 
-      socket.emit("updateStreamState", {
-        isStreaming,
-        settings,
-        platform,
-      });
-
-      if (isStreaming) {
-        localStorage.setItem("wrld_isLive", "true");
-        localStorage.setItem("wrld_settings", JSON.stringify(settings));
-      } else {
-        socket.emit("updateStreamState", { isStreaming: false });
-        localStorage.removeItem("wrld_isLive");
-      }
+    // 💾 Keep localStorage in sync
+    if (isStreaming) {
+      localStorage.setItem("wrld_isLive", "true");
+    } else {
+      localStorage.removeItem("wrld_isLive");
     }
 
-    console.log(
-      `🔸 updateStreamState emitted (${platform})`,
-      isStreaming,
-      settings
-    );
-  }, [settings]);
+    // 🎥 Manage actual local media stream
+    const startLocal = async () => {
+      if (localStream || !mscRef.current) return;
 
-  // --- cleanup ---
+      try {
+        const constraints = {
+          video: settings.camera || settings.frontCamera || settings.backCamera,
+          audio: settings.mic,
+        };
+
+        if (!constraints.video && !constraints.audio) {
+          console.log("⚠️ No active sources, skipping stream init");
+          return;
+        }
+
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        setLocalStream(stream);
+        await mscRef.current.publishLocalStream(stream);
+        console.log("📡 Published local stream", stream.getTracks());
+      } catch (err) {
+        console.error("❌ Error starting local stream:", err);
+      }
+    };
+
+    const stopLocal = async () => {
+      if (!localStream) return;
+      localStream.getTracks().forEach((t) => t.stop());
+      setLocalStream(null);
+      console.log("🛑 Stopped local stream");
+    };
+
+    if (isStreaming) startLocal();
+    else stopLocal();
+
+    console.log(`📡 Stream state → ${isStreaming ? "LIVE" : "OFFLINE"}`);
+  }, [
+    settings.__live,
+    settings.camera,
+    settings.frontCamera,
+    settings.backCamera,
+    settings.mic,
+    settings.screenShare,
+    settings.location,
+    settings.chat,
+    settings.gyro,
+    settings.torch,
+  ]);
+
+  // ✅ Cleanup on unmount
   useEffect(() => {
     return () => {
       mscRef.current?.close();
+      localStream?.getTracks().forEach((t) => t.stop());
     };
   }, []);
 
   return (
     <BroadcastContext.Provider
-      value={{ settings, setSettings, msc: mscRef.current! }}
+      value={{
+        settings,
+        setSettings,
+        msc: mscRef.current!,
+        localStream,
+      }}
     >
       {children}
     </BroadcastContext.Provider>

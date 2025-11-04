@@ -6,6 +6,12 @@ import { socket } from "./socket";
 const MEDIASERVER_URL =
   import.meta.env.VITE_MEDIASERVER_URL || "https://10.0.0.84:4002"; // 👈 adjust for your LAN/public IP
 
+
+type RemoteStreamEntry = {
+  audioStream?: MediaStream;
+  videoStream?: MediaStream;
+}
+
 export class MediaSoupClient {
   socket: Socket;
   device: mediasoupClient.Device | null = null;
@@ -16,7 +22,7 @@ export class MediaSoupClient {
   recvTransport: mediasoupClient.types.Transport | null = null;
 
   localStream: MediaStream | null = null;
-  remoteStreams = new Map<string, MediaStream>();
+  remoteStreams = new Map<string, RemoteStreamEntry>();
 
   _toggleLock = false;
   currentViewingPeer: string | null = null;
@@ -44,9 +50,19 @@ export class MediaSoupClient {
     });
 
     // 🔹 New producer (another user's published stream)
-    this.socket.on("newProducer", async ({ producerId, kind }) => {
+    this.socket.on("newProducer", async ({ producerId, kind, peerId }) => {
       console.log("🆕 New producer:", producerId, kind);
-      await this.consume(producerId);
+
+      // ✅ Skip if already consuming this producer
+      if (this.consumers.has(producerId)) {
+        console.log(`⚠️ Already consuming ${producerId}, skipping`);
+        return;
+      }
+
+      // Optional: only auto-consume if viewing this peer
+      if (this.currentViewingPeer && this.currentViewingPeer === peerId) {
+        await this.consume(producerId, peerId);
+      }
     });
 
     // 🔹 Peer list updates (buffered replay)
@@ -238,7 +254,7 @@ async createRecvTransport() {
     throw new Error("Invalid transport creation response: missing id");
   }
 
-  console.log("📡 [createRecvTransport] Creating recv transport with id:", data.id);
+    console.log("📡 [createRecvTransport] Creating recv transport with id:", data.id);
   this.recvTransport = this.device.createRecvTransport(data);
 
   // 🧩 Connect handshake
@@ -257,18 +273,25 @@ async createRecvTransport() {
             errback?.(new Error(res.error));
             reject(res.error);
           } else {
-            console.log("✅ [createRecvTransport] Recv transport connected!");
-            callback();
-            resolve();
+            console.log("✅ [createRecvTransport] Recv transport connected (client ack)");
+            this.socket.emit("recvTransportReady", { id: data.id }, () => {
+              console.log("📨 [createRecvTransport] Server acknowledged recvTransportReady");
+              callback();
+              resolve();
+            });
           }
         }
       );
     });
   });
 
-  console.log("🎯 [createRecvTransport] Ready to consume streams");
+  // 🕐 Allow DTLS handshake to settle fully before first consume
+  await new Promise((r) => setTimeout(r, 300));
+
+  console.log("🎯 [createRecvTransport] Fully ready to consume streams");
   return this.recvTransport;
 }
+
 
 
 
@@ -301,25 +324,43 @@ async publishTrack(track: MediaStreamTrack) {
 
   // --- Consuming remote producers ---
 
-  async consume(producerId: string, peerId?: string) {
-    if (!this.device) await this.initDevice();
+ async consume(producerId: string, peerId?: string) {
+  if (!this.recvTransport) {
+    console.warn("⚠️ No recv transport, creating new one...");
+    await this.createRecvTransport();
+    await new Promise((r) => setTimeout(r, 250));
+  }
 
-    let tries = 3;
-    while (!this.recvTransport && tries > 0) {
-      console.log(`⏳ Waiting for recv transport... (${4 - tries}/3)`);
-      await new Promise((r) => setTimeout(r, 300));
-      tries--;
+  if (this.consumers.has(producerId)) {
+    console.log(`⚠️ Already consuming producer ${producerId}, re-emitting existing stream`);
+    const consumer = this.consumers.get(producerId)!;
+    const tagId = peerId || (consumer as any).peerId || producerId;
+    const existing = this.remoteStreams.get(tagId);
+    if (existing) {
+      if (existing.videoStream)
+        this.onNewStream?.(existing.videoStream, tagId, "video");
+      if (existing.audioStream)
+        this.onNewStream?.(existing.audioStream, tagId, "audio");
     }
+    return consumer;
+  }
 
-    if (!this.recvTransport) {
-      console.warn("🚫 Cannot consume — recv transport not ready");
+  if (!this.device) await this.initDevice();
+  const { rtpCapabilities } = this.device!;
+  console.log("🛰️ consume() request:", producerId);
+
+    let data;
+    try {
+      data = await this.request("consume", { producerId, rtpCapabilities });
+    } catch (err) {
+      console.error("❌ Consume request failed:", err);
+      // Reset recv transport to recover from broken SDP
+      this.recvTransport?.close();
+      this.recvTransport = null;
+      await this.createRecvTransport();
       return;
     }
 
-    const { rtpCapabilities } = this.device!;
-    console.log("🛰️ consume() request:", producerId);
-
-    const data = await this.request("consume", { producerId, rtpCapabilities });
     console.log("🛰️ consume() response:", data);
 
     if (data.error) {
@@ -327,50 +368,91 @@ async publishTrack(track: MediaStreamTrack) {
       return;
     }
 
-    // ✅ Create the consumer
-    const consumer = await this.recvTransport.consume({
-      id: data.id,
-      producerId,
-      kind: data.kind,
-      rtpParameters: data.rtpParameters,
-    });
+    // 🆕 Ensure each consumer has a unique MID (prevents duplicate a=mid errors)
+    if (!data.rtpParameters.mid) {
+      data.rtpParameters.mid = `${data.kind}-${producerId.slice(0, 6)}`;
+    }
+
+    // ✅ Create the consumer safely
+    let consumer;
+    try {
+      consumer = await this.recvTransport.consume({
+        id: data.id,
+        producerId,
+        kind: data.kind,
+        rtpParameters: data.rtpParameters,
+      });
+    } catch (err) {
+      console.error("❌ Failed to create consumer:", err);
+      return;
+    }
 
     console.log("🎞️ consumer created:", consumer.id, consumer.kind);
-    console.log("🎞️ track:", consumer.track, consumer.track.readyState);
-
-    consumer.track.onunmute = () => {
-      console.log("🎬 Track UNMUTED, ready to render:", consumer.track.id);
-    };
 
     // 🧩 Wrap track into a stream
     const stream = new MediaStream([consumer.track]);
     const tagId = peerId || data.peerId || producerId;
 
+    // 🧠 Debug readiness
+    consumer.track.onunmute = () => {
+      console.log("🎬 Track UNMUTED, ready to render:", consumer.track.id);
+    };
+    consumer.track.onended = () => {
+      console.log("🛑 Track ENDED:", consumer.track.id);
+    };
+
+    // 🎧 Auto-play audio tracks (but don’t double-attach)
     if (consumer.kind === "audio") {
-      const audio = document.createElement("audio");
-      audio.srcObject = stream;
-      audio.autoplay = true;
-      audio.muted = false;
-      audio.style.display = "none";
-      document.body.appendChild(audio);
+      const audioElId = `audio-${tagId}`;
+      let audio = document.getElementById(audioElId) as HTMLAudioElement | null;
+
+      if (!audio) {
+        audio = document.createElement("audio");
+        audio.id = audioElId;
+        audio.srcObject = stream;
+        audio.autoplay = true;
+        audio.muted = false;
+        audio.style.display = "none";
+        document.body.appendChild(audio);
+        console.log(`🎧 Attached new audio element for ${tagId}`);
+      } else {
+        audio.srcObject = stream;
+        console.log(`🎧 Updated existing audio element for ${tagId}`);
+      }
     }
 
-    // ✅ Store separately for audio/video distinction
+    // ✅ Store the new stream
     const entry = this.remoteStreams.get(tagId) || {};
     if (consumer.kind === "audio") entry.audioStream = stream;
     if (consumer.kind === "video") entry.videoStream = stream;
     this.remoteStreams.set(tagId, entry);
 
-    // ✅ Notify app with media type
+    // ✅ Notify BroadcastPage
     this.onNewStream?.(stream, tagId, consumer.kind);
 
-    // ✅ Resume playback
-    this.request("resume", { consumerId: consumer.id }).catch(() =>
-      console.warn("⚠️ resume failed for", consumer.id)
-    );
+    // ✅ Resume consumer (starts receiving media)
+    try {
+      await this.request("resume", { consumerId: consumer.id });
+    } catch {
+      console.warn("⚠️ resume failed for", consumer.id);
+    }
 
+    // ✅ Track cleanup
+    consumer.on("transportclose", () => {
+      console.warn(`⚠️ Transport closed for consumer ${consumer.id}`);
+      this.consumers.delete(producerId);
+    });
+
+    consumer.on("producerclose", () => {
+      console.warn(`⚠️ Producer closed for consumer ${consumer.id}`);
+      this.consumers.delete(producerId);
+      this.remoteStreams.delete(tagId);
+    });
+
+    this.consumers.set(producerId, consumer);
     return consumer;
   }
+
 
 
   stopProducerByKind(kind: "audio" | "video") {
@@ -431,29 +513,43 @@ async publishTrack(track: MediaStreamTrack) {
   }
 
   // --- Request peer producers ---
-  async viewPeer(peerId: string) {
-    if (!this.device) await this.initDevice();
-    if (!this.recvTransport) {
-      console.log("🎯 Creating recv transport on-demand...");
-      await this.createRecvTransport();
-    }
-
-    const producers = await this.request("getPeerProducers", { peerId });
-    if (!producers?.length) {
-      console.warn(`⚠️ No active producers for peer: ${peerId}`);
-      return;
-    }
-
-    await Promise.all(
-      producers.map(async (p) => {
-        const id = p.id || p.producerId;
-        if (!id) return;
-        console.log(`🎥 Consuming ${p.kind} producer: ${id}`);
-        return this.consume(id);
-      })
-    );
-
+  // apps/web/src/lib/mediasoupClient.ts
+async viewPeer(peerId: string) {
+  if (!this.device) await this.initDevice();
+  if (!this.recvTransport) {
+    console.log("🎯 Creating recv transport on-demand...");
+    await this.createRecvTransport();
   }
+
+  // apps/web/src/lib/mediasoupClient.ts
+  let producers: any[] = [];
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    producers = await this.request("getPeerProducers", { peerId });
+    if (producers?.length) break;
+    console.warn(
+      `⚠️ No producers for ${peerId} (attempt ${attempt}/5) — retrying...`
+    );
+    await new Promise((r) => setTimeout(r, 500));
+  }
+
+  if (!producers?.length) {
+    console.warn(`🚫 Still no producers for ${peerId} after retries.`);
+    return;
+  }
+
+
+  // ✅ Consume producers sequentially to avoid SDP collision
+  for (const [index, p] of producers.entries()) {
+    const id = p.id || p.producerId;
+    if (!id) continue;
+    console.log(`🎥 Consuming ${p.kind} producer: ${id}`);
+    await this.consume(id);
+
+    // 🕐 Tiny delay to let the SDP negotiation finish before next consume
+    await new Promise((r) => setTimeout(r, 250 * (index + 1)));
+  }
+}
+
 
   // --- Cleanup ---
   close() {
@@ -461,7 +557,27 @@ async publishTrack(track: MediaStreamTrack) {
 
     // stop media tracks first
     this.localStream?.getTracks().forEach((t) => t.stop());
-    this.remoteStreams.forEach((s) => s.getTracks().forEach((t) => t.stop()));
+
+
+
+    console.log("🧹 Closing mediasoup client...");
+
+    this.remoteStreams.forEach((entry) => {
+    if (!entry) return;
+
+    // Handle old style (direct MediaStream)
+    if (entry instanceof MediaStream) {
+      entry.getTracks().forEach((t) => t.stop());
+    }
+
+    // Handle new style (object with audio/video streams)
+    if (entry.videoStream instanceof MediaStream) {
+      entry.videoStream.getTracks().forEach((t) => t.stop());
+    }
+    if (entry.audioStream instanceof MediaStream) {
+      entry.audioStream.getTracks().forEach((t) => t.stop());
+    }
+  });
 
     // close transports cleanly
     try {

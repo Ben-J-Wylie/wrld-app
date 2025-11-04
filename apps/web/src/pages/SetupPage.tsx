@@ -33,64 +33,78 @@ type Toggles = {
 
 export default function SetupPage() {
   const { settings, setSettings, msc } = useBroadcast();
-  const [isLive, setIsLive] = useState(false);
+  //const [isLive, setIsLive] = useState(false);
   const isMobile = useIsMobile();
   const [messages, setMessages] = useState<string[]>([]);
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
   //const msc = new MediaSoupClient();
 
   async function publishTrack(kind: "audio" | "video") {
-    const constraints =
-      kind === "audio"
-        ? { audio: true, video: false }
-        : { audio: false, video: true };
-
     try {
+      const constraints =
+        kind === "audio"
+          ? { audio: true, video: false }
+          : { audio: false, video: true };
+
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      await msc.publishLocalStream(stream);
-      console.log(`📡 Published ${kind} stream`);
+      const track =
+        kind === "audio"
+          ? stream.getAudioTracks()[0]
+          : stream.getVideoTracks()[0];
+
+      if (!track) {
+        console.warn(`⚠️ No ${kind} track found`);
+        return;
+      }
+
+      await msc.publishTrack(track, kind);
+      console.log(`📡 Published ${kind} track`);
     } catch (err) {
       console.error(`❌ Failed to publish ${kind}:`, err);
     }
   }
 
   const toggle = async (key: keyof typeof settings) => {
+    // create updated settings copy
     const updated = { ...settings, [key]: !settings[key] };
 
     // --- single-camera rule for mobile ---
     if (key === "frontCamera" && updated.frontCamera) {
       updated.backCamera = false;
-      updated.camera = true; // ✅ mirror unified camera flag
+      updated.camera = true;
     }
 
     if (key === "backCamera" && updated.backCamera) {
       updated.frontCamera = false;
-      updated.camera = true; // ✅ mirror unified camera flag
+      updated.camera = true;
     }
 
-    // If both cameras are now off, also turn off the unified flag
-    if (!updated.frontCamera && !updated.backCamera) {
-      updated.camera = false;
+    // if both cameras off, also disable unified camera flag
+    if (key === "frontCamera" || key === "backCamera" || key === "camera") {
+      // If both cameras are off, disable the unified flag
+      if (!updated.frontCamera && !updated.backCamera) {
+        updated.camera = false;
+      }
     }
-
-    // --- desktop toggle ---
+    // --- desktop toggle (no front/back distinction) ---
     if (key === "camera") {
       updated.camera = !settings.camera;
     }
 
+    // ✅ apply to React state
     setSettings(updated);
-
     console.log("🔸 Updated settings:", updated);
 
+    // ✅ tell server immediately about this change
+    const hasAnySourceSelected = Object.values(updated).some(Boolean);
+
     socket.emit("updateStreamState", {
-      isStreaming: isLive,
+      isStreaming: updated.__live && hasAnySourceSelected,
       settings: updated,
       platform: isMobile ? "mobile" : "desktop",
     });
 
-    // --- independent mic / camera logic ---
-
-    // 🎤 MIC toggle
+    // 🎤 handle mic toggle
     if (key === "mic") {
       if (updated.mic) {
         console.log("🎙️ Turning mic ON...");
@@ -98,17 +112,17 @@ export default function SetupPage() {
           audio: true,
         });
         const track = stream.getAudioTracks()[0];
-        if (track) await msc.publishTrack(track); // 👈 this publishes audio-only
+        if (track) await msc.publishTrack(track);
       } else {
         console.log("🔇 Turning mic OFF...");
         msc.stopProducerByKind("audio");
       }
     }
 
-    // 🎥 CAMERA toggle (includes front/back)
+    // 🎥 handle camera toggles
     if (key === "camera" || key === "frontCamera" || key === "backCamera") {
       if (updated.camera || updated.frontCamera || updated.backCamera) {
-        console.log("📸 Turning camera ON (video-only)...");
+        console.log("📸 Turning camera ON...");
         await publishTrack("video");
       } else {
         console.log("🛑 Turning camera OFF...");
@@ -122,26 +136,12 @@ export default function SetupPage() {
   const handleGoLive = () => {
     if (!hasAnyEnabled) return;
 
-    const goingLive = !isLive;
-    setIsLive(goingLive);
+    // flip the global context flag
+    setSettings((prev) => ({ ...prev, __live: !prev.__live }));
 
-    // ✅ Tell backend you’re now streaming
-    socket.emit("updateStreamState", {
-      isStreaming: goingLive,
-      settings,
-      platform: isMobile ? "mobile" : "desktop",
-    });
-
-    if (goingLive) {
+    // if turning on, go to broadcast page
+    if (!settings.__live) {
       navigate("/broadcast");
-      setTimeout(() => setIsLive(false), 500);
-    } else {
-      // optional cleanup if they hit "End Stream"
-      socket.emit("updateStreamState", {
-        isStreaming: false,
-        settings,
-        platform: isMobile ? "mobile" : "desktop",
-      });
     }
   };
   async function handleToggleScreenShare() {
@@ -172,21 +172,31 @@ export default function SetupPage() {
     };
   }, [msc]);
 
+  useEffect(() => {
+    const anyOn = [
+      settings.camera,
+      settings.frontCamera,
+      settings.backCamera,
+      settings.mic,
+      settings.location,
+      settings.screenShare,
+      settings.chat,
+      settings.gyro,
+      settings.torch,
+    ].some(Boolean);
+
+    if (!anyOn && settings.__live) {
+      console.log("🧹 All toggles off — stopping live stream");
+      setSettings((prev) => ({ ...prev, __live: false }));
+    }
+  }, [settings]);
+
   // ✅ disable Go Live unless one toggle is active
   const hasAnyEnabled = Object.values(settings).some(Boolean);
 
   return (
     <div className="setup-container">
       <div className="setup-header">
-        <button
-          className={`go-live-button ${isLive ? "active" : ""}`}
-          onClick={handleGoLive}
-          disabled={!hasAnyEnabled}
-        >
-          <Power size={20} />
-          {isLive ? "End Stream" : "Go Live"}
-        </button>
-
         <h1 className="setup-title">Setup Your Stream</h1>
         <p className="setup-subtitle">
           Choose what you’ll share before going live.
@@ -283,16 +293,6 @@ export default function SetupPage() {
             />
           </>
         )}
-      </div>
-
-      <div className="go-live-wrapper">
-        <button
-          className={`go-live-button ${isLive ? "active" : ""}`}
-          onClick={handleGoLive}
-        >
-          <Power size={20} />
-          {isLive ? "End Stream" : "Go Live"}
-        </button>
       </div>
     </div>
   );
@@ -449,9 +449,7 @@ function MicFFTPreview() {
 /* -----------------------------
    Screen Share Preview (strict-mode safe)
 ------------------------------ */
-/* -----------------------------
-   Screen Share Preview (controlled)
------------------------------- */
+
 function ScreenSharePreview({ stream }: { stream: MediaStream }) {
   const vidRef = useRef<HTMLVideoElement | null>(null);
 
