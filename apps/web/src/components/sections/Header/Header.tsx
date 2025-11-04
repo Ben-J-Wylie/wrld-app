@@ -1,43 +1,66 @@
 import React from "react";
 import { useResponsiveContext } from "../../containers/Responsive/ResponsiveContext";
+import ParallaxItem from "../../containers/Parallax/ParallaxItem";
 import WrldLogo from "../../elements/Logo/Logo";
+import Avatar from "../../elements/Avatar/Avatar";
 import "./Header.css";
 
-export default function Header() {
+interface HeaderProps {
+  depth?: number;
+}
+
+export default function Header({ depth = 0 }: HeaderProps) {
   const { scale, device } = useResponsiveContext();
 
-  // 🔹 Basic responsive sizing
+  // 🔹 Responsive sizing
   const headerHeight = 100 * scale;
-  const logoSize = 100; // base size; logo handles its own scale internally
+  const logoSize = 100; // base size
+  const avatarSize = 60;
 
-  // 🔹 Example spacing or layout variation
+  // 🔹 Layout spacing
   const paddingX = device === "mobile" ? 16 : 32;
   const paddingY = device === "mobile" ? 8 : 16;
 
   return (
-    <header
-      className="header"
+    <ParallaxItem
+      depth={depth}
+      fixed
       style={{
-        height: `${headerHeight}px`,
-        padding: `${paddingY}px ${paddingX}px`,
+        top: 0,
+        left: 0,
+        width: "100%",
+        zIndex: 100,
       }}
     >
-      <div className="header-left">
-        <WrldLogo
-          layout="inline"
-          iconDepth={0}
-          textDepth={0.1}
-          size={logoSize}
-        />
-      </div>
+      <header
+        className="header"
+        style={{
+          height: `${headerHeight}px`,
+          padding: `${paddingY}px ${paddingX}px`,
+        }}
+      >
+        {/* Left: Logo */}
+        <div className="header-left">
+          <WrldLogo
+            layout="inline"
+            size={logoSize}
+            iconDepth={0.1}
+            textDepth={0}
+          />
+        </div>
 
-      <div className="header-right">
-        <nav className="nav">
-          <a href="#">Home</a>
-          <a href="#">About</a>
-          <a href="#">Contact</a>
-        </nav>
-      </div>
-    </header>
+        {/* Right: Avatar */}
+        <div className="header-right">
+          <Avatar
+            layout="inline"
+            size={avatarSize}
+            iconDepth={0.1}
+            textDepth={0}
+            avatarUrl="https://api.dicebear.com/8.x/adventurer/svg?seed=ben"
+            username="Ben"
+          />
+        </div>
+      </header>
+    </ParallaxItem>
   );
 }

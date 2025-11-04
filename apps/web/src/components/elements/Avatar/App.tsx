@@ -4,13 +4,18 @@ import React from "react";
 import { ResponsiveProvider } from "./components/containers/Responsive/ResponsiveContext";
 import { ParallaxScene } from "./components/containers/Parallax/ParallaxScene";
 import { ParallaxLight } from "./components/containers/Parallax/ParallaxLight";
+import DebugOverlay from "./components/containers/DebugOverlay";
 import Avatar from "./components/elements/Avatar/Avatar";
+import "./components/_main/main.css";
 
-export default function AvatarDemoScene() {
+export default function App() {
+  const showDebug = true; // 🔹 toggle debug overlay
+
   return (
     <ResponsiveProvider>
       <ParallaxLight>
         <ParallaxScene>
+          {/* Scrollable space */}
           <div
             style={{
               height: "200vh",
@@ -18,19 +23,47 @@ export default function AvatarDemoScene() {
               overflow: "scroll",
             }}
           ></div>
-          <Avatar
-            avatarUrl="https://api.dicebear.com/8.x/adventurer/svg?seed=ben"
-            username="Ben"
-            size={100}
-            depth={0}
-            style={{ top: "30%", left: "90%", position: "absolute" }}
-          />
-          <Avatar
-            username="Alice"
-            size={100}
-            depth={0.1}
-            style={{ top: "150%", left: "10%", position: "absolute" }}
-          />
+
+          {/* Inline Avatar */}
+          <div
+            style={{
+              position: "absolute",
+              top: "30%",
+              left: "50%",
+              transform: "translate(-50%, -50%)",
+            }}
+          >
+            <DebugOverlay show={showDebug}>
+              <Avatar
+                avatarUrl="https://api.dicebear.com/8.x/adventurer/svg?seed=ben"
+                username="Ben"
+                layout="inline"
+                size={200}
+                iconDepth={0}
+                textDepth={0}
+              />
+            </DebugOverlay>
+          </div>
+
+          {/* Stacked Avatar */}
+          <div
+            style={{
+              position: "absolute",
+              top: "70%",
+              left: "50%",
+              transform: "translate(-50%, -50%)",
+            }}
+          >
+            <DebugOverlay show={showDebug}>
+              <Avatar
+                username="Alice"
+                layout="stacked"
+                size={200}
+                iconDepth={0}
+                textDepth={0}
+              />
+            </DebugOverlay>
+          </div>
         </ParallaxScene>
       </ParallaxLight>
     </ResponsiveProvider>

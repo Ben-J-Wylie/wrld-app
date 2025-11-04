@@ -4,12 +4,16 @@
   justify-content: space-between;
   width: 100%;
   position: fixed;
+  isolation: isolate;
   top: 0;
   left: 0;
-  background: rgba(171, 168, 156, 0.5);
+  background: rgba(171, 168, 156, 1);
   backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(10px);
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  z-index: 100;
+  /* z-index: 100; */
+
+  
   /* transition: all 0.3s ease-in-out; */
 }
 
@@ -24,13 +28,10 @@
 }
 
 .header-right a {
-  color: white;
   text-decoration: none;
   font-weight: 300;
   letter-spacing: 0.05em;
   transition: opacity 0.2s;
 }
 
-.header-right a:hover {
-  opacity: 0.7;
-}
+

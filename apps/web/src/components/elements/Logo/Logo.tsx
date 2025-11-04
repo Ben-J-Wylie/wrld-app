@@ -1,23 +1,23 @@
 import React, { useState } from "react";
-import ParallaxItem from "../../containers/Parallax/ParallaxItem";
 import { useResponsiveContext } from "../../containers/Responsive/ResponsiveContext";
+import ParallaxItem from "../../containers/Parallax/ParallaxItem";
 import "../../_main/main.css";
 import WrldSVG from "./Logo.svg?react";
 
-type WrldLogoProps = {
+interface WrldLogoProps {
   layout?: "inline" | "stacked";
+  size?: number;
   iconDepth?: number;
   textDepth?: number;
-  size?: number;
   hoverDepthShift?: number;
   style?: React.CSSProperties;
-};
+}
 
 export default function WrldLogo({
   layout = "inline",
+  size = 200,
   iconDepth = 0,
   textDepth = 0,
-  size = 200,
   hoverDepthShift = 0.1,
   style = {},
 }: WrldLogoProps) {
@@ -40,6 +40,7 @@ export default function WrldLogo({
     <div
       className={`logo ${layout}`}
       style={{
+        display: "flex",
         flexDirection: isInline ? "row" : "column",
         alignItems: "center",
         justifyContent: "center",
@@ -65,9 +66,6 @@ export default function WrldLogo({
           className="logo-text"
           style={{
             fontSize: `${textSize}px`,
-            margin: 0,
-            letterSpacing: "0.05em",
-            fontWeight: 200,
           }}
         >
           WRLD

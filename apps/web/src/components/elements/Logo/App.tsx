@@ -36,7 +36,7 @@ export default function App() {
               <WrldLogo
                 layout="inline"
                 iconDepth={0}
-                textDepth={0.1}
+                textDepth={0}
                 size={200}
               />
             </DebugOverlay>
@@ -55,7 +55,7 @@ export default function App() {
               <WrldLogo
                 layout="stacked"
                 iconDepth={0}
-                textDepth={0.1}
+                textDepth={0}
                 size={200}
               />
             </DebugOverlay>

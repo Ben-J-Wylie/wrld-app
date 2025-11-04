@@ -12,11 +12,12 @@ export const GLOBAL_PARAMS = {
   scaleFactor: { mobile: 0.6, tablet: 0.8, desktop: 1 },
 
   shadow: {
-    // 🔹 base visual softness
-    blur: { mobile: 0.2, tablet: .06, desktop: 1 },
-
+    
     // 🔹 opacity of base shadow color
     opacity: { mobile: 0.6, tablet: 0.6, desktop: 0.6 },
+
+    // 🔹 base visual softness
+    blur: { mobile: 0.2, tablet: 0.6, desktop: 1 },
 
     // 🔹 how much blur grows per unit of depth distance
     growth: { mobile: 0.7, tablet: 0.85, desktop: 1 },
@@ -25,6 +26,6 @@ export const GLOBAL_PARAMS = {
     offsetScale: { mobile: 0.6, tablet: 0.8, desktop: 1 },
 
     // 🔹 how quickly opacity falls off with depth
-    falloff: { mobile: 1, tablet: 1, desktop: 1 },
+    falloff: { mobile: 5, tablet: 5, desktop: 5 },
   },
 };

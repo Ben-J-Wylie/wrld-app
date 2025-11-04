@@ -3,11 +3,11 @@ import { useParallaxScene } from "./ParallaxScene";
 import { useParallaxLight } from "./ParallaxLight";
 import { useResponsiveContext } from "../Responsive/ResponsiveContext";
 
-// Extend to allow native HTML div attributes like onMouseEnter, onClick, etc.
 type Props = {
   depth?: number;
   strength?: number;
   scaleFactor?: number;
+  fixed?: boolean; // stays on screen, but still reacts to depth + light
   style?: React.CSSProperties;
   children: React.ReactNode;
 } & React.HTMLAttributes<HTMLDivElement>;
@@ -16,9 +16,10 @@ const ParallaxItem: React.FC<Props> = ({
   depth = 0,
   strength = 30,
   scaleFactor = 0.005,
+  fixed = false,
   style,
   children,
-  ...rest // capture DOM handlers (hover, click, etc.)
+  ...rest
 }) => {
   const outerRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
@@ -34,18 +35,19 @@ const ParallaxItem: React.FC<Props> = ({
   } = useResponsiveContext();
 
   useEffect(() => {
-    const outer = outerRef.current;
     const inner = innerRef.current;
-    if (!outer || !inner) return;
+    if (!inner) return;
 
-    // --- Parallax movement ---
-    const rect = outer.getBoundingClientRect();
+    // --- Compute center of element relative to viewport ---
+    const rect = inner.getBoundingClientRect();
     const cx = vw / 2;
     const cy = vh / 2;
     const ex = rect.left + rect.width / 2;
     const ey = rect.top + rect.height / 2;
     const normX = (ex - cx) / cx;
     const normY = (ey - cy) / cy;
+
+    // --- Transform physics ---
     const tx = normX * depth * strength;
     const ty = normY * depth * strength;
     const scale = 1 + depth * scaleFactor;
@@ -61,7 +63,6 @@ const ParallaxItem: React.FC<Props> = ({
         shadowOpacity - absDepth * shadowFalloff * 0.05
       );
 
-      // Reverse direction depending on depth sign (for layering illusion)
       const dir = depth > 0 ? -1 : 1;
       const sx = dir * lx * offset * intensity;
       const sy = dir * ly * offset * intensity;
@@ -76,7 +77,12 @@ const ParallaxItem: React.FC<Props> = ({
       )}px ${shadowColor}`;
     }
 
-    inner.style.transform = `translate3d(${tx}px, ${ty}px, 0) scale(${scale})`;
+    // --- Apply transforms ---
+    // ✅ Fixed: respond visually but do NOT move with scroll
+    // ✅ Non-fixed: also move with scroll depth displacement
+    inner.style.transform = `translate3d(${fixed ? 0 : tx}px, ${
+      fixed ? 0 : ty
+    }px, 0) scale(${scale})`;
     inner.style.filter = shadow === "none" ? "none" : `drop-shadow(${shadow})`;
   }, [
     scrollY,
@@ -85,6 +91,7 @@ const ParallaxItem: React.FC<Props> = ({
     depth,
     strength,
     scaleFactor,
+    fixed,
     lx,
     ly,
     intensity,
@@ -96,25 +103,56 @@ const ParallaxItem: React.FC<Props> = ({
     shadowFalloff,
   ]);
 
-  // ✅ Automatically center if both top/left are defined
+  // --- Common inner container ---
+  const innerStyle: React.CSSProperties = {
+    transformOrigin: "center center",
+    willChange: "transform, filter",
+    pointerEvents: "auto",
+  };
+
+  // --- Centering logic (for scroll-based items only) ---
   const centeredStyle =
     style?.top !== undefined && style?.left !== undefined
       ? { transform: "translate(-50%, -50%)", ...style }
       : style;
 
+  // --- Render ---
+  if (fixed) {
+    // ✅ Fixed: stays in viewport, full physics still applied
+    return (
+      <div
+        ref={innerRef}
+        {...rest}
+        style={{
+          position: "fixed",
+          top: style?.top ?? "auto",
+          left: style?.left ?? "auto",
+          right: style?.right ?? "auto",
+          bottom: style?.bottom ?? "auto",
+          zIndex: style?.zIndex ?? 10,
+          ...innerStyle,
+          ...style,
+        }}
+        data-depth={depth}
+        data-fixed
+      >
+        {children}
+      </div>
+    );
+  }
+
+  // ✅ Normal parallax-scrolling item
   return (
     <div
       ref={outerRef}
-      style={{ position: "relative", ...centeredStyle }}
-      {...rest} // ✅ forward event handlers, classes, etc.
+      style={{
+        position: "relative",
+        ...centeredStyle,
+      }}
+      {...rest}
+      data-depth={depth}
     >
-      <div
-        ref={innerRef}
-        style={{
-          transformOrigin: "center center",
-          willChange: "transform, filter",
-        }}
-      >
+      <div ref={innerRef} style={innerStyle}>
         {children}
       </div>
     </div>
