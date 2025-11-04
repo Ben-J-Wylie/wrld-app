@@ -54,10 +54,10 @@ export default function Header({ depth = 0 }: HeaderProps) {
           <Avatar
             layout="inline"
             size={avatarSize}
-            iconDepth={0.1}
+            iconDepth={0}
             textDepth={0}
+            username="Dr. kalcranstihillmanston"
             avatarUrl="https://api.dicebear.com/8.x/adventurer/svg?seed=ben"
-            username="Ben"
           />
         </div>
       </header>

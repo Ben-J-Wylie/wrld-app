@@ -33,7 +33,7 @@ export default function Avatar({
 
   const isInline = layout === "inline";
 
-  const iconToTextRatio = isInline ? 0.3 : 0.25;
+  const iconToTextRatio = isInline ? 0.25 : 0.25;
   const responsiveSize = size * scale;
   const iconDepthAdjusted = hovered
     ? iconDepth + hoverDepthShift
@@ -48,26 +48,26 @@ export default function Avatar({
 
   return (
     <div
-      className={`avatar-wrapper ${layout}`}
+      className={`avatar ${layout}`}
       style={{
-        display: "flex",
         flexDirection: isInline ? "row" : "column",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: isInline ? "0.5em" : "1em",
-        cursor: "pointer",
+        justifyContent: isInline ? "flex-start" : "center",
+        gap: isInline ? ".1em" : "0.5em",
+
         ...style,
       }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      {/* 🔸 Text label */}
+      {/* 👈 Text first */}
       {showText && (username || email) && (
         <ParallaxItem depth={textDepthAdjusted}>
           <div
             className="avatar-text"
             style={{
               fontSize: `${textSize}px`,
+              textAlign: "right",
+              whiteSpace: "nowrap",
             }}
           >
             {username || email}
@@ -75,35 +75,24 @@ export default function Avatar({
         </ParallaxItem>
       )}
 
-      {/* 🔹 Icon */}
+      {/* 👉 Avatar second */}
       <ParallaxItem depth={iconDepthAdjusted}>
         <div
-          className={`avatar ${device}`}
+          className={`avatar-icon ${device}`}
           style={{
             width: `${responsiveSize}px`,
             height: `${responsiveSize}px`,
-            borderRadius: "50%",
-            overflow: "hidden",
-            backgroundColor: "#222",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
           }}
         >
           {avatarUrl ? (
             <img
               src={avatarUrl}
               alt={username || email || "User Avatar"}
-              style={{
-                width: "100%",
-                height: "100%",
-                objectFit: "cover",
-              }}
+              style={{}}
             />
           ) : (
             <span
               style={{
-                color: "#fff",
                 fontSize: `${textSize}px`,
               }}
             >
