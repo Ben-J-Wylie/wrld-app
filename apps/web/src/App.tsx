@@ -1,5 +1,5 @@
 import React from "react";
-import LockToggle from "./components/elements/LockToggle/LockToggle";
+import ToggleSlider from "./components/elements/ToggleSlider/ToggleSlider";
 import "./components/_main/main.css";
 
 export default function App() {
@@ -14,7 +14,7 @@ export default function App() {
         background: "var(--color-background, #222)",
       }}
     >
-      <LockToggle />
+      <ToggleSlider />
     </div>
   );
 }
