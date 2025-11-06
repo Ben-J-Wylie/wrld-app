@@ -15,26 +15,68 @@
   transition:
     transform 0.4s ease,
     opacity 0.4s ease;
+
+  /* Scrollbar overlay + fade-out */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+  scrollbar-gutter: stable both-edges;
+  position: relative;
 }
 
-/* ===== Scrollbar Styling ===== */
+/* ===== Scrollbar Styling (overlay + fade-out) ===== */
 .menu-container::-webkit-scrollbar {
   width: 8px;
-}
-.menu-container::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 8px;
-}
-.menu-container::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.4);
+  position: absolute;
+  z-index: 2;
+  transition: opacity 0.4s ease;
+  opacity: 0; /* hidden by default */
 }
 
-/* 👇 Scrollbar on LEFT when menu is on the LEFT */
+.menu-container:hover::-webkit-scrollbar {
+  opacity: 1; /* fade in on hover */
+}
+
+.menu-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.menu-container::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 8px;
+  background-clip: padding-box;
+  transition: background 0.2s ease;
+}
+
+.menu-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.5);
+}
+
+/* 👇 Scrollbar position logic */
 .menu-container.menu-left {
   direction: rtl;
+  padding-left: 0;
+  border-top-left-radius: 0 !important;
+  border-bottom-left-radius: 0 !important;
 }
+
 .menu-container.menu-left > * {
   direction: ltr;
+}
+
+.menu-container.menu-right {
+  direction: ltr;
+  padding-right: 0;
+  border-top-right-radius: 0 !important;
+  border-bottom-right-radius: 0 !important;
+}
+
+/* Scrollbar overlay position for left/right */
+.menu-container.menu-left::-webkit-scrollbar {
+  left: 0;
+}
+
+.menu-container.menu-right::-webkit-scrollbar {
+  right: 0;
 }
 
 /* ===== Direction-aware animations ===== */
@@ -74,22 +116,22 @@
   opacity: 0;
 }
 
-/* ===== Text alignment per orientation (override flex centering) ===== */
+/* ===== Text alignment per orientation ===== */
 .menu-container.menu-right .menu-entry {
-  justify-content: flex-start;  /* <-- was centered in .menu-entry */
+  justify-content: flex-start;
   text-align: left;
-  align-items: center;          /* keep vertical centering */
+  align-items: center;
 }
 
 .menu-container.menu-left .menu-entry {
-  justify-content: flex-end;    /* <-- push text inward toward the edge */
+  justify-content: flex-end;
   text-align: right;
   align-items: center;
 }
 
 .menu-container.menu-top .menu-entry,
 .menu-container.menu-bottom .menu-entry {
-  justify-content: center;      /* centered for top/bottom */
+  justify-content: center;
   text-align: center;
   align-items: center;
 }

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import ParallaxItem from "../../containers/Parallax/ParallaxItem";
 import { useResponsiveContext } from "../../containers/Responsive/ResponsiveContext";
 import "./MenuContainer.css";
@@ -28,18 +28,49 @@ export default function MenuContainer({
 }: MenuProps) {
   const { scale, width, height } = useResponsiveContext();
   const [visible, setVisible] = useState(isOpen);
+  const containerRef = useRef<HTMLDivElement | null>(null);
 
-  // ensure visibility persists long enough for animation
+  // 1) Ensure the node exists when opening (breaks the chicken-and-egg)
   useEffect(() => {
     if (isOpen) setVisible(true);
-    else {
-      const timer = setTimeout(() => setVisible(false), 400); // match CSS duration
-      return () => clearTimeout(timer);
-    }
   }, [isOpen]);
+
+  // 2) Toggle classes and handle transition end on the mounted node
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    // start transition on next frame so styles are applied
+    if (isOpen) {
+      requestAnimationFrame(() => {
+        el.classList.add("open");
+        el.classList.remove("closed");
+      });
+    } else {
+      el.classList.add("closed");
+      el.classList.remove("open");
+    }
+
+    const handleEnd = (e: TransitionEvent) => {
+      // Only react to transform/opacity (the ones we transition)
+      if (e.target !== el) return;
+      if (e.propertyName !== "opacity" && e.propertyName !== "transform")
+        return;
+
+      if (!isOpen) {
+        setVisible(false); // hide only after close animation actually finishes
+      }
+      // Let the parallax system re-measure at the exact end of the transition
+      window.dispatchEvent(new Event("menuReflow"));
+    };
+
+    el.addEventListener("transitionend", handleEnd);
+    return () => el.removeEventListener("transitionend", handleEnd);
+  }, [isOpen, side, visible]);
 
   if (!width || !height) return null;
 
+  // Layout
   const baseStyle: React.CSSProperties = {
     position: "fixed",
     zIndex: 90,
@@ -51,18 +82,13 @@ export default function MenuContainer({
 
   const getViewportOffset = (axis: "X" | "Y") => {
     const dimension = axis === "X" ? width : height;
-
     if (typeof offset === "string" && offset.includes("%")) {
-      const numeric = parseFloat(offset);
-      return (numeric / 100) * dimension; // convert % of viewport dimension to px
+      return (parseFloat(offset) / 100) * dimension;
     }
-
-    // Fallback if offset is numeric (already pixels)
     return Number(offset) || 0;
   };
 
   let layoutStyle: React.CSSProperties = {};
-
   switch (side) {
     case "menu-left":
     case "menu-right": {
@@ -78,23 +104,15 @@ export default function MenuContainer({
       };
       break;
     }
-
-    case "menu-top": {
-      layoutStyle = {
-        ...baseStyle,
-        top: startOffset ?? 0,
-        left: "50%",
-        width: span,
-        height: encroach,
-        transform: `translateX(-50%) translateX(${getViewportOffset("X")}px)`,
-      };
-      break;
-    }
-
+    case "menu-top":
     case "menu-bottom": {
+      const verticalPosition =
+        side === "menu-top"
+          ? { top: startOffset ?? 0 }
+          : { bottom: startOffset ?? 0 };
       layoutStyle = {
         ...baseStyle,
-        bottom: startOffset ?? 0,
+        ...verticalPosition,
         left: "50%",
         width: span,
         height: encroach,
@@ -108,26 +126,10 @@ export default function MenuContainer({
     visible && (
       <ParallaxItem depth={depth} fixed style={layoutStyle}>
         <div
-          ref={(el) => {
-            if (el && isOpen) {
-              requestAnimationFrame(() => {
-                el.classList.add("open");
-                el.classList.remove("closed");
-
-                // 🔹 Trigger menuReflow after transition completes
-                setTimeout(() => {
-                  window.dispatchEvent(new Event("menuReflow"));
-                }, 400); // match your CSS transition duration
-              });
-            } else if (el && !isOpen) {
-              el.classList.add("closed");
-              el.classList.remove("open");
-            }
-          }}
-          className={`menu-container ${side} ${isOpen ? "closed" : ""}`}
-          style={{
-            borderRadius: `${12 * scale}px`,
-          }}
+          ref={containerRef}
+          className={`menu-container ${side} closed`}
+          // ^ start "closed"; effect will switch to "open" on next frame if isOpen
+          style={{ borderRadius: `${12 * scale}px` }}
         >
           {children}
         </div>
