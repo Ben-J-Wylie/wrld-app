@@ -46,7 +46,6 @@ export default function MenuEntry({
       <div
         className="menu-entry"
         style={{
-          borderRadius: `${4 * scale}px`,
           padding: `${4 * scale}px ${8 * scale}px`,
           fontSize: `${12 * scale}px`,
           ...style,

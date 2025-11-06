@@ -40,5 +40,11 @@
 
 
 
+.menu-container {
+  --menu-entry-radius: 4px; /* adjust this value to control right/left rounding globally */
+}
+
+
+
 
 

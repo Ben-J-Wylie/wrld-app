@@ -12,10 +12,32 @@
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  /* transition: background 0.2s ease, color 0.2s ease, border 0.2s ease; */
+  border-radius: var(--menu-entry-radius); /* Default full rounding */
+  transition: background 0.2s ease, color 0.2s ease, border 0.2s ease;
 }
 
+/* Hover */
 .menu-entry:hover {
   border-color: rgba(255, 255, 255, 0.6);
   background: var(--color-tertiary);
+}
+
+/* ===== Orientation-aware rounding ===== */
+
+/* Left-flush menu → flatten left corners only */
+.menu-container.menu-left .menu-entry {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+/* Right-flush menu → flatten right corners only */
+.menu-container.menu-right .menu-entry {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+/* Top or bottom menus can still have full rounding unless you want similar logic */
+.menu-container.menu-top .menu-entry,
+.menu-container.menu-bottom .menu-entry {
+  border-radius: var(--menu-entry-radius);
 }
