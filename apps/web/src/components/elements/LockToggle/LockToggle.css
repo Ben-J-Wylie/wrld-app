@@ -1,0 +1,89 @@
+.lock-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  position: relative;
+}
+
+/* Keep lock position fixed relative to toggle width */
+.lock-icon {
+  width: 48px;
+  height: 48px;
+  background: var(--color-tertiary);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border: 1px solid var(--color-primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  transition: all 0.3s ease;
+}
+.lock-icon img {
+  width: 24px;
+  height: 24px;
+  opacity: 0.8;
+}
+.lock-icon:hover img {
+  opacity: 1;
+}
+.lock-icon.left {
+  order: 0;
+}
+.lock-icon.right {
+  order: 2;
+}
+
+/* Slider styling (same as before) */
+.toggle-slider {
+  width: 160px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  order: 1;
+}
+
+.slider-trough {
+  flex: 1;
+  height: 100%;
+  border-radius: 8px;
+  border: 1px solid var(--color-primary);
+  background: var(--color-tertiary);
+  display: flex;
+  align-items: center;
+  position: relative;
+  transition: border-color 0.3s ease;
+}
+
+.toggle-slider.on .slider-trough {
+  border-color: var(--color-accent);
+}
+
+.slider-thumb {
+  position: absolute;
+  height: calc(100% - 6px);
+  width: calc(50% - 6px);
+  margin: 3px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-primary);
+  background: var(--color-secondary);
+  transition: all 0.3s ease;
+}
+
+.toggle-slider.on .slider-thumb {
+  background: var(--color-accent);
+  transform: translateX(100%);
+}
+
+.slider-text {
+  color: white;
+  font-weight: bold;
+  font-size: 0.9rem;
+  pointer-events: none;
+}

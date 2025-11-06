@@ -77,7 +77,7 @@ export default function Header({ depth = 0 }: HeaderProps) {
       {/* Top Menu */}
       <MenuContainer
         isOpen={menuTopOpen}
-        side="menu-right"
+        side="menu-top"
         depth={0}
         span="20%"
         encroach="50%"
