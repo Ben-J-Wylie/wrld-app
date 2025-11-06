@@ -1,0 +1,95 @@
+.menu-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start; /* top-align entries */
+  align-items: stretch;
+  gap: 8px;
+  padding: 10px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scroll-behavior: smooth;
+  opacity: 0;
+  transform: translate(0, 0);
+  transition:
+    transform 0.4s ease,
+    opacity 0.4s ease;
+}
+
+/* ===== Scrollbar Styling ===== */
+.menu-container::-webkit-scrollbar {
+  width: 8px;
+}
+.menu-container::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+}
+.menu-container::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+/* 👇 Scrollbar on LEFT when menu is on the LEFT */
+.menu-container.menu-left {
+  direction: rtl;
+}
+.menu-container.menu-left > * {
+  direction: ltr;
+}
+
+/* ===== Direction-aware animations ===== */
+.menu-container.menu-left.open {
+  transform: translateX(0);
+  opacity: 1;
+}
+.menu-container.menu-left.closed {
+  transform: translateX(-110%);
+  opacity: 0;
+}
+
+.menu-container.menu-right.open {
+  transform: translateX(0);
+  opacity: 1;
+}
+.menu-container.menu-right.closed {
+  transform: translateX(110%);
+  opacity: 0;
+}
+
+.menu-container.menu-top.open {
+  transform: translateY(0);
+  opacity: 1;
+}
+.menu-container.menu-top.closed {
+  transform: translateY(-110%);
+  opacity: 0;
+}
+
+.menu-container.menu-bottom.open {
+  transform: translateY(0);
+  opacity: 1;
+}
+.menu-container.menu-bottom.closed {
+  transform: translateY(110%);
+  opacity: 0;
+}
+
+/* ===== Text alignment per orientation (override flex centering) ===== */
+.menu-container.menu-right .menu-entry {
+  justify-content: flex-start;  /* <-- was centered in .menu-entry */
+  text-align: left;
+  align-items: center;          /* keep vertical centering */
+}
+
+.menu-container.menu-left .menu-entry {
+  justify-content: flex-end;    /* <-- push text inward toward the edge */
+  text-align: right;
+  align-items: center;
+}
+
+.menu-container.menu-top .menu-entry,
+.menu-container.menu-bottom .menu-entry {
+  justify-content: center;      /* centered for top/bottom */
+  text-align: center;
+  align-items: center;
+}

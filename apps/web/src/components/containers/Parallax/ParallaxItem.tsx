@@ -50,7 +50,7 @@ const ParallaxItem: React.FC<Props> = ({
     // --- Transform physics ---
     const tx = normX * depth * strength;
     const ty = normY * depth * strength;
-    const scale = 1 + depth * scaleFactor;
+    const visualScale = fixed ? 1 : 1 + depth * scaleFactor;
 
     // --- Shadow physics ---
     let shadow = "none";
@@ -78,11 +78,12 @@ const ParallaxItem: React.FC<Props> = ({
     }
 
     // --- Apply transforms ---
-    // ✅ Fixed: respond visually but do NOT move with scroll
-    // ✅ Non-fixed: also move with scroll depth displacement
-    inner.style.transform = `translate3d(${fixed ? 0 : tx}px, ${
-      fixed ? 0 : ty
-    }px, 0) scale(${scale})`;
+    if (!fixed) {
+      // ✅ Normal parallax-scrolling items
+      inner.style.transform = `translate3d(${tx}px, ${ty}px, 0) scale(${visualScale})`;
+    }
+
+    // --- Apply shadow even for fixed elements ---
     inner.style.filter = shadow === "none" ? "none" : `drop-shadow(${shadow})`;
   }, [
     scrollY,

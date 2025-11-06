@@ -14,6 +14,7 @@ interface AvatarProps {
   hoverDepthShift?: number;
   showText?: boolean;
   style?: React.CSSProperties;
+  onClick?: () => void;
 }
 
 export default function Avatar({
@@ -27,6 +28,7 @@ export default function Avatar({
   hoverDepthShift = 0.1,
   showText = true,
   style = {},
+  onClick,
 }: AvatarProps) {
   const { scale, parallaxStrength, device } = useResponsiveContext();
   const [hovered, setHovered] = useState(false);
@@ -49,10 +51,11 @@ export default function Avatar({
   return (
     <div
       className={`avatar ${layout}`}
+      onClick={onClick}
       style={{
         flexDirection: isInline ? "row" : "column",
         justifyContent: isInline ? "flex-start" : "center",
-        gap: isInline ? ".1em" : "0.5em",
+        gap: isInline ? "0.5em" : "0.5em",
 
         ...style,
       }}

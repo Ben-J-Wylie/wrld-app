@@ -6,8 +6,8 @@ import { ParallaxScene } from "./components/containers/Parallax/ParallaxScene";
 import { ParallaxLight } from "./components/containers/Parallax/ParallaxLight";
 import WrldLogo from "./components/elements/Logo/Logo";
 import DebugOverlay from "./components/containers/DebugOverlay";
-import "./components/_main/main.css";
 import Header from "./components/sections/Header/Header";
+import "./components/_main/main.css";
 
 export default function App() {
   const showDebug = false;
@@ -16,7 +16,10 @@ export default function App() {
     <ResponsiveProvider>
       <ParallaxLight>
         <ParallaxScene>
-          <Header /> {/* 👈 new header */}
+          {/* 🔹 Fixed Header with depth-aware lighting */}
+          <Header depth={0.2} />
+
+          {/* 🔹 Scrollable space below */}
           <div
             style={{
               height: "200vh",
@@ -24,17 +27,22 @@ export default function App() {
               position: "relative",
             }}
           >
-            {/* Inline logo test */}
+            {/* Centered WrldLogo to show parallax movement */}
             <div
               style={{
                 position: "absolute",
-                top: "40%",
+                top: "50%",
                 left: "50%",
                 transform: "translate(-50%, -50%)",
               }}
             >
               <DebugOverlay show={showDebug}>
-                <WrldLogo layout="inline" iconDepth={0} textDepth={1} />
+                <WrldLogo
+                  layout="inline"
+                  size={150}
+                  iconDepth={0}
+                  textDepth={0}
+                />
               </DebugOverlay>
             </div>
           </div>

@@ -53,6 +53,8 @@
 
 @import "../elements/Avatar/Avatar.css";
 @import "../elements/Logo/Logo.css";
+@import "../elements/Menu/MenuContainer.css";
+@import "../elements/Menu/MenuEntry.css";
 
 
 /* Features */

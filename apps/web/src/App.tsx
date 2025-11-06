@@ -14,7 +14,7 @@ export default function App() {
     <ResponsiveProvider>
       <ParallaxLight>
         <ParallaxScene>
-          {/* 🔹 Fixed Header with depth-aware lighting */}
+          {/* 🔹 Fixed Header — includes clickable Avatar that opens a top menu */}
           <Header depth={0.2} />
 
           {/* 🔹 Scrollable space below */}

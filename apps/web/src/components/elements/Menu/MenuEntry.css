@@ -1,0 +1,21 @@
+.menu-entry {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: 100%;
+  color: aliceblue;
+  background: var(--color-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  cursor: pointer;
+  user-select: none;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  /* transition: background 0.2s ease, color 0.2s ease, border 0.2s ease; */
+}
+
+.menu-entry:hover {
+  border-color: rgba(255, 255, 255, 0.6);
+  background: var(--color-tertiary);
+}
