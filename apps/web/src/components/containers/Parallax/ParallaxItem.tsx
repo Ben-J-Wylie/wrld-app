@@ -1,4 +1,345 @@
-import React, { useEffect, useRef } from "react";
+// import React, { useEffect, useRef } from "react";
+// import { useParallaxScene } from "./ParallaxScene";
+// import { useParallaxLight } from "./ParallaxLight";
+// import { useResponsiveContext } from "../Responsive/ResponsiveContext";
+
+// type Props = {
+//   depth?: number;
+//   strength?: number;
+//   scaleFactor?: number;
+//   fixed?: boolean; // stays on screen, but still reacts to depth + light
+//   style?: React.CSSProperties;
+//   children: React.ReactNode;
+// } & React.HTMLAttributes<HTMLDivElement>;
+
+// const ParallaxItem: React.FC<Props> = ({
+//   depth = 0,
+//   strength = 30,
+//   scaleFactor = 0.005,
+//   fixed = false,
+//   style,
+//   children,
+//   ...rest
+// }) => {
+//   const outerRef = useRef<HTMLDivElement>(null);
+//   const innerRef = useRef<HTMLDivElement>(null);
+
+//   const { scrollY, vw, vh } = useParallaxScene();
+//   const { x: lx, y: ly, intensity, color } = useParallaxLight();
+//   const {
+//     shadowBlur,
+//     shadowOpacity,
+//     shadowGrowth,
+//     shadowOffsetScale,
+//     shadowFalloff,
+//   } = useResponsiveContext();
+
+//   useEffect(() => {
+//     const inner = innerRef.current;
+//     if (!inner) return;
+
+//     // --- Compute center of element relative to viewport ---
+//     const rect = inner.getBoundingClientRect();
+//     const cx = vw / 2;
+//     const cy = vh / 2;
+//     const ex = rect.left + rect.width / 2;
+//     const ey = rect.top + rect.height / 2;
+//     const normX = (ex - cx) / cx;
+//     const normY = (ey - cy) / cy;
+
+//     // --- Transform physics ---
+//     const tx = normX * depth * strength;
+//     const ty = normY * depth * strength;
+//     const visualScale = fixed ? 1 : 1 + depth * scaleFactor;
+
+//     // --- Shadow physics ---
+//     let shadow = "none";
+//     if (depth !== 0) {
+//       const absDepth = Math.abs(depth);
+//       const offset = absDepth * shadowOffsetScale * 30;
+//       const blur = shadowBlur + absDepth * shadowGrowth * 1.4;
+//       const baseOpacity = Math.max(
+//         0,
+//         shadowOpacity - absDepth * shadowFalloff * 0.05
+//       );
+
+//       const dir = depth > 0 ? -1 : 1;
+//       const sx = dir * lx * offset * intensity;
+//       const sy = dir * ly * offset * intensity;
+
+//       const shadowColor = color.replace(/rgba?\(([^)]+)\)/, (_, inner) => {
+//         const rgb = inner.split(",").slice(0, 3).join(",");
+//         return `rgba(${rgb}, ${baseOpacity.toFixed(2)})`;
+//       });
+
+//       shadow = `${sx.toFixed(2)}px ${sy.toFixed(2)}px ${blur.toFixed(
+//         2
+//       )}px ${shadowColor}`;
+//     }
+
+//     // --- Apply transforms ---
+//     if (!fixed) {
+//       // ✅ Normal parallax-scrolling items
+//       inner.style.transform = `translate3d(${tx}px, ${ty}px, 0) scale(${visualScale})`;
+//     }
+
+//     // --- Apply shadow even for fixed elements ---
+//     inner.style.filter = shadow === "none" ? "none" : `drop-shadow(${shadow})`;
+//   }, [
+//     scrollY,
+//     vw,
+//     vh,
+//     depth,
+//     strength,
+//     scaleFactor,
+//     fixed,
+//     lx,
+//     ly,
+//     intensity,
+//     color,
+//     shadowBlur,
+//     shadowOpacity,
+//     shadowGrowth,
+//     shadowOffsetScale,
+//     shadowFalloff,
+//   ]);
+
+//   // --- Common inner container ---
+//   const innerStyle: React.CSSProperties = {
+//     transformOrigin: "center center",
+//     willChange: "transform, filter",
+//     pointerEvents: "auto",
+//   };
+
+//   // --- Centering logic (for scroll-based items only) ---
+//   const centeredStyle =
+//     style?.top !== undefined && style?.left !== undefined
+//       ? { transform: "translate(-50%, -50%)", ...style }
+//       : style;
+
+//   // --- Render ---
+//   if (fixed) {
+//     // ✅ Fixed: stays in viewport, full physics still applied
+//     return (
+//       <div
+//         ref={innerRef}
+//         {...rest}
+//         style={{
+//           position: "fixed",
+//           top: style?.top ?? "auto",
+//           left: style?.left ?? "auto",
+//           right: style?.right ?? "auto",
+//           bottom: style?.bottom ?? "auto",
+//           zIndex: style?.zIndex ?? 10,
+//           ...innerStyle,
+//           ...style,
+//         }}
+//         data-depth={depth}
+//         data-fixed
+//       >
+//         {children}
+//       </div>
+//     );
+//   }
+
+//   // ✅ Normal parallax-scrolling item
+//   return (
+//     <div
+//       ref={outerRef}
+//       style={{
+//         position: "relative",
+//         ...centeredStyle,
+//       }}
+//       {...rest}
+//       data-depth={depth}
+//     >
+//       <div ref={innerRef} style={innerStyle}>
+//         {children}
+//       </div>
+//     </div>
+//   );
+// };
+
+// export default ParallaxItem;
+
+// FIX TO MENU ENTRY REPOSITIIONING.
+
+// import React, { useEffect, useRef, useCallback } from "react";
+// import { useParallaxScene } from "./ParallaxScene";
+// import { useParallaxLight } from "./ParallaxLight";
+// import { useResponsiveContext } from "../Responsive/ResponsiveContext";
+
+// type Props = {
+//   depth?: number;
+//   strength?: number;
+//   scaleFactor?: number;
+//   fixed?: boolean; // stays on screen, but still reacts to depth + light
+//   style?: React.CSSProperties;
+//   children: React.ReactNode;
+// } & React.HTMLAttributes<HTMLDivElement>;
+
+// const ParallaxItem: React.FC<Props> = ({
+//   depth = 0,
+//   strength = 30,
+//   scaleFactor = 0.005,
+//   fixed = false,
+//   style,
+//   children,
+//   ...rest
+// }) => {
+//   const outerRef = useRef<HTMLDivElement>(null);
+//   const innerRef = useRef<HTMLDivElement>(null);
+
+//   const { scrollY, vw, vh } = useParallaxScene();
+//   const { x: lx, y: ly, intensity, color } = useParallaxLight();
+//   const {
+//     shadowBlur,
+//     shadowOpacity,
+//     shadowGrowth,
+//     shadowOffsetScale,
+//     shadowFalloff,
+//   } = useResponsiveContext();
+
+//   // --- Main computation logic as reusable callback ---
+//   const computeTransform = useCallback(() => {
+//     const inner = innerRef.current;
+//     if (!inner) return;
+
+//     // --- Compute center of element relative to viewport ---
+//     const rect = inner.getBoundingClientRect();
+//     const cx = vw / 2;
+//     const cy = vh / 2;
+//     const ex = rect.left + rect.width / 2;
+//     const ey = rect.top + rect.height / 2;
+//     const normX = (ex - cx) / cx;
+//     const normY = (ey - cy) / cy;
+
+//     // --- Transform physics ---
+//     const tx = normX * depth * strength;
+//     const ty = normY * depth * strength;
+//     const visualScale = fixed ? 1 : 1 + depth * scaleFactor;
+
+//     // --- Shadow physics ---
+//     let shadow = "none";
+//     if (depth !== 0) {
+//       const absDepth = Math.abs(depth);
+//       const offset = absDepth * shadowOffsetScale * 30;
+//       const blur = shadowBlur + absDepth * shadowGrowth * 1.4;
+//       const baseOpacity = Math.max(
+//         0,
+//         shadowOpacity - absDepth * shadowFalloff * 0.05
+//       );
+
+//       const dir = depth > 0 ? -1 : 1;
+//       const sx = dir * lx * offset * intensity;
+//       const sy = dir * ly * offset * intensity;
+
+//       const shadowColor = color.replace(/rgba?\(([^)]+)\)/, (_, inner) => {
+//         const rgb = inner.split(",").slice(0, 3).join(",");
+//         return `rgba(${rgb}, ${baseOpacity.toFixed(2)})`;
+//       });
+
+//       shadow = `${sx.toFixed(2)}px ${sy.toFixed(2)}px ${blur.toFixed(
+//         2
+//       )}px ${shadowColor}`;
+//     }
+
+//     // --- Apply transforms ---
+//     if (!fixed) {
+//       inner.style.transform = `translate3d(${tx}px, ${ty}px, 0) scale(${visualScale})`;
+//     }
+
+//     // --- Apply shadow even for fixed elements ---
+//     inner.style.filter = shadow === "none" ? "none" : `drop-shadow(${shadow})`;
+//   }, [
+//     vw,
+//     vh,
+//     depth,
+//     strength,
+//     scaleFactor,
+//     fixed,
+//     lx,
+//     ly,
+//     intensity,
+//     color,
+//     shadowBlur,
+//     shadowOpacity,
+//     shadowGrowth,
+//     shadowOffsetScale,
+//     shadowFalloff,
+//   ]);
+
+//   // --- Normal updates (scroll, resize, light changes, etc.) ---
+//   useEffect(() => {
+//     computeTransform();
+//   }, [computeTransform, scrollY]);
+
+//   // --- Reflow recalculation after menu animation completes ---
+//   useEffect(() => {
+//     const handleReflow = () => computeTransform();
+//     window.addEventListener("menuReflow", handleReflow);
+//     return () => window.removeEventListener("menuReflow", handleReflow);
+//   }, [computeTransform]);
+
+//   // --- Common inner container ---
+//   const innerStyle: React.CSSProperties = {
+//     transformOrigin: "center center",
+//     willChange: "transform, filter",
+//     pointerEvents: "auto",
+//   };
+
+//   // --- Centering logic (for scroll-based items only) ---
+//   const centeredStyle =
+//     style?.top !== undefined && style?.left !== undefined
+//       ? { transform: "translate(-50%, -50%)", ...style }
+//       : style;
+
+//   // --- Render ---
+//   if (fixed) {
+//     return (
+//       <div
+//         ref={innerRef}
+//         {...rest}
+//         style={{
+//           position: "fixed",
+//           top: style?.top ?? "auto",
+//           left: style?.left ?? "auto",
+//           right: style?.right ?? "auto",
+//           bottom: style?.bottom ?? "auto",
+//           zIndex: style?.zIndex ?? 10,
+//           ...innerStyle,
+//           ...style,
+//         }}
+//         data-depth={depth}
+//         data-fixed
+//       >
+//         {children}
+//       </div>
+//     );
+//   }
+
+//   return (
+//     <div
+//       ref={outerRef}
+//       style={{
+//         position: "relative",
+//         ...centeredStyle,
+//       }}
+//       {...rest}
+//       data-depth={depth}
+//     >
+//       <div ref={innerRef} style={innerStyle}>
+//         {children}
+//       </div>
+//     </div>
+//   );
+// };
+
+// export default ParallaxItem;
+
+// NO SNAP AT THE END OF ANIMATION
+
+import React, { useEffect, useRef, useCallback } from "react";
 import { useParallaxScene } from "./ParallaxScene";
 import { useParallaxLight } from "./ParallaxLight";
 import { useResponsiveContext } from "../Responsive/ResponsiveContext";
@@ -34,7 +375,8 @@ const ParallaxItem: React.FC<Props> = ({
     shadowFalloff,
   } = useResponsiveContext();
 
-  useEffect(() => {
+  // --- Main computation logic as reusable callback ---
+  const computeTransform = useCallback(() => {
     const inner = innerRef.current;
     if (!inner) return;
 
@@ -79,14 +421,12 @@ const ParallaxItem: React.FC<Props> = ({
 
     // --- Apply transforms ---
     if (!fixed) {
-      // ✅ Normal parallax-scrolling items
       inner.style.transform = `translate3d(${tx}px, ${ty}px, 0) scale(${visualScale})`;
     }
 
     // --- Apply shadow even for fixed elements ---
     inner.style.filter = shadow === "none" ? "none" : `drop-shadow(${shadow})`;
   }, [
-    scrollY,
     vw,
     vh,
     depth,
@@ -104,6 +444,43 @@ const ParallaxItem: React.FC<Props> = ({
     shadowFalloff,
   ]);
 
+  // --- Continuous animation frame recalculation ---
+  useEffect(() => {
+    let frameId: number;
+    let active = true;
+
+    const loop = () => {
+      if (!active) return;
+      computeTransform();
+      frameId = requestAnimationFrame(loop);
+    };
+
+    loop();
+
+    // Optional optimization: pause when CSS transitions end
+    const el = innerRef.current;
+    const onStart = () => {
+      active = true;
+      cancelAnimationFrame(frameId);
+      loop();
+    };
+    const onEnd = () => {
+      active = false;
+      cancelAnimationFrame(frameId);
+      computeTransform(); // one final precise frame
+    };
+
+    el?.addEventListener("transitionstart", onStart);
+    el?.addEventListener("transitionend", onEnd);
+
+    return () => {
+      active = false;
+      cancelAnimationFrame(frameId);
+      el?.removeEventListener("transitionstart", onStart);
+      el?.removeEventListener("transitionend", onEnd);
+    };
+  }, [computeTransform]);
+
   // --- Common inner container ---
   const innerStyle: React.CSSProperties = {
     transformOrigin: "center center",
@@ -119,7 +496,6 @@ const ParallaxItem: React.FC<Props> = ({
 
   // --- Render ---
   if (fixed) {
-    // ✅ Fixed: stays in viewport, full physics still applied
     return (
       <div
         ref={innerRef}
@@ -142,7 +518,6 @@ const ParallaxItem: React.FC<Props> = ({
     );
   }
 
-  // ✅ Normal parallax-scrolling item
   return (
     <div
       ref={outerRef}

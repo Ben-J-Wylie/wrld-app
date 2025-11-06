@@ -151,13 +151,33 @@ export default function Header({ depth = 0 }: HeaderProps) {
         depth={0}
         span="20%"
         encroach="50%"
-        offset="40%"
+        offset="35%"
         startOffset={`${headerHeight}px`} // 👈 now works correctly
       >
         <MenuEntry label="Profile" depth={0.1} />
-        <MenuEntry label="Settings" depth={0.12} />
-        <MenuEntry label="Help" depth={0.14} />
-        <MenuEntry label="Sign Out" depth={0.16} />
+        <MenuEntry label="Settings" depth={0.1} />
+        <MenuEntry label="Help" depth={0.1} />
+        <MenuEntry label="Sign Out" depth={0.1} />
+        <MenuEntry label="Profile" depth={0.1} />
+        <MenuEntry label="Settings" depth={0.1} />
+        <MenuEntry label="Help" depth={0.1} />
+        <MenuEntry label="Sign Out" depth={0.1} />
+        <MenuEntry label="Profile" depth={0.1} />
+        <MenuEntry label="Settings" depth={0.1} />
+        <MenuEntry label="Help" depth={0.1} />
+        <MenuEntry label="Sign Out" depth={0.1} />
+        <MenuEntry label="Profile" depth={0.1} />
+        <MenuEntry label="Settings" depth={0.1} />
+        <MenuEntry label="Help" depth={0.1} />
+        <MenuEntry label="Sign Out" depth={0.1} />
+        <MenuEntry label="Profile" depth={0.1} />
+        <MenuEntry label="Settings" depth={0.1} />
+        <MenuEntry label="Help" depth={0.1} />
+        <MenuEntry label="Sign Out" depth={0.1} />
+        <MenuEntry label="Profile" depth={0.1} />
+        <MenuEntry label="Settings" depth={0.1} />
+        <MenuEntry label="Help" depth={0.1} />
+        <MenuEntry label="Sign Out" depth={0.1} />
       </MenuContainer>
     </>
   );
