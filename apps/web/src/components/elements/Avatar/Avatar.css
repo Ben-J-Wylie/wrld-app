@@ -32,7 +32,6 @@
   color: var(--color-primary);
   font-weight: 600;
   text-transform: uppercase;
-  user-select: none;
 }
 
 .avatar-text {
@@ -56,7 +55,7 @@
   background: var(--color-tertiary);
   font-size: 0.9em;
   letter-spacing: 0.5px;
-  color: "#fff",
+  color: #fff;
 }
 
 

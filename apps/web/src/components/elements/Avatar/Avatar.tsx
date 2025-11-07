@@ -91,16 +91,10 @@ export default function Avatar({
             <img
               src={avatarUrl}
               alt={username || email || "User Avatar"}
-              style={{}}
+              style={{ width: "100%", height: "100%", objectFit: "cover" }}
             />
           ) : (
-            <span
-              style={{
-                fontSize: `${textSize}px`,
-              }}
-            >
-              {initial}
-            </span>
+            <span style={{ fontSize: `${textSize}px` }}>{initial}</span>
           )}
         </div>
       </ParallaxItem>
