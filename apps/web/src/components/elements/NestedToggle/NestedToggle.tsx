@@ -1,27 +1,27 @@
 import React, { useState, useEffect } from "react";
-import "./LiveToggle.css";
+import "../../_main/main.css";
 
-type ToggleState = "on" | "off" | "cued";
+export type ToggleState = "on" | "off" | "cued";
 
-interface LiveToggleProps {
+interface NestedToggleProps {
   label?: string;
   parentState?: ToggleState;
   initialState?: ToggleState;
   onStateChange?: (state: ToggleState) => void;
 }
 
-export default function LiveToggle({
+export default function NestedToggle({
   label = "LIVE",
   parentState = "on",
   initialState = "off",
   onStateChange,
-}: LiveToggleProps) {
+}: NestedToggleProps) {
   const [position, setPosition] = useState<"on" | "off">(
     initialState === "on" ? "on" : "off"
   );
   const [displayState, setDisplayState] = useState<ToggleState>(initialState);
 
-  // determine visual state based on parent hierarchy
+  // === Determine visual state based on parent hierarchy ===
   useEffect(() => {
     if (parentState === "off" && position === "on") {
       setDisplayState("cued");

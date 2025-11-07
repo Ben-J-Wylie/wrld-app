@@ -7,13 +7,13 @@
   transition: all 0.3s ease;
 }
 
-/* === Shared trough === */
+/* === Trough === */
 .slider-trough {
   flex: 1;
   height: 100%;
   border-radius: 8px;
-  border: 1px solid var(--color-primary);
-  background: var(--color-tertiary);
+  border: 1px solid var(--color-primary, #888);
+  background: var(--color-secondary, #333);
   display: flex;
   align-items: center;
   transition: border-color 0.3s ease;
@@ -30,8 +30,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--color-primary);
-  background: var(--color-secondary);
+  border: 1px solid var(--color-primary, #888);
+  background: var(--color-tertiary, #222);
   transition: all 0.3s ease;
 }
 
@@ -40,16 +40,16 @@
   font-weight: bold;
   font-size: 0.9rem;
   pointer-events: none;
-  color: var(--color-primary);
+  color: var(--color-primary, #ccc);
   transition: color 0.3s ease;
 }
 
 /* === ON === */
 .toggle-slider.on .slider-trough {
-  border-color: var(--color-accent);
+  border-color: var(--color-accent, #ff3366);
 }
 .toggle-slider.on .slider-thumb {
-  background: var(--color-accent);
+  background: var(--color-accent, #ff3366);
   transform: translateX(100%);
 }
 .toggle-slider.on .slider-text {
@@ -59,22 +59,22 @@
 /* === OFF === */
 .toggle-slider.off .slider-thumb {
   transform: translateX(0);
-  background: var(--color-secondary);
-  border-color: var(--color-primary);
+  background: var(--color-tertiary, #222);
+  border-color: var(--color-primary, #888);
 }
 .toggle-slider.off .slider-text {
-  color: var(--color-primary);
+  color: var(--color-primary, #ccc);
 }
 
 /* === CUED === */
 .toggle-slider.cued .slider-trough {
-  border-color: var(--color-accent);
+  border-color: var(--color-accent, #ff3366);
 }
 .toggle-slider.cued .slider-thumb {
-  background: var(--color-secondary);
-  border-color: var(--color-accent);
+  background: var(--color-tertiary, #222);
+  border-color: var(--color-accent, #ff3366);
   transform: translateX(100%);
 }
 .toggle-slider.cued .slider-text {
-  color: var(--color-accent);
+  color: var(--color-accent, #ff3366);
 }
