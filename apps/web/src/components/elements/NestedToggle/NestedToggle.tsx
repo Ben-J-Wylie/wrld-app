@@ -1,61 +1,41 @@
-import React, { useState, useEffect } from "react";
+// NestedToggle.tsx
+import React from "react";
 import "../../_main/main.css";
-
-export type ToggleState = "on" | "off" | "cued";
+import { useToggleNode } from "./useToggleNode";
+import { ToggleState } from "./ToggleTypes";
 
 interface NestedToggleProps {
-  label?: string;
-  parentState?: ToggleState;
-  initialState?: ToggleState;
-  onStateChange?: (state: ToggleState) => void;
-  generation?: number; // 1 = parent, 2 = child, 3 = grandchild, etc.
-  ancestorStates?: ToggleState[]; // used for nested visual chain
+  id: string;
 }
 
-export default function NestedToggle({
-  label = "LIVE",
-  parentState = "on",
-  initialState = "off",
-  onStateChange,
-  generation = 1,
-  ancestorStates = [],
-}: NestedToggleProps) {
-  const [position, setPosition] = useState<"on" | "off">(
-    initialState === "on" ? "on" : "off"
-  );
-  const [displayState, setDisplayState] = useState<ToggleState>(initialState);
-
-  useEffect(() => {
-    if (parentState === "off" && position === "on") setDisplayState("cued");
-    else if (parentState === "cued" && position === "on")
-      setDisplayState("cued");
-    else setDisplayState(position);
-  }, [parentState, position]);
+export default function NestedToggle({ id }: NestedToggleProps) {
+  const { state, label, setState, ancestors } = useToggleNode(id);
 
   const handleClick = () => {
-    const newPosition = position === "off" ? "on" : "off";
-    setPosition(newPosition);
-    onStateChange?.(newPosition);
+    let newState: ToggleState;
+
+    switch (state) {
+      case "on":
+        newState = "off";
+        break;
+      case "cued":
+        newState = "off"; // or decide if you want to toggle to "on"
+        break;
+      default:
+        newState = "on";
+        break;
+    }
+
+    setState(newState);
   };
 
-  // === Text Display ===
-  const stateLabels: Record<ToggleState, string> = {
-    on: label,
-    off: `NOT ${label}`,
-    cued: "CUED",
-  };
-  const text = stateLabels[displayState];
-
-  // Combine ancestor states with current one to visualize all generations
-  const circles = [...ancestorStates, displayState].slice(-generation);
+  const text =
+    state === "on" ? label : state === "cued" ? "CUED" : `NOT ${label}`;
+  const generation = ancestors.length + 1;
 
   return (
-    <div className="toggle-wrapper">
-      <div
-        className={`toggle-slider ${displayState}`}
-        onClick={handleClick}
-        title={`${label}: ${displayState.toUpperCase()}`}
-      >
+    <div className="toggle-wrapper" onClick={handleClick}>
+      <div className={`toggle-slider ${state}`}>
         <div className="toggle-trough">
           <div className="toggle-thumb">
             <span className="toggle-text">{text}</span>
@@ -63,13 +43,12 @@ export default function NestedToggle({
         </div>
       </div>
 
-      {/* Circles row */}
       <div className="toggle-circles">
-        {circles.map((state, i) => (
+        {[...ancestors, state].slice(-generation).map((s, i) => (
           <div
             key={i}
-            className={`circle circle-${state} ${
-              i === circles.length - 1 ? "self" : "ancestor"
+            className={`circle circle-${s} ${
+              i === generation - 1 ? "self" : "ancestor"
             }`}
           />
         ))}

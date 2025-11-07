@@ -1,23 +1,16 @@
-import React, { useState } from "react";
-import NestedToggle, {
-  ToggleState,
-} from "./components/elements/NestedToggle/NestedToggle";
-import "./components/_main/main.css";
+// App.tsx
+import React, { useEffect } from "react";
+import NestedToggle from "./components/elements/NestedToggle/NestedToggle";
+import { toggleRegistry } from "./components/elements/NestedToggle/ToggleRegistry";
+import { toggleFamilyConfig } from "./components/elements/NestedToggle/toggleConfig";
 
 export default function App() {
-  const [globalState, setGlobalState] = useState<ToggleState>("on");
-  const [child1State, setChild1State] = useState<ToggleState>("off");
-  const [child2State, setChild2State] = useState<ToggleState>("on");
-  const [grandChildState, setGrandChildState] = useState<ToggleState>("off");
-
-  const effectiveChild1 =
-    globalState === "off" && child1State === "on" ? "cued" : child1State;
-  const effectiveChild2 =
-    globalState === "off" && child2State === "on" ? "cued" : child2State;
-  const effectiveGrandChild =
-    (globalState === "off" || child2State === "off") && grandChildState === "on"
-      ? "cued"
-      : grandChildState;
+  useEffect(() => {
+    // initialize the registry
+    Object.values(toggleFamilyConfig).forEach((node) => {
+      toggleRegistry.register(node);
+    });
+  }, []);
 
   return (
     <div
@@ -32,45 +25,16 @@ export default function App() {
         fontFamily: "sans-serif",
       }}
     >
-      <h2 style={{ color: "white" }}>Nested Dependency Toggle Demo</h2>
+      <h2 style={{ color: "white" }}>Global Family Toggle Demo</h2>
 
-      <NestedToggle
-        initialState={globalState}
-        onStateChange={setGlobalState}
-        generation={1}
-      />
+      <NestedToggle id="parent" />
 
       <div style={{ display: "flex", gap: "16px" }}>
-        <NestedToggle
-          initialState={child1State}
-          parentState={globalState}
-          onStateChange={setChild1State}
-          generation={2}
-          ancestorStates={[globalState]}
-        />
-        <NestedToggle
-          initialState={child2State}
-          parentState={globalState}
-          onStateChange={setChild2State}
-          generation={2}
-          ancestorStates={[globalState]}
-        />
+        <NestedToggle id="child1" />
+        <NestedToggle id="child2" />
       </div>
 
-      <NestedToggle
-        initialState={grandChildState}
-        parentState={effectiveChild2}
-        onStateChange={setGrandChildState}
-        generation={3}
-        ancestorStates={[globalState, effectiveChild2]}
-      />
-
-      <div style={{ color: "#bbb", marginTop: "24px", fontSize: "0.85rem" }}>
-        <p>Parent: {globalState}</p>
-        <p>Child 1: {effectiveChild1}</p>
-        <p>Child 2: {effectiveChild2}</p>
-        <p>Grandchild: {effectiveGrandChild}</p>
-      </div>
+      <NestedToggle id="grandchild" />
     </div>
   );
 }
