@@ -35,7 +35,6 @@ export default function App() {
       <h2 style={{ color: "white" }}>Nested Dependency Toggle Demo</h2>
 
       <NestedToggle
-        label="PARENT"
         initialState={globalState}
         onStateChange={setGlobalState}
         generation={1}
@@ -43,7 +42,6 @@ export default function App() {
 
       <div style={{ display: "flex", gap: "16px" }}>
         <NestedToggle
-          label="CHILD 1"
           initialState={child1State}
           parentState={globalState}
           onStateChange={setChild1State}
@@ -51,7 +49,6 @@ export default function App() {
           ancestorStates={[globalState]}
         />
         <NestedToggle
-          label="CHILD 2"
           initialState={child2State}
           parentState={globalState}
           onStateChange={setChild2State}
@@ -61,7 +58,6 @@ export default function App() {
       </div>
 
       <NestedToggle
-        label="GRANDCHILD"
         initialState={grandChildState}
         parentState={effectiveChild2}
         onStateChange={setGrandChildState}

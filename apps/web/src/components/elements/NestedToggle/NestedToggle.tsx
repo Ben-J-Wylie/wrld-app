@@ -39,25 +39,21 @@ export default function NestedToggle({
   };
 
   const text =
-    displayState === "on"
-      ? label
-      : displayState === "cued"
-      ? `${label} (CUED)`
-      : `NOT ${label}`;
+    displayState === "on" ? label : displayState === "cued" ? "CUED" : "OFF";
 
   // Combine ancestor states with current one to visualize all generations
   const circles = [...ancestorStates, displayState].slice(-generation);
 
   return (
-    <div className="nested-toggle-wrapper">
+    <div className="toggle-wrapper">
       <div
         className={`toggle-slider ${displayState}`}
         onClick={handleClick}
         title={`${label}: ${displayState.toUpperCase()}`}
       >
-        <div className="slider-trough">
-          <div className="slider-thumb">
-            <span className="slider-text">{text}</span>
+        <div className="toggle-trough">
+          <div className="toggle-thumb">
+            <span className="toggle-text">{text}</span>
           </div>
         </div>
       </div>
