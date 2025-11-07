@@ -1,4 +1,4 @@
-// toggleConfig.ts
+
 import { ToggleState } from "./ToggleTypes";
 
 export const toggleFamilyConfig = {
@@ -6,7 +6,7 @@ export const toggleFamilyConfig = {
 //  FIRST GEN
     GlobalLive: {
     id: "GlobalLive",
-    // label: "PARENT",
+    label: "PARENT",
     parentId: undefined,
     state: "off" as ToggleState,
   },
@@ -15,13 +15,13 @@ export const toggleFamilyConfig = {
 
   child1: {
     id: "child1",
-    // label: "CHILD 1",
+    label: "CHILD 1",
     parentId: "GlobalLive",
     state: "off" as ToggleState,
   },
   child2: {
     id: "child2",
-    // label: "CHILD 2",
+    label: "CHILD 2",
     parentId: "GlobalLive",
     state: "off" as ToggleState,
   },
@@ -30,7 +30,7 @@ export const toggleFamilyConfig = {
 
   grandchild: {
     id: "grandchild",
-    // label: "GRANDCHILD",
+    label: "GRANDCHILD",
     parentId: "child2",
     state: "off" as ToggleState,
   },
