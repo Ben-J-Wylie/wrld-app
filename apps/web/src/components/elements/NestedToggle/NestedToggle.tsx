@@ -29,8 +29,7 @@ export default function NestedToggle({ id }: NestedToggleProps) {
     setState(newState);
   };
 
-  const text =
-    state === "on" ? label : state === "cued" ? "CUED" : `NOT ${label}`;
+  const text = state === "on" ? "LIVE" : state === "cued" ? "CUED" : "OFF";
   const generation = ancestors.length + 1;
 
   return (

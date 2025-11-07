@@ -27,7 +27,7 @@ export default function App() {
     >
       <h2 style={{ color: "white" }}>Global Family Toggle Demo</h2>
 
-      <NestedToggle id="parent" />
+      <NestedToggle id="GlobalLive" />
 
       <div style={{ display: "flex", gap: "16px" }}>
         <NestedToggle id="child1" />
