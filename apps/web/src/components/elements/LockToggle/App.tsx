@@ -1,19 +1,19 @@
 // @ts-nocheck
 
 import React from "react";
-import LockToggle from "./components/elements/LockToggle/LockToggle";
-import "./components/_main/main.css";
+import LockToggle from "./LockToggle";
+import "./LockToggle.css";
 
 export default function App() {
   return (
     <div
       style={{
-        height: "100vh",
         width: "100vw",
+        height: "100vh",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        background: "var(--color-background, #222)",
+        background: "var(--color-background, #1a1a1a)",
       }}
     >
       <LockToggle />
