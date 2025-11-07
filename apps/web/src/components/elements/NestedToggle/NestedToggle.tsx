@@ -8,6 +8,8 @@ interface NestedToggleProps {
   parentState?: ToggleState;
   initialState?: ToggleState;
   onStateChange?: (state: ToggleState) => void;
+  generation?: number; // 1 = parent, 2 = child, 3 = grandchild, etc.
+  ancestorStates?: ToggleState[]; // used for nested visual chain
 }
 
 export default function NestedToggle({
@@ -15,21 +17,19 @@ export default function NestedToggle({
   parentState = "on",
   initialState = "off",
   onStateChange,
+  generation = 1,
+  ancestorStates = [],
 }: NestedToggleProps) {
   const [position, setPosition] = useState<"on" | "off">(
     initialState === "on" ? "on" : "off"
   );
   const [displayState, setDisplayState] = useState<ToggleState>(initialState);
 
-  // === Determine visual state based on parent hierarchy ===
   useEffect(() => {
-    if (parentState === "off" && position === "on") {
+    if (parentState === "off" && position === "on") setDisplayState("cued");
+    else if (parentState === "cued" && position === "on")
       setDisplayState("cued");
-    } else if (parentState === "cued" && position === "on") {
-      setDisplayState("cued");
-    } else {
-      setDisplayState(position);
-    }
+    else setDisplayState(position);
   }, [parentState, position]);
 
   const handleClick = () => {
@@ -45,16 +45,33 @@ export default function NestedToggle({
       ? `${label} (CUED)`
       : `NOT ${label}`;
 
+  // Combine ancestor states with current one to visualize all generations
+  const circles = [...ancestorStates, displayState].slice(-generation);
+
   return (
-    <div
-      className={`toggle-slider ${displayState}`}
-      onClick={handleClick}
-      title={`${label}: ${displayState.toUpperCase()}`}
-    >
-      <div className="slider-trough">
-        <div className="slider-thumb">
-          <span className="slider-text">{text}</span>
+    <div className="nested-toggle-wrapper">
+      <div
+        className={`toggle-slider ${displayState}`}
+        onClick={handleClick}
+        title={`${label}: ${displayState.toUpperCase()}`}
+      >
+        <div className="slider-trough">
+          <div className="slider-thumb">
+            <span className="slider-text">{text}</span>
+          </div>
         </div>
+      </div>
+
+      {/* Circles row */}
+      <div className="toggle-circles">
+        {circles.map((state, i) => (
+          <div
+            key={i}
+            className={`circle circle-${state} ${
+              i === circles.length - 1 ? "self" : "ancestor"
+            }`}
+          />
+        ))}
       </div>
     </div>
   );
