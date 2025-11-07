@@ -38,8 +38,13 @@ export default function NestedToggle({
     onStateChange?.(newPosition);
   };
 
-  const text =
-    displayState === "on" ? label : displayState === "cued" ? "CUED" : "OFF";
+  // === Text Display ===
+  const stateLabels: Record<ToggleState, string> = {
+    on: label,
+    off: `NOT ${label}`,
+    cued: "CUED",
+  };
+  const text = stateLabels[displayState];
 
   // Combine ancestor states with current one to visualize all generations
   const circles = [...ancestorStates, displayState].slice(-generation);
