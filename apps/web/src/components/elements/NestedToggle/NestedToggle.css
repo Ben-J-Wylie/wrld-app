@@ -4,34 +4,76 @@
   display: flex;
   align-items: center;
   cursor: pointer;
+  position: relative;
   transition: all 0.3s ease;
 }
 
-/* === Trough === */
-.toggle-trough {
+/* === New size-owning layer for trough === */
+.trough-layer {
+  position: relative;
   flex: 1;
   height: 100%;
-  border-radius: 8px;
-  border: 1px solid var(--color-primary, #888);
-  background: var(--color-secondary, #333);
-  display: flex;
-  align-items: center;
-  justify-content: flex-start; /* start by default */
-  transition: border-color 0.3s ease, justify-content 0.3s ease;
-  padding: 3px; /* replaces thumb margin */
 }
 
-/* === Thumb === */
-.toggle-thumb {
+/* Both trough boxes occupy the exact same rectangle */
+.toggle-trough {
+  position: absolute;
+  inset: 0;
+  border-radius: 8px;
+  border: 1px solid var(--color-primary, #888);
+  box-sizing: border-box;
+  transition: border-color 0.3s ease, justify-content 0.3s ease;
+  display: flex;
+  align-items: center;
+  overflow: hidden; /* clip rounded corners identically */
+}
+
+/* Base trough provides visuals + padding + thumb layout */
+.toggle-trough.base {
+  background: var(--color-secondary, #333);
+  justify-content: flex-start;  /* OFF default */
+  padding: 3px;                 /* spacing for thumb */
+  z-index: 1;
+}
+
+/* Duplicate trough: border only, transparent fill */
+.toggle-trough.duplicate-stroke {
+  background: transparent !important;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* === New size-owning layer for thumb === */
+.thumb-layer {
+  position: relative;
   height: 100%;
-  flex: 0 0 50%;
+  flex: 0 0 50%; /* this is what slides; both thumbs inside fill it */
+}
+
+/* Both thumbs occupy the exact same rectangle */
+.toggle-thumb {
+  position: absolute;
+  inset: 0;
   border-radius: 6px;
+  border: 1px solid var(--color-primary, #888);
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--color-primary, #888);
-  background: var(--color-tertiary, #222);
   transition: all 0.3s ease;
+}
+
+/* Base thumb visuals */
+.toggle-thumb.base {
+  background: var(--color-tertiary, #222);
+  z-index: 1;
+}
+
+/* Duplicate thumb: border only, transparent fill */
+.toggle-thumb.duplicate-stroke {
+  background: transparent !important;
+  pointer-events: none;
+  z-index: 2;
 }
 
 /* === Text === */
@@ -43,33 +85,39 @@
   transition: color 0.3s ease;
 }
 
-/* === ON === */
-.toggle-slider.on .toggle-trough {
+/* === STATE: ON === */
+.toggle-slider.on .toggle-trough.base {
   justify-content: flex-end;
   border-color: var(--color-accent, #ff3366);
 }
 .toggle-slider.on .toggle-thumb {
   background: var(--color-accent, #ff3366);
+  border-color: var(--color-accent, #ff3366);
 }
 .toggle-slider.on .toggle-text {
   color: white;
 }
+.toggle-slider.on .toggle-trough.duplicate-stroke {
+  border-color: var(--color-accent, #ff3366);
+}
 
-/* === OFF === */
-.toggle-slider.off .toggle-trough {
+/* === STATE: OFF === */
+.toggle-slider.off .toggle-trough.base {
   justify-content: flex-start;
 }
 .toggle-slider.off .toggle-thumb {
-  transform: translateX(0);
   background: var(--color-tertiary, #222);
   border-color: var(--color-primary, #888);
 }
 .toggle-slider.off .toggle-text {
   color: var(--color-primary, #ccc);
 }
+.toggle-slider.off .toggle-trough.duplicate-stroke {
+  border-color: var(--color-primary, #888);
+}
 
-/* === CUED === */
-.toggle-slider.cued .toggle-trough {
+/* === STATE: CUED === */
+.toggle-slider.cued .toggle-trough.base {
   justify-content: flex-end;
   border-color: var(--color-accent, #ff3366);
 }
@@ -80,8 +128,11 @@
 .toggle-slider.cued .toggle-text {
   color: var(--color-accent, #ff3366);
 }
+.toggle-slider.cued .toggle-trough.duplicate-stroke {
+  border-color: var(--color-accent, #ff3366);
+}
 
-/* === Circles Visualization === */
+/* === Circles Visualization (unchanged) === */
 .toggle-wrapper {
   display: flex;
   flex-direction: column;
@@ -97,7 +148,6 @@
   margin-top: 4px;
 }
 
-/* Circle base style */
 .circle {
   width: 5px;
   height: 5px;
@@ -105,23 +155,7 @@
   transition: all 0.3s ease;
 }
 
-/* States */
-.circle-off {
-  border: 1px solid var(--color-primary);
-  background: transparent;
-}
-
-.circle-cued {
-  border: 1px solid var(--color-accent);
-  background: transparent;
-}
-
-.circle-on {
-  border: 1px solid var(--color-accent);
-  background: var(--color-accent);
-}
-
-/* Emphasize self slightly */
-.circle.self {
-  transform: scale(1);
-}
+.circle-off { border: 1px solid var(--color-primary); background: transparent; }
+.circle-cued { border: 1px solid var(--color-accent);  background: transparent; }
+.circle-on  { border: 1px solid var(--color-accent);  background: var(--color-accent); }
+.circle.self { transform: scale(1); }
