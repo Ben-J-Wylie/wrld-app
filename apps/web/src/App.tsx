@@ -35,7 +35,10 @@ export default function App() {
             }}
           >
             <h2 style={{ color: "white", marginBottom: "20px" }}>
-              Global Family Toggle Demo (Parallax Enabled)
+              Global Family Toggle Demo (Parallax Enabled) More work to be done
+              here with how components play with parallax item. Wrapping
+              components in parallaxitem destroys them if they don't have a set
+              size. Should we be defining size before or after they are wrapped?
             </h2>
 
             {/* 🔹 Root Toggle */}

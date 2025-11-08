@@ -1,73 +1,95 @@
 // @ts-nocheck
 
-import React, { useState } from "react";
-import NestedToggle, { ToggleState } from "./NestedToggle";
-import "./NestedToggle.css";
+// App.tsx
+import React, { useEffect } from "react";
+import NestedToggle from "./components/elements/NestedToggle/NestedToggle";
+import { toggleRegistry } from "./components/elements/NestedToggle/ToggleRegistry";
+import { toggleFamilyConfig } from "./components/elements/NestedToggle/toggleConfig";
+import { ResponsiveProvider } from "./components/containers/Responsive/ResponsiveContext";
+import { ParallaxLight } from "./components/containers/Parallax/ParallaxLight";
+import { ParallaxScene } from "./components/containers/Parallax/ParallaxScene";
 
 export default function App() {
-  const [globalState, setGlobalState] = useState<ToggleState>("on");
-  const [child1State, setChild1State] = useState<ToggleState>("off");
-  const [child2State, setChild2State] = useState<ToggleState>("on");
-  const [grandChildState, setGrandChildState] = useState<ToggleState>("off");
-
-  const effectiveChild1 =
-    globalState === "off" && child1State === "on" ? "cued" : child1State;
-  const effectiveChild2 =
-    globalState === "off" && child2State === "on" ? "cued" : child2State;
-  const effectiveGrandChild =
-    (globalState === "off" || child2State === "off") && grandChildState === "on"
-      ? "cued"
-      : grandChildState;
+  useEffect(() => {
+    // Initialize the toggle registry only once
+    Object.values(toggleFamilyConfig).forEach((node) => {
+      toggleRegistry.register(node);
+    });
+  }, []);
 
   return (
-    <div
-      style={{
-        height: "100vh",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: "20px",
-        background: "var(--color-background, #1a1a1a)",
-        fontFamily: "sans-serif",
-      }}
-    >
-      <h2 style={{ color: "white" }}>Nested Dependency Toggle Demo</h2>
+    <ResponsiveProvider>
+      <ParallaxLight>
+        <ParallaxScene>
+          <div
+            style={{
+              height: "200vh", // extra scroll space to see parallax
+              width: "100vw",
+              position: "relative",
+              background: "var(--color-background, #1a1a1a)",
+              overflowX: "hidden",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "32px",
+              fontFamily: "sans-serif",
+            }}
+          >
+            <h2 style={{ color: "white", marginBottom: "20px" }}>
+              Global Family Toggle Demo (Parallax Enabled) More work to be done
+              here with how components play with parallax item. Wrapping
+              components in parallaxitem destroys them if they don't have a set
+              size. Should we be defining size before or after they are wrapped?
+            </h2>
 
-      <NestedToggle
-        label="PARENT"
-        initialState={globalState}
-        onStateChange={setGlobalState}
-      />
+            {/* 🔹 Root Toggle */}
+            <NestedToggle
+              id="GlobalLive"
+              size={1}
+              troughDepth={0.01}
+              thumbDepth={0.04}
+              textDepth={0.08}
+              circleDepth={0.02}
+              hoverDepthShift={0.01}
+              style={{ marginBottom: "20px" }}
+            />
 
-      <div style={{ display: "flex", gap: "16px" }}>
-        <NestedToggle
-          label="CHILD 1"
-          initialState={child1State}
-          parentState={globalState}
-          onStateChange={setChild1State}
-        />
-        <NestedToggle
-          label="CHILD 2"
-          initialState={child2State}
-          parentState={globalState}
-          onStateChange={setChild2State}
-        />
-      </div>
+            {/* 🔹 Child Toggles */}
+            <div style={{ display: "flex", gap: "20px" }}>
+              <NestedToggle
+                id="child1"
+                size={1}
+                troughDepth={1}
+                thumbDepth={0.2}
+                textDepth={0.2}
+                circleDepth={0.3}
+                hoverDepthShift={0.015}
+              />
+              <NestedToggle
+                id="child2"
+                size={1}
+                troughDepth={1}
+                thumbDepth={0.05}
+                textDepth={0.09}
+                circleDepth={0.03}
+                hoverDepthShift={0.015}
+              />
+            </div>
 
-      <NestedToggle
-        label="GRANDCHILD"
-        initialState={grandChildState}
-        parentState={effectiveChild2}
-        onStateChange={setGrandChildState}
-      />
-
-      <div style={{ color: "#bbb", marginTop: "24px", fontSize: "0.85rem" }}>
-        <p>Parent: {globalState}</p>
-        <p>Child 1: {effectiveChild1}</p>
-        <p>Child 2: {effectiveChild2}</p>
-        <p>Grandchild: {effectiveGrandChild}</p>
-      </div>
-    </div>
+            {/* 🔹 Grandchild Toggle */}
+            <NestedToggle
+              id="grandchild"
+              size={0.8}
+              troughDepth={0.03}
+              thumbDepth={0.06}
+              textDepth={0.1}
+              circleDepth={0.04}
+              hoverDepthShift={0.015}
+            />
+          </div>
+        </ParallaxScene>
+      </ParallaxLight>
+    </ResponsiveProvider>
   );
 }
