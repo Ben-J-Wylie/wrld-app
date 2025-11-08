@@ -4,89 +4,44 @@
   display: flex;
   align-items: center;
   cursor: pointer;
-  position: relative;
   transition: all 0.3s ease;
 }
 
-/* === New size-owning layer for trough === */
-.trough-layer {
-  position: relative;
+.toggle-trough {
   flex: 1;
   height: 100%;
-}
-
-/* Both trough boxes occupy the exact same rectangle */
-.toggle-trough {
-  position: absolute;
-  inset: 0;
   border-radius: 8px;
   border: 1px solid var(--color-primary, #888);
-  box-sizing: border-box;
-  transition: border-color 0.3s ease, justify-content 0.3s ease;
+  background: var(--color-secondary, #333);
   display: flex;
   align-items: center;
-  overflow: hidden; /* clip rounded corners identically */
+  justify-content: flex-start;
+  transition: border-color 0.3s ease, justify-content 0.3s ease;
+  padding: 3px;
 }
 
-/* Base trough provides visuals + padding + thumb layout */
-.toggle-trough.base {
-  background: var(--color-secondary, #333);
-  justify-content: flex-start;  /* OFF default */
-  padding: 3px;                 /* spacing for thumb */
-  z-index: 1;
-}
-
-/* Duplicate trough: border only, transparent fill */
-.toggle-trough.duplicate-stroke {
-  background: transparent !important;
-  pointer-events: none;
-  z-index: 2;
-}
-
-/* === New size-owning layer for thumb === */
-.thumb-layer {
-  position: relative;
-  height: 100%;
-  flex: 0 0 50%; /* this is what slides; both thumbs inside fill it */
-}
-
-/* Both thumbs occupy the exact same rectangle */
 .toggle-thumb {
-  position: absolute;
-  inset: 0;
+  flex: 0 0 50%;
+  height: 100%;
   border-radius: 6px;
   border: 1px solid var(--color-primary, #888);
-  box-sizing: border-box;
+  background: var(--color-tertiary, #222);
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.3s ease;
 }
 
-/* Base thumb visuals */
-.toggle-thumb.base {
-  background: var(--color-tertiary, #222);
-  z-index: 1;
-}
-
-/* Duplicate thumb: border only, transparent fill */
-.toggle-thumb.duplicate-stroke {
-  background: transparent !important;
-  pointer-events: none;
-  z-index: 2;
-}
-
-/* === Text === */
 .toggle-text {
   font-weight: bold;
   font-size: 0.9rem;
-  pointer-events: none;
   color: var(--color-primary, #ccc);
+  pointer-events: none;
   transition: color 0.3s ease;
 }
 
 /* === STATE: ON === */
-.toggle-slider.on .toggle-trough.base {
+.toggle-slider.on .toggle-trough {
   justify-content: flex-end;
   border-color: var(--color-accent, #ff3366);
 }
@@ -97,27 +52,9 @@
 .toggle-slider.on .toggle-text {
   color: white;
 }
-.toggle-slider.on .toggle-trough.duplicate-stroke {
-  border-color: var(--color-accent, #ff3366);
-}
-
-/* === STATE: OFF === */
-.toggle-slider.off .toggle-trough.base {
-  justify-content: flex-start;
-}
-.toggle-slider.off .toggle-thumb {
-  background: var(--color-tertiary, #222);
-  border-color: var(--color-primary, #888);
-}
-.toggle-slider.off .toggle-text {
-  color: var(--color-primary, #ccc);
-}
-.toggle-slider.off .toggle-trough.duplicate-stroke {
-  border-color: var(--color-primary, #888);
-}
 
 /* === STATE: CUED === */
-.toggle-slider.cued .toggle-trough.base {
+.toggle-slider.cued .toggle-trough {
   justify-content: flex-end;
   border-color: var(--color-accent, #ff3366);
 }
@@ -128,11 +65,20 @@
 .toggle-slider.cued .toggle-text {
   color: var(--color-accent, #ff3366);
 }
-.toggle-slider.cued .toggle-trough.duplicate-stroke {
-  border-color: var(--color-accent, #ff3366);
+
+/* === STATE: OFF === */
+.toggle-slider.off .toggle-trough {
+  justify-content: flex-start;
+}
+.toggle-slider.off .toggle-thumb {
+  background: var(--color-tertiary, #222);
+  border-color: var(--color-primary, #888);
+}
+.toggle-slider.off .toggle-text {
+  color: var(--color-primary, #ccc);
 }
 
-/* === Circles Visualization (unchanged) === */
+/* === Circles Visualization === */
 .toggle-wrapper {
   display: flex;
   flex-direction: column;
@@ -156,6 +102,6 @@
 }
 
 .circle-off { border: 1px solid var(--color-primary); background: transparent; }
-.circle-cued { border: 1px solid var(--color-accent);  background: transparent; }
-.circle-on  { border: 1px solid var(--color-accent);  background: var(--color-accent); }
+.circle-cued { border: 1px solid var(--color-accent); background: transparent; }
+.circle-on { border: 1px solid var(--color-accent); background: var(--color-accent); }
 .circle.self { transform: scale(1); }

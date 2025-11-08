@@ -2,6 +2,7 @@ import React from "react";
 import "../../_main/main.css";
 import { useToggleNode } from "./useToggleNode";
 import { ToggleState } from "./ToggleTypes";
+import "./NestedToggle.css";
 
 interface NestedToggleProps {
   id: string;
@@ -14,8 +15,6 @@ export default function NestedToggle({ id }: NestedToggleProps) {
     let newState: ToggleState;
     switch (state) {
       case "on":
-        newState = "off";
-        break;
       case "cued":
         newState = "off";
         break;
@@ -32,25 +31,10 @@ export default function NestedToggle({ id }: NestedToggleProps) {
   return (
     <div className="toggle-wrapper" onClick={handleClick}>
       <div className={`toggle-slider ${state}`}>
-        {/* ✅ Size owner for trough; two identical troughs stacked inside */}
-        <div className="trough-layer">
-          {/* BASE trough (real background, padding, layout) */}
-          <div className="toggle-trough base">
-            {/* ✅ Size owner for thumb; two identical thumbs stacked inside */}
-            <div className="thumb-layer">
-              <div className="toggle-thumb base">
-                <span className="toggle-text">{text}</span>
-              </div>
-              {/* DUPLICATE thumb stroke (transparent fill) */}
-              <div
-                className="toggle-thumb duplicate-stroke"
-                aria-hidden="true"
-              />
-            </div>
+        <div className="toggle-trough">
+          <div className="toggle-thumb">
+            <span className="toggle-text">{text}</span>
           </div>
-
-          {/* DUPLICATE trough stroke (transparent fill) */}
-          <div className="toggle-trough duplicate-stroke" aria-hidden="true" />
         </div>
       </div>
 
