@@ -1,3 +1,4 @@
+/* === SLIDER CONTAINER === */
 .toggle-slider {
   width: 160px;
   height: 48px;
@@ -7,6 +8,7 @@
   transition: all 0.3s ease;
 }
 
+/* === TROUGH === */
 .toggle-trough {
   flex: 1;
   height: 100%;
@@ -15,13 +17,47 @@
   background: var(--color-secondary, #333);
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: flex-start; /* default OFF position */
   transition: border-color 0.3s ease, justify-content 0.3s ease;
   padding: 3px;
+  box-sizing: border-box;
+  position: relative;
 }
 
+/* === PARALLAX WRAPPER COMPATIBILITY === */
+/* Maintain correct thumb width & prevent collapse */
+.toggle-trough > [data-depth] {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 50%;         /* 💎 definitive: thumb always half of trough */
+  height: 100%;       /* full trough height */
+  box-sizing: border-box;
+}
+
+/* === THUMB === */
 .toggle-thumb {
-  flex: 0 0 50%;
+  width: 100%;
+  height: 100%;
+  min-width: 72px;     /* 👈 ensures constant thumb size visually */
+  min-height: 42px;    /* 👈 prevents collapse vertically */
+  border-radius: 6px;
+  border: 1px solid var(--color-primary, #888);
+  background: var(--color-tertiary, #222);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  box-sizing: border-box;
+  position: relative;
+  flex-shrink: 0;       /* prevents compression */
+  overflow: hidden;
+}
+
+/* === THUMB === */
+.toggle-thumb {
+  width: 100%;            /* fills the 50% parallax wrapper width */
   height: 100%;
   border-radius: 6px;
   border: 1px solid var(--color-primary, #888);
@@ -30,14 +66,20 @@
   align-items: center;
   justify-content: center;
   transition: all 0.3s ease;
+  box-sizing: border-box;
+  position: relative;
+  flex-shrink: 0;         /* 🧱 keeps thumb from shrinking with text */
+  overflow: hidden;       /* ensures text never overflows shape */
 }
 
+/* === TEXT === */
 .toggle-text {
   font-weight: bold;
   font-size: 0.9rem;
   color: var(--color-primary, #ccc);
   pointer-events: none;
   transition: color 0.3s ease;
+  white-space: nowrap;    /* prevents wrapping inside the thumb */
 }
 
 /* === STATE: ON === */
@@ -78,7 +120,7 @@
   color: var(--color-primary, #ccc);
 }
 
-/* === Circles Visualization === */
+/* === CIRCLES VISUALIZATION === */
 .toggle-wrapper {
   display: flex;
   flex-direction: column;
@@ -101,7 +143,21 @@
   transition: all 0.3s ease;
 }
 
-.circle-off { border: 1px solid var(--color-primary); background: transparent; }
-.circle-cued { border: 1px solid var(--color-accent); background: transparent; }
-.circle-on { border: 1px solid var(--color-accent); background: var(--color-accent); }
-.circle.self { transform: scale(1); }
+.circle-off {
+  border: 1px solid var(--color-primary);
+  background: transparent;
+}
+
+.circle-cued {
+  border: 1px solid var(--color-accent);
+  background: transparent;
+}
+
+.circle-on {
+  border: 1px solid var(--color-accent);
+  background: var(--color-accent);
+}
+
+.circle.self {
+  transform: scale(1);
+}
