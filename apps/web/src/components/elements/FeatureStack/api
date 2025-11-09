@@ -1,0 +1,104 @@
+import React from "react";
+import FeatureStack from "../../containers/FeatureStack/FeatureStack"; 
+// Adjust path as needed depending on your folder structure
+
+// 🧠 Optional: import SVGs, images, or React components
+import BaseSVG from "./BaseSVG.svg?react";
+import OverlaySVG from "./OverlaySVG.svg?react";
+import UIButton from "../elements/UIButton"; // example React layer
+
+/**
+ * FeatureStack Layer API
+ * --------------------------------------------------------------
+ * id:               string             // unique key for this layer
+ * Component?:        React.FC<SVGProps> // optional React SVG component or UI element
+ * src?:              string             // optional image source (png, jpg, etc.)
+ * depth?:            number             // parallax depth factor (0 = flat, >0 = farther)
+ * hoverDepthShift?:  number             // how much deeper it moves on hover
+ * width?:            number             // explicit pixel width
+ * height?:           number             // explicit pixel height
+ * offsetX?:          number             // x-offset (px) from stack center
+ * offsetY?:          number             // y-offset (px) from stack center
+ * rotation?:         number             // rotation in degrees
+ * scale?:            number             // scale multiplier
+ * opacity?:          number             // layer opacity (0–1)
+ * color?:            string             // fill or background color
+ */
+
+export default function NewFeature() {
+  return (
+    <FeatureStack
+      top="50%"     // stack's anchor point within the scene
+      left="50%"    // (keep 50/50 for centered)
+      size={400}    // base size of the entire stack container
+      layers={[
+        // === Base visual layer ===
+        {
+          id: "base",
+          Component: BaseSVG,
+          depth: 0,
+          hoverDepthShift: 0.1,
+          width: 400,
+          height: 400,
+          color: "#3333ff",
+          opacity: 1,
+          scale: 1,
+        },
+
+        // === Overlay or accent layer ===
+        {
+          id: "overlay",
+          Component: OverlaySVG,
+          depth: 0.25,
+          hoverDepthShift: 0.15,
+          width: 380,
+          height: 380,
+          offsetY: -20,
+          opacity: 0.8,
+          color: "#ff6600",
+          rotation: 10,
+        },
+
+        // === Functional UI layer (button, toggle, etc.) ===
+        {
+          id: "ui",
+          Component: UIButton,
+          depth: 0.6,
+          hoverDepthShift: 0.2,
+          width: 160,
+          height: 48,
+          offsetY: 150,
+          offsetX: 0,
+          opacity: 1,
+          scale: 1,
+        },
+      ]}
+    />
+  );
+}
+
+
+
+// FeatureStack.tsx
+
+type FeatureLayer = {
+  id: string;
+  Component?: React.FunctionComponent<React.SVGProps<SVGSVGElement>>;
+  src?: string;
+  depth?: number;
+  hoverDepthShift?: number;
+  width?: number;
+  height?: number;
+  offsetX?: number;
+  offsetY?: number;
+  rotation?: number;
+  scale?: number;
+  opacity?: number;
+  color?: string;
+  fixed?: boolean;           // 👈 new
+  zIndex?: number;           // 👈 helpful for overlays
+  top?: string;              // 👈 allow explicit positioning
+  left?: string;
+  right?: string;
+  bottom?: string;
+};
