@@ -1,20 +1,40 @@
+// In simple terms:
+// - The "stage" is your fixed 3D camera and lighting setup that displays everything.
+
+// Internal subcomponents:
+// - FitPerspectiveCamera
+// - Creates a PerspectiveCamera (the core of the parallax illusion).
+// - Updates the store whenever viewport size changes.
+// - Controlled by a few parameters:
+//      - CAMERA_FOV: affects perspective distortion (lower = flatter, higher = deeper).
+//      - near / far: render range.
+
+// CameraRig
+// - Moves the camera smoothly up and down based on scroll.
+// - Controlled by:
+//      - SCROLL_RANGE_MULT: overall parallax strength.
+//      - Lerp speed (0.1 → 0.2 faster).
+// - Uses the scroll value from the store and calculates vertical offset.
+
+// Lighting
+// - Adds an ambientLight and directionalLight for basic visibility.
+// - You could later move these into the config if you want artistic control.
+
+// Impact:
+// - This file determines how strong and how smooth the parallax feels.
+
 // src/parallax/Stage.tsx
 import { Canvas, useThree, useFrame } from "@react-three/fiber";
 import { PerspectiveCamera, PerformanceMonitor } from "@react-three/drei";
 import { PropsWithChildren, useEffect } from "react";
 import { useParallaxStore } from "./ParallaxStore";
-import { SceneDebugHelpers } from "./SceneDebugHelpers";
+import { ParallaxConfig } from "./ParallaxConfig";
 
-/**
- * FitPerspectiveCamera
- * ------------------------------------------------------------
- * Creates a Perspective camera that adjusts automatically to viewport size.
- * Perspective projection introduces real parallax — closer layers move faster.
- */
 function FitPerspectiveCamera() {
   const { size } = useThree();
   const setViewport = useParallaxStore((s) => s.setViewport);
 
+  // Update viewport on resize
   useEffect(() => {
     setViewport(size.width, size.height);
   }, [size, setViewport]);
@@ -22,40 +42,42 @@ function FitPerspectiveCamera() {
   return (
     <PerspectiveCamera
       makeDefault
-      position={[0, 0, 10]}
-      fov={50} // field of view (lower = flatter, higher = more depth)
-      near={0.1}
-      far={100}
+      position={[0, 0, ParallaxConfig.camera.positionZ]}
+      fov={ParallaxConfig.camera.fov}
+      near={ParallaxConfig.camera.near}
+      far={ParallaxConfig.camera.far}
     />
   );
 }
 
-/**
- * CameraRig
- * ------------------------------------------------------------
- * Moves the camera vertically in response to page scroll.
- * Scroll down (scrollY ↑) moves camera down along -Y axis.
- */
 function CameraRig() {
   const { camera } = useThree();
   const scrollNorm = useParallaxStore((s) => s.scroll);
   const vp = useParallaxStore((s) => s.viewport);
 
+  // Persistent smoothed Y value (starts at camera's initial position)
+  let currentY = camera.position.y;
+
   useFrame(() => {
-    // Global scroll amplitude (adjust to taste)
-    const scrollRange = vp.h * 0.15;
+    // Scroll range scales with viewport height
+    const scrollRange = vp.h * ParallaxConfig.scroll.rangeMultiplier;
 
-    // Invert direction so scrolling down moves camera downward
-    const cameraY = -(scrollNorm - 0.5) * scrollRange;
+    // Convert normalized scroll (0–1) into world-space Y position
+    const targetY = -(scrollNorm - 0.5) * scrollRange;
 
-    camera.position.y = cameraY;
-    camera.lookAt(0, cameraY, 0); // keep looking toward the center of the scene
+    // Smooth interpolation toward target (lerp)
+    currentY += (targetY - currentY) * ParallaxConfig.scroll.smoothness;
+
+    camera.position.y = currentY;
+    camera.lookAt(0, currentY, 0);
   });
 
   return null;
 }
 
 export function Stage({ children }: PropsWithChildren) {
+  const { lighting, debug } = ParallaxConfig;
+
   return (
     <Canvas
       linear
@@ -65,18 +87,27 @@ export function Stage({ children }: PropsWithChildren) {
     >
       <PerformanceMonitor onDecline={() => null} />
 
-      {/* 🎥 Perspective camera with scroll-controlled rig */}
+      {/* 🎥 Camera system */}
       <FitPerspectiveCamera />
       <CameraRig />
 
-      {/* 🧭 Debug grid & axes */}
-      <SceneDebugHelpers visible={true} />
+      {/* 💡 Lighting setup */}
+      <ambientLight intensity={lighting.ambient} />
+      <directionalLight
+        position={lighting.directional.position}
+        intensity={lighting.directional.intensity}
+      />
 
-      {/* Soft lighting */}
-      <ambientLight intensity={0.6} />
-      <directionalLight position={[1, 2, 3]} intensity={0.4} />
-
+      {/* 🧱 Scene content */}
       {children}
+
+      {/* 🧭 Optional debug grid */}
+      {debug.enabled && (
+        <>
+          <gridHelper args={[20, 20]} />
+          <axesHelper args={[2]} />
+        </>
+      )}
     </Canvas>
   );
 }

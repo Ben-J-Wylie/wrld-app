@@ -1,37 +1,44 @@
+// In simple terms:
+// - A silent helper that listens for scroll and resize events, then keeps the store up to date.
+
+// Controls:
+// - It normalizes scroll (window.scrollY / totalPageHeight).
+// - It measures the document height so parallax stays proportional even on long pages.
+// - It updates viewport dimensions for responsive scaling.
+
+// Impact:
+// - Feeds consistent scroll values (0–1) to the entire parallax system.
+// - Without it, nothing would move.
+
+// src/parallax/ParallaxController.tsx
 import { useEffect, useRef } from "react";
 import { useParallaxStore } from "./ParallaxStore";
-
-type Props = {
-  /** How smoothly layers interpolate toward their target positions. */
-  damping?: number;
-};
+import { ParallaxConfig } from "./ParallaxConfig";
 
 /**
  * ParallaxController
  * ------------------------------------------------------------
- * Watches window scroll & resize events.
- * Updates normalized scroll (0..1) and viewport dimensions in the global store.
+ * Monitors window scroll and resize.
+ * Normalizes scroll (0–1) and updates global viewport size.
  */
-export function ParallaxController({ damping = 0.1 }: Props) {
+export function ParallaxController() {
   const setScroll = useParallaxStore((s) => s.setScroll);
   const setViewport = useParallaxStore((s) => s.setViewport);
-  const setDamping = useParallaxStore((s) => s.setDamping);
-
   const docHeightRef = useRef<number>(1);
 
   useEffect(() => {
-    // Initialize damping value
-    setDamping(damping);
+    if (!ParallaxConfig.controller.enabled) return;
 
     const updateScroll = () => {
       const denom = Math.max(1, docHeightRef.current);
-      const scrollNorm = window.scrollY / denom;
-      setScroll(scrollNorm);
+      const value = window.scrollY;
+      setScroll(
+        ParallaxConfig.controller.normalizeScroll ? value / denom : value
+      );
     };
 
     const onResize = () => {
       setViewport(window.innerWidth, window.innerHeight);
-
       const body = document.body;
       const html = document.documentElement;
       const docHeight = Math.max(
@@ -41,15 +48,11 @@ export function ParallaxController({ damping = 0.1 }: Props) {
         html.scrollHeight,
         html.offsetHeight
       );
-
       docHeightRef.current = docHeight - window.innerHeight;
       updateScroll();
     };
 
-    // Initialize
     onResize();
-
-    // Attach listeners
     window.addEventListener("resize", onResize);
     window.addEventListener("scroll", updateScroll, { passive: true });
 
@@ -57,7 +60,7 @@ export function ParallaxController({ damping = 0.1 }: Props) {
       window.removeEventListener("resize", onResize);
       window.removeEventListener("scroll", updateScroll);
     };
-  }, [damping, setScroll, setViewport, setDamping]);
+  }, [setScroll, setViewport]);
 
   return null;
 }

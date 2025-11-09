@@ -1,7 +1,16 @@
+// In simple terms:
+// - A 3D “container” for anything that should sit at a certain depth from the camera.
+
+// Controls:
+// - depth: how far away it is (smaller = closer, moves faster; larger = farther).
+// - baseY: initial vertical offset.
+
+// Impact:
+// - Controls how each layer participates in the 3D depth illusion.
+
 // src/parallax/ParallaxGroup.tsx
 import { ThreeElements } from "@react-three/fiber";
-import { useRef } from "react";
-import * as THREE from "three";
+import { ParallaxConfig } from "./ParallaxConfig";
 
 type GroupProps = ThreeElements["group"];
 
@@ -12,13 +21,15 @@ interface ParallaxGroupProps extends GroupProps {
   baseY?: number;
 }
 
+/**
+ * ParallaxGroup
+ * ------------------------------------------------------------
+ * Holds one or more parallax-aware objects at a given depth.
+ */
 export function ParallaxGroup({
-  depth = 0,
-  baseY = 0,
+  depth = ParallaxConfig.layers.defaultDepth,
+  baseY = ParallaxConfig.layers.baseY,
   ...props
 }: ParallaxGroupProps) {
-  const ref = useRef<THREE.Group>(null!);
-
-  // In perspective mode, just place the object in world space
-  return <group ref={ref} position={[0, baseY, depth]} {...props} />;
+  return <group position={[0, baseY, depth]} {...props} />;
 }
