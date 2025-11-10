@@ -2,8 +2,8 @@
 export const ParallaxConfig = {
   camera: {
     fov: 50,            // human-eye equivalent
-    near: 0.1,
-    far: 100,
+    near: 0.1,          // units from the camera
+    far: 10.1,          // units from the camera
     positionZ: 10,      // distance from origin
   },
 
