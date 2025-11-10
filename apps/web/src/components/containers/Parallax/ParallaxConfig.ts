@@ -1,24 +1,25 @@
 // src/parallax/ParallaxConfig.ts
 export const ParallaxConfig = {
   camera: {
-    fov: 50,            // human-eye equivalent
-    near: 0.1,          // units from the camera
-    far: 10.1,          // units from the camera
-    positionZ: 10,      // distance from origin
+    baseFov: 50,        // boot / fallback FOV; overridden dynamically
+    near: 0.1,          // camera near clipping plane
+    far: 10.1,          // camera far clipping plane
+    positionZ: 10,      // distance from origin (sets perspective strength)
   },
 
   scroll: {
-    smoothness: 0.1,    // how responsive the camera movement feels
+    smoothness: 0.1,    // camera interpolation speed when scrolling
   },
 
   scene: {
-    // Defines the background plane geometry the camera traverses
+    // Defines the background plane geometry that the camera frames
     background: {
-      heightWorld: 50,  // height of the backmost plane in world units
-      depth: 0,         // its Z-position (world space)
+      baseWidth: 1920,  // historical reference; now replaced by geometry width
+      heightWorld: 50,
+      depth: 0,
     },
 
-    // Optional defaults for layer creation convenience
+    // Default layer settings (useful for mid / front layers)
     layerDefaults: {
       width: 8,
       opacity: 1,
