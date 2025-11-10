@@ -1,20 +1,31 @@
 // src/parallax/ParallaxConfig.ts
 export const ParallaxConfig = {
-  /** Camera behavior */
   camera: {
-    fov: 50,           // Field of view (lower = flatter, higher = deeper)
+    fov: 50,            // human-eye equivalent
     near: 0.1,
     far: 100,
-    positionZ: 10,
+    positionZ: 10,      // distance from origin
   },
 
-  /** Scroll and motion response */
   scroll: {
-    rangeMultiplier: 0.15, // Overall parallax strength (0.1–0.3 typical)
-    smoothness: 0.1,       // Camera lerp factor (higher = snappier)
+    smoothness: 0.1,    // how responsive the camera movement feels
   },
 
-  /** Lighting */
+  scene: {
+    // Defines the background plane geometry the camera traverses
+    background: {
+      heightWorld: 50,  // height of the backmost plane in world units
+      depth: 0,         // its Z-position (world space)
+    },
+
+    // Optional defaults for layer creation convenience
+    layerDefaults: {
+      width: 8,
+      opacity: 1,
+      baseY: 0,
+    },
+  },
+
   lighting: {
     ambient: 0.6,
     directional: {
@@ -23,24 +34,7 @@ export const ParallaxConfig = {
     },
   },
 
-  /** Default layer values for ParallaxGroup & ParallaxImage */
-  layers: {
-    defaultDepth: 1,
-    defaultOpacity: 1,
-    defaultWidth: 8,
-    baseY: 0,
-  },
-
-  /** Scroll + resize monitoring */
-  controller: {
-    enabled: true,       // Set false to disable auto scroll/resize tracking
-    normalizeScroll: true, // Keep scroll between 0–1
-  },
-
-  /** Debug / dev mode */
   debug: {
     enabled: false,
-    showGrid: false,
-    showAxes: false,
   },
 };

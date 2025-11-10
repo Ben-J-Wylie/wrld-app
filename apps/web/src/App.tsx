@@ -7,7 +7,7 @@ export default function App() {
   return (
     <>
       {/* Controller tracks scroll + viewport size and updates global store */}
-      <ParallaxController damping={0.08} />
+      <ParallaxController />
 
       {/* Stage: fixed Three.js canvas with camera + lighting */}
       <Stage>

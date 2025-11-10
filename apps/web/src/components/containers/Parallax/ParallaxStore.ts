@@ -9,18 +9,23 @@
 // - Anything that changes scroll (user scrolling, custom animation) will drive parallax.
 // - Updating the viewport dimensions lets camera or content respond to resizing.
 
+// src/parallax/ParallaxStore.ts
 import { create } from "zustand";
 
-type ParallaxState = {
+interface ParallaxState {
   scroll: number;
   viewport: { w: number; h: number };
+  backgroundHeight: number;
   setScroll: (v: number) => void;
   setViewport: (w: number, h: number) => void;
-};
+  setBackgroundHeight: (height: number) => void;
+}
 
 export const useParallaxStore = create<ParallaxState>((set) => ({
   scroll: 0,
-  viewport: { w: 1, h: 1 },
-  setScroll: (scroll) => set({ scroll }),
+  viewport: { w: window.innerWidth, h: window.innerHeight },
+  backgroundHeight: 0,
+  setScroll: (v) => set({ scroll: v }),
   setViewport: (w, h) => set({ viewport: { w, h } }),
+  setBackgroundHeight: (height) => set({ backgroundHeight: height }),
 }));

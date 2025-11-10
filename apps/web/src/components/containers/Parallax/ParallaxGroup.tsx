@@ -25,10 +25,12 @@ interface ParallaxGroupProps extends GroupProps {
  * ParallaxGroup
  * ------------------------------------------------------------
  * Holds one or more parallax-aware objects at a given depth.
+ * Depth and baseY now read from ParallaxConfig.scene.layerDefaults
+ * to reflect world-space geometry.
  */
 export function ParallaxGroup({
-  depth = ParallaxConfig.layers.defaultDepth,
-  baseY = ParallaxConfig.layers.baseY,
+  depth = 0,
+  baseY = ParallaxConfig.scene.layerDefaults.baseY,
   ...props
 }: ParallaxGroupProps) {
   return <group position={[0, baseY, depth]} {...props} />;

@@ -1,15 +1,7 @@
-// In simple terms:
-// - A quick demo to show how to layer multiple groups at different depths.
-
-// Controls:
-// - Just assigns different depth values to various shapes.
-// - Good reference for building custom scenes.
-
-// src/scenes/ExampleScene.tsx
-import { ParallaxGroup } from "./ParallaxGroup";
-import { ParallaxConfig } from "./ParallaxConfig";
+import { BackgroundPlane } from "../Parallax/BackgroundPlane";
+import { ParallaxGroup } from "../Parallax/ParallaxGroup";
+import { ParallaxConfig } from "../Parallax/ParallaxConfig";
 import {
-  LayerBackShape,
   LayerMid2Shape,
   LayerMid1Shape,
   LayerFrontShape,
@@ -17,27 +9,23 @@ import {
 } from "./Shapes";
 
 export default function ExampleScene() {
-  const d = ParallaxConfig.layers.defaultDepth;
-
   return (
     <>
-      <ParallaxGroup depth={d + 0}>
-        <LayerBackShape />
-      </ParallaxGroup>
+      <BackgroundPlane height={15} depth={0} color="#111" />
 
-      <ParallaxGroup depth={d + 1}>
+      <ParallaxGroup depth={1}>
         <LayerMid2Shape />
       </ParallaxGroup>
 
-      <ParallaxGroup depth={d + 2}>
+      <ParallaxGroup depth={2}>
         <LayerMid1Shape />
       </ParallaxGroup>
 
-      <ParallaxGroup depth={d + 3}>
+      <ParallaxGroup depth={3}>
         <LayerFrontShape />
       </ParallaxGroup>
 
-      <ParallaxGroup depth={d + 3.2}>
+      <ParallaxGroup depth={3.2}>
         <UiGlassShape />
       </ParallaxGroup>
     </>

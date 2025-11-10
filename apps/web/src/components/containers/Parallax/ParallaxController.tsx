@@ -13,7 +13,6 @@
 // src/parallax/ParallaxController.tsx
 import { useEffect, useRef } from "react";
 import { useParallaxStore } from "./ParallaxStore";
-import { ParallaxConfig } from "./ParallaxConfig";
 
 /**
  * ParallaxController
@@ -27,14 +26,10 @@ export function ParallaxController() {
   const docHeightRef = useRef<number>(1);
 
   useEffect(() => {
-    if (!ParallaxConfig.controller.enabled) return;
-
     const updateScroll = () => {
       const denom = Math.max(1, docHeightRef.current);
       const value = window.scrollY;
-      setScroll(
-        ParallaxConfig.controller.normalizeScroll ? value / denom : value
-      );
+      setScroll(value / denom);
     };
 
     const onResize = () => {

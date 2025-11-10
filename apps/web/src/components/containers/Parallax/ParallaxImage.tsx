@@ -26,12 +26,18 @@ type Props = GroupProps & {
   opacity?: number;
 };
 
+/**
+ * ParallaxImage
+ * ------------------------------------------------------------
+ * A convenience wrapper for rendering 2D images within a ParallaxGroup.
+ * Uses physically consistent world-space sizing and depth behavior.
+ */
 export default function ParallaxImage({
   src,
-  width = ParallaxConfig.layers.defaultWidth,
+  width = ParallaxConfig.scene.layerDefaults.width,
   height,
-  depth = ParallaxConfig.layers.defaultDepth,
-  opacity = ParallaxConfig.layers.defaultOpacity,
+  depth = 0,
+  opacity = ParallaxConfig.scene.layerDefaults.opacity,
   ...rest
 }: Props) {
   return (

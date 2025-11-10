@@ -26,15 +26,19 @@
 // src/parallax/Stage.tsx
 import { Canvas, useThree, useFrame } from "@react-three/fiber";
 import { PerspectiveCamera, PerformanceMonitor } from "@react-three/drei";
-import { PropsWithChildren, useEffect } from "react";
+import { PropsWithChildren, useEffect, useRef } from "react";
 import { useParallaxStore } from "./ParallaxStore";
 import { ParallaxConfig } from "./ParallaxConfig";
 
+/**
+ * FitPerspectiveCamera
+ * ------------------------------------------------------------
+ * Creates a perspective camera that fits viewport and updates on resize.
+ */
 function FitPerspectiveCamera() {
   const { size } = useThree();
   const setViewport = useParallaxStore((s) => s.setViewport);
 
-  // Update viewport on resize
   useEffect(() => {
     setViewport(size.width, size.height);
   }, [size, setViewport]);
@@ -50,31 +54,45 @@ function FitPerspectiveCamera() {
   );
 }
 
+/**
+ * CameraRig
+ * ------------------------------------------------------------
+ * Moves camera vertically based on scroll, derived from actual scene geometry.
+ */
 function CameraRig() {
   const { camera } = useThree();
   const scrollNorm = useParallaxStore((s) => s.scroll);
-  const vp = useParallaxStore((s) => s.viewport);
+  const bgHeight = useParallaxStore((s) => s.backgroundHeight); // 🆕 dynamic height
 
-  // Persistent smoothed Y value (starts at camera's initial position)
-  let currentY = camera.position.y;
+  const fov = ParallaxConfig.camera.fov;
+  const bgDepth = ParallaxConfig.scene.background.depth ?? 0;
+
+  const vFov = (fov * Math.PI) / 180;
+  const cameraToBg = Math.abs(camera.position.z - bgDepth);
+  const visibleHeightAtBg = 2 * Math.tan(vFov / 2) * cameraToBg;
+
+  const cameraTravelY = Math.max(0, bgHeight - visibleHeightAtBg);
+  const currentY = useRef(camera.position.y);
 
   useFrame(() => {
-    // Scroll range scales with viewport height
-    const scrollRange = vp.h * ParallaxConfig.scroll.rangeMultiplier;
+    if (!camera) return;
 
-    // Convert normalized scroll (0–1) into world-space Y position
-    const targetY = -(scrollNorm - 0.5) * scrollRange;
+    const targetY = -(scrollNorm - 0.5) * cameraTravelY;
+    currentY.current +=
+      (targetY - currentY.current) * ParallaxConfig.scroll.smoothness;
 
-    // Smooth interpolation toward target (lerp)
-    currentY += (targetY - currentY) * ParallaxConfig.scroll.smoothness;
-
-    camera.position.y = currentY;
-    camera.lookAt(0, currentY, 0);
+    camera.position.y = currentY.current;
+    camera.lookAt(0, currentY.current, 0);
   });
 
   return null;
 }
 
+/**
+ * Stage
+ * ------------------------------------------------------------
+ * Fixed full-viewport Canvas that renders the scene and manages camera + lights.
+ */
 export function Stage({ children }: PropsWithChildren) {
   const { lighting, debug } = ParallaxConfig;
 
@@ -94,14 +112,14 @@ export function Stage({ children }: PropsWithChildren) {
       {/* 💡 Lighting setup */}
       <ambientLight intensity={lighting.ambient} />
       <directionalLight
-        position={lighting.directional.position}
+        position={lighting.directional.position as [number, number, number]}
         intensity={lighting.directional.intensity}
       />
 
       {/* 🧱 Scene content */}
       {children}
 
-      {/* 🧭 Optional debug grid */}
+      {/* 🧭 Optional debug helpers */}
       {debug.enabled && (
         <>
           <gridHelper args={[20, 20]} />
