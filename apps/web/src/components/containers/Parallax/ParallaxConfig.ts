@@ -3,7 +3,7 @@ export const ParallaxConfig = {
   camera: {
     baseFov: 50,        // boot / fallback FOV; overridden dynamically
     near: 0.1,          // camera near clipping plane
-    far: 10.1,          // camera far clipping plane
+    far: 100,          // camera far clipping plane
     positionZ: 10,      // distance from origin (sets perspective strength)
   },
 
