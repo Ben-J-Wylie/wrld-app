@@ -67,17 +67,24 @@ function CameraRig() {
   const fov = ParallaxConfig.camera.fov;
   const bgDepth = ParallaxConfig.scene.background.depth ?? 0;
 
+  // Compute the visible vertical span of the camera’s frustum at the background’s depth
   const vFov = (fov * Math.PI) / 180;
   const cameraToBg = Math.abs(camera.position.z - bgDepth);
   const visibleHeightAtBg = 2 * Math.tan(vFov / 2) * cameraToBg;
 
+  // Total camera travel range = background’s total height − what’s visible at once
   const cameraTravelY = Math.max(0, bgHeight - visibleHeightAtBg);
+
+  // Smoothed camera Y position
   const currentY = useRef(camera.position.y);
 
   useFrame(() => {
     if (!camera) return;
 
+    // Map normalized scroll 0–1 → vertical position across world-space range
     const targetY = -(scrollNorm - 0.5) * cameraTravelY;
+
+    // Smooth interpolation
     currentY.current +=
       (targetY - currentY.current) * ParallaxConfig.scroll.smoothness;
 
