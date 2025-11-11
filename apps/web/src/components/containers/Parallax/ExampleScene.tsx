@@ -6,6 +6,7 @@ import {
   LayerFrontShape,
   UiGlassShape,
 } from "./Shapes";
+import "./test.css";
 import background from "./32.png"; // your image
 
 export default function ExampleScene() {

@@ -8,13 +8,13 @@ export const ParallaxConfig = {
   },
 
   scroll: {
-    smoothness: 0.1,    // camera interpolation speed when scrolling
+    smoothness: 1,    // camera interpolation speed when scrolling
   },
 
   scene: {
   background: {
     widthWorld: 10,   
-    heightWorld: 15,
+    heightWorld: 50,
     depth: 0,
   },
 

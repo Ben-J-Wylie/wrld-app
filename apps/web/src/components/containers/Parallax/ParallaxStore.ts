@@ -11,6 +11,7 @@
 
 // src/parallax/ParallaxStore.ts
 // src/parallax/ParallaxStore.ts
+// src/parallax/ParallaxStore.ts
 import { create } from "zustand";
 
 interface ParallaxState {
@@ -18,21 +19,25 @@ interface ParallaxState {
   viewport: { w: number; h: number };
   backgroundWidth: number;
   backgroundHeight: number;
+  visibleHeight: number;                 // ✅ NEW
   setScroll: (v: number) => void;
   setViewport: (w: number, h: number) => void;
   setBackgroundWidth: (width: number) => void;
   setBackgroundHeight: (height: number) => void;
+  setVisibleHeight: (height: number) => void; // ✅ NEW
 }
 
 export const useParallaxStore = create<ParallaxState>((set) => ({
   scroll: 0,
   viewport: { w: window.innerWidth, h: window.innerHeight },
-  backgroundWidth: 10, // default composition width
-  backgroundHeight: 0, // updated once BackgroundPlane mounts
+  backgroundWidth: 10,
+  backgroundHeight: 0,
+  visibleHeight: 0, // ✅ default value
 
   // setters
   setScroll: (v) => set({ scroll: v }),
   setViewport: (w, h) => set({ viewport: { w, h } }),
   setBackgroundWidth: (width) => set({ backgroundWidth: width }),
   setBackgroundHeight: (height) => set({ backgroundHeight: height }),
+  setVisibleHeight: (height) => set({ visibleHeight: height }), // ✅
 }));

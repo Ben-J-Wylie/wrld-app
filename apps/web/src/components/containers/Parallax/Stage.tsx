@@ -14,6 +14,7 @@ function FitPerspectiveCamera({
 }) {
   const { camera, size } = useThree();
   const setViewport = useParallaxStore((s) => s.setViewport);
+  const setVisibleHeight = useParallaxStore((s) => s.setVisibleHeight); // ✅ pulled once
   const bgWidth =
     useParallaxStore((s) => s.backgroundWidth) ??
     ParallaxConfig.scene.background.widthWorld;
@@ -38,10 +39,9 @@ function FitPerspectiveCamera({
     const visibleHeight = 2 * distance * Math.tan((fovDeg * Math.PI) / 360);
     onValuesChange?.({ fov: cam.fov, visibleHeight });
 
-    // (optional) write visible height to the store so the controller can size virtual scroll
-    useParallaxStore.setState({ visibleHeight });
-    initialized.current = true;
-  }, [size, bgWidth, camera, setViewport, onValuesChange]);
+    // ✅ store visible height once per mount/update
+    setVisibleHeight(visibleHeight);
+  }, [size, bgWidth, camera, setViewport, onValuesChange, setVisibleHeight]);
 
   useFrame(() => {
     const cam = camera as THREE.PerspectiveCamera;
@@ -59,7 +59,9 @@ function FitPerspectiveCamera({
 
     const visibleHeight = 2 * distance * Math.tan((cam.fov * Math.PI) / 360);
     onValuesChange?.({ fov: cam.fov, visibleHeight });
-    useParallaxStore.setState({ visibleHeight });
+
+    // ✅ use the same typed setter here
+    setVisibleHeight(visibleHeight);
   });
 
   return (
