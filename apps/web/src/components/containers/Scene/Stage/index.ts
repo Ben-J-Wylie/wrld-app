@@ -3,7 +3,7 @@
 // -----------------------------------------------------------------------------
 
 export { Stage } from "./Stage";
-export { FitPerspectiveCamera } from "./FitPerspectiveCamera";
-export { CameraRig } from "./CameraRig";
+// export { FitPerspectiveCamera } from "./FitPerspectiveCamera";
+// export { CameraRig } from "./CameraRig";
 
 

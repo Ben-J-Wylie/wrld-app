@@ -3,8 +3,7 @@ import { PerformanceMonitor } from "@react-three/drei";
 import { PropsWithChildren, useEffect } from "react";
 import { SceneConfig, useSceneStore } from "@/Scene";
 import { RegisterThreeObjects, useThreeStore } from "@/Scene/Helpers";
-import { FitPerspectiveCamera, CameraRig } from "@/Scene/Stage";
-import { CameraOverlay } from "@/Scene/Camera";
+import { FitPerspectiveCamera, CameraRig, CameraOverlay } from "@/Scene/Camera";
 
 /**
  * Stage
@@ -22,7 +21,8 @@ export function Stage({ children }: PropsWithChildren) {
   // keep store synced with config world height
   useEffect(() => setWorldHeight(worldHeight), [worldHeight, setWorldHeight]);
 
-  const { scene, camera } = useThreeStore.getState();
+  const scene = useThreeStore((s) => s.scene);
+  const camera = useThreeStore((s) => s.camera);
 
   return (
     <>
