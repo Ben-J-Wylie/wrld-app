@@ -47,12 +47,14 @@ export function ScrollController() {
 
     /* -------------------- Touch -------------------- */
     const onTouchStart = (e: TouchEvent) => {
+      e.preventDefault(); // 👈 stop Safari bounce / refresh
       touchActive.current = true;
       lastTouchY.current = e.touches[0].clientY;
       lastDeltaY.current = 0;
     };
 
     const onTouchMove = (e: TouchEvent) => {
+      e.preventDefault(); // 👈 critical on iOS
       const y = e.touches[0].clientY;
       const deltaY = lastTouchY.current - y;
       lastTouchY.current = y;
@@ -111,8 +113,8 @@ export function ScrollController() {
 
     /* -------------------- Cleanup -------------------- */
     window.addEventListener("wheel", onWheel, { passive: true });
-    window.addEventListener("touchstart", onTouchStart, { passive: true });
-    window.addEventListener("touchmove", onTouchMove, { passive: true });
+    window.addEventListener("touchstart", onTouchStart, { passive: false });
+    window.addEventListener("touchmove", onTouchMove, { passive: false });
     window.addEventListener("touchend", onTouchEnd);
     window.addEventListener("touchcancel", onTouchEnd);
     window.addEventListener("keydown", onKeyDown);
