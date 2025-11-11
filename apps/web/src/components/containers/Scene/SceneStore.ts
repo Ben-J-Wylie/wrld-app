@@ -20,8 +20,12 @@ interface SceneStoreState {
 
   backgroundWidth?: number;
   backgroundHeight?: number;
-  setWorldHeight: (h: number) => void;
+  setBackgroundSize: (w: number, h: number) => void;
+
+  worldWidth?: number;
+  worldHeight?: number;
   setWorldWidth: (w: number) => void;
+  setWorldHeight: (h: number) => void;
 }
 
 export const useSceneStore = create<SceneStoreState>((set) => ({
@@ -37,6 +41,10 @@ export const useSceneStore = create<SceneStoreState>((set) => ({
 
   backgroundWidth: undefined,
   backgroundHeight: undefined,
-  setWorldHeight: (h) => set({ backgroundHeight: h }),
-  setWorldWidth: (w) => set({ backgroundWidth: w }),
+  setBackgroundSize: (w, h) => set({ backgroundWidth: w, backgroundHeight: h }),
+
+  worldWidth: undefined,
+  worldHeight: undefined,
+  setWorldWidth: (w) => set({ worldWidth: w }),
+  setWorldHeight: (h) => set({ worldHeight: h }),
 }));
