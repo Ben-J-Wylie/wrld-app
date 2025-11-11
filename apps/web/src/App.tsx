@@ -1,24 +1,17 @@
-// ✅ Pull in everything exported from "@/Scene" under one object called "Scene"
-import * as Scene from "@/Scene/index";
-
-console.log("Scene exports:", Scene);
+import * as Scene from "@/Scene";
+import { StageDom } from "./components/containers/Scene/Stage/StageDom"; // if you put it there
 
 export default function App() {
   return (
+    // A: Synthetic scroll
     <Scene.Stage>
-      {/* 🧭 Normalized scroll input across devices */}
       <Scene.ScrollController />
-
-      {/* 🌈 Main world composition */}
       <Scene.DemoScene />
-
-      {/* 👁 Optional debug PiP overlay */}
-      {/* {Scene.SceneConfig.debug.enabled && (
-        <Scene.CameraOverlay
-          stageScene={null as any}
-          stageCamera={null as any}
-        />
-      )} */}
     </Scene.Stage>
+
+    // B: DOM scroll
+    // <Scene.StageDom>
+    //   <Scene.DemoScene />
+    // </Scene.StageDom>
   );
 }
