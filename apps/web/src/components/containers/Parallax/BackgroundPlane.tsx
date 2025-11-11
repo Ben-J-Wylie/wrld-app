@@ -1,5 +1,4 @@
-// src/parallax/BackgroundPlane.tsx
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { Mesh, TextureLoader } from "three";
 import { useLoader } from "@react-three/fiber";
 import { useParallaxStore } from "./ParallaxStore";
@@ -16,38 +15,53 @@ interface BackgroundPlaneProps {
 /**
  * BackgroundPlane
  * ------------------------------------------------------------
- * - Regular piece of geometry (not a special case).
- * - Defines composition width (drives camera FOV).
- * - Reports its width + height to ParallaxStore.
+ * Uses ParallaxConfig.scene.background.{widthWorld,heightWorld,depth}
+ * as defaults, reports actual geometry to ParallaxStore.
  */
 export function BackgroundPlane({
   src,
-  width = 10,
-  height,
+  width = ParallaxConfig.scene.background.widthWorld,
+  height = ParallaxConfig.scene.background.heightWorld,
   depth = ParallaxConfig.scene.background.depth,
 }: BackgroundPlaneProps) {
   const meshRef = useRef<Mesh>(null);
   const texture = useLoader(TextureLoader, src);
+
   const setBackgroundWidth = useParallaxStore((s) => s.setBackgroundWidth);
   const setBackgroundHeight = useParallaxStore((s) => s.setBackgroundHeight);
 
-  // Preserve texture aspect ratio if no height provided
+  // Maintain correct aspect if height not provided
   const aspect =
-    texture.image && texture.image.width && texture.image.height
+    texture?.image && texture.image.width && texture.image.height
       ? texture.image.width / texture.image.height
       : 1;
-  const planeHeight = height ?? width / aspect;
+  const planeWidth = width ?? ParallaxConfig.scene.background.widthWorld;
+  const planeHeight =
+    height ??
+    ParallaxConfig.scene.background.heightWorld ??
+    planeWidth / aspect;
 
-  // Measure once and store in global state
   useEffect(() => {
-    setBackgroundWidth(width);
+    setBackgroundWidth(planeWidth);
     setBackgroundHeight(planeHeight);
-  }, [width, planeHeight, setBackgroundWidth, setBackgroundHeight]);
+  }, [planeWidth, planeHeight, setBackgroundWidth, setBackgroundHeight]);
+
+  useEffect(() => {
+    console.log(
+      "📏 BackgroundPlane mounted:",
+      "width =",
+      planeWidth.toFixed(3),
+      "height =",
+      planeHeight.toFixed(3)
+    );
+    setBackgroundWidth(planeWidth);
+    setBackgroundHeight(planeHeight);
+  }, [planeWidth, planeHeight, setBackgroundWidth, setBackgroundHeight]);
 
   return (
     <ParallaxGroup depth={depth}>
-      <mesh ref={meshRef}>
-        <planeGeometry args={[width, planeHeight]} />
+      <mesh ref={meshRef} position={[0, 0, 0]}>
+        <planeGeometry args={[planeWidth, planeHeight]} />
         <meshBasicMaterial map={texture} toneMapped={false} />
       </mesh>
     </ParallaxGroup>

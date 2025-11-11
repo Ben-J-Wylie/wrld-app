@@ -12,12 +12,11 @@ export const ParallaxConfig = {
   },
 
   scene: {
-    // Defines the background plane geometry that the camera frames
-    background: {
-      baseWidth: 1920,  // historical reference; now replaced by geometry width
-      heightWorld: 50,
-      depth: 0,
-    },
+  background: {
+    widthWorld: 10,   
+    heightWorld: 15,
+    depth: 0,
+  },
 
     // Default layer settings (useful for mid / front layers)
     layerDefaults: {
@@ -36,6 +35,6 @@ export const ParallaxConfig = {
   },
 
   debug: {
-    enabled: false,
+    enabled: true,
   },
 };

@@ -10,7 +10,6 @@
 // - Feeds consistent scroll values (0–1) to the entire parallax system.
 // - Without it, nothing would move.
 
-// src/parallax/ParallaxController.tsx
 import { useEffect, useRef } from "react";
 import { useParallaxStore } from "./ParallaxStore";
 
@@ -19,41 +18,62 @@ import { useParallaxStore } from "./ParallaxStore";
  * ------------------------------------------------------------
  * Monitors window scroll and resize.
  * Normalizes scroll (0–1) and updates global viewport size.
+ * Optimized for smooth, snappy resizing.
  */
 export function ParallaxController() {
   const setScroll = useParallaxStore((s) => s.setScroll);
   const setViewport = useParallaxStore((s) => s.setViewport);
-  const docHeightRef = useRef<number>(1);
+  const docHeightRef = useRef(1);
 
   useEffect(() => {
+    let resizeFrame = 0;
+    let scrollFrame = 0;
+
     const updateScroll = () => {
-      const denom = Math.max(1, docHeightRef.current);
-      const value = window.scrollY;
-      setScroll(value / denom);
+      cancelAnimationFrame(scrollFrame);
+      scrollFrame = requestAnimationFrame(() => {
+        const denom = Math.max(1, docHeightRef.current);
+        const value = window.scrollY;
+        setScroll(Math.min(1, Math.max(0, value / denom)));
+      });
+    };
+
+    const computeDocHeight = () => {
+      const body = document.body;
+      const html = document.documentElement;
+      return (
+        Math.max(
+          body.scrollHeight,
+          body.offsetHeight,
+          html.clientHeight,
+          html.scrollHeight,
+          html.offsetHeight
+        ) - window.innerHeight
+      );
     };
 
     const onResize = () => {
-      setViewport(window.innerWidth, window.innerHeight);
-      const body = document.body;
-      const html = document.documentElement;
-      const docHeight = Math.max(
-        body.scrollHeight,
-        body.offsetHeight,
-        html.clientHeight,
-        html.scrollHeight,
-        html.offsetHeight
-      );
-      docHeightRef.current = docHeight - window.innerHeight;
-      updateScroll();
+      cancelAnimationFrame(resizeFrame);
+      resizeFrame = requestAnimationFrame(() => {
+        docHeightRef.current = computeDocHeight();
+        setViewport(window.innerWidth, window.innerHeight);
+        updateScroll();
+      });
     };
 
-    onResize();
+    // Initial sync
+    docHeightRef.current = computeDocHeight();
+    setViewport(window.innerWidth, window.innerHeight);
+    updateScroll();
+
     window.addEventListener("resize", onResize);
     window.addEventListener("scroll", updateScroll, { passive: true });
 
     return () => {
       window.removeEventListener("resize", onResize);
       window.removeEventListener("scroll", updateScroll);
+      cancelAnimationFrame(resizeFrame);
+      cancelAnimationFrame(scrollFrame);
     };
   }, [setScroll, setViewport]);
 
