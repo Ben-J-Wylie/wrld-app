@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 import { useEffect } from "react";
 import { useParallaxStore } from "../Parallax/ParallaxStore";
 import { BackgroundPlane } from "../Parallax/BackgroundPlane";

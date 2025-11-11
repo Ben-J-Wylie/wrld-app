@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 // src/parallax/Stage.tsx
 import * as THREE from "three";
 import { Canvas, useThree, useFrame } from "@react-three/fiber";

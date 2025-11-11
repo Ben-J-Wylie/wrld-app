@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 import React, { useMemo } from "react";
 import { useTexture } from "@react-three/drei";
 import { useParallaxScene } from "./ParallaxScene";

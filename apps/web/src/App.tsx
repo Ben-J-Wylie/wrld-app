@@ -1,17 +1,24 @@
-import { VirtualScrollController } from "./components/containers/Parallax/VirtualScrollController";
-import { Stage } from "./components/containers/Parallax/Stage";
-import ExampleScene from "./components/containers/Parallax/ExampleScene";
+// ✅ Pull in everything exported from "@/Scene" under one object called "Scene"
+import * as Scene from "@/Scene/index";
+
+console.log("Scene exports:", Scene);
 
 export default function App() {
   return (
-    <>
-      <VirtualScrollController />
-      <Stage>
-        <ExampleScene />
-      </Stage>
-    </>
+    <Scene.Stage>
+      {/* 🧭 Normalized scroll input across devices */}
+      <Scene.ScrollController />
+
+      {/* 🌈 Main world composition */}
+      <Scene.DemoScene />
+
+      {/* 👁 Optional debug PiP overlay */}
+      {/* {Scene.SceneConfig.debug.enabled && (
+        <Scene.CameraOverlay
+          stageScene={null as any}
+          stageCamera={null as any}
+        />
+      )} */}
+    </Scene.Stage>
   );
 }
-
-// import FlyCamTest from "./components/containers/Parallax/FlyCamTest";
-// export default FlyCamTest;

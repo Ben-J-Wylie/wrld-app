@@ -16,7 +16,15 @@
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx",
-    "types": ["node", "react", "react-dom", "vite/client"]
+    "types": ["node", "react", "react-dom", "vite/client"],
+
+    "baseUrl": "src",
+
+    "paths": {
+      "@/*": ["*"],
+      "@/Scene/*": ["components/containers/Scene/*"],
+      "@/Scene": ["components/containers/Scene/index"]
+    }
   },
   "include": ["src"]
 }

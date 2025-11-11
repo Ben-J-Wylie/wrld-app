@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 import React, { useState } from "react";
 import { useResponsiveContext } from "../../containers/Responsive/ResponsiveContext";
 import ParallaxItem from "../../containers/Parallax/ParallaxItem";

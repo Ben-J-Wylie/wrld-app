@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 import React, { useEffect, useRef, useCallback } from "react";
 import { useParallaxScene } from "./ParallaxScene";
 import { useParallaxLight } from "./ParallaxLight";

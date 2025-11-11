@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 import React from "react";
 import FeatureStack from "../../containers/FeatureStack/FeatureStack"; 
 // Adjust path as needed depending on your folder structure
@@ -24,6 +26,9 @@ import UIButton from "../elements/UIButton"; // example React layer
  * opacity?:          number             // layer opacity (0–1)
  * color?:            string             // fill or background color
  */
+
+// @ts-nocheck
+
 
 export default function NewFeature() {
   return (

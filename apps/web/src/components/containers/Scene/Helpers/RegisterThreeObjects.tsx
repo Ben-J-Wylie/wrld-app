@@ -1,7 +1,6 @@
-// src/parallax/RegisterThreeObjects.tsx
 import { useThree } from "@react-three/fiber";
 import { useEffect } from "react";
-import { useThreeStore } from "./threeStore";
+import { useThreeStore } from "./ThreeStore";
 
 export function RegisterThreeObjects() {
   const { scene, camera } = useThree();

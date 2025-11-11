@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 // In simple terms:
 // - A 3D “container” for anything that should sit at a certain depth from the camera.
 

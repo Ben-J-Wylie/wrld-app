@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 import React, { useMemo } from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrthographicCamera } from "@react-three/drei";

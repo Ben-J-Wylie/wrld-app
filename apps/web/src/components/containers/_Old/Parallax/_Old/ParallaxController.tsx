@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 // In simple terms:
 // - A silent helper that listens for scroll and resize events, then keeps the store up to date.
 

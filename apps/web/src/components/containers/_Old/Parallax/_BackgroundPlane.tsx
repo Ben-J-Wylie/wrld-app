@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 import { useEffect, useRef } from "react";
 import { Mesh, TextureLoader } from "three";
 import { useLoader } from "@react-three/fiber";

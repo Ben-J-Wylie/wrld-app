@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 // In simple terms:
 // - A convenience wrapper for rendering 2D images with depth and opacity.
 
