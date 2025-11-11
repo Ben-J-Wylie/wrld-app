@@ -1,10 +1,4 @@
-/**
- * SceneConfig
- * -----------------------------------------------------------------------------
- * Global configuration constants for your scene system.
- * Defines camera defaults, background dimensions, lighting, scroll smoothing,
- * and optional debug settings.
- */
+export type ScrollMode = "custom" | "dom";
 
 export const SceneConfig = {
   camera: {
@@ -31,7 +25,8 @@ export const SceneConfig = {
   },
 
   scroll: {
-    smoothness: 0.08, // damping for camera scroll interpolation
+    smoothness: 0.08,
+    mode: "custom" as ScrollMode, // 👈 explicit union type here
   },
 
   debug: {
@@ -40,3 +35,4 @@ export const SceneConfig = {
 } as const;
 
 export type SceneConfigType = typeof SceneConfig;
+
