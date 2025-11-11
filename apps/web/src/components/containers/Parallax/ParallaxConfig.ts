@@ -4,11 +4,16 @@ export const ParallaxConfig = {
     baseFov: 50,        // boot / fallback FOV; overridden dynamically
     near: 0.1,          // camera near clipping plane
     far: 100,          // camera far clipping plane
-    positionZ: 10,      // distance from origin (sets perspective strength)
+    positionZ: 50,      // distance from origin (sets perspective strength)
   },
 
-  scroll: {
-    smoothness: 1,    // camera interpolation speed when scrolling
+scroll: {
+    baseWheelSpeed: 0.0012,
+    baseTouchSpeed: 0.0025,
+    baseKeySpeed: 0.4,
+    damping: .1,
+    spring: 1,
+    smoothness: .5, // (optional: used by CameraRig)
   },
 
   scene: {

@@ -5,6 +5,10 @@ import { PerspectiveCamera, PerformanceMonitor } from "@react-three/drei";
 import { PropsWithChildren, useEffect, useRef, useState } from "react";
 import { useParallaxStore } from "./ParallaxStore";
 import { ParallaxConfig } from "./ParallaxConfig";
+import { FlyOnWallCamera } from "./FlyOnWallCamera";
+import { FlyOnWallOverlay } from "./FlyOnWallOverlay";
+import { RegisterThreeObjects } from "./RegisterThreeObjects";
+import { useThreeStore } from "./threeStore";
 
 /* ----------------------- FitPerspectiveCamera ----------------------- */
 function FitPerspectiveCamera({
@@ -145,52 +149,47 @@ export function Stage({ children }: PropsWithChildren) {
   const worldHeight =
     useParallaxStore((s) => s.backgroundHeight) ??
     ParallaxConfig.scene.background.heightWorld;
+  const setWorldHeight = useParallaxStore((s) => s.setWorldHeight);
+
+  useEffect(() => setWorldHeight(worldHeight), [worldHeight, setWorldHeight]);
+
+  // pull from store once (assuming Zustand)
+  const { scene, camera } = useThreeStore.getState();
 
   return (
     <>
+      {/* --- main Stage canvas --- */}
       <Canvas
         linear
         dpr={[1, Math.min(2, window.devicePixelRatio || 1.5)]}
         gl={{ antialias: true, alpha: true }}
-        style={{ position: "fixed", inset: 0, pointerEvents: "none" }}
+        style={{ position: "fixed", inset: 0 }}
       >
         <PerformanceMonitor onDecline={() => null} />
-
+        <RegisterThreeObjects /> {/* 👈 add this line */}
         <FitPerspectiveCamera
           onValuesChange={({ fov, visibleHeight }) => {
             setFovDisplay(fov);
             setVisHeight(visibleHeight);
           }}
         />
-
         <CameraRig />
-
         <ambientLight intensity={lighting.ambient} />
         <directionalLight
           position={lighting.directional.position as [number, number, number]}
           intensity={lighting.directional.intensity}
         />
-
         {children}
       </Canvas>
 
+      {/* --- independent observer window --- */}
+      {scene && camera && (
+        <FlyOnWallOverlay stageScene={scene} stageCamera={camera} />
+      )}
+
+      {/* --- debug readout --- */}
       {debug.enabled && (
-        <div
-          style={{
-            position: "fixed",
-            bottom: "8px",
-            right: "12px",
-            padding: "6px 10px",
-            background: "rgba(0,0,0,0.65)",
-            color: "#0ff",
-            fontFamily: "monospace",
-            fontSize: "12px",
-            borderRadius: "6px",
-            zIndex: 9999,
-            userSelect: "none",
-            lineHeight: "1.3em",
-          }}
-        >
+        <div className="debug-overlay">
           <div>FOV: {fovDisplay.toFixed(2)}°</div>
           <div>World Width: {worldWidth.toFixed(3)}</div>
           <div>World Height: {worldHeight.toFixed(3)}</div>
