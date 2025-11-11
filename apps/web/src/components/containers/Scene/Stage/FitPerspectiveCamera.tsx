@@ -11,6 +11,7 @@ interface FitPerspectiveCameraProps {
 /**
  * FitPerspectiveCamera
  * Dynamically adjusts FOV to fit world width across viewport aspect ratio.
+ * Updates Zustand store with FOV and visible height each frame.
  */
 export function FitPerspectiveCamera({
   onValuesChange,
@@ -18,6 +19,7 @@ export function FitPerspectiveCamera({
   const { camera, size } = useThree();
   const setViewport = useSceneStore((s) => s.setViewport);
   const setVisibleHeight = useSceneStore((s) => s.setVisibleHeight);
+  const setFov = useSceneStore((s) => s.setFov); // ✅ added line
 
   const bgWidth =
     useSceneStore((s) => s.backgroundWidth) ??
@@ -40,9 +42,20 @@ export function FitPerspectiveCamera({
     cam.updateProjectionMatrix();
 
     const visibleHeight = 2 * distance * Math.tan((fovDeg * Math.PI) / 360);
-    onValuesChange?.({ fov: cam.fov, visibleHeight });
+
+    // ✅ update both Zustand + external callback
+    setFov(cam.fov);
     setVisibleHeight(visibleHeight);
-  }, [size, bgWidth, camera, setViewport, onValuesChange, setVisibleHeight]);
+    onValuesChange?.({ fov: cam.fov, visibleHeight });
+  }, [
+    size,
+    bgWidth,
+    camera,
+    setViewport,
+    onValuesChange,
+    setVisibleHeight,
+    setFov,
+  ]);
 
   useFrame(() => {
     const cam = camera as THREE.PerspectiveCamera;
@@ -51,14 +64,18 @@ export function FitPerspectiveCamera({
     const fovDeg =
       (2 * Math.atan(bgWidth / 2 / (distance * aspect)) * 180) / Math.PI;
 
+    // Smoothly interpolate toward target FOV
     fovTarget.current += (fovDeg - fovTarget.current) * 0.1;
     cam.fov = fovTarget.current;
     cam.aspect = aspect;
     cam.updateProjectionMatrix();
 
     const visibleHeight = 2 * distance * Math.tan((cam.fov * Math.PI) / 360);
-    onValuesChange?.({ fov: cam.fov, visibleHeight });
+
+    // ✅ update both Zustand + external callback
+    setFov(cam.fov);
     setVisibleHeight(visibleHeight);
+    onValuesChange?.({ fov: cam.fov, visibleHeight });
   });
 
   return (

@@ -1,5 +1,3 @@
-import { useEffect } from "react";
-import { useSceneStore } from "@/Scene";
 import { BackgroundPlane, Group } from "@/Scene/Layers";
 import {
   LayerMid2Shape,
@@ -16,14 +14,6 @@ import background from "./32.png";
  * Each layer sits at a specific depth (Z), creating parallax via perspective.
  */
 export function DemoScene() {
-  const setWorldHeight = useSceneStore((s) => s.setWorldHeight);
-
-  useEffect(() => {
-    // Define total world height in scene units
-    // Corresponds roughly to the furthest depth object
-    setWorldHeight(3.2);
-  }, [setWorldHeight]);
-
   return (
     <>
       <BackgroundPlane src={background} depth={0} />

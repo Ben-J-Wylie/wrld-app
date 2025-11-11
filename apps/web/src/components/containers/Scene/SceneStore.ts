@@ -4,20 +4,28 @@ import { create } from "zustand";
  * SceneStore
  * -----------------------------------------------------------------------------
  * Global reactive state for scene and camera properties.
- * Manages scroll, viewport, world dimensions, and visible height.
+ * Manages scroll, viewport, world dimensions, FOV, and visible height.
  */
 
 interface SceneStoreState {
+  // 🔹 Scroll position (0–1 normalized)
   scroll: number;
   setScroll: (value: number) => void;
 
+  // 🔹 Viewport dimensions
   viewportWidth: number;
   viewportHeight: number;
   setViewport: (w: number, h: number) => void;
 
+  // 🔹 Camera FOV (updated dynamically)
+  fov: number;
+  setFov: (f: number) => void;
+
+  // 🔹 Visible height (changes with aspect/FOV)
   visibleHeight: number;
   setVisibleHeight: (h: number) => void;
 
+  // 🔹 Background / world size
   backgroundWidth?: number;
   backgroundHeight?: number;
   setBackgroundSize: (w: number, h: number) => void;
@@ -35,6 +43,9 @@ export const useSceneStore = create<SceneStoreState>((set) => ({
   viewportWidth: 0,
   viewportHeight: 0,
   setViewport: (w, h) => set({ viewportWidth: w, viewportHeight: h }),
+
+  fov: 0,
+  setFov: (f) => set({ fov: f }),
 
   visibleHeight: 0,
   setVisibleHeight: (h) => set({ visibleHeight: h }),
