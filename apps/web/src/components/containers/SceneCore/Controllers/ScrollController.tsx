@@ -9,15 +9,15 @@ import { SceneConfig, useSceneStore } from "@/components/containers/SceneCore";
  * Handles all input for normalized scroll (0–1).
  * Supports wheel, touch, and keyboard input.
  * Smooths motion using velocity + spring damping model.
- * Reactively scales scroll range based on current worldHeight + visibleHeight.
+ * Reactively scales scroll range based on current sceneHeight + visibleHeight.
  */
 export function ScrollController() {
   const setScroll = useSceneStore((s) => s.setScroll);
 
-  // ✅ Use worldHeight instead of backgroundHeight
-  const worldHeight =
-    useSceneStore((s) => s.worldHeight) ??
-    SceneConfig.scene.background.worldHeight;
+  // ✅ Use sceneHeight instead of backgroundHeight
+  const sceneHeight =
+    useSceneStore((s) => s.sceneHeight) ??
+    SceneConfig.scene.background.sceneHeight;
 
   const visibleHeight = useSceneStore((s) => s.visibleHeight);
 
@@ -37,8 +37,8 @@ export function ScrollController() {
       spring = 0.08,
     } = SceneConfig.scroll as any;
 
-    // 🔹 Use the *live* worldHeight to determine scroll scale
-    const wH = worldHeight ?? SceneConfig.scene.background.worldHeight;
+    // 🔹 Use the *live* sceneHeight to determine scroll scale
+    const wH = sceneHeight ?? SceneConfig.scene.background.sceneHeight;
     const vH = visibleHeight ?? 10;
     const scrollScale = Math.max(vH / wH, 0.1);
 
@@ -137,7 +137,7 @@ export function ScrollController() {
       window.removeEventListener("touchcancel", onTouchEnd);
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [setScroll, worldHeight, visibleHeight]); // ✅ re-run when worldHeight changes
+  }, [setScroll, sceneHeight, visibleHeight]); // ✅ re-run when sceneHeight changes
 
   return null;
 }

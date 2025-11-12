@@ -10,13 +10,13 @@ import { SceneConfig } from "../SceneConfig";
  * -----------------------------------------------------------------------------
  * Renders the flat background image for the 3D scene.
  *
- * This component is **read-only** — it does NOT define world size anymore.
- * Instead, it reads the current world width and height from the SceneStore,
+ * This component is **read-only** — it does NOT define scene size anymore.
+ * Instead, it reads the current scene width and height from the SceneStore,
  * which are maintained elsewhere (for example, by DemoScene or layout logic).
  *
  * Purpose:
- *   - Display a textured plane that represents the back of the 3D world.
- *   - Stay in sync with world dimensions defined in the SceneStore.
+ *   - Display a textured plane that represents the back of the 3D scene.
+ *   - Stay in sync with scene dimensions defined in the SceneStore.
  *   - Use SceneConfig values only as safe fallbacks if the store is uninitialized.
  *
  * Data flow:
@@ -24,8 +24,8 @@ import { SceneConfig } from "../SceneConfig";
  */
 interface BackgroundPlaneProps {
   src: string; // Background image texture file
-  width?: number; // Optional manual override for world width
-  height?: number; // Optional manual override for world height
+  width?: number; // Optional manual override for scene width
+  height?: number; // Optional manual override for scene height
   depth?: number; // Z-position in the scene (from SceneConfig by default)
 }
 
@@ -41,11 +41,11 @@ export function BackgroundPlane({
   // 🔹 Load the texture from the provided image source
   const texture = useLoader(THREE.TextureLoader, src);
 
-  // 🔹 Read current world dimensions from the SceneStore
+  // 🔹 Read current scene dimensions from the SceneStore
   // These are live, reactive values — if another file (like DemoScene)
-  // calls setWorldWidth/Height, the BackgroundPlane automatically re-renders.
-  const worldWidth = useSceneStore((s) => s.worldWidth);
-  const worldHeight = useSceneStore((s) => s.worldHeight);
+  // calls setSceneWidth/Height, the BackgroundPlane automatically re-renders.
+  const sceneWidth = useSceneStore((s) => s.sceneWidth);
+  const sceneHeight = useSceneStore((s) => s.sceneHeight);
 
   // ---------------------------------------------------------------------------
   // 🎨 Determine the final plane dimensions (in world units)
@@ -55,11 +55,11 @@ export function BackgroundPlane({
   // 2️⃣ Reactive values from SceneStore (dynamic, updated elsewhere)
   // 3️⃣ Fallbacks from SceneConfig (static design defaults)
   const planeWidth =
-    width ?? worldWidth ?? SceneConfig.scene.background.worldWidth;
+    width ?? sceneWidth ?? SceneConfig.scene.background.sceneWidth;
   const planeHeight =
     height ??
-    worldHeight ??
-    SceneConfig.scene.background.worldHeight ??
+    sceneHeight ??
+    SceneConfig.scene.background.sceneHeight ??
     planeWidth;
 
   // ---------------------------------------------------------------------------
@@ -96,8 +96,8 @@ export function BackgroundPlane({
 │        SceneConfig          │
 │  (static design defaults)   │
 │─────────────────────────────│
-│  widthWorld:   10           │
-│  heightWorld:  30           │
+│  sceneWidth:   10           │
+│  sceneHeight:  30           │
 │  depth:         0           │
 └──────────────┬──────────────┘
                │
@@ -107,8 +107,8 @@ export function BackgroundPlane({
 │        SceneStore           │
 │  (shared reactive state)    │
 │─────────────────────────────│
-│  worldWidth:   10           │
-│  worldHeight:  15   ✅ true │ ← updated by external file (e.g. DemoScene)
+│  sceneWidth:   10           │
+│  sceneHeight:  15   ✅ true │ ← updated by external file (e.g. DemoScene)
 │  visibleHeight: computed    │
 │  scroll: dynamic value      │
 └──────────────┬──────────────┘
@@ -143,6 +143,6 @@ export function BackgroundPlane({
 │─────────────────────────────│
 │ - Background = correct size │
 │ - Camera scrolls properly   │
-│ - FOV matches world height  │
+│ - FOV matches scene height  │
 └─────────────────────────────┘
 */

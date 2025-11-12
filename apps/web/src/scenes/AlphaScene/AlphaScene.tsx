@@ -10,20 +10,20 @@ import * as THREE from "three";
 /**
  * AlphaScene
  * ---------------------------------------------------------------------------
- * A blank, ready-to-build 2.5D world.
- * - Sets per-scene world width/height
+ * A blank, ready-to-build 2.5D scene.
+ * - Sets per-scene scene width/height
  * - Adds basic per-scene lighting
  * - Includes a placeholder background + layer structure
  */
 
 export function AlphaScene() {
-  const setWorldHeight = useSceneStore((s) => s.setWorldHeight);
-  const setWorldWidth = useSceneStore((s) => s.setWorldWidth);
+  const setSceneHeight = useSceneStore((s) => s.setSceneHeight);
+  const setSceneWidth = useSceneStore((s) => s.setSceneWidth);
 
   useEffect(() => {
-    setWorldWidth(10);
-    setWorldHeight(15);
-  }, [setWorldWidth, setWorldHeight]);
+    setSceneWidth(10);
+    setSceneHeight(15);
+  }, [setSceneWidth, setSceneHeight]);
 
   return (
     <>

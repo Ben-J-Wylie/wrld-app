@@ -6,18 +6,18 @@ import { create } from "zustand";
  * This store holds all the live, shared state for your 3D scene.
  *
  * Purpose:
- *   - Keep camera, scroll, and world dimensions in sync across components.
+ *   - Keep camera, scroll, and scene dimensions in sync across components.
  *   - Provide a single source of truth for anything that changes in real time.
  *
  * Ownership:
  *   - The "external scene" (for example, DemoScene.tsx) is the **only writer**
- *     of the world dimensions.
+ *     of the scene dimensions.
  *   - The BackgroundPlane, Camera, and Scroll systems are **readers** that
  *     react to these values automatically.
  *
  * Hierarchy of truth:
  *   SceneConfig → (fallback defaults)
- *   External scene → (sets world size)
+ *   External scene → (sets scene size)
  *   SceneStore → (broadcasts values)
  *   BackgroundPlane / Camera / Scroll → (read reactively)
  */
@@ -44,7 +44,7 @@ interface SceneStoreState {
   /* 🎥 Camera FOV                                                          */
   /* ------------------------------------------------------------------------ */
   // The camera's current field of view in degrees.
-  // Updated automatically when world size or aspect ratio changes.
+  // Updated automatically when scene size or aspect ratio changes.
   fov: number;
   setFov: (f: number) => void;
 
@@ -57,15 +57,15 @@ interface SceneStoreState {
   setVisibleHeight: (h: number) => void;
 
   /* ------------------------------------------------------------------------ */
-  /* 🌍 World Dimensions (authoritative size of your 3D world)              */
+  /* 🌍 Scene Dimensions (authoritative size of your 3D scene)              */
   /* ------------------------------------------------------------------------ */
-  // These represent the real-world width and height of the entire scene.
+  // These represent the real-scene width and height of the entire scene.
   // They are set once by the external scene (e.g. DemoScene.tsx)
   // and then read by everything else (BackgroundPlane, Camera, etc.)
-  worldWidth?: number;
-  worldHeight?: number;
-  setWorldWidth: (w: number) => void;
-  setWorldHeight: (h: number) => void;
+  sceneWidth?: number;
+  sceneHeight?: number;
+  setSceneWidth: (w: number) => void;
+  setSceneHeight: (h: number) => void;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -93,11 +93,11 @@ export const useSceneStore = create<SceneStoreState>((set) => ({
   visibleHeight: 0,
   setVisibleHeight: (h) => set({ visibleHeight: h }),
 
-  /* ------------------------- World dimensions ---------------------------- */
-  worldWidth: undefined,
-  worldHeight: undefined,
-  setWorldWidth: (w) => set({ worldWidth: w }),
-  setWorldHeight: (h) => set({ worldHeight: h }),
+  /* ------------------------- Scene dimensions ---------------------------- */
+  sceneWidth: undefined,
+  sceneHeight: undefined,
+  setSceneWidth: (w) => set({ sceneWidth: w }),
+  setSceneHeight: (h) => set({ sceneHeight: h }),
 }));
 
 

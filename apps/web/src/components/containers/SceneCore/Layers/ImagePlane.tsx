@@ -21,7 +21,7 @@ interface ImagePlaneProps extends GroupProps {
  */
 export function ImagePlane({
   src,
-  width = SceneConfig.scene.background.worldWidth,
+  width = SceneConfig.scene.background.sceneWidth,
   height,
   depth = 0,
   opacity = 1,

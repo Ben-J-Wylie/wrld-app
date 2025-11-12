@@ -58,12 +58,12 @@ export function CameraOverlay({
   // ✅ pull all live data straight from the store
   const fovDisplay = useSceneStore((s) => s.fov);
   const visibleHeight = useSceneStore((s) => s.visibleHeight);
-  const worldWidth =
-    useSceneStore((s) => s.worldWidth) ??
-    SceneConfig.scene.background.worldWidth;
-  const worldHeight =
-    useSceneStore((s) => s.worldHeight) ??
-    SceneConfig.scene.background.worldHeight;
+  const sceneWidth =
+    useSceneStore((s) => s.sceneWidth) ??
+    SceneConfig.scene.background.sceneWidth;
+  const sceneHeight =
+    useSceneStore((s) => s.sceneHeight) ??
+    SceneConfig.scene.background.sceneHeight;
 
   return (
     <>
@@ -101,8 +101,8 @@ export function CameraOverlay({
         }}
       >
         <div>FOV: {fovDisplay.toFixed(2)}°</div>
-        <div>World Width: {worldWidth.toFixed(3)}</div>
-        <div>World Height: {worldHeight.toFixed(3)}</div>
+        <div>Scene Width: {sceneWidth.toFixed(3)}</div>
+        <div>Scene Height: {sceneHeight.toFixed(3)}</div>
         <div>Visible Height: {visibleHeight.toFixed(3)}</div>
       </div>
     </>
