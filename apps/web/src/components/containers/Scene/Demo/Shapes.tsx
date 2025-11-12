@@ -5,7 +5,6 @@ import { ThreeElements } from "@react-three/fiber";
 
 type MeshProps = ThreeElements["mesh"];
 
-// Base Plane Shape Factory
 function PlaneShape({
   color,
   width = 10,
@@ -19,9 +18,17 @@ function PlaneShape({
   opacity?: number;
 }) {
   return (
-    <mesh {...rest}>
+    <mesh castShadow receiveShadow {...rest}>
       <planeGeometry args={[width, height]} />
-      <meshBasicMaterial color={color} transparent opacity={opacity} />
+      <meshStandardMaterial
+        color={color}
+        transparent
+        opacity={opacity}
+        roughness={0.8}
+        metalness={0.1}
+        side={THREE.DoubleSide} // temporarily robust while tuning
+        shadowSide={THREE.FrontSide} // prefer the front side for shadowing
+      />
     </mesh>
   );
 }

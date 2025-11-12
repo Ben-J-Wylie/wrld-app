@@ -56,9 +56,16 @@ export function BackgroundPlane({
 
   return (
     <Group depth={depth}>
-      <mesh ref={meshRef} position={[0, 0, 0]}>
+      <mesh ref={meshRef} position={[0, 0, 0]} receiveShadow>
         <planeGeometry args={[planeWidth, planeHeight]} />
-        <meshBasicMaterial map={texture} toneMapped={false} />
+        <meshStandardMaterial
+          map={texture}
+          toneMapped
+          roughness={1}
+          metalness={0}
+          side={THREE.DoubleSide}
+          shadowSide={THREE.FrontSide}
+        />
       </mesh>
     </Group>
   );

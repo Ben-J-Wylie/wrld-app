@@ -3,7 +3,11 @@ import { PerformanceMonitor } from "@react-three/drei";
 import { PropsWithChildren, useEffect } from "react";
 import { SceneConfig, useSceneStore } from "@/Scene";
 import { RegisterThreeObjects, useThreeStore } from "@/Scene/Helpers";
-import { FitPerspectiveCamera, CameraRig, CameraOverlay } from "@/Scene/Camera";
+import {
+  FitPerspectiveCamera,
+  CameraRig,
+  CameraOverlay,
+} from "@/components/containers/Scene/Cameras";
 import { ScrollDomWrapper } from "@/Scene/Controllers";
 
 /**

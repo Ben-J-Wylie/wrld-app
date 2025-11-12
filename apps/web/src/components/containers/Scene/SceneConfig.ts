@@ -17,12 +17,10 @@ export const SceneConfig = {
   },
 
   lighting: {
-    ambient: 0.5,
-    directional: {
-      position: [5, 5, 5],
-      intensity: 0.8,
-    },
-  },
+    ambient: 0.3,
+    directional: { position: [5, 5, 5], intensity: 1.2 },
+    point: { position: [1, 1.5, 4], intensity: 5, distance: 50 },
+},
 
   scroll: {
     smoothness: 0.08,

@@ -6,7 +6,7 @@
 // ----------------------------------------------------------------------------
 
 export * from "./Stage";
-export * from "./Camera";
+export * from "./Cameras";
 export * from "./Controllers";
 export * from "./Layers";
 export * from "./Helpers";

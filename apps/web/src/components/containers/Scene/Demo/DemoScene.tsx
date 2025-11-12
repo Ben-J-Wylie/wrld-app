@@ -17,19 +17,15 @@ export function DemoScene() {
   return (
     <>
       <BackgroundPlane src={background} depth={0} />
-
       <Group depth={0.1}>
         <LayerMid2Shape />
       </Group>
-
       <Group depth={2}>
         <LayerMid1Shape />
       </Group>
-
       <Group depth={3}>
         <LayerFrontShape />
       </Group>
-
       <Group depth={3.2}>
         <UiGlassShape />
       </Group>
