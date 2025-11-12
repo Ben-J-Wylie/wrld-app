@@ -1,5 +1,7 @@
+//
+
 import { useEffect, useRef } from "react";
-import { SceneConfig, useSceneStore } from "@/Scene";
+import { SceneConfig, useSceneStore } from "@/components/containers/SceneCore";
 
 /**
  * ScrollController
@@ -7,10 +9,16 @@ import { SceneConfig, useSceneStore } from "@/Scene";
  * Handles all input for normalized scroll (0–1).
  * Supports wheel, touch, and keyboard input.
  * Smooths motion using velocity + spring damping model.
+ * Reactively scales scroll range based on current worldHeight + visibleHeight.
  */
 export function ScrollController() {
   const setScroll = useSceneStore((s) => s.setScroll);
-  const worldHeight = useSceneStore((s) => s.backgroundHeight);
+
+  // ✅ Use worldHeight instead of backgroundHeight
+  const worldHeight =
+    useSceneStore((s) => s.worldHeight) ??
+    SceneConfig.scene.background.worldHeight;
+
   const visibleHeight = useSceneStore((s) => s.visibleHeight);
 
   const velocity = useRef(0);
@@ -29,7 +37,8 @@ export function ScrollController() {
       spring = 0.08,
     } = SceneConfig.scroll as any;
 
-    const wH = worldHeight ?? 10;
+    // 🔹 Use the *live* worldHeight to determine scroll scale
+    const wH = worldHeight ?? SceneConfig.scene.background.worldHeight;
     const vH = visibleHeight ?? 10;
     const scrollScale = Math.max(vH / wH, 0.1);
 
@@ -47,14 +56,14 @@ export function ScrollController() {
 
     /* -------------------- Touch -------------------- */
     const onTouchStart = (e: TouchEvent) => {
-      e.preventDefault(); // 👈 stop Safari bounce / refresh
+      e.preventDefault();
       touchActive.current = true;
       lastTouchY.current = e.touches[0].clientY;
       lastDeltaY.current = 0;
     };
 
     const onTouchMove = (e: TouchEvent) => {
-      e.preventDefault(); // 👈 critical on iOS
+      e.preventDefault();
       const y = e.touches[0].clientY;
       const deltaY = lastTouchY.current - y;
       lastTouchY.current = y;
@@ -98,7 +107,7 @@ export function ScrollController() {
       e.preventDefault();
     };
 
-    /* -------------------- Animation -------------------- */
+    /* -------------------- Animation Loop -------------------- */
     const loop = () => {
       if (!touchActive.current) {
         velocity.current += (target.current - position.current) * spring;
@@ -128,7 +137,7 @@ export function ScrollController() {
       window.removeEventListener("touchcancel", onTouchEnd);
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [setScroll, worldHeight, visibleHeight]);
+  }, [setScroll, worldHeight, visibleHeight]); // ✅ re-run when worldHeight changes
 
   return null;
 }

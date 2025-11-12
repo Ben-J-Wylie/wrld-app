@@ -1,6 +1,6 @@
 // src/components/containers/Scene/ScrollDomWrapper.tsx
 import { useRef, useEffect } from "react";
-import { useSceneStore } from "@/Scene";
+import { useSceneStore } from "@/components/containers/SceneCore";
 
 export function ScrollDomWrapper({ children }: { children: React.ReactNode }) {
   const setScroll = useSceneStore((s) => s.setScroll);

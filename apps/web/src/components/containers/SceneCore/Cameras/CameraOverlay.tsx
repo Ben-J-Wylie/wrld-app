@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { PerspectiveCamera, OrbitControls } from "@react-three/drei";
 import { useEffect, useRef } from "react";
-import { SceneConfig, useSceneStore } from "@/Scene";
+import { SceneConfig, useSceneStore } from "@/components/containers/SceneCore";
 
 function ObserverScene({
   sharedScene,
@@ -60,10 +60,10 @@ export function CameraOverlay({
   const visibleHeight = useSceneStore((s) => s.visibleHeight);
   const worldWidth =
     useSceneStore((s) => s.worldWidth) ??
-    SceneConfig.scene.background.widthWorld;
+    SceneConfig.scene.background.worldWidth;
   const worldHeight =
     useSceneStore((s) => s.worldHeight) ??
-    SceneConfig.scene.background.heightWorld;
+    SceneConfig.scene.background.worldHeight;
 
   return (
     <>

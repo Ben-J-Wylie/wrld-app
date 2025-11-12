@@ -1,7 +1,7 @@
 import { ThreeElements } from "@react-three/fiber";
 import { Image } from "@react-three/drei";
-import { SceneConfig } from "@/Scene";
-import { Group } from "@/Scene/Layers";
+import { SceneConfig } from "@/components/containers/SceneCore";
+import { Group } from "@/components/containers/SceneCore/Layers";
 
 type GroupProps = ThreeElements["group"];
 
@@ -21,7 +21,7 @@ interface ImagePlaneProps extends GroupProps {
  */
 export function ImagePlane({
   src,
-  width = SceneConfig.scene.background.widthWorld,
+  width = SceneConfig.scene.background.worldWidth,
   height,
   depth = 0,
   opacity = 1,

@@ -2,7 +2,7 @@
 import { useRef, useEffect } from "react";
 import * as THREE from "three";
 import { useThree } from "@react-three/fiber";
-import { SceneConfig } from "@/Scene";
+import { SceneConfig } from "@/components/containers/SceneCore";
 
 export function DirectionalLight() {
   const lightRef = useRef<THREE.DirectionalLight>(null);

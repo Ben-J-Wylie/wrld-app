@@ -10,8 +10,8 @@ export const SceneConfig = {
 
   scene: {
     background: {
-      widthWorld: 10,
-      heightWorld: 30,
+      worldWidth: 10,
+      worldHeight: 30,
       depth: 0,
     },
   },

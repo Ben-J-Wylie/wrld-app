@@ -1,14 +1,17 @@
 import { Canvas } from "@react-three/fiber";
 import { PerformanceMonitor } from "@react-three/drei";
 import { PropsWithChildren, useEffect } from "react";
-import { SceneConfig, useSceneStore } from "@/Scene";
-import { RegisterThreeObjects, useThreeStore } from "@/Scene/Helpers";
+import { SceneConfig, useSceneStore } from "@/components/containers/SceneCore";
+import {
+  RegisterThreeObjects,
+  useThreeStore,
+} from "@/components/containers/SceneCore/Helpers";
 import {
   FitPerspectiveCamera,
   CameraRig,
   CameraOverlay,
-} from "@/components/containers/Scene/Cameras";
-import { ScrollDomWrapper } from "@/Scene/Controllers";
+} from "@/components/containers/SceneCore/Cameras";
+import { ScrollDomWrapper } from "@/components/containers/SceneCore/Controllers";
 
 /**
  * StageDom

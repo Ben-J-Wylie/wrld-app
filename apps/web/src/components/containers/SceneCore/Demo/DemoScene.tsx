@@ -1,4 +1,7 @@
-import { BackgroundPlane, Group } from "@/Scene/Layers";
+import {
+  BackgroundPlane,
+  Group,
+} from "@/components/containers/SceneCore/Layers";
 import {
   LayerMid2Shape,
   LayerMid1Shape,
