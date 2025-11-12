@@ -13,18 +13,41 @@ export const SceneConfig = {
       sceneWidth: 10,
       sceneHeight: 30,
       depth: 0,
+      color: "#dddddd",
     },
   },
 
   lighting: {
-    ambient: 0.3,
-    directional: { position: [5, 5, 5], intensity: 1.2 },
-    point: { position: [1, 1.5, 4], intensity: 5, distance: 50 },
-},
+    ambient: .3,
+
+    directional: {
+      position: [0, 0, 10] as [number, number, number],
+      target: [0, 0, 0] as [number, number, number],
+      
+      color: "#ffffff",
+      intensity: 1,
+
+      castShadow: true,
+      shadow: {
+        bias: -0.0005,
+        normalBias: 0.02,
+        radius: 2,
+        mapSize: [2048, 2048] as [number, number],
+        camera: {
+          near: 0,
+          far: 20,
+          left: -10,
+          right: 10,
+          top: 100,
+          bottom: -10,
+        },
+      },
+    },
+  },
 
   scroll: {
     smoothness: 0.08,
-    mode: "custom" as ScrollMode, // 👈 explicit union type here
+    mode: "custom" as ScrollMode,
   },
 
   debug: {
@@ -33,4 +56,3 @@ export const SceneConfig = {
 } as const;
 
 export type SceneConfigType = typeof SceneConfig;
-

@@ -5,6 +5,12 @@ import {
   BackgroundPlane,
   Group,
 } from "@/components/containers/SceneCore/Layers";
+import {
+  LayerMid2Shape,
+  LayerMid1Shape,
+  LayerFrontShape,
+  UiGlassShape,
+} from "./Shapes";
 import * as THREE from "three";
 
 /**
@@ -27,25 +33,21 @@ export function AlphaScene() {
 
   return (
     <>
-      {/* 💡 Local lights */}
-      <ambientLight intensity={0.4} />
-      <directionalLight
-        color={new THREE.Color("#ffffff")}
-        intensity={0.8}
-        position={[5, 5, 5]}
-        castShadow
-      />
-      <pointLight color={"#88ccff"} intensity={0.6} position={[-3, 2, 3]} />
-
       {/* 🖼 Scene layers */}
-      <BackgroundPlane
-        src="https://dummyimage.com/1920x1080/111/fff.png&text=AlphaScene"
-        depth={0}
-      />
+      <BackgroundPlane />
 
-      <Group depth={1}>{/* Add midground objects here */}</Group>
-
-      <Group depth={3}>{/* Add foreground objects here */}</Group>
+      <Group depth={1}>
+        <LayerMid2Shape castShadow receiveShadow />
+      </Group>
+      <Group depth={2}>
+        <LayerMid1Shape castShadow receiveShadow />
+      </Group>
+      <Group depth={3}>
+        <LayerFrontShape castShadow receiveShadow />
+      </Group>
+      <Group depth={3.2}>
+        <UiGlassShape castShadow receiveShadow />
+      </Group>
     </>
   );
 }

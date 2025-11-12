@@ -3,63 +3,87 @@ import { useRef, useEffect } from "react";
 import * as THREE from "three";
 import { useThree } from "@react-three/fiber";
 import { SceneConfig } from "@/components/containers/SceneCore";
+import { CameraHelper } from "three";
 
 export function DirectionalLight() {
   const lightRef = useRef<THREE.DirectionalLight>(null);
   const helperRef = useRef<THREE.DirectionalLightHelper | null>(null);
   const { scene } = useThree();
 
-  const { position, intensity } = SceneConfig.lighting.directional;
+  const { color, position, intensity, target, castShadow, shadow } =
+    SceneConfig.lighting.directional;
   const { enabled: debugEnabled } = SceneConfig.debug;
+
+  useEffect(() => {
+    if (!lightRef.current) return;
+    const camHelper = new CameraHelper(lightRef.current.shadow.camera);
+    scene.add(camHelper);
+  }, []);
 
   useEffect(() => {
     if (!lightRef.current) return;
     const light = lightRef.current;
 
+    // 🔹 Core light properties
+
     light.position.set(...position);
-    light.intensity = intensity;
-    light.castShadow = true;
-
-    light.shadow.bias = -0.0005; // small negative to pull shadow off the caster
-    light.shadow.normalBias = 0.02; // helps with grazing angles
-    light.shadow.radius = 2; // (WebGL2) softens PCF a touch
-
-    // 🔹 Add a target (so the light has direction)
-    light.target.position.set(0, 0, 0);
+    light.target.position.set(...target);
     scene.add(light.target);
 
-    // Shadow bounds
-    light.shadow.mapSize.set(2048, 2048);
-    light.shadow.camera.near = 0.5;
-    light.shadow.camera.far = 50;
-    light.shadow.camera.left = -10;
-    light.shadow.camera.right = 10;
-    light.shadow.camera.top = 10;
-    light.shadow.camera.bottom = -10;
+    light.color = new THREE.Color(color);
+    light.intensity = intensity;
 
-    // ✅ Attach helper only if debug mode is on
+    light.castShadow = castShadow;
+
+    // 🔹 Shadow setup
+    const s = shadow;
+    light.shadow.bias = s.bias;
+    light.shadow.normalBias = s.normalBias;
+    light.shadow.radius = s.radius;
+    light.shadow.mapSize.set(...s.mapSize);
+    light.shadow.camera.near = s.camera.near;
+    light.shadow.camera.far = s.camera.far;
+    light.shadow.camera.left = s.camera.left;
+    light.shadow.camera.right = s.camera.right;
+    light.shadow.camera.top = s.camera.top;
+    light.shadow.camera.bottom = s.camera.bottom;
+
+    light.shadow.camera.updateProjectionMatrix();
+
+    // 🔹 Debug helper (if enabled)
     if (debugEnabled) {
       const helper = new THREE.DirectionalLightHelper(light, 1, 0xffaa00);
       helperRef.current = helper;
       scene.add(helper);
     }
 
-    // Cleanup on unmount
+    // 🧹 Cleanup on unmount
     return () => {
+      scene.remove(light.target);
       if (helperRef.current) {
         scene.remove(helperRef.current);
         helperRef.current.dispose();
         helperRef.current = null;
       }
     };
-  }, [scene, position, intensity, debugEnabled]);
+  }, [
+    scene,
+    color,
+    position,
+    intensity,
+    target,
+    castShadow,
+    shadow,
+    debugEnabled,
+  ]);
 
   return (
     <directionalLight
       ref={lightRef}
-      color="#ffffff"
+      color={color}
       intensity={intensity}
       position={position}
+      castShadow={castShadow}
     />
   );
 }

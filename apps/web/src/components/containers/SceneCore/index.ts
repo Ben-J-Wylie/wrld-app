@@ -14,4 +14,3 @@ export * from "./Helpers";
 export * from "./SceneConfig";
 export * from "./SceneStore";
 
-export * from "./Demo/DemoScene";

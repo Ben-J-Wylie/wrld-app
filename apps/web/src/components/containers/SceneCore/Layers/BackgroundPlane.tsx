@@ -23,7 +23,8 @@ import { SceneConfig } from "../SceneConfig";
  *   SceneConfig → SceneStore → BackgroundPlane → Camera/Render
  */
 interface BackgroundPlaneProps {
-  src: string; // Background image texture file
+  src?: string; // Optionsl background image texture file
+  color?: string; // Optional background color override
   width?: number; // Optional manual override for scene width
   height?: number; // Optional manual override for scene height
   depth?: number; // Z-position in the scene (from SceneConfig by default)
@@ -31,29 +32,32 @@ interface BackgroundPlaneProps {
 
 export function BackgroundPlane({
   src,
+  color,
   width,
   height,
   depth = SceneConfig.scene.background.depth,
 }: BackgroundPlaneProps) {
-  // 🔹 Reference to the mesh (for debugging or manual inspection)
+  // Reference to the mesh (for debugging or manual inspection)
   const meshRef = useRef<THREE.Mesh>(null);
 
-  // 🔹 Load the texture from the provided image source
-  const texture = useLoader(THREE.TextureLoader, src);
+  // Load the texture from the provided image source
+  const texture: THREE.Texture | null = src
+    ? useLoader(THREE.TextureLoader, src)
+    : null;
 
-  // 🔹 Read current scene dimensions from the SceneStore
+  // Read current scene dimensions from the SceneStore
   // These are live, reactive values — if another file (like DemoScene)
   // calls setSceneWidth/Height, the BackgroundPlane automatically re-renders.
   const sceneWidth = useSceneStore((s) => s.sceneWidth);
   const sceneHeight = useSceneStore((s) => s.sceneHeight);
 
   // ---------------------------------------------------------------------------
-  // 🎨 Determine the final plane dimensions (in world units)
+  // Determine the final plane dimensions (in world units)
   // ---------------------------------------------------------------------------
   // Priority of values:
-  // 1️⃣ Props passed directly to BackgroundPlane (manual override)
-  // 2️⃣ Reactive values from SceneStore (dynamic, updated elsewhere)
-  // 3️⃣ Fallbacks from SceneConfig (static design defaults)
+  // 1️Props passed directly to BackgroundPlane (manual override)
+  // 2️Reactive values from SceneStore (dynamic, updated elsewhere)
+  // 3️Fallbacks from SceneConfig (static design defaults)
   const planeWidth =
     width ?? sceneWidth ?? SceneConfig.scene.background.sceneWidth;
   const planeHeight =
@@ -63,7 +67,12 @@ export function BackgroundPlane({
     planeWidth;
 
   // ---------------------------------------------------------------------------
-  // 🧱 Render the background plane
+  // Determines the color with a fallback to config
+  // ---------------------------------------------------------------------------
+  const finalColor = color ?? SceneConfig.scene.background.color ?? "#dddddd";
+
+  // ---------------------------------------------------------------------------
+  // Render the background plane
   // ---------------------------------------------------------------------------
   // <Group> offsets the plane along the Z-axis.
   // The <planeGeometry> uses the computed dimensions.
@@ -74,21 +83,31 @@ export function BackgroundPlane({
         {/* Flat rectangle geometry in world units */}
         <planeGeometry args={[planeWidth, planeHeight]} />
 
-        {/* Image texture with simple, realistic lighting response */}
-        <meshStandardMaterial
-          map={texture}
-          toneMapped
-          roughness={1}
-          metalness={0}
-          side={THREE.DoubleSide} // visible from both sides
-        />
+        {/* Conditionally use image or color material */}
+        {texture ? (
+          <meshStandardMaterial
+            map={texture as THREE.Texture}
+            toneMapped
+            roughness={1}
+            metalness={0}
+            side={THREE.DoubleSide}
+          />
+        ) : (
+          <meshStandardMaterial
+            color={finalColor}
+            toneMapped
+            roughness={1}
+            metalness={0}
+            side={THREE.DoubleSide}
+          />
+        )}
       </mesh>
     </Group>
   );
 }
 
 /* -------------------------------------------------------------------------- */
-/* 🧭 Data Flow Diagram — Read-Only Architecture                              */
+/* Data Flow Diagram — Read-Only Architecture                              */
 /* -------------------------------------------------------------------------- */
 
 /*
@@ -108,7 +127,7 @@ export function BackgroundPlane({
 │  (shared reactive state)    │
 │─────────────────────────────│
 │  sceneWidth:   10           │
-│  sceneHeight:  15   ✅ true │ ← updated by external file (e.g. DemoScene)
+│  sceneHeight:  15    true   │ ← updated by external file (e.g. DemoScene)
 │  visibleHeight: computed    │
 │  scroll: dynamic value      │
 └──────────────┬──────────────┘
