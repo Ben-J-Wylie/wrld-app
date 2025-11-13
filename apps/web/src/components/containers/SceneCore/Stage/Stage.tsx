@@ -1,6 +1,6 @@
 // src/components/containers/SceneCore/Stage/Stage.tsx
 import { Canvas } from "@react-three/fiber"; // React-friendly WebGL renderer
-import { PerformanceMonitor } from "@react-three/drei"; // FPS monitor / adaptive performance
+import { PerformanceMonitor, SoftShadows } from "@react-three/drei"; // FPS monitor / adaptive performance
 import * as THREE from "three";
 import { PropsWithChildren, useMemo } from "react";
 
@@ -73,13 +73,14 @@ export function Stage({ children }: PropsWithChildren) {
     <Wrapper>
       {/* 🖼 Main 3D Canvas (React Three Fiber) */}
       <Canvas
-        // Enable smooth shadows and linear color space
-        shadows={{ type: THREE.PCFSoftShadowMap }}
-        linear
-        // Adjust rendering resolution for clarity vs performance
+        shadows
         dpr={[1, Math.min(2, window.devicePixelRatio || 1.5)]}
-        gl={{ antialias: true, alpha: true }}
-        // Position and scroll handling
+        gl={{
+          antialias: true,
+          alpha: true,
+          shadowMapEnabled: true,
+          shadowMapType: THREE.PCFSoftShadowMap,
+        }}
         style={{
           position: scrollMode === "dom" ? "sticky" : "fixed",
           top: 0,
@@ -90,15 +91,15 @@ export function Stage({ children }: PropsWithChildren) {
           zIndex: 0,
         }}
       >
-        {/* ⚙️ Core setup and camera logic */}
-        <PerformanceMonitor /> {/* Dynamically lowers quality if FPS drops */}
-        <RegisterThreeObjects /> {/* Saves camera & scene refs to Zustand */}
-        <FitPerspectiveCamera /> {/* Auto-adjust FOV to fit viewport */}
-        <CameraRig /> {/* Handles scroll-based camera movement */}
-        {/* 💡 Lighting system */}
+        <PerformanceMonitor />
+        <RegisterThreeObjects />
+        <FitPerspectiveCamera />
+        <CameraRig />
+
         <AmbientLight />
-        <DirectionalLight /> {/* Key directional light for all scenes */}
-        {/* 🎨 Scene content (child layers, meshes, etc.) */}
+        <DirectionalLight />
+
+        <SoftShadows size={30} samples={40} focus={0.25} />
         {children}
       </Canvas>
 

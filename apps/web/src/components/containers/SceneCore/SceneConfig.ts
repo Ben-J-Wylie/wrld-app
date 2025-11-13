@@ -13,7 +13,7 @@ export const SceneConfig = {
       sceneWidth: 10,
       sceneHeight: 50,
       depth: 0,
-      color: "#c9c9c9",
+      color: "#ffffff",
     },
   },
 
@@ -24,26 +24,25 @@ export const SceneConfig = {
 },
 
     directional: {
-      position: [10, 30, 150] as [number, number, number],
+      position: [-30, 30, 100] as [number, number, number],
       target: [0, 0, 1] as [number, number, number],
       
       intensity: 1,
-      color: "#ffd4d4",
+      color: "#ffffff",
       
-
       castShadow: true,
       shadow: {
-        bias: -0.0001,
-        normalBias: 0.1,
-        radius: 2,
-        mapSize: [2048, 2048] as [number, number],
+        bias: -0.00015,
+        normalBias: 0.05,
+        radius: 6,  
+        mapSize: [4096, 4096] as [number, number],
         camera: {
           near: 50,
-          far: 250,
+          far: 150,
           left: -50,
           right: 50,
-          top: 150,
-          bottom: -150,
+          top: 100,
+          bottom: -100,
         },
       },
     },
