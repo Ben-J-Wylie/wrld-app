@@ -3,80 +3,92 @@ import { useRef, useEffect } from "react";
 import * as THREE from "three";
 import { useThree } from "@react-three/fiber";
 import { SceneConfig } from "@/components/containers/SceneCore";
-import { CameraHelper } from "three";
 
+/**
+ * DirectionalLight
+ * ---------------------------------------------------------------------------
+ * This component creates a directional light that:
+ *   • casts shadows
+ *   • uses a custom shadow camera (orthographic box)
+ *   • optionally shows debug helpers
+ *   • keeps the light.target in the correct position
+ *
+ * IMPORTANT:
+ * All shadow properties MUST be set in JSX (not in useEffect),
+ * because Three.js allocates shadow maps when the renderer is created.
+ * If castShadow or mapSize is set too late, shadows will never appear.
+ */
 export function DirectionalLight() {
+  // The actual Three.js light instance
   const lightRef = useRef<THREE.DirectionalLight>(null);
-  const helperRef = useRef<THREE.DirectionalLightHelper | null>(null);
+
+  // Helpers (visual debugging)
+  const camHelperRef = useRef<THREE.CameraHelper | null>(null);
+  const lightHelperRef = useRef<THREE.DirectionalLightHelper | null>(null);
+
+  // Access the scene to attach helpers + target
   const { scene } = useThree();
 
+  // Pull settings from config file
   const { color, position, intensity, target, castShadow, shadow } =
     SceneConfig.lighting.directional;
+
   const { enabled: debugEnabled } = SceneConfig.debug;
 
-  useEffect(() => {
-    if (!lightRef.current) return;
-    const camHelper = new CameraHelper(lightRef.current.shadow.camera);
-    scene.add(camHelper);
-  }, []);
-
+  /* ------------------------------------------------------------------------
+   * 1. HANDLE LIGHT TARGET + OPTIONAL HELPERS
+   * ------------------------------------------------------------------------
+   * Directional lights require a target to define the direction they point.
+   * R3F does not automatically update the target's matrix, so we must do it
+   * manually in an effect after the light exists.
+   */
   useEffect(() => {
     if (!lightRef.current) return;
     const light = lightRef.current;
 
-    // 🔹 Core light properties
-
-    light.position.set(...position);
+    /* -- Update the position the light points at -- */
     light.target.position.set(...target);
+    light.target.updateMatrixWorld(); // IMPORTANT
     scene.add(light.target);
 
-    light.color = new THREE.Color(color);
-    light.intensity = intensity;
-
-    light.castShadow = castShadow;
-
-    // 🔹 Shadow setup
-    const s = shadow;
-    light.shadow.bias = s.bias;
-    light.shadow.normalBias = s.normalBias;
-    light.shadow.radius = s.radius;
-    light.shadow.mapSize.set(...s.mapSize);
-    light.shadow.camera.near = s.camera.near;
-    light.shadow.camera.far = s.camera.far;
-    light.shadow.camera.left = s.camera.left;
-    light.shadow.camera.right = s.camera.right;
-    light.shadow.camera.top = s.camera.top;
-    light.shadow.camera.bottom = s.camera.bottom;
-
-    light.shadow.camera.updateProjectionMatrix();
-
-    // 🔹 Debug helper (if enabled)
+    /* -- Debug helpers: show the light direction + shadow camera box -- */
     if (debugEnabled) {
-      const helper = new THREE.DirectionalLightHelper(light, 1, 0xffaa00);
-      helperRef.current = helper;
-      scene.add(helper);
+      // Yellow direction indicator
+      const dirHelper = new THREE.DirectionalLightHelper(light, 0.5, 0xffaa00);
+      lightHelperRef.current = dirHelper;
+      scene.add(dirHelper);
+
+      // Shadow frustum (blue wireframe) that shows the orthographic camera box
+      const camHelper = new THREE.CameraHelper(light.shadow.camera);
+      camHelperRef.current = camHelper;
+      scene.add(camHelper);
     }
 
-    // 🧹 Cleanup on unmount
+    /* -- Cleanup on unmount -- */
     return () => {
       scene.remove(light.target);
-      if (helperRef.current) {
-        scene.remove(helperRef.current);
-        helperRef.current.dispose();
-        helperRef.current = null;
+
+      if (lightHelperRef.current) {
+        scene.remove(lightHelperRef.current);
+        lightHelperRef.current.dispose();
+        lightHelperRef.current = null;
+      }
+
+      if (camHelperRef.current) {
+        scene.remove(camHelperRef.current);
+        camHelperRef.current.dispose();
+        camHelperRef.current = null;
       }
     };
-  }, [
-    scene,
-    color,
-    position,
-    intensity,
-    target,
-    castShadow,
-    shadow,
-    debugEnabled,
-  ]);
+  }, [scene, target, debugEnabled]);
 
+  /* ------------------------------------------------------------------------
+   * 2. THE LIGHT ITSELF
+   * ------------------------------------------------------------------------
+   * All shadow-related settings are placed directly on the JSX component.
+   * This ensures they exist BEFORE Three.js creates the renderer + shadow map.
+   * If they were set later in useEffect, shadows would not work.
+   */
   return (
     <directionalLight
       ref={lightRef}
@@ -84,6 +96,57 @@ export function DirectionalLight() {
       intensity={intensity}
       position={position}
       castShadow={castShadow}
+      /* -- Shadow map resolution (higher = softer, cleaner shadows) -- */
+      shadow-mapSize={shadow.mapSize}
+      /* -- Shadow acne / peter-panning control -- */
+      shadow-bias={shadow.bias}
+      shadow-normalBias={shadow.normalBias}
+      /* -- Soft edges support (WebGL2 only) -- */
+      shadow-radius={shadow.radius}
+      /* -- Custom orthographic shadow camera frustum -- */
+      shadow-camera-near={shadow.camera.near}
+      shadow-camera-far={shadow.camera.far}
+      shadow-camera-left={shadow.camera.left}
+      shadow-camera-right={shadow.camera.right}
+      shadow-camera-top={shadow.camera.top}
+      shadow-camera-bottom={shadow.camera.bottom}
     />
   );
 }
+
+//            ┌─────────────────────────┐
+//            │  R3F mounts the light   │
+//            │  <directionalLight />   │
+//            └─────────────┬───────────┘
+//                          │
+//        All shadow settings already exist here
+//        (castShadow, mapSize, camera, bias, etc.)
+//                          │
+//           Three.js renderer allocates shadow map
+//                          │
+//                          ▼
+//  ┌────────────────────────────────────────────┐
+//  │ useEffect runs AFTER the light is created  │
+//  └─────────────────────────┬──────────────────┘
+//                            │
+//                            ▼
+//              ┌──────────────────────────┐
+//              │ Update light.target      │
+//              │ • position it correctly  │
+//              │ • updateMatrixWorld()    │
+//              └─────────────┬────────────┘
+//                            │
+//                            ▼
+//            ┌─────────────────────────────────┐
+//            │ (Optional) Add debug helpers    │
+//            │ • DirectionalLightHelper        │
+//            │ • CameraHelper (shadow frustum) │
+//            └──────────────┬──────────────────┘
+//                           │
+//                           ▼
+//            ┌──────────────────────────────────┐
+//            │ Scene renders with correct light │
+//            │ • shadows work                   │
+//            │ • target applied                 │
+//            │ • helpers visible (if enabled)   │
+//            └──────────────────────────────────┘

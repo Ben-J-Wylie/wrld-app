@@ -27,8 +27,8 @@ export function AlphaScene() {
   const setSceneWidth = useSceneStore((s) => s.setSceneWidth);
 
   useEffect(() => {
-    setSceneWidth(10);
-    setSceneHeight(15);
+    setSceneWidth(100);
+    setSceneHeight(200);
   }, [setSceneWidth, setSceneHeight]);
 
   return (
@@ -36,16 +36,16 @@ export function AlphaScene() {
       {/* 🖼 Scene layers */}
       <BackgroundPlane />
 
-      <Group depth={1}>
+      <Group depth={5}>
         <LayerMid2Shape castShadow receiveShadow />
       </Group>
-      <Group depth={2}>
+      <Group depth={10}>
         <LayerMid1Shape castShadow receiveShadow />
       </Group>
-      <Group depth={3}>
+      <Group depth={15}>
         <LayerFrontShape castShadow receiveShadow />
       </Group>
-      <Group depth={3.2}>
+      <Group depth={20}>
         <UiGlassShape castShadow receiveShadow />
       </Group>
     </>

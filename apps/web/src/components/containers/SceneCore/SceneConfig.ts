@@ -3,43 +3,47 @@ export type ScrollMode = "custom" | "dom";
 export const SceneConfig = {
   camera: {
     baseFov: 50,
-    positionZ: 10,
+    positionZ: 100,
     near: 0.1,
-    far: 100,
+    far: 120,
   },
 
   scene: {
     background: {
       sceneWidth: 10,
-      sceneHeight: 30,
+      sceneHeight: 50,
       depth: 0,
-      color: "#dddddd",
+      color: "#c9c9c9",
     },
   },
 
   lighting: {
-    ambient: .3,
+    ambient: {
+      intensity: 0.1,
+      color: "#ffffff",
+},
 
     directional: {
-      position: [0, 0, 10] as [number, number, number],
-      target: [0, 0, 0] as [number, number, number],
+      position: [10, 30, 150] as [number, number, number],
+      target: [0, 0, 1] as [number, number, number],
       
-      color: "#ffffff",
       intensity: 1,
+      color: "#ffd4d4",
+      
 
       castShadow: true,
       shadow: {
-        bias: -0.0005,
-        normalBias: 0.02,
+        bias: -0.0001,
+        normalBias: 0.1,
         radius: 2,
         mapSize: [2048, 2048] as [number, number],
         camera: {
-          near: 0,
-          far: 20,
-          left: -10,
-          right: 10,
-          top: 100,
-          bottom: -10,
+          near: 50,
+          far: 250,
+          left: -50,
+          right: 50,
+          top: 150,
+          bottom: -150,
         },
       },
     },

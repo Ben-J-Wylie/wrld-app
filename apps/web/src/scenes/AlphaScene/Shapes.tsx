@@ -36,26 +36,26 @@ function PlaneShape({
 // === Layered placeholders ===
 
 export function LayerBackShape(props: MeshProps) {
-  return <PlaneShape color="#224488" width={6} height={3} {...props} />;
+  return <PlaneShape color="#224488" width={30} height={20} {...props} />;
 }
 
 export function LayerMid2Shape(props: MeshProps) {
-  return <PlaneShape color="#336699" width={5} height={3} {...props} />;
+  return <PlaneShape color="#336699" width={25} height={15} {...props} />;
 }
 
 export function LayerMid1Shape(props: MeshProps) {
-  return <PlaneShape color="#4499aa" width={4} height={3} {...props} />;
+  return <PlaneShape color="#4499aa" width={20} height={10} {...props} />;
 }
 
 export function LayerFrontShape(props: MeshProps) {
-  return <PlaneShape color="#55bbcc" width={3} height={3} {...props} />;
+  return <PlaneShape color="#55bbcc" width={15} height={5} {...props} />;
 }
 
 export function UiGlassShape(props: MeshProps) {
   return (
     <PlaneShape
       color="#ffffff"
-      width={2}
+      width={10}
       height={3}
       opacity={0.35}
       {...props}
