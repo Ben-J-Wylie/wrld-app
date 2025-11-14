@@ -83,21 +83,19 @@ export function BackgroundPlane({
         {/* Flat rectangle geometry in world units */}
         <planeGeometry args={[planeWidth, planeHeight]} />
 
-        {/* Conditionally use image or color material */}
+        {/* Conditionally use image or color Phong material */}
         {texture ? (
-          <meshStandardMaterial
+          <meshPhongMaterial
             map={texture as THREE.Texture}
-            toneMapped
-            roughness={1}
-            metalness={0}
+            shininess={100} // adjust specular size
+            specular={new THREE.Color(0xffffff)} // highlight color
             side={THREE.DoubleSide}
           />
         ) : (
-          <meshStandardMaterial
+          <meshPhongMaterial
             color={finalColor}
-            toneMapped
-            roughness={1}
-            metalness={0}
+            shininess={100}
+            specular={new THREE.Color(0xffffff)}
             side={THREE.DoubleSide}
           />
         )}

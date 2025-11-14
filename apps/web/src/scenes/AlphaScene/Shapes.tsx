@@ -20,14 +20,15 @@ function PlaneShape({
   return (
     <mesh castShadow receiveShadow {...rest}>
       <planeGeometry args={[width, height]} />
-      <meshStandardMaterial
+
+      <meshPhongMaterial
         color={color}
         transparent
         opacity={opacity}
-        roughness={0.8}
-        metalness={0.1}
-        side={THREE.DoubleSide} // temporarily robust while tuning
-        shadowSide={THREE.FrontSide} // prefer the front side for shadowing
+        shininess={0} // similar "gloss depth" to roughness≈0.8
+        specular={new THREE.Color(0xffffff)} // highlight color
+        side={THREE.DoubleSide}
+        shadowSide={THREE.FrontSide}
       />
     </mesh>
   );
