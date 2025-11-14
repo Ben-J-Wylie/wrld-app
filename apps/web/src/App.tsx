@@ -1,8 +1,13 @@
-// src/App.tsx
 import { useEffect, useRef } from "react";
-import * as THREE from "three";
-import { ThreeEngine } from "@/components/containers/SceneCore/engine";
-import { createBackgroundPlane } from "@/components/containers/SceneCore/Layers/BackgroundPlane";
+import {
+  Engine,
+  Cameras,
+  Controllers,
+  Layers,
+  SceneConfig,
+  useSceneStore,
+} from "./components/containers/SceneCore";
+import { createDemoScene } from "./components/containers/SceneCore/DemoScene";
 
 export default function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -10,51 +15,27 @@ export default function App() {
   useEffect(() => {
     if (!canvasRef.current) return;
 
-    // Create engine
-    const engine = new ThreeEngine(canvasRef.current);
+    // --- Create engine ---
+    const engine = new Engine.ThreeEngine(canvasRef.current);
 
-    // Background plane (image or color)
-    const bg = createBackgroundPlane({
-      // src: background, // <- if you have an imported PNG/JPG
-      depth: -4, // sits behind box + ground
-    });
-    engine.scene.add(bg);
+    // --- Attach plugins ---
+    Controllers.applyScrollController();
+    Cameras.applyFitPerspectiveCamera(engine);
+    Cameras.applyCameraRig(engine);
 
-    //
-    // TEMP TEST OBJECTS
-    //
-    const box = new THREE.Mesh(
-      new THREE.BoxGeometry(1, 1, 1),
-      new THREE.MeshStandardMaterial({ color: "hotpink" })
-    );
-    box.castShadow = true;
-    box.position.set(0, 0.5, 0);
-    engine.scene.add(box);
+    // --- Add full demo scene ---
+    const demo = createDemoScene();
+    engine.scene.add(demo);
 
-    // Ground plane for shadows
-    const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(20, 20),
-      new THREE.MeshStandardMaterial({ color: "hotpink" })
-    );
-    ground.rotation.x = -Math.PI / 2;
-    ground.receiveShadow = true;
-    engine.scene.add(ground);
-
-    // Start the engine
     engine.start();
 
     return () => engine.stop();
   }, []);
 
-  // console.log("Scene children:", engine.scene.children);
   return (
     <canvas
       ref={canvasRef}
-      style={{
-        width: "100vw",
-        height: "100vh",
-        display: "block",
-      }}
+      style={{ width: "100vw", height: "100vh", display: "block" }}
     />
   );
 }

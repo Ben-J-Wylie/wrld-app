@@ -1,10 +1,6 @@
-// @ts-nocheck
-
+// SceneCore/Controllers/index.ts
 // -----------------------------------------------------------------------------
-// Scene Stage Barrel Export
+// Input controllers barrel
 // -----------------------------------------------------------------------------
 
-export { Stage } from "./Stage";
-
-
-
+export { applyScrollController } from "./ScrollController";

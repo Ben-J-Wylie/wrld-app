@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 export type ScrollMode = "custom" | "dom";
 
 export const SceneConfig = {

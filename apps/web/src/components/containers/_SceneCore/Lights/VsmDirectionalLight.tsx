@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 // src/components/containers/SceneCore/Lights/VsmDirectionalLight.tsx
 import { useEffect, useRef } from "react";
 import * as THREE from "three";

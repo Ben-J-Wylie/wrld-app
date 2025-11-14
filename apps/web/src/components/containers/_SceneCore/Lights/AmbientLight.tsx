@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 // src/components/Scene/Lights/AmbientLight.tsx
 import { SceneConfig } from "@/components/containers/SceneCore";
 

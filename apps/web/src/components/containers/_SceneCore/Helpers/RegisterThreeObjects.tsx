@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 import { useThree } from "@react-three/fiber";
 import { useEffect } from "react";
 import { useThreeStore } from "./ThreeStore";

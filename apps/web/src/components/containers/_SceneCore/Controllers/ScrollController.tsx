@@ -1,4 +1,4 @@
-//
+// @ts-nocheck
 
 import { useEffect, useRef } from "react";
 import { SceneConfig, useSceneStore } from "@/components/containers/SceneCore";

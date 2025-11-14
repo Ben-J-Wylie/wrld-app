@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 import { create } from "zustand";
 import * as THREE from "three";
 

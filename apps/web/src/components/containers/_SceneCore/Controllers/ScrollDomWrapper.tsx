@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 // src/components/containers/Scene/ScrollDomWrapper.tsx
 import { useRef, useEffect } from "react";
 import { useSceneStore } from "@/components/containers/SceneCore";
