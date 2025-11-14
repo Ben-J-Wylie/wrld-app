@@ -1,33 +1,17 @@
-import { ThreeElements } from "@react-three/fiber";
-import { SceneConfig } from "../SceneConfig";
-import { ReactNode } from "react";
+// SceneCore/engine/objects/Group.ts
+import * as THREE from "three";
 
-type GroupProps = ThreeElements["group"];
-
-interface GroupLayerProps extends GroupProps {
-  /** Distance from camera: smaller = closer (moves faster), larger = farther (moves slower) */
-  depth?: number;
-  /** Optional Y offset */
-  baseY?: number;
-  /** Child elements to render inside the group */
-  children?: ReactNode;
+export interface GroupOptions {
+  x?: number;
+  y?: number;
+  depth?: number; // z-position
 }
 
-/**
- * Group
- * ---------------------------------------------------------------------------
- * 3D container for scene elements at a specific world-space depth.
- * Provides spatial grouping for consistent depth management.
- */
-export function Group({
-  depth = 0,
-  baseY = SceneConfig.scene.background.depth ?? 0,
-  children,
-  ...props
-}: GroupLayerProps) {
-  return (
-    <group position={[0, baseY, depth]} {...props}>
-      {children}
-    </group>
-  );
+export function createGroup(options: GroupOptions = {}) {
+  const { x = 0, y = 0, depth = 0 } = options;
+
+  const group = new THREE.Group();
+  group.position.set(x, y, depth);
+
+  return group;
 }

@@ -1,7 +1,0 @@
-/* in main.css or index.css */
-html, body {
-  height: 100%;
-  overflow: hidden;   /* disable native scrolling */
-  margin: 0;
-  touch-action: none; /* prevent browser pull-to-refresh */
-}
