@@ -6,7 +6,7 @@ export function createDirectionalLight() {
 
   // --- Directional Light ----------------------------------------------------
   const light = new THREE.DirectionalLight(0xffffff, 1.2);
-  light.position.set(3, 3, 15);
+  light.position.set(-5, 5, 20);
   light.castShadow = true;
 
   // Required target (DirectionalLights must aim at something)
@@ -21,7 +21,7 @@ export function createDirectionalLight() {
   light.shadow.mapSize.set(512, 512);
 
   // VSM blur controls
-  light.shadow.radius = 12;
+  light.shadow.radius = 8;
   light.shadow.blurSamples = 16;
 
   // bias tuning

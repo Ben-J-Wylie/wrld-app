@@ -9,10 +9,13 @@ import { createOrbitCamera } from "./components/containers/SceneCore/Cameras/Orb
 // Objects
 import { createBackdrop } from "./components/containers/SceneCore/Layers/Backdrop";
 import { createSphere } from "./components/containers/SceneCore/Layers/Sphere";
+import { createImagePlane } from "./components/containers/SceneCore/Layers/ImagePlane";
 
 // Lights
 import { createAmbientLight } from "./components/containers/SceneCore/Lights/AmbientLight";
 import { createDirectionalLight } from "./components/containers/SceneCore/Lights/DirectionalLight";
+
+import banner from "./banner.png";
 
 export default function WrldBasicScene() {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -46,6 +49,7 @@ export default function WrldBasicScene() {
       // Renderer
       // ----------------------------------
       const renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.domElement.style.pointerEvents = "auto";
       renderer.setPixelRatio(window.devicePixelRatio);
       renderer.setSize(width, height);
 
@@ -122,8 +126,32 @@ export default function WrldBasicScene() {
       // ----------------------------------
       // OBJECTS
       // ----------------------------------
-      scene.add(createSphere());
-      scene.add(createBackdrop({ width: 10, height: 30 }));
+      // scene.add(createSphere());
+      scene.add(createBackdrop({ width: 11, height: 30 }));
+
+      const plane1 = createImagePlane({
+        src: "./banner.png",
+        width: 4,
+        height: 2.5,
+        position: [-2, 1, 2],
+      });
+      scene.add(plane1);
+
+      const plane2 = createImagePlane({
+        src: "/textures/pic1.png",
+        width: 4,
+        height: 2.5,
+        position: [0, 0, 3],
+      });
+      scene.add(plane2);
+
+      const plane3 = createImagePlane({
+        src: "/textures/pic1.png",
+        width: 4,
+        height: 2.5,
+        position: [2, -1, 4],
+      });
+      scene.add(plane3);
 
       window.addEventListener("resize", onResize);
     };

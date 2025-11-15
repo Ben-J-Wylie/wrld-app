@@ -2,9 +2,7 @@
 import * as THREE from "three";
 
 export function createAmbientLight() {
-  // Simple soft ambient fill light
-  const ambient = new THREE.AmbientLight(0xffffff, .6);
+  const ambient = new THREE.AmbientLight(0xffffff, 0.5);
 
-  // Return directly (no need for a group)
   return ambient;
 }

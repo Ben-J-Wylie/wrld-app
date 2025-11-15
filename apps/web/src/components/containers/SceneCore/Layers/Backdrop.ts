@@ -21,7 +21,7 @@ export function createBackdrop(options: BackdropOptions = {}) {
   backdrop.rotation.set(0, 0, 0);
 
   // Internal default depth
-  backdrop.position.z = -5;
+  backdrop.position.z = 0;
 
   // Must receive shadows
   backdrop.receiveShadow = true;
