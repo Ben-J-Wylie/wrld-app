@@ -123,7 +123,7 @@ export default function WrldBasicScene() {
       // OBJECTS
       // ----------------------------------
       scene.add(createSphere());
-      scene.add(createBackdrop());
+      scene.add(createBackdrop({ width: 10, height: 30 }));
 
       window.addEventListener("resize", onResize);
     };

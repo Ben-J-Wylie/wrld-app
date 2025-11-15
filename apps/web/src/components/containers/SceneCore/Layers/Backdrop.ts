@@ -1,22 +1,29 @@
 // src/Backdrop.ts
 import * as THREE from "three";
 
-export function createBackdrop() {
-  // --- Geometry & Material ---
-  const geo = new THREE.PlaneGeometry(20, 20);
+export interface BackdropOptions {
+  width?: number;
+  height?: number;
+}
+
+export function createBackdrop(options: BackdropOptions = {}) {
+  const { width = 20, height = 20 } = options;
+
+  // Geometry & Material (color stays internal)
+  const geo = new THREE.PlaneGeometry(width, height);
   const mat = new THREE.MeshStandardMaterial({
-    color: 0x333333,
+    color: 0x333333, // internal default
   });
 
-  // --- Mesh ---
   const backdrop = new THREE.Mesh(geo, mat);
 
-  // Vertical orientation (normal facing +Z)
-  backdrop.rotation.x = 0;
-  backdrop.rotation.y = 0;
+  // Vertical orientation (normal +Z)
+  backdrop.rotation.set(0, 0, 0);
+
+  // Internal default depth
   backdrop.position.z = -5;
 
-  // MUST be true to receive shadows
+  // Must receive shadows
   backdrop.receiveShadow = true;
 
   return backdrop;
