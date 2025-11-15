@@ -34,6 +34,9 @@ export default function WrldBasicScene() {
   const orbitCameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null); // active camera
 
+  // Dynamic FOV update
+  const updateSceneCameraRef = useRef<(() => void) | null>(null);
+
   // Controls
   const controlsRef = useRef<OrbitControls | null>(null);
 
@@ -79,13 +82,21 @@ export default function WrldBasicScene() {
       // CAMERAS
       // ----------------------------------
 
-      // Scene Camera (main)
-      const { camera: sceneCamera, helper: sceneCameraHelper } =
-        createSceneCamera(renderer);
+      // Scene Camera — now includes dynamic FOV
+      const {
+        camera: sceneCamera,
+        helper: sceneCameraHelper,
+        updateSmooth: updateSceneCamera,
+      } = createSceneCamera(renderer);
+
       scene.add(sceneCamera);
       scene.add(sceneCameraHelper);
 
+      // Store camera
       sceneCameraRef.current = sceneCamera;
+
+      // Store FOV update function
+      updateSceneCameraRef.current = updateSceneCamera;
 
       // Orbit Camera (secondary)
       const {
@@ -217,6 +228,11 @@ export default function WrldBasicScene() {
       if (!renderer || !camera || !scene) return;
 
       frameIdRef.current = requestAnimationFrame(animate);
+
+      // NEW: make SceneCamera dynamically fit the backdrop width
+      if (updateSceneCameraRef.current) {
+        updateSceneCameraRef.current();
+      }
 
       if (controls) controls.update();
       renderer.render(scene, camera);

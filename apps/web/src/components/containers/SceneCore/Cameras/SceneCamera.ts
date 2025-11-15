@@ -1,89 +1,76 @@
-// src/SceneCamera.ts
+// src/components/containers/SceneCore/Cameras/SceneCamera.ts
 import * as THREE from "three";
 import { useSceneStore } from "../Store/SceneStore";
 
 export function createSceneCamera(renderer: THREE.WebGLRenderer) {
-  const width = renderer.domElement.clientWidth;
-  const height = renderer.domElement.clientHeight;
-
-  // ---------------------------------------------------------------------------
-  // CREATE CAMERA
-  // ---------------------------------------------------------------------------
-  const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
-
-  // Position camera
   const cameraZ = 100;
+
+  const getViewport = () => ({
+    w: renderer.domElement.clientWidth,
+    h: renderer.domElement.clientHeight,
+  });
+
+  const { w, h } = getViewport();
+
+  const camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 110);
   camera.position.set(0, 0, cameraZ);
+
+  // CameraHelper (debug view of frustum)
+  const helper = new THREE.CameraHelper(camera);
 
   let currentFov = camera.fov;
 
-  // ---------------------------------------------------------------------------
-  // FOV MATH — Fit Width
-  // ---------------------------------------------------------------------------
+  // ------------------------------------------------------------
+  // FIT WIDTH MATH
+  // ------------------------------------------------------------
   function computeFitWidthFov() {
     const sceneWidth = useSceneStore.getState().sceneWidth;
+    const { w, h } = getViewport();
+    const aspect = w / h;
 
-    const viewportW = renderer.domElement.clientWidth;
-    const viewportH = renderer.domElement.clientHeight;
-    const aspect = viewportW / viewportH;
-
-    // Horizontal FOV needed to fit world width
     const fovX = 2 * Math.atan(sceneWidth / 2 / cameraZ);
-
-    // Convert horizontal FOV → vertical FOV (Three.js uses vertical)
     const fovY = 2 * Math.atan(Math.tan(fovX / 2) / aspect);
 
     return THREE.MathUtils.radToDeg(fovY);
   }
 
-  // ---------------------------------------------------------------------------
-  // Instant update (used on resize or initial boot)
-  // ---------------------------------------------------------------------------
+  // Instant update (on resize or store immediately)
   function updateInstant() {
+    const { w, h } = getViewport();
     const fov = computeFitWidthFov();
     currentFov = fov;
 
     camera.fov = fov;
-    camera.aspect =
-      renderer.domElement.clientWidth / renderer.domElement.clientHeight;
+    camera.aspect = w / h;
     camera.updateProjectionMatrix();
+    helper.update();
   }
 
-  // ---------------------------------------------------------------------------
-  // Smooth update (optional, for animation per frame)
-  // ---------------------------------------------------------------------------
+  // Smooth update (every frame)
   function updateSmooth() {
+    const { w, h } = getViewport();
     const target = computeFitWidthFov();
-    currentFov += (target - currentFov) * 0.1; // 10% lerp
+
+    currentFov += (target - currentFov) * 1;
 
     camera.fov = currentFov;
-    camera.aspect =
-      renderer.domElement.clientWidth / renderer.domElement.clientHeight;
+    camera.aspect = w / h;
     camera.updateProjectionMatrix();
+    helper.update();
   }
 
-  // ---------------------------------------------------------------------------
-  // Hook into window resizing
-  // ---------------------------------------------------------------------------
-  function onResize() {
-    updateInstant();
-  }
+  // Store subscription → dynamic FOV
+  useSceneStore.subscribe((state, prev) => {
+    if (state.sceneWidth !== prev.sceneWidth) updateInstant();
+  });
 
-  window.addEventListener("resize", onResize);
-
-  // Initial projection setup
+  // Initial update
   updateInstant();
-
-  // Helper (optional)
-  const helper = new THREE.CameraHelper(camera);
 
   return {
     camera,
     helper,
     updateSmooth,
     updateInstant,
-    dispose() {
-      window.removeEventListener("resize", onResize);
-    },
   };
 }
