@@ -1,48 +1,89 @@
 // src/SceneCamera.ts
 import * as THREE from "three";
+import { useSceneStore } from "../Store/SceneStore";
 
-export function createSceneCamera(width: number, height: number) {
-  // ---------------------------------------------------------------------------
-  // CREATE CAMERA (correct PerspectiveCamera signature)
-  // ---------------------------------------------------------------------------
-  const camera = new THREE.PerspectiveCamera(
-    45,              // fov
-    width / height,  // aspect
-    0.1,             // near
-    100              // far
-  );
-
-  // --- POSITION --------------------------------------------------------------
-  camera.position.set(0, 0, 20);
+export function createSceneCamera(renderer: THREE.WebGLRenderer) {
+  const width = renderer.domElement.clientWidth;
+  const height = renderer.domElement.clientHeight;
 
   // ---------------------------------------------------------------------------
-  // FULL FRUSTUM / PROJECTION CONTROLS
+  // CREATE CAMERA
   // ---------------------------------------------------------------------------
+  const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
 
-  // Vertical field of view
-  camera.fov = 45;
+  // Position camera
+  const cameraZ = 100;
+  camera.position.set(0, 0, cameraZ);
 
-  // Near & far planes
-  camera.near = 0.1;
-  camera.far = 100;
-
-  // Aspect ratio
-  camera.aspect = width / height;
-
-  // Zoom (optical zoom, not distance)
-  camera.zoom = 1.0; // >1 zooms in, <1 zooms out
-
-  // Physical camera settings (more cinematic control)
-  camera.filmGauge = 35; // mm sensor width
-  camera.filmOffset = 0; // horizontal shift
-
-  // Must rebuild the projection matrix after modifying frustum parameters
-  camera.updateProjectionMatrix();
+  let currentFov = camera.fov;
 
   // ---------------------------------------------------------------------------
-  // CAMERA HELPER
+  // FOV MATH — Fit Width
   // ---------------------------------------------------------------------------
+  function computeFitWidthFov() {
+    const sceneWidth = useSceneStore.getState().sceneWidth;
+
+    const viewportW = renderer.domElement.clientWidth;
+    const viewportH = renderer.domElement.clientHeight;
+    const aspect = viewportW / viewportH;
+
+    // Horizontal FOV needed to fit world width
+    const fovX = 2 * Math.atan(sceneWidth / 2 / cameraZ);
+
+    // Convert horizontal FOV → vertical FOV (Three.js uses vertical)
+    const fovY = 2 * Math.atan(Math.tan(fovX / 2) / aspect);
+
+    return THREE.MathUtils.radToDeg(fovY);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Instant update (used on resize or initial boot)
+  // ---------------------------------------------------------------------------
+  function updateInstant() {
+    const fov = computeFitWidthFov();
+    currentFov = fov;
+
+    camera.fov = fov;
+    camera.aspect =
+      renderer.domElement.clientWidth / renderer.domElement.clientHeight;
+    camera.updateProjectionMatrix();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Smooth update (optional, for animation per frame)
+  // ---------------------------------------------------------------------------
+  function updateSmooth() {
+    const target = computeFitWidthFov();
+    currentFov += (target - currentFov) * 0.1; // 10% lerp
+
+    camera.fov = currentFov;
+    camera.aspect =
+      renderer.domElement.clientWidth / renderer.domElement.clientHeight;
+    camera.updateProjectionMatrix();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Hook into window resizing
+  // ---------------------------------------------------------------------------
+  function onResize() {
+    updateInstant();
+  }
+
+  window.addEventListener("resize", onResize);
+
+  // Initial projection setup
+  updateInstant();
+
+  // Helper (optional)
   const helper = new THREE.CameraHelper(camera);
 
-  return { camera, helper };
+  return {
+    camera,
+    helper,
+    updateSmooth,
+    updateInstant,
+    dispose() {
+      window.removeEventListener("resize", onResize);
+    },
+  };
 }

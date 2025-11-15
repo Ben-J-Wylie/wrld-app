@@ -6,7 +6,7 @@ export function createDirectionalLight() {
 
   // --- Directional Light ----------------------------------------------------
   const light = new THREE.DirectionalLight(0xffffff, 1.2);
-  light.position.set(-5, 5, 20);
+  light.position.set(-15, 5, 20);
   light.castShadow = true;
 
   // Required target (DirectionalLights must aim at something)

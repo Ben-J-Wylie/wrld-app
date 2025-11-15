@@ -1,5 +1,7 @@
 import { useRef, useEffect } from "react";
 import * as THREE from "three";
+import { useSceneStore } from "./components/containers/SceneCore/Store/SceneStore";
+
 import { OrbitControls } from "three-stdlib";
 
 // Cameras
@@ -7,7 +9,10 @@ import { createSceneCamera } from "./components/containers/SceneCore/Cameras/Sce
 import { createOrbitCamera } from "./components/containers/SceneCore/Cameras/OrbitCamera";
 
 // Objects
-import { createBackdrop } from "./components/containers/SceneCore/Layers/Backdrop";
+import {
+  createBackdrop,
+  resizeBackdrop,
+} from "./components/containers/SceneCore/Layers/Backdrop";
 import { createSphere } from "./components/containers/SceneCore/Layers/Sphere";
 import { createImagePlane } from "./components/containers/SceneCore/Layers/ImagePlane";
 
@@ -37,6 +42,8 @@ export default function WrldBasicScene() {
 
   useEffect(() => {
     if (!containerRef.current) return;
+
+    let backdropMesh: THREE.Mesh | null = null;
 
     // -------------------------------------------------------
     // INIT
@@ -74,7 +81,7 @@ export default function WrldBasicScene() {
 
       // Scene Camera (main)
       const { camera: sceneCamera, helper: sceneCameraHelper } =
-        createSceneCamera(width, height);
+        createSceneCamera(renderer);
       scene.add(sceneCamera);
       scene.add(sceneCameraHelper);
 
@@ -124,10 +131,36 @@ export default function WrldBasicScene() {
       scene.add(createDirectionalLight());
 
       // ----------------------------------
+      // BACKDROP
+      // ----------------------------------
+
+      // 1. Update the SceneStore with this scene’s dimensions
+      useSceneStore.getState().setSceneWidth(60);
+      useSceneStore.getState().setSceneHeight(100);
+
+      const store = useSceneStore.getState();
+
+      // 2. Create the initial backdrop using store dimensions
+      backdropMesh = createBackdrop({
+        width: store.sceneWidth,
+        height: store.sceneHeight,
+      });
+      scene.add(backdropMesh);
+
+      // 3. Subscribe to store changes → resize backdrop
+      useSceneStore.subscribe((state, prev) => {
+        if (
+          state.sceneWidth !== prev.sceneWidth ||
+          state.sceneHeight !== prev.sceneHeight
+        ) {
+          if (backdropMesh) {
+            resizeBackdrop(backdropMesh, state.sceneWidth, state.sceneHeight);
+          }
+        }
+      });
+      // ----------------------------------
       // OBJECTS
       // ----------------------------------
-      // scene.add(createSphere());
-      scene.add(createBackdrop({ width: 11, height: 30 }));
 
       const plane1 = createImagePlane({
         src: "./banner.png",
