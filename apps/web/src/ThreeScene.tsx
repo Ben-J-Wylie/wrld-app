@@ -146,8 +146,8 @@ export default function WrldBasicScene() {
       // ----------------------------------
 
       // 1. Update the SceneStore with this scene’s dimensions
-      useSceneStore.getState().setSceneWidth(60);
-      useSceneStore.getState().setSceneHeight(100);
+      useSceneStore.getState().setSceneWidth(80);
+      useSceneStore.getState().setSceneHeight(40);
 
       const store = useSceneStore.getState();
 
