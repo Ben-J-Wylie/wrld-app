@@ -1,23 +1,6 @@
 // src/components/containers/SceneCore/Cameras/CameraRig.ts
 // -----------------------------------------------------------------------------
-// CameraRig — Production Version
-// -----------------------------------------------------------------------------
-// Responsibilities:
-//  - Calculate camera movement bounds from:
-//      • sceneWidth / sceneHeight (backdrop)
-//      • camera FOV (dynamic, adaptive FOV)
-//      • camera aspect ratio
-//      • cameraZ position
-//  - Clamp camera movement so we *never* expose outside backdrop
-//  - Update limits on:
-//      • backdrop dimension changes
-//      • viewport resize
-//      • camera FOV changes (smooth updates every frame)
-// -----------------------------------------------------------------------------
-// Output API:
-//    rig.setOffset(x, y)     → clamps and applies movement
-//    rig.onFovOrResize()     → recalculates movement limits
-//    rig.getLimits()         → ScrollController pulls this each frame
+// CameraRig — Final Corrected Version (prevents drift-right initialization)
 // -----------------------------------------------------------------------------
 
 import * as THREE from "three";
@@ -27,25 +10,26 @@ export function createCameraRig(
   camera: THREE.PerspectiveCamera,
   cameraZ: number
 ) {
-  // Current movement limits — updated by updateLimits()
   let maxX = 0;
   let maxY = 0;
 
-  // Cache to avoid redundant math
+  // Cached values to detect changes
   let prevFov = camera.fov;
   let prevAspect = camera.aspect;
   let prevSceneWidth = 0;
   let prevSceneHeight = 0;
 
   /**
-   * --------------------------------------------------------------------------
    * updateLimits()
-   * - Central math that clamps camera movement to stay inside backdrop.
-   * - Called on:
-   *     • Resize
-   *     • Scene dimension changes
-   *     • FOV changes (smooth updates)
-   * --------------------------------------------------------------------------
+   * Recompute movement bounds based on:
+   *  - FOV
+   *  - aspect
+   *  - sceneWidth / sceneHeight
+   *  - cameraZ
+   *
+   * IMPORTANT FIX:
+   *   Re-center or clamp camera after recomputing limits
+   *   → prevents starting on right edge when X-scroll exists.
    */
   const updateLimits = () => {
     const { sceneWidth: W, sceneHeight: H } = useSceneStore.getState();
@@ -55,18 +39,23 @@ export function createCameraRig(
       return;
     }
 
-    // Camera's vertical FOV in radians
+    // Camera's vertical FOV (radians)
     const vFov = THREE.MathUtils.degToRad(camera.fov);
 
-    // Frustum height/width at distance Z
+    // Frustum footprint at cameraZ
     const frustumHalfHeight = Math.tan(vFov / 2) * cameraZ;
     const frustumHalfWidth = frustumHalfHeight * camera.aspect;
 
-    // Amount of background area available past the camera frustum
+    // Max allowed movement before exposing backdrop edges
     maxX = Math.max(0, W / 2 - frustumHalfWidth);
     maxY = Math.max(0, H / 2 - frustumHalfHeight);
 
-    // Cache for next frame
+    // IMPORTANT FIX: clamp current camera pos to new bounds
+    // This ensures the camera stays centered if possible.
+    camera.position.x = THREE.MathUtils.clamp(camera.position.x, -maxX, maxX);
+    camera.position.y = THREE.MathUtils.clamp(camera.position.y, -maxY, maxY);
+
+    // Cache values
     prevFov = camera.fov;
     prevAspect = camera.aspect;
     prevSceneWidth = W;
@@ -77,8 +66,7 @@ export function createCameraRig(
   updateLimits();
 
   /**
-   * Detect whether anything changed that requires a limit recompute.
-   * Called every frame via rig.onFrameUpdate()
+   * Detect changes that require recalculation.
    */
   const needsRecalc = () => {
     const { sceneWidth: W, sceneHeight: H } = useSceneStore.getState();
@@ -91,13 +79,12 @@ export function createCameraRig(
     );
   };
 
-  /**
-   * PUBLIC API
-   */
+  // ------------------------------------------------------
+  // PUBLIC API
+  // ------------------------------------------------------
   return {
     /**
-     * setOffset(x, y)
-     * Applies movement (clamped within allowed range)
+     * Apply movement, clamped within allowed range.
      */
     setOffset(x: number, y: number) {
       const cx = THREE.MathUtils.clamp(x, -maxX, maxX);
@@ -108,21 +95,14 @@ export function createCameraRig(
     },
 
     /**
-     * onResizeOrFovChange()
-     * Called externally when:
-     *  - window resize
-     *  - backdrop dimension changes
-     *  - manual FOV updates
+     * Recompute limits (used in resize + instant updates).
      */
     onResizeOrFovChange() {
       updateLimits();
     },
 
     /**
-     * onFrameUpdate()
-     * Called once per animation frame.
-     * - Detects smooth FOV changes from adaptive SceneCamera
-     * - Keeps limits perfectly in sync
+     * Every frame: detect smooth FOV changes and update limits.
      */
     onFrameUpdate() {
       if (needsRecalc()) {
@@ -131,8 +111,7 @@ export function createCameraRig(
     },
 
     /**
-     * getLimits()
-     * Used by ScrollController every frame
+     * ScrollController uses this.
      */
     getLimits() {
       return { maxX, maxY };
