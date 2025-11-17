@@ -27,6 +27,7 @@ export default function WrldBasicScene() {
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
 
   const updateSceneCameraRef = useRef<(() => void) | null>(null);
+  const updateSceneCameraInstantRef = useRef<(() => void) | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
 
   const scrollControllerRef = useRef<any>(null);
@@ -70,12 +71,16 @@ export default function WrldBasicScene() {
       const {
         camera: sceneCamera,
         helper: sceneHelper,
-        updateSmooth: updateSceneCamera,
+        updateSmooth: updateSceneCameraSmooth,
+        updateInstant: updateSceneCameraInstant,
       } = createSceneCamera(renderer);
 
-      scene.add(sceneHelper); // helper added for debugging
+      scene.add(sceneHelper);
+
+      // Store camera + updaters
       sceneCameraRef.current = sceneCamera;
-      updateSceneCameraRef.current = updateSceneCamera;
+      updateSceneCameraRef.current = updateSceneCameraSmooth; // smooth (animation)
+      updateSceneCameraInstantRef.current = updateSceneCameraInstant; // instant (resizes)
 
       // ----------------------------------
       // CAMERA RIG
@@ -203,8 +208,9 @@ export default function WrldBasicScene() {
       camera.updateProjectionMatrix();
       renderer.setSize(width, height);
 
-      // Update limits and recalc FOV
-      if (updateSceneCameraRef.current) updateSceneCameraRef.current();
+      // ⭐ FIX: properly call the instant version
+      updateSceneCameraInstantRef.current?.();
+
       cameraRig?.onResizeOrFovChange();
     };
 
