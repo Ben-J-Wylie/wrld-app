@@ -1,6 +1,7 @@
 import { useRef, useEffect } from "react";
 import * as THREE from "three";
 import { useSceneStore } from "./components/containers/SceneCore/Store/SceneStore";
+import { getBreakpoint } from "./components/containers/SceneCore/Utilities/Breakpoints";
 
 import { OrbitControls } from "three-stdlib";
 
@@ -48,6 +49,27 @@ export default function WrldBasicScene() {
 
     let backdropMesh: THREE.Mesh | null = null;
 
+    // ⭐ NEW: A single reusable function to apply breakpoint dimensions
+    const applyBreakpointDimensions = () => {
+      const MobileDimensions = { width: 20, height: 30 };
+      const TabletDimensions = { width: 30, height: 40 };
+      const DesktopDimensions = { width: 50, height: 50 };
+
+      const store = useSceneStore.getState();
+      const bp = getBreakpoint(window.innerWidth);
+
+      if (bp === "mobile") {
+        store.setSceneWidth(MobileDimensions.width);
+        store.setSceneHeight(MobileDimensions.height);
+      } else if (bp === "tablet") {
+        store.setSceneWidth(TabletDimensions.width);
+        store.setSceneHeight(TabletDimensions.height);
+      } else {
+        store.setSceneWidth(DesktopDimensions.width);
+        store.setSceneHeight(DesktopDimensions.height);
+      }
+    };
+
     // -------------------------------------------------------
     // INIT
     // -------------------------------------------------------
@@ -82,7 +104,6 @@ export default function WrldBasicScene() {
       // CAMERAS
       // ----------------------------------
 
-      // Scene Camera — now includes dynamic FOV
       const {
         camera: sceneCamera,
         helper: sceneCameraHelper,
@@ -92,13 +113,9 @@ export default function WrldBasicScene() {
       scene.add(sceneCamera);
       scene.add(sceneCameraHelper);
 
-      // Store camera
       sceneCameraRef.current = sceneCamera;
-
-      // Store FOV update function
       updateSceneCameraRef.current = updateSceneCamera;
 
-      // Orbit Camera (secondary)
       const {
         camera: orbitCamera,
         controls,
@@ -111,12 +128,9 @@ export default function WrldBasicScene() {
       orbitCameraRef.current = orbitCamera;
       controlsRef.current = controls;
 
-      // Active camera defaults to the SceneCamera
       cameraRef.current = sceneCamera;
 
-      // ----------------------------------
-      // CAMERA SWITCH (press C)
-      // ----------------------------------
+      // Camera toggle
       window.addEventListener("keydown", (e) => {
         if (e.key.toLowerCase() === "c") {
           const current = cameraRef.current;
@@ -125,13 +139,7 @@ export default function WrldBasicScene() {
 
           if (!sceneCam || !orbitCam) return;
 
-          if (current === sceneCam) {
-            cameraRef.current = orbitCam;
-            console.log("Switched to OrbitCamera");
-          } else {
-            cameraRef.current = sceneCam;
-            console.log("Switched to SceneCamera");
-          }
+          cameraRef.current = current === sceneCam ? orbitCam : sceneCam;
         }
       });
 
@@ -145,34 +153,31 @@ export default function WrldBasicScene() {
       // BACKDROP
       // ----------------------------------
 
-      // 1. Update the SceneStore with this scene’s dimensions
-      useSceneStore.getState().setSceneWidth(80);
-      useSceneStore.getState().setSceneHeight(40);
+      // ⭐ Apply initial breakpoint dimensions before creating backdrop
+      applyBreakpointDimensions();
 
       const store = useSceneStore.getState();
 
-      // 2. Create the initial backdrop using store dimensions
       backdropMesh = createBackdrop({
         width: store.sceneWidth,
         height: store.sceneHeight,
       });
       scene.add(backdropMesh);
 
-      // 3. Subscribe to store changes → resize backdrop
+      // Subscribe for updates
       useSceneStore.subscribe((state, prev) => {
         if (
           state.sceneWidth !== prev.sceneWidth ||
           state.sceneHeight !== prev.sceneHeight
         ) {
-          if (backdropMesh) {
-            resizeBackdrop(backdropMesh, state.sceneWidth, state.sceneHeight);
-          }
+          if (!backdropMesh) return;
+          resizeBackdrop(backdropMesh, state.sceneWidth, state.sceneHeight);
         }
       });
+
       // ----------------------------------
       // OBJECTS
       // ----------------------------------
-
       const plane1 = createImagePlane({
         src: "./banner.png",
         width: 4,
@@ -214,6 +219,10 @@ export default function WrldBasicScene() {
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
       renderer.setSize(width, height);
+
+      // ⭐ MOST IMPORTANT FIX:
+      // Re-apply sceneWidth/sceneHeight on resize
+      applyBreakpointDimensions();
     };
 
     // -------------------------------------------------------
@@ -229,7 +238,6 @@ export default function WrldBasicScene() {
 
       frameIdRef.current = requestAnimationFrame(animate);
 
-      // NEW: make SceneCamera dynamically fit the backdrop width
       if (updateSceneCameraRef.current) {
         updateSceneCameraRef.current();
       }
