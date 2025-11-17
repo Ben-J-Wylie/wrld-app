@@ -6,7 +6,7 @@ export function createDirectionalLight() {
 
   // --- Directional Light ----------------------------------------------------
   const light = new THREE.DirectionalLight(0xffffff, 1.2);
-  light.position.set(-15, 5, 20);
+  light.position.set(-15, 5, 100);
   light.castShadow = true;
 
   // Required target (DirectionalLights must aim at something)
@@ -32,12 +32,12 @@ export function createDirectionalLight() {
   const cam = light.shadow.camera as THREE.OrthographicCamera;
 
   cam.near = 0.5;
-  cam.far = 50;
+  cam.far = 150;
 
-  cam.left = -10;
-  cam.right = 10;
-  cam.top = 10;
-  cam.bottom = -10;
+  cam.left = -50;
+  cam.right = 50;
+  cam.top = 50;
+  cam.bottom = -50;
 
   cam.updateProjectionMatrix();
 
