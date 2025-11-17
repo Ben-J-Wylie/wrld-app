@@ -141,9 +141,9 @@ export default function WrldBasicScene() {
       // BACKDROP
       // ----------------------------------
       const backdrop = initializeBackdrop(scene, {
-        mobile: { width: 50, height: 1500 },
+        mobile: { width: 50, height: 150 },
         tablet: { width: 75, height: 75 },
-        desktop: { width: 1500, height: 50 },
+        desktop: { width: 150, height: 50 },
       });
       backdrop.position.set(0, 0, 0);
 
