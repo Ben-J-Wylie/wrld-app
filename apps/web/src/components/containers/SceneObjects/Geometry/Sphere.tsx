@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { createSphere } from "./SpherePrimitive";
-import { useStage } from "../Stage/useStage";
+import { useStage } from "../../SceneCore/Stage/useStage";
 
 export interface SphereProps {
   radius?: number;
