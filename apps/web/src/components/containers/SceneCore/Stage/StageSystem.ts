@@ -31,8 +31,6 @@ export function createStage(
   container: HTMLElement,
   definition: StageDefinition
 ): StageAPI {
-  console.log("=== createStage() INITIALIZE ===");
-
   // ---------------------------------------------------------
   // RENDERER
   // ---------------------------------------------------------
@@ -92,23 +90,15 @@ export function createStage(
   const dynamicObjects = new Set<THREE.Object3D>();
 
   function addObject(obj: THREE.Object3D, parent?: THREE.Object3D | null) {
-    console.log("addObject() called:", obj);
-    console.log("requested parent:", parent);
-
     if (parent) {
-      console.log("→ parent.add(obj)");
       parent.add(obj);
     } else {
-      console.log("→ scene.add(obj)");
       scene.add(obj);
     }
-
-    console.log("final obj.parent:", obj.parent);
     dynamicObjects.add(obj);
   }
 
   function removeObject(obj: THREE.Object3D) {
-    console.log("removeObject():", obj);
     if (obj.parent) {
       obj.parent.remove(obj);
     }
@@ -116,15 +106,8 @@ export function createStage(
   }
 
   function injectChildrenInto(parentRef: React.RefObject<any>, children: any) {
-    console.log("injectChildrenInto()");
-    console.log("parentRef.current:", parentRef.current);
-    console.log("children being injected:", children);
-
     return React.Children.map(children, (child: any) => {
       if (!child) return null;
-
-      console.log("→ cloning child:", child);
-      console.log("→ injecting __parent:", parentRef.current);
 
       return React.cloneElement(child, {
         __parent: parentRef.current,
@@ -178,7 +161,6 @@ export function createStage(
   // CLEANUP
   // ---------------------------------------------------------
   function cleanup() {
-    console.log("cleanup()");
     engine.stop();
     window.removeEventListener("resize", onResize);
     window.removeEventListener("keydown", onKey);

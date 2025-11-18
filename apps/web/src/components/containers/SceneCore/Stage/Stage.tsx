@@ -27,7 +27,6 @@ export function Stage({ backdrop, style, children }: StageProps) {
   useEffect(() => {
     if (!canvasContainerRef.current) return;
 
-    console.log("Stage.tsx → createStage");
     const stage = createStage(canvasContainerRef.current, { backdrop });
     setStageAPI(stage);
     stageRootRef.current = stage.scene;

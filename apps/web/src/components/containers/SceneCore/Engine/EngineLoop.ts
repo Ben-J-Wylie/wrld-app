@@ -49,6 +49,13 @@ export function createEngineLoop(options: EngineLoopOptions) {
     // Scroll controller
     if (updateScroll) updateScroll(dt);
 
+    // 🔄 Ensure any camera helper attached to the active camera is updated
+    const userData = camera.userData as any;
+    const helper = userData?.helper as THREE.CameraHelper | undefined;
+    if (helper) {
+      helper.update();
+    }
+
     // Render
     renderer.render(scene, camera);
   };

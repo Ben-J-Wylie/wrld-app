@@ -1,3 +1,4 @@
+// src/components/containers/SceneCore/Cameras/createCameraPackage.ts
 import * as THREE from "three";
 import { OrbitControls } from "three-stdlib";
 
@@ -17,7 +18,7 @@ export interface CameraPackage {
   updateSceneCameraSmooth: () => void;
   updateSceneCameraInstant: () => void;
 
-  cameraRig: any;
+  cameraRig: ReturnType<typeof createCameraRig>;
 
   cameraSwitcher: () => THREE.PerspectiveCamera;
 }
@@ -73,7 +74,6 @@ export function createCameraPackage(
   const cameraSwitcher = () => {
     activeCamera = activeCamera === sceneCamera ? orbitCamera : sceneCamera;
 
-    // Enable controls only when using orbitCam
     controls.enabled = activeCamera === orbitCamera;
 
     return activeCamera;

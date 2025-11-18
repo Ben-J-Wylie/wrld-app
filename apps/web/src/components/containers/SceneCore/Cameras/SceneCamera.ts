@@ -17,13 +17,13 @@ export function createSceneCamera(renderer: THREE.WebGLRenderer) {
 
   const helper = new THREE.CameraHelper(camera);
 
+  // 🔗 attach helper to camera so the engine loop can find & update it
+  (camera.userData as any).helper = helper;
+
   let currentFov = camera.fov;
 
   // ------------------------------------------------------------
-  // ADAPTIVE FOV:
-  // - If viewport is wide relative to backdrop: fit WIDTH.
-  // - If viewport is tall relative to backdrop: fit HEIGHT.
-  // In both cases, never show outside the backdrop.
+  // ADAPTIVE FOV
   // ------------------------------------------------------------
   function computeAdaptiveFov() {
     const { sceneWidth: W, sceneHeight: H } = useSceneStore.getState();
@@ -39,14 +39,11 @@ export function createSceneCamera(renderer: THREE.WebGLRenderer) {
     let fovY: number;
 
     if (aspect >= bgAspect) {
-      // Viewport is as wide or wider than the backdrop.
-      // Fit WIDTH so left/right align with backdrop.
+      // Fit WIDTH
       const fovX = 2 * Math.atan(W / 2 / cameraZ);
       fovY = 2 * Math.atan(Math.tan(fovX / 2) / aspect);
     } else {
-      // Viewport is narrower (taller) than the backdrop.
-      // Fit HEIGHT so top/bottom align with backdrop,
-      // and let the sides collapse inward.
+      // Fit HEIGHT
       fovY = 2 * Math.atan(H / 2 / cameraZ);
     }
 
@@ -62,6 +59,8 @@ export function createSceneCamera(renderer: THREE.WebGLRenderer) {
     camera.fov = fov;
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
+
+    // still fine to update here for immediate feedback
     helper.update();
   }
 
@@ -77,6 +76,8 @@ export function createSceneCamera(renderer: THREE.WebGLRenderer) {
     camera.fov = currentFov;
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
+
+    // also OK to update here (engine loop will also update every frame)
     helper.update();
   }
 

@@ -28,20 +28,14 @@ export function Group({
   // MOUNT GROUP
   // -------------------------------------------------------------
   useLayoutEffect(() => {
-    console.log("---- GROUP MOUNT ----");
-    console.log("requested parent:", __parent);
-
     const g = new THREE.Group();
 
     g.position.set(position[0], position[1], position[2] + z);
     g.rotation.set(rotation[0], rotation[1], rotation[2]);
     g.scale.set(scale[0], scale[1], scale[2]);
 
-    console.log("created THREE.Group:", g);
-
     groupRef.current = g;
 
-    console.log("adding group to parent:", __parent);
     stage.addObject(g, __parent);
 
     return () => {
@@ -54,8 +48,6 @@ export function Group({
   // -------------------------------------------------------------
   useLayoutEffect(() => {
     if (!groupRef.current) return;
-
-    console.log("GROUP injecting children with parentRef:", groupRef.current);
 
     const injected = stage.injectChildrenInto(groupRef, children);
     setInjectedChildren(injected);

@@ -11,10 +11,10 @@ export function createOrbitCamera(
   // CREATE CAMERA (correct constructor usage)
   // ---------------------------------------------------------------------------
   const camera = new THREE.PerspectiveCamera(
-    45,              // fov
-    width / height,  // aspect ratio  <-- IMPORTANT!
-    0.1,             // near
-    100              // far
+    45, // fov
+    width / height, // aspect ratio  <-- IMPORTANT!
+    0.1, // near
+    100 // far
   );
 
   // --- POSITION --------------------------------------------------------------
@@ -76,6 +76,7 @@ export function createOrbitCamera(
   // CAMERA HELPER
   // ---------------------------------------------------------------------------
   const helper = new THREE.CameraHelper(camera);
+  (camera.userData as any).helper = helper;
 
   return { camera, controls, helper };
 }
