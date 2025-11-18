@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
-import { ThreeEngine } from "@/components/containers/SceneCore/Engine/engine";
+import { ThreeEngine } from "@/components/containers/SceneCore/Engine/Engine";
 
 export function VanillaScene() {
   const ref = useRef<HTMLCanvasElement>(null);

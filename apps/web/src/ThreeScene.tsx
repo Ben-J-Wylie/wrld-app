@@ -3,18 +3,17 @@ import * as THREE from "three";
 
 import { OrbitControls } from "three-stdlib";
 
-import { createSceneCamera } from "./components/containers/SceneCore/Cameras/SceneCamera";
-import { createCameraRig } from "./components/containers/SceneCore/Cameras/CameraRig";
+import { createEngineLoop } from "./components/containers/SceneCore/Engine/EngineLoop";
+import { createRenderer } from "./components/containers/SceneCore/Engine/Renderer";
+
+import { createCameraPackage } from "./components/containers/SceneCore/Cameras/CameraPackage";
 import { createScrollController } from "./components/containers/SceneCore/Controllers/ScrollController";
-import { createOrbitCamera } from "./components/containers/SceneCore/Cameras/OrbitCamera";
 
 import { initializeBackdrop } from "./components/containers/SceneCore/Layers/Backdrop";
 import { createImagePlane } from "./components/containers/SceneCore/Layers/ImagePlane";
 
 import { createAmbientLight } from "./components/containers/SceneCore/Lights/AmbientLight";
 import { createDirectionalLight } from "./components/containers/SceneCore/Lights/DirectionalLight";
-
-import { useSceneStore } from "./components/containers/SceneCore/Store/SceneStore";
 
 export default function WrldBasicScene() {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -28,12 +27,13 @@ export default function WrldBasicScene() {
 
   const updateSceneCameraRef = useRef<(() => void) | null>(null);
   const updateSceneCameraInstantRef = useRef<(() => void) | null>(null);
-  const controlsRef = useRef<OrbitControls | null>(null);
 
+  const controlsRef = useRef<OrbitControls | null>(null);
   const scrollControllerRef = useRef<any>(null);
   const cameraRigRef = useRef<any>(null);
 
-  const frameIdRef = useRef<number | null>(null);
+  // NEW: engineRef replaces any RAF refs
+  const engineRef = useRef<any>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -48,13 +48,7 @@ export default function WrldBasicScene() {
       // ----------------------------------
       // RENDERER
       // ----------------------------------
-      const renderer = new THREE.WebGLRenderer({ antialias: true });
-      renderer.domElement.style.pointerEvents = "auto";
-      renderer.setPixelRatio(window.devicePixelRatio);
-      renderer.setSize(width, height);
-      renderer.shadowMap.enabled = true;
-      renderer.shadowMap.type = THREE.VSMShadowMap;
-
+      const renderer = createRenderer(width, height);
       rendererRef.current = renderer;
       containerRef.current!.appendChild(renderer.domElement);
 
@@ -66,76 +60,38 @@ export default function WrldBasicScene() {
       sceneRef.current = scene;
 
       // ----------------------------------
-      // SCENE CAMERA (Dynamic-FOV Camera)
+      // CAMERA PACKAGE (scene + orbit + rig)
       // ----------------------------------
-      const {
-        camera: sceneCamera,
-        helper: sceneHelper,
-        updateSmooth: updateSceneCameraSmooth,
-        updateInstant: updateSceneCameraInstant,
-      } = createSceneCamera(renderer);
+      const cams = createCameraPackage(renderer, scene, width, height);
 
-      scene.add(sceneHelper);
+      sceneCameraRef.current = cams.sceneCamera;
+      orbitCameraRef.current = cams.orbitCamera;
+      cameraRef.current = cams.activeCameraRef.current;
 
-      // Store camera + updaters
-      sceneCameraRef.current = sceneCamera;
-      updateSceneCameraRef.current = updateSceneCameraSmooth; // smooth (animation)
-      updateSceneCameraInstantRef.current = updateSceneCameraInstant; // instant (resizes)
+      controlsRef.current = cams.controls;
 
-      // ----------------------------------
-      // CAMERA RIG
-      // ----------------------------------
-      const cameraZ = sceneCamera.position.z;
-      const cameraRig = createCameraRig(sceneCamera, cameraZ);
-      cameraRigRef.current = cameraRig;
+      updateSceneCameraRef.current = cams.updateSceneCameraSmooth;
+      updateSceneCameraInstantRef.current = cams.updateSceneCameraInstant;
 
-      // Keep rig updated with FOV/resizes
-      useSceneStore.subscribe(() => {
-        cameraRig.onResizeOrFovChange();
-      });
+      cameraRigRef.current = cams.cameraRig;
 
-      // ----------------------------------
-      // SCROLL CONTROLLER (Hybrid)
-      // ----------------------------------
-      const scroll = createScrollController({ cameraRig });
-      scrollControllerRef.current = scroll;
-
-      // Start scroll system using renderer DOM element
-      scroll.start(renderer.domElement);
-
-      // ----------------------------------
-      // ORBIT CAMERA (Debug Camera)
-      // ----------------------------------
-      const {
-        camera: orbitCamera,
-        controls,
-        helper: orbitHelper,
-      } = createOrbitCamera(renderer, width, height);
-
-      scene.add(orbitHelper);
-      orbitCameraRef.current = orbitCamera;
-      controlsRef.current = controls;
-      controls.enabled = false;
-
-      // start with SceneCamera
-      cameraRef.current = sceneCamera;
-
-      // Toggle cameras on “C”
+      // Camera toggle on "C"
       window.addEventListener("keydown", (e) => {
         if (e.key.toLowerCase() === "c") {
-          const nextCamera =
-            cameraRef.current === sceneCameraRef.current
-              ? orbitCameraRef.current
-              : sceneCameraRef.current;
-
-          cameraRef.current = nextCamera;
-
-          if (controlsRef.current) {
-            // Enable controls ONLY for orbit camera
-            controlsRef.current.enabled = nextCamera === orbitCameraRef.current;
-          }
+          cameraRef.current = cams.cameraSwitcher();
         }
       });
+
+      // ----------------------------------
+      // SCROLL CONTROLLER
+      // ----------------------------------
+      const scroll = createScrollController({
+        cameraRig: cameraRigRef.current,
+      });
+      scrollControllerRef.current = scroll;
+
+      scroll.start(renderer.domElement);
+
       // ----------------------------------
       // LIGHTS
       // ----------------------------------
@@ -152,9 +108,8 @@ export default function WrldBasicScene() {
       });
       backdrop.position.set(0, 0, 0);
 
-      // Backdrop writes sceneWidth/sceneHeight → update camera + rig
-      if (updateSceneCameraRef.current) updateSceneCameraRef.current();
-      cameraRig.onResizeOrFovChange();
+      updateSceneCameraRef.current?.();
+      cameraRigRef.current?.onResizeOrFovChange();
 
       // ----------------------------------
       // OBJECTS
@@ -186,72 +141,74 @@ export default function WrldBasicScene() {
         })
       );
 
+      // ----------------------------------
+      // RESIZE
+      // ----------------------------------
+      const onResize = () => {
+        const renderer = rendererRef.current;
+        const camera = cameraRef.current;
+        const cameraRig = cameraRigRef.current;
+
+        if (!renderer || !camera) return;
+
+        const width = containerRef.current!.clientWidth;
+        const height = containerRef.current!.clientHeight;
+
+        camera.aspect = width / height;
+        camera.updateProjectionMatrix();
+        renderer.setSize(width, height);
+
+        updateSceneCameraInstantRef.current?.();
+        cameraRig?.onResizeOrFovChange();
+      };
+
       window.addEventListener("resize", onResize);
-      // Set initial camera
-      cameraRef.current = sceneCamera;
+
+      // ----------------------------------
+      // ENGINE LOOP
+      // ----------------------------------
+      const engine = createEngineLoop({
+        renderer,
+        scene,
+
+        getCamera: () => cameraRef.current,
+
+        updateSceneCamera: () =>
+          cameraRef.current === sceneCameraRef.current
+            ? updateSceneCameraRef.current?.()
+            : undefined,
+
+        updateOrbitControls: () =>
+          cameraRef.current === orbitCameraRef.current
+            ? controlsRef.current?.update()
+            : undefined,
+
+        updateScroll: (dt) =>
+          cameraRef.current === sceneCameraRef.current
+            ? scrollControllerRef.current?.update(dt)
+            : undefined,
+      });
+
+      engine.start();
+      engineRef.current = engine;
+
+      // Cleanup local listener inside init()
+      return () => {
+        window.removeEventListener("resize", onResize);
+      };
     };
 
-    // -------------------------------------------------------
-    // RESIZE
-    // -------------------------------------------------------
-    const onResize = () => {
-      const renderer = rendererRef.current;
-      const camera = cameraRef.current;
-      const cameraRig = cameraRigRef.current;
-
-      if (!renderer || !camera) return;
-
-      const width = containerRef.current!.clientWidth;
-      const height = containerRef.current!.clientHeight;
-
-      camera.aspect = width / height;
-      camera.updateProjectionMatrix();
-      renderer.setSize(width, height);
-
-      // ⭐ FIX: properly call the instant version
-      updateSceneCameraInstantRef.current?.();
-
-      cameraRig?.onResizeOrFovChange();
-    };
+    // Run init()
+    const cleanupInit = init();
 
     // -------------------------------------------------------
-    // ANIMATE LOOP
+    // GLOBAL CLEANUP
     // -------------------------------------------------------
-    const animate = () => {
-      const renderer = rendererRef.current;
-      const scene = sceneRef.current;
-      const camera = cameraRef.current;
-      const controls = controlsRef.current;
-      const scroll = scrollControllerRef.current;
-
-      if (!renderer || !scene || !camera) return;
-
-      frameIdRef.current = requestAnimationFrame(animate);
-
-      if (camera === sceneCameraRef.current) {
-        // Adaptive FOV camera
-        if (updateSceneCameraRef.current) updateSceneCameraRef.current();
-
-        // Scroll updates (Hybrid)
-        scroll.update(1 / 60);
-      } else if (controls) {
-        controls.update();
-      }
-
-      renderer.render(scene, camera);
-    };
-    // -------------------------------------------------------
-    // START ENGINE
-    // -------------------------------------------------------
-    init();
-    animate();
-
-    // Cleanup
     return () => {
-      cancelAnimationFrame(frameIdRef.current!);
-      window.removeEventListener("resize", onResize);
+      cleanupInit?.();
 
-      if (scrollControllerRef.current) scrollControllerRef.current.stop();
+      engineRef.current?.stop();
+      scrollControllerRef.current?.stop();
     };
   }, []);
 
