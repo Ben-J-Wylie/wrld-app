@@ -10,7 +10,7 @@ export interface CameraPackage {
   sceneCamera: THREE.PerspectiveCamera;
   orbitCamera: THREE.PerspectiveCamera;
 
-  activeCameraRef: { current: THREE.PerspectiveCamera };
+  activeCamera: THREE.PerspectiveCamera;
 
   controls: OrbitControls;
 
@@ -63,26 +63,26 @@ export function createCameraPackage(
   controls.enabled = false;
 
   // ------------------------------------------
-  // Reactive Active Camera Reference
+  // Active camera
   // ------------------------------------------
-  const activeCameraRef = { current: sceneCamera };
+  let activeCamera: THREE.PerspectiveCamera = sceneCamera;
 
   // ------------------------------------------
   // Camera Switcher
   // ------------------------------------------
   const cameraSwitcher = () => {
-    activeCameraRef.current =
-      activeCameraRef.current === sceneCamera ? orbitCamera : sceneCamera;
+    activeCamera = activeCamera === sceneCamera ? orbitCamera : sceneCamera;
 
-    controls.enabled = activeCameraRef.current === orbitCamera;
+    // Enable controls only when using orbitCam
+    controls.enabled = activeCamera === orbitCamera;
 
-    return activeCameraRef.current;
+    return activeCamera;
   };
 
   return {
     sceneCamera,
     orbitCamera,
-    activeCameraRef,
+    activeCamera,
     controls,
     updateSceneCameraSmooth,
     updateSceneCameraInstant,
