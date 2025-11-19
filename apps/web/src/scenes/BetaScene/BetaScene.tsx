@@ -26,19 +26,71 @@ export default function HomePage() {
         <Sphere radius={10} position={[0, -10, 20]} color="hotpink" />
       </Group> */}
 
-      <Group position={[0, 0, 0]}>
-        <ImagePlane src={banner} width={30} height={20} position={[0, 20, 8]} />
+      <Group position={[0, 0, 0.5]}>
         <ImagePlane
-          src={banner}
-          width={30}
-          height={20}
-          position={[0, 20, 12]}
-        />
-        <ImagePlane
-          src={banner}
-          width={30}
-          height={20}
-          position={[0, 20, 16]}
+          // -------------------------------
+          // TEXTURE / COLOR
+          // -------------------------------
+          src=""
+          color="#9e1010ff"
+          // -------------------------------
+          // RESPONSIVE DIMENSIONS
+          // -------------------------------
+          width={{
+            mobile: 20,
+            tablet: 5,
+            desktop: 50,
+          }}
+          height={{
+            mobile: 18,
+            tablet: 10,
+            desktop: 5,
+          }}
+          // -------------------------------
+          // RESPONSIVE POSITION
+          // -------------------------------
+          position={{
+            mobile: [0, -2, 0],
+            tablet: [0, -1, 0],
+            desktop: [0, 0, 0],
+          }}
+          // -------------------------------
+          // RESPONSIVE ROTATION
+          // -------------------------------
+          rotation={{
+            mobile: [0, 0, 0],
+            tablet: [0, 45, 0],
+            desktop: [0, 30, 0],
+          }}
+          // -------------------------------
+          // Z-OFFSET (applied AFTER position)
+          // -------------------------------
+          z={1.5}
+          // -------------------------------
+          // SHADOW CONTROLS
+          // -------------------------------
+          castShadow={true} // native mesh.castShadow
+          receiveShadow={true} // enables custom shadow pipeline
+          shadowRadius={2.5} // PCF disk radius
+          shadowSamples={8} // # of poisson taps
+          shadowFade={0.25} // exponential falloff
+          shadowDistanceFactor={1.2} // scale depth-distance sensitivity
+          shadowLightSize={1.0} // penumbra softness factor
+          // -------------------------------
+          // INTERACTION
+          // -------------------------------
+          onClick={(e, hit) => {
+            console.log("ImagePlane clicked", hit);
+          }}
+          onHover={(e, hit) => {
+            if (hit) console.log("hover in");
+            else console.log("hover out");
+          }}
+          // -------------------------------
+          // INTERNAL PARENT OVERRIDE
+          // (used when nested inside <Group>)
+          // -------------------------------
+          __parent={null}
         />
       </Group>
     </Stage>
