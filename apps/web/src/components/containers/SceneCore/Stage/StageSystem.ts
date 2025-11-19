@@ -17,13 +17,26 @@ export interface StageDefinition {
 }
 
 export interface StageAPI {
-  scene: THREE.Scene; // ← ADD THIS
+  scene: THREE.Scene;
+
   addObject: (obj: THREE.Object3D, parent?: THREE.Object3D | null) => void;
   removeObject: (obj: THREE.Object3D) => void;
+
   injectChildrenInto: (
     parentRef: React.RefObject<THREE.Object3D | null>,
     children: React.ReactNode
   ) => any;
+
+  registerInteractive: (
+    obj: THREE.Object3D,
+    handlers: {
+      onClick?: (e: PointerEvent, hit: THREE.Intersection) => void;
+      onHover?: (e: PointerEvent, hit: THREE.Intersection | undefined) => void;
+    }
+  ) => void;
+
+  unregisterInteractive: (obj: THREE.Object3D) => void;
+
   cleanup: () => void;
 }
 
@@ -38,6 +51,7 @@ export function createStage(
   const height = container.clientHeight;
 
   const renderer = createRenderer(width, height);
+  renderer.domElement.style.pointerEvents = "auto";
   container.appendChild(renderer.domElement);
 
   // ---------------------------------------------------------
@@ -71,6 +85,57 @@ export function createStage(
   const scrollSystem = applyScrollSystem(cams.cameraRig, renderer.domElement);
 
   // ---------------------------------------------------------
+  // INTERACTION SYSTEM (NEW)
+  // ---------------------------------------------------------
+  const interactiveObjects = new Set<THREE.Object3D>();
+  const raycaster = new THREE.Raycaster();
+  const pointer = new THREE.Vector2();
+
+  function registerInteractive(
+    obj: THREE.Object3D,
+    handlers: { onClick?: any; onHover?: any }
+  ) {
+    obj.userData.handlers = handlers;
+    interactiveObjects.add(obj);
+  }
+
+  function unregisterInteractive(obj: THREE.Object3D) {
+    interactiveObjects.delete(obj);
+    delete obj.userData.handlers;
+  }
+
+  function updatePointer(event: PointerEvent) {
+    const rect = renderer.domElement.getBoundingClientRect();
+    pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+  }
+
+  function onPointerDown(e: PointerEvent) {
+    updatePointer(e);
+    raycaster.setFromCamera(pointer, activeCamera);
+
+    const hits = raycaster.intersectObjects([...interactiveObjects], true);
+    if (hits.length > 0) {
+      hits[0].object.userData.handlers?.onClick?.(e, hits[0]);
+    }
+  }
+
+  function onPointerMove(e: PointerEvent) {
+    updatePointer(e);
+    raycaster.setFromCamera(pointer, activeCamera);
+
+    const hits = raycaster.intersectObjects([...interactiveObjects], true);
+
+    for (const obj of interactiveObjects) {
+      const hovered = hits.find((h) => h.object === obj);
+      obj.userData.handlers?.onHover?.(e, hovered);
+    }
+  }
+
+  renderer.domElement.addEventListener("pointerdown", onPointerDown);
+  renderer.domElement.addEventListener("pointermove", onPointerMove);
+
+  // ---------------------------------------------------------
   // BACKDROP
   // ---------------------------------------------------------
   let backdropSystem: any = null;
@@ -90,18 +155,14 @@ export function createStage(
   const dynamicObjects = new Set<THREE.Object3D>();
 
   function addObject(obj: THREE.Object3D, parent?: THREE.Object3D | null) {
-    if (parent) {
-      parent.add(obj);
-    } else {
-      scene.add(obj);
-    }
+    if (parent) parent.add(obj);
+    else scene.add(obj);
+
     dynamicObjects.add(obj);
   }
 
   function removeObject(obj: THREE.Object3D) {
-    if (obj.parent) {
-      obj.parent.remove(obj);
-    }
+    if (obj.parent) obj.parent.remove(obj);
     dynamicObjects.delete(obj);
   }
 
@@ -109,9 +170,7 @@ export function createStage(
     return React.Children.map(children, (child: any) => {
       if (!child) return null;
 
-      return React.cloneElement(child, {
-        __parent: parentRef.current,
-      });
+      return React.cloneElement(child, { __parent: parentRef.current });
     });
   }
 
@@ -162,15 +221,21 @@ export function createStage(
   // ---------------------------------------------------------
   function cleanup() {
     engine.stop();
+    scrollSystem.scroll.stop();
+
     window.removeEventListener("resize", onResize);
     window.removeEventListener("keydown", onKey);
 
-    scrollSystem.scroll.stop();
+    renderer.domElement.removeEventListener("pointerdown", onPointerDown);
+    renderer.domElement.removeEventListener("pointermove", onPointerMove);
+
     backdropSystem?.cleanup();
 
     dynamicObjects.forEach((obj) => {
       if (obj.parent) obj.parent.remove(obj);
     });
+
+    interactiveObjects.clear();
     dynamicObjects.clear();
   }
 
@@ -182,6 +247,8 @@ export function createStage(
     addObject,
     removeObject,
     injectChildrenInto,
+    registerInteractive, // <-- EXPOSED
+    unregisterInteractive, // <-- EXPOSED
     cleanup,
   };
 }
