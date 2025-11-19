@@ -31,8 +31,8 @@ export default function HomePage() {
           // -------------------------------
           // TEXTURE / COLOR
           // -------------------------------
-          src=""
-          color="#9e1010ff"
+          src={banner}
+          color="#9e1010"
           // -------------------------------
           // RESPONSIVE DIMENSIONS
           // -------------------------------
@@ -71,11 +71,6 @@ export default function HomePage() {
           // -------------------------------
           castShadow={true} // native mesh.castShadow
           receiveShadow={true} // enables custom shadow pipeline
-          shadowRadius={2.5} // PCF disk radius
-          shadowSamples={8} // # of poisson taps
-          shadowFade={0.25} // exponential falloff
-          shadowDistanceFactor={1.2} // scale depth-distance sensitivity
-          shadowLightSize={1.0} // penumbra softness factor
           // -------------------------------
           // INTERACTION
           // -------------------------------

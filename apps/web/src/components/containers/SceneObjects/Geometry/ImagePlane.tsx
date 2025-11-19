@@ -4,7 +4,6 @@ import * as THREE from "three";
 
 import { createImagePlane } from "./ImagePlanePrimitive";
 import { useStage } from "@/components/containers/SceneCore/Stage/useStage";
-import { ShadowProps } from "@/components/containers/SceneCore/Shadows/ShadowTypes";
 import { getBreakpoint } from "@/components/containers/SceneCore/Layers/Breakpoints";
 
 // --------- Responsive Types ---------
@@ -21,9 +20,9 @@ interface ResponsiveVec3 {
   desktop?: [number, number, number];
 }
 
-// --------- Full API ---------
+// --------- Public API ---------
 
-export interface ImagePlaneProps extends ShadowProps {
+export interface ImagePlaneProps {
   src?: string;
   color?: string | number;
 
@@ -34,6 +33,9 @@ export interface ImagePlaneProps extends ShadowProps {
   rotation?: ResponsiveVec3;
 
   z?: number;
+
+  castShadow?: boolean;
+  receiveShadow?: boolean;
 
   onClick?: (e: PointerEvent, hit: THREE.Intersection) => void;
   onHover?: (e: PointerEvent, hit: THREE.Intersection | undefined) => void;
@@ -47,10 +49,7 @@ function useBreakpoint() {
   const [bp, setBp] = useState(getBreakpoint(window.innerWidth));
 
   useEffect(() => {
-    const onResize = () => {
-      setBp(getBreakpoint(window.innerWidth));
-    };
-
+    const onResize = () => setBp(getBreakpoint(window.innerWidth));
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
@@ -71,26 +70,18 @@ export function ImagePlane({
   z = 0,
   __parent = null,
 
-  // Shadows
   castShadow,
   receiveShadow,
-  shadowRadius,
-  shadowSamples,
-  shadowFade,
-  shadowDistanceFactor,
-  shadowLightSize,
 
-  // Interactions
   onClick,
   onHover,
 }: ImagePlaneProps) {
   const meshRef = useRef<THREE.Mesh | null>(null);
   const stage = useStage();
 
-  // Reactive breakpoint
   const bp = useBreakpoint();
 
-  // Resolved responsive props
+  // Resolve responsive props
   const w = width?.[bp] ?? 1;
   const h = height?.[bp] ?? 1;
 
@@ -102,16 +93,8 @@ export function ImagePlane({
     const mesh = createImagePlane({
       src,
       color,
-
       castShadow,
       receiveShadow,
-      shadowRadius,
-      shadowSamples,
-      shadowFade,
-      shadowDistanceFactor,
-      shadowLightSize,
-
-      shadowSystem: stage.shadowSystem,
     });
 
     mesh.scale.set(w, h, 1);
