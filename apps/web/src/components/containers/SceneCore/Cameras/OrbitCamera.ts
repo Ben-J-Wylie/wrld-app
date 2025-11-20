@@ -13,12 +13,12 @@ export function createOrbitCamera(
   const camera = new THREE.PerspectiveCamera(
     45, // fov
     width / height, // aspect ratio  <-- IMPORTANT!
-    0.1, // near
-    100 // far
+    1, // near
+    3000 // far
   );
 
   // --- POSITION --------------------------------------------------------------
-  camera.position.set(10, 8, 15);
+  camera.position.set(500, 10, 1000);
 
   // ---------------------------------------------------------------------------
   // FULL FRUSTUM CONTROLS
@@ -28,8 +28,8 @@ export function createOrbitCamera(
   camera.fov = 45;
 
   // Near & far
-  camera.near = 0.1;
-  camera.far = 500;
+  camera.near = 1;
+  camera.far = 3000;
 
   // Aspect
   camera.aspect = width / height;
@@ -65,7 +65,7 @@ export function createOrbitCamera(
 
   // Distance limits
   controls.minDistance = 1;
-  controls.maxDistance = 200;
+  controls.maxDistance = 2000;
 
   // Target
   controls.target.set(0, 0, 0);

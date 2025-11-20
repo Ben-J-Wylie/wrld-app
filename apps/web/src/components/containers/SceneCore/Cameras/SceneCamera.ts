@@ -3,7 +3,7 @@ import * as THREE from "three";
 import { useSceneStore } from "../Store/SceneStore";
 
 export function createSceneCamera(renderer: THREE.WebGLRenderer) {
-  const cameraZ = 100;
+  const cameraZ = 1000;
 
   const getViewport = () => ({
     w: renderer.domElement.clientWidth,
@@ -12,7 +12,7 @@ export function createSceneCamera(renderer: THREE.WebGLRenderer) {
 
   const { w, h } = getViewport();
 
-  const camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 110);
+  const camera = new THREE.PerspectiveCamera(45, w / h, 1, 1100);
   camera.position.set(0, 0, cameraZ);
 
   const helper = new THREE.CameraHelper(camera);

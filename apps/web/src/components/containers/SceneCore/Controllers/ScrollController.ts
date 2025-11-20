@@ -29,18 +29,18 @@ const IS_MOBILE =
 // --------------------------------------------------
 // CONFIG (Desktop-first — mobile multipliers below)
 // --------------------------------------------------
-const TOUCH_DRAG_SPEED = 0.05;
-const WHEEL_SPEED = 0.05;
-const KEY_STEP = 0.5;
-const KEY_HOLD_VELOCITY = 50;
+const TOUCH_DRAG_SPEED = 0.8;
+const WHEEL_SPEED = 0.8;
+const KEY_STEP = 50;
+const KEY_HOLD_VELOCITY = 300;
 const KEY_HOLD_DELAY = 270;
-const INERTIA_GAIN = 0.01;
+const INERTIA_GAIN = 1;
 const FRICTION = 0.9;
 const STOP_THRESHOLD = 0.0001;
 
 // Mobile-only tuning (boosts raw input deltas)
-const MOBILE_TOUCH_MULTIPLIER = IS_MOBILE ? 1.5 : 1;
-const MOBILE_INERTIA_MULTIPLIER = IS_MOBILE ? 10 : 1;
+const MOBILE_TOUCH_MULTIPLIER = IS_MOBILE ? 1 : 1;
+const MOBILE_INERTIA_MULTIPLIER = IS_MOBILE ? 1 : 1;
 
 // --------------------------------------------------
 // STATE (Normalized Scrolling: scrollX/scrollY = 0–1)

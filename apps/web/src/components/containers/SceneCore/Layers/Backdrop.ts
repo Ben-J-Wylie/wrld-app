@@ -88,7 +88,7 @@ export function createBackdrop({
   height: number;
 }) {
   const geo = new THREE.PlaneGeometry(width, height);
-  const mat = new THREE.MeshStandardMaterial({ color: 0x333333 });
+  const mat = new THREE.MeshStandardMaterial({ color: 0xb9b8af });
 
   const mesh = new THREE.Mesh(geo, mat);
   mesh.receiveShadow = true;

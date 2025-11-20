@@ -1,6 +1,6 @@
 // src/App.tsx
 import React from "react";
-import BetaScene from "./scenes/BetaScene/BetaScene";
+import LogoScene from "./components/elements/Logo/LogoScene";
 
 export default function App() {
   return (
@@ -13,7 +13,7 @@ export default function App() {
         padding: 0,
       }}
     >
-      <BetaScene />
+      <LogoScene />
     </div>
   );
 }
