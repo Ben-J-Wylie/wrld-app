@@ -38,29 +38,29 @@ export default function HomePage() {
           // -------------------------------
           width={{
             mobile: 20,
-            tablet: 5,
-            desktop: 50,
+            tablet: 20,
+            desktop: 20,
           }}
           height={{
-            mobile: 18,
-            tablet: 10,
-            desktop: 5,
+            mobile: 20,
+            tablet: 20,
+            desktop: 20,
           }}
           // -------------------------------
           // RESPONSIVE POSITION
           // -------------------------------
           position={{
             mobile: [0, -2, 0],
-            tablet: [0, -1, 0],
-            desktop: [0, 0, 0],
+            tablet: [5, -1, 0],
+            desktop: [-5, 0, 0],
           }}
           // -------------------------------
           // RESPONSIVE ROTATION
           // -------------------------------
           rotation={{
             mobile: [0, 0, 0],
-            tablet: [0, 45, 0],
-            desktop: [0, 30, 0],
+            tablet: [0, 0, 0],
+            desktop: [0, 0, 0],
           }}
           // -------------------------------
           // Z-OFFSET (applied AFTER position)
