@@ -1,7 +1,9 @@
-// SceneCore/Layers/Group.tsx
-import { useLayoutEffect, useRef, useState } from "react";
+// src/components/containers/SceneCore/Layers/Group.tsx
+import React, { useEffect, useRef } from "react";
 import * as THREE from "three";
-import { useStage } from "@/components/containers/SceneCore/Stage/useStage";
+
+import { useStage } from "../Stage/useStage";
+import { ParentContext, useParent } from "./ParentContext";
 
 export interface GroupProps {
   children?: React.ReactNode;
@@ -18,53 +20,32 @@ export function Group({
   scale = [1, 1, 1],
   z = 0,
 }: GroupProps) {
-  const groupRef = useRef<THREE.Group | null>(null);
   const stage = useStage();
-  const [injectedChildren, setInjectedChildren] =
-    useState<React.ReactNode>(null);
+  const parent = useParent();
+  const groupRef = useRef(new THREE.Group());
 
-  // -------------------------------------------------------------
-  // MOUNT GROUP
-  // -------------------------------------------------------------
-  useLayoutEffect(() => {
-    const group = new THREE.Group();
+  useEffect(() => {
+    const g = groupRef.current;
 
-    group.position.set(position[0], position[1], position[2] + z);
-    group.rotation.set(rotation[0], rotation[1], rotation[2]);
-    group.scale.set(scale[0], scale[1], scale[2]);
+    g.position.set(position[0], position[1], position[2] + z);
+    g.rotation.set(rotation[0], rotation[1], rotation[2]);
+    g.scale.set(scale[0], scale[1], scale[2]);
 
-    groupRef.current = group;
+    stage.addObject(g, parent);
 
-    // Register it with the stage as a parent
-    stage.addObject(group);
-    stage.pushParent(group);
-
-    return () => {
-      stage.popParent();
-      stage.removeObject(group);
-    };
+    return () => stage.removeObject(g);
   }, []);
 
-  // -------------------------------------------------------------
-  // CHILD INJECTION
-  // -------------------------------------------------------------
-  useLayoutEffect(() => {
-    if (!groupRef.current) return;
-
-    const injected = stage.injectChildrenInto(groupRef, children);
-    setInjectedChildren(injected);
-  }, [children]);
-
-  // -------------------------------------------------------------
-  // TRANSFORMS
-  // -------------------------------------------------------------
-  useLayoutEffect(() => {
-    if (!groupRef.current) return;
-
-    groupRef.current.position.set(position[0], position[1], position[2] + z);
-    groupRef.current.rotation.set(rotation[0], rotation[1], rotation[2]);
-    groupRef.current.scale.set(scale[0], scale[1], scale[2]);
+  useEffect(() => {
+    const g = groupRef.current;
+    g.position.set(position[0], position[1], position[2] + z);
+    g.rotation.set(rotation[0], rotation[1], rotation[2]);
+    g.scale.set(scale[0], scale[1], scale[2]);
   }, [position, rotation, scale, z]);
 
-  return <>{injectedChildren}</>;
+  return (
+    <ParentContext.Provider value={groupRef.current}>
+      {children}
+    </ParentContext.Provider>
+  );
 }

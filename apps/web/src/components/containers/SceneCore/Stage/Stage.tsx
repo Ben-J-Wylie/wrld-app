@@ -5,7 +5,8 @@ import * as THREE from "three";
 import { StageContext } from "./StageContext";
 import { createStage } from "./StageSystem";
 import type { StageAPI } from "./StageSystem";
-import { useWrldTheme } from "@/components/containers/SceneCore/Theme/WrldThemeProvider";
+import { useWrldTheme } from "../Theme/WrldThemeProvider";
+import { ParentContext } from "../Layers/ParentContext";
 
 export interface StageProps {
   backdrop?: {
@@ -54,7 +55,7 @@ export function Stage({ backdrop, style, children }: StageProps) {
     stageRootRef.current = stage.scene;
 
     return () => stage.cleanup();
-  }, []); // ❗ create only ONCE
+  }, []);
 
   // -----------------------------------------------
   // UPDATE BACKDROP COLOR WHEN THEME CHANGES
@@ -67,9 +68,6 @@ export function Stage({ backdrop, style, children }: StageProps) {
   // -----------------------------------------------
   // Inject React children into stage root
   // -----------------------------------------------
-  const injectedChildren =
-    stageAPI && stageAPI.injectChildrenInto(stageRootRef, children);
-
   return (
     <div
       style={{
@@ -89,9 +87,10 @@ export function Stage({ backdrop, style, children }: StageProps) {
       {/* REACT LAYER */}
       {stageAPI && (
         <StageContext.Provider value={stageAPI}>
-          <div style={{ position: "relative", zIndex: 10 }}>
-            {injectedChildren}
-          </div>
+          {/* This provides the *root* THREE parent for React-driven objects */}
+          <ParentContext.Provider value={stageRootRef.current}>
+            <div style={{ position: "relative", zIndex: 10 }}>{children}</div>
+          </ParentContext.Provider>
         </StageContext.Provider>
       )}
     </div>

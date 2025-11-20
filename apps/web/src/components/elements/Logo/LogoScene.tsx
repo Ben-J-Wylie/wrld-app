@@ -1,8 +1,10 @@
-import { Stage } from "@/components/containers/SceneCore/Stage/Stage";
-import { TextPlane } from "@/components/containers/SceneObjects/Geometry/TextPlane";
-import { ImagePlane } from "@/components/containers/SceneObjects/Geometry/ImagePlane";
-import { Group } from "@/components/containers/SceneCore/Layers/Group";
-import { useWrldTheme } from "@/components/containers/SceneCore/Theme/WrldThemeProvider";
+import { Stage } from "../../containers/SceneCore/Stage/Stage";
+import { TextPlane } from "../../containers/SceneObjects/Geometry/TextPlane";
+import { ImagePlane } from "../../containers/SceneObjects/Geometry/ImagePlane";
+import { Group } from "../../containers/SceneCore/Layers/Group";
+import { ScreenGroup } from "../../containers/SceneCore/Layers/ScreenGroup";
+import { useWrldTheme } from "../../containers/SceneCore/Theme/WrldThemeProvider";
+import { TestPlane } from "../../containers/SceneObjects/Geometry/TestPlane";
 
 import Logo from "./Logo.svg";
 
@@ -19,6 +21,63 @@ export default function LogoElement() {
         position: [0, 0, 0],
       }}
     >
+      <ScreenGroup position={[0, 0, -750]}>
+        <ImagePlane
+          // -------------------------------
+          // TEXTURE / COLOR
+          // -------------------------------
+          //   src={Logo}
+          color="#ffffff"
+          // -------------------------------
+          // RESPONSIVE DIMENSIONS
+          // -------------------------------
+          width={{
+            mobile: 100,
+            tablet: 100,
+            desktop: 100,
+          }}
+          height={{
+            mobile: 100,
+            tablet: 100,
+            desktop: 100,
+          }}
+          // -------------------------------
+          // RESPONSIVE POSITION
+          // -------------------------------
+          position={{
+            mobile: [0, 0, 0],
+            tablet: [0, 0, 0],
+            desktop: [0, 0, 0],
+          }}
+          // -------------------------------
+          // RESPONSIVE ROTATION
+          // -------------------------------
+          rotation={{
+            mobile: [0, 0, 0],
+            tablet: [0, 0, 0],
+            desktop: [0, 0, 0],
+          }}
+          // -------------------------------
+          // Z-OFFSET (applied AFTER position)
+          // -------------------------------
+          z={-1}
+          // -------------------------------
+          // SHADOW CONTROLS
+          // -------------------------------
+          castShadow={true} // native mesh.castShadow
+          receiveShadow={true} // enables custom shadow pipeline
+          // -------------------------------
+          // INTERACTION
+          // -------------------------------
+          onClick={(e, hit) => {
+            console.log("ImagePlane clicked", hit);
+          }}
+          onHover={(e, hit) => {
+            if (hit) console.log("hover in");
+            else console.log("hover out");
+          }}
+        />
+      </ScreenGroup>
       <Group position={[0, 0, 20]}>
         <TextPlane
           /* --------------------------

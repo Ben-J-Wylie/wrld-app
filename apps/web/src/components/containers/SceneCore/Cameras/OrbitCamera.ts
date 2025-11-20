@@ -14,11 +14,11 @@ export function createOrbitCamera(
     45, // fov
     width / height, // aspect ratio  <-- IMPORTANT!
     1, // near
-    3000 // far
+    6000 // far
   );
 
   // --- POSITION --------------------------------------------------------------
-  camera.position.set(500, 10, 1000);
+  camera.position.set(500, 300, 3000);
 
   // ---------------------------------------------------------------------------
   // FULL FRUSTUM CONTROLS
@@ -29,7 +29,7 @@ export function createOrbitCamera(
 
   // Near & far
   camera.near = 1;
-  camera.far = 3000;
+  camera.far = 6000;
 
   // Aspect
   camera.aspect = width / height;
@@ -65,7 +65,7 @@ export function createOrbitCamera(
 
   // Distance limits
   controls.minDistance = 1;
-  controls.maxDistance = 2000;
+  controls.maxDistance = 5000;
 
   // Target
   controls.target.set(0, 0, 0);

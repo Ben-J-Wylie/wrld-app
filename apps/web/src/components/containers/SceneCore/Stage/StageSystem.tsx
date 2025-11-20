@@ -1,4 +1,4 @@
-// StageSystem.ts
+// src/components/containers/SceneCore/Stage/StageSystem.ts
 import React from "react";
 import * as THREE from "three";
 
@@ -28,6 +28,15 @@ export interface StageDefinition {
 export interface StageAPI {
   scene: THREE.Scene;
 
+  /** Root for screen-space UI, parented under the SceneCamera. */
+  getCameraRoot(): THREE.Group;
+
+  /** The *main* scene camera (backdrop-fitting, HUD-anchoring). */
+  getSceneCamera(): THREE.PerspectiveCamera;
+
+  /** The currently active render camera (Scene or Orbit). */
+  getCamera(): THREE.PerspectiveCamera;
+
   // Hierarchy grouping
   pushParent(obj: THREE.Object3D): void;
   popParent(): void;
@@ -55,8 +64,6 @@ export interface StageAPI {
   getBackdropMesh(): THREE.Mesh | null;
 
   cleanup(): void;
-
-  injectChildrenInto(_ignored: any, children: React.ReactNode): React.ReactNode;
 }
 
 // ---------------------------------------------------------
@@ -94,7 +101,7 @@ export function createStage(
   const cams = createCameraPackage(renderer, scene, width, height);
   let activeCamera = cams.activeCamera;
 
-  // Toggle orbit camera with "C"
+  // Toggle orbit camera with "C" (render camera only)
   window.addEventListener("keydown", (e: KeyboardEvent) => {
     if (e.key.toLowerCase() === "c") {
       activeCamera = cams.cameraSwitcher();
@@ -158,7 +165,6 @@ export function createStage(
       })
     : null;
 
-  // Expose backdrop API wrappers:
   const setBackdropColor = (color: THREE.ColorRepresentation) => {
     if (!backdropSystem) return;
     const mat = backdropSystem.mesh.material as THREE.MeshStandardMaterial;
@@ -201,8 +207,12 @@ export function createStage(
   // ---------------------------------------------------------
   const dynamicObjects = new Set<THREE.Object3D>();
 
-  function addObject(obj: THREE.Object3D) {
-    getActiveParent().add(obj);
+  function addObject(
+    obj: THREE.Object3D,
+    explicitParent?: THREE.Object3D | null
+  ) {
+    const parent = explicitParent ?? getActiveParent();
+    parent.add(obj);
     dynamicObjects.add(obj);
   }
 
@@ -259,10 +269,25 @@ export function createStage(
   }
 
   // ---------------------------------------------------------
+  // CAMERA ACCESSORS
+  // ---------------------------------------------------------
+  function getCamera() {
+    return activeCamera as THREE.PerspectiveCamera;
+  }
+
+  function getSceneCamera() {
+    return cams.sceneCamera;
+  }
+
+  // ---------------------------------------------------------
   // RETURN PUBLIC API
   // ---------------------------------------------------------
   return {
     scene,
+
+    getCameraRoot: () => cams.cameraRoot,
+    getSceneCamera,
+    getCamera,
 
     pushParent,
     popParent,
@@ -281,16 +306,10 @@ export function createStage(
       delete obj.userData.handlers;
     },
 
-    // BACKDROP API
     setBackdropColor,
     setBackdropPosition,
     setBackdropSize,
     getBackdropMesh,
-
-    // React injection passthrough
-    injectChildrenInto(_unused, children) {
-      return children;
-    },
 
     cleanup,
   };
