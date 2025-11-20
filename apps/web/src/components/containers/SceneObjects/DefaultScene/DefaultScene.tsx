@@ -74,10 +74,6 @@ export default function DefaultScene() {
           onHover={(e, hit) => {
             console.log("Hover:", hit ? "enter" : "leave");
           }}
-          /* --------------------------
-           *  PARENTING (optional)
-           * -------------------------- */
-          __parent={null} // let Stage place it at root
         />
         <ImagePlane
           // -------------------------------
@@ -133,71 +129,6 @@ export default function DefaultScene() {
             if (hit) console.log("hover in");
             else console.log("hover out");
           }}
-          // -------------------------------
-          // INTERNAL PARENT OVERRIDE
-          // (used when nested inside <Group>)
-          // -------------------------------
-          __parent={null}
-        />
-        <ImagePlane
-          // -------------------------------
-          // TEXTURE / COLOR
-          // -------------------------------
-          src={Image}
-          color="#ffffff"
-          // -------------------------------
-          // RESPONSIVE DIMENSIONS
-          // -------------------------------
-          width={{
-            mobile: 500,
-            tablet: 500,
-            desktop: 500,
-          }}
-          height={{
-            mobile: 500,
-            tablet: 500,
-            desktop: 500,
-          }}
-          // -------------------------------
-          // RESPONSIVE POSITION
-          // -------------------------------
-          position={{
-            mobile: [0, 0, 50],
-            tablet: [0, 0, 50],
-            desktop: [0, 0, 50],
-          }}
-          // -------------------------------
-          // RESPONSIVE ROTATION
-          // -------------------------------
-          rotation={{
-            mobile: [0, 0, 0],
-            tablet: [0, 0, 0],
-            desktop: [0, 0, 0],
-          }}
-          // -------------------------------
-          // Z-OFFSET (applied AFTER position)
-          // -------------------------------
-          z={0}
-          // -------------------------------
-          // SHADOW CONTROLS
-          // -------------------------------
-          castShadow={true} // native mesh.castShadow
-          receiveShadow={true} // enables custom shadow pipeline
-          // -------------------------------
-          // INTERACTION
-          // -------------------------------
-          onClick={(e, hit) => {
-            console.log("ImagePlane clicked", hit);
-          }}
-          onHover={(e, hit) => {
-            if (hit) console.log("hover in");
-            else console.log("hover out");
-          }}
-          // -------------------------------
-          // INTERNAL PARENT OVERRIDE
-          // (used when nested inside <Group>)
-          // -------------------------------
-          __parent={null}
         />
       </Group>
     </Stage>

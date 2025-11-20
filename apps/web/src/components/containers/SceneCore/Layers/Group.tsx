@@ -1,3 +1,4 @@
+// SceneCore/Layers/Group.tsx
 import { useLayoutEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { useStage } from "@/components/containers/SceneCore/Stage/useStage";
@@ -8,7 +9,6 @@ export interface GroupProps {
   rotation?: [number, number, number];
   scale?: [number, number, number];
   z?: number;
-  __parent?: THREE.Object3D | null;
 }
 
 export function Group({
@@ -17,7 +17,6 @@ export function Group({
   rotation = [0, 0, 0],
   scale = [1, 1, 1],
   z = 0,
-  __parent = null,
 }: GroupProps) {
   const groupRef = useRef<THREE.Group | null>(null);
   const stage = useStage();
@@ -28,23 +27,26 @@ export function Group({
   // MOUNT GROUP
   // -------------------------------------------------------------
   useLayoutEffect(() => {
-    const g = new THREE.Group();
+    const group = new THREE.Group();
 
-    g.position.set(position[0], position[1], position[2] + z);
-    g.rotation.set(rotation[0], rotation[1], rotation[2]);
-    g.scale.set(scale[0], scale[1], scale[2]);
+    group.position.set(position[0], position[1], position[2] + z);
+    group.rotation.set(rotation[0], rotation[1], rotation[2]);
+    group.scale.set(scale[0], scale[1], scale[2]);
 
-    groupRef.current = g;
+    groupRef.current = group;
 
-    stage.addObject(g, __parent);
+    // Register it with the stage as a parent
+    stage.addObject(group);
+    stage.pushParent(group);
 
     return () => {
-      stage.removeObject(g);
+      stage.popParent();
+      stage.removeObject(group);
     };
   }, []);
 
   // -------------------------------------------------------------
-  // CHILD INJECTION — RUN ONLY AFTER groupRef.current EXISTS
+  // CHILD INJECTION
   // -------------------------------------------------------------
   useLayoutEffect(() => {
     if (!groupRef.current) return;
@@ -64,8 +66,5 @@ export function Group({
     groupRef.current.scale.set(scale[0], scale[1], scale[2]);
   }, [position, rotation, scale, z]);
 
-  // -------------------------------------------------------------
-  // RENDER INJECTED CHILDREN
-  // -------------------------------------------------------------
   return <>{injectedChildren}</>;
 }

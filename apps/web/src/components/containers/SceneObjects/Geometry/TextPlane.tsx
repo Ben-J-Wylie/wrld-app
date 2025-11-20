@@ -6,8 +6,6 @@ import { createTextPlane } from "./TextPlanePrimitive";
 import { useStage } from "@/components/containers/SceneCore/Stage/useStage";
 import { getBreakpoint } from "@/components/containers/SceneCore/Layers/Breakpoints";
 
-// --------- Responsive Types ---------
-
 interface ResponsiveNumber {
   mobile?: number;
   tablet?: number;
@@ -20,8 +18,6 @@ interface ResponsiveVec3 {
   desktop?: [number, number, number];
 }
 
-// --------- Public API ---------
-
 export interface TextPlaneProps {
   text: string;
   fontSize?: number;
@@ -30,8 +26,8 @@ export interface TextPlaneProps {
   background?: string | null;
   padding?: number;
 
-  width?: ResponsiveNumber; // world units (auto if omitted)
-  height?: ResponsiveNumber; // world units (auto if omitted)
+  width?: ResponsiveNumber;
+  height?: ResponsiveNumber;
 
   position?: ResponsiveVec3;
   rotation?: ResponsiveVec3;
@@ -43,11 +39,7 @@ export interface TextPlaneProps {
 
   onClick?: (e: PointerEvent, hit: THREE.Intersection) => void;
   onHover?: (e: PointerEvent, hit: THREE.Intersection | undefined) => void;
-
-  __parent?: THREE.Object3D | null;
 }
-
-// --------- Breakpoint Hook ---------
 
 function useBreakpoint() {
   const [bp, setBp] = useState(getBreakpoint(window.innerWidth));
@@ -60,8 +52,6 @@ function useBreakpoint() {
 
   return bp;
 }
-
-// --------- Component ---------
 
 export function TextPlane({
   text,
@@ -76,7 +66,6 @@ export function TextPlane({
   position,
   rotation,
   z = 0,
-  __parent = null,
 
   castShadow,
   receiveShadow,
@@ -88,14 +77,12 @@ export function TextPlane({
   const stage = useStage();
   const bp = useBreakpoint();
 
-  // Resolve responsive props
-  const w = width?.[bp];
-  const h = height?.[bp];
+  const w = width?.[bp] ?? 1;
+  const h = height?.[bp] ?? 1;
 
   const pos = position?.[bp] ?? [0, 0, 0];
   const rot = rotation?.[bp] ?? [0, 0, 0];
 
-  // ------- MOUNT -------
   useEffect(() => {
     const mesh = createTextPlane({
       text,
@@ -104,19 +91,17 @@ export function TextPlane({
       color,
       background,
       padding,
-
       castShadow,
       receiveShadow,
     });
 
     meshRef.current = mesh;
 
-    // Initial transforms
-    if (w && h) mesh.scale.set(w, h, 1);
+    mesh.scale.set(w, h, 1);
     mesh.position.set(pos[0], pos[1], pos[2] + z);
     mesh.rotation.set(rot[0], rot[1], rot[2]);
 
-    stage.addObject(mesh, __parent);
+    stage.addObject(mesh);
 
     if (onClick || onHover) {
       stage.registerInteractive(mesh, { onClick, onHover });
@@ -124,21 +109,26 @@ export function TextPlane({
 
     return () => {
       if (onClick || onHover) stage.unregisterInteractive(mesh);
-
       stage.removeObject(mesh);
-      mesh.geometry?.dispose?.();
-      (mesh.material as THREE.Material)?.dispose?.();
+      mesh.geometry.dispose();
+      (mesh.material as THREE.Material).dispose();
     };
-  }, []);
+  }, [
+    text,
+    fontSize,
+    fontFamily,
+    color,
+    background,
+    padding,
+    castShadow,
+    receiveShadow,
+  ]);
 
-  // ------- RESPONSIVE UPDATES -------
   useEffect(() => {
     const mesh = meshRef.current;
     if (!mesh) return;
 
-    // Only apply width/height if provided
-    if (w && h) mesh.scale.set(w, h, 1);
-
+    mesh.scale.set(w, h, 1);
     mesh.position.set(pos[0], pos[1], pos[2] + z);
     mesh.rotation.set(rot[0], rot[1], rot[2]);
   }, [bp, w, h, pos, rot, z]);

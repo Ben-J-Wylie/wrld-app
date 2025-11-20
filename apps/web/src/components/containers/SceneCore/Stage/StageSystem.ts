@@ -19,13 +19,12 @@ export interface StageDefinition {
 export interface StageAPI {
   scene: THREE.Scene;
 
-  addObject: (obj: THREE.Object3D, parent?: THREE.Object3D | null) => void;
-  removeObject: (obj: THREE.Object3D) => void;
+  pushParent: (obj: THREE.Object3D) => void;
+  popParent: () => void;
+  getActiveParent: () => THREE.Object3D;
 
-  injectChildrenInto: (
-    parentRef: React.RefObject<THREE.Object3D | null>,
-    children: React.ReactNode
-  ) => any;
+  addObject: (obj: THREE.Object3D) => void;
+  removeObject: (obj: THREE.Object3D) => void;
 
   registerInteractive: (
     obj: THREE.Object3D,
@@ -38,6 +37,12 @@ export interface StageAPI {
   unregisterInteractive: (obj: THREE.Object3D) => void;
 
   cleanup: () => void;
+
+  // React child injector now NO LONGER mutates props
+  injectChildrenInto: (
+    _ignored: any,
+    children: React.ReactNode
+  ) => React.ReactNode;
 }
 
 export function createStage(
@@ -150,14 +155,30 @@ export function createStage(
   }
 
   // ---------------------------------------------------------
-  // REACT-DRIVEN DYNAMIC OBJECT REGISTRY
+  // PARENT STACK (NEW — replaces __parent)
+  // ---------------------------------------------------------
+  const parentStack: THREE.Object3D[] = [scene];
+
+  function pushParent(obj: THREE.Object3D) {
+    parentStack.push(obj);
+  }
+
+  function popParent() {
+    if (parentStack.length > 1) parentStack.pop();
+  }
+
+  function getActiveParent() {
+    return parentStack[parentStack.length - 1];
+  }
+
+  // ---------------------------------------------------------
+  // DYNAMIC OBJECTS
   // ---------------------------------------------------------
   const dynamicObjects = new Set<THREE.Object3D>();
 
-  function addObject(obj: THREE.Object3D, parent?: THREE.Object3D | null) {
-    if (parent) parent.add(obj);
-    else scene.add(obj);
-
+  function addObject(obj: THREE.Object3D) {
+    const parent = getActiveParent();
+    parent.add(obj);
     dynamicObjects.add(obj);
   }
 
@@ -166,12 +187,11 @@ export function createStage(
     dynamicObjects.delete(obj);
   }
 
-  function injectChildrenInto(parentRef: React.RefObject<any>, children: any) {
-    return React.Children.map(children, (child: any) => {
-      if (!child) return null;
-
-      return React.cloneElement(child, { __parent: parentRef.current });
-    });
+  // ---------------------------------------------------------
+  // NEW injectChildrenInto — no __parent mutation
+  // ---------------------------------------------------------
+  function injectChildrenInto(_unused: any, children: React.ReactNode) {
+    return children;
   }
 
   // ---------------------------------------------------------
@@ -230,25 +250,25 @@ export function createStage(
     renderer.domElement.removeEventListener("pointermove", onPointerMove);
 
     backdropSystem?.cleanup();
-
-    dynamicObjects.forEach((obj) => {
-      if (obj.parent) obj.parent.remove(obj);
-    });
-
-    interactiveObjects.clear();
     dynamicObjects.clear();
+    interactiveObjects.clear();
   }
-
   // ---------------------------------------------------------
-  // API Return
+  // API RETURN
   // ---------------------------------------------------------
   return {
     scene,
+    pushParent,
+    popParent,
+    getActiveParent,
+
     addObject,
     removeObject,
+
+    registerInteractive,
+    unregisterInteractive,
+
     injectChildrenInto,
-    registerInteractive, // <-- EXPOSED
-    unregisterInteractive, // <-- EXPOSED
     cleanup,
   };
 }

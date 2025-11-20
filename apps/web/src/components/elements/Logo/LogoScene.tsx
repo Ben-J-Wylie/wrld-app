@@ -17,7 +17,7 @@ export default function LogoElement() {
         position: [0, 0, 0],
       }}
     >
-      <Group position={[0, 0, 100]}>
+      <Group position={[0, 0, 20]}>
         <TextPlane
           /* --------------------------
            *  TEXT SETTINGS
@@ -33,22 +33,22 @@ export default function LogoElement() {
            *  If omitted → auto-sizes based on canvas
            * -------------------------- */
           width={{
-            mobile: 100,
-            tablet: 100,
-            desktop: 100,
+            mobile: 50,
+            tablet: 50,
+            desktop: 50,
           }}
           height={{
-            mobile: 100,
-            tablet: 100,
-            desktop: 100,
+            mobile: 50,
+            tablet: 50,
+            desktop: 50,
           }}
           // -------------------------------
           // RESPONSIVE POSITION
           // -------------------------------
           position={{
-            mobile: [0, 0, 500],
-            tablet: [0, 0, 50],
-            desktop: [0, 0, 0],
+            mobile: [0, 0, 0],
+            tablet: [0, 0, 100],
+            desktop: [0, 0, 200],
           }}
           // -------------------------------
           // RESPONSIVE ROTATION
@@ -64,7 +64,7 @@ export default function LogoElement() {
            *  SHADOWS
            * -------------------------- */
           castShadow={true}
-          receiveShadow={false}
+          receiveShadow={true}
           /* --------------------------
            *  INTERACTION
            * -------------------------- */
@@ -89,21 +89,21 @@ export default function LogoElement() {
           // RESPONSIVE DIMENSIONS
           // -------------------------------
           width={{
-            mobile: 500,
-            tablet: 500,
-            desktop: 500,
+            mobile: 100,
+            tablet: 100,
+            desktop: 100,
           }}
           height={{
-            mobile: 500,
-            tablet: 500,
-            desktop: 500,
+            mobile: 100,
+            tablet: 100,
+            desktop: 100,
           }}
           // -------------------------------
           // RESPONSIVE POSITION
           // -------------------------------
           position={{
-            mobile: [0, 0, 0],
-            tablet: [0, 0, 0],
+            mobile: [0, 0, 200],
+            tablet: [0, 0, 100],
             desktop: [0, 0, 0],
           }}
           // -------------------------------
@@ -117,7 +117,7 @@ export default function LogoElement() {
           // -------------------------------
           // Z-OFFSET (applied AFTER position)
           // -------------------------------
-          z={0}
+          z={1}
           // -------------------------------
           // SHADOW CONTROLS
           // -------------------------------

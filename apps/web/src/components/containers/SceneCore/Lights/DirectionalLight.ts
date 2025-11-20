@@ -21,8 +21,8 @@ export function createDirectionalLight() {
   light.shadow.mapSize.set(512, 512);
 
   // VSM blur controls
-  light.shadow.radius = 8;
-  light.shadow.blurSamples = 16;
+  light.shadow.radius = 6;
+  light.shadow.blurSamples = 8;
 
   // bias tuning
   light.shadow.bias = -0.0001;

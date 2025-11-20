@@ -39,11 +39,14 @@ export function createTextPlane(options: TextPlaneOptions) {
   canvas.height = textHeight + padding * 2;
 
   ctx.font = `${fontSize}px ${fontFamily}`;
+
+  // Background (with alpha support)
   if (background) {
     ctx.fillStyle = background;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
 
+  // Draw text
   ctx.fillStyle = color;
   ctx.textBaseline = "top";
   ctx.fillText(text, padding, padding);
@@ -54,25 +57,25 @@ export function createTextPlane(options: TextPlaneOptions) {
   texture.magFilter = THREE.LinearFilter;
   texture.needsUpdate = true;
 
-  // Convert canvas px → world units (same convention as ImagePlane)
+  // Convert px → world units (same convention as ImagePlane)
   const worldWidth = canvas.width / 100;
   const worldHeight = canvas.height / 100;
 
   const geo = new THREE.PlaneGeometry(worldWidth, worldHeight);
 
+  // --- Material (MATCHING ImagePlane) ---------------------------
   const mat = new THREE.MeshStandardMaterial({
     map: texture,
+    color: 0xffffff, // same rule: white when texture is present
     transparent: true,
+    alphaTest: 0.01, // CRITICAL for clean text edges
     side: THREE.FrontSide,
   });
 
   const mesh = new THREE.Mesh(geo, mat);
 
-  // --- Shadow Props --------------------------------------------------
   mesh.castShadow = castShadow;
   mesh.receiveShadow = receiveShadow;
-
-  mesh.userData.isTextPlane = true;
 
   return mesh;
 }
