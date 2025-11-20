@@ -2,10 +2,12 @@ import { Stage } from "@/components/containers/SceneCore/Stage/Stage";
 import { TextPlane } from "@/components/containers/SceneObjects/Geometry/TextPlane";
 import { ImagePlane } from "@/components/containers/SceneObjects/Geometry/ImagePlane";
 import { Group } from "@/components/containers/SceneCore/Layers/Group";
+import { useWrldTheme } from "@/components/containers/SceneCore/Theme/WrldThemeProvider";
 
 import Logo from "./Logo.svg";
 
 export default function LogoElement() {
+  const theme = useWrldTheme();
   return (
     <Stage
       backdrop={{
@@ -25,7 +27,7 @@ export default function LogoElement() {
           text="WRLD"
           fontSize={200}
           fontFamily="Inter"
-          color="#ffffff"
+          color={theme.colors.text}
           background={null}
           padding={32}
           /* --------------------------

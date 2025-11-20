@@ -4,7 +4,7 @@ import * as THREE from "three";
 
 import { createTextPlane } from "./TextPlanePrimitive";
 import { useStage } from "@/components/containers/SceneCore/Stage/useStage";
-import { getBreakpoint } from "@/components/containers/SceneCore/Layers/Breakpoints";
+import { getBreakpoint } from "@/components/containers/SceneCore/Theme/Breakpoints";
 
 interface ResponsiveNumber {
   mobile?: number;

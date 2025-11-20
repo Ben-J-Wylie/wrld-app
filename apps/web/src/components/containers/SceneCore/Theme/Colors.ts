@@ -1,14 +1,14 @@
 // SceneCore/Theme/colors.ts
 
 export const WrldColors = {
-  primary: "#FF3366",
-  secondary: "#00D1FF",
-  accent: "#FFA400",
+  primary: "#2d2d2d",
+  secondary: "#444444",
+  accent: "#838383",
 
-  text: "#FFFFFF",
+  text: "#252525",
   mutedText: "#595959",
 
-  background: "#434343",
+  background: "#e1e1db",
   panel: "#1A1A1A",
 
   success: "#0ECB81",

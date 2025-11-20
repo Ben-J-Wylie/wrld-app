@@ -1,7 +1,7 @@
 // Backdrop.ts
 import * as THREE from "three";
 import { useSceneStore } from "../Store/SceneStore";
-import { getBreakpoint } from "./Breakpoints";
+import { getBreakpoint } from "../Theme/Breakpoints";
 
 export interface BackdropDimensions {
   mobile: { width: number; height: number };
