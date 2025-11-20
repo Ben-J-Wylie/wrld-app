@@ -1,11 +1,13 @@
 // src/components/containers/SceneCore/Layers/TextPlane.tsx
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import * as THREE from "three";
 
 import { createTextPlane } from "./TextPlanePrimitive";
 import { useStage } from "../../SceneCore/Stage/useStage";
-import { useParent } from "../../SceneCore/Layers/ParentContext";
+import { useParent } from "../../SceneCore/Utilities/ParentContext";
 import { getBreakpoint } from "../../SceneCore/Theme/Breakpoints";
+import { resolveResponsive } from "../../SceneCore/Utilities/ResponsiveResolve";
+import type { BreakpointKey } from "../../SceneCore/Utilities/ResponsiveResolve";
 
 interface ResponsiveNumber {
   mobile?: number;
@@ -27,11 +29,11 @@ export interface TextPlaneProps {
   background?: string | null;
   padding?: number;
 
-  width?: ResponsiveNumber;
-  height?: ResponsiveNumber;
+  width?: number | ResponsiveNumber;
+  height?: number | ResponsiveNumber;
 
-  position?: ResponsiveVec3;
-  rotation?: ResponsiveVec3;
+  position?: [number, number, number] | ResponsiveVec3;
+  rotation?: [number, number, number] | ResponsiveVec3;
 
   z?: number;
 
@@ -42,24 +44,6 @@ export interface TextPlaneProps {
   onHover?: (e: PointerEvent, hit: THREE.Intersection | undefined) => void;
 }
 
-// -----------------------------------------------------
-// Breakpoint Hook
-// -----------------------------------------------------
-function useBreakpoint() {
-  const [bp, setBp] = useState(getBreakpoint(window.innerWidth));
-
-  useEffect(() => {
-    const onResize = () => setBp(getBreakpoint(window.innerWidth));
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
-
-  return bp;
-}
-
-// -----------------------------------------------------
-// TEXT PLANE COMPONENT
-// -----------------------------------------------------
 export function TextPlane(props: TextPlaneProps) {
   const {
     text,
@@ -82,21 +66,22 @@ export function TextPlane(props: TextPlaneProps) {
     onHover,
   } = props;
 
-  const meshRef = useRef<THREE.Mesh | null>(null);
   const stage = useStage();
   const parent = useParent() ?? null;
+  const meshRef = useRef<THREE.Mesh | null>(null);
 
-  const bp = useBreakpoint();
+  // Breakpoint detection
+  const bp = getBreakpoint(window.innerWidth) as BreakpointKey;
 
-  const w = width?.[bp] ?? 1;
-  const h = height?.[bp] ?? 1;
+  // Responsive resolution (identical to ImagePlane)
+  const w = resolveResponsive(width, bp, 100);
+  const h = resolveResponsive(height, bp, 100);
+  const pos = resolveResponsive(position, bp, [0, 0, 0]);
+  const rot = resolveResponsive(rotation, bp, [0, 0, 0]);
 
-  const pos = position?.[bp] ?? [0, 0, 0];
-  const rot = rotation?.[bp] ?? [0, 0, 0];
-
-  // -----------------------------------------------------
-  // CREATE + MOUNT MESH
-  // -----------------------------------------------------
+  // -------------------------------------------------------
+  // CREATE + MOUNT (only once)
+  // -------------------------------------------------------
   useEffect(() => {
     const mesh = createTextPlane({
       text,
@@ -141,12 +126,14 @@ export function TextPlane(props: TextPlaneProps) {
     castShadow,
     receiveShadow,
     stage,
-    parent, // <-- ensures correct parenting updates
+    parent,
+    onClick,
+    onHover,
   ]);
 
-  // -----------------------------------------------------
-  // UPDATE TRANSFORMS ON BREAKPOINT/RESPONSIVE CHANGE
-  // -----------------------------------------------------
+  // -------------------------------------------------------
+  // UPDATE transforms on breakpoint or responsive change
+  // -------------------------------------------------------
   useEffect(() => {
     const mesh = meshRef.current;
     if (!mesh) return;
@@ -154,7 +141,7 @@ export function TextPlane(props: TextPlaneProps) {
     mesh.scale.set(w, h, 1);
     mesh.position.set(pos[0], pos[1], pos[2] + z);
     mesh.rotation.set(rot[0], rot[1], rot[2]);
-  }, [bp, w, h, pos, rot, z]);
+  });
 
   return null;
 }

@@ -31,8 +31,6 @@ export function createCameraPackage(
   width: number,
   height: number
 ): CameraPackage {
-  console.log("%c[CameraPackage] init", "color:#4cf;font-weight:bold");
-
   // ------------------------------------------
   // SceneCamera
   // ------------------------------------------
@@ -43,25 +41,16 @@ export function createCameraPackage(
     updateInstant: updateSceneCameraInstant,
   } = createSceneCamera(renderer);
 
-  console.log("[CameraPackage] sceneCamera created:", sceneCamera);
-
   // IMPORTANT: add camera to scene
   scene.add(sceneCamera);
-  console.log(
-    "%c[CameraPackage] sceneCamera ADDED TO SCENE",
-    "color:#0f0;font-weight:bold"
-  );
 
   scene.add(sceneHelper);
-  console.log("[CameraPackage] sceneHelper added");
 
   // ------------------------------------------
   // Camera Rig
   // ------------------------------------------
   const cameraZ = sceneCamera.position.z;
   const cameraRig = createCameraRig(sceneCamera, cameraZ);
-
-  console.log("[CameraPackage] CameraRig created", { cameraZ });
 
   useSceneStore.subscribe(() => {
     cameraRig.onResizeOrFovChange();
@@ -76,8 +65,6 @@ export function createCameraPackage(
     helper: orbitHelper,
   } = createOrbitCamera(renderer, width, height);
 
-  console.log("[CameraPackage] orbitCamera created");
-
   scene.add(orbitHelper);
   controls.enabled = false;
 
@@ -85,17 +72,10 @@ export function createCameraPackage(
   // Active camera
   // ------------------------------------------
   let activeCamera: THREE.PerspectiveCamera = sceneCamera;
-  console.log("[CameraPackage] activeCamera = sceneCamera");
 
   const cameraSwitcher = () => {
     activeCamera = activeCamera === sceneCamera ? orbitCamera : sceneCamera;
     controls.enabled = activeCamera === orbitCamera;
-
-    console.log(
-      "%c[CameraPackage] ⟳ CAMERA SWITCH →",
-      "color:#fd0;font-weight:bold",
-      activeCamera === sceneCamera ? "SceneCamera" : "OrbitCamera"
-    );
 
     return activeCamera;
   };
@@ -106,18 +86,6 @@ export function createCameraPackage(
   const cameraRoot = new THREE.Group();
   cameraRoot.name = "CameraRoot";
   sceneCamera.add(cameraRoot);
-
-  console.log(
-    "%c[CameraPackage] cameraRoot ADDED under sceneCamera",
-    "color:#0ff;font-weight:bold",
-    cameraRoot
-  );
-
-  // DOUBLE VERIFY: log hierarchy
-  console.log(
-    "[CameraPackage] sceneCamera children:",
-    sceneCamera.children.map((c) => c.name || c.type)
-  );
 
   return {
     sceneCamera,

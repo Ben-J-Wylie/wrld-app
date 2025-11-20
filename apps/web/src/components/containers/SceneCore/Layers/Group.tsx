@@ -3,7 +3,7 @@ import React, { useEffect, useRef } from "react";
 import * as THREE from "three";
 
 import { useStage } from "../Stage/useStage";
-import { ParentContext, useParent } from "./ParentContext";
+import { ParentContext, useParent } from "../Utilities/ParentContext";
 
 export interface GroupProps {
   children?: React.ReactNode;

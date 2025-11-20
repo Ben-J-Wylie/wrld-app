@@ -6,7 +6,7 @@ import { StageContext } from "./StageContext";
 import { createStage } from "./StageSystem";
 import type { StageAPI } from "./StageSystem";
 import { useWrldTheme } from "../Theme/WrldThemeProvider";
-import { ParentContext } from "../Layers/ParentContext";
+import { ParentContext } from "../Utilities/ParentContext";
 
 export interface StageProps {
   backdrop?: {

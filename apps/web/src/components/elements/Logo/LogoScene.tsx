@@ -4,7 +4,6 @@ import { ImagePlane } from "../../containers/SceneObjects/Geometry/ImagePlane";
 import { Group } from "../../containers/SceneCore/Layers/Group";
 import { ScreenGroup } from "../../containers/SceneCore/Layers/ScreenGroup";
 import { useWrldTheme } from "../../containers/SceneCore/Theme/WrldThemeProvider";
-import { TestPlane } from "../../containers/SceneObjects/Geometry/TestPlane";
 
 import Logo from "./Logo.svg";
 

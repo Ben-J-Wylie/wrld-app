@@ -4,8 +4,10 @@ import * as THREE from "three";
 
 import { createImagePlane } from "./ImagePlanePrimitive";
 import { useStage } from "../../SceneCore/Stage/useStage";
-import { useParent } from "../../SceneCore/Layers/ParentContext";
+import { useParent } from "../../SceneCore/Utilities/ParentContext";
 import { getBreakpoint } from "../../SceneCore/Theme/Breakpoints";
+import { resolveResponsive } from "../../SceneCore/Utilities/ResponsiveResolve";
+import type { BreakpointKey } from "../../SceneCore/Utilities/ResponsiveResolve";
 
 interface ResponsiveNumber {
   mobile?: number;
@@ -22,11 +24,11 @@ export interface ImagePlaneProps {
   src?: string;
   color?: string | number;
 
-  width?: ResponsiveNumber;
-  height?: ResponsiveNumber;
+  width?: number | ResponsiveNumber;
+  height?: number | ResponsiveNumber;
 
-  position?: ResponsiveVec3;
-  rotation?: ResponsiveVec3;
+  position?: [number, number, number] | ResponsiveVec3;
+  rotation?: [number, number, number] | ResponsiveVec3;
 
   z?: number;
 
@@ -37,32 +39,7 @@ export interface ImagePlaneProps {
   onHover?: (e: PointerEvent, hit: THREE.Intersection | undefined) => void;
 }
 
-// -------------------------------------------------------
-// Breakpoint Hook
-// -------------------------------------------------------
-function useBreakpoint() {
-  const [bp, setBp] = useState(getBreakpoint(window.innerWidth));
-
-  useEffect(() => {
-    console.log("[ImagePlane] BP init =", bp);
-    const onResize = () => {
-      const next = getBreakpoint(window.innerWidth);
-      console.log("[ImagePlane] BP resize →", next);
-      setBp(next);
-    };
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
-
-  return bp;
-}
-
-// -------------------------------------------------------
-// Component
-// -------------------------------------------------------
 export function ImagePlane(props: ImagePlaneProps) {
-  console.log("[ImagePlane] render props =", props);
-
   const {
     src,
     color,
@@ -77,105 +54,60 @@ export function ImagePlane(props: ImagePlaneProps) {
     onHover,
   } = props;
 
-  const bp = useBreakpoint();
   const stage = useStage();
-
-  // For scene, Group, or ScreenGroup
   const parent = useParent() ?? null;
-
   const meshRef = useRef<THREE.Mesh | null>(null);
 
-  const w = width?.[bp] ?? 1;
-  const h = height?.[bp] ?? 1;
+  // Breakpoint detection
+  const bp = getBreakpoint(window.innerWidth) as BreakpointKey;
 
-  const pos = position?.[bp] ?? [0, 0, 0];
-  const rot = rotation?.[bp] ?? [0, 0, 0];
-
-  console.log("[ImagePlane] resolved values", {
-    bp,
-    w,
-    h,
-    pos,
-    rot,
-    parent,
-  });
+  // Resolve all responsive properties
+  const w = resolveResponsive(width, bp, 100);
+  const h = resolveResponsive(height, bp, 100);
+  const pos = resolveResponsive(position, bp, [0, 0, 0]);
+  const rot = resolveResponsive(rotation, bp, [0, 0, 0]);
 
   // -------------------------------------------------------
-  // MOUNT: Create Mesh
+  // CREATE + MOUNT (only once)
   // -------------------------------------------------------
   useEffect(() => {
-    console.log("[ImagePlane] MOUNT effect starting…");
-
-    const mesh = createImagePlane({
-      src,
-      color,
-      castShadow,
-      receiveShadow,
-    });
-
-    console.log("[ImagePlane] Primitive mesh created:", mesh);
-
+    const mesh = createImagePlane({ src, color, castShadow, receiveShadow });
     meshRef.current = mesh;
 
+    // Initial transforms
     mesh.scale.set(w, h, 1);
     mesh.position.set(pos[0], pos[1], pos[2] + z);
     mesh.rotation.set(rot[0], rot[1], rot[2]);
 
-    console.log("[ImagePlane] Transforms applied:", {
-      scale: mesh.scale,
-      position: mesh.position,
-      rotation: mesh.rotation,
-      zAdded: z,
-    });
-
     stage.addObject(mesh, parent);
-
-    console.log("[ImagePlane] After stage.addObject:", {
-      realParent: mesh.parent,
-      expectedParent: parent,
-    });
 
     if (onClick || onHover) {
       stage.registerInteractive(mesh, { onClick, onHover });
-      console.log("[ImagePlane] Registered interactive handlers");
     }
 
     return () => {
-      console.log("[ImagePlane] UNMOUNT cleanup");
       const m = meshRef.current;
       if (!m) return;
 
       if (onClick || onHover) stage.unregisterInteractive(m);
-
       stage.removeObject(m);
+
       m.geometry.dispose();
       (m.material as THREE.Material).dispose();
     };
-  }, [src, color, castShadow, receiveShadow, parent, stage]);
+  }, [src, color, castShadow, receiveShadow, stage, parent, onClick, onHover]);
 
   // -------------------------------------------------------
-  // UPDATE transforms on breakpoint
+  // UPDATE transforms on breakpoint or responsive change
   // -------------------------------------------------------
   useEffect(() => {
     const mesh = meshRef.current;
     if (!mesh) return;
 
-    console.log("[ImagePlane] BP update transforms:", {
-      w,
-      h,
-      pos,
-      rot,
-      z,
-    });
-
     mesh.scale.set(w, h, 1);
     mesh.position.set(pos[0], pos[1], pos[2] + z);
     mesh.rotation.set(rot[0], rot[1], rot[2]);
-
-    // Force update world matrix for debug
-    mesh.updateWorldMatrix(true, true);
-    console.log("[ImagePlane] world matrix after update:", mesh.matrixWorld);
-  }, [bp, w, h, pos, rot, z]);
+  });
 
   return null;
 }
