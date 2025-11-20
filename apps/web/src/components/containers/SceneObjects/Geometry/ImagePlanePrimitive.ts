@@ -1,10 +1,12 @@
 // SceneCore/Layers/ImagePlanePrimitive.ts
 import * as THREE from "three";
-import { ShadowProps } from "@/components/containers/SceneCore/Shadows/ShadowTypes";
 
-export interface ImagePlanePrimitiveOptions extends ShadowProps {
+export interface ImagePlanePrimitiveOptions {
   src?: string;
   color?: string | number;
+
+  castShadow?: boolean;
+  receiveShadow?: boolean;
 }
 
 export function createImagePlane(options: ImagePlanePrimitiveOptions) {
@@ -17,8 +19,7 @@ export function createImagePlane(options: ImagePlanePrimitiveOptions) {
   } = options;
 
   // ---------- Texture ----------
-  const textureLoader = new THREE.TextureLoader();
-  const texture = src ? textureLoader.load(src) : null;
+  const texture = src ? new THREE.TextureLoader().load(src) : null;
 
   const geo = new THREE.PlaneGeometry(1, 1);
 

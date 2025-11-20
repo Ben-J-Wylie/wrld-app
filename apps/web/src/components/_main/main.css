@@ -2,12 +2,9 @@
 
 /* Sandbox */
 
-
 /* Logic */
 
-
 /* Main */
-
 
 /* Root */
 
@@ -17,11 +14,10 @@
 @import "../_root/Typograpgy/Typography.css";
 @import "../_root/var.css";
 
-
 /* Containers */
 
-@import "../containers/container.css";
-@import "../containers/grids.css";
+/* @import "../containers/container.css";
+@import "../containers/grids.css"; */
 
 /* Elements */
 
@@ -51,13 +47,11 @@
 @import "../elements/VideoPlayer/VideoPlayer.css"; 
 */
 
-@import "../elements/Avatar/Avatar.css";
+/* @import "../elements/Avatar/Avatar.css";
 @import "../elements/Logo/Logo.css";
 @import "../elements/Menu/MenuContainer.css";
 @import "../elements/Menu/MenuEntry.css";
-@import "../elements/NestedToggle/NestedToggle.css";
-
-
+@import "../elements/NestedToggle/NestedToggle.css"; */
 
 /* Features */
 
@@ -76,71 +70,9 @@
 @import "../features/PreviewTorch/PreviewTorch.css";
 @import "../features/UserDropdown/UserDropdown.css"; */
 
-
 /* Sections */
 
 /* @import "../sections/Header/Header.css"; */
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 /* TODO: Look at implementing a script to assemble all css into one file. 
 This will allow you to keep seperate files while minimizing server requests.

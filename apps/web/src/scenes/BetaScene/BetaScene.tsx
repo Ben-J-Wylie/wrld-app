@@ -18,13 +18,13 @@ export default function HomePage() {
         position: [0, 0, 0],
       }}
     >
-      {/* <Group position={[5, -10, 0]}>
+      <Group position={[5, -10, 0]}>
         <Cube size={[10, 10, 10]} position={[0, 0, 50]} color="orange" />
       </Group>
 
       <Group position={[-3, 3, 0]}>
         <Sphere radius={10} position={[0, -10, 20]} color="hotpink" />
-      </Group> */}
+      </Group>
 
       <Group position={[0, 0, 0.5]}>
         <ImagePlane
