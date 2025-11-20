@@ -14,8 +14,8 @@ export function createImagePlane(options: ImagePlanePrimitiveOptions) {
     src,
     color,
 
-    castShadow = false,
-    receiveShadow = false,
+    castShadow = true,
+    receiveShadow = true,
   } = options;
 
   // ---------- Texture ----------
@@ -28,7 +28,7 @@ export function createImagePlane(options: ImagePlanePrimitiveOptions) {
     color: texture ? 0xffffff : color ?? 0x888888,
     transparent: true,
     alphaTest: 0.01,
-    side: THREE.DoubleSide,
+    side: THREE.FrontSide,
   });
 
   const mesh = new THREE.Mesh(geo, mat);

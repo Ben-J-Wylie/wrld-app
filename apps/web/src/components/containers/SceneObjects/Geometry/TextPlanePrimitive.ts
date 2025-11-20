@@ -22,8 +22,8 @@ export function createTextPlane(options: TextPlaneOptions) {
     background = null,
     padding = 32,
 
-    castShadow = false,
-    receiveShadow = false,
+    castShadow = true,
+    receiveShadow = true,
   } = options;
 
   // --- Canvas --------------------------------------------------
