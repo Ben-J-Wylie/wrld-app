@@ -1,3 +1,4 @@
+// StageSystem.ts
 import React from "react";
 import * as THREE from "three";
 
@@ -9,42 +10,58 @@ import { applyBackdropSystem } from "../Layers/BackdropSystem";
 import { createAmbientLight } from "../Lights/AmbientLight";
 import { createDirectionalLight } from "../Lights/DirectionalLight";
 
+// ---------------------------------------------------------
+// Types
+// ---------------------------------------------------------
 export interface StageDefinition {
   backdrop?: {
-    presetSizes: any;
+    presetSizes: {
+      mobile: { width: number; height: number };
+      tablet: { width: number; height: number };
+      desktop: { width: number; height: number };
+    };
     position?: [number, number, number];
+    color?: THREE.ColorRepresentation;
   };
 }
 
 export interface StageAPI {
   scene: THREE.Scene;
 
-  pushParent: (obj: THREE.Object3D) => void;
-  popParent: () => void;
-  getActiveParent: () => THREE.Object3D;
+  // Hierarchy grouping
+  pushParent(obj: THREE.Object3D): void;
+  popParent(): void;
+  getActiveParent(): THREE.Object3D;
 
-  addObject: (obj: THREE.Object3D) => void;
-  removeObject: (obj: THREE.Object3D) => void;
+  // Object lifecycle
+  addObject(obj: THREE.Object3D): void;
+  removeObject(obj: THREE.Object3D): void;
 
-  registerInteractive: (
+  // Interaction
+  registerInteractive(
     obj: THREE.Object3D,
     handlers: {
       onClick?: (e: PointerEvent, hit: THREE.Intersection) => void;
       onHover?: (e: PointerEvent, hit: THREE.Intersection | undefined) => void;
     }
-  ) => void;
+  ): void;
 
-  unregisterInteractive: (obj: THREE.Object3D) => void;
+  unregisterInteractive(obj: THREE.Object3D): void;
 
-  cleanup: () => void;
+  // Backdrop API
+  setBackdropColor(color: THREE.ColorRepresentation): void;
+  setBackdropPosition(pos: [number, number, number]): void;
+  setBackdropSize(width: number, height: number): void;
+  getBackdropMesh(): THREE.Mesh | null;
 
-  // React child injector now NO LONGER mutates props
-  injectChildrenInto: (
-    _ignored: any,
-    children: React.ReactNode
-  ) => React.ReactNode;
+  cleanup(): void;
+
+  injectChildrenInto(_ignored: any, children: React.ReactNode): React.ReactNode;
 }
 
+// ---------------------------------------------------------
+// FACTORY FUNCTION: createStage()
+// ---------------------------------------------------------
 export function createStage(
   container: HTMLElement,
   definition: StageDefinition
@@ -72,17 +89,17 @@ export function createStage(
   scene.add(createDirectionalLight());
 
   // ---------------------------------------------------------
-  // CAMERAS + CAMERA RIG
+  // CAMERA PACKAGE
   // ---------------------------------------------------------
   const cams = createCameraPackage(renderer, scene, width, height);
   let activeCamera = cams.activeCamera;
 
-  const onKey = (e: KeyboardEvent) => {
+  // Toggle orbit camera with "C"
+  window.addEventListener("keydown", (e: KeyboardEvent) => {
     if (e.key.toLowerCase() === "c") {
       activeCamera = cams.cameraSwitcher();
     }
-  };
-  window.addEventListener("keydown", onKey);
+  });
 
   // ---------------------------------------------------------
   // SCROLL SYSTEM
@@ -90,24 +107,11 @@ export function createStage(
   const scrollSystem = applyScrollSystem(cams.cameraRig, renderer.domElement);
 
   // ---------------------------------------------------------
-  // INTERACTION SYSTEM (NEW)
+  // INTERACTION SYSTEM
   // ---------------------------------------------------------
   const interactiveObjects = new Set<THREE.Object3D>();
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
-
-  function registerInteractive(
-    obj: THREE.Object3D,
-    handlers: { onClick?: any; onHover?: any }
-  ) {
-    obj.userData.handlers = handlers;
-    interactiveObjects.add(obj);
-  }
-
-  function unregisterInteractive(obj: THREE.Object3D) {
-    interactiveObjects.delete(obj);
-    delete obj.userData.handlers;
-  }
 
   function updatePointer(event: PointerEvent) {
     const rect = renderer.domElement.getBoundingClientRect();
@@ -115,17 +119,20 @@ export function createStage(
     pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
   }
 
-  function onPointerDown(e: PointerEvent) {
+  // CLICK
+  renderer.domElement.addEventListener("pointerdown", (e) => {
     updatePointer(e);
     raycaster.setFromCamera(pointer, activeCamera);
 
     const hits = raycaster.intersectObjects([...interactiveObjects], true);
     if (hits.length > 0) {
-      hits[0].object.userData.handlers?.onClick?.(e, hits[0]);
+      const h = hits[0];
+      h.object.userData.handlers?.onClick?.(e, h);
     }
-  }
+  });
 
-  function onPointerMove(e: PointerEvent) {
+  // HOVER
+  renderer.domElement.addEventListener("pointermove", (e) => {
     updatePointer(e);
     raycaster.setFromCamera(pointer, activeCamera);
 
@@ -135,27 +142,45 @@ export function createStage(
       const hovered = hits.find((h) => h.object === obj);
       obj.userData.handlers?.onHover?.(e, hovered);
     }
-  }
-
-  renderer.domElement.addEventListener("pointerdown", onPointerDown);
-  renderer.domElement.addEventListener("pointermove", onPointerMove);
+  });
 
   // ---------------------------------------------------------
-  // BACKDROP
+  // BACKDROP SYSTEM
   // ---------------------------------------------------------
-  let backdropSystem: any = null;
-  if (definition.backdrop) {
-    backdropSystem = applyBackdropSystem({
-      scene,
-      presetSizes: definition.backdrop.presetSizes,
-      updateSceneCamera: cams.updateSceneCameraInstant,
-      cameraRig: cams.cameraRig,
-      position: definition.backdrop.position ?? [0, 0, 0],
-    });
-  }
+  const backdropSystem = definition.backdrop
+    ? applyBackdropSystem({
+        scene,
+        presetSizes: definition.backdrop.presetSizes,
+        updateSceneCamera: cams.updateSceneCameraInstant,
+        cameraRig: cams.cameraRig,
+        position: definition.backdrop.position ?? [0, 0, 0],
+        color: definition.backdrop.color,
+      })
+    : null;
+
+  // Expose backdrop API wrappers:
+  const setBackdropColor = (color: THREE.ColorRepresentation) => {
+    if (!backdropSystem) return;
+    const mat = backdropSystem.mesh.material as THREE.MeshStandardMaterial;
+    mat.color.set(color);
+  };
+
+  const setBackdropPosition = (pos: [number, number, number]) => {
+    if (!backdropSystem) return;
+    backdropSystem.mesh.position.set(...pos);
+  };
+
+  const setBackdropSize = (width: number, height: number) => {
+    if (!backdropSystem) return;
+    backdropSystem.resize(width, height);
+  };
+
+  const getBackdropMesh = () => {
+    return backdropSystem?.mesh ?? null;
+  };
 
   // ---------------------------------------------------------
-  // PARENT STACK (NEW — replaces __parent)
+  // PARENT STACK
   // ---------------------------------------------------------
   const parentStack: THREE.Object3D[] = [scene];
 
@@ -177,40 +202,31 @@ export function createStage(
   const dynamicObjects = new Set<THREE.Object3D>();
 
   function addObject(obj: THREE.Object3D) {
-    const parent = getActiveParent();
-    parent.add(obj);
+    getActiveParent().add(obj);
     dynamicObjects.add(obj);
   }
 
   function removeObject(obj: THREE.Object3D) {
-    if (obj.parent) obj.parent.remove(obj);
+    obj.parent?.remove(obj);
     dynamicObjects.delete(obj);
   }
 
   // ---------------------------------------------------------
-  // NEW injectChildrenInto — no __parent mutation
+  // RESIZE HANDLER
   // ---------------------------------------------------------
-  function injectChildrenInto(_unused: any, children: React.ReactNode) {
-    return children;
-  }
-
-  // ---------------------------------------------------------
-  // RESIZE
-  // ---------------------------------------------------------
-  const onResize = () => {
+  window.addEventListener("resize", () => {
     const width = container.clientWidth;
     const height = container.clientHeight;
 
     renderer.setSize(width, height);
 
-    activeCamera.aspect = width / height;
-    activeCamera.updateProjectionMatrix();
+    const cam = activeCamera as THREE.PerspectiveCamera;
+    cam.aspect = width / height;
+    cam.updateProjectionMatrix();
 
     cams.updateSceneCameraInstant();
     cams.cameraRig.onResizeOrFovChange();
-  };
-
-  window.addEventListener("resize", onResize);
+  });
 
   // ---------------------------------------------------------
   // ENGINE LOOP
@@ -219,15 +235,12 @@ export function createStage(
     renderer,
     scene,
     getCamera: () => activeCamera,
-
     updateSceneCamera: () =>
       activeCamera === cams.sceneCamera
         ? cams.updateSceneCameraSmooth()
         : undefined,
-
     updateOrbitControls: () =>
       activeCamera === cams.orbitCamera ? cams.controls.update() : undefined,
-
     updateScroll: (dt) =>
       activeCamera === cams.sceneCamera
         ? scrollSystem.scroll.update(dt)
@@ -242,22 +255,15 @@ export function createStage(
   function cleanup() {
     engine.stop();
     scrollSystem.scroll.stop();
-
-    window.removeEventListener("resize", onResize);
-    window.removeEventListener("keydown", onKey);
-
-    renderer.domElement.removeEventListener("pointerdown", onPointerDown);
-    renderer.domElement.removeEventListener("pointermove", onPointerMove);
-
     backdropSystem?.cleanup();
-    dynamicObjects.clear();
-    interactiveObjects.clear();
   }
+
   // ---------------------------------------------------------
-  // API RETURN
+  // RETURN PUBLIC API
   // ---------------------------------------------------------
   return {
     scene,
+
     pushParent,
     popParent,
     getActiveParent,
@@ -265,10 +271,27 @@ export function createStage(
     addObject,
     removeObject,
 
-    registerInteractive,
-    unregisterInteractive,
+    registerInteractive(obj, handlers) {
+      obj.userData.handlers = handlers;
+      interactiveObjects.add(obj);
+    },
 
-    injectChildrenInto,
+    unregisterInteractive(obj) {
+      interactiveObjects.delete(obj);
+      delete obj.userData.handlers;
+    },
+
+    // BACKDROP API
+    setBackdropColor,
+    setBackdropPosition,
+    setBackdropSize,
+    getBackdropMesh,
+
+    // React injection passthrough
+    injectChildrenInto(_unused, children) {
+      return children;
+    },
+
     cleanup,
   };
 }

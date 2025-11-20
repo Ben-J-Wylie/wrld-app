@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+// Stage.tsx
+import { useEffect, useRef, useState, useMemo } from "react";
 import * as THREE from "three";
 
 import { StageContext } from "./StageContext";
 import { createStage } from "./StageSystem";
 import type { StageAPI } from "./StageSystem";
+import { useWrldTheme } from "@/components/containers/SceneCore/Theme/WrldThemeProvider";
 
 export interface StageProps {
   backdrop?: {
@@ -23,21 +25,48 @@ export function Stage({ backdrop, style, children }: StageProps) {
   const stageRootRef = useRef<THREE.Object3D | null>(null);
   const [stageAPI, setStageAPI] = useState<StageAPI | null>(null);
 
-  // Init stage once the canvas container exists
+  // -----------------------------------------------
+  // THEME (React hook - safe here)
+  // -----------------------------------------------
+  const theme = useWrldTheme();
+
+  // -----------------------------------------------
+  // Stable themed backdrop config
+  // (prevents infinite effect loops)
+  // -----------------------------------------------
+  const themedBackdrop = useMemo(() => {
+    return backdrop
+      ? { ...backdrop, color: theme.colors.background }
+      : undefined;
+  }, [backdrop, theme.colors.background]);
+
+  // -----------------------------------------------
+  // CREATE STAGE (only once)
+  // -----------------------------------------------
   useEffect(() => {
     if (!canvasContainerRef.current) return;
 
-    const stage = createStage(canvasContainerRef.current, { backdrop });
+    const stage = createStage(canvasContainerRef.current, {
+      backdrop: themedBackdrop,
+    });
+
     setStageAPI(stage);
     stageRootRef.current = stage.scene;
 
     return () => stage.cleanup();
-    // usually you'd not depend on `backdrop` unless you really want to recreate
-    // the whole stage when it changes. For now we keep it here because that's
-    // how you had it, but [] is often safer.
-  }, [backdrop]);
+  }, []); // ❗ create only ONCE
 
-  // If stageAPI exists, inject __parent for the scene root
+  // -----------------------------------------------
+  // UPDATE BACKDROP COLOR WHEN THEME CHANGES
+  // -----------------------------------------------
+  useEffect(() => {
+    if (!stageAPI || !themedBackdrop) return;
+    stageAPI.setBackdropColor?.(themedBackdrop.color);
+  }, [stageAPI, themedBackdrop?.color]);
+
+  // -----------------------------------------------
+  // Inject React children into stage root
+  // -----------------------------------------------
   const injectedChildren =
     stageAPI && stageAPI.injectChildrenInto(stageRootRef, children);
 
@@ -51,13 +80,13 @@ export function Stage({ backdrop, style, children }: StageProps) {
         ...style,
       }}
     >
-      {/* CANVAS LAYER: mounted once and never unmounted */}
+      {/* CANVAS LAYER */}
       <div
         ref={canvasContainerRef}
         style={{ position: "absolute", inset: 0 }}
       />
 
-      {/* REACT LAYER: only appears once stageAPI is ready */}
+      {/* REACT LAYER */}
       {stageAPI && (
         <StageContext.Provider value={stageAPI}>
           <div style={{ position: "relative", zIndex: 10 }}>

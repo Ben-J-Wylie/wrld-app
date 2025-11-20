@@ -1,46 +1,81 @@
+// BackdropSystem.ts
 import * as THREE from "three";
-import { initializeBackdrop } from "./Backdrop";
+import {
+  initializeBackdrop,
+  resizeBackdrop,
+  BackdropDimensions,
+} from "./Backdrop";
 
 interface BackdropSystemOptions {
   scene: THREE.Scene;
-
-  /** { mobile: {width,height}, tablet:{...}, desktop:{...} } */
-  presetSizes: any;
-
-  /** updateSceneCameraInstant or updateSceneCameraSmooth */
+  presetSizes: BackdropDimensions;
   updateSceneCamera?: () => void;
-
-  /** cameraRigRef.current */
-  cameraRig?: {
-    onResizeOrFovChange?: () => void;
-  };
-
+  cameraRig?: { onResizeOrFovChange?: () => void };
   position?: [number, number, number];
+  color?: THREE.ColorRepresentation;
 }
 
+/**
+ * Wraps the backdrop with a stable, predictable API for StageSystem.
+ * Provides:
+ * - mesh reference
+ * - resize(width, height)
+ * - cleanup()
+ */
 export function applyBackdropSystem({
   scene,
   presetSizes,
   updateSceneCamera,
   cameraRig,
   position = [0, 0, 0],
+  color,
 }: BackdropSystemOptions) {
-  const backdrop = initializeBackdrop(scene, presetSizes);
+  // ---------------------------------------
+  // CREATE BACKDROP MESH
+  // ---------------------------------------
+  const mesh = initializeBackdrop(scene, presetSizes, color);
+  mesh.position.set(...position);
 
-  backdrop.position.set(...position);
-
-  // Update camera + rig once backdrop sets sceneWidth/sceneHeight
+  // ---------------------------------------
+  // INITIAL CAMERA SYNC
+  // ---------------------------------------
   updateSceneCamera?.();
   cameraRig?.onResizeOrFovChange?.();
 
+  // ---------------------------------------
+  // RESIZE HANDLER (public API)
+  // ---------------------------------------
+  function resize(width: number, height: number) {
+    resizeBackdrop(mesh, width, height);
+
+    updateSceneCamera?.();
+    cameraRig?.onResizeOrFovChange?.();
+  }
+
+  // ---------------------------------------
+  // CLEANUP
+  // ---------------------------------------
+  function cleanup() {
+    scene.remove(mesh);
+
+    mesh.geometry.dispose();
+    const mat = mesh.material as THREE.Material | THREE.Material[];
+    if (Array.isArray(mat)) {
+      mat.forEach((m) => m.dispose());
+    } else {
+      mat.dispose();
+    }
+
+    // Remove resize listener from initializeBackdrop()
+    (mesh as any)._dispose?.();
+  }
+
+  // ---------------------------------------
+  // RETURN PUBLIC API
+  // ---------------------------------------
   return {
-    backdrop,
-    cleanup: () => {
-      scene.remove(backdrop);
-      backdrop.geometry?.dispose();
-      if (backdrop.material) {
-        (backdrop.material as any).dispose?.();
-      }
-    },
+    mesh,
+    resize,
+    cleanup,
   };
 }

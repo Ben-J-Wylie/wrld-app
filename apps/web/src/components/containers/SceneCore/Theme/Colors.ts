@@ -6,9 +6,9 @@ export const WrldColors = {
   accent: "#FFA400",
 
   text: "#FFFFFF",
-  mutedText: "#AAAAAA",
+  mutedText: "#595959",
 
-  background: "#101010",
+  background: "#434343",
   panel: "#1A1A1A",
 
   success: "#0ECB81",

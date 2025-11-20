@@ -74,10 +74,6 @@ export default function LogoElement() {
           onHover={(e, hit) => {
             console.log("Hover:", hit ? "enter" : "leave");
           }}
-          /* --------------------------
-           *  PARENTING (optional)
-           * -------------------------- */
-          __parent={null} // let Stage place it at root
         />
         <ImagePlane
           // -------------------------------
@@ -133,11 +129,6 @@ export default function LogoElement() {
             if (hit) console.log("hover in");
             else console.log("hover out");
           }}
-          // -------------------------------
-          // INTERNAL PARENT OVERRIDE
-          // (used when nested inside <Group>)
-          // -------------------------------
-          __parent={null}
         />
       </Group>
     </Stage>

@@ -1,4 +1,4 @@
-// src/Backdrop.ts
+// Backdrop.ts
 import * as THREE from "three";
 import { useSceneStore } from "../Store/SceneStore";
 import { getBreakpoint } from "./Breakpoints";
@@ -15,11 +15,18 @@ const DEFAULT_DIMS: BackdropDimensions = {
   desktop: { width: 50, height: 100 },
 };
 
+/**
+ * Creates and manages a backdrop mesh that:
+ * - Resizes based on window width breakpoints
+ * - Syncs its dimensions into the SceneStore
+ * - Updates automatically on window resize
+ */
 export function initializeBackdrop(
   scene: THREE.Scene,
-  dims: BackdropDimensions = DEFAULT_DIMS
-) {
-  let backdrop: THREE.Mesh | null = null;
+  dims: BackdropDimensions = DEFAULT_DIMS,
+  color: THREE.ColorRepresentation = 0x222222
+): THREE.Mesh {
+  let mesh: THREE.Mesh;
   const store = useSceneStore.getState();
 
   // -----------------------------------------
@@ -29,51 +36,49 @@ export function initializeBackdrop(
     const bp = getBreakpoint(window.innerWidth);
     const { width, height } = dims[bp];
 
-    // Update store → camera reacts → subscribers update
     store.setSceneWidth(width);
     store.setSceneHeight(height);
 
-    // Resize existing backdrop mesh
-    if (backdrop) resizeBackdrop(backdrop, width, height);
+    if (mesh) resizeBackdrop(mesh, width, height);
   };
 
   // -----------------------------------------
-  // INITIALIZE BACKDROP
+  // INITIAL DIMENSIONS
   // -----------------------------------------
   applyDimensions();
-
-  const initialBp = getBreakpoint(window.innerWidth);
-  const { width, height } = dims[initialBp];
-
-  backdrop = createBackdrop({ width, height });
-  scene.add(backdrop);
+  const bp = getBreakpoint(window.innerWidth);
+  const { width, height } = dims[bp];
 
   // -----------------------------------------
-  // STORE SUBSCRIPTION FOR EXTERNAL CHANGES
+  // CREATE BACKDROP
+  // -----------------------------------------
+  mesh = createBackdrop({ width, height, color });
+  scene.add(mesh);
+
+  // -----------------------------------------
+  // SUBSCRIBE TO STORE DIMENSION CHANGES
   // -----------------------------------------
   useSceneStore.subscribe((state, prev) => {
     if (
       state.sceneWidth !== prev.sceneWidth ||
       state.sceneHeight !== prev.sceneHeight
     ) {
-      if (backdrop) {
-        resizeBackdrop(backdrop, state.sceneWidth, state.sceneHeight);
-      }
+      resizeBackdrop(mesh, state.sceneWidth, state.sceneHeight);
     }
   });
 
   // -----------------------------------------
-  // RESIZE LISTENER
+  // WINDOW RESIZE LISTENER
   // -----------------------------------------
   const onResize = () => applyDimensions();
   window.addEventListener("resize", onResize);
 
-  // Cleanup hook for scene teardown (optional)
-  (backdrop as any)._dispose = () => {
+  // Attach a disposal hook to mesh
+  (mesh as any)._dispose = () => {
     window.removeEventListener("resize", onResize);
   };
 
-  return backdrop;
+  return mesh;
 }
 
 // -------------------------------------------------
@@ -83,16 +88,19 @@ export function initializeBackdrop(
 export function createBackdrop({
   width,
   height,
+  color,
 }: {
   width: number;
   height: number;
-}) {
-  const geo = new THREE.PlaneGeometry(width, height);
-  const mat = new THREE.MeshStandardMaterial({ color: 0xb9b8af });
+  color: THREE.ColorRepresentation;
+}): THREE.Mesh {
+  const geometry = new THREE.PlaneGeometry(width, height);
+  const material = new THREE.MeshStandardMaterial({ color });
 
-  const mesh = new THREE.Mesh(geo, mat);
+  const mesh = new THREE.Mesh(geometry, material);
   mesh.receiveShadow = true;
   mesh.position.z = 0;
+
   return mesh;
 }
 
