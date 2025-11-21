@@ -1,5 +1,5 @@
 // src/components/containers/SceneCore/Layers/ScreenGroup.tsx
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import * as THREE from "three";
 
 import { useStage } from "../Stage/useStage";
@@ -20,7 +20,7 @@ export interface ScreenGroupProps {
   /** Positive z = farther from camera */
   z?: number;
 
-  /** Child-space offsets (added AFTER anchoring) */
+  /** Local offsets */
   position?: [number, number, number];
   rotation?: [number, number, number];
   scale?: [number, number, number];
@@ -46,58 +46,78 @@ export function ScreenGroup({
   const groupRef = useRef<THREE.Group | null>(null);
   const [mountedGroup, setMountedGroup] = useState<THREE.Group | null>(null);
 
-  // Create + attach
+  // Create & attach to cameraRoot
   useEffect(() => {
     const g = new THREE.Group();
     groupRef.current = g;
     cameraRoot.add(g);
     setMountedGroup(g);
 
-    return () => cameraRoot.remove(g);
+    return () => {
+      cameraRoot.remove(g);
+    };
   }, []);
 
-  // Anchor update
-  useEffect(() => {
+  // ----------------------------------------
+  // UPDATE ANCHOR LOGIC (re-run on resize/FOV)
+  // ----------------------------------------
+  const updateAnchor = useCallback(() => {
     const g = groupRef.current;
     if (!g) return;
 
     const camera = getCamera();
     if (!camera) return;
 
-    // ----------------------------------------
-    // FRUSTUM AT DEPTH z
-    // ----------------------------------------
+    // ----- frustum size at depth -----
     const halfH = z * Math.tan((camera.fov * Math.PI) / 360);
     const halfW = halfH * camera.aspect;
 
     let anchorXPos = 0;
     let anchorYPos = 0;
 
-    // Horizontal anchor
     if (anchorX === "left") anchorXPos = -halfW;
     else if (anchorX === "right") anchorXPos = halfW;
 
-    // Vertical anchor
-    if (anchorY === "top") anchorYPos = +halfH;
+    if (anchorY === "top") anchorYPos = halfH;
     else if (anchorY === "bottom") anchorYPos = -halfH;
 
-    // Apply offsets (world units)
     anchorXPos += offsetX;
     anchorYPos += offsetY;
 
-    // Final world Z (negative because camera looks down -Z)
     const finalZ = -(z + position[2]);
 
-    // ----------------------------------------
-    // FINAL WORLD TRANSFORM
-    // ----------------------------------------
     g.position.set(anchorXPos + position[0], anchorYPos + position[1], finalZ);
-
     g.rotation.set(...rotation);
     g.scale.set(...scale);
 
     g.updateMatrixWorld(true);
-  }, [anchorX, anchorY, offsetX, offsetY, z, position, rotation, scale]);
+  }, [
+    anchorX,
+    anchorY,
+    offsetX,
+    offsetY,
+    z,
+    position,
+    rotation,
+    scale,
+    getCamera,
+  ]);
+
+  // Run once on mount + whenever props change
+  useEffect(() => {
+    updateAnchor();
+  }, [updateAnchor]);
+
+  // Subscribe to Stage viewport updates
+  useEffect(() => {
+    if (!stage.onResizeOrFovChange) return;
+
+    const unsub = stage.onResizeOrFovChange(() => {
+      updateAnchor();
+    });
+
+    return () => unsub?.();
+  }, [stage, updateAnchor]);
 
   return (
     <ParentContext.Provider value={mountedGroup}>

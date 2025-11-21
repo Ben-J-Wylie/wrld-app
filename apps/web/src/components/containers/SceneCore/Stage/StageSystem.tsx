@@ -41,6 +41,8 @@ export interface StageAPI {
   getViewportWidth(): number;
   getViewportHeight(): number;
 
+  onResizeOrFovChange(cb: () => void): () => void;
+
   // Hierarchy grouping
   pushParent(obj: THREE.Object3D): void;
   popParent(): void;
@@ -226,6 +228,20 @@ export function createStage(
   }
 
   // ---------------------------------------------------------
+  // RESIZE / FOV CHANGE SUBSCRIBERS
+  // ---------------------------------------------------------
+  const fovListeners = new Set<() => void>();
+
+  function onResizeOrFovChange(cb: () => void) {
+    fovListeners.add(cb);
+    return () => fovListeners.delete(cb);
+  }
+
+  function emitResizeOrFov() {
+    for (const cb of fovListeners) cb();
+  }
+
+  // ---------------------------------------------------------
   // RESIZE HANDLER
   // ---------------------------------------------------------
   window.addEventListener("resize", () => {
@@ -238,8 +254,12 @@ export function createStage(
     cam.aspect = width / height;
     cam.updateProjectionMatrix();
 
+    // Re-fit SceneCamera to backdrop & update rig
     cams.updateSceneCameraInstant();
     cams.cameraRig.onResizeOrFovChange();
+
+    // 🔥 Notify HUD / ScreenGroups that the frustum changed
+    emitResizeOrFov();
   });
 
   // ---------------------------------------------------------
@@ -249,10 +269,16 @@ export function createStage(
     renderer,
     scene,
     getCamera: () => activeCamera,
-    updateSceneCamera: () =>
-      activeCamera === cams.sceneCamera
-        ? cams.updateSceneCameraSmooth()
-        : undefined,
+    updateSceneCamera: () => {
+      if (activeCamera === cams.sceneCamera) {
+        const prevFov = cams.sceneCamera.fov;
+        cams.updateSceneCameraSmooth();
+        if (cams.sceneCamera.fov !== prevFov) {
+          // 🔥 FOV changed this frame → notify listeners
+          emitResizeOrFov();
+        }
+      }
+    },
     updateOrbitControls: () =>
       activeCamera === cams.orbitCamera ? cams.controls.update() : undefined,
     updateScroll: (dt) =>
@@ -270,6 +296,7 @@ export function createStage(
     engine.stop();
     scrollSystem.scroll.stop();
     backdropSystem?.cleanup();
+    fovListeners.clear();
   }
 
   // ---------------------------------------------------------
@@ -303,6 +330,8 @@ export function createStage(
 
     getViewportWidth,
     getViewportHeight,
+
+    onResizeOrFovChange,
 
     pushParent,
     popParent,
