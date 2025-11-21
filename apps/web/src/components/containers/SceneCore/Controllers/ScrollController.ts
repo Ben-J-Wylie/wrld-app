@@ -1,20 +1,20 @@
-// ScrollController.ts — WRLD DOM-Like Scroll Physics
+// src/components/containers/SceneCore/Controllers/ScrollController.ts
+// --------------------------------------------------
+// ScrollController — WRLD DOM-Like Scroll Physics
 // --------------------------------------------------
 // - Touch drag (stick-to-finger, 1:1 feel)
 // - Flick inertia with friction
 // - Wheel / trackpad scroll
 // - Arrow keys: tap + smooth hold
 // - Works identically regardless of world/backdrop size
-// - Mobile boost for touch responsiveness
-// - Normalized scroll range (0–1), mapped to CameraRig limits
+// - NO responsibility for camera initialization
+// --------------------------------------------------
 
-// --------------------------------------------------
-// TYPE
-// --------------------------------------------------
 export interface ScrollControllerOptions {
   cameraRig: {
     setOffset: (x: number, y: number) => void;
     getLimits: () => { maxX: number; maxY: number };
+    getOffset: () => { x: number; y: number };
     onResizeOrFovChange?: () => void;
   };
 }
@@ -38,80 +38,120 @@ const INERTIA_GAIN = 1;
 const FRICTION = 0.9;
 const STOP_THRESHOLD = 0.0001;
 
-// Mobile-only tuning (boosts raw input deltas)
+// Mobile-only tuning
 const MOBILE_TOUCH_MULTIPLIER = IS_MOBILE ? 1 : 1;
 const MOBILE_INERTIA_MULTIPLIER = IS_MOBILE ? 1 : 1;
-
-// --------------------------------------------------
-// STATE (Normalized Scrolling: scrollX/scrollY = 0–1)
-// --------------------------------------------------
-let scrollX = 0.5;
-let scrollY = 0.5;
-
-let velocityX = 0;
-let velocityY = 0;
-
-let isKeyScrollingX = false;
-let isKeyScrollingY = false;
-let keyVelocityX = 0;
-let keyVelocityY = 0;
-let keyDownTime = 0;
-
-let isPointerDown = false;
-let lastTouchX = 0;
-let lastTouchY = 0;
-let lastTouchTime = 0;
-
-let inertiaActive = false;
-let isListening = false;
-let dom: HTMLElement | null = null;
 
 // --------------------------------------------------
 // MAIN CONTROLLER FACTORY
 // --------------------------------------------------
 export function createScrollController({ cameraRig }: ScrollControllerOptions) {
+  // Normalized scroll in [0,1]
+  let scrollX = 0.5;
+  let scrollY = 0.5;
+
+  let velocityX = 0;
+  let velocityY = 0;
+
+  let isKeyScrollingX = false;
+  let isKeyScrollingY = false;
+  let keyVelocityX = 0;
+  let keyVelocityY = 0;
+  let keyDownTime = 0;
+
+  let isPointerDown = false;
+  let lastTouchX = 0;
+  let lastTouchY = 0;
+  let lastTouchTime = 0;
+
+  let inertiaActive = false;
+  let isListening = false;
+  let dom: HTMLElement | null = null;
+
+  let loggedFirstFrame = false;
+
+  // We want to sync ONCE from the actual camera position
+  // after CameraRig has valid limits.
+  let needsInitialSync = true;
+
   // --------------------------------------------------
-  // MAP NORMALIZED SCROLL → CAMERA OFFSET
+  // UTILS
+  // --------------------------------------------------
+  function clamp01(v: number) {
+    return Math.min(1, Math.max(0, v));
+  }
+
+  // Convert current camera offset → normalized scroll
+  function syncScrollFromCameraIfReady() {
+    const { maxX, maxY } = cameraRig.getLimits();
+
+    // No valid limits yet → wait
+    if (maxX === 0 && maxY === 0) return;
+
+    const { x, y } = cameraRig.getOffset();
+
+    let nx = 0.5;
+    let ny = 0.5;
+
+    if (maxX > 0) {
+      nx = x / (2 * maxX) + 0.5;
+    }
+
+    if (maxY > 0) {
+      // Remember: offY = -(ny - 0.5) * 2 * maxY
+      // ⇒ ny = -offY / (2*maxY) + 0.5
+      ny = -y / (2 * maxY) + 0.5;
+    }
+
+    scrollX = clamp01(nx);
+    scrollY = clamp01(ny);
+
+    needsInitialSync = false;
+  }
+
+  // --------------------------------------------------
+  // APPLY CAMERA OFFSET
   // --------------------------------------------------
   function applyCameraOffset() {
     const { maxX, maxY } = cameraRig.getLimits();
 
-    // clamp normalized scroll
-    const nx = Math.min(1, Math.max(0, scrollX));
-    const ny = Math.min(1, Math.max(0, scrollY));
+    const nx = clamp01(scrollX);
+    const ny = clamp01(scrollY);
 
-    // horizontal (natural)
-    const offX = (nx - 0.5) * 2 * maxX;
-
-    // vertical (inverted)
-    const offY = -(ny - 0.5) * 2 * maxY;
+    const offX = (nx - 0.5) * 2 * maxX; // horizontal
+    const offY = -(ny - 0.5) * 2 * maxY; // vertical (inverted)
 
     cameraRig.setOffset(offX, offY);
   }
+
+  // NOTE: we DO NOT call applyCameraOffset() here.
+  // First thing we do on the first valid frame is:
+  //   1) sync scroll from camera
+  //   2) then use input to move from there.
 
   // --------------------------------------------------
   // INPUT HANDLERS
   // --------------------------------------------------
 
-  // Wheel / Trackpad
   function onWheel(e: WheelEvent) {
     e.preventDefault();
     e.stopPropagation();
 
     const { maxX, maxY } = cameraRig.getLimits();
 
+    if (maxX === 0 && maxY === 0) return;
+
     scrollY += (e.deltaY * WHEEL_SPEED) / Math.max(maxY, 1);
     scrollX += (e.deltaX * WHEEL_SPEED) / Math.max(maxX, 1);
 
-    scrollX = Math.min(1, Math.max(0, scrollX));
-    scrollY = Math.min(1, Math.max(0, scrollY));
+    scrollX = clamp01(scrollX);
+    scrollY = clamp01(scrollY);
 
     inertiaActive = false;
     velocityX = 0;
     velocityY = 0;
   }
 
-  // Touch begin
   function onTouchStart(e: TouchEvent) {
     e.preventDefault();
     if (!e.touches.length) return;
@@ -128,7 +168,6 @@ export function createScrollController({ cameraRig }: ScrollControllerOptions) {
     velocityY = 0;
   }
 
-  // Touch move (DOM-like drag)
   function onTouchMove(e: TouchEvent) {
     e.preventDefault();
     if (!isPointerDown || !e.touches.length) return;
@@ -149,22 +188,20 @@ export function createScrollController({ cameraRig }: ScrollControllerOptions) {
     lastTouchTime = now;
 
     const { maxX, maxY } = cameraRig.getLimits();
+    if (maxX === 0 && maxY === 0) return;
 
     const dragBoost = TOUCH_DRAG_SPEED * MOBILE_TOUCH_MULTIPLIER;
 
-    // convert drag → normalized scroll
     scrollX += (dx * dragBoost) / Math.max(maxX, 1);
     scrollY += (dy * dragBoost) / Math.max(maxY, 1);
 
-    scrollX = Math.min(1, Math.max(0, scrollX));
-    scrollY = Math.min(1, Math.max(0, scrollY));
+    scrollX = clamp01(scrollX);
+    scrollY = clamp01(scrollY);
 
-    // track flick velocity (px/sec)
     velocityX = dx / dt;
     velocityY = dy / dt;
   }
 
-  // Touch end (start inertia if flick was fast)
   function onTouchEnd() {
     if (!isPointerDown) return;
     isPointerDown = false;
@@ -173,12 +210,12 @@ export function createScrollController({ cameraRig }: ScrollControllerOptions) {
     inertiaActive = speedSq > 0.01;
   }
 
-  // Keyboard — tap and hold
   function onKeyDown(e: KeyboardEvent) {
     const now = performance.now();
     const repeat = e.repeat;
 
     const { maxX, maxY } = cameraRig.getLimits();
+    if (maxX === 0 && maxY === 0) return;
 
     switch (e.key) {
       case "ArrowUp":
@@ -229,7 +266,6 @@ export function createScrollController({ cameraRig }: ScrollControllerOptions) {
         }
         break;
 
-      // Pagination
       case "Home":
         scrollY = 0;
         break;
@@ -246,6 +282,9 @@ export function createScrollController({ cameraRig }: ScrollControllerOptions) {
       default:
         return;
     }
+
+    scrollX = clamp01(scrollX);
+    scrollY = clamp01(scrollY);
 
     inertiaActive = false;
     velocityX = 0;
@@ -267,15 +306,31 @@ export function createScrollController({ cameraRig }: ScrollControllerOptions) {
   function animate(dt: number) {
     const { maxX, maxY } = cameraRig.getLimits();
 
-    // 1. Inertia (flick momentum)
+    // 🔍 FIRST VALID FRAME:
+    // Sync normalized scroll to whatever the rig chose.
+    if (needsInitialSync) {
+      syncScrollFromCameraIfReady();
+    }
+
+    // If still no limits, do nothing (no scrollable area).
+    if (maxX === 0 && maxY === 0) {
+      return;
+    }
+
+    // 🔍 DEBUG: first frame snapshot
+    if (!loggedFirstFrame) {
+      loggedFirstFrame = true;
+    }
+
+    // Inertia
     if (inertiaActive && !isPointerDown) {
       const inertiaBoost = INERTIA_GAIN * MOBILE_INERTIA_MULTIPLIER;
 
       scrollX += (velocityX * inertiaBoost * dt) / Math.max(maxX, 1);
       scrollY += (velocityY * inertiaBoost * dt) / Math.max(maxY, 1);
 
-      scrollX = Math.min(1, Math.max(0, scrollX));
-      scrollY = Math.min(1, Math.max(0, scrollY));
+      scrollX = clamp01(scrollX);
+      scrollY = clamp01(scrollY);
 
       const decay = Math.pow(FRICTION, dt * 60);
       velocityX *= decay;
@@ -291,18 +346,15 @@ export function createScrollController({ cameraRig }: ScrollControllerOptions) {
       }
     }
 
-    // 2. Arrow key smooth scroll
+    // Key hold
     if (isKeyScrollingX) {
-      scrollX += keyVelocityX * dt;
-      scrollX = Math.min(1, Math.max(0, scrollX));
+      scrollX = clamp01(scrollX + keyVelocityX * dt);
     }
 
     if (isKeyScrollingY) {
-      scrollY += keyVelocityY * dt;
-      scrollY = Math.min(1, Math.max(0, scrollY));
+      scrollY = clamp01(scrollY + keyVelocityY * dt);
     }
 
-    // 3. Apply offset
     applyCameraOffset();
   }
 

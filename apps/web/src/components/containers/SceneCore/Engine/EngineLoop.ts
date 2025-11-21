@@ -3,17 +3,10 @@ import * as THREE from "three";
 export interface EngineLoopOptions {
   renderer: THREE.WebGLRenderer;
   scene: THREE.Scene;
-
-  /** Returns whichever camera is currently active */
   getCamera: () => THREE.PerspectiveCamera | null;
 
-  /** Called every frame if SceneCamera is active */
   updateSceneCamera?: () => void;
-
-  /** Called every frame if OrbitControls are active */
   updateOrbitControls?: () => void;
-
-  /** Called every frame if scroll controller is active */
   updateScroll?: (dt: number) => void;
 }
 
@@ -40,23 +33,34 @@ export function createEngineLoop(options: EngineLoopOptions) {
     const camera = getCamera();
     if (!camera) return;
 
-    // SceneCamera (adaptive FOV)
-    if (updateSceneCamera) updateSceneCamera();
+    // -------------------------------------------------------
+    // UPDATE SCENE CAMERA (adaptive FOV)
+    // -------------------------------------------------------
+    if (updateSceneCamera) {
+      updateSceneCamera();
+    }
 
-    // Orbit controls
-    if (updateOrbitControls) updateOrbitControls();
+    // -------------------------------------------------------
+    // UPDATE ORBIT CONTROLS
+    // -------------------------------------------------------
+    if (updateOrbitControls) {
+      updateOrbitControls();
+    }
 
-    // Scroll controller
-    if (updateScroll) updateScroll(dt);
+    // -------------------------------------------------------
+    // UPDATE SCROLL CONTROLLER
+    // -------------------------------------------------------
+    if (updateScroll) {
+      updateScroll(dt);
+    }
 
-    // 🔄 Ensure any camera helper attached to the active camera is updated
+    // Camera helper
     const userData = camera.userData as any;
     const helper = userData?.helper as THREE.CameraHelper | undefined;
     if (helper) {
       helper.update();
     }
 
-    // Render
     renderer.render(scene, camera);
   };
 
@@ -64,6 +68,7 @@ export function createEngineLoop(options: EngineLoopOptions) {
     start() {
       if (!frameId) {
         lastTime = performance.now();
+
         animate();
       }
     },
