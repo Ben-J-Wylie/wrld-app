@@ -5,8 +5,23 @@ import * as THREE from "three";
 import { useStage } from "../Stage/useStage";
 import { ParentContext } from "../Utilities/ParentContext";
 
+import { getBreakpoint } from "../Theme/Breakpoints";
+import {
+  resolveResponsive,
+  BreakpointKey,
+} from "../Utilities/ResponsiveResolve";
+
+// -----------------------------------
+// TYPES
+// -----------------------------------
 type AnchorX = "left" | "center" | "right";
 type AnchorY = "top" | "center" | "bottom";
+
+interface ResponsiveVec3 {
+  mobile?: [number, number, number];
+  tablet?: [number, number, number];
+  desktop?: [number, number, number];
+}
 
 export interface ScreenGroupProps {
   children?: React.ReactNode;
@@ -20,11 +35,13 @@ export interface ScreenGroupProps {
   /** Positive z = farther from camera */
   z?: number;
 
-  /** Local offsets */
-  position?: [number, number, number];
-  rotation?: [number, number, number];
+  /** Local transforms — fully responsive */
+  position?: [number, number, number] | ResponsiveVec3;
+  rotation?: [number, number, number] | ResponsiveVec3;
   scale?: [number, number, number];
 }
+
+// -----------------------------------
 
 export function ScreenGroup({
   children,
@@ -59,7 +76,7 @@ export function ScreenGroup({
   }, []);
 
   // ----------------------------------------
-  // UPDATE ANCHOR LOGIC (re-run on resize/FOV)
+  // UPDATE ANCHOR LOGIC
   // ----------------------------------------
   const updateAnchor = useCallback(() => {
     const g = groupRef.current;
@@ -67,6 +84,21 @@ export function ScreenGroup({
 
     const camera = getCamera();
     if (!camera) return;
+
+    // Resolve responsive values
+    const bp = getBreakpoint(window.innerWidth) as BreakpointKey;
+
+    const resolvedPos = resolveResponsive<[number, number, number]>(
+      position,
+      bp,
+      [0, 0, 0]
+    );
+
+    const resolvedRot = resolveResponsive<[number, number, number]>(
+      rotation,
+      bp,
+      [0, 0, 0]
+    );
 
     // ----- frustum size at depth -----
     const halfH = z * Math.tan((camera.fov * Math.PI) / 360);
@@ -84,10 +116,19 @@ export function ScreenGroup({
     anchorXPos += offsetX;
     anchorYPos += offsetY;
 
-    const finalZ = -(z + position[2]);
+    const finalZ = -(z + resolvedPos[2]);
 
-    g.position.set(anchorXPos + position[0], anchorYPos + position[1], finalZ);
-    g.rotation.set(...rotation);
+    // Position
+    g.position.set(
+      anchorXPos + resolvedPos[0],
+      anchorYPos + resolvedPos[1],
+      finalZ
+    );
+
+    // Rotation
+    g.rotation.set(resolvedRot[0], resolvedRot[1], resolvedRot[2]);
+
+    // Scale
     g.scale.set(...scale);
 
     g.updateMatrixWorld(true);

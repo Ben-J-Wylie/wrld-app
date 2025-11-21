@@ -1,5 +1,5 @@
 // src/components/containers/SceneCore/Layers/ImagePlane.tsx
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import * as THREE from "three";
 
 import { createImagePlane } from "./ImagePlanePrimitive";
@@ -14,6 +14,7 @@ interface ResponsiveNumber {
   tablet?: number;
   desktop?: number;
 }
+
 interface ResponsiveVec3 {
   mobile?: [number, number, number];
   tablet?: [number, number, number];
@@ -29,8 +30,11 @@ export interface ImagePlaneProps {
 
   position?: [number, number, number] | ResponsiveVec3;
   rotation?: [number, number, number] | ResponsiveVec3;
+  scale?: [number, number, number] | ResponsiveVec3;
 
   z?: number;
+
+  visible?: boolean;
 
   castShadow?: boolean;
   receiveShadow?: boolean;
@@ -43,13 +47,20 @@ export function ImagePlane(props: ImagePlaneProps) {
   const {
     src,
     color,
+
     width,
     height,
+
     position,
     rotation,
+    scale,
+
     z = 0,
+    visible = true,
+
     castShadow,
     receiveShadow,
+
     onClick,
     onHover,
   } = props;
@@ -58,36 +69,53 @@ export function ImagePlane(props: ImagePlaneProps) {
   const parent = useParent() ?? null;
   const meshRef = useRef<THREE.Mesh | null>(null);
 
-  // Breakpoint detection
   const bp = getBreakpoint(window.innerWidth) as BreakpointKey;
 
-  // Resolve all responsive properties
-  const w = resolveResponsive(width, bp, 100);
-  const h = resolveResponsive(height, bp, 100);
-  const pos = resolveResponsive(position, bp, [0, 0, 0]);
-  const rot = resolveResponsive(rotation, bp, [0, 0, 0]);
+  // -------------------------------
+  // Resolve all responsive values
+  // -------------------------------
+  const w = resolveResponsive<number>(width, bp, 100);
+  const h = resolveResponsive<number>(height, bp, 100);
+
+  const pos = resolveResponsive<[number, number, number]>(
+    position,
+    bp,
+    [0, 0, 0]
+  );
+
+  const rot = resolveResponsive<[number, number, number]>(
+    rotation,
+    bp,
+    [0, 0, 0]
+  );
+
+  const scl = resolveResponsive<[number, number, number]>(scale, bp, [1, 1, 1]);
 
   // -------------------------------------------------------
-  // CREATE + MOUNT (only once)
+  // CREATE + MOUNT (once)
   // -------------------------------------------------------
   useEffect(() => {
     const mesh = createImagePlane({ src, color, castShadow, receiveShadow });
     meshRef.current = mesh;
 
     // Initial transforms
-    mesh.scale.set(w, h, 1);
+    mesh.scale.set(w * scl[0], h * scl[1], scl[2]);
     mesh.position.set(pos[0], pos[1], pos[2] + z);
     mesh.rotation.set(rot[0], rot[1], rot[2]);
+    mesh.visible = visible;
 
     stage.addObject(mesh, parent);
 
+    // Interaction
     if (onClick || onHover) {
       stage.registerInteractive(mesh, { onClick, onHover });
     }
 
+    // Cleanup
     return () => {
+      if (!meshRef.current) return;
+
       const m = meshRef.current;
-      if (!m) return;
 
       if (onClick || onHover) stage.unregisterInteractive(m);
       stage.removeObject(m);
@@ -98,15 +126,16 @@ export function ImagePlane(props: ImagePlaneProps) {
   }, [src, color, castShadow, receiveShadow, stage, parent, onClick, onHover]);
 
   // -------------------------------------------------------
-  // UPDATE transforms on breakpoint or responsive change
+  // UPDATE transforms on responsive or breakpoint change
   // -------------------------------------------------------
   useEffect(() => {
     const mesh = meshRef.current;
     if (!mesh) return;
 
-    mesh.scale.set(w, h, 1);
+    mesh.scale.set(w * scl[0], h * scl[1], scl[2]);
     mesh.position.set(pos[0], pos[1], pos[2] + z);
     mesh.rotation.set(rot[0], rot[1], rot[2]);
+    mesh.visible = visible;
   });
 
   return null;

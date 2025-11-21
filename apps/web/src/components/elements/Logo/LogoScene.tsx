@@ -20,10 +20,10 @@ export default function LogoElement() {
         position: [0, 0, 0],
       }}
     >
-      <ScreenGroup z={900} anchorX="center" anchorY="top">
-        <ImagePlane />
+      <ScreenGroup z={900} anchorX="center" offsetY={-50} anchorY="top">
+        <ImagePlane width={1500} height={400} />
       </ScreenGroup>
-      <Group position={[0, 0, 20]}>
+      <Group position={[0, 0, 0]}>
         <TextPlane
           /* --------------------------
            *  TEXT SETTINGS
@@ -52,9 +52,9 @@ export default function LogoElement() {
           // RESPONSIVE POSITION
           // -------------------------------
           position={{
-            mobile: [0, 0, 0],
-            tablet: [0, 0, 100],
-            desktop: [0, 0, 200],
+            mobile: [0, 0, 10],
+            tablet: [0, 0, 10],
+            desktop: [0, 0, 10],
           }}
           // -------------------------------
           // RESPONSIVE ROTATION
@@ -104,9 +104,9 @@ export default function LogoElement() {
           // RESPONSIVE POSITION
           // -------------------------------
           position={{
-            mobile: [0, 0, 200],
-            tablet: [0, 0, 100],
-            desktop: [0, 0, 0],
+            mobile: [0, 0, 50],
+            tablet: [0, 0, 50],
+            desktop: [0, 0, 50],
           }}
           // -------------------------------
           // RESPONSIVE ROTATION

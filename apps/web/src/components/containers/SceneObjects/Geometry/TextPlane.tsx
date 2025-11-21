@@ -35,7 +35,12 @@ export interface TextPlaneProps {
   position?: [number, number, number] | ResponsiveVec3;
   rotation?: [number, number, number] | ResponsiveVec3;
 
+  /** NEW: responsive scale */
+  scale?: [number, number, number] | ResponsiveVec3;
+
+  /** Single value only */
   z?: number;
+  visible?: boolean;
 
   castShadow?: boolean;
   receiveShadow?: boolean;
@@ -55,9 +60,13 @@ export function TextPlane(props: TextPlaneProps) {
 
     width,
     height,
+
     position,
     rotation,
+    scale,
+
     z = 0,
+    visible = true,
 
     castShadow,
     receiveShadow,
@@ -70,18 +79,31 @@ export function TextPlane(props: TextPlaneProps) {
   const parent = useParent() ?? null;
   const meshRef = useRef<THREE.Mesh | null>(null);
 
-  // Breakpoint detection
   const bp = getBreakpoint(window.innerWidth) as BreakpointKey;
 
-  // Responsive resolution (identical to ImagePlane)
-  const w = resolveResponsive(width, bp, 100);
-  const h = resolveResponsive(height, bp, 100);
-  const pos = resolveResponsive(position, bp, [0, 0, 0]);
-  const rot = resolveResponsive(rotation, bp, [0, 0, 0]);
+  // ----------------------------------------
+  // Resolve responsive props
+  // ----------------------------------------
+  const w = resolveResponsive<number>(width, bp, 100);
+  const h = resolveResponsive<number>(height, bp, 50);
 
-  // -------------------------------------------------------
-  // CREATE + MOUNT (only once)
-  // -------------------------------------------------------
+  const pos = resolveResponsive<[number, number, number]>(
+    position,
+    bp,
+    [0, 0, 0]
+  );
+
+  const rot = resolveResponsive<[number, number, number]>(
+    rotation,
+    bp,
+    [0, 0, 0]
+  );
+
+  const scl = resolveResponsive<[number, number, number]>(scale, bp, [1, 1, 1]);
+
+  // ----------------------------------------
+  // CREATE + MOUNT ONCE
+  // ----------------------------------------
   useEffect(() => {
     const mesh = createTextPlane({
       text,
@@ -96,9 +118,10 @@ export function TextPlane(props: TextPlaneProps) {
 
     meshRef.current = mesh;
 
-    mesh.scale.set(w, h, 1);
+    mesh.scale.set(w * scl[0], h * scl[1], scl[2]);
     mesh.position.set(pos[0], pos[1], pos[2] + z);
     mesh.rotation.set(rot[0], rot[1], rot[2]);
+    mesh.visible = visible;
 
     stage.addObject(mesh, parent);
 
@@ -131,16 +154,17 @@ export function TextPlane(props: TextPlaneProps) {
     onHover,
   ]);
 
-  // -------------------------------------------------------
-  // UPDATE transforms on breakpoint or responsive change
-  // -------------------------------------------------------
+  // ----------------------------------------
+  // UPDATE on responsive change
+  // ----------------------------------------
   useEffect(() => {
     const mesh = meshRef.current;
     if (!mesh) return;
 
-    mesh.scale.set(w, h, 1);
+    mesh.scale.set(w * scl[0], h * scl[1], scl[2]);
     mesh.position.set(pos[0], pos[1], pos[2] + z);
     mesh.rotation.set(rot[0], rot[1], rot[2]);
+    mesh.visible = visible;
   });
 
   return null;

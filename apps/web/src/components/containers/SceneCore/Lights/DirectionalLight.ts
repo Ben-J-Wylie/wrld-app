@@ -6,7 +6,7 @@ export function createDirectionalLight() {
 
   // --- Directional Light ----------------------------------------------------
   const light = new THREE.DirectionalLight(0xffffff, 1.2);
-  light.position.set(-300, 150, 1000);
+  light.position.set(-100, 50, 1000);
   light.castShadow = true;
 
   // Required target (DirectionalLights must aim at something)
@@ -18,15 +18,15 @@ export function createDirectionalLight() {
   group.add(target);
 
   // --- Shadow Settings ------------------------------------------------------
-  light.shadow.mapSize.set(512, 512);
+  light.shadow.mapSize.set(2048, 2048);
 
   // VSM blur controls
-  light.shadow.radius = 6;
-  light.shadow.blurSamples = 8;
+  light.shadow.radius = 8;
+  light.shadow.blurSamples = 16;
 
   // bias tuning
   light.shadow.bias = -0.0001;
-  light.shadow.normalBias = 0.05;
+  light.shadow.normalBias = 0.01;
 
   // --- Shadow Camera (Orthographic) ----------------------------------------
   const cam = light.shadow.camera as THREE.OrthographicCamera;
@@ -34,10 +34,10 @@ export function createDirectionalLight() {
   cam.near = 0.5;
   cam.far = 1500;
 
-  cam.left = -500;
-  cam.right = 500;
-  cam.top = 500;
-  cam.bottom = -500;
+  cam.left = -1000;
+  cam.right = 1000;
+  cam.top = 1000;
+  cam.bottom = -1000;
 
   cam.updateProjectionMatrix();
 

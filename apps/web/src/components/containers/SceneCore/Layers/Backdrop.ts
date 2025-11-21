@@ -94,7 +94,9 @@ export function createBackdrop({
   height: number;
   color: THREE.ColorRepresentation;
 }): THREE.Mesh {
-  const geometry = new THREE.PlaneGeometry(width, height);
+  const PAD = 100;
+
+  const geometry = new THREE.PlaneGeometry(width + PAD, height + PAD);
   const material = new THREE.MeshStandardMaterial({ color });
 
   const mesh = new THREE.Mesh(geometry, material);
@@ -109,6 +111,8 @@ export function resizeBackdrop(
   width: number,
   height: number
 ) {
+  const PAD = 100;
+
   mesh.geometry.dispose();
-  mesh.geometry = new THREE.PlaneGeometry(width, height);
+  mesh.geometry = new THREE.PlaneGeometry(width + PAD, height + PAD);
 }
