@@ -20,7 +20,7 @@ export default function LogoElement() {
         position: [0, 0, 0],
       }}
     >
-      <ScreenGroup position={[0, 0, -750]}>
+      <ScreenGroup z={500} anchorX="right" anchorY="top">
         <ImagePlane />
       </ScreenGroup>
       <Group position={[0, 0, 20]}>

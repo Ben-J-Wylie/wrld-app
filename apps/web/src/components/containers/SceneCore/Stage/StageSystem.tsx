@@ -37,6 +37,10 @@ export interface StageAPI {
   /** The currently active render camera (Scene or Orbit). */
   getCamera(): THREE.PerspectiveCamera;
 
+  /** NEW — viewport size used for responsive breakpoints */
+  getViewportWidth(): number;
+  getViewportHeight(): number;
+
   // Hierarchy grouping
   pushParent(obj: THREE.Object3D): void;
   popParent(): void;
@@ -279,6 +283,14 @@ export function createStage(
     return cams.sceneCamera;
   }
 
+  function getViewportWidth() {
+    return container.clientWidth;
+  }
+
+  function getViewportHeight() {
+    return container.clientHeight;
+  }
+
   // ---------------------------------------------------------
   // RETURN PUBLIC API
   // ---------------------------------------------------------
@@ -288,6 +300,9 @@ export function createStage(
     getCameraRoot: () => cams.cameraRoot,
     getSceneCamera,
     getCamera,
+
+    getViewportWidth,
+    getViewportHeight,
 
     pushParent,
     popParent,
