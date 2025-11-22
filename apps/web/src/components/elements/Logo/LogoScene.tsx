@@ -20,8 +20,26 @@ export default function LogoElement() {
         position: [0, 0, 0],
       }}
     >
-      <ScreenGroup z={900} anchorX="center" offsetY={-50} anchorY="top">
-        <ImagePlane width={1500} height={400} />
+      <ImagePlane
+        domContent={
+          <div
+            style={{
+              padding: "20px",
+              background: "white",
+              borderRadius: "12px",
+              fontSize: "32px",
+              border: "3px solid black",
+            }}
+          >
+            Hello WRLD
+          </div>
+        }
+        domPixelScale={0.01}
+        position={[0, 0, 10]}
+        z={5}
+      />
+      <ScreenGroup z={945} anchorX="center" offsetY={-50} anchorY="top">
+        <ImagePlane width={1000} height={150} color={theme.colors.background} />
       </ScreenGroup>
       <Group position={[0, 0, 0]}>
         <TextPlane
@@ -79,61 +97,6 @@ export default function LogoElement() {
           }}
           onHover={(e, hit) => {
             console.log("Hover:", hit ? "enter" : "leave");
-          }}
-        />
-        <ImagePlane
-          // -------------------------------
-          // TEXTURE / COLOR
-          // -------------------------------
-          src={Logo}
-          color="#ffffff"
-          // -------------------------------
-          // RESPONSIVE DIMENSIONS
-          // -------------------------------
-          width={{
-            mobile: 100,
-            tablet: 100,
-            desktop: 100,
-          }}
-          height={{
-            mobile: 100,
-            tablet: 100,
-            desktop: 100,
-          }}
-          // -------------------------------
-          // RESPONSIVE POSITION
-          // -------------------------------
-          position={{
-            mobile: [0, 0, 50],
-            tablet: [0, 0, 50],
-            desktop: [0, 0, 50],
-          }}
-          // -------------------------------
-          // RESPONSIVE ROTATION
-          // -------------------------------
-          rotation={{
-            mobile: [0, 0, 0],
-            tablet: [0, 0, 0],
-            desktop: [0, 0, 0],
-          }}
-          // -------------------------------
-          // Z-OFFSET (applied AFTER position)
-          // -------------------------------
-          z={1}
-          // -------------------------------
-          // SHADOW CONTROLS
-          // -------------------------------
-          castShadow={true} // native mesh.castShadow
-          receiveShadow={true} // enables custom shadow pipeline
-          // -------------------------------
-          // INTERACTION
-          // -------------------------------
-          onClick={(e, hit) => {
-            console.log("ImagePlane clicked", hit);
-          }}
-          onHover={(e, hit) => {
-            if (hit) console.log("hover in");
-            else console.log("hover out");
           }}
         />
       </Group>

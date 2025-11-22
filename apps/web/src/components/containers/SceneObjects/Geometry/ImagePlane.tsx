@@ -1,5 +1,5 @@
-// src/components/containers/SceneCore/Layers/ImagePlane.tsx
-import { useEffect, useRef } from "react";
+// SceneCore/Layers/ImagePlane.tsx
+import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 
 import { createImagePlane } from "./ImagePlanePrimitive";
@@ -8,6 +8,8 @@ import { useParent } from "../../SceneCore/Utilities/ParentContext";
 import { getBreakpoint } from "../../SceneCore/Theme/Breakpoints";
 import { resolveResponsive } from "../../SceneCore/Utilities/ResponsiveResolve";
 import type { BreakpointKey } from "../../SceneCore/Utilities/ResponsiveResolve";
+
+import { DomSurface, DomSurfaceAPI } from "../../SceneCore/Layers/DomSurface"; // ⭐ You will adjust this import path
 
 interface ResponsiveNumber {
   mobile?: number;
@@ -22,8 +24,17 @@ interface ResponsiveVec3 {
 }
 
 export interface ImagePlaneProps {
+  /** Direct Texture override (useful for CanvasTexture, DomSurface, etc.) */
+  texture?: THREE.Texture;
+
+  /** Normal file texture */
   src?: string;
   color?: string | number;
+
+  /** DOM Content → CanvasTexture → ImagePlane */
+  domContent?: React.ReactNode;
+  domBackground?: string;
+  domPixelScale?: number;
 
   width?: number | ResponsiveNumber;
   height?: number | ResponsiveNumber;
@@ -33,7 +44,6 @@ export interface ImagePlaneProps {
   scale?: [number, number, number] | ResponsiveVec3;
 
   z?: number;
-
   visible?: boolean;
 
   castShadow?: boolean;
@@ -45,8 +55,13 @@ export interface ImagePlaneProps {
 
 export function ImagePlane(props: ImagePlaneProps) {
   const {
+    texture,
     src,
     color,
+
+    domContent,
+    domBackground = "transparent",
+    domPixelScale = 0.01,
 
     width,
     height,
@@ -69,11 +84,11 @@ export function ImagePlane(props: ImagePlaneProps) {
   const parent = useParent() ?? null;
   const meshRef = useRef<THREE.Mesh | null>(null);
 
+  // For DOM textures we need to store the surface
+  const [domSurface, setDomSurface] = useState<DomSurfaceAPI | null>(null);
+
   const bp = getBreakpoint(window.innerWidth) as BreakpointKey;
 
-  // -------------------------------
-  // Resolve all responsive values
-  // -------------------------------
   const w = resolveResponsive<number>(width, bp, 100);
   const h = resolveResponsive<number>(height, bp, 100);
 
@@ -91,14 +106,31 @@ export function ImagePlane(props: ImagePlaneProps) {
 
   const scl = resolveResponsive<[number, number, number]>(scale, bp, [1, 1, 1]);
 
-  // -------------------------------------------------------
-  // CREATE + MOUNT (once)
-  // -------------------------------------------------------
+  // -------------------------------------------------------------------------
+  // MESH INIT
+  // -------------------------------------------------------------------------
   useEffect(() => {
-    const mesh = createImagePlane({ src, color, castShadow, receiveShadow });
+    const mesh = createImagePlane({
+      src,
+      color,
+      castShadow,
+      receiveShadow,
+
+      // --- Texture routing ---
+      domSurface: domSurface
+        ? {
+            texture: domSurface.texture,
+            width: domSurface.width,
+            height: domSurface.height,
+          }
+        : null,
+      useDomSurface: !!domContent,
+      domPixelScale,
+    });
+
     meshRef.current = mesh;
 
-    // Initial transforms
+    // Set initial transforms
     mesh.scale.set(w * scl[0], h * scl[1], scl[2]);
     mesh.position.set(pos[0], pos[1], pos[2] + z);
     mesh.rotation.set(rot[0], rot[1], rot[2]);
@@ -111,23 +143,34 @@ export function ImagePlane(props: ImagePlaneProps) {
       stage.registerInteractive(mesh, { onClick, onHover });
     }
 
-    // Cleanup
     return () => {
       if (!meshRef.current) return;
 
       const m = meshRef.current;
-
       if (onClick || onHover) stage.unregisterInteractive(m);
+
       stage.removeObject(m);
 
       m.geometry.dispose();
       (m.material as THREE.Material).dispose();
     };
-  }, [src, color, castShadow, receiveShadow, stage, parent, onClick, onHover]);
+  }, [
+    src,
+    color,
+    domContent,
+    domSurface,
+    domPixelScale,
+    castShadow,
+    receiveShadow,
+    stage,
+    parent,
+    onClick,
+    onHover,
+  ]);
 
-  // -------------------------------------------------------
-  // UPDATE transforms on responsive or breakpoint change
-  // -------------------------------------------------------
+  // -------------------------------------------------------------------------
+  // TRANSFORM UPDATES
+  // -------------------------------------------------------------------------
   useEffect(() => {
     const mesh = meshRef.current;
     if (!mesh) return;
@@ -138,5 +181,22 @@ export function ImagePlane(props: ImagePlaneProps) {
     mesh.visible = visible;
   });
 
-  return null;
+  // -------------------------------------------------------------------------
+  // DOM SURFACE WRAPPER (offscreen)
+  // -------------------------------------------------------------------------
+  // DomSurface must exist in React tree for ImagePlane to receive updates
+  return domContent ? (
+    <>
+      <DomSurface
+        content={domContent}
+        background={domBackground}
+        pixelRatio={window.devicePixelRatio}
+        onReady={(api) => {
+          setDomSurface(api);
+          api.update(); // trigger first refresh
+        }}
+      />
+      {/* Plane itself does not render anything directly */}
+    </>
+  ) : null;
 }
