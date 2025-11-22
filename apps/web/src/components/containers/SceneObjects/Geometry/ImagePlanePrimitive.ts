@@ -48,15 +48,21 @@ export function createImagePlane(options: ImagePlanePrimitiveOptions) {
   if (useDomSurface && domSurface && domSurface.texture) {
     texture = domSurface.texture;
 
-    // Convert DOM px → world units
     width = domSurface.width * domPixelScale;
     height = domSurface.height * domPixelScale;
 
-    // DOM textures should not be lit → BasicMaterial
-    material = new THREE.MeshBasicMaterial({
+    material = new THREE.MeshStandardMaterial({
       map: texture,
+      color: 0xffffff,
+      roughness: 1,
+      metalness: 0,
       transparent: true,
+      alphaTest: 0.01,
+      side: THREE.DoubleSide,
+      shadowSide: THREE.DoubleSide,
     });
+
+    material.needsUpdate = true;
   }
 
   // ------------------------------------------------------------
