@@ -30,7 +30,9 @@ class ToggleRegistry {
   }
 
   // === Registration ===
-  register(node: Omit<ToggleNode, "children" | "desired"> & { desired?: "on" | "off" }) {
+  register(
+    node: Omit<ToggleNode, "children" | "desired"> & { desired?: "on" | "off" }
+  ) {
     const existing = this.registry[node.id];
     this.registry[node.id] = {
       ...existing,

@@ -31,8 +31,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 50%;         /* 💎 definitive: thumb always half of trough */
-  height: 100%;       /* full trough height */
+  width: 50%; /* 💎 definitive: thumb always half of trough */
+  height: 100%; /* full trough height */
   box-sizing: border-box;
 }
 
@@ -40,8 +40,8 @@
 .toggle-thumb {
   width: 100%;
   height: 100%;
-  min-width: 72px;     /* 👈 ensures constant thumb size visually */
-  min-height: 42px;    /* 👈 prevents collapse vertically */
+  min-width: 72px; /* 👈 ensures constant thumb size visually */
+  min-height: 42px; /* 👈 prevents collapse vertically */
   border-radius: 6px;
   border: 1px solid var(--color-primary, #888);
   background: var(--color-tertiary, #222);
@@ -51,13 +51,13 @@
   transition: all 0.3s ease;
   box-sizing: border-box;
   position: relative;
-  flex-shrink: 0;       /* prevents compression */
+  flex-shrink: 0; /* prevents compression */
   overflow: hidden;
 }
 
 /* === THUMB === */
 .toggle-thumb {
-  width: 100%;            /* fills the 50% parallax wrapper width */
+  width: 100%; /* fills the 50% parallax wrapper width */
   height: 100%;
   border-radius: 6px;
   border: 1px solid var(--color-primary, #888);
@@ -68,8 +68,8 @@
   transition: all 0.3s ease;
   box-sizing: border-box;
   position: relative;
-  flex-shrink: 0;         /* 🧱 keeps thumb from shrinking with text */
-  overflow: hidden;       /* ensures text never overflows shape */
+  flex-shrink: 0; /* 🧱 keeps thumb from shrinking with text */
+  overflow: hidden; /* ensures text never overflows shape */
 }
 
 /* === TEXT === */
@@ -79,7 +79,7 @@
   color: var(--color-primary, #ccc);
   pointer-events: none;
   transition: color 0.3s ease;
-  white-space: nowrap;    /* prevents wrapping inside the thumb */
+  white-space: nowrap; /* prevents wrapping inside the thumb */
 }
 
 /* === STATE: ON === */

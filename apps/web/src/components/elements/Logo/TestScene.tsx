@@ -33,44 +33,6 @@ export default function LogoElement() {
         position={[0, 0, 10]}
         z={5}
       />
-      <ImagePlane
-        // --------------------------------
-        // TEXTURE / COLOR
-        // --------------------------------
-
-        color="#ffffff"
-        // --------------------------------
-        // RESPONSIVE SIZE (scaleXY)
-        // --------------------------------
-        width={{
-          mobile: 100,
-          tablet: 120,
-          desktop: 160,
-        }}
-        height={{
-          mobile: 50,
-          tablet: 60,
-          desktop: 80,
-        }}
-        // --------------------------------
-        // RESPONSIVE POSITION
-        // --------------------------------
-        position={{
-          mobile: [40, 0, 40],
-          tablet: [40, 0, 40],
-          desktop: [40, 0, 40],
-        }}
-        // --------------------------------
-        // SHADOWS
-        // --------------------------------
-        castShadow={true}
-        receiveShadow={true}
-        // --------------------------------
-        // INTERACTION
-        // --------------------------------
-        onClick={(e, hit) => {}}
-        onHover={(e, hit) => {}}
-      />
     </Stage>
   );
 }

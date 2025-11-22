@@ -30,10 +30,13 @@ export function useToggleNode(id: string) {
   }, [id]);
 
   // Only user-intent is toggled: "on" | "off" (never set "cued" directly)
-  const setStateAndPropagate = useCallback((newState: ToggleState) => {
-    const desired: "on" | "off" = newState === "cued" ? "on" : newState;
-    toggleRegistry.updateState(id, desired);
-  }, [id]);
+  const setStateAndPropagate = useCallback(
+    (newState: ToggleState) => {
+      const desired: "on" | "off" = newState === "cued" ? "on" : newState;
+      toggleRegistry.updateState(id, desired);
+    },
+    [id]
+  );
 
   return { state, label, setState: setStateAndPropagate, ancestors };
 }
