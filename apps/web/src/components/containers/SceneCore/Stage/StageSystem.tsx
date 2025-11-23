@@ -49,8 +49,11 @@ export interface StageAPI {
   getActiveParent(): THREE.Object3D;
 
   // Object lifecycle
-  addObject(obj: THREE.Object3D): void;
-  removeObject(obj: THREE.Object3D): void;
+  addObject(obj: THREE.Object3D, explicitParent?: THREE.Object3D | null): void;
+  removeObject(
+    obj: THREE.Object3D,
+    explicitParent?: THREE.Object3D | null
+  ): void;
 
   // Interaction
   registerInteractive(
