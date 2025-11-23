@@ -1,9 +1,15 @@
+// src/components/containers/SceneCore/Engine/EngineLoop.ts
 import * as THREE from "three";
+import type { CSS3DRenderer } from "three-stdlib";
 
 export interface EngineLoopOptions {
   renderer: THREE.WebGLRenderer;
   scene: THREE.Scene;
   getCamera: () => THREE.PerspectiveCamera | null;
+
+  // NEW: optional CSS3D layer
+  cssRenderer?: CSS3DRenderer;
+  cssScene?: THREE.Scene | null;
 
   updateSceneCamera?: () => void;
   updateOrbitControls?: () => void;
@@ -15,6 +21,8 @@ export function createEngineLoop(options: EngineLoopOptions) {
     renderer,
     scene,
     getCamera,
+    cssRenderer,
+    cssScene,
     updateSceneCamera,
     updateOrbitControls,
     updateScroll,
@@ -61,14 +69,20 @@ export function createEngineLoop(options: EngineLoopOptions) {
       helper.update();
     }
 
+    // -------------------------------------------------------
+    // RENDER PIPELINE
+    // -------------------------------------------------------
     renderer.render(scene, camera);
+
+    if (cssRenderer && cssScene) {
+      cssRenderer.render(cssScene, camera);
+    }
   };
 
   return {
     start() {
       if (!frameId) {
         lastTime = performance.now();
-
         animate();
       }
     },

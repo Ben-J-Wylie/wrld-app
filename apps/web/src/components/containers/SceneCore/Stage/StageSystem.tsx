@@ -1,6 +1,7 @@
 // src/components/containers/SceneCore/Stage/StageSystem.ts
 import React from "react";
 import * as THREE from "three";
+import { CSS3DRenderer } from "three-stdlib";
 
 import { createRenderer } from "../Renderer/Renderer";
 import { createEngineLoop } from "../Engine/EngineLoop";
@@ -48,14 +49,21 @@ export interface StageAPI {
   popParent(): void;
   getActiveParent(): THREE.Object3D;
 
-  // Object lifecycle
+  // Object lifecycle (WebGL)
   addObject(obj: THREE.Object3D, explicitParent?: THREE.Object3D | null): void;
   removeObject(
     obj: THREE.Object3D,
     explicitParent?: THREE.Object3D | null
   ): void;
 
-  // Interaction
+  // NEW: CSS3D object lifecycle
+  addCSSObject(obj: THREE.Object3D): void;
+  removeCSSObject(obj: THREE.Object3D): void;
+
+  // (Debug / advanced)
+  getCSSScene(): THREE.Scene;
+
+  // Interaction (WebGL raycaster)
   registerInteractive(
     obj: THREE.Object3D,
     handlers: {
@@ -83,20 +91,37 @@ export function createStage(
   definition: StageDefinition
 ): StageAPI {
   // ---------------------------------------------------------
-  // RENDERER
+  // RENDERERS
   // ---------------------------------------------------------
   const width = container.clientWidth;
   const height = container.clientHeight;
 
+  // WebGL renderer
   const renderer = createRenderer(width, height);
   renderer.domElement.style.pointerEvents = "auto";
+  renderer.domElement.style.position = "absolute";
+  renderer.domElement.style.inset = "0";
+
+  // CSS3D renderer (DOM layer)
+  const cssRenderer = new CSS3DRenderer();
+  cssRenderer.setSize(width, height);
+  cssRenderer.domElement.style.position = "absolute";
+  cssRenderer.domElement.style.inset = "0";
+  // Important: let DOM elements themselves decide pointer-events
+  cssRenderer.domElement.style.pointerEvents = "none";
+
+  // Append WebGL first, CSS3D above it
   container.appendChild(renderer.domElement);
+  container.appendChild(cssRenderer.domElement);
 
   // ---------------------------------------------------------
-  // SCENE
+  // SCENES
   // ---------------------------------------------------------
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x202020);
+
+  // NEW: separate CSS3D scene
+  const cssScene = new THREE.Scene();
 
   // ---------------------------------------------------------
   // LIGHTS
@@ -123,7 +148,7 @@ export function createStage(
   const scrollSystem = applyScrollSystem(cams.cameraRig, renderer.domElement);
 
   // ---------------------------------------------------------
-  // INTERACTION SYSTEM
+  // INTERACTION SYSTEM (WebGL raycaster only)
   // ---------------------------------------------------------
   const interactiveObjects = new Set<THREE.Object3D>();
   const raycaster = new THREE.Raycaster();
@@ -195,7 +220,7 @@ export function createStage(
   };
 
   // ---------------------------------------------------------
-  // PARENT STACK
+  // PARENT STACK (WebGL scene graph)
   // ---------------------------------------------------------
   const parentStack: THREE.Object3D[] = [scene];
 
@@ -212,7 +237,7 @@ export function createStage(
   }
 
   // ---------------------------------------------------------
-  // DYNAMIC OBJECTS
+  // DYNAMIC OBJECTS (WebGL)
   // ---------------------------------------------------------
   const dynamicObjects = new Set<THREE.Object3D>();
 
@@ -228,6 +253,21 @@ export function createStage(
   function removeObject(obj: THREE.Object3D) {
     obj.parent?.remove(obj);
     dynamicObjects.delete(obj);
+  }
+
+  // ---------------------------------------------------------
+  // CSS3D OBJECTS
+  // ---------------------------------------------------------
+  function addCSSObject(obj: THREE.Object3D) {
+    cssScene.add(obj);
+  }
+
+  function removeCSSObject(obj: THREE.Object3D) {
+    cssScene.remove(obj);
+  }
+
+  function getCSSScene() {
+    return cssScene;
   }
 
   // ---------------------------------------------------------
@@ -252,6 +292,7 @@ export function createStage(
     const height = container.clientHeight;
 
     renderer.setSize(width, height);
+    cssRenderer.setSize(width, height);
 
     const cam = activeCamera as THREE.PerspectiveCamera;
     cam.aspect = width / height;
@@ -271,6 +312,8 @@ export function createStage(
   const engine = createEngineLoop({
     renderer,
     scene,
+    cssRenderer,
+    cssScene,
     getCamera: () => activeCamera,
     updateSceneCamera: () => {
       if (activeCamera === cams.sceneCamera) {
@@ -300,6 +343,14 @@ export function createStage(
     scrollSystem.scroll.stop();
     backdropSystem?.cleanup();
     fovListeners.clear();
+
+    // Remove renderers from DOM
+    if (renderer.domElement.parentElement === container) {
+      container.removeChild(renderer.domElement);
+    }
+    if (cssRenderer.domElement.parentElement === container) {
+      container.removeChild(cssRenderer.domElement);
+    }
   }
 
   // ---------------------------------------------------------
@@ -342,6 +393,10 @@ export function createStage(
 
     addObject,
     removeObject,
+
+    addCSSObject,
+    removeCSSObject,
+    getCSSScene,
 
     registerInteractive(obj, handlers) {
       obj.userData.handlers = handlers;
