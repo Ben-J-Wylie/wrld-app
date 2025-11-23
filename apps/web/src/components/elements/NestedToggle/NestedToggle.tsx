@@ -56,7 +56,6 @@ import React, { useState } from "react";
 import "../../_main/main.css";
 import { useToggleNode } from "./useToggleNode";
 import { ToggleState } from "./ToggleTypes";
-import ParallaxItem from "../../containers/Parallax/ParallaxItem";
 import "./NestedToggle.css";
 
 interface NestedToggleProps {
@@ -114,34 +113,24 @@ export default function NestedToggle({
       onMouseLeave={() => setHover(false)}
       style={{ transform: `scale(${size})`, ...style }}
     >
-      <ParallaxItem depth={troughDepth + depthShift}>
-        <div className={`toggle-slider ${state}`}>
-          <div className="toggle-trough">
-            <ParallaxItem depth={thumbDepth + depthShift}>
-              <div className="toggle-thumb">
-                {showText && (
-                  <ParallaxItem depth={textDepth + depthShift}>
-                    <span className="toggle-text">{text}</span>
-                  </ParallaxItem>
-                )}
-              </div>
-            </ParallaxItem>
+      <div className={`toggle-slider ${state}`}>
+        <div className="toggle-trough">
+          <div className="toggle-thumb">
+            {showText && <span className="toggle-text">{text}</span>}
           </div>
         </div>
-      </ParallaxItem>
+      </div>
 
-      <ParallaxItem depth={circleDepth + depthShift}>
-        <div className="toggle-circles">
-          {[...ancestors, state].slice(-generation).map((s, i) => (
-            <div
-              key={i}
-              className={`circle circle-${s} ${
-                i === generation - 1 ? "self" : "ancestor"
-              }`}
-            />
-          ))}
-        </div>
-      </ParallaxItem>
+      <div className="toggle-circles">
+        {[...ancestors, state].slice(-generation).map((s, i) => (
+          <div
+            key={i}
+            className={`circle circle-${s} ${
+              i === generation - 1 ? "self" : "ancestor"
+            }`}
+          />
+        ))}
+      </div>
     </div>
   );
 }
