@@ -195,24 +195,27 @@ export const Dom3D: React.FC<Dom3DProps> = ({
       cssObj.scale.set(1, 1, 1);
 
       // ---------------------------------------------
-      // Shadow sync – make DOM appear solid in world
+      // Shadow sync – STATIC plane in world space
       // ---------------------------------------------
       if (shadow && domEl) {
-        const rect = domEl.getBoundingClientRect();
+        // Compute pixel size ONCE
+        if (!shadow.userData.pixelSynced) {
+          const rect = domEl.getBoundingClientRect();
 
-        const fovRad = (camera.fov * Math.PI) / 180;
-        const vh = 2 * distance * Math.tan(fovRad / 2);
-        const vw = vh * camera.aspect;
+          // Convert pixels → world units at *unit scale* (no camera-based correction)
+          // 1 world unit = 1 pixel (you can change this)
+          const planeWidth = rect.width;
+          const planeHeight = rect.height;
 
-        const worldPerPixelY = vh / viewportHeight;
-        const worldPerPixelX = vw / viewportWidth;
+          shadow.scale.set(planeWidth, planeHeight, 1);
+          shadow.userData.pixelSynced = true;
+        }
 
-        const planeWidth = rect.width * worldPerPixelX;
-        const planeHeight = rect.height * worldPerPixelY;
-
+        // Always follow the DOM object's world position & rotation
         shadow.position.copy(worldPos);
         shadow.quaternion.copy(worldQuat);
-        shadow.scale.set(planeWidth, planeHeight, 1);
+
+        // DO NOT update scale again
       }
 
       frameId = requestAnimationFrame(update);
