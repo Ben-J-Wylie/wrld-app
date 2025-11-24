@@ -114,14 +114,14 @@ export default function NestedToggle({
       style={{ transform: `scale(${size})`, ...style }}
     >
       <div className={`toggle-slider ${state}`}>
-        <div className="toggle-trough">
+        <div className="toggle-trough" data-shadow-shape="true">
           <div className="toggle-thumb">
             {showText && <span className="toggle-text">{text}</span>}
           </div>
         </div>
       </div>
 
-      <div className="toggle-circles">
+      <div className="toggle-circles" data-shadow-shape="true">
         {[...ancestors, state].slice(-generation).map((s, i) => (
           <div
             key={i}
