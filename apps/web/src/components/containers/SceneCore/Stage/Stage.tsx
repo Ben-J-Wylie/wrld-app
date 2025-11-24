@@ -1,98 +1,221 @@
-// Stage.tsx
-import { useEffect, useRef, useState, useMemo } from "react";
+// @ts-nocheck
+
+// src/components/containers/SceneCore/Stage/Stage.tsx
+import { Canvas, useThree } from "@react-three/fiber"; // React-friendly WebGL renderer
+import { PerformanceMonitor } from "@react-three/drei"; // FPS monitor / adaptive performance
 import * as THREE from "three";
+import { PropsWithChildren, useMemo, useEffect } from "react";
 
-import { StageContext } from "./StageContext";
-import { createStage } from "./StageSystem";
-import type { StageAPI } from "./StageSystem";
-import { useWrldTheme } from "../Theme/WrldThemeProvider";
-import { ParentContext } from "../Utilities/ParentContext";
+// 🧩 Core config + global Zustand store
+import { SceneConfig, useSceneStore } from "@/components/containers/SceneCore";
 
-export interface StageProps {
-  backdrop?: {
-    presetSizes: {
-      mobile: { width: number; height: number };
-      tablet: { width: number; height: number };
-      desktop: { width: number; height: number };
-    };
-    position?: [number, number, number];
-  };
-  style?: React.CSSProperties;
-  children?: React.ReactNode;
+// 🧠 Helpers: register scene & camera globally for shared access
+import {
+  RegisterThreeObjects,
+  useThreeStore,
+} from "@/components/containers/SceneCore/Helpers";
+
+// 🎥 Camera system (auto-fitting FOV, scroll rig, optional overlay)
+import {
+  FitPerspectiveCamera,
+  CameraRig,
+  CameraOverlay,
+} from "@/components/containers/SceneCore/Engine/camera";
+
+// 🌀 Scroll systems (two modes)
+import {
+  ScrollController, // smooth physics-based scroll
+  ScrollDomWrapper, // wrapper for native DOM scroll
+} from "@/components/containers/SceneCore/Controllers";
+
+// 💡 Scene-wide lights
+import {
+  AmbientLight,
+  VsmLights,
+} from "@/components/containers/SceneCore/Engine/lights";
+
+export function RendererDebug() {
+  const { gl } = useThree();
+
+  useEffect(() => {
+    console.log("🔍 Renderer Info ----------------------");
+    console.log("Renderer:", gl.constructor.name);
+    console.log(
+      "WebGL Version:",
+      gl.getContext().getParameter(gl.getContext().VERSION)
+    );
+    console.log("ShadowMap Type:", gl.shadowMap.type);
+    console.log("ShadowMap Enabled:", gl.shadowMap.enabled);
+    console.log("ShadowMap Needs Update:", gl.shadowMap.needsUpdate);
+    console.log("Blur Samples:", (gl.shadowMap as any).blurSamples);
+    console.log("---------------------------------------");
+  }, [gl]);
+
+  return null;
 }
 
-export function Stage({ backdrop, style, children }: StageProps) {
-  const canvasContainerRef = useRef<HTMLDivElement | null>(null);
-  const stageRootRef = useRef<THREE.Object3D | null>(null);
-  const [stageAPI, setStageAPI] = useState<StageAPI | null>(null);
+export function ShadowDebug() {
+  const { scene } = useThree();
 
-  // -----------------------------------------------
-  // THEME (React hook - safe here)
-  // -----------------------------------------------
-  const theme = useWrldTheme();
-
-  // -----------------------------------------------
-  // Stable themed backdrop config
-  // (prevents infinite effect loops)
-  // -----------------------------------------------
-  const themedBackdrop = useMemo(() => {
-    return backdrop
-      ? { ...backdrop, color: theme.colors.background }
-      : undefined;
-  }, [backdrop, theme.colors.background]);
-
-  // -----------------------------------------------
-  // CREATE STAGE (only once)
-  // -----------------------------------------------
   useEffect(() => {
-    if (!canvasContainerRef.current) return;
+    const light = scene.getObjectByProperty(
+      "type",
+      "DirectionalLight"
+    ) as THREE.DirectionalLight;
+    if (!light) return;
 
-    const stage = createStage(canvasContainerRef.current, {
-      backdrop: themedBackdrop,
-    });
+    const helper = new THREE.CameraHelper(light.shadow.camera);
+    scene.add(helper);
 
-    setStageAPI(stage);
-    stageRootRef.current = stage.scene;
+    return () => {
+      scene.remove(helper);
+    };
+  }, [scene]);
 
-    return () => stage.cleanup();
-  }, []);
+  return null;
+}
 
-  // -----------------------------------------------
-  // UPDATE BACKDROP COLOR WHEN THEME CHANGES
-  // -----------------------------------------------
+export function ConfigureVSM() {
+  const { gl } = useThree();
+
   useEffect(() => {
-    if (!stageAPI || !themedBackdrop) return;
-    stageAPI.setBackdropColor?.(themedBackdrop.color);
-  }, [stageAPI, themedBackdrop?.color]);
+    gl.shadowMap.type = THREE.VSMShadowMap;
+    (gl.shadowMap as any).blurSamples = 0;
+  }, [gl]);
 
-  // -----------------------------------------------
-  // Inject React children into stage root
-  // -----------------------------------------------
+  return null;
+}
+
+/**
+ * Stage (Manual Mode)
+ * -----------------------------------------------------------------------------
+ * The Stage is the root 3D container for all scenes.
+ * It mounts a <Canvas> and attaches:
+ *   - Camera system
+ *   - Lighting
+ *   - Scroll system (DOM or custom)
+ *   - Optional debug overlay
+ *
+ * The Stage does not define scene dimensions itself — that’s now handled
+ * inside each scene (e.g. DemoScene, AlphaScene).
+ */
+export function Stage({ children }: PropsWithChildren) {
+  // 📦 Pull settings from global SceneConfig
+  const { lighting, debug, scroll } = SceneConfig;
+  const scrollMode = scroll.mode; // "dom" | "custom"
+
+  // 🧠 Get reactive scene dimensions from Zustand (set by scenes)
+  const sceneWidth = useSceneStore((s) => s.sceneWidth);
+  const sceneHeight = useSceneStore((s) => s.sceneHeight);
+
+  // 🔗 Access globally shared Three.js references
+  const scene = useThreeStore((s) => s.scene);
+  const camera = useThreeStore((s) => s.camera);
+
+  // 🧩 Choose scroll wrapper dynamically:
+  // If scroll mode is "dom", wrap the Canvas in a ScrollDomWrapper.
+  // If "custom", render directly (scrolling handled by ScrollController).
+  const Wrapper = useMemo(
+    () =>
+      scrollMode === "dom"
+        ? ScrollDomWrapper
+        : ({ children }: { children: React.ReactNode }) => <>{children}</>,
+    [scrollMode]
+  );
+
   return (
-    <div
-      style={{
-        width: "100vw",
-        height: "100vh",
-        position: "relative",
-        overflow: "hidden",
-        ...style,
-      }}
-    >
-      {/* CANVAS LAYER */}
-      <div
-        ref={canvasContainerRef}
-        style={{ position: "absolute", inset: 0 }}
-      />
+    <Wrapper>
+      {/* 🖼 Main 3D Canvas (React Three Fiber) */}
+      <Canvas
+        shadows
+        dpr={[1, Math.min(2, window.devicePixelRatio || 1.5)]}
+        gl={{
+          antialias: true,
+          alpha: true,
+          shadowMapEnabled: true,
+          shadowMapType: THREE.VSMShadowMap,
+        }}
+        onCreated={({ gl }) => {
+          gl.shadowMap.enabled = true;
+          gl.shadowMap.type = THREE.VSMShadowMap;
+        }}
+        style={{
+          position: scrollMode === "dom" ? "sticky" : "fixed",
+          top: 0,
+          left: 0,
+          width: "100%",
+          height: "100vh",
+          pointerEvents: scrollMode === "dom" ? "none" : "auto",
+          zIndex: 0,
+        }}
+      >
+        <RegisterThreeObjects />
+        <FitPerspectiveCamera />
+        <CameraRig />
+        <AmbientLight />
+        <VsmLights /> {/* <---- your new exact torus-example lights */}
+        {children}
+      </Canvas>
 
-      {/* REACT LAYER */}
-      {stageAPI && (
-        <StageContext.Provider value={stageAPI}>
-          {/* This provides the *root* THREE parent for React-driven objects */}
-          <ParentContext.Provider value={stageRootRef.current}>
-            <div style={{ position: "relative", zIndex: 10 }}>{children}</div>
-          </ParentContext.Provider>
-        </StageContext.Provider>
+      {/* 🧭 Scroll controller (only in "custom" mode) */}
+      {scrollMode === "custom" && <ScrollController />}
+
+      {/* 👁 Optional camera debug overlay */}
+      {debug.enabled && scene && camera && (
+        <CameraOverlay stageScene={scene} stageCamera={camera} />
       )}
-    </div>
+    </Wrapper>
   );
 }
+
+//                      ┌────────────────────────────┐
+//                      │        <Stage />           │
+//                      │ Root 3D environment        │
+//                      └────────────┬───────────────┘
+//                                   │
+//                    ┌───────────────┴────────────────┐
+//                    │                                │
+//                    ▼                                ▼
+//         ┌────────────────────┐           ┌────────────────────┐
+//         │   SceneConfig      │           │   useSceneStore     │
+//         │ (lighting, scroll, │           │ (reactive values:   │
+//         │ debug defaults)    │           │  sceneWidth/Height) │
+//         └────────────────────┘           └────────────────────┘
+//                                   │
+//                                   ▼
+//                       ┌────────────────────────┐
+//                       │  Choose Scroll Wrapper │
+//                       │  - DOM → ScrollDomWrapper
+//                       │  - Custom → <>{}</>     │
+//                       └────────────────────────┘
+//                                   │
+//                                   ▼
+//                       ┌────────────────────────┐
+//                       │      <Canvas />        │
+//                       │ (React Three Fiber)    │
+//                       └────────────────────────┘
+//                                   │
+//           ┌────────────────────────┼───────────────────────────────┐
+//           ▼                        ▼                               ▼
+//  ┌────────────────────┐  ┌────────────────────┐          ┌────────────────────┐
+//  │ RegisterThreeObjects│  │ FitPerspectiveCamera│         │ CameraRig          │
+//  │ Save refs globally  │  │ Adjust FOV to view │         │ Animate camera     │
+//  └────────────────────┘  └────────────────────┘          └────────────────────┘
+//           │                        │                               │
+//           ▼                        ▼                               ▼
+//  ┌────────────────────┐  ┌────────────────────┐          ┌────────────────────┐
+//  │ DirectionalLight   │  │ {children} layers  │          │ PerformanceMonitor │
+//  │ Global illumination│  │ Scene content      │          │ Manage FPS quality │
+//  └────────────────────┘  └────────────────────┘          └────────────────────┘
+//                                   │
+//                                   ▼
+//                     ┌───────────────────────────────┐
+//                     │ ScrollController (if custom)  │
+//                     │ Handles smooth scroll physics │
+//                     └───────────────────────────────┘
+//                                   │
+//                                   ▼
+//                     ┌───────────────────────────────┐
+//                     │ CameraOverlay (debug view)    │
+//                     │ Shows FOV & camera frustum    │
+//                     └───────────────────────────────┘
