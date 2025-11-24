@@ -30,21 +30,21 @@ export default function App() {
       {/* <ImagePlane ... domContent={<NestedToggle id="GlobalLive" />} /> */}
 
       {/* 🔹 Root Toggle in 3D via Dom3D */}
-      <Dom3D position={[0, 100, 100]} baseScaleDistance={500}>
+      <Dom3D position={[0, 100, 100]}>
         <NestedToggle id="GlobalLive" />
       </Dom3D>
 
       {/* 🔹 Child Toggles */}
-      <Dom3D position={[-100, 0, 30]} baseScaleDistance={500}>
+      <Dom3D position={[-100, 0, 60]}>
         <NestedToggle id="child1" />
       </Dom3D>
 
-      <Dom3D position={[100, 0, 30]} baseScaleDistance={500}>
+      <Dom3D position={[100, 0, 60]}>
         <NestedToggle id="child2" />
       </Dom3D>
 
       {/* 🔹 Grandchild */}
-      <Dom3D position={[0, -100, 1]} baseScaleDistance={500}>
+      <Dom3D position={[0, -100, 40]}>
         <NestedToggle id="grandchild" />
       </Dom3D>
     </Stage>
