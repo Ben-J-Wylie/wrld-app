@@ -8,6 +8,14 @@ import { useStage } from "../Stage/useStage";
 import type { StageAPI } from "../Stage/StageSystem";
 import { useParent } from "../Utilities/ParentContext";
 
+// Helper module you created earlier:
+// - createShadowCasterPlane(): THREE.Mesh
+// - createSilhouetteTexture(el: HTMLElement): Promise<THREE.Texture | null>
+import {
+  createShadowCasterPlane,
+  createSilhouetteTexture,
+} from "./ShadowCaster";
+
 /**
  * Dom3D – CSS3DObject Version (REAL 3D)
  * -------------------------------------
@@ -15,7 +23,8 @@ import { useParent } from "../Utilities/ParentContext";
  * - DOM exists in true 3D space with real camera projection
  * - Full perspective foreshortening (far edge smaller)
  * - Local transform is relative to ParentContext object
- * - Invisible WebGL plane under DOM receives/casts shadows
+ * - Shadow is cast by a WebGL plane textured with a DOM silhouette
+ *   (alpha-tested → non-rectangular shadow: matches actual component shape)
  *
  * Default: rotation=[0,0,0] → plane lies on XY, facing +Z (local space)
  */
@@ -29,7 +38,7 @@ export interface Dom3DProps {
   /** Local rotation (radians) relative to parent. */
   rotation?: [number, number, number];
 
-  /** Controls how big the DOM feels at 1m distance. */
+  /** Controls how big the DOM feels at 1m distance (currently unused). */
   baseScaleDistance?: number;
   minScale?: number;
   maxScale?: number;
@@ -64,7 +73,7 @@ export const Dom3D: React.FC<Dom3DProps> = ({
   const stage = useStage() as StageAPI;
   const parent = useParent();
 
-  // Pre-allocated math objects
+  // Pre-allocated math objects (per component instance)
   const localPos = new THREE.Vector3(...position);
   const localEuler = new THREE.Euler(rotation[0], rotation[1], rotation[2]);
   const localQuat = new THREE.Quaternion().setFromEuler(localEuler);
@@ -78,30 +87,32 @@ export const Dom3D: React.FC<Dom3DProps> = ({
   const worldScale = new THREE.Vector3();
 
   // --------------------------------------------------------
-  // Shadow plane – invisible but casts/receives shadows
+  // Shadow plane – WebGL mesh that will cast the silhouette shadow
   // --------------------------------------------------------
   useEffect(() => {
     if (!stage || !parent) return;
 
-    const geo = new THREE.PlaneGeometry(1, 1);
-    const mat = new THREE.MeshStandardMaterial({
-      color: 0xffffff,
-      opacity: 0,
-      transparent: true,
-      depthWrite: false,
-    });
-
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-
+    const mesh = createShadowCasterPlane();
     shadowMeshRef.current = mesh;
+
+    // Ensure material is configured for alpha-tested shadows
+    const mat = mesh.material as THREE.MeshStandardMaterial;
+    mat.transparent = true;
+    mat.opacity = 1;
+    mat.alphaTest = 0.5;
+    mat.depthWrite = false;
+    // This hides the plane in the beauty pass while keeping it in shadow passes
+    mat.colorWrite = false;
+
+    mesh.castShadow = true;
+    mesh.receiveShadow = false;
+
     stage.addObject(mesh, parent);
 
     return () => {
       stage.removeObject(mesh);
-      geo.dispose();
-      mat.dispose();
+      mesh.geometry.dispose();
+      (mesh.material as THREE.Material).dispose();
     };
   }, [stage, parent]);
 
@@ -112,7 +123,7 @@ export const Dom3D: React.FC<Dom3DProps> = ({
     if (!stage || !elRef.current) return;
 
     // Let this element actually receive pointer events
-    // (CSS renderer root has pointerEvents: none)
+    // (CSS renderer root usually has pointerEvents: none)
     elRef.current.style.pointerEvents = "auto";
     elRef.current.style.transformStyle = "preserve-3d";
 
@@ -127,9 +138,36 @@ export const Dom3D: React.FC<Dom3DProps> = ({
   }, [stage]);
 
   // --------------------------------------------------------
-  // Main update loop – sync CSS3D + shadow to world
+  // Generate silhouette texture from DOM and apply to shadow material
   // --------------------------------------------------------
   useEffect(() => {
+    if (!elRef.current || !shadowMeshRef.current) return;
+
+    let cancelled = false;
+
+    async function bakeSilhouette() {
+      // elRef.current is guarded above, so non-null assertion is safe
+      const silhouette = await createSilhouetteTexture(elRef.current!);
+      if (cancelled || !silhouette || !shadowMeshRef.current) return;
+
+      const mat = shadowMeshRef.current.material as THREE.MeshStandardMaterial;
+      mat.alphaMap = silhouette;
+      mat.needsUpdate = true;
+    }
+
+    bakeSilhouette();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [children]); // re-bake if the DOM children change
+
+  // --------------------------------------------------------
+  // Main update loop – sync CSS3D + shadow to world transform
+  // --------------------------------------------------------
+  useEffect(() => {
+    if (!stage || !parent) return;
+
     let frameId: number | null = null;
 
     const update = () => {
@@ -137,14 +175,7 @@ export const Dom3D: React.FC<Dom3DProps> = ({
       const cssObj = cssObjRef.current;
       const shadow = shadowMeshRef.current;
 
-      if (!camera || !cssObj || !parent) {
-        frameId = requestAnimationFrame(update);
-        return;
-      }
-
-      const viewportWidth = stage.getViewportWidth();
-      const viewportHeight = stage.getViewportHeight();
-      if (!viewportWidth || !viewportHeight) {
+      if (!camera || !cssObj) {
         frameId = requestAnimationFrame(update);
         return;
       }
@@ -171,6 +202,7 @@ export const Dom3D: React.FC<Dom3DProps> = ({
       // Apply to CSS3D object
       cssObj.position.copy(worldPos);
       cssObj.quaternion.copy(worldQuat);
+      cssObj.scale.set(1, 1, 1); // CSS3D scaling handled implicitly by camera
 
       // ---------------------------------------------
       // Distance-based visibility + near/far culling
@@ -190,28 +222,23 @@ export const Dom3D: React.FC<Dom3DProps> = ({
       }
 
       // ---------------------------------------------
-      // Scale feeling (roughly constant screen size)
-      // ---------------------------------------------
-      cssObj.scale.set(1, 1, 1);
-
-      // ---------------------------------------------
-      // Shadow sync – STATIC plane sized 1:1 with DOM pixels
+      // Shadow sync – plane sized 1:1 with DOM pixels
       // ---------------------------------------------
       if (shadow && domEl) {
-        // Compute pixel size once (1 world unit = 1 pixel)
+        // One-time sizing: 1 world unit = 1 pixel
         if (!shadow.userData.pixelSized) {
           const rect = domEl.getBoundingClientRect();
 
-          // 1 world unit = 1 pixel
           const worldW = rect.width;
           const worldH = rect.height;
 
-          shadow.scale.set(worldW * 1.13, worldH * 1.13, 1);
+          // Slight scale fudge if you want a halo, otherwise use (worldW, worldH, 1)
+          shadow.scale.set(worldW, worldH, 1);
 
           shadow.userData.pixelSized = true;
         }
 
-        // Follow DOM world transform (no foreshortening)
+        // Follow DOM world transform (true 3D)
         shadow.position.copy(worldPos);
         shadow.quaternion.copy(worldQuat);
       }
@@ -235,11 +262,11 @@ export const Dom3D: React.FC<Dom3DProps> = ({
     rotation[0],
     rotation[1],
     rotation[2],
+    minDistance,
+    maxDistance,
     baseScaleDistance,
     minScale,
     maxScale,
-    minDistance,
-    maxDistance,
   ]);
 
   return (
