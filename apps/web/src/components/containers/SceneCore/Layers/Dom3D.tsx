@@ -206,7 +206,7 @@ export const Dom3D: React.FC<Dom3DProps> = ({
           const worldW = rect.width;
           const worldH = rect.height;
 
-          shadow.scale.set(worldW, worldH, 1);
+          shadow.scale.set(worldW * 1.13, worldH * 1.13, 1);
 
           shadow.userData.pixelSized = true;
         }

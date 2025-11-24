@@ -44,7 +44,7 @@ export default function App() {
       </Dom3D>
 
       {/* 🔹 Grandchild */}
-      <Dom3D position={[0, -100, 5]} baseScaleDistance={500}>
+      <Dom3D position={[0, -100, 1]} baseScaleDistance={500}>
         <NestedToggle id="grandchild" />
       </Dom3D>
     </Stage>
