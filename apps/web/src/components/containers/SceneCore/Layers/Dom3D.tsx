@@ -336,11 +336,16 @@ export const Dom3D: React.FC<Dom3DProps> = ({
       parent.updateWorldMatrix(true, false);
       parentWorldMat.copy(parent.matrixWorld);
 
+      // CONVERT DEGREES → RADIANS HERE
       localPos.set(...position);
-      localEuler.set(...rotation);
+      localEuler.set(
+        THREE.MathUtils.degToRad(rotation[0]),
+        THREE.MathUtils.degToRad(rotation[1]),
+        THREE.MathUtils.degToRad(rotation[2])
+      );
       localQuat.setFromEuler(localEuler);
-      localMat.compose(localPos, localQuat, new THREE.Vector3(1, 1, 1));
 
+      localMat.compose(localPos, localQuat, new THREE.Vector3(1, 1, 1));
       worldMat.multiplyMatrices(parentWorldMat, localMat);
       worldMat.decompose(worldPos, worldQuat, worldScale);
 
@@ -357,18 +362,16 @@ export const Dom3D: React.FC<Dom3DProps> = ({
       domEl.style.opacity = isHidden ? "0" : "1";
       domEl.style.pointerEvents = isHidden ? "none" : "auto";
 
-      //
-      // Shadow plane — static orientation, only position moves
-      //
+      // Shadow plane — same world position & rotation as DOM element
       shadow.position.copy(worldPos);
 
-      // Lock rotation so it never skews/foreshortens with camera
-      shadow.quaternion.set(0, 0, 0, 1);
+      // COPY DOM ROTATION — THIS MAKES THE SHADOW MATCH DOM ORIENTATION
+      shadow.quaternion.copy(worldQuat);
 
-      // Size is fixed from last bake (DOM px → world units)
+      // SCALE = (raw DOM width/height) × (world scale of the parent chain)
       shadow.scale.set(
-        lastShadowWidth.current || 0,
-        lastShadowHeight.current || 0,
+        lastShadowWidth.current * worldScale.x || 0,
+        lastShadowHeight.current * worldScale.y || 0,
         1
       );
 

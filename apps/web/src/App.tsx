@@ -19,7 +19,7 @@ export default function App() {
     <Stage
       backdrop={{
         presetSizes: {
-          mobile: { width: 750, height: 1600 },
+          mobile: { width: 750, height: 2000 },
           tablet: { width: 1024, height: 1024 },
           desktop: { width: 1920, height: 1080 },
         },
@@ -30,7 +30,7 @@ export default function App() {
       {/* <ImagePlane ... domContent={<NestedToggle id="GlobalLive" />} /> */}
 
       {/* 🔹 Root Toggle in 3D via Dom3D */}
-      <Dom3D position={[0, 100, 100]}>
+      <Dom3D position={[0, 100, 100]} rotation={[0, 45, 10]}>
         <NestedToggle id="GlobalLive" />
       </Dom3D>
 
