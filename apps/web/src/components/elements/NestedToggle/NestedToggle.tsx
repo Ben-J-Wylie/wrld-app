@@ -61,11 +61,6 @@ import "./NestedToggle.css";
 interface NestedToggleProps {
   id: string;
   size?: number; // overall scale multiplier
-  troughDepth?: number; // parallax depth for trough
-  thumbDepth?: number; // parallax depth for thumb
-  textDepth?: number; // parallax depth for text
-  circleDepth?: number; // parallax depth for circles
-  hoverDepthShift?: number; // depth shift on hover
   showText?: boolean;
   style?: React.CSSProperties;
   onClick?: () => void;
@@ -74,11 +69,6 @@ interface NestedToggleProps {
 export default function NestedToggle({
   id,
   size = 1,
-  troughDepth = 0.02,
-  thumbDepth = 0.05,
-  textDepth = 0.08,
-  circleDepth = 0.03,
-  hoverDepthShift = 0.015,
   showText = true,
   style,
   onClick,
@@ -103,7 +93,6 @@ export default function NestedToggle({
 
   const text = state === "on" ? "LIVE" : state === "cued" ? "CUED" : "OFF";
   const generation = ancestors.length + 1;
-  const depthShift = hover ? hoverDepthShift : 0;
 
   return (
     <div
