@@ -75,8 +75,8 @@ export function DirectionalLight() {
       <directionalLight
         ref={lightRef}
         castShadow
-        position={[-200, 50, 1000]}
-        intensity={1.2}
+        position={[-200, 300, 1000]}
+        intensity={2}
         shadow-mapSize={[2048, 2048]}
         shadow-bias={-0.0001}
         shadow-normalBias={0.0008}

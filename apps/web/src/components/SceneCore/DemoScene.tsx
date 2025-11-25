@@ -11,12 +11,17 @@ import { useCameraRig } from "./Cameras/useCameraRig";
 import { useScrollController } from "./Controllers/useScrollController";
 import { DirectionalLight } from "./Lights/DirectionalLight";
 
+import { Toggle3D } from "./Toggle3D/Toggle3D";
+
 const backdropSizes: BackdropDimensions = {
   mobile: { width: 720, height: 1920 },
   tablet: { width: 1280, height: 1280 },
   desktop: { width: 1920, height: 720 },
 };
 
+// ------------------------------------------------------------------
+// InnerScene: lives inside <Canvas>
+// ------------------------------------------------------------------
 // ------------------------------------------------------------------
 // InnerScene: lives inside <Canvas>
 // ------------------------------------------------------------------
@@ -36,12 +41,18 @@ function InnerScene() {
       <ambientLight intensity={0.5} />
       <DirectionalLight />
 
-      {/* Test objects */}
-      <mesh position={[0, 0, 0]} castShadow>
-        <boxGeometry args={[300, 300, 300]} />
+      {/* Shadow test image plane */}
+      <mesh
+        position={[0, 0, -50]} // behind toggles
+        rotation={[0, 0, 0]} // tilt so shadows show clearly
+        castShadow
+        receiveShadow
+      >
+        <planeGeometry args={[2000, 2000]} />
         <meshStandardMaterial color="white" />
       </mesh>
 
+      {/* Test cubes */}
       <mesh position={[800, 0, 0]} castShadow>
         <boxGeometry args={[200, 200, 200]} />
         <meshStandardMaterial color="red" />
@@ -56,6 +67,26 @@ function InnerScene() {
         <boxGeometry args={[200, 200, 200]} />
         <meshStandardMaterial color="green" />
       </mesh>
+
+      {/* Toggles */}
+      <Toggle3D
+        width={200}
+        height={50}
+        position={[0, 10, 20]}
+        onChange={(s) => console.log("Toggle state:", s)}
+      />
+      <Toggle3D
+        width={200}
+        height={50}
+        position={[0, 60, 50]}
+        onChange={(s) => console.log("Toggle state:", s)}
+      />
+      <Toggle3D
+        width={200}
+        height={50}
+        position={[0, -50, 100]}
+        onChange={(s) => console.log("Toggle state:", s)}
+      />
 
       <Backdrop />
     </>
@@ -76,7 +107,7 @@ export function DemoScene() {
 
   return (
     <div style={{ width: "100vw", height: "100vh", background: "#000" }}>
-      <Canvas shadows>
+      <Canvas shadows gl={{ outputColorSpace: THREE.SRGBColorSpace }}>
         <InnerScene />
       </Canvas>
     </div>

@@ -23,7 +23,7 @@ interface BackdropProps {
 // Backdrop component (reads store)
 // ----------------------------------
 export const Backdrop = forwardRef<THREE.Mesh, BackdropProps>(
-  ({ color = "#dc4c4c", padding = 50 }, ref) => {
+  ({ color = "#cbcbcb", padding = 50 }, ref) => {
     const width = useSceneStore((s) => s.sceneWidth);
     const height = useSceneStore((s) => s.sceneHeight);
 
