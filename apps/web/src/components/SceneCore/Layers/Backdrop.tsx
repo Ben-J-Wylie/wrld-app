@@ -3,7 +3,7 @@ import React, { forwardRef, useMemo } from "react";
 import { useSceneStore } from "../Store/SceneStore";
 
 // ----------------------------------
-// Exported dimensions type
+// EXPORT ONLY the dimensions type
 // ----------------------------------
 export interface BackdropDimensions {
   mobile: { width: number; height: number };
@@ -11,68 +11,30 @@ export interface BackdropDimensions {
   desktop: { width: number; height: number };
 }
 
+// ----------------------------------
+// INTERNAL ONLY props (not exported)
+// ----------------------------------
 interface BackdropProps {
   color?: THREE.ColorRepresentation;
-  padding?: number; // uniform padding on all sides
-  paddingX?: number; // horizontal padding (left+right)
-  paddingY?: number; // vertical padding (top+bottom)
-  paddingTop?: number;
-  paddingBottom?: number;
-  paddingLeft?: number;
-  paddingRight?: number;
+  padding?: number; // uniform padding
 }
 
 // ----------------------------------
 // Backdrop component (reads store)
 // ----------------------------------
 export const Backdrop = forwardRef<THREE.Mesh, BackdropProps>(
-  (
-    {
-      color = "#dc4c4c",
-      padding = 50,
-      paddingX,
-      paddingY,
-      paddingTop,
-      paddingBottom,
-      paddingLeft,
-      paddingRight,
-    },
-    ref
-  ) => {
-    // Store-driven "true world size"
+  ({ color = "#dc4c4c", padding = 50 }, ref) => {
     const width = useSceneStore((s) => s.sceneWidth);
     const height = useSceneStore((s) => s.sceneHeight);
 
-    // ---------------------------------------------
-    // Resolve padding rules
-    // ---------------------------------------------
-    const { pLeft, pRight, pTop, pBottom } = useMemo(() => {
-      const p = padding;
-      const px = paddingX ?? p;
-      const py = paddingY ?? p;
-
+    // uniform padding on all sides
+    const { drawWidth, drawHeight } = useMemo(() => {
+      const grow = padding * 2;
       return {
-        pLeft: paddingLeft ?? px,
-        pRight: paddingRight ?? px,
-        pTop: paddingTop ?? py,
-        pBottom: paddingBottom ?? py,
+        drawWidth: width + grow,
+        drawHeight: height + grow,
       };
-    }, [
-      padding,
-      paddingX,
-      paddingY,
-      paddingTop,
-      paddingBottom,
-      paddingLeft,
-      paddingRight,
-    ]);
-
-    // ---------------------------------------------
-    // COMPUTED BACKDROP DRAW SIZE
-    // (store + padding)
-    // ---------------------------------------------
-    const drawWidth = width + pLeft + pRight;
-    const drawHeight = height + pTop + pBottom;
+    }, [width, height, padding]);
 
     return (
       <mesh ref={ref}>
