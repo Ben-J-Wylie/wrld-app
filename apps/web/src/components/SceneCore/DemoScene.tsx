@@ -1,19 +1,27 @@
 // DemoScene.tsx
-import React from "react";
+import React, { useEffect } from "react";
 import { Canvas } from "@react-three/fiber";
 
 import { useBreakpoint } from "./Utilities/Breakpoints";
 import { CameraSwitcher } from "./Cameras/CameraSwitcher";
 import { Backdrop, BackdropDimensions } from "./Layers/Backdrop";
+import { useSceneStore } from "./Store/SceneStore";
 
 const backdropSizes: BackdropDimensions = {
-  mobile: { width: 100, height: 100 },
-  tablet: { width: 200, height: 300 },
-  desktop: { width: 300, height: 200 },
+  mobile: { width: 720, height: 1920 },
+  tablet: { width: 1280, height: 1280 },
+  desktop: { width: 1920, height: 720 },
 };
 
 export function DemoScene() {
-  const breakpoint = useBreakpoint(); // 👈 watch viewport + return correct bp
+  const breakpoint = useBreakpoint();
+  const setSceneSize = useSceneStore((s) => s.setSceneSize);
+
+  // 💡 Update SceneStore when breakpoint changes
+  useEffect(() => {
+    const preset = backdropSizes[breakpoint] ?? backdropSizes.desktop;
+    setSceneSize(preset.width, preset.height);
+  }, [breakpoint, setSceneSize]);
 
   return (
     <div style={{ width: "100vw", height: "100vh", background: "#000" }}>
@@ -23,8 +31,8 @@ export function DemoScene() {
         <ambientLight intensity={0.4} />
         <directionalLight position={[200, 300, 400]} intensity={1} castShadow />
 
-        {/* This will now update automatically */}
-        <Backdrop presetSizes={backdropSizes} breakpoint={breakpoint} />
+        {/* Backdrop now reads directly from store */}
+        <Backdrop color="#dc4c4c" />
       </Canvas>
     </div>
   );

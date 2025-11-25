@@ -9,7 +9,7 @@ export const OrbitCamera = forwardRef<THREE.PerspectiveCamera>((props, ref) => {
       position={[0, 400, 1200]}
       fov={45}
       near={1}
-      far={5000}
+      far={8000}
       {...props}
     />
   );
