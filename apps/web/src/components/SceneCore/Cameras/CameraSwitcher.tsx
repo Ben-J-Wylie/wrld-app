@@ -1,18 +1,22 @@
 // CameraSwitcher.tsx
 import * as THREE from "three";
-import React, { useRef, useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 
 import { SceneCamera } from "./SceneCamera";
 import { OrbitCamera } from "./OrbitCamera";
 
-export function CameraSwitcher() {
+interface CameraSwitcherProps {
+  sceneCamRef: React.RefObject<THREE.PerspectiveCamera | null>;
+  orbitCamRef: React.RefObject<THREE.PerspectiveCamera | null>;
+}
+
+export function CameraSwitcher({
+  sceneCamRef,
+  orbitCamRef,
+}: CameraSwitcherProps) {
   const { set } = useThree();
-
-  const sceneCam = useRef<THREE.PerspectiveCamera>(null!);
-  const orbitCam = useRef<THREE.PerspectiveCamera>(null!);
-
   const [active, setActive] = useState<"scene" | "orbit">("scene");
 
   // Press 'c' to toggle
@@ -26,24 +30,25 @@ export function CameraSwitcher() {
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
-  // Update renderer camera each frame
+  // Update renderer camera each frame based on 'active'
   useFrame(() => {
-    if (active === "scene" && sceneCam.current) {
-      set({ camera: sceneCam.current });
-    } else if (active === "orbit" && orbitCam.current) {
-      set({ camera: orbitCam.current });
+    if (active === "scene" && sceneCamRef.current) {
+      set({ camera: sceneCamRef.current });
+    } else if (active === "orbit" && orbitCamRef.current) {
+      set({ camera: orbitCamRef.current });
     }
   });
 
   return (
     <>
-      <SceneCamera ref={sceneCam} />
-      <OrbitCamera ref={orbitCam} />
+      <SceneCamera ref={sceneCamRef} />
+      <OrbitCamera ref={orbitCamRef} />
 
       {/* OrbitControls only active when orbit camera is selected */}
       <OrbitControls
         enabled={active === "orbit"}
-        camera={orbitCam.current ?? undefined}
+        // When ref isn't set yet, OrbitControls falls back to default three.camera
+        camera={orbitCamRef.current ?? undefined}
       />
     </>
   );

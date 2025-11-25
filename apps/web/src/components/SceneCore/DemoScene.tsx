@@ -1,8 +1,8 @@
 // DemoScene.tsx
 import * as THREE from "three";
-
 import React, { useEffect, useRef } from "react";
 import { Canvas, useThree } from "@react-three/fiber";
+
 import { useBreakpoint } from "./Utilities/Breakpoints";
 import { Backdrop, BackdropDimensions } from "./Layers/Backdrop";
 import { useSceneStore } from "./Store/SceneStore";
@@ -20,50 +20,51 @@ const backdropSizes: BackdropDimensions = {
 // InnerScene: lives inside <Canvas>
 // ------------------------------------------------------------------
 function InnerScene() {
-  const { camera, gl } = useThree();
-  const cameraRig = useCameraRig(camera as THREE.PerspectiveCamera);
+  const { gl } = useThree();
+
+  // Explicit refs for each camera
+  const sceneCamRef = useRef<THREE.PerspectiveCamera | null>(null);
+  const orbitCamRef = useRef<THREE.PerspectiveCamera | null>(null);
+
+  // ✅ CameraRig is bound ONLY to the SceneCamera
+  const cameraRig = useCameraRig(sceneCamRef.current);
   useScrollController(cameraRig, gl.domElement);
 
   return (
     <>
-      <CameraSwitcher />
+      {/* CameraSwitcher just toggles which camera is active in R3F,
+          but the rig/scroll always talk to sceneCamRef only. */}
+      <CameraSwitcher sceneCamRef={sceneCamRef} orbitCamRef={orbitCamRef} />
 
       <ambientLight intensity={0.6} />
       <directionalLight position={[300, 500, 400]} intensity={1} castShadow />
 
-      {/* ------------------------------
-         TEST OBJECTS TO SEE SCROLLING
-         ------------------------------ */}
-
-      {/* Center cube */}
+      {/* Test objects */}
       <mesh position={[0, 0, 0]}>
         <boxGeometry args={[300, 300, 300]} />
         <meshStandardMaterial color="white" />
       </mesh>
 
-      {/* Right → red box */}
       <mesh position={[800, 0, 0]}>
         <boxGeometry args={[200, 200, 200]} />
         <meshStandardMaterial color="red" />
       </mesh>
 
-      {/* Top → blue box */}
       <mesh position={[0, 800, 0]}>
         <boxGeometry args={[200, 200, 200]} />
         <meshStandardMaterial color="blue" />
       </mesh>
 
-      {/* Bottom → green box */}
       <mesh position={[0, -800, 0]}>
         <boxGeometry args={[200, 200, 200]} />
         <meshStandardMaterial color="green" />
       </mesh>
 
-      {/* Backdrop (reads size from store) */}
       <Backdrop color="#222" />
     </>
   );
 }
+
 // ------------------------------------------------------------------
 // DemoScene Wrapper
 // ------------------------------------------------------------------
@@ -74,7 +75,7 @@ export function DemoScene() {
   useEffect(() => {
     const preset = backdropSizes[breakpoint] ?? backdropSizes.desktop;
     setSceneSize(preset.width, preset.height);
-  }, [breakpoint]);
+  }, [breakpoint, setSceneSize]);
 
   return (
     <div style={{ width: "100vw", height: "100vh", background: "#000" }}>

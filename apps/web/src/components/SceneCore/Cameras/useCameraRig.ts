@@ -7,24 +7,23 @@ import { createCameraRig } from "./CameraRig";
 const CAMERA_Z = 1000;
 
 export function useCameraRig(camera: THREE.Camera | null) {
-  const rigRef = useRef<any>(null);
+  const rigRef = useRef<ReturnType<typeof createCameraRig> | null>(null);
   const { size } = useThree();
+  const isPerspective = camera instanceof THREE.PerspectiveCamera;
 
-  // If camera is NOT a perspective camera → do nothing
-  if (!(camera instanceof THREE.PerspectiveCamera)) {
-    return null;
-  }
-
+  // (Re)create rig whenever the *scene camera instance* or viewport changes
   useEffect(() => {
-    if (!camera) return;
+    if (!isPerspective || !camera) return;
 
     rigRef.current = createCameraRig(camera, CAMERA_Z);
-    rigRef.current.onResizeOrFovChange();
-  }, [camera, size.width, size.height]);
+    rigRef.current.onResizeOrFovChange?.();
+  }, [isPerspective, camera, size.width, size.height]);
 
+  // Drive rig every frame
   useFrame(() => {
+    if (!isPerspective) return;
     rigRef.current?.onFrameUpdate?.();
   });
 
-  return rigRef.current;
+  return isPerspective ? rigRef.current : null;
 }

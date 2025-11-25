@@ -4,20 +4,17 @@ import { useThree } from "@react-three/fiber";
 
 export const OrbitCamera = forwardRef<THREE.PerspectiveCamera>((props, ref) => {
   const camRef = useRef<THREE.PerspectiveCamera>(null!);
-  const set = useThree((s) => s.set);
+  // We no longer call `set({ camera: cam })` here
+  useThree(); // still okay if you want access later; otherwise can remove
 
   useEffect(() => {
     const cam = camRef.current;
 
-    // Force-apply properties (JSX does not guarantee this order)
     cam.near = 1;
     cam.far = 12000;
     cam.fov = 45;
     cam.position.set(0, 400, 1200);
-    cam.updateProjectionMatrix(); // 💥 REQUIRED or far plane won’t apply
-
-    // If you toggle cameras, ensure R3F knows this is the active one
-    set({ camera: cam });
+    cam.updateProjectionMatrix();
   }, []);
 
   return (
