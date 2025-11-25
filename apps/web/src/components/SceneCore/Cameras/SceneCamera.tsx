@@ -78,7 +78,7 @@ export const SceneCamera = forwardRef<THREE.PerspectiveCamera>((props, ref) => {
     const targetFov = computeAdaptiveFov();
 
     // Smooth interpolation
-    cam.fov += (targetFov - cam.fov) * 0.15;
+    cam.fov += (targetFov - cam.fov) * 1;
 
     cam.aspect = size.width / size.height;
     cam.updateProjectionMatrix();
