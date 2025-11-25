@@ -1,0 +1,64 @@
+// src/scenes/shapes.tsx
+import React from "react";
+import * as THREE from "three";
+import { ThreeElements } from "@react-three/fiber";
+
+type MeshProps = ThreeElements["mesh"];
+
+function PlaneShape({
+  color,
+  width = 10,
+  height = 6,
+  opacity = 1,
+  ...rest
+}: MeshProps & {
+  color: string;
+  width?: number;
+  height?: number;
+  opacity?: number;
+}) {
+  return (
+    <mesh castShadow receiveShadow {...rest}>
+      <planeGeometry args={[width, height]} />
+      <meshStandardMaterial
+        color={color}
+        transparent
+        opacity={opacity}
+        roughness={0.8}
+        metalness={0.1}
+        side={THREE.DoubleSide} // temporarily robust while tuning
+        shadowSide={THREE.FrontSide} // prefer the front side for shadowing
+      />
+    </mesh>
+  );
+}
+
+// === Layered placeholders ===
+
+export function LayerBackShape(props: MeshProps) {
+  return <PlaneShape color="#224488" width={6} height={3} {...props} />;
+}
+
+export function LayerMid2Shape(props: MeshProps) {
+  return <PlaneShape color="#336699" width={5} height={3} {...props} />;
+}
+
+export function LayerMid1Shape(props: MeshProps) {
+  return <PlaneShape color="#4499aa" width={4} height={3} {...props} />;
+}
+
+export function LayerFrontShape(props: MeshProps) {
+  return <PlaneShape color="#55bbcc" width={3} height={3} {...props} />;
+}
+
+export function UiGlassShape(props: MeshProps) {
+  return (
+    <PlaneShape
+      color="#ffffff"
+      width={2}
+      height={3}
+      opacity={0.35}
+      {...props}
+    />
+  );
+}
