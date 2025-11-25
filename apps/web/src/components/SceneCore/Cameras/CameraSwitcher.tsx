@@ -8,18 +8,20 @@ import { SceneCamera } from "./SceneCamera";
 import { OrbitCamera } from "./OrbitCamera";
 
 interface CameraSwitcherProps {
-  sceneCamRef: React.RefObject<THREE.PerspectiveCamera | null>;
-  orbitCamRef: React.RefObject<THREE.PerspectiveCamera | null>;
+  sceneCamRef: React.RefObject<THREE.PerspectiveCamera>;
+  orbitCamRef: React.RefObject<THREE.PerspectiveCamera>;
 }
 
 export function CameraSwitcher({
   sceneCamRef,
   orbitCamRef,
 }: CameraSwitcherProps) {
-  const { set } = useThree();
+  const { gl, set } = useThree();
   const [active, setActive] = useState<"scene" | "orbit">("scene");
 
-  // Press 'c' to toggle
+  // ---------------------------------------------------------------------------
+  // Toggle with "c"
+  // ---------------------------------------------------------------------------
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === "c") {
@@ -30,24 +32,40 @@ export function CameraSwitcher({
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
-  // Update renderer camera each frame based on 'active'
+  // ---------------------------------------------------------------------------
+  // Every frame:
+  // 1. Update both cameras' aspect ratios to match viewport
+  // 2. Activate whichever camera is selected
+  // ---------------------------------------------------------------------------
   useFrame(() => {
-    if (active === "scene" && sceneCamRef.current) {
-      set({ camera: sceneCamRef.current });
-    } else if (active === "orbit" && orbitCamRef.current) {
-      set({ camera: orbitCamRef.current });
+    const { clientWidth, clientHeight } = gl.domElement;
+    const aspect = clientWidth / clientHeight;
+
+    // Update both cameras, even when inactive
+    const allCams = [sceneCamRef.current, orbitCamRef.current];
+    allCams.forEach((cam) => {
+      if (!cam) return;
+      cam.aspect = aspect;
+      cam.updateProjectionMatrix();
+    });
+
+    // Activate active cam
+    const cam = active === "scene" ? sceneCamRef.current : orbitCamRef.current;
+
+    if (cam) {
+      set({ camera: cam });
     }
   });
 
   return (
     <>
+      {/* Camera Instances */}
       <SceneCamera ref={sceneCamRef} />
       <OrbitCamera ref={orbitCamRef} />
 
-      {/* OrbitControls only active when orbit camera is selected */}
+      {/* Orbit controls activate only for orbitCam */}
       <OrbitControls
         enabled={active === "orbit"}
-        // When ref isn't set yet, OrbitControls falls back to default three.camera
         camera={orbitCamRef.current ?? undefined}
       />
     </>
