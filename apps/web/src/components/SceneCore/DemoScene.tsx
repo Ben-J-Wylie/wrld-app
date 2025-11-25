@@ -9,6 +9,7 @@ import { useSceneStore } from "./Store/SceneStore";
 import { CameraSwitcher } from "./Cameras/CameraSwitcher";
 import { useCameraRig } from "./Cameras/useCameraRig";
 import { useScrollController } from "./Controllers/useScrollController";
+import { DirectionalLight } from "./Lights/DirectionalLight";
 
 const backdropSizes: BackdropDimensions = {
   mobile: { width: 720, height: 1920 },
@@ -22,45 +23,41 @@ const backdropSizes: BackdropDimensions = {
 function InnerScene() {
   const { gl } = useThree();
 
-  // Explicit refs for each camera
-  const sceneCamRef = useRef<THREE.PerspectiveCamera | null>(null);
-  const orbitCamRef = useRef<THREE.PerspectiveCamera | null>(null);
+  const sceneCamRef = useRef<THREE.PerspectiveCamera>(null!);
+  const orbitCamRef = useRef<THREE.PerspectiveCamera>(null!);
 
-  // ✅ CameraRig is bound ONLY to the SceneCamera
   const cameraRig = useCameraRig(sceneCamRef.current);
   useScrollController(cameraRig, gl.domElement);
 
   return (
     <>
-      {/* CameraSwitcher just toggles which camera is active in R3F,
-          but the rig/scroll always talk to sceneCamRef only. */}
       <CameraSwitcher sceneCamRef={sceneCamRef} orbitCamRef={orbitCamRef} />
 
-      <ambientLight intensity={0.6} />
-      <directionalLight position={[300, 500, 400]} intensity={1} castShadow />
+      <ambientLight intensity={0.5} />
+      <DirectionalLight />
 
       {/* Test objects */}
-      <mesh position={[0, 0, 0]}>
+      <mesh position={[0, 0, 0]} castShadow>
         <boxGeometry args={[300, 300, 300]} />
         <meshStandardMaterial color="white" />
       </mesh>
 
-      <mesh position={[800, 0, 0]}>
+      <mesh position={[800, 0, 0]} castShadow>
         <boxGeometry args={[200, 200, 200]} />
         <meshStandardMaterial color="red" />
       </mesh>
 
-      <mesh position={[0, 800, 0]}>
+      <mesh position={[0, 800, 0]} castShadow>
         <boxGeometry args={[200, 200, 200]} />
         <meshStandardMaterial color="blue" />
       </mesh>
 
-      <mesh position={[0, -800, 0]}>
+      <mesh position={[0, -800, 0]} castShadow>
         <boxGeometry args={[200, 200, 200]} />
         <meshStandardMaterial color="green" />
       </mesh>
 
-      <Backdrop color="#222" />
+      <Backdrop />
     </>
   );
 }
@@ -79,7 +76,7 @@ export function DemoScene() {
 
   return (
     <div style={{ width: "100vw", height: "100vh", background: "#000" }}>
-      <Canvas>
+      <Canvas shadows>
         <InnerScene />
       </Canvas>
     </div>

@@ -37,9 +37,9 @@ export const Backdrop = forwardRef<THREE.Mesh, BackdropProps>(
     }, [width, height, padding]);
 
     return (
-      <mesh ref={ref}>
+      <mesh ref={ref} receiveShadow>
         <planeGeometry args={[drawWidth, drawHeight]} />
-        <meshBasicMaterial color={color} />
+        <meshStandardMaterial color={color} />
       </mesh>
     );
   }
