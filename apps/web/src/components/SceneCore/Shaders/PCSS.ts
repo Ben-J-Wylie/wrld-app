@@ -7,20 +7,21 @@ let pcssPatched = false;
 // GLOBAL PCSS DEFAULTS
 // -----------------------------------------------------------------------------
 const PCSS_DEFAULTS = {
-  lightSize: 1.2, // softness multiplier
-  searchRadiusScale: 1.0, // blocker search expansion
-  filterRadiusScale: 1.0, // penumbra blur multiplier
+  lightSize: 1.2,
+  searchRadiusScale: 1.0,
+  filterRadiusScale: 1.0,
 };
 export type PCSSOptions = Partial<typeof PCSS_DEFAULTS>;
 
 // -----------------------------------------------------------------------------
-// Public API: enablePCSS(gl)
+// Public API
 // -----------------------------------------------------------------------------
 export function enablePCSS(
   renderer: THREE.WebGLRenderer,
   options: PCSSOptions = {}
 ) {
   if (pcssPatched) return;
+  pcssPatched = true;
 
   const { lightSize, searchRadiusScale, filterRadiusScale } = {
     ...PCSS_DEFAULTS,
@@ -37,24 +38,14 @@ export function enablePCSS(
 
   const funcMarker = "float getShadow(";
   const idx = original.indexOf(funcMarker);
-  if (idx === -1) {
-    console.error("[PCSS] getShadow() not found");
-    return;
-  }
-
   const braceStart = original.indexOf("{", idx);
-  if (braceStart === -1) {
-    console.error("[PCSS] Missing '{' for getShadow()");
-    return;
-  }
 
-  // Walk braces to find the end of the function
+  // find end of function
   let depth = 0;
   let i = braceStart;
   for (; i < original.length; i++) {
-    const c = original[i];
-    if (c === "{") depth++;
-    else if (c === "}") {
+    if (original[i] === "{") depth++;
+    else if (original[i] === "}") {
       depth--;
       if (depth === 0) {
         i++;
@@ -63,28 +54,28 @@ export function enablePCSS(
     }
   }
 
-  if (depth !== 0) {
-    console.error("[PCSS] Brace mismatch in getShadow()");
-    return;
-  }
-
   const before = original.slice(0, idx);
   const after = original.slice(i);
 
-  // ---------------------------------------------------------------------------
-  // Inject our custom getShadow implementation (unchanged from your latest)
-  // ---------------------------------------------------------------------------
-  const pcssGetShadow = /* glsl */ `
+  // -----------------------------------------------------------
+  // Inject uniforms for blue-noise sampling
+  // -----------------------------------------------------------
+  // Force-clear program cache so shaders recompile with new chunk
+  const props = (renderer as any).properties;
+  if (props && props.get) {
+    const p = props.get(renderer);
+    if (p && p.programs) p.programs.length = 0;
+  }
+
+  chunk.shadowmap_pars_fragment =
+    before +
+    /* glsl */ `
+uniform sampler2D pcssBlueNoise;
+uniform vec2      pcssBlueNoiseSize;
+
 const float PCSS_LIGHT_SIZE   = ${lightSize.toFixed(5)};
 const float PCSS_SEARCH_SCALE = ${searchRadiusScale.toFixed(5)};
 const float PCSS_FILTER_SCALE = ${filterRadiusScale.toFixed(5)};
-
-// Cheap 2D hash -> [0,1)
-float hash12(vec2 p) {
-  vec3 p3  = fract(vec3(p.xyx) * 0.1031);
-  p3 += dot(p3, p3.yzx + 33.33);
-  return fract((p3.x + p3.y) * p3.z);
-}
 
 // 16-tap Poisson
 vec2 poisson[16];
@@ -107,12 +98,6 @@ void initPoisson() {
   poisson[15] = vec2( -0.671,  0.285 );
 }
 
-vec2 rotatePoisson(vec2 v, float angle) {
-  float c = cos(angle);
-  float s = sin(angle);
-  return mat2(c, -s, s, c) * v;
-}
-
 float getShadow(
   sampler2D shadowMap,
   vec2 shadowMapSize,
@@ -122,6 +107,13 @@ float getShadow(
   vec4 shadowCoord
 ) {
   initPoisson();
+
+  // -------------------------
+  // Screen-space blue noise
+  // -------------------------
+  vec2 bnUV = gl_FragCoord.xy / pcssBlueNoiseSize;
+  float jitter = texture2D(pcssBlueNoise, bnUV).r;
+  float baseAngle = jitter * 6.28318530718; // 2*pi
 
   shadowCoord.xyz /= shadowCoord.w;
   shadowCoord.z += shadowBias;
@@ -135,22 +127,22 @@ float getShadow(
 
   float receiverDepth = shadowCoord.z;
   float texel = 1.0 / max(shadowMapSize.x, shadowMapSize.y);
-
   float radiusBase = shadowRadius * PCSS_LIGHT_SIZE;
-  float jitter = hash12(shadowCoord.xy * shadowMapSize);
-  float baseAngle = jitter * 6.2831853;
 
   float searchRadius = radiusBase * texel * 2.0 * PCSS_SEARCH_SCALE;
 
+  // Blocker search
   float blockerSum = 0.0;
   float blockerCount = 0.0;
 
   for (int i = 0; i < 16; i++) {
     float angle = baseAngle + float(i) * 0.3926991;
-    vec2 r = rotatePoisson(poisson[i], angle);
-    vec2 uv = shadowCoord.xy + r * searchRadius;
+    float c = cos(angle), s = sin(angle);
+    vec2 r = mat2(c, -s, s, c) * poisson[i];
 
-    float depth = unpackRGBAToDepth(texture2D(shadowMap, uv));
+    float depth = unpackRGBAToDepth(texture2D(shadowMap,
+      shadowCoord.xy + r * searchRadius));
+
     if (depth < receiverDepth) {
       blockerSum += depth;
       blockerCount += 1.0;
@@ -163,8 +155,7 @@ float getShadow(
   }
 
   float avgBlocker = blockerSum / blockerCount;
-  float penumbra = (receiverDepth - avgBlocker) / max(avgBlocker, 0.0005);
-  penumbra = clamp(penumbra, 0.0, 1.0);
+  float penumbra = clamp((receiverDepth - avgBlocker) / max(avgBlocker, 0.0005), 0.0, 1.0);
 
   float filterRadius =
     penumbra * radiusBase * texel * 3.5 * PCSS_FILTER_SCALE;
@@ -172,22 +163,22 @@ float getShadow(
   float shadow = 0.0;
   for (int i = 0; i < 16; i++) {
     float angle = baseAngle + float(i) * 1.178097;
-    vec2 r = rotatePoisson(poisson[i], angle);
-    vec2 uv = shadowCoord.xy + r * filterRadius;
+    float c = cos(angle), s = sin(angle);
+    vec2 r = mat2(c, -s, s, c) * poisson[i];
 
-    float depth = unpackRGBAToDepth(texture2D(shadowMap, uv));
+    float depth = unpackRGBAToDepth(texture2D(shadowMap,
+      shadowCoord.xy + r * filterRadius));
+
     shadow += step(receiverDepth, depth);
   }
 
   shadow /= 16.0;
   return mix(1.0, shadow, shadowIntensity);
 }
-`;
+` +
+    after;
 
-  chunk.shadowmap_pars_fragment = before + pcssGetShadow + after;
-
+  // Set renderer to correct mode
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-
-  pcssPatched = true;
 }

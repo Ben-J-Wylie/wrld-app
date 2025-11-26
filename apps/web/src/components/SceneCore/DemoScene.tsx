@@ -1,7 +1,8 @@
 // DemoScene.tsx
 import * as THREE from "three";
+import { TextureLoader } from "three";
 import React, { useEffect, useRef } from "react";
-import { Canvas, useThree } from "@react-three/fiber";
+import { Canvas, useLoader, useThree } from "@react-three/fiber";
 
 import { useSceneStore } from "./Store/SceneStore";
 import { useBreakpointListener } from "./Utilities/Breakpoints";
@@ -19,6 +20,8 @@ import { ImagePlane } from "./Geometry/ImagePlane";
 import { enablePCSS } from "./Shaders/PCSS";
 
 import { printShadowChunk } from "./Shaders/DebugShaderChunk";
+import { applyPCSSBlueNoise } from "./Shaders/applyPCSSBlueNoise";
+import bn4x4 from "./Shaders/bn4x4.png";
 
 const backdropSizes: BackdropDimensions = {
   mobile: { width: 720, height: 1920 },
@@ -30,7 +33,7 @@ const backdropSizes: BackdropDimensions = {
 // Inner Three.js scene
 // -----------------------------------------------------
 function InnerScene() {
-  const { gl } = useThree();
+  const { scene, gl } = useThree();
 
   const sceneCamRef = useRef<THREE.PerspectiveCamera>(null!);
   const orbitCamRef = useRef<THREE.PerspectiveCamera>(null!);
@@ -38,11 +41,31 @@ function InnerScene() {
   const cameraRig = useCameraRig(sceneCamRef.current);
   useScrollController(cameraRig, gl.domElement);
 
+  // --- Load blue-noise ---
+  const blueNoise = useLoader(TextureLoader, bn4x4);
+  blueNoise.wrapS = blueNoise.wrapT = THREE.RepeatWrapping;
+  blueNoise.minFilter = THREE.NearestFilter;
+  blueNoise.magFilter = THREE.NearestFilter;
+  blueNoise.generateMipmaps = false;
+
+  // --- Inject uniforms into every material ---
+  useEffect(() => {
+    scene.traverse((obj) => {
+      const mat = (obj as any).material;
+      if (!mat) return;
+
+      if (Array.isArray(mat)) {
+        mat.forEach((m) => applyPCSSBlueNoise(m, blueNoise));
+      } else {
+        applyPCSSBlueNoise(mat, blueNoise);
+      }
+    });
+  }, [scene, blueNoise]);
+
   return (
     <>
       <CameraSwitcher sceneCamRef={sceneCamRef} orbitCamRef={orbitCamRef} />
 
-      {/* Lighting */}
       <ambientLight intensity={0.4} />
       <DirectionalLight />
 
