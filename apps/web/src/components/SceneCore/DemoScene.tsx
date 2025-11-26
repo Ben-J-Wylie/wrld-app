@@ -16,6 +16,10 @@ import { useScrollController } from "./Controllers/useScrollController";
 
 import { ImagePlane } from "./Geometry/ImagePlane";
 
+import { enablePCSS } from "./Shaders/PCSS";
+
+import { printShadowChunk } from "./Shaders/DebugShaderChunk";
+
 const backdropSizes: BackdropDimensions = {
   mobile: { width: 720, height: 1920 },
   tablet: { width: 1280, height: 1280 },
@@ -39,12 +43,12 @@ function InnerScene() {
       <CameraSwitcher sceneCamRef={sceneCamRef} orbitCamRef={orbitCamRef} />
 
       {/* Lighting */}
-      <ambientLight intensity={0.5} />
+      <ambientLight intensity={0.4} />
       <DirectionalLight />
 
-      {/* ===========================================================
-          IMAGE PLANE #1 — simple responsive width/height
-         =========================================================== */}
+      {/* -----------------------------------------------------
+          Test Image Planes
+         ----------------------------------------------------- */}
       <ImagePlane
         color="#ffdd33"
         width={{ mobile: 50, tablet: 50, desktop: 50 }}
@@ -52,7 +56,7 @@ function InnerScene() {
         position={{
           mobile: [-200, 200, 10],
           tablet: [300, -150, 50],
-          desktop: [-400, 100, 100],
+          desktop: [-400, 100, 300],
         }}
         rotation={{
           mobile: [45, 0, 0],
@@ -68,9 +72,6 @@ function InnerScene() {
         receiveShadow
       />
 
-      {/* ===========================================================
-          IMAGE PLANE #2 — rotation + z layering + scale changes
-         =========================================================== */}
       <ImagePlane
         color="#33aaff"
         z={2}
@@ -81,11 +82,6 @@ function InnerScene() {
         }}
         width={{ mobile: 120, tablet: 140, desktop: 200 }}
         height={{ mobile: 60, tablet: 70, desktop: 100 }}
-        rotation={{
-          mobile: [0, 0, 0],
-          tablet: [0, 0, 0],
-          desktop: [0, 0, 0],
-        }}
         scale={{
           mobile: [1, 1, 1],
           tablet: [0.9, 0.9, 1],
@@ -95,9 +91,6 @@ function InnerScene() {
         receiveShadow
       />
 
-      {/* ===========================================================
-          IMAGE PLANE #3 — full responsive everything (complex)
-         =========================================================== */}
       <ImagePlane
         color="#44ff88"
         z={1}
@@ -116,21 +109,10 @@ function InnerScene() {
           tablet: 100,
           desktop: 50,
         }}
-        rotation={{
-          mobile: [0, 0, 0],
-          tablet: [0, 0, 0],
-          desktop: [0, 0, 0],
-        }}
-        scale={{
-          mobile: [1, 1, 1],
-          tablet: [1, 1, 1],
-          desktop: [1, 1, 1],
-        }}
         castShadow
         receiveShadow
       />
 
-      {/* Toggles just for sanity / shadow tests */}
       <Toggle3D width={200} height={50} position={[0, 10, 20]} />
       <Toggle3D width={200} height={50} position={[0, 60, 50]} />
       <Toggle3D width={200} height={50} position={[0, -50, 100]} />
@@ -141,15 +123,16 @@ function InnerScene() {
 }
 
 // -----------------------------------------------------
-// Outer DemoScene component
+// Outer DemoScene
 // -----------------------------------------------------
 export function DemoScene() {
-  useBreakpointListener(); // listens for window resize
+  useBreakpointListener();
 
   const breakpoint = useSceneStore((s) => s.breakpoint);
   const setSceneSize = useSceneStore((s) => s.setSceneSize);
-
-  // update Backdrop size whenever breakpoint changes
+  useEffect(() => {
+    printShadowChunk();
+  }, []);
   useEffect(() => {
     const preset = backdropSizes[breakpoint];
     setSceneSize(preset.width, preset.height);
@@ -157,7 +140,13 @@ export function DemoScene() {
 
   return (
     <div style={{ width: "100vw", height: "100vh", background: "#000" }}>
-      <Canvas shadows gl={{ outputColorSpace: THREE.SRGBColorSpace }}>
+      <Canvas
+        shadows
+        gl={{ outputColorSpace: THREE.SRGBColorSpace }}
+        onCreated={({ gl }) => {
+          enablePCSS(gl);
+        }}
+      >
         <InnerScene />
       </Canvas>
     </div>

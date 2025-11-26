@@ -3,71 +3,108 @@ import * as THREE from "three";
 import React, { useEffect, useRef } from "react";
 import { useThree, useFrame } from "@react-three/fiber";
 
-export function DirectionalLight() {
+export interface PCSSLightProps {
+  shadowSize?: number; // Shadow map resolution
+  frustumSize?: number; // Ortho shadow camera area
+  intensity?: number; // Light intensity
+  position?: [number, number, number];
+
+  /** PCSS parameters */
+  pcssLightSize?: number; // Physical light source size
+  pcssSearchStep?: number; // Blocker search radius
+  pcssFilterStep?: number; // PCF kernel scale
+}
+
+export function DirectionalLight({
+  shadowSize = 4096,
+  frustumSize = 1000,
+  intensity = 2,
+  position = [-300, 600, 1200],
+
+  pcssLightSize = 0.005, // world-space size of the area light
+  pcssSearchStep = 0.002, // search radius for blockers
+  pcssFilterStep = 0.001, // filtering radius for PCF
+}: PCSSLightProps) {
   const lightRef = useRef<THREE.DirectionalLight>(null!);
   const targetRef = useRef<THREE.Object3D>(null!);
 
-  const lightHelperRef = useRef<THREE.DirectionalLightHelper | null>(null);
-  const shadowHelperRef = useRef<THREE.CameraHelper | null>(null);
+  const helperLightRef = useRef<THREE.DirectionalLightHelper | null>(null);
+  const helperShadowRef = useRef<THREE.CameraHelper | null>(null);
 
   const scene = useThree((s) => s.scene);
 
+  // ---------------------------------------------------------------------
+  // INIT
+  // ---------------------------------------------------------------------
   useEffect(() => {
     const light = lightRef.current;
     const target = targetRef.current;
 
-    // Add target object
+    // attach target to scene graph
     scene.add(target);
     target.position.set(0, 0, 0);
 
     light.target = target;
-
-    // ⚡ Force-update the light before configuring shadow camera
     light.updateMatrixWorld(true);
 
-    // ---------------- SHADOW CAMERA SETUP ----------------
+    // ------------------------------------------------------------------
+    // SHADOW CAMERA SETUP
+    // ------------------------------------------------------------------
     const cam = light.shadow.camera as THREE.OrthographicCamera;
 
-    const size = 1500;
-    cam.left = -size;
-    cam.right = size;
-    cam.top = size;
-    cam.bottom = -size;
-    cam.near = 1;
+    cam.left = -frustumSize;
+    cam.right = frustumSize;
+    cam.top = frustumSize;
+    cam.bottom = -frustumSize;
+
+    cam.near = 0.5;
     cam.far = 5000;
 
     cam.updateProjectionMatrix();
-    cam.updateMatrixWorld(true); // ⚡ critical
 
-    // ---------------- HELPERS ----------------
-    const lh = new THREE.DirectionalLightHelper(light, 50);
+    // ------------------------------------------------------------------
+    // HELPERS
+    // ------------------------------------------------------------------
+    const dl = new THREE.DirectionalLightHelper(light, 50);
     const sh = new THREE.CameraHelper(cam);
 
-    lightHelperRef.current = lh;
-    shadowHelperRef.current = sh;
+    helperLightRef.current = dl;
+    helperShadowRef.current = sh;
 
-    scene.add(lh);
+    scene.add(dl);
     scene.add(sh);
 
-    return () => {
-      if (lightHelperRef.current) {
-        scene.remove(lightHelperRef.current);
-        lightHelperRef.current.dispose();
-      }
-      if (shadowHelperRef.current) {
-        scene.remove(shadowHelperRef.current);
-        shadowHelperRef.current.geometry.dispose();
-        (shadowHelperRef.current.material as THREE.Material).dispose();
-      }
+    // ------------------------------------------------------------------
+    // Inject PCSS uniforms
+    // These are consumed by enablePCSS() shader patch
+    // ------------------------------------------------------------------
+    light.userData.pcss = {
+      lightSize: pcssLightSize,
+      searchStep: pcssSearchStep,
+      filterStep: pcssFilterStep,
     };
-  }, [scene]);
 
-  // Update helpers each frame
+    return () => {
+      dl.removeFromParent();
+      dl.dispose();
+
+      sh.removeFromParent();
+      sh.geometry.dispose();
+      (sh.material as THREE.Material).dispose();
+    };
+  }, [scene, frustumSize, pcssLightSize, pcssSearchStep, pcssFilterStep]);
+
+  // ---------------------------------------------------------------------
+  // RUNTIME UPDATES
+  // ---------------------------------------------------------------------
   useFrame(() => {
-    lightHelperRef.current?.update();
-    shadowHelperRef.current?.update();
+    helperLightRef.current?.update();
+    helperShadowRef.current?.update();
   });
 
+  // ---------------------------------------------------------------------
+  // RENDER LIGHT
+  // ---------------------------------------------------------------------
   return (
     <>
       <object3D ref={targetRef} />
@@ -75,11 +112,12 @@ export function DirectionalLight() {
       <directionalLight
         ref={lightRef}
         castShadow
-        position={[-200, 300, 1000]}
-        intensity={2}
-        shadow-mapSize={[2048, 2048]}
+        position={position}
+        intensity={intensity}
+        /** PCSS uses hard maps — softness handled in shader */
+        shadow-mapSize={[shadowSize, shadowSize]}
         shadow-bias={-0.0001}
-        shadow-normalBias={0.0008}
+        shadow-normalBias={0.002}
       />
     </>
   );
