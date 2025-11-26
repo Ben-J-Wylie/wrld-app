@@ -1,18 +1,18 @@
-// ShadowDirectionalLight.tsx
+// src/components/containers/SceneCore/Lights/DirectionalLight.tsx
 import * as THREE from "three";
 import React, { useEffect, useRef } from "react";
 import { useThree, useFrame } from "@react-three/fiber";
 
-export interface PCSSLightProps {
+export interface DirectionalLightProps {
   shadowSize?: number; // Shadow map resolution
   frustumSize?: number; // Ortho shadow camera area
   intensity?: number; // Light intensity
   position?: [number, number, number];
 
-  /** PCSS parameters */
-  pcssLightSize?: number; // Physical light source size
-  pcssSearchStep?: number; // Blocker search radius
-  pcssFilterStep?: number; // PCF kernel scale
+  // Shadow tuning
+  shadowRadius?: number; // PCSS softness driver (0 = hard, bigger = softer)
+  shadowBias?: number;
+  shadowNormalBias?: number;
 }
 
 export function DirectionalLight({
@@ -21,10 +21,10 @@ export function DirectionalLight({
   intensity = 2,
   position = [-300, 600, 1200],
 
-  pcssLightSize = 0.005, // world-space size of the area light
-  pcssSearchStep = 0.002, // search radius for blockers
-  pcssFilterStep = 0.001, // filtering radius for PCF
-}: PCSSLightProps) {
+  shadowRadius = 20.0,
+  shadowBias = -0.001,
+  shadowNormalBias = 0.02,
+}: DirectionalLightProps) {
   const lightRef = useRef<THREE.DirectionalLight>(null!);
   const targetRef = useRef<THREE.Object3D>(null!);
 
@@ -58,7 +58,7 @@ export function DirectionalLight({
     cam.bottom = -frustumSize;
 
     cam.near = 0.5;
-    cam.far = 5000;
+    cam.far = 2000;
 
     cam.updateProjectionMatrix();
 
@@ -74,16 +74,6 @@ export function DirectionalLight({
     scene.add(dl);
     scene.add(sh);
 
-    // ------------------------------------------------------------------
-    // Inject PCSS uniforms
-    // These are consumed by enablePCSS() shader patch
-    // ------------------------------------------------------------------
-    light.userData.pcss = {
-      lightSize: pcssLightSize,
-      searchStep: pcssSearchStep,
-      filterStep: pcssFilterStep,
-    };
-
     return () => {
       dl.removeFromParent();
       dl.dispose();
@@ -92,7 +82,7 @@ export function DirectionalLight({
       sh.geometry.dispose();
       (sh.material as THREE.Material).dispose();
     };
-  }, [scene, frustumSize, pcssLightSize, pcssSearchStep, pcssFilterStep]);
+  }, [scene, frustumSize]);
 
   // ---------------------------------------------------------------------
   // RUNTIME UPDATES
@@ -114,10 +104,10 @@ export function DirectionalLight({
         castShadow
         position={position}
         intensity={intensity}
-        /** PCSS uses hard maps — softness handled in shader */
         shadow-mapSize={[shadowSize, shadowSize]}
-        shadow-bias={-0.0001}
-        shadow-normalBias={0.002}
+        shadow-radius={shadowRadius}
+        shadow-bias={shadowBias}
+        shadow-normalBias={shadowNormalBias}
       />
     </>
   );

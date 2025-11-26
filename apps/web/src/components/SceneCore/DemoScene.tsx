@@ -76,9 +76,9 @@ function InnerScene() {
         color="#33aaff"
         z={2}
         position={{
-          mobile: [50, -100, 500],
-          tablet: [100, -150, 500],
-          desktop: [150, -200, 500],
+          mobile: [50, -100, 520],
+          tablet: [100, -150, 520],
+          desktop: [150, -200, 520],
         }}
         width={{ mobile: 120, tablet: 140, desktop: 200 }}
         height={{ mobile: 60, tablet: 70, desktop: 100 }}
@@ -144,7 +144,12 @@ export function DemoScene() {
         shadows
         gl={{ outputColorSpace: THREE.SRGBColorSpace }}
         onCreated={({ gl }) => {
-          enablePCSS(gl);
+          // 🔧 Global PCSS tuning
+          enablePCSS(gl, {
+            lightSize: 1.0, // overall softness multiplier
+            searchRadiusScale: 1.0, // blocker search range
+            filterRadiusScale: 1.0, // penumbra blur range
+          });
         }}
       >
         <InnerScene />
