@@ -143,14 +143,7 @@ export function DemoScene() {
       <Canvas
         shadows
         gl={{ outputColorSpace: THREE.SRGBColorSpace }}
-        onCreated={({ gl }) => {
-          // 🔧 Global PCSS tuning
-          enablePCSS(gl, {
-            lightSize: 1.0, // overall softness multiplier
-            searchRadiusScale: 1.0, // blocker search range
-            filterRadiusScale: 1.0, // penumbra blur range
-          });
-        }}
+        onCreated={({ gl }) => enablePCSS(gl)}
       >
         <InnerScene />
       </Canvas>

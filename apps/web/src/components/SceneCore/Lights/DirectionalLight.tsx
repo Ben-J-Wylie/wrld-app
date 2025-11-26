@@ -21,7 +21,7 @@ export function DirectionalLight({
   intensity = 2,
   position = [-300, 600, 1200],
 
-  shadowRadius = 20.0,
+  shadowRadius = 10.0,
   shadowBias = -0.001,
   shadowNormalBias = 0.02,
 }: DirectionalLightProps) {

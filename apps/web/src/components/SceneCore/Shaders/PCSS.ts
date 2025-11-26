@@ -4,55 +4,51 @@ import * as THREE from "three";
 let pcssPatched = false;
 
 // -----------------------------------------------------------------------------
-// PCSS options: global knobs for the shader
+// GLOBAL PCSS DEFAULTS
 // -----------------------------------------------------------------------------
-export interface PCSSOptions {
-  /** Multiplier for effective light size (bigger = softer penumbra) */
-  lightSize?: number;
-  /** Multiplier for blocker search radius */
-  searchRadiusScale?: number;
-  /** Multiplier for PCF filter radius */
-  filterRadiusScale?: number;
-}
+const PCSS_DEFAULTS = {
+  lightSize: 1.2, // softness multiplier
+  searchRadiusScale: 1.0, // blocker search expansion
+  filterRadiusScale: 1.0, // penumbra blur multiplier
+};
+export type PCSSOptions = Partial<typeof PCSS_DEFAULTS>;
 
+// -----------------------------------------------------------------------------
+// Public API: enablePCSS(gl)
+// -----------------------------------------------------------------------------
 export function enablePCSS(
   renderer: THREE.WebGLRenderer,
   options: PCSSOptions = {}
 ) {
-  if (pcssPatched) return; // avoid double patching
+  if (pcssPatched) return;
 
-  const {
-    lightSize = 1.0,
-    searchRadiusScale = 1.0,
-    filterRadiusScale = 1.0,
-  } = options;
+  const { lightSize, searchRadiusScale, filterRadiusScale } = {
+    ...PCSS_DEFAULTS,
+    ...options,
+  };
 
   const chunk = THREE.ShaderChunk;
   const original = chunk.shadowmap_pars_fragment;
 
   if (!original) {
-    console.error("[PCSS] shadowmap_pars_fragment not found on ShaderChunk");
+    console.error("[PCSS] Missing shadowmap_pars_fragment");
     return;
   }
 
   const funcMarker = "float getShadow(";
-  const funcIndex = original.indexOf(funcMarker);
-
-  if (funcIndex === -1) {
-    console.error(
-      "[PCSS] Could not locate getShadow() in shadowmap_pars_fragment"
-    );
+  const idx = original.indexOf(funcMarker);
+  if (idx === -1) {
+    console.error("[PCSS] getShadow() not found");
     return;
   }
 
-  // Find the opening brace of getShadow
-  const braceStart = original.indexOf("{", funcIndex);
+  const braceStart = original.indexOf("{", idx);
   if (braceStart === -1) {
-    console.error("[PCSS] Could not find opening brace for getShadow()");
+    console.error("[PCSS] Missing '{' for getShadow()");
     return;
   }
 
-  // Walk braces to find matching closing brace
+  // Walk braces to find the end of the function
   let depth = 0;
   let i = braceStart;
   for (; i < original.length; i++) {
@@ -61,36 +57,23 @@ export function enablePCSS(
     else if (c === "}") {
       depth--;
       if (depth === 0) {
-        i++; // include this closing brace
+        i++;
         break;
       }
     }
   }
 
   if (depth !== 0) {
-    console.error("[PCSS] Brace walk failed while parsing getShadow()");
+    console.error("[PCSS] Brace mismatch in getShadow()");
     return;
   }
 
-  const before = original.slice(0, funcIndex);
+  const before = original.slice(0, idx);
   const after = original.slice(i);
 
-  // ------------------------------------------------------------------
-  // PCSS getShadow — 16-tap blue-noise PCSS
-  //
-  // Signature (matches your patched build):
-  //   sampler2D shadowMap,
-  //   vec2 shadowMapSize,
-  //   float shadowIntensity,
-  //   float shadowBias,
-  //   float shadowRadius,
-  //   vec4 shadowCoord
-  //
-  // NOTE:
-  // - We use THREE's `shadowRadius` (per-light, from shadow-radius prop)
-  // - And multiply it by global PCSS scalars baked in here.
-  // - "Rotation" is faked via a hash of shadowCoord.xy, so no JS uniforms.
-  // ------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // Inject our custom getShadow implementation (unchanged from your latest)
+  // ---------------------------------------------------------------------------
   const pcssGetShadow = /* glsl */ `
 const float PCSS_LIGHT_SIZE   = ${lightSize.toFixed(5)};
 const float PCSS_SEARCH_SCALE = ${searchRadiusScale.toFixed(5)};
@@ -103,9 +86,8 @@ float hash12(vec2 p) {
   return fract((p3.x + p3.y) * p3.z);
 }
 
-// 16-tap blue-noise-ish Poisson disk
+// 16-tap Poisson
 vec2 poisson[16];
-
 void initPoisson() {
   poisson[0]  = vec2( 0.535, -0.295 );
   poisson[1]  = vec2( -0.706, -0.110 );
@@ -152,26 +134,19 @@ float getShadow(
   if (!inFrustum) return 1.0;
 
   float receiverDepth = shadowCoord.z;
-
   float texel = 1.0 / max(shadowMapSize.x, shadowMapSize.y);
 
-  // Base radius comes from THREE's shadowRadius, scaled globally
   float radiusBase = shadowRadius * PCSS_LIGHT_SIZE;
-
-  // Pseudo "rotation" per-pixel (stable, no JS uniform needed)
   float jitter = hash12(shadowCoord.xy * shadowMapSize);
-  float baseAngle = jitter * 6.2831853; // 2*pi
+  float baseAngle = jitter * 6.2831853;
 
-  // -----------------------------
-  // BLOCKER SEARCH (PCSS)
-  // -----------------------------
   float searchRadius = radiusBase * texel * 2.0 * PCSS_SEARCH_SCALE;
 
   float blockerSum = 0.0;
   float blockerCount = 0.0;
 
   for (int i = 0; i < 16; i++) {
-    float angle = baseAngle + float(i) * 0.3926991; // 2*pi / 16
+    float angle = baseAngle + float(i) * 0.3926991;
     vec2 r = rotatePoisson(poisson[i], angle);
     vec2 uv = shadowCoord.xy + r * searchRadius;
 
@@ -182,30 +157,21 @@ float getShadow(
     }
   }
 
-  // No blockers → hard shadow
   if (blockerCount < 1.0) {
     float hard = texture2DCompare(shadowMap, shadowCoord.xy, receiverDepth);
     return mix(1.0, hard, shadowIntensity);
   }
 
   float avgBlocker = blockerSum / blockerCount;
-
-  // -----------------------------
-  // Penumbra size
-  // -----------------------------
   float penumbra = (receiverDepth - avgBlocker) / max(avgBlocker, 0.0005);
   penumbra = clamp(penumbra, 0.0, 1.0);
 
   float filterRadius =
     penumbra * radiusBase * texel * 3.5 * PCSS_FILTER_SCALE;
 
-  // -----------------------------
-  // PCF FILTER
-  // -----------------------------
   float shadow = 0.0;
-
   for (int i = 0; i < 16; i++) {
-    float angle = baseAngle + float(i) * 1.178097; // 3*(2*pi/16) for decorrelation
+    float angle = baseAngle + float(i) * 1.178097;
     vec2 r = rotatePoisson(poisson[i], angle);
     vec2 uv = shadowCoord.xy + r * filterRadius;
 
@@ -214,15 +180,12 @@ float getShadow(
   }
 
   shadow /= 16.0;
-
-  // Blend using shadowIntensity
   return mix(1.0, shadow, shadowIntensity);
 }
 `;
 
   chunk.shadowmap_pars_fragment = before + pcssGetShadow + after;
 
-  // Force a compatible shadow map type
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
