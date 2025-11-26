@@ -4,7 +4,6 @@ import { TextureLoader } from "three";
 import { useSceneStore } from "../Store/SceneStore";
 import {
   resolveResponsive,
-  mergeZ,
   ResponsiveValue,
 } from "../Utilities/BreakpointResolver";
 
@@ -29,11 +28,12 @@ export interface ImagePlaneProps {
   width?: ResponsiveValue<number>;
   height?: ResponsiveValue<number>;
 
-  // ❗ These remain in **DEGREES**
+  // These remain in DEGREES
   position?: ResponsiveValue<Vec3>;
-  rotation?: ResponsiveValue<Vec3>; // in degrees
+  rotation?: ResponsiveValue<Vec3>;
   scale?: ResponsiveValue<Vec3>;
 
+  // ❗ z is now ONLY for renderOrder
   z?: number;
 
   visible?: boolean;
@@ -58,7 +58,7 @@ export const ImagePlane = forwardRef<THREE.Mesh, ImagePlaneProps>(
       rotation = [0, 0, 0], // DEGREES
       scale = [1, 1, 1],
 
-      z = 0,
+      z = 0, // renderOrder only
       visible = true,
 
       castShadow = true,
@@ -69,9 +69,6 @@ export const ImagePlane = forwardRef<THREE.Mesh, ImagePlaneProps>(
     },
     ref
   ) => {
-    // --------------------------------------------------
-    // Breakpoint
-    // --------------------------------------------------
     const bp = useSceneStore((s) => s.breakpoint);
 
     // --------------------------------------------------
@@ -88,6 +85,7 @@ export const ImagePlane = forwardRef<THREE.Mesh, ImagePlaneProps>(
       }
 
       let mounted = true;
+
       new TextureLoader().load(
         src,
         (tex) => {
@@ -116,23 +114,10 @@ export const ImagePlane = forwardRef<THREE.Mesh, ImagePlaneProps>(
     const resolvedWidth = resolveResponsive(width, bp);
     const resolvedHeight = resolveResponsive(height, bp);
 
-    const basePosition = resolveResponsive(position, bp) as Vec3;
-
-    // --------------------------------------------------
-    // Convert degrees → radians RIGHT HERE
-    // --------------------------------------------------
+    const resolvedPosition = resolveResponsive(position, bp) as Vec3;
     const rotationDeg = resolveResponsive(rotation, bp) as Vec3;
-    const resolvedRotation = degVec3(rotationDeg); // <— conversion happens here
-
+    const resolvedRotation = degVec3(rotationDeg);
     const resolvedScale = resolveResponsive(scale, bp) as Vec3;
-
-    // --------------------------------------------------
-    // Safe Z override
-    // --------------------------------------------------
-    const finalPos = useMemo<Vec3>(
-      () => mergeZ(basePosition, z),
-      [basePosition, z]
-    );
 
     // --------------------------------------------------
     // Pointer handlers
@@ -159,12 +144,13 @@ export const ImagePlane = forwardRef<THREE.Mesh, ImagePlaneProps>(
     return (
       <mesh
         ref={ref}
-        position={finalPos}
-        rotation={resolvedRotation} // RADIANS passed to R3F
+        position={resolvedPosition} // ← TRUE 3D Z COMES FROM HERE
+        rotation={resolvedRotation} // radians
         scale={resolvedScale}
         visible={visible}
         castShadow={castShadow}
         receiveShadow={receiveShadow}
+        renderOrder={z ?? 0} // ← LAYERING ONLY
         onClick={handleClick}
         onPointerMove={handlePointerMove}
         onPointerOut={handlePointerOut}

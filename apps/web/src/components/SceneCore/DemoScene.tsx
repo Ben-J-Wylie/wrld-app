@@ -47,22 +47,22 @@ function InnerScene() {
          =========================================================== */}
       <ImagePlane
         color="#ffdd33"
-        width={{ mobile: 20, tablet: 160, desktop: 80 }}
-        height={{ mobile: 200, tablet: 80, desktop: 100 }}
+        width={{ mobile: 50, tablet: 50, desktop: 50 }}
+        height={{ mobile: 50, tablet: 50, desktop: 50 }}
         position={{
-          mobile: [-200, 200, 1000],
-          tablet: [300, -150, 1000],
-          desktop: [-400, 100, 300],
+          mobile: [-200, 200, 10],
+          tablet: [300, -150, 50],
+          desktop: [-400, 100, 100],
         }}
         rotation={{
           mobile: [45, 0, 0],
           tablet: [0, 45, 0],
-          desktop: [0, 0, 45],
+          desktop: [0, 0, 0],
         }}
         scale={{
-          mobile: [1, 1, 1],
-          tablet: [1.2, 20, 1],
-          desktop: [8.4, 5.4, 3],
+          mobile: [10, 1, 1],
+          tablet: [1, 10, 1],
+          desktop: [1, 1, 10],
         }}
         castShadow
         receiveShadow
@@ -73,18 +73,18 @@ function InnerScene() {
          =========================================================== */}
       <ImagePlane
         color="#33aaff"
-        z={250}
+        z={2}
         position={{
-          mobile: [50, -100, 0],
-          tablet: [100, -150, 0],
-          desktop: [150, -200, 0],
+          mobile: [50, -100, 500],
+          tablet: [100, -150, 500],
+          desktop: [150, -200, 500],
         }}
         width={{ mobile: 120, tablet: 140, desktop: 200 }}
         height={{ mobile: 60, tablet: 70, desktop: 100 }}
         rotation={{
           mobile: [0, 0, 0],
-          tablet: [0.3, 0.2, 0],
-          desktop: [0.5, 0.4, 0],
+          tablet: [0, 0, 0],
+          desktop: [0, 0, 0],
         }}
         scale={{
           mobile: [1, 1, 1],
@@ -100,11 +100,11 @@ function InnerScene() {
          =========================================================== */}
       <ImagePlane
         color="#44ff88"
-        z={400}
+        z={1}
         position={{
-          mobile: [200, 200, 0],
-          tablet: [300, 100, 0],
-          desktop: [500, 50, 0],
+          mobile: [0, 0, 500],
+          tablet: [0, -150, 500],
+          desktop: [0, 0, 500],
         }}
         width={{
           mobile: 100,
@@ -118,13 +118,13 @@ function InnerScene() {
         }}
         rotation={{
           mobile: [0, 0, 0],
-          tablet: [0, 0.3, 0.1],
-          desktop: [0.2, 0.5, 0.1],
+          tablet: [0, 0, 0],
+          desktop: [0, 0, 0],
         }}
         scale={{
           mobile: [1, 1, 1],
-          tablet: [1.5, 1.5, 1],
-          desktop: [2, 2, 1],
+          tablet: [1, 1, 1],
+          desktop: [1, 1, 1],
         }}
         castShadow
         receiveShadow
