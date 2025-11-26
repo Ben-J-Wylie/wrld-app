@@ -1,101 +1,110 @@
-// src/components/containers/SceneCore/Shaders/PCSS.ts
 import * as THREE from "three";
 
 let pcssPatched = false;
 
-// -----------------------------------------------------------------------------
-// GLOBAL PCSS DEFAULTS
-// -----------------------------------------------------------------------------
-const PCSS_DEFAULTS = {
-  lightSize: 1.2,
-  searchRadiusScale: 1.0,
-  filterRadiusScale: 1.0,
-};
-export type PCSSOptions = Partial<typeof PCSS_DEFAULTS>;
+export interface PCSSOptions {
+  lightSize?: number;
+  searchRadiusScale?: number;
+  filterRadiusScale?: number;
+}
 
-// -----------------------------------------------------------------------------
-// Public API
-// -----------------------------------------------------------------------------
 export function enablePCSS(
   renderer: THREE.WebGLRenderer,
   options: PCSSOptions = {}
 ) {
   if (pcssPatched) return;
-  pcssPatched = true;
 
-  const { lightSize, searchRadiusScale, filterRadiusScale } = {
-    ...PCSS_DEFAULTS,
-    ...options,
-  };
+  const {
+    lightSize = 1.0,
+    searchRadiusScale = 1.0,
+    filterRadiusScale = 1.0,
+  } = options;
 
   const chunk = THREE.ShaderChunk;
   const original = chunk.shadowmap_pars_fragment;
 
   if (!original) {
-    console.error("[PCSS] Missing shadowmap_pars_fragment");
+    console.error("[PCSS] shadowmap_pars_fragment not found");
     return;
   }
 
+  // Locate getShadow()
   const funcMarker = "float getShadow(";
-  const idx = original.indexOf(funcMarker);
-  const braceStart = original.indexOf("{", idx);
+  const funcIndex = original.indexOf(funcMarker);
 
-  // find end of function
+  if (funcIndex === -1) {
+    console.error("[PCSS] getShadow() not found");
+    return;
+  }
+
+  const braceStart = original.indexOf("{", funcIndex);
   let depth = 0;
   let i = braceStart;
   for (; i < original.length; i++) {
     if (original[i] === "{") depth++;
-    else if (original[i] === "}") {
-      depth--;
-      if (depth === 0) {
-        i++;
-        break;
-      }
+    if (original[i] === "}") depth--;
+    if (depth === 0) {
+      i++;
+      break;
     }
   }
 
-  const before = original.slice(0, idx);
+  const before = original.slice(0, funcIndex);
   const after = original.slice(i);
 
-  // -----------------------------------------------------------
-  // Inject uniforms for blue-noise sampling
-  // -----------------------------------------------------------
-  // Force-clear program cache so shaders recompile with new chunk
-  const props = (renderer as any).properties;
-  if (props && props.get) {
-    const p = props.get(renderer);
-    if (p && p.programs) p.programs.length = 0;
-  }
-
-  chunk.shadowmap_pars_fragment =
-    before +
-    /* glsl */ `
-uniform sampler2D pcssBlueNoise;
-uniform vec2      pcssBlueNoiseSize;
+  // ---------------------------------------------------------------------------
+  // 32-tap PCSS + per-frame rotating Poisson kernel
+  // ---------------------------------------------------------------------------
+  const pcssGetShadow = /* glsl */ `
+uniform float uPoissonRotation;
 
 const float PCSS_LIGHT_SIZE   = ${lightSize.toFixed(5)};
 const float PCSS_SEARCH_SCALE = ${searchRadiusScale.toFixed(5)};
 const float PCSS_FILTER_SCALE = ${filterRadiusScale.toFixed(5)};
 
-// 16-tap Poisson
-vec2 poisson[16];
+// 32-tap Poisson disk
+vec2 poisson[32];
+
 void initPoisson() {
-  poisson[0]  = vec2( 0.535, -0.295 );
-  poisson[1]  = vec2( -0.706, -0.110 );
-  poisson[2]  = vec2( 0.063,  0.717 );
-  poisson[3]  = vec2( -0.525,  0.531 );
-  poisson[4]  = vec2( 0.387,  0.544 );
-  poisson[5]  = vec2( -0.089, -0.822 );
-  poisson[6]  = vec2( 0.741,  0.067 );
-  poisson[7]  = vec2( -0.812, -0.474 );
-  poisson[8]  = vec2( 0.246, -0.913 );
-  poisson[9]  = vec2( -0.397, -0.614 );
-  poisson[10] = vec2( 0.874, -0.343 );
-  poisson[11] = vec2( -0.132,  0.312 );
-  poisson[12] = vec2( 0.561,  0.812 );
-  poisson[13] = vec2( -0.276,  0.857 );
-  poisson[14] = vec2( 0.202, -0.381 );
-  poisson[15] = vec2( -0.671,  0.285 );
+  poisson[0]  = vec2(-0.94201624, -0.39906216);
+  poisson[1]  = vec2( 0.94558609, -0.76890725);
+  poisson[2]  = vec2(-0.09418410, -0.92938870);
+  poisson[3]  = vec2( 0.34495938,  0.29387760);
+  poisson[4]  = vec2(-0.91588581,  0.45771432);
+  poisson[5]  = vec2(-0.81544232, -0.87912464);
+  poisson[6]  = vec2(-0.38277543,  0.27676845);
+  poisson[7]  = vec2( 0.97484398,  0.75648379);
+  poisson[8]  = vec2( 0.44323325, -0.97511554);
+  poisson[9]  = vec2( 0.53742981, -0.47373420);
+  poisson[10] = vec2(-0.26496911, -0.41893023);
+  poisson[11] = vec2( 0.79197514,  0.19090188);
+  poisson[12] = vec2(-0.24188840,  0.99706507);
+  poisson[13] = vec2(-0.81409955,  0.91437590);
+  poisson[14] = vec2( 0.19984126,  0.78641367);
+  poisson[15] = vec2( 0.14383161, -0.14100790);
+
+  poisson[16] = vec2(-0.94558609,  0.76890725);
+  poisson[17] = vec2( 0.09418410,  0.92938870);
+  poisson[18] = vec2(-0.34495938, -0.29387760);
+  poisson[19] = vec2( 0.91588581, -0.45771432);
+  poisson[20] = vec2( 0.81544232,  0.87912464);
+  poisson[21] = vec2(-0.38277543,  0.27676845);
+  poisson[22] = vec2(-0.97484398, -0.75648379);
+  poisson[23] = vec2(-0.44323325,  0.97511554);
+  poisson[24] = vec2(-0.53742981,  0.47373420);
+  poisson[25] = vec2( 0.26496911,  0.41893023);
+  poisson[26] = vec2(-0.79197514, -0.19090188);
+  poisson[27] = vec2( 0.24188840, -0.99706507);
+  poisson[28] = vec2( 0.81409955, -0.91437590);
+  poisson[29] = vec2(-0.19984126, -0.78641367);
+  poisson[30] = vec2(-0.14383161,  0.14100790);
+  poisson[31] = vec2( 0.58321015,  0.21115454);
+}
+
+vec2 rotatePoisson(vec2 v) {
+  float c = cos(uPoissonRotation);
+  float s = sin(uPoissonRotation);
+  return mat2(c, -s, s, c) * v;
 }
 
 float getShadow(
@@ -108,41 +117,36 @@ float getShadow(
 ) {
   initPoisson();
 
-  // -------------------------
-  // Screen-space blue noise
-  // -------------------------
-  vec2 bnUV = gl_FragCoord.xy / pcssBlueNoiseSize;
-  float jitter = texture2D(pcssBlueNoise, bnUV).r;
-  float baseAngle = jitter * 6.28318530718; // 2*pi
-
   shadowCoord.xyz /= shadowCoord.w;
   shadowCoord.z += shadowBias;
 
   bool inFrustum =
-    shadowCoord.x >= 0.0 && shadowCoord.x <= 1.0 &&
-    shadowCoord.y >= 0.0 && shadowCoord.y <= 1.0 &&
+    shadowCoord.x >= 0.0 &&
+    shadowCoord.x <= 1.0 &&
+    shadowCoord.y >= 0.0 &&
+    shadowCoord.y <= 1.0 &&
     shadowCoord.z <= 1.0;
 
   if (!inFrustum) return 1.0;
 
   float receiverDepth = shadowCoord.z;
+
   float texel = 1.0 / max(shadowMapSize.x, shadowMapSize.y);
   float radiusBase = shadowRadius * PCSS_LIGHT_SIZE;
 
+  // -----------------------------
+  // Blocker search
+  // -----------------------------
   float searchRadius = radiusBase * texel * 2.0 * PCSS_SEARCH_SCALE;
 
-  // Blocker search
   float blockerSum = 0.0;
   float blockerCount = 0.0;
 
-  for (int i = 0; i < 16; i++) {
-    float angle = baseAngle + float(i) * 0.3926991;
-    float c = cos(angle), s = sin(angle);
-    vec2 r = mat2(c, -s, s, c) * poisson[i];
+  for (int i = 0; i < 32; i++) {
+    vec2 r = rotatePoisson(poisson[i]);
+    vec2 uv = shadowCoord.xy + r * searchRadius;
 
-    float depth = unpackRGBAToDepth(texture2D(shadowMap,
-      shadowCoord.xy + r * searchRadius));
-
+    float depth = unpackRGBAToDepth(texture2D(shadowMap, uv));
     if (depth < receiverDepth) {
       blockerSum += depth;
       blockerCount += 1.0;
@@ -155,30 +159,39 @@ float getShadow(
   }
 
   float avgBlocker = blockerSum / blockerCount;
-  float penumbra = clamp((receiverDepth - avgBlocker) / max(avgBlocker, 0.0005), 0.0, 1.0);
+
+  // -----------------------------
+  // Penumbra calc
+  // -----------------------------
+  float penumbra = (receiverDepth - avgBlocker) / max(avgBlocker, 0.0005);
+  penumbra = clamp(penumbra, 0.0, 1.0);
 
   float filterRadius =
-    penumbra * radiusBase * texel * 3.5 * PCSS_FILTER_SCALE;
+    penumbra * radiusBase * texel * 4.0 * PCSS_FILTER_SCALE;
 
+  // -----------------------------
+  // PCF filter
+  // -----------------------------
   float shadow = 0.0;
-  for (int i = 0; i < 16; i++) {
-    float angle = baseAngle + float(i) * 1.178097;
-    float c = cos(angle), s = sin(angle);
-    vec2 r = mat2(c, -s, s, c) * poisson[i];
 
-    float depth = unpackRGBAToDepth(texture2D(shadowMap,
-      shadowCoord.xy + r * filterRadius));
-
+  for (int i = 0; i < 32; i++) {
+    vec2 r = rotatePoisson(poisson[i]);
+    vec2 uv = shadowCoord.xy + r * filterRadius;
+    float depth = unpackRGBAToDepth(texture2D(shadowMap, uv));
     shadow += step(receiverDepth, depth);
   }
 
-  shadow /= 16.0;
+  shadow /= 32.0;
+
   return mix(1.0, shadow, shadowIntensity);
 }
-` +
-    after;
+`;
 
-  // Set renderer to correct mode
+  chunk.shadowmap_pars_fragment = before + pcssGetShadow + after;
+
+  // Global shadow settings
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+  pcssPatched = true;
 }

@@ -19,7 +19,6 @@ import { ImagePlane } from "./Geometry/ImagePlane";
 
 import { enablePCSS } from "./Shaders/PCSS";
 
-import { printShadowChunk } from "./Shaders/DebugShaderChunk";
 import { applyPCSSBlueNoise } from "./Shaders/applyPCSSBlueNoise";
 import bn4x4 from "./Shaders/bn4x4.png";
 
@@ -153,9 +152,7 @@ export function DemoScene() {
 
   const breakpoint = useSceneStore((s) => s.breakpoint);
   const setSceneSize = useSceneStore((s) => s.setSceneSize);
-  useEffect(() => {
-    printShadowChunk();
-  }, []);
+
   useEffect(() => {
     const preset = backdropSizes[breakpoint];
     setSceneSize(preset.width, preset.height);
