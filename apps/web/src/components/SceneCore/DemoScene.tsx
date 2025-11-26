@@ -116,7 +116,7 @@ function InnerScene() {
         castShadow
         receiveShadow
       /> */}
-      <ScreenPin position={[0, 0, -945]}>
+      <ScreenPin position={[0, 0, -950]}>
         <Toggle3D width={200} height={50} position={[0, 20, 20]} />
         <Toggle3D width={200} height={50} position={[0, 0, 50]} />
         <Toggle3D width={200} height={50} position={[0, -20, 100]} />
