@@ -1,6 +1,5 @@
 // DemoScene.tsx
 import * as THREE from "three";
-import { TextureLoader } from "three";
 import React, { useEffect, useRef } from "react";
 import { Canvas, useLoader, useThree } from "@react-three/fiber";
 
@@ -17,10 +16,9 @@ import { useScrollController } from "./Controllers/useScrollController";
 
 import { ImagePlane } from "./Geometry/ImagePlane";
 
-import { enablePCSS } from "./Shaders/PCSS";
+import { Group } from "./Layers/Group";
 
-import { applyPCSSBlueNoise } from "./Shaders/applyPCSSBlueNoise";
-import bn4x4 from "./Shaders/bn4x4.png";
+import { enablePCSS } from "./Shaders/PCSS"; // ← 32-tap stable PCSS
 
 const backdropSizes: BackdropDimensions = {
   mobile: { width: 720, height: 1920 },
@@ -40,26 +38,9 @@ function InnerScene() {
   const cameraRig = useCameraRig(sceneCamRef.current);
   useScrollController(cameraRig, gl.domElement);
 
-  // --- Load blue-noise ---
-  const blueNoise = useLoader(TextureLoader, bn4x4);
-  blueNoise.wrapS = blueNoise.wrapT = THREE.RepeatWrapping;
-  blueNoise.minFilter = THREE.NearestFilter;
-  blueNoise.magFilter = THREE.NearestFilter;
-  blueNoise.generateMipmaps = false;
-
-  // --- Inject uniforms into every material ---
-  useEffect(() => {
-    scene.traverse((obj) => {
-      const mat = (obj as any).material;
-      if (!mat) return;
-
-      if (Array.isArray(mat)) {
-        mat.forEach((m) => applyPCSSBlueNoise(m, blueNoise));
-      } else {
-        applyPCSSBlueNoise(mat, blueNoise);
-      }
-    });
-  }, [scene, blueNoise]);
+  // -----------------------------------------------------
+  // NO BLUE-NOISE — clean, stable PCSS
+  // -----------------------------------------------------
 
   return (
     <>
@@ -71,7 +52,7 @@ function InnerScene() {
       {/* -----------------------------------------------------
           Test Image Planes
          ----------------------------------------------------- */}
-      <ImagePlane
+      {/* <ImagePlane
         color="#ffdd33"
         width={{ mobile: 50, tablet: 50, desktop: 50 }}
         height={{ mobile: 50, tablet: 50, desktop: 50 }}
@@ -133,12 +114,28 @@ function InnerScene() {
         }}
         castShadow
         receiveShadow
-      />
-
-      <Toggle3D width={200} height={50} position={[0, 10, 20]} />
-      <Toggle3D width={200} height={50} position={[0, 60, 50]} />
-      <Toggle3D width={200} height={50} position={[0, -50, 100]} />
-
+      /> */}
+      <Group
+        position={{
+          mobile: [0, 0, 0],
+          tablet: [0, 0, 0],
+          desktop: [0, 0, 100],
+        }}
+        rotation={{
+          mobile: [0, 0, 0],
+          tablet: [0, 0, 0],
+          desktop: [0, 0, 0],
+        }}
+        scale={{
+          mobile: [1, 1, 1],
+          tablet: [1, 1, 1],
+          desktop: [1, 1, 1],
+        }}
+      >
+        <Toggle3D width={200} height={50} position={[0, 10, 20]} />
+        <Toggle3D width={200} height={50} position={[0, 60, 50]} />
+        <Toggle3D width={200} height={50} position={[0, -50, 100]} />
+      </Group>
       <Backdrop />
     </>
   );
@@ -163,7 +160,7 @@ export function DemoScene() {
       <Canvas
         shadows
         gl={{ outputColorSpace: THREE.SRGBColorSpace }}
-        onCreated={({ gl }) => enablePCSS(gl)}
+        onCreated={({ gl }) => enablePCSS(gl)} // ← only PCSS
       >
         <InnerScene />
       </Canvas>
