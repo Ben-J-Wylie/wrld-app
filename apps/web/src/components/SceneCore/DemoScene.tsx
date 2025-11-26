@@ -17,6 +17,7 @@ import { useScrollController } from "./Controllers/useScrollController";
 import { ImagePlane } from "./Geometry/ImagePlane";
 
 import { Group } from "./Layers/Group";
+import { ScreenPin } from "./Layers/ScreenPin";
 
 import { enablePCSS } from "./Shaders/PCSS"; // ← 32-tap stable PCSS
 
@@ -115,6 +116,11 @@ function InnerScene() {
         castShadow
         receiveShadow
       /> */}
+      <ScreenPin position={[0, 0, -945]}>
+        <Toggle3D width={200} height={50} position={[0, 20, 20]} />
+        <Toggle3D width={200} height={50} position={[0, 0, 50]} />
+        <Toggle3D width={200} height={50} position={[0, -20, 100]} />
+      </ScreenPin>
       <Group
         position={{
           mobile: [0, 0, 0],
@@ -132,9 +138,9 @@ function InnerScene() {
           desktop: [1, 1, 1],
         }}
       >
-        <Toggle3D width={200} height={50} position={[0, 10, 20]} />
-        <Toggle3D width={200} height={50} position={[0, 60, 50]} />
-        <Toggle3D width={200} height={50} position={[0, -50, 100]} />
+        <Toggle3D width={200} height={50} position={[-200, 10, 20]} />
+        <Toggle3D width={200} height={50} position={[-200, 60, 50]} />
+        <Toggle3D width={200} height={50} position={[-200, -50, 100]} />
       </Group>
       <Backdrop />
     </>
