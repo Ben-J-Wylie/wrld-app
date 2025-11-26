@@ -50,18 +50,18 @@ function InnerScene() {
         width={{ mobile: 20, tablet: 160, desktop: 80 }}
         height={{ mobile: 200, tablet: 80, desktop: 100 }}
         position={{
-          mobile: [-200, 200, 100],
-          tablet: [300, -150, 200],
+          mobile: [-200, 200, 1000],
+          tablet: [300, -150, 1000],
           desktop: [-400, 100, 300],
         }}
         rotation={{
-          mobile: [0, 0, 0],
-          tablet: [0.1, 0.1, 0],
-          desktop: [0.2, 0.2, 0],
+          mobile: [45, 0, 0],
+          tablet: [0, 45, 0],
+          desktop: [0, 0, 45],
         }}
         scale={{
           mobile: [1, 1, 1],
-          tablet: [1.2, 1.2, 1],
+          tablet: [1.2, 20, 1],
           desktop: [8.4, 5.4, 3],
         }}
         castShadow
@@ -114,7 +114,7 @@ function InnerScene() {
         height={{
           mobile: 50,
           tablet: 100,
-          desktop: 180,
+          desktop: 50,
         }}
         rotation={{
           mobile: [0, 0, 0],

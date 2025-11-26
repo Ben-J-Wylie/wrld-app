@@ -1,4 +1,3 @@
-// ImagePlane.tsx
 import * as THREE from "three";
 import React, { forwardRef, useEffect, useMemo, useState } from "react";
 import { TextureLoader } from "three";
@@ -7,34 +6,40 @@ import {
   resolveResponsive,
   mergeZ,
   ResponsiveValue,
-} from "../Utilities/BreakpointResolver"; // ✅ adjust path if needed
+} from "../Utilities/BreakpointResolver";
 
 type Vec3 = [number, number, number];
 
+// --------------------------------------------------
+// Convert degrees → radians
+// --------------------------------------------------
+function degVec3(v: Vec3): Vec3 {
+  return [
+    THREE.MathUtils.degToRad(v[0]),
+    THREE.MathUtils.degToRad(v[1]),
+    THREE.MathUtils.degToRad(v[2]),
+  ];
+}
+
 export interface ImagePlaneProps {
-  // Texture sources
   src?: string | null;
   texture?: THREE.Texture;
   color?: THREE.ColorRepresentation;
 
-  // Responsive sizing
   width?: ResponsiveValue<number>;
   height?: ResponsiveValue<number>;
 
-  // Responsive transforms
+  // ❗ These remain in **DEGREES**
   position?: ResponsiveValue<Vec3>;
-  rotation?: ResponsiveValue<Vec3>;
+  rotation?: ResponsiveValue<Vec3>; // in degrees
   scale?: ResponsiveValue<Vec3>;
 
-  // Optional z override (for layering)
   z?: number;
 
-  // Visibility + shadows
   visible?: boolean;
   castShadow?: boolean;
   receiveShadow?: boolean;
 
-  // Interaction callbacks
   onClick?: (e: THREE.Event, hit: THREE.Intersection) => void;
   onHover?: (e: THREE.Event | null, hit: THREE.Intersection | null) => void;
 }
@@ -50,7 +55,7 @@ export const ImagePlane = forwardRef<THREE.Mesh, ImagePlaneProps>(
       height = 100,
 
       position = [0, 0, 0],
-      rotation = [0, 0, 0],
+      rotation = [0, 0, 0], // DEGREES
       scale = [1, 1, 1],
 
       z = 0,
@@ -65,63 +70,69 @@ export const ImagePlane = forwardRef<THREE.Mesh, ImagePlaneProps>(
     ref
   ) => {
     // --------------------------------------------------
-    // Breakpoint from global SceneStore
+    // Breakpoint
     // --------------------------------------------------
     const bp = useSceneStore((s) => s.breakpoint);
 
     // --------------------------------------------------
-    // Texture loading (hook-safe, src is optional)
+    // Load texture
     // --------------------------------------------------
     const [loadedTexture, setLoadedTexture] = useState<THREE.Texture | null>(
       null
     );
 
     useEffect(() => {
-      // If no src, clear any previous texture
       if (!src) {
         setLoadedTexture(null);
         return;
       }
 
-      let isMounted = true;
-      const loader = new TextureLoader();
-
-      loader.load(
+      let mounted = true;
+      new TextureLoader().load(
         src,
         (tex) => {
-          if (!isMounted) return;
+          if (!mounted) return;
           tex.colorSpace = THREE.SRGBColorSpace;
           setLoadedTexture(tex);
         },
         undefined,
         (err) => {
-          if (!isMounted) return;
+          if (!mounted) return;
           console.warn("ImagePlane failed to load:", src, err);
           setLoadedTexture(null);
         }
       );
 
       return () => {
-        isMounted = false;
+        mounted = false;
       };
     }, [src]);
 
     const finalTexture = texture ?? loadedTexture ?? null;
 
     // --------------------------------------------------
-    // Responsive resolution
+    // Responsive values
     // --------------------------------------------------
     const resolvedWidth = resolveResponsive(width, bp);
     const resolvedHeight = resolveResponsive(height, bp);
 
     const basePosition = resolveResponsive(position, bp) as Vec3;
-    const resolvedRotation = resolveResponsive(rotation, bp) as Vec3;
+
+    // --------------------------------------------------
+    // Convert degrees → radians RIGHT HERE
+    // --------------------------------------------------
+    const rotationDeg = resolveResponsive(rotation, bp) as Vec3;
+    const resolvedRotation = degVec3(rotationDeg); // <— conversion happens here
+
     const resolvedScale = resolveResponsive(scale, bp) as Vec3;
 
-    const finalPos = useMemo<Vec3>(() => {
-      // Use mergeZ helper so z override is clean & consistent
-      return mergeZ(basePosition, z);
-    }, [basePosition, z]);
+    // --------------------------------------------------
+    // Safe Z override
+    // --------------------------------------------------
+    const finalPos = useMemo<Vec3>(
+      () => mergeZ(basePosition, z),
+      [basePosition, z]
+    );
 
     // --------------------------------------------------
     // Pointer handlers
@@ -133,8 +144,7 @@ export const ImagePlane = forwardRef<THREE.Mesh, ImagePlaneProps>(
     };
 
     const handlePointerOut = (e: any) => {
-      if (!onHover) return;
-      onHover(e, null);
+      if (onHover) onHover(e, null);
     };
 
     const handleClick = (e: any) => {
@@ -150,8 +160,8 @@ export const ImagePlane = forwardRef<THREE.Mesh, ImagePlaneProps>(
       <mesh
         ref={ref}
         position={finalPos}
-        rotation={resolvedRotation as any}
-        scale={resolvedScale as any}
+        rotation={resolvedRotation} // RADIANS passed to R3F
+        scale={resolvedScale}
         visible={visible}
         castShadow={castShadow}
         receiveShadow={receiveShadow}
