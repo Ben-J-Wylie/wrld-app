@@ -76,7 +76,7 @@ export function enablePCSS(
   const after = original.slice(i);
 
   // ------------------------------------------------------------------
-  // PCSS getShadow — 16-tap blue-noise PCSS
+  // PCSS getShadow
   //
   // Signature (matches your patched build):
   //   sampler2D shadowMap,
@@ -89,47 +89,11 @@ export function enablePCSS(
   // NOTE:
   // - We use THREE's `shadowRadius` (per-light, from shadow-radius prop)
   // - And multiply it by global PCSS scalars baked in here.
-  // - "Rotation" is faked via a hash of shadowCoord.xy, so no JS uniforms.
   // ------------------------------------------------------------------
   const pcssGetShadow = /* glsl */ `
-const float PCSS_LIGHT_SIZE   = ${lightSize.toFixed(5)};
-const float PCSS_SEARCH_SCALE = ${searchRadiusScale.toFixed(5)};
-const float PCSS_FILTER_SCALE = ${filterRadiusScale.toFixed(5)};
-
-// Cheap 2D hash -> [0,1)
-float hash12(vec2 p) {
-  vec3 p3  = fract(vec3(p.xyx) * 0.1031);
-  p3 += dot(p3, p3.yzx + 33.33);
-  return fract((p3.x + p3.y) * p3.z);
-}
-
-// 16-tap blue-noise-ish Poisson disk
-vec2 poisson[16];
-
-void initPoisson() {
-  poisson[0]  = vec2( 0.535, -0.295 );
-  poisson[1]  = vec2( -0.706, -0.110 );
-  poisson[2]  = vec2( 0.063,  0.717 );
-  poisson[3]  = vec2( -0.525,  0.531 );
-  poisson[4]  = vec2( 0.387,  0.544 );
-  poisson[5]  = vec2( -0.089, -0.822 );
-  poisson[6]  = vec2( 0.741,  0.067 );
-  poisson[7]  = vec2( -0.812, -0.474 );
-  poisson[8]  = vec2( 0.246, -0.913 );
-  poisson[9]  = vec2( -0.397, -0.614 );
-  poisson[10] = vec2( 0.874, -0.343 );
-  poisson[11] = vec2( -0.132,  0.312 );
-  poisson[12] = vec2( 0.561,  0.812 );
-  poisson[13] = vec2( -0.276,  0.857 );
-  poisson[14] = vec2( 0.202, -0.381 );
-  poisson[15] = vec2( -0.671,  0.285 );
-}
-
-vec2 rotatePoisson(vec2 v, float angle) {
-  float c = cos(angle);
-  float s = sin(angle);
-  return mat2(c, -s, s, c) * v;
-}
+const float PCSS_LIGHT_SIZE      = ${lightSize.toFixed(5)};
+const float PCSS_SEARCH_SCALE    = ${searchRadiusScale.toFixed(5)};
+const float PCSS_FILTER_SCALE    = ${filterRadiusScale.toFixed(5)};
 
 float getShadow(
   sampler2D shadowMap,
@@ -139,31 +103,49 @@ float getShadow(
   float shadowRadius,
   vec4 shadowCoord
 ) {
-  initPoisson();
-
   shadowCoord.xyz /= shadowCoord.w;
   shadowCoord.z += shadowBias;
 
   bool inFrustum =
-    shadowCoord.x >= 0.0 && shadowCoord.x <= 1.0 &&
-    shadowCoord.y >= 0.0 && shadowCoord.y <= 1.0 &&
+    shadowCoord.x >= 0.0 &&
+    shadowCoord.x <= 1.0 &&
+    shadowCoord.y >= 0.0 &&
+    shadowCoord.y <= 1.0 &&
     shadowCoord.z <= 1.0;
 
-  if (!inFrustum) return 1.0;
+  if (!inFrustum) {
+    return 1.0;
+  }
 
   float receiverDepth = shadowCoord.z;
 
+  // Poisson-disk taps
+  vec2 poisson[16];
+  poisson[0]  = vec2(-0.94201624, -0.39906216);
+  poisson[1]  = vec2( 0.94558609, -0.76890725);
+  poisson[2]  = vec2(-0.09418410, -0.92938870);
+  poisson[3]  = vec2( 0.34495938,  0.29387760);
+  poisson[4]  = vec2(-0.91588581,  0.45771432);
+  poisson[5]  = vec2(-0.81544232, -0.87912464);
+  poisson[6]  = vec2(-0.38277543,  0.27676845);
+  poisson[7]  = vec2( 0.97484398,  0.75648379);
+  poisson[8]  = vec2( 0.44323325, -0.97511554);
+  poisson[9]  = vec2( 0.53742981, -0.47373420);
+  poisson[10] = vec2(-0.26496911, -0.41893023);
+  poisson[11] = vec2( 0.79197514,  0.19090188);
+  poisson[12] = vec2(-0.24188840,  0.99706507);
+  poisson[13] = vec2(-0.81409955,  0.91437590);
+  poisson[14] = vec2( 0.19984126,  0.78641367);
+  poisson[15] = vec2( 0.14383161, -0.14100790);
+
+  // Convert radius to UV
   float texel = 1.0 / max(shadowMapSize.x, shadowMapSize.y);
 
-  // Base radius comes from THREE's shadowRadius, scaled globally
+  // Base radius comes from THREE's shadowRadius
   float radiusBase = shadowRadius * PCSS_LIGHT_SIZE;
 
-  // Pseudo "rotation" per-pixel (stable, no JS uniform needed)
-  float jitter = hash12(shadowCoord.xy * shadowMapSize);
-  float baseAngle = jitter * 6.2831853; // 2*pi
-
   // -----------------------------
-  // BLOCKER SEARCH (PCSS)
+  // Blocker search
   // -----------------------------
   float searchRadius = radiusBase * texel * 2.0 * PCSS_SEARCH_SCALE;
 
@@ -171,10 +153,7 @@ float getShadow(
   float blockerCount = 0.0;
 
   for (int i = 0; i < 16; i++) {
-    float angle = baseAngle + float(i) * 0.3926991; // 2*pi / 16
-    vec2 r = rotatePoisson(poisson[i], angle);
-    vec2 uv = shadowCoord.xy + r * searchRadius;
-
+    vec2 uv = shadowCoord.xy + poisson[i] * searchRadius;
     float depth = unpackRGBAToDepth(texture2D(shadowMap, uv));
     if (depth < receiverDepth) {
       blockerSum += depth;
@@ -196,26 +175,22 @@ float getShadow(
   float penumbra = (receiverDepth - avgBlocker) / max(avgBlocker, 0.0005);
   penumbra = clamp(penumbra, 0.0, 1.0);
 
-  float filterRadius =
-    penumbra * radiusBase * texel * 3.5 * PCSS_FILTER_SCALE;
+  float filterRadius = penumbra * radiusBase * texel * 4.0 * PCSS_FILTER_SCALE;
 
   // -----------------------------
-  // PCF FILTER
+  // PCF filter
   // -----------------------------
   float shadow = 0.0;
 
   for (int i = 0; i < 16; i++) {
-    float angle = baseAngle + float(i) * 1.178097; // 3*(2*pi/16) for decorrelation
-    vec2 r = rotatePoisson(poisson[i], angle);
-    vec2 uv = shadowCoord.xy + r * filterRadius;
-
+    vec2 uv = shadowCoord.xy + poisson[i] * filterRadius;
     float depth = unpackRGBAToDepth(texture2D(shadowMap, uv));
     shadow += step(receiverDepth, depth);
   }
 
   shadow /= 16.0;
 
-  // Blend using shadowIntensity
+  // Must use shadowIntensity
   return mix(1.0, shadow, shadowIntensity);
 }
 `;
