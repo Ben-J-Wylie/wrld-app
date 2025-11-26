@@ -3,15 +3,18 @@ import * as THREE from "three";
 import React, { useEffect, useRef } from "react";
 import { Canvas, useThree } from "@react-three/fiber";
 
-import { useBreakpoint } from "./Utilities/Breakpoints";
-import { Backdrop, BackdropDimensions } from "./Layers/Backdrop";
 import { useSceneStore } from "./Store/SceneStore";
+import { useBreakpointListener } from "./Utilities/Breakpoints";
+import { Backdrop, BackdropDimensions } from "./Layers/Backdrop";
+
 import { CameraSwitcher } from "./Cameras/CameraSwitcher";
+import { DirectionalLight } from "./Lights/DirectionalLight";
+import { Toggle3D } from "./Toggle3D/Toggle3D";
+
 import { useCameraRig } from "./Cameras/useCameraRig";
 import { useScrollController } from "./Controllers/useScrollController";
-import { DirectionalLight } from "./Lights/DirectionalLight";
 
-import { Toggle3D } from "./Toggle3D/Toggle3D";
+import { ImagePlane } from "./Geometry/ImagePlane";
 
 const backdropSizes: BackdropDimensions = {
   mobile: { width: 720, height: 1920 },
@@ -19,12 +22,9 @@ const backdropSizes: BackdropDimensions = {
   desktop: { width: 1920, height: 720 },
 };
 
-// ------------------------------------------------------------------
-// InnerScene: lives inside <Canvas>
-// ------------------------------------------------------------------
-// ------------------------------------------------------------------
-// InnerScene: lives inside <Canvas>
-// ------------------------------------------------------------------
+// -----------------------------------------------------
+// Inner Three.js scene
+// -----------------------------------------------------
 function InnerScene() {
   const { gl } = useThree();
 
@@ -38,70 +38,120 @@ function InnerScene() {
     <>
       <CameraSwitcher sceneCamRef={sceneCamRef} orbitCamRef={orbitCamRef} />
 
+      {/* Lighting */}
       <ambientLight intensity={0.5} />
       <DirectionalLight />
 
-      {/* Shadow test image plane */}
-      <mesh
-        position={[0, 0, -50]} // behind toggles
-        rotation={[0, 0, 0]} // tilt so shadows show clearly
+      {/* ===========================================================
+          IMAGE PLANE #1 — simple responsive width/height
+         =========================================================== */}
+      <ImagePlane
+        color="#ffdd33"
+        width={{ mobile: 20, tablet: 160, desktop: 80 }}
+        height={{ mobile: 200, tablet: 80, desktop: 100 }}
+        position={{
+          mobile: [-200, 200, 100],
+          tablet: [300, -150, 200],
+          desktop: [-400, 100, 300],
+        }}
+        rotation={{
+          mobile: [0, 0, 0],
+          tablet: [0.1, 0.1, 0],
+          desktop: [0.2, 0.2, 0],
+        }}
+        scale={{
+          mobile: [1, 1, 1],
+          tablet: [1.2, 1.2, 1],
+          desktop: [8.4, 5.4, 3],
+        }}
         castShadow
         receiveShadow
-      >
-        <planeGeometry args={[2000, 2000]} />
-        <meshStandardMaterial color="white" />
-      </mesh>
-
-      {/* Test cubes */}
-      <mesh position={[800, 0, 0]} castShadow>
-        <boxGeometry args={[200, 200, 200]} />
-        <meshStandardMaterial color="red" />
-      </mesh>
-
-      <mesh position={[0, 800, 0]} castShadow>
-        <boxGeometry args={[200, 200, 200]} />
-        <meshStandardMaterial color="blue" />
-      </mesh>
-
-      <mesh position={[0, -800, 0]} castShadow>
-        <boxGeometry args={[200, 200, 200]} />
-        <meshStandardMaterial color="green" />
-      </mesh>
-
-      {/* Toggles */}
-      <Toggle3D
-        width={200}
-        height={50}
-        position={[0, 10, 20]}
-        onChange={(s) => console.log("Toggle state:", s)}
       />
-      <Toggle3D
-        width={200}
-        height={50}
-        position={[0, 60, 50]}
-        onChange={(s) => console.log("Toggle state:", s)}
+
+      {/* ===========================================================
+          IMAGE PLANE #2 — rotation + z layering + scale changes
+         =========================================================== */}
+      <ImagePlane
+        color="#33aaff"
+        z={250}
+        position={{
+          mobile: [50, -100, 0],
+          tablet: [100, -150, 0],
+          desktop: [150, -200, 0],
+        }}
+        width={{ mobile: 120, tablet: 140, desktop: 200 }}
+        height={{ mobile: 60, tablet: 70, desktop: 100 }}
+        rotation={{
+          mobile: [0, 0, 0],
+          tablet: [0.3, 0.2, 0],
+          desktop: [0.5, 0.4, 0],
+        }}
+        scale={{
+          mobile: [1, 1, 1],
+          tablet: [0.9, 0.9, 1],
+          desktop: [0.8, 0.8, 1],
+        }}
+        castShadow
+        receiveShadow
       />
-      <Toggle3D
-        width={200}
-        height={50}
-        position={[0, -50, 100]}
-        onChange={(s) => console.log("Toggle state:", s)}
+
+      {/* ===========================================================
+          IMAGE PLANE #3 — full responsive everything (complex)
+         =========================================================== */}
+      <ImagePlane
+        color="#44ff88"
+        z={400}
+        position={{
+          mobile: [200, 200, 0],
+          tablet: [300, 100, 0],
+          desktop: [500, 50, 0],
+        }}
+        width={{
+          mobile: 100,
+          tablet: 200,
+          desktop: 320,
+        }}
+        height={{
+          mobile: 50,
+          tablet: 100,
+          desktop: 180,
+        }}
+        rotation={{
+          mobile: [0, 0, 0],
+          tablet: [0, 0.3, 0.1],
+          desktop: [0.2, 0.5, 0.1],
+        }}
+        scale={{
+          mobile: [1, 1, 1],
+          tablet: [1.5, 1.5, 1],
+          desktop: [2, 2, 1],
+        }}
+        castShadow
+        receiveShadow
       />
+
+      {/* Toggles just for sanity / shadow tests */}
+      <Toggle3D width={200} height={50} position={[0, 10, 20]} />
+      <Toggle3D width={200} height={50} position={[0, 60, 50]} />
+      <Toggle3D width={200} height={50} position={[0, -50, 100]} />
 
       <Backdrop />
     </>
   );
 }
 
-// ------------------------------------------------------------------
-// DemoScene Wrapper
-// ------------------------------------------------------------------
+// -----------------------------------------------------
+// Outer DemoScene component
+// -----------------------------------------------------
 export function DemoScene() {
-  const breakpoint = useBreakpoint();
+  useBreakpointListener(); // listens for window resize
+
+  const breakpoint = useSceneStore((s) => s.breakpoint);
   const setSceneSize = useSceneStore((s) => s.setSceneSize);
 
+  // update Backdrop size whenever breakpoint changes
   useEffect(() => {
-    const preset = backdropSizes[breakpoint] ?? backdropSizes.desktop;
+    const preset = backdropSizes[breakpoint];
     setSceneSize(preset.width, preset.height);
   }, [breakpoint, setSceneSize]);
 

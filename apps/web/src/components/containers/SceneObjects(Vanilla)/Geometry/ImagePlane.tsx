@@ -1,14 +1,18 @@
-// src/components/containers/SceneCore/Layers/ImagePlane.tsx
-import { useEffect, useRef } from "react";
+// ImagePlane.tsx
 import * as THREE from "three";
+import React, { forwardRef, useMemo } from "react";
+import { useLoader } from "@react-three/fiber";
+import { TextureLoader } from "three";
+import { useBreakpoint } from "../../../SceneCore/Utilities/Breakpoints";
 
-import { createImagePlane } from "./ImagePlanePrimitive";
-import { useStage } from "../../SceneCore/Stage/useStage";
-import { useParent } from "../../SceneCore/Utilities/ParentContext";
-import { getBreakpoint } from "../../SceneCore/Theme/Breakpoints";
-import { resolveResponsive } from "../../SceneCore/Utilities/ResponsiveResolve";
-import type { BreakpointKey } from "../../SceneCore/Utilities/ResponsiveResolve";
+// --------------------------------------------------
+// Breakpoint type
+// --------------------------------------------------
+type BP = "mobile" | "tablet" | "desktop";
 
+// --------------------------------------------------
+// Responsive types
+// --------------------------------------------------
 interface ResponsiveNumber {
   mobile?: number;
   tablet?: number;
@@ -21,10 +25,16 @@ interface ResponsiveVec3 {
   desktop?: [number, number, number];
 }
 
-export interface ImagePlaneProps {
+// --------------------------------------------------
+// Component props
+// --------------------------------------------------
+interface ImagePlaneProps {
+  // Texture + color
   src?: string;
-  color?: string | number;
+  texture?: THREE.Texture;
+  color?: THREE.ColorRepresentation;
 
+  // Responsive geometry
   width?: number | ResponsiveNumber;
   height?: number | ResponsiveNumber;
 
@@ -32,111 +42,153 @@ export interface ImagePlaneProps {
   rotation?: [number, number, number] | ResponsiveVec3;
   scale?: [number, number, number] | ResponsiveVec3;
 
+  // Single values
   z?: number;
-
   visible?: boolean;
 
+  // Shadows
   castShadow?: boolean;
   receiveShadow?: boolean;
 
-  onClick?: (e: PointerEvent, hit: THREE.Intersection) => void;
-  onHover?: (e: PointerEvent, hit: THREE.Intersection | undefined) => void;
+  // Interaction
+  onClick?: (e: THREE.Event, hit: THREE.Intersection) => void;
+  onHover?: (e: THREE.Event, hit: THREE.Intersection | null) => void;
 }
 
-export function ImagePlane(props: ImagePlaneProps) {
-  const {
-    src,
-    color,
-
-    width,
-    height,
-
-    position,
-    rotation,
-    scale,
-
-    z = 0,
-    visible = true,
-
-    castShadow,
-    receiveShadow,
-
-    onClick,
-    onHover,
-  } = props;
-
-  const stage = useStage();
-  const parent = useParent() ?? null;
-  const meshRef = useRef<THREE.Mesh | null>(null);
-
-  const bp = getBreakpoint(window.innerWidth) as BreakpointKey;
-
-  // -------------------------------
-  // Resolve all responsive values
-  // -------------------------------
-  const w = resolveResponsive<number>(width, bp, 100);
-  const h = resolveResponsive<number>(height, bp, 100);
-
-  const pos = resolveResponsive<[number, number, number]>(
-    position,
-    bp,
-    [0, 0, 0]
+// --------------------------------------------------
+// Responsive resolve utilities
+// --------------------------------------------------
+function isResponsiveObject<T>(v: any): v is Partial<Record<BP, T>> {
+  return (
+    typeof v === "object" &&
+    v !== null &&
+    !Array.isArray(v) &&
+    ("mobile" in v || "tablet" in v || "desktop" in v)
   );
+}
 
-  const rot = resolveResponsive<[number, number, number]>(
-    rotation,
-    bp,
-    [0, 0, 0]
-  );
+function resolveResponsive<T>(value: T | Partial<Record<BP, T>>, bp: BP): T {
+  if (value === undefined) return undefined as any;
 
-  const scl = resolveResponsive<[number, number, number]>(scale, bp, [1, 1, 1]);
+  // Not responsive → return as-is
+  if (!isResponsiveObject(value)) return value as T;
 
-  // -------------------------------------------------------
-  // CREATE + MOUNT (once)
-  // -------------------------------------------------------
-  useEffect(() => {
-    const mesh = createImagePlane({ src, color, castShadow, receiveShadow });
-    meshRef.current = mesh;
+  // Value for this breakpoint?
+  const bpValue = value[bp];
+  if (bpValue !== undefined) return bpValue;
 
-    // Initial transforms
-    mesh.scale.set(w * scl[0], h * scl[1], scl[2]);
-    mesh.position.set(pos[0], pos[1], pos[2] + z);
-    mesh.rotation.set(rot[0], rot[1], rot[2]);
-    mesh.visible = visible;
+  // Fallback: first defined value
+  for (const key of ["mobile", "tablet", "desktop"] as BP[]) {
+    const v = value[key];
+    if (v !== undefined) return v;
+  }
 
-    stage.addObject(mesh, parent);
+  throw new Error("Responsive object has no values");
+}
 
-    // Interaction
-    if (onClick || onHover) {
-      stage.registerInteractive(mesh, { onClick, onHover });
-    }
+// --------------------------------------------------
+// Component
+// --------------------------------------------------
+export const ImagePlane = forwardRef<THREE.Mesh, ImagePlaneProps>(
+  (
+    {
+      src,
+      texture,
+      color = "#ffffff",
 
-    // Cleanup
-    return () => {
-      if (!meshRef.current) return;
+      width = 100,
+      height = 100,
 
-      const m = meshRef.current;
+      position = [0, 0, 0],
+      rotation = [0, 0, 0],
+      scale = [1, 1, 1],
 
-      if (onClick || onHover) stage.unregisterInteractive(m);
-      stage.removeObject(m);
+      z = 0,
+      visible = true,
 
-      m.geometry.dispose();
-      (m.material as THREE.Material).dispose();
+      castShadow = true,
+      receiveShadow = true,
+
+      onClick,
+      onHover,
+    },
+    ref
+  ) => {
+    const bp = useBreakpoint(); // mobile / tablet / desktop
+
+    // -----------------------------
+    // Texture loading (if src provided)
+    // -----------------------------
+    const loadedTexture =
+      src !== undefined
+        ? (useLoader(TextureLoader, src) as THREE.Texture)
+        : undefined;
+
+    const finalTexture = texture ?? loadedTexture ?? null;
+
+    // -----------------------------
+    // Resolve responsive props
+    // -----------------------------
+    const w = resolveResponsive(width, bp);
+    const h = resolveResponsive(height, bp);
+
+    const pos = resolveResponsive(position, bp);
+    const rot = resolveResponsive(rotation, bp);
+    const scl = resolveResponsive(scale, bp);
+
+    // Inject Z override
+    const finalPos = useMemo<[number, number, number]>(() => {
+      const p = [...(pos as [number, number, number])];
+      if (z !== undefined) p[2] = z;
+      return p as [number, number, number];
+    }, [pos, z]);
+
+    // -----------------------------
+    // Interactivity handlers
+    // -----------------------------
+    const handlePointerMove = (e: any) => {
+      if (onHover) onHover(e, e.intersections?.[0] ?? null);
     };
-  }, [src, color, castShadow, receiveShadow, stage, parent, onClick, onHover]);
 
-  // -------------------------------------------------------
-  // UPDATE transforms on responsive or breakpoint change
-  // -------------------------------------------------------
-  useEffect(() => {
-    const mesh = meshRef.current;
-    if (!mesh) return;
+    const handlePointerOut = (e: any) => {
+      if (onHover) onHover(e, null);
+    };
 
-    mesh.scale.set(w * scl[0], h * scl[1], scl[2]);
-    mesh.position.set(pos[0], pos[1], pos[2] + z);
-    mesh.rotation.set(rot[0], rot[1], rot[2]);
-    mesh.visible = visible;
-  });
+    const handleClick = (e: any) => {
+      if (onClick) onClick(e, e.intersections?.[0]);
+    };
 
-  return null;
-}
+    // -----------------------------
+    // Render
+    // -----------------------------
+    return (
+      <mesh
+        ref={ref}
+        position={finalPos}
+        rotation={rot as any}
+        scale={scl as any}
+        visible={visible}
+        castShadow={castShadow}
+        receiveShadow={receiveShadow}
+        onClick={handleClick}
+        onPointerMove={handlePointerMove}
+        onPointerOut={handlePointerOut}
+      >
+        <planeGeometry args={[w, h]} />
+
+        <meshStandardMaterial
+          map={finalTexture ?? undefined}
+          color={color}
+          alphaTest={0.3}
+          transparent={false}
+          depthWrite={true}
+          depthTest={true}
+          toneMapped={true}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+    );
+  }
+);
+
+ImagePlane.displayName = "ImagePlane";

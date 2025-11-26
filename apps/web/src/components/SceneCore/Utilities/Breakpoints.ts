@@ -1,7 +1,6 @@
-// useBreakpoint.ts
-import { useState, useEffect } from "react";
-
-export type Breakpoint = "mobile" | "tablet" | "desktop";
+// Breakpoint.ts
+import { useEffect } from "react";
+import { useSceneStore, Breakpoint } from "../Store/SceneStore";
 
 export const BREAKPOINTS = {
   mobile: 0,
@@ -15,19 +14,20 @@ function resolveBreakpoint(width: number): Breakpoint {
   return "mobile";
 }
 
-export function useBreakpoint(): Breakpoint {
-  const [bp, setBp] = useState<Breakpoint>(
-    resolveBreakpoint(window.innerWidth)
-  );
+export function useBreakpointListener() {
+  const setBreakpoint = useSceneStore((s) => s.setBreakpoint);
 
   useEffect(() => {
-    function onResize() {
-      setBp(resolveBreakpoint(window.innerWidth));
+    function update() {
+      const width = typeof window === "undefined" ? 1024 : window.innerWidth;
+
+      const bp = resolveBreakpoint(width);
+      setBreakpoint(bp);
     }
 
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
+    update(); // call on mount
 
-  return bp;
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, [setBreakpoint]);
 }
