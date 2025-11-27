@@ -25,16 +25,16 @@ export function DirectionalLight({
   shadowSize = 4096,
   frustumSize = 1000,
   intensity = 2,
-  position = [-500, 100, 500],
+  position = [-200, 100, 500],
 
-  shadowRadius = 40.0,
+  shadowRadius = 20.0,
   shadowBias = -0.001,
   shadowNormalBias = 0.02,
 
-  followSceneCamera = false,
+  followSceneCamera = true,
 
-  showLightHelper = true,
-  showShadowHelper = true,
+  showLightHelper = false,
+  showShadowHelper = false,
 }: DirectionalLightProps) {
   const lightRef = useRef<THREE.DirectionalLight>(null!);
   const targetRef = useRef<THREE.Object3D>(null!);

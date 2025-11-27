@@ -7,6 +7,8 @@ import {
   ResponsiveValue,
 } from "../Utilities/BreakpointResolver";
 
+import { createRoundedRectangleShape } from "./RoundedRectangle";
+
 type Vec3 = [number, number, number];
 
 // --------------------------------------------------
@@ -30,12 +32,14 @@ export interface ImagePlaneProps {
   width?: ResponsiveValue<number>;
   height?: ResponsiveValue<number>;
 
+  /** NEW — corner radius in world units */
+  cornerRadius?: ResponsiveValue<number>;
+
   position?: ResponsiveValue<Vec3>;
   rotation?: ResponsiveValue<Vec3>;
   scale?: ResponsiveValue<Vec3>;
 
   z?: number; // renderOrder only
-
   visible?: boolean;
 
   castShadow?: boolean;
@@ -57,11 +61,13 @@ export const ImagePlane = forwardRef<THREE.Mesh, ImagePlaneProps>(
       width = 100,
       height = 100,
 
+      cornerRadius = 0, // NEW — responsive radius
+
       position = [0, 0, 0],
-      rotation = [0, 0, 0], // DEGREES
+      rotation = [0, 0, 0],
       scale = [1, 1, 1],
 
-      z = 0, // renderOrder only
+      z = 0,
 
       visible = true,
 
@@ -117,11 +123,47 @@ export const ImagePlane = forwardRef<THREE.Mesh, ImagePlaneProps>(
     // --------------------------------------------------
     const resolvedWidth = resolveResponsive(width, bp);
     const resolvedHeight = resolveResponsive(height, bp);
+    const resolvedRadius = resolveResponsive(cornerRadius, bp);
 
     const resolvedPosition = resolveResponsive(position, bp) as Vec3;
     const rotationDeg = resolveResponsive(rotation, bp) as Vec3;
     const resolvedRotation = degVec3(rotationDeg);
     const resolvedScale = resolveResponsive(scale, bp) as Vec3;
+
+    // --------------------------------------------------
+    // Geometry (plane or rounded plane)
+    // --------------------------------------------------
+    const geometry = useMemo(() => {
+      const w = resolvedWidth;
+      const h = resolvedHeight;
+      const r = resolvedRadius ?? 0;
+
+      // Flat plane (fastest)
+      if (r <= 0.0001) {
+        return new THREE.PlaneGeometry(w, h);
+      }
+
+      // Rounded rectangle shape → ShapeGeometry
+      const shape = createRoundedRectangleShape(w, h, r);
+      const geo = new THREE.ShapeGeometry(shape);
+
+      // Proper UVs for full texture coverage
+      geo.computeBoundingBox();
+      const bbox = geo.boundingBox!;
+      const size = new THREE.Vector2(
+        bbox.max.x - bbox.min.x,
+        bbox.max.y - bbox.min.y
+      );
+
+      const uvAttr = geo.getAttribute("uv");
+      for (let i = 0; i < uvAttr.count; i++) {
+        const x = geo.attributes.position.getX(i) - bbox.min.x;
+        const y = geo.attributes.position.getY(i) - bbox.min.y;
+        uvAttr.setXY(i, x / size.x, y / size.y);
+      }
+
+      return geo;
+    }, [resolvedWidth, resolvedHeight, resolvedRadius]);
 
     // --------------------------------------------------
     // Pointer handlers
@@ -159,9 +201,8 @@ export const ImagePlane = forwardRef<THREE.Mesh, ImagePlaneProps>(
         onClick={handleClick}
         onPointerMove={handlePointerMove}
         onPointerOut={handlePointerOut}
+        geometry={geometry} // USE CUSTOM GEOMETRY
       >
-        <planeGeometry args={[resolvedWidth, resolvedHeight]} />
-
         <meshStandardMaterial
           map={finalTexture ?? undefined}
           color={color}

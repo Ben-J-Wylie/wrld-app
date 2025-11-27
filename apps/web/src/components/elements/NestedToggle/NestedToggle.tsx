@@ -1,72 +1,29 @@
-import React, { useState } from "react";
-import "../../_main/main.css";
-import { useToggleNode } from "./useToggleNode";
-import { ToggleState } from "./ToggleTypes";
-import "./NestedToggle.css";
+import { Backdrop } from "../../containers/SceneCore/Layers/Backdrop";
+import { Stage } from "../../containers/SceneCore/Stage";
+import { Group } from "../../containers/SceneCore/Layers/Group";
+import { ThreeStateToggle } from "../../elements/NestedToggle/ThreeStateToggle";
 
-interface NestedToggleProps {
-  id: string;
-  size?: number;
-  showText?: boolean;
-  style?: React.CSSProperties;
-  onClick?: () => void;
-}
+const backdropSizes = {
+  mobile: { width: 720, height: 1920 },
+  tablet: { width: 1280, height: 1280 },
+  desktop: { width: 1920, height: 720 },
+};
 
-export default function NestedToggle({
-  id,
-  size = 1,
-  showText = true,
-  style,
-  onClick,
-}: NestedToggleProps) {
-  const { state, label, setState, ancestors } = useToggleNode(id);
-  const [hover, setHover] = useState(false);
-
-  const handleClick = () => {
-    let newState: ToggleState;
-    switch (state) {
-      case "on":
-      case "cued":
-        newState = "off";
-        break;
-      default:
-        newState = "on";
-        break;
-    }
-    setState(newState);
-    onClick?.();
-  };
-
-  const text = state === "on" ? "LIVE" : state === "cued" ? "CUED" : "OFF";
-  const generation = ancestors.length + 1;
-
+export function NestedToggle() {
   return (
-    <div
-      className="toggle-wrapper"
-      onClick={handleClick}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      style={{ transform: `scale(${size})`, ...style }}
-    >
-      <div className={`toggle-slider ${state}`}>
-        <div className="toggle-trough" data-shadow-shape="true">
-          <div className="toggle-thumb">
-            {showText && <span className="toggle-text">{text}</span>}
-          </div>
-        </div>
-      </div>
+    <Stage backdrop={backdropSizes}>
+      <Group
+        name="MyGroup"
+        position={{ mobile: [0, 0, 0], tablet: [0, 0, 0], desktop: [0, 0, 0] }}
+        rotation={{ mobile: [0, 0, 0], tablet: [0, 0, 0], desktop: [0, 0, 0] }}
+        scale={{ mobile: [1, 1, 1], tablet: [1, 1, 1], desktop: [1, 1, 1] }}
+        anchor={[0, 0, 0]}
+        visible={true}
+      >
+        <ThreeStateToggle />
+      </Group>
 
-      <div className="toggle-circles">
-        {[...ancestors, state].slice(-generation).map((s, i) => (
-          <div
-            key={i}
-            className={`circle circle-${s} ${
-              i === generation - 1 ? "self" : "ancestor"
-            }`}
-            data-shadow-shape="true"
-          />
-        ))}
-      </div>
-    </div>
+      <Backdrop />
+    </Stage>
   );
 }

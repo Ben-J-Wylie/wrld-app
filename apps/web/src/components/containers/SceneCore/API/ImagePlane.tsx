@@ -16,6 +16,11 @@
     tablet: 90,
     desktop: 120,
   }}
+  cornerRadius={{
+    mobile: 20,
+    tablet: 30,
+    desktop: 40,
+  }}
   // --- Responsive Transform (true 3D world space) ---
   position={{
     mobile: [0, 0, 0], // Vec3 → includes TRUE Z

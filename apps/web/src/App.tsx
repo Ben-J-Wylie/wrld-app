@@ -1,7 +1,7 @@
 // App.tsx
 import React from "react";
-import { DefaultScene } from "./scenes/DefaultScene";
+import { NestedToggle } from "./components/elements/NestedToggle/NestedToggle";
 
 export default function App() {
-  return <DefaultScene />;
+  return <NestedToggle />;
 }

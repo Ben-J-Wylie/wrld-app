@@ -1,12 +1,14 @@
+// @ts-nocheck
+
 // DefaultScene.tsx
 import React from "react";
 
-import { Stage } from "../components/containers/SceneCore/Stage";
-import { Backdrop } from "../components/containers/SceneCore/Layers/Backdrop";
-import { CameraPin } from "../components/containers/SceneCore/Layers/CameraPin";
-import { Group } from "../components/containers/SceneCore/Layers/Group";
+import { Stage } from "../../containers/SceneCore/Stage";
+import { Backdrop } from "../../containers/SceneCore/Layers/Backdrop";
+import { CameraPin } from "../../containers/SceneCore/Layers/CameraPin";
+import { Group } from "../../containers/SceneCore/Layers/Group";
 
-import { ImagePlane } from "../components/containers/SceneCore/Geometry/ImagePlane";
+import { ImagePlane } from "../../containers/SceneCore/Geometry/ImagePlane";
 
 const backdropSizes = {
   mobile: { width: 720, height: 1920 },
@@ -27,7 +29,7 @@ export function DefaultScene() {
         anchorX="center" // "left" | "center" | "right"
         anchorY="top" // "top" | "center" | "bottom"
         anchorZ={900} // distance from camera
-        // --- Offsets ---
+        // --- Frustum Offsets ---
         offsetX={0}
         offsetY={0}
         // --- Optional Meta ---
@@ -49,6 +51,11 @@ export function DefaultScene() {
             tablet: 90,
             desktop: 120,
           }}
+          cornerRadius={{
+            mobile: 20,
+            tablet: 30,
+            desktop: 40,
+          }}
           // --- Responsive Transform (true 3D world space) ---
           position={{
             mobile: [0, 0, 0], // Vec3 → includes TRUE Z
@@ -66,7 +73,7 @@ export function DefaultScene() {
             desktop: [1, 1, 1],
           }}
           // --- Render Layering ---
-          z={10}
+          z={0}
           // --- Shadows ---
           castShadow={true}
           receiveShadow={true} // renderOrder only — NOT world-space Z
@@ -122,6 +129,11 @@ export function DefaultScene() {
             tablet: 90,
             desktop: 120,
           }}
+          cornerRadius={{
+            mobile: 20,
+            tablet: 30,
+            desktop: 40,
+          }}
           // --- Responsive Transform (true 3D world space) ---
           position={{
             mobile: [0, 0, 0], // Vec3 → includes TRUE Z
@@ -139,7 +151,7 @@ export function DefaultScene() {
             desktop: [1, 1, 1],
           }}
           // --- Render Layering ---
-          z={10}
+          z={0}
           // --- Shadows ---
           castShadow={true}
           receiveShadow={true} // renderOrder only — NOT world-space Z
