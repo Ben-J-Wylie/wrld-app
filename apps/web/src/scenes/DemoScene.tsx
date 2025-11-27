@@ -5,7 +5,7 @@ import { Stage } from "../components/containers/SceneCore/Stage";
 import { Backdrop } from "../components/containers/SceneCore/Layers/Backdrop";
 import { CameraPin } from "../components/containers/SceneCore/Layers/CameraPin";
 import { Group } from "../components/containers/SceneCore/Layers/Group";
-import { Toggle3D } from "../components/containers/SceneCore/Toggle3D/Toggle3D";
+import { Toggle3D } from "../components/elements/Toggle3D/Toggle3D";
 
 const backdropSizes = {
   mobile: { width: 720, height: 1920 },
@@ -16,7 +16,7 @@ const backdropSizes = {
 export function DemoScene() {
   return (
     <Stage backdrop={backdropSizes}>
-      <CameraPin anchorX="center" anchorY="top" z={900} offsetY={-100}>
+      <CameraPin anchorX="center" anchorY="top" anchorZ={900} offsetY={-100}>
         <Toggle3D width={1000} height={200} />
       </CameraPin>
 

@@ -7,7 +7,7 @@ type AnchorX = "left" | "center" | "right";
 type AnchorY = "top" | "center" | "bottom";
 
 export interface CameraPinProps {
-  children?: React.ReactNode;
+  name?: string;
 
   position?: [number, number, number];
   rotation?: [number, number, number];
@@ -15,27 +15,42 @@ export interface CameraPinProps {
 
   anchorX?: AnchorX;
   anchorY?: AnchorY;
+  anchorZ?: number;
+
   offsetX?: number;
   offsetY?: number;
-  z?: number;
+
+  visible?: boolean;
+
+  children?: React.ReactNode;
 }
 
 export function CameraPin({
-  children,
+  name,
+
   position = [0, 0, -200],
   rotation = [0, 0, 0],
   scale = [1, 1, 1],
 
   anchorX,
   anchorY,
+  anchorZ,
+
   offsetX = 0,
   offsetY = 0,
-  z,
+
+  visible = true,
+
+  children,
 }: CameraPinProps) {
   const group = useRef(new THREE.Group()).current;
   const { size } = useThree();
 
-  const sceneCamera = getSceneCamera(); // ⭐ always SceneCamera
+  const sceneCamera = getSceneCamera(); // Always SceneCamera
+
+  // Apply name + visible immediately
+  group.name = name ?? "";
+  group.visible = visible;
 
   // Attach to SceneCamera
   useEffect(() => {
@@ -47,14 +62,14 @@ export function CameraPin({
   }, [sceneCamera, group]);
 
   const isAnchored =
-    z !== undefined || anchorX !== undefined || anchorY !== undefined;
+    anchorZ !== undefined || anchorX !== undefined || anchorY !== undefined;
 
   // ANCHOR MODE
   const updateAnchor = useCallback(() => {
     if (!isAnchored || !sceneCamera) return;
 
     const cam = sceneCamera as THREE.PerspectiveCamera;
-    const depth = z ?? 200;
+    const depth = anchorZ ?? 200;
 
     const halfH = depth * Math.tan((cam.fov * Math.PI) / 360);
     const halfW = halfH * cam.aspect;
@@ -79,14 +94,14 @@ export function CameraPin({
     group.updateMatrixWorld(true);
   }, [
     isAnchored,
-    anchorX,
-    anchorY,
-    offsetX,
-    offsetY,
-    z,
     position,
     rotation,
     scale,
+    anchorX,
+    anchorY,
+    anchorZ,
+    offsetX,
+    offsetY,
     sceneCamera,
   ]);
 
@@ -101,6 +116,7 @@ export function CameraPin({
     group.position.set(...position);
     group.rotation.set(...rotation);
     group.scale.set(...scale);
+
     group.updateMatrixWorld(true);
   }, [isAnchored, position, rotation, scale, sceneCamera]);
 

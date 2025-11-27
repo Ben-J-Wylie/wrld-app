@@ -6,7 +6,7 @@ import { Canvas, useThree } from "@react-three/fiber";
 import { useSceneStore } from "./Store/SceneStore";
 import { useBreakpointListener } from "./Utilities/Breakpoints";
 
-import { enablePCSS } from "./Shaders/PCSS";
+import { enablePCSS } from "./Shadows/PCSS";
 
 import { CameraSwitcher } from "./Cameras/CameraSwitcher";
 import { useCameraRig } from "./Cameras/useCameraRig";

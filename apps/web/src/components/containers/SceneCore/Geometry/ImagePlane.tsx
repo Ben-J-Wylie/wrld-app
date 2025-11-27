@@ -21,6 +21,8 @@ function degVec3(v: Vec3): Vec3 {
 }
 
 export interface ImagePlaneProps {
+  name?: string;
+
   src?: string | null;
   texture?: THREE.Texture;
   color?: THREE.ColorRepresentation;
@@ -28,15 +30,14 @@ export interface ImagePlaneProps {
   width?: ResponsiveValue<number>;
   height?: ResponsiveValue<number>;
 
-  // These remain in DEGREES
   position?: ResponsiveValue<Vec3>;
   rotation?: ResponsiveValue<Vec3>;
   scale?: ResponsiveValue<Vec3>;
 
-  // ❗ z is now ONLY for renderOrder
-  z?: number;
+  z?: number; // renderOrder only
 
   visible?: boolean;
+
   castShadow?: boolean;
   receiveShadow?: boolean;
 
@@ -47,6 +48,8 @@ export interface ImagePlaneProps {
 export const ImagePlane = forwardRef<THREE.Mesh, ImagePlaneProps>(
   (
     {
+      name,
+
       src = null,
       texture,
       color = "#ffffff",
@@ -59,6 +62,7 @@ export const ImagePlane = forwardRef<THREE.Mesh, ImagePlaneProps>(
       scale = [1, 1, 1],
 
       z = 0, // renderOrder only
+
       visible = true,
 
       castShadow = true,
@@ -144,13 +148,14 @@ export const ImagePlane = forwardRef<THREE.Mesh, ImagePlaneProps>(
     return (
       <mesh
         ref={ref}
-        position={resolvedPosition} // ← TRUE 3D Z COMES FROM HERE
-        rotation={resolvedRotation} // radians
+        name={name ?? ""}
+        position={resolvedPosition}
+        rotation={resolvedRotation}
         scale={resolvedScale}
+        renderOrder={z ?? 0}
         visible={visible}
         castShadow={castShadow}
         receiveShadow={receiveShadow}
-        renderOrder={z ?? 0} // ← LAYERING ONLY
         onClick={handleClick}
         onPointerMove={handlePointerMove}
         onPointerOut={handlePointerOut}

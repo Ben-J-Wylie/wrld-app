@@ -20,20 +20,14 @@ function degVec3(v: Vec3): Vec3 {
 }
 
 export interface GroupProps {
+  name?: string;
   position?: ResponsiveValue<Vec3>; // degrees
   rotation?: ResponsiveValue<Vec3>; // degrees
   scale?: ResponsiveValue<Vec3>;
 
-  /** OPTIONAL:
-   * Defines the group's anchor in LOCAL SPACE.
-   * Example: [0.5, 0.5, 0] means anchor is at center of group bounding-box.
-   * For now, keep this the default centre.
-   */
   anchor?: Vec3; // normalized 0..1
-
-  children?: React.ReactNode;
   visible?: boolean;
-  name?: string;
+  children?: React.ReactNode;
 }
 
 /**
@@ -46,14 +40,13 @@ export interface GroupProps {
 export const Group = forwardRef<THREE.Group, GroupProps>(
   (
     {
+      name,
       position = [0, 0, 0],
       rotation = [0, 0, 0], // degrees
       scale = [1, 1, 1],
-
       anchor = [0, 0, 0], // default = center, but used when bounding box is known
-      children,
       visible = true,
-      name,
+      children,
     },
     ref
   ) => {
@@ -93,10 +86,10 @@ export const Group = forwardRef<THREE.Group, GroupProps>(
       <group
         ref={ref}
         name={name}
-        visible={visible}
         position={resolvedPos}
         rotation={resolvedRot}
         scale={resolvedScale}
+        visible={visible}
       >
         {/* Inner group applies anchor shift */}
         {/* So the *outer* group transforms around that pivot point */}
