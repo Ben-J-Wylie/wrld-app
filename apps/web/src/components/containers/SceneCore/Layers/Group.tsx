@@ -1,35 +1,109 @@
-// @ts-nocheck
+// Group.tsx
+import * as THREE from "three";
+import React, { forwardRef, useMemo } from "react";
 
-import { ThreeElements } from "@react-three/fiber";
-import { SceneConfig } from "../SceneConfig";
-import { ReactNode } from "react";
+import { useSceneStore } from "../Store/SceneStore";
+import {
+  resolveResponsive,
+  ResponsiveValue,
+} from "../Utilities/BreakpointResolver";
 
-type GroupProps = ThreeElements["group"];
+type Vec3 = [number, number, number];
 
-interface GroupLayerProps extends GroupProps {
-  /** Distance from camera: smaller = closer (moves faster), larger = farther (moves slower) */
-  depth?: number;
-  /** Optional Y offset */
-  baseY?: number;
-  /** Child elements to render inside the group */
-  children?: ReactNode;
+// Convert degrees → radians
+function degVec3(v: Vec3): Vec3 {
+  return [
+    THREE.MathUtils.degToRad(v[0]),
+    THREE.MathUtils.degToRad(v[1]),
+    THREE.MathUtils.degToRad(v[2]),
+  ];
+}
+
+export interface GroupProps {
+  position?: ResponsiveValue<Vec3>; // degrees
+  rotation?: ResponsiveValue<Vec3>; // degrees
+  scale?: ResponsiveValue<Vec3>;
+
+  /** OPTIONAL:
+   * Defines the group's anchor in LOCAL SPACE.
+   * Example: [0.5, 0.5, 0] means anchor is at center of group bounding-box.
+   * For now, keep this the default centre.
+   */
+  anchor?: Vec3; // normalized 0..1
+
+  children?: React.ReactNode;
+  visible?: boolean;
+  name?: string;
 }
 
 /**
- * Group
- * ---------------------------------------------------------------------------
- * 3D container for scene elements at a specific world-space depth.
- * Provides spatial grouping for consistent depth management.
+ * WrldGroup:
+ * A transform group with its own anchor offset.
+ * - Fully responsive (same interface as ImagePlane)
+ * - Nestable (groups inside groups)
+ * - Local anchor point for pivot-based transforms
  */
-export function Group({
-  depth = 0,
-  baseY = SceneConfig.scene.background.depth ?? 0,
-  children,
-  ...props
-}: GroupLayerProps) {
-  return (
-    <group position={[0, baseY, depth]} {...props}>
-      {children}
-    </group>
-  );
-}
+export const Group = forwardRef<THREE.Group, GroupProps>(
+  (
+    {
+      position = [0, 0, 0],
+      rotation = [0, 0, 0], // degrees
+      scale = [1, 1, 1],
+
+      anchor = [0, 0, 0], // default = center, but used when bounding box is known
+      children,
+      visible = true,
+      name,
+    },
+    ref
+  ) => {
+    const bp = useSceneStore((s) => s.breakpoint);
+
+    // --------------------------------------------------
+    // Resolve responsive transforms
+    // --------------------------------------------------
+    const resolvedPos = resolveResponsive(position, bp) as Vec3;
+    const resolvedRotDeg = resolveResponsive(rotation, bp) as Vec3;
+    const resolvedRot = degVec3(resolvedRotDeg);
+    const resolvedScale = resolveResponsive(scale, bp) as Vec3;
+
+    // --------------------------------------------------
+    // ANCHOR OFFSET
+    // --------------------------------------------------
+    // Right now we assume the anchor is *local-centric offset*.
+    // This works perfectly for grouping ImagePlanes, Sprites, Toggles, etc.
+    //
+    // The math:
+    // - group pivot is at "anchor"
+    // - we shift children such that the pivot acts like true center
+    //
+    // Later we can compute bounding boxes dynamically
+    // to support anchor={[0.5,0.5,0]} meaning "true center of children".
+    // For now anchor is a direct offset.
+    // --------------------------------------------------
+
+    const anchorOffset = useMemo(() => {
+      return new THREE.Vector3(anchor[0], anchor[1], anchor[2]);
+    }, [anchor]);
+
+    // --------------------------------------------------
+    // Render
+    // --------------------------------------------------
+    return (
+      <group
+        ref={ref}
+        name={name}
+        visible={visible}
+        position={resolvedPos}
+        rotation={resolvedRot}
+        scale={resolvedScale}
+      >
+        {/* Inner group applies anchor shift */}
+        {/* So the *outer* group transforms around that pivot point */}
+        <group position={anchorOffset.multiplyScalar(-1)}>{children}</group>
+      </group>
+    );
+  }
+);
+
+Group.displayName = "Group";

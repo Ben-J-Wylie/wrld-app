@@ -1,22 +1,19 @@
-// @ts-nocheck
+// src/components/containers/SceneCore/Lights/AmbientLight.tsx
+import * as THREE from "three";
+import React, { forwardRef } from "react";
 
-// src/components/Scene/Lights/AmbientLight.tsx
-import { SceneConfig } from "@/components/containers/SceneCore";
+export interface AmbientLightProps {
+  intensity?: number;
+  color?: THREE.ColorRepresentation;
+}
 
 /**
- * AmbientLight
- * ---------------------------------------------------------------------------
- * A soft, global light that brightens the entire scene evenly.
- *
- * NOTES:
- * • Ambient light does NOT cast shadows.
- * • It is usually paired with a key light (e.g. a directional light)
- *   that provides shape, shadow, and direction.
- * • The intensity should stay relatively low (0.2–0.6) so that
- *   shadows from the main light remain visible.
+ * AmbientLight — simple global fill light
  */
-export function AmbientLight() {
-  const { intensity, color } = SceneConfig.lighting.ambient;
+export const AmbientLight = forwardRef<THREE.AmbientLight, AmbientLightProps>(
+  ({ intensity = 1, color = 0xffffff }, ref) => {
+    return <ambientLight ref={ref} intensity={intensity} color={color} />;
+  }
+);
 
-  return <ambientLight intensity={intensity} color={color} />;
-}
+AmbientLight.displayName = "AmbientLight";

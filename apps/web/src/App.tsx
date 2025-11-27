@@ -1,6 +1,6 @@
 // App.tsx
 import React from "react";
-import { DemoScene } from "./components/SceneCore/DemoScene";
+import { DemoScene } from "./scenes/DemoScene";
 
 export default function App() {
   return <DemoScene />;

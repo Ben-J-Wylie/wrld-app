@@ -1,7 +1,7 @@
 // useScrollController.ts
 import { useEffect, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
-import { createScrollController } from "../Controllers/ScrollController";
+import { createScrollController } from "./ScrollController";
 
 export function useScrollController(
   cameraRig: any,
