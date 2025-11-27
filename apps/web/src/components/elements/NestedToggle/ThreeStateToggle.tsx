@@ -14,6 +14,7 @@ import {
 type Vec3 = [number, number, number];
 
 export interface ThreeStateToggleProps {
+  name?: string;
   // ---- Responsive trough & slider sizing ----
   troughWidth?: ResponsiveValue<number>;
   troughHeight?: ResponsiveValue<number>;
@@ -40,6 +41,7 @@ export interface ThreeStateToggleProps {
 }
 
 export function ThreeStateToggle({
+  name = "ThreeStateToggle",
   // DEFAULTS (can be overridden by consumer)
   troughWidth = { mobile: 200, tablet: 200, desktop: 200 },
   troughHeight = { mobile: 50, tablet: 50, desktop: 50 },
@@ -123,7 +125,7 @@ export function ThreeStateToggle({
   // -------------------------------------------------------
   return (
     <Group
-      name="ThreeStateToggle"
+      name={name}
       position={resolvedPosition}
       rotation={resolvedRotation}
       scale={resolvedScale}
@@ -152,7 +154,7 @@ export function ThreeStateToggle({
         color={sliderColor}
         castShadow={true}
         receiveShadow={true}
-        onClick={() => nextState()}
+        onPointerDown={() => nextState()}
       />
     </Group>
   );

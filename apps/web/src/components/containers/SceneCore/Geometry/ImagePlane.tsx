@@ -32,7 +32,7 @@ export interface ImagePlaneProps {
   width?: ResponsiveValue<number>;
   height?: ResponsiveValue<number>;
 
-  /** NEW — corner radius in world units */
+  /** Rounded corners */
   cornerRadius?: ResponsiveValue<number>;
 
   position?: ResponsiveValue<Vec3>;
@@ -47,6 +47,9 @@ export interface ImagePlaneProps {
 
   onClick?: (e: THREE.Event, hit: THREE.Intersection) => void;
   onHover?: (e: THREE.Event | null, hit: THREE.Intersection | null) => void;
+
+  /** NEW — works on mobile */
+  onPointerDown?: (e: any) => void;
 }
 
 export const ImagePlane = forwardRef<THREE.Mesh, ImagePlaneProps>(
@@ -61,7 +64,7 @@ export const ImagePlane = forwardRef<THREE.Mesh, ImagePlaneProps>(
       width = 100,
       height = 100,
 
-      cornerRadius = 0, // NEW — responsive radius
+      cornerRadius = 0,
 
       position = [0, 0, 0],
       rotation = [0, 0, 0],
@@ -76,6 +79,7 @@ export const ImagePlane = forwardRef<THREE.Mesh, ImagePlaneProps>(
 
       onClick,
       onHover,
+      onPointerDown,
     },
     ref
   ) => {
@@ -138,16 +142,14 @@ export const ImagePlane = forwardRef<THREE.Mesh, ImagePlaneProps>(
       const h = resolvedHeight;
       const r = resolvedRadius ?? 0;
 
-      // Flat plane (fastest)
       if (r <= 0.0001) {
         return new THREE.PlaneGeometry(w, h);
       }
 
-      // Rounded rectangle shape → ShapeGeometry
       const shape = createRoundedRectangleShape(w, h, r);
       const geo = new THREE.ShapeGeometry(shape);
 
-      // Proper UVs for full texture coverage
+      // Proper UVs
       geo.computeBoundingBox();
       const bbox = geo.boundingBox!;
       const size = new THREE.Vector2(
@@ -199,9 +201,10 @@ export const ImagePlane = forwardRef<THREE.Mesh, ImagePlaneProps>(
         castShadow={castShadow}
         receiveShadow={receiveShadow}
         onClick={handleClick}
+        onPointerDown={onPointerDown} // NEW mobile click support
         onPointerMove={handlePointerMove}
         onPointerOut={handlePointerOut}
-        geometry={geometry} // USE CUSTOM GEOMETRY
+        geometry={geometry}
       >
         <meshStandardMaterial
           map={finalTexture ?? undefined}

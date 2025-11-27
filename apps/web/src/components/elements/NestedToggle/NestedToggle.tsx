@@ -20,7 +20,7 @@ export function NestedToggle() {
         anchor={[0, 0, 0]}
         visible={true}
       >
-        <ThreeStateToggle />
+        <ThreeStateToggle name="Test Toggle" />
       </Group>
 
       <Backdrop />
