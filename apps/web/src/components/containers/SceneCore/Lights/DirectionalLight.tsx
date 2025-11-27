@@ -3,16 +3,23 @@ import * as THREE from "three";
 import React, { useEffect, useRef } from "react";
 import { useThree, useFrame } from "@react-three/fiber";
 
+import { getSceneCamera } from "../Cameras/SceneCameraRegistry";
+
 export interface DirectionalLightProps {
   shadowSize?: number; // Shadow map resolution
   frustumSize?: number; // Ortho shadow camera area
-  intensity?: number; // Light intensity
+  intensity?: number;
   position?: [number, number, number];
 
   // Shadow tuning
-  shadowRadius?: number; // PCSS softness driver (0 = hard, bigger = softer)
+  shadowRadius?: number;
   shadowBias?: number;
   shadowNormalBias?: number;
+
+  // Camera-following behaviour
+  followSceneCamera?: boolean;
+  followOffset?: [number, number, number];
+  targetOffset?: [number, number, number];
 }
 
 export function DirectionalLight({
@@ -24,6 +31,10 @@ export function DirectionalLight({
   shadowRadius = 40.0,
   shadowBias = -0.001,
   shadowNormalBias = 0.02,
+
+  followSceneCamera = false,
+  followOffset = [0, 300, 600],
+  targetOffset = [0, -200, -600],
 }: DirectionalLightProps) {
   const lightRef = useRef<THREE.DirectionalLight>(null!);
   const targetRef = useRef<THREE.Object3D>(null!);
@@ -40,7 +51,7 @@ export function DirectionalLight({
     const light = lightRef.current;
     const target = targetRef.current;
 
-    // attach target to scene graph
+    // Target MUST be world-space
     scene.add(target);
     target.position.set(0, 0, 0);
 
@@ -58,7 +69,7 @@ export function DirectionalLight({
     cam.bottom = -frustumSize;
 
     cam.near = 0.5;
-    cam.far = 1000;
+    cam.far = 800;
 
     cam.updateProjectionMatrix();
 
@@ -77,7 +88,6 @@ export function DirectionalLight({
     return () => {
       dl.removeFromParent();
       dl.dispose();
-
       sh.removeFromParent();
       sh.geometry.dispose();
       (sh.material as THREE.Material).dispose();
@@ -85,9 +95,30 @@ export function DirectionalLight({
   }, [scene, frustumSize]);
 
   // ---------------------------------------------------------------------
-  // RUNTIME UPDATES
+  // FOLLOW **ONLY** THE REGISTERED SceneCamera
   // ---------------------------------------------------------------------
   useFrame(() => {
+    const light = lightRef.current;
+    const target = targetRef.current;
+    const sceneCamera = getSceneCamera();
+
+    if (followSceneCamera && sceneCamera) {
+      // Make sure camera matrix is current (optional)
+      sceneCamera.updateMatrixWorld();
+
+      // Follow position
+      const off = new THREE.Vector3(...followOffset);
+      sceneCamera.localToWorld(off);
+      light.position.copy(off);
+
+      // Follow target
+      const tOff = new THREE.Vector3(...targetOffset);
+      sceneCamera.localToWorld(tOff);
+      target.position.copy(tOff);
+
+      light.target.updateMatrixWorld();
+    }
+
     helperLightRef.current?.update();
     helperShadowRef.current?.update();
   });
