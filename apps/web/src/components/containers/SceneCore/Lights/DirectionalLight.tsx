@@ -6,22 +6,17 @@ import { useThree, useFrame } from "@react-three/fiber";
 import { getSceneCamera } from "../Cameras/SceneCameraRegistry";
 
 export interface DirectionalLightProps {
-  shadowSize?: number; // Shadow map resolution
-  frustumSize?: number; // Ortho shadow camera area
+  shadowSize?: number;
+  frustumSize?: number;
   intensity?: number;
   position?: [number, number, number];
 
-  // Shadow tuning
   shadowRadius?: number;
   shadowBias?: number;
   shadowNormalBias?: number;
 
-  // Camera-following behaviour
   followSceneCamera?: boolean;
-  followOffset?: [number, number, number];
-  targetOffset?: [number, number, number];
 
-  // Helper toggles
   showLightHelper?: boolean;
   showShadowHelper?: boolean;
 }
@@ -30,18 +25,16 @@ export function DirectionalLight({
   shadowSize = 4096,
   frustumSize = 1000,
   intensity = 2,
-  position = [-200, 100, 500],
+  position = [-500, 100, 500],
 
   shadowRadius = 40.0,
   shadowBias = -0.001,
   shadowNormalBias = 0.02,
 
   followSceneCamera = false,
-  followOffset = [0, 300, 600],
-  targetOffset = [0, -200, -600],
 
-  showLightHelper = false,
-  showShadowHelper = false,
+  showLightHelper = true,
+  showShadowHelper = true,
 }: DirectionalLightProps) {
   const lightRef = useRef<THREE.DirectionalLight>(null!);
   const targetRef = useRef<THREE.Object3D>(null!);
@@ -51,36 +44,33 @@ export function DirectionalLight({
 
   const scene = useThree((s) => s.scene);
 
-  // ---------------------------------------------------------------------
-  // INIT
-  // ---------------------------------------------------------------------
+  // Base positions (do not change)
+  const baseLightPos = new THREE.Vector3(...position);
+  const baseTargetPos = new THREE.Vector3(0, 0, 0);
+
+  // ---------------------------------------------------------------------------
+  // INIT — set up target, shadows, helpers
+  // ---------------------------------------------------------------------------
   useEffect(() => {
     const light = lightRef.current;
     const target = targetRef.current;
 
-    // Target must be in world space
+    // Ensure target is in the scene graph
     scene.add(target);
-    target.position.set(0, 0, 0);
 
+    // IMPORTANT: ensure the light uses our custom target
     light.target = target;
-    light.updateMatrixWorld(true);
+    light.target.updateMatrixWorld(true);
 
-    // ------------------------------------------------------------------
-    // SHADOW CAMERA SETUP
-    // ------------------------------------------------------------------
+    // Shadow camera setup
     const cam = light.shadow.camera as THREE.OrthographicCamera;
-
     cam.left = -frustumSize;
     cam.right = frustumSize;
     cam.top = frustumSize;
     cam.bottom = -frustumSize;
     cam.near = 0.5;
-    cam.far = 800;
+    cam.far = 2000;
     cam.updateProjectionMatrix();
-
-    // ------------------------------------------------------------------
-    // HELPERS
-    // ------------------------------------------------------------------
 
     // Light helper
     if (showLightHelper) {
@@ -97,13 +87,10 @@ export function DirectionalLight({
     }
 
     return () => {
-      // Light helper cleanup
-      if (helperLightRef.current) {
-        helperLightRef.current.removeFromParent();
-        helperLightRef.current.dispose();
-      }
+      // Cleanup helpers
+      helperLightRef.current?.removeFromParent();
+      helperLightRef.current?.dispose();
 
-      // Shadow helper cleanup
       if (helperShadowRef.current) {
         helperShadowRef.current.removeFromParent();
         helperShadowRef.current.geometry.dispose();
@@ -112,38 +99,49 @@ export function DirectionalLight({
     };
   }, [scene, frustumSize, showLightHelper, showShadowHelper]);
 
-  // ---------------------------------------------------------------------
-  // FOLLOW REGISTERED SceneCamera (no smoothing / no lerp)
-  // ---------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // FOLLOW CAMERA — XY only (ignore Z entirely)
+  // ---------------------------------------------------------------------------
   useFrame(() => {
     const light = lightRef.current;
     const target = targetRef.current;
-    const sceneCamera = getSceneCamera();
+    const cam = getSceneCamera();
 
-    if (followSceneCamera && sceneCamera) {
-      sceneCamera.updateMatrixWorld();
+    if (!cam) return;
 
-      // Light position
-      const off = new THREE.Vector3(...followOffset);
-      sceneCamera.localToWorld(off);
-      light.position.copy(off);
+    if (!followSceneCamera) {
+      // Static mode
+      light.position.copy(baseLightPos);
+      target.position.copy(baseTargetPos);
+    } else {
+      // Camera follow mode: only X and Y
+      const camPos = cam.getWorldPosition(new THREE.Vector3());
 
-      // Target position
-      const tOff = new THREE.Vector3(...targetOffset);
-      sceneCamera.localToWorld(tOff);
-      target.position.copy(tOff);
+      light.position.set(
+        baseLightPos.x + camPos.x,
+        baseLightPos.y + camPos.y,
+        baseLightPos.z // keep Z unchanged
+      );
 
-      light.target.updateMatrixWorld();
+      target.position.set(
+        baseTargetPos.x + camPos.x,
+        baseTargetPos.y + camPos.y,
+        baseTargetPos.z // keep Z unchanged
+      );
     }
 
-    // Update helpers (only if created)
-    if (showLightHelper) helperLightRef.current?.update();
-    if (showShadowHelper) helperShadowRef.current?.update();
+    // IMPORTANT: rebind target every frame so R3F doesn't override it
+    light.target = target;
+    light.target.updateMatrixWorld();
+
+    // Update helpers
+    helperLightRef.current?.update();
+    helperShadowRef.current?.update();
   });
 
-  // ---------------------------------------------------------------------
-  // RENDER LIGHT
-  // ---------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // RENDER
+  // ---------------------------------------------------------------------------
   return (
     <>
       <object3D ref={targetRef} />
@@ -151,7 +149,6 @@ export function DirectionalLight({
       <directionalLight
         ref={lightRef}
         castShadow
-        position={position}
         intensity={intensity}
         shadow-mapSize={[shadowSize, shadowSize]}
         shadow-radius={shadowRadius}

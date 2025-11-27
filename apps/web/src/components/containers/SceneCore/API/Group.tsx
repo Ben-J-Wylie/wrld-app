@@ -22,6 +22,4 @@
   anchor={[0, 0, 0]} // normalized offset, e.g. [0.5, 0.5, 0]
   // --- Optional Meta ---
   visible={true}
->
-  {/* children rendered inside the anchor-adjusted pivot */}
-</Group>;
+></Group>;

@@ -53,11 +53,7 @@ function InnerScene({ children }: { children?: React.ReactNode }) {
 
       {/* Lighting */}
       <AmbientLight />
-      <DirectionalLight
-        followSceneCamera
-        followOffset={[0, 0, -500]}
-        targetOffset={[0, -50, -1000]}
-      />
+      <DirectionalLight />
 
       {/* User's 3D Scene */}
       {children}
