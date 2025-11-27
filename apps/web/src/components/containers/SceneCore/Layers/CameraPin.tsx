@@ -6,7 +6,7 @@ import { getSceneCamera } from "../Cameras/SceneCameraRegistry";
 type AnchorX = "left" | "center" | "right";
 type AnchorY = "top" | "center" | "bottom";
 
-export interface ScreenPinProps {
+export interface CameraPinProps {
   children?: React.ReactNode;
 
   position?: [number, number, number];
@@ -20,7 +20,7 @@ export interface ScreenPinProps {
   z?: number;
 }
 
-export function ScreenPin({
+export function CameraPin({
   children,
   position = [0, 0, -200],
   rotation = [0, 0, 0],
@@ -31,7 +31,7 @@ export function ScreenPin({
   offsetX = 0,
   offsetY = 0,
   z,
-}: ScreenPinProps) {
+}: CameraPinProps) {
   const group = useRef(new THREE.Group()).current;
   const { size } = useThree();
 

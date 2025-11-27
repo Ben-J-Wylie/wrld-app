@@ -20,10 +20,8 @@ export function createCameraRig(
   let prevW = 0;
   let prevH = 0;
 
-  // Initial placement logic
-  let readyForInitialPlacement = false;
+  // Initial placement flag
   let hasPlacedInitially = false;
-  let placementPasses = 0;
 
   // ----------------------------------------------------
   // computeLimits() — core math
@@ -47,16 +45,31 @@ export function createCameraRig(
     maxX = Math.max(0, W / 2 - halfWidth);
     maxY = Math.max(0, H / 2 - halfHeight);
 
-    // Two passes → stable values (because FOV is easing)
-    const nonZero = maxX > 1e-6 || maxY > 1e-6;
-    if (nonZero) placementPasses++;
-    if (placementPasses >= 2) readyForInitialPlacement = true;
+    // One-time initial placement based on scrollable axis
+    if (!hasPlacedInitially) {
+      const verticalOnly = maxY > 1e-6 && maxX < 1e-6;
+      const horizontalOnly = maxX > 1e-6 && maxY < 1e-6;
 
-    // If we've already placed once, keep camera clamped
-    if (hasPlacedInitially) {
-      camera.position.x = THREE.MathUtils.clamp(camera.position.x, -maxX, maxX);
-      camera.position.y = THREE.MathUtils.clamp(camera.position.y, -maxY, maxY);
+      if (verticalOnly) {
+        // Tall scene → start at TOP
+        camera.position.x = 0;
+        camera.position.y = maxY;
+      } else if (horizontalOnly) {
+        // Wide scene → start at LEFT
+        camera.position.x = -maxX;
+        camera.position.y = 0;
+      } else {
+        // Mixed or no scroll → center
+        camera.position.x = 0;
+        camera.position.y = 0;
+      }
+
+      hasPlacedInitially = true;
     }
+
+    // Always clamp after limits update
+    camera.position.x = THREE.MathUtils.clamp(camera.position.x, -maxX, maxX);
+    camera.position.y = THREE.MathUtils.clamp(camera.position.y, -maxY, maxY);
 
     // Cache
     prevFov = camera.fov;
@@ -79,32 +92,6 @@ export function createCameraRig(
   }
 
   // ----------------------------------------------------
-  // initialPlacement()
-  // ----------------------------------------------------
-  function initialPlacement() {
-    if (!readyForInitialPlacement || hasPlacedInitially) return;
-
-    const verticalOnly = maxY > 1e-6 && maxX < 1e-6;
-    const horizontalOnly = maxX > 1e-6 && maxY < 1e-6;
-
-    if (verticalOnly) {
-      // We scroll vertically → start at TOP
-      camera.position.x = 0;
-      camera.position.y = maxY;
-    } else if (horizontalOnly) {
-      // Horizontal scroller → start at LEFT
-      camera.position.x = -maxX;
-      camera.position.y = 0;
-    } else {
-      // Mixed or no scroll → center
-      camera.position.x = 0;
-      camera.position.y = 0;
-    }
-
-    hasPlacedInitially = true;
-  }
-
-  // ----------------------------------------------------
   // PUBLIC API
   // ----------------------------------------------------
   return {
@@ -121,17 +108,15 @@ export function createCameraRig(
       };
     },
 
-    // Triggered by resize + FOV change
+    // Optional external trigger (not strictly required anymore)
     onResizeOrFovChange() {
       computeLimits();
-      initialPlacement();
     },
 
     // Called every frame by SceneCore engine loop
     onFrameUpdate() {
       if (needsRecalc()) {
         computeLimits();
-        initialPlacement();
       }
     },
 

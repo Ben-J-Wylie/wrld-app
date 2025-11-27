@@ -3,7 +3,7 @@ import React from "react";
 
 import { Stage } from "../components/containers/SceneCore/Stage";
 import { Backdrop } from "../components/containers/SceneCore/Layers/Backdrop";
-import { ScreenPin } from "../components/containers/SceneCore/Layers/ScreenPin";
+import { CameraPin } from "../components/containers/SceneCore/Layers/CameraPin";
 import { Group } from "../components/containers/SceneCore/Layers/Group";
 import { Toggle3D } from "../components/containers/SceneCore/Toggle3D/Toggle3D";
 
@@ -16,9 +16,9 @@ const backdropSizes = {
 export function DemoScene() {
   return (
     <Stage backdrop={backdropSizes}>
-      <ScreenPin anchorX="center" anchorY="top" z={950} offsetY={-25}>
-        <Toggle3D width={200} height={50} />
-      </ScreenPin>
+      <CameraPin anchorX="center" anchorY="top" z={900} offsetY={-100}>
+        <Toggle3D width={1000} height={200} />
+      </CameraPin>
 
       <Group
         position={{

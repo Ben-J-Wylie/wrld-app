@@ -19,7 +19,7 @@ export function DirectionalLight({
   shadowSize = 4096,
   frustumSize = 1000,
   intensity = 2,
-  position = [-300, 600, 1200],
+  position = [-200, 100, 500],
 
   shadowRadius = 40.0,
   shadowBias = -0.001,
@@ -58,7 +58,7 @@ export function DirectionalLight({
     cam.bottom = -frustumSize;
 
     cam.near = 0.5;
-    cam.far = 2000;
+    cam.far = 1000;
 
     cam.updateProjectionMatrix();
 
