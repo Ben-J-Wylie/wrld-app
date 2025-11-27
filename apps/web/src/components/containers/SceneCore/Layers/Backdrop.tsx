@@ -1,6 +1,9 @@
+// SceneCore/Layers/Backdrop.tsx
+
 import * as THREE from "three";
 import React, { forwardRef, useMemo } from "react";
 import { useSceneStore } from "../Store/SceneStore";
+import { useWrldTheme } from "../Themes/WrldThemeProvider";
 
 // ----------------------------------
 // EXPORT ONLY the dimensions type
@@ -20,14 +23,19 @@ interface BackdropProps {
 }
 
 // ----------------------------------
-// Backdrop component (reads store)
+// Backdrop component (reads store + theme)
 // ----------------------------------
 export const Backdrop = forwardRef<THREE.Mesh, BackdropProps>(
-  ({ color = "#cbcbcb", padding = 100 }, ref) => {
+  ({ color, padding = 100 }, ref) => {
+    const theme = useWrldTheme();
+
     const width = useSceneStore((s) => s.sceneWidth);
     const height = useSceneStore((s) => s.sceneHeight);
 
-    // uniform padding on all sides
+    // Determine background color:
+    // prop override wins → otherwise theme → fallback manual hex
+    const finalColor = color ?? theme.colors.background ?? "#ffffff";
+
     const { drawWidth, drawHeight } = useMemo(() => {
       const grow = padding * 2;
       return {
@@ -39,7 +47,7 @@ export const Backdrop = forwardRef<THREE.Mesh, BackdropProps>(
     return (
       <mesh ref={ref} receiveShadow>
         <planeGeometry args={[drawWidth, drawHeight]} />
-        <meshStandardMaterial color={color} />
+        <meshStandardMaterial color={finalColor} />
       </mesh>
     );
   }
