@@ -1,8 +1,9 @@
-// SceneCamera.tsx
+// src/components/containers/SceneCore/Cameras/SceneCamera.tsx
 import * as THREE from "three";
 import React, { forwardRef, useEffect, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useSceneStore } from "../Store/SceneStore";
+import { registerSceneCamera } from "./SceneCameraRegistry";
 
 const CAMERA_Z = 1000;
 
@@ -26,7 +27,6 @@ export const SceneCamera = forwardRef<THREE.PerspectiveCamera>((props, ref) => {
     if (W <= 0 || H <= 0) return cameraRef.current.fov;
 
     const bgAspect = W / H;
-
     let fovYRad: number;
 
     if (aspect >= bgAspect) {
@@ -46,6 +46,10 @@ export const SceneCamera = forwardRef<THREE.PerspectiveCamera>((props, ref) => {
   // --------------------------------------------
   useEffect(() => {
     const cam = cameraRef.current;
+
+    // ⭐ Register this SceneCamera globally
+    registerSceneCamera(cam);
+
     cam.position.set(0, 0, CAMERA_Z);
 
     // Initial FOV
@@ -53,12 +57,13 @@ export const SceneCamera = forwardRef<THREE.PerspectiveCamera>((props, ref) => {
     cam.aspect = size.width / size.height;
     cam.updateProjectionMatrix();
 
-    // Add CameraHelper to the scene
+    // Add CameraHelper to scene
     const helper = new THREE.CameraHelper(cam);
     helperRef.current = helper;
     scene.add(helper);
 
     return () => {
+      // Cleanup helper correctly
       if (helperRef.current) {
         scene.remove(helperRef.current);
         helperRef.current.geometry.dispose();
@@ -77,7 +82,7 @@ export const SceneCamera = forwardRef<THREE.PerspectiveCamera>((props, ref) => {
 
     const targetFov = computeAdaptiveFov();
 
-    // Smooth interpolation
+    // Smooth interpolation toward new target FOV
     cam.fov += (targetFov - cam.fov) * 1;
 
     cam.aspect = size.width / size.height;
@@ -90,6 +95,8 @@ export const SceneCamera = forwardRef<THREE.PerspectiveCamera>((props, ref) => {
     <perspectiveCamera
       ref={(node) => {
         cameraRef.current = node!;
+
+        // Forward ref support
         if (typeof ref === "function") ref(node!);
         else if (ref) (ref as any).current = node!;
       }}

@@ -50,76 +50,15 @@ function InnerScene() {
       <ambientLight intensity={0.4} />
       <DirectionalLight />
 
-      {/* -----------------------------------------------------
-          Test Image Planes
-         ----------------------------------------------------- */}
-      {/* <ImagePlane
-        color="#ffdd33"
-        width={{ mobile: 50, tablet: 50, desktop: 50 }}
-        height={{ mobile: 50, tablet: 50, desktop: 50 }}
-        position={{
-          mobile: [-200, 200, 10],
-          tablet: [300, -150, 50],
-          desktop: [-400, 100, 300],
-        }}
-        rotation={{
-          mobile: [45, 0, 0],
-          tablet: [0, 45, 0],
-          desktop: [0, 0, 0],
-        }}
-        scale={{
-          mobile: [10, 1, 1],
-          tablet: [1, 10, 1],
-          desktop: [1, 1, 10],
-        }}
-        castShadow
-        receiveShadow
-      />
-
-      <ImagePlane
-        color="#33aaff"
-        z={2}
-        position={{
-          mobile: [50, -100, 520],
-          tablet: [100, -150, 520],
-          desktop: [150, -200, 520],
-        }}
-        width={{ mobile: 120, tablet: 140, desktop: 200 }}
-        height={{ mobile: 60, tablet: 70, desktop: 100 }}
-        scale={{
-          mobile: [1, 1, 1],
-          tablet: [0.9, 0.9, 1],
-          desktop: [0.8, 0.8, 1],
-        }}
-        castShadow
-        receiveShadow
-      />
-
-      <ImagePlane
-        color="#44ff88"
-        z={1}
-        position={{
-          mobile: [0, 0, 500],
-          tablet: [0, -150, 500],
-          desktop: [0, 0, 500],
-        }}
-        width={{
-          mobile: 100,
-          tablet: 200,
-          desktop: 320,
-        }}
-        height={{
-          mobile: 50,
-          tablet: 100,
-          desktop: 50,
-        }}
-        castShadow
-        receiveShadow
-      /> */}
-      <ScreenPin position={[0, 0, -950]}>
-        <Toggle3D width={200} height={50} position={[0, 20, 20]} />
-        <Toggle3D width={200} height={50} position={[0, 0, 50]} />
-        <Toggle3D width={200} height={50} position={[0, -20, 100]} />
+      {/* <ScreenPin position={[0, 0, -950]}> */}
+      <ScreenPin
+        anchorX="center"
+        anchorY="top"
+        z={950}
+        offsetX={0}
+        offsetY={-25}
+      >
+        <Toggle3D width={200} height={50} position={[0, 0, 0]} />
       </ScreenPin>
       <Group
         position={{
