@@ -48,7 +48,7 @@ export const SceneCamera = forwardRef<THREE.PerspectiveCamera>((props, ref) => {
     const cam = cameraRef.current;
 
     // ⭐ Register this SceneCamera globally
-    registerSceneCamera(cam);
+    registerSceneCamera(cam, CAMERA_Z);
 
     cam.position.set(0, 0, CAMERA_Z);
 
