@@ -20,6 +20,10 @@ export interface DirectionalLightProps {
   followSceneCamera?: boolean;
   followOffset?: [number, number, number];
   targetOffset?: [number, number, number];
+
+  // Helper toggles
+  showLightHelper?: boolean;
+  showShadowHelper?: boolean;
 }
 
 export function DirectionalLight({
@@ -35,6 +39,9 @@ export function DirectionalLight({
   followSceneCamera = false,
   followOffset = [0, 300, 600],
   targetOffset = [0, -200, -600],
+
+  showLightHelper = false,
+  showShadowHelper = false,
 }: DirectionalLightProps) {
   const lightRef = useRef<THREE.DirectionalLight>(null!);
   const targetRef = useRef<THREE.Object3D>(null!);
@@ -51,7 +58,7 @@ export function DirectionalLight({
     const light = lightRef.current;
     const target = targetRef.current;
 
-    // Target MUST be world-space
+    // Target must be in world space
     scene.add(target);
     target.position.set(0, 0, 0);
 
@@ -67,35 +74,46 @@ export function DirectionalLight({
     cam.right = frustumSize;
     cam.top = frustumSize;
     cam.bottom = -frustumSize;
-
     cam.near = 0.5;
     cam.far = 800;
-
     cam.updateProjectionMatrix();
 
     // ------------------------------------------------------------------
     // HELPERS
     // ------------------------------------------------------------------
-    const dl = new THREE.DirectionalLightHelper(light, 50);
-    const sh = new THREE.CameraHelper(cam);
 
-    helperLightRef.current = dl;
-    helperShadowRef.current = sh;
+    // Light helper
+    if (showLightHelper) {
+      const dl = new THREE.DirectionalLightHelper(light, 50);
+      helperLightRef.current = dl;
+      scene.add(dl);
+    }
 
-    scene.add(dl);
-    scene.add(sh);
+    // Shadow camera helper
+    if (showShadowHelper) {
+      const sh = new THREE.CameraHelper(cam);
+      helperShadowRef.current = sh;
+      scene.add(sh);
+    }
 
     return () => {
-      dl.removeFromParent();
-      dl.dispose();
-      sh.removeFromParent();
-      sh.geometry.dispose();
-      (sh.material as THREE.Material).dispose();
+      // Light helper cleanup
+      if (helperLightRef.current) {
+        helperLightRef.current.removeFromParent();
+        helperLightRef.current.dispose();
+      }
+
+      // Shadow helper cleanup
+      if (helperShadowRef.current) {
+        helperShadowRef.current.removeFromParent();
+        helperShadowRef.current.geometry.dispose();
+        (helperShadowRef.current.material as THREE.Material).dispose();
+      }
     };
-  }, [scene, frustumSize]);
+  }, [scene, frustumSize, showLightHelper, showShadowHelper]);
 
   // ---------------------------------------------------------------------
-  // FOLLOW **ONLY** THE REGISTERED SceneCamera
+  // FOLLOW REGISTERED SceneCamera (no smoothing / no lerp)
   // ---------------------------------------------------------------------
   useFrame(() => {
     const light = lightRef.current;
@@ -103,15 +121,14 @@ export function DirectionalLight({
     const sceneCamera = getSceneCamera();
 
     if (followSceneCamera && sceneCamera) {
-      // Make sure camera matrix is current (optional)
       sceneCamera.updateMatrixWorld();
 
-      // Follow position
+      // Light position
       const off = new THREE.Vector3(...followOffset);
       sceneCamera.localToWorld(off);
       light.position.copy(off);
 
-      // Follow target
+      // Target position
       const tOff = new THREE.Vector3(...targetOffset);
       sceneCamera.localToWorld(tOff);
       target.position.copy(tOff);
@@ -119,8 +136,9 @@ export function DirectionalLight({
       light.target.updateMatrixWorld();
     }
 
-    helperLightRef.current?.update();
-    helperShadowRef.current?.update();
+    // Update helpers (only if created)
+    if (showLightHelper) helperLightRef.current?.update();
+    if (showShadowHelper) helperShadowRef.current?.update();
   });
 
   // ---------------------------------------------------------------------

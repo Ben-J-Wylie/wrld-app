@@ -68,7 +68,11 @@ function InnerScene({ children }: { children?: React.ReactNode }) {
 /* ---------------------------------------------------------------------------
  * Stage — The public API for scene building
  * ---------------------------------------------------------------------------*/
-export function Stage({ children, backdrop, background = "#000" }: StageProps) {
+export function Stage({
+  children,
+  backdrop,
+  background = "#ffffff",
+}: StageProps) {
   useBreakpointListener();
 
   const breakpoint = useSceneStore((s) => s.breakpoint);
