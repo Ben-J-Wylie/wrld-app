@@ -1,32 +1,39 @@
-// toggleFamilyConfig.ts
-import { ToggleState } from "./ToggleTypes";
+// ToggleTree.ts
+import { ToggleState } from "./ToggleState";
 
-export const ToggleTree = {
+export interface ToggleTree {
+  id: string;
+  label: string;
+  parentId?: string;
+  state: ToggleState;
+}
+
+export const ToggleTree: Record<string, ToggleTree> = {
   GlobalLive: {
     id: "GlobalLive",
     label: "Global Live",
     parentId: undefined,
-    state: "off" as ToggleState,
+    state: "off",
   },
 
   CameraLive: {
     id: "CameraLive",
     label: "Camera Live",
     parentId: "GlobalLive",
-    state: "off" as ToggleState,
+    state: "off",
   },
 
   CameraFeature: {
     id: "CameraFeature",
     label: "Camera Feature",
     parentId: "CameraLive",
-    state: "off" as ToggleState,
+    state: "off",
   },
 
   AudioLive: {
     id: "AudioLive",
     label: "Audio Live",
     parentId: "GlobalLive",
-    state: "off" as ToggleState,
+    state: "off",
   },
 };

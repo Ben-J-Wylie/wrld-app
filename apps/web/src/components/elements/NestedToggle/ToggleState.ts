@@ -1,4 +1,4 @@
-// ToggleTypes.ts
+// ToggleState.ts
 
 /** Effective state shown to UI or 3D toggle */
 export type ToggleState = "on" | "off" | "cued";

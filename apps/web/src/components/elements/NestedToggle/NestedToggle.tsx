@@ -1,3 +1,4 @@
+// NestedToggle.tsx
 import React, { useMemo, useRef } from "react";
 import * as THREE from "three";
 
@@ -12,24 +13,21 @@ import {
 } from "../../CoreScene/Utilities/BreakpointResolver";
 
 import { toggleRegistry } from "./ToggleRegistry";
-import { useToggleNode } from "./useToggleNode";
+import { ToggleNode as useToggleNode } from "./ToggleNode";
+import { ToggleTree } from "./ToggleTree"; // needed for overrides
 
 type Vec3 = [number, number, number];
 
 export interface NestedToggleProps {
-  /** MUST be unique */
   id: string;
 
-  /** Optional: parent identifier for nested control */
-  parentId?: string;
-
+  /** You may still override this visually. */
   name?: string;
 
   troughWidth?: ResponsiveValue<number>;
   troughHeight?: ResponsiveValue<number>;
   sliderWidth?: ResponsiveValue<number>;
   sliderHeight?: ResponsiveValue<number>;
-
   radius?: ResponsiveValue<number>;
 
   position?: ResponsiveValue<Vec3>;
@@ -44,9 +42,7 @@ export interface NestedToggleProps {
 
 export function NestedToggle({
   id,
-  parentId,
-
-  name = "NestedToggle",
+  name,
 
   troughWidth = { mobile: 200, tablet: 200, desktop: 200 },
   troughHeight = { mobile: 50, tablet: 50, desktop: 50 },
@@ -65,28 +61,48 @@ export function NestedToggle({
 }: NestedToggleProps) {
   const bp = useSceneStore((s) => s.breakpoint);
 
-  // --------------------------------------------
-  // Register this node in the global registry
-  // --------------------------------------------
+  // -----------------------------------------------------------
+  // Correct registration logic:
+  // 1. If tree loaded it already registered → do NOT override.
+  // 2. Only override label if "name" is provided.
+  // -----------------------------------------------------------
   React.useEffect(() => {
+    const existing = toggleRegistry.getNode(id);
+
+    if (existing) {
+      // Only override label if provided, keep the existing state + parent
+      if (name && existing.label !== name) {
+        toggleRegistry.register({
+          id,
+          label: name,
+          state: existing.state,
+          parentId: existing.parentId,
+        });
+      }
+      return;
+    }
+
+    // If not in registry yet → register using tree defaults
+    const treeDef = ToggleTree[id];
+
     toggleRegistry.register({
       id,
-      label: name,
-      parentId,
-      state: "off",
+      label: name ?? treeDef.label,
+      parentId: treeDef.parentId,
+      state: treeDef.state,
     });
 
     return () => toggleRegistry.unregister(id);
-  }, [id, parentId, name]);
+  }, [id, name]);
 
-  // --------------------------------------------
-  // Subscribe to the registry
-  // --------------------------------------------
+  // -----------------------------------------------------------
+  // Subscribe to registry
+  // -----------------------------------------------------------
   const { state } = useToggleNode(id);
 
-  // --------------------------------------------
-  // Resolve responsive values
-  // --------------------------------------------
+  // -----------------------------------------------------------
+  // Resolve responsive
+  // -----------------------------------------------------------
   const resolvedWidth = resolveResponsive(troughWidth, bp);
   const resolvedHeight = resolveResponsive(troughHeight, bp);
   const resolvedSliderWidth = resolveResponsive(sliderWidth, bp);
@@ -97,19 +113,17 @@ export function NestedToggle({
   const resolvedRotation = resolveResponsive(rotation, bp);
   const resolvedScale = resolveResponsive(scale, bp);
 
-  // --------------------------------------------
-  // Click handler — sends “desired = on/off”
-  // Registry computes effective off/cued/on
-  // --------------------------------------------
+  // -----------------------------------------------------------
+  // Handle click
+  // -----------------------------------------------------------
   const handleClick = () => {
-    // user-intent toggle:
     const desired = state === "off" ? "on" : "off";
     toggleRegistry.updateState(id, desired);
   };
 
-  // --------------------------------------------
-  // Slider target X per registry state
-  // --------------------------------------------
+  // -----------------------------------------------------------
+  // Slider animation
+  // -----------------------------------------------------------
   const targetX = useMemo(() => {
     switch (state) {
       case "off":
@@ -123,9 +137,6 @@ export function NestedToggle({
 
   const sliderRef = useRef<THREE.Mesh>(null!);
 
-  // --------------------------------------------
-  // Animate slider
-  // --------------------------------------------
   useFrame(() => {
     if (!sliderRef.current) return;
     sliderRef.current.position.x = THREE.MathUtils.lerp(
@@ -135,12 +146,12 @@ export function NestedToggle({
     );
   });
 
-  // --------------------------------------------
+  // -----------------------------------------------------------
   // Render
-  // --------------------------------------------
+  // -----------------------------------------------------------
   return (
     <Group
-      name={name}
+      name={name ?? id}
       position={resolvedPosition}
       rotation={resolvedRotation}
       scale={resolvedScale}

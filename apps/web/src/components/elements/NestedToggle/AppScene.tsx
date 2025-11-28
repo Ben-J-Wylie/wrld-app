@@ -1,22 +1,30 @@
 // NestedToggleScene.tsx
 
+import { useEffect } from "react";
+
 import { Backdrop } from "../../CoreScene/Layers/Backdrop";
 import { Stage } from "../../CoreScene/Stage";
 import { Group } from "../../CoreScene/Layers/Group";
 import { NestedToggle } from "./NestedToggle";
 
-// import { ToggleTree } from "../../elements/NestedToggle/ToggleTree";
-
-const backdropSizes = {
-  mobile: { width: 720, height: 1920 },
-  tablet: { width: 1280, height: 1280 },
-  desktop: { width: 1920, height: 720 },
-};
+import { toggleRegistry } from "./ToggleRegistry";
+import { ToggleTree } from "./ToggleTree";
 
 export function AppScene() {
+  // 🔥 Load the toggle hierarchy at startup
+  useEffect(() => {
+    toggleRegistry.clear();
+    toggleRegistry.loadFromTree(ToggleTree);
+  }, []);
+
+  const backdropSizes = {
+    mobile: { width: 720, height: 1920 },
+    tablet: { width: 1280, height: 1280 },
+    desktop: { width: 1920, height: 720 },
+  };
+
   return (
     <Stage backdrop={backdropSizes}>
-      {/* Wrapping group for convenience */}
       <Group
         name="NestedToggleGroup"
         position={{
@@ -37,12 +45,14 @@ export function AppScene() {
         anchor={[0.5, 0.5, 0]}
         visible={true}
       >
-        {/* ============================================================ */}
-        {/* ROOT TOGGLE (level 1) */}
-        {/* ============================================================ */}
+        {/* ---------------------------------------------------------------- */}
+        {/*  Toggle hierarchy comes from ToggleTree, not the scene.          */}
+        {/*  Scene ONLY places toggles visually.                             */}
+        {/* ---------------------------------------------------------------- */}
+
+        {/* ROOT TOGGLE */}
         <NestedToggle
           id="GlobalLive"
-          name="Global Live"
           position={{
             mobile: [0, 200, 0],
             tablet: [0, 200, 0],
@@ -50,13 +60,9 @@ export function AppScene() {
           }}
         />
 
-        {/* ============================================================ */}
-        {/* LEVEL 2 CHILDREN OF ROOT */}
-        {/* ============================================================ */}
+        {/* CHILDREN */}
         <NestedToggle
           id="CameraLive"
-          parentId="GlobalLive"
-          name="Camera Live"
           position={{
             mobile: [0, 80, 0],
             tablet: [0, 80, 0],
@@ -66,8 +72,6 @@ export function AppScene() {
 
         <NestedToggle
           id="AudioLive"
-          parentId="GlobalLive"
-          name="Audio Live"
           position={{
             mobile: [0, -40, 0],
             tablet: [0, -40, 0],
@@ -75,13 +79,9 @@ export function AppScene() {
           }}
         />
 
-        {/* ============================================================ */}
-        {/* LEVEL 3 — Child of CameraLive */}
-        {/* ============================================================ */}
+        {/* GRANDCHILD */}
         <NestedToggle
           id="CameraFeature"
-          parentId="CameraLive"
-          name="Camera Feature"
           position={{
             mobile: [0, -160, 0],
             tablet: [0, -160, 0],

@@ -1,9 +1,9 @@
-// useToggleNode.ts
+// ToggleNode.ts
 import { useEffect, useState, useCallback } from "react";
 import { toggleRegistry } from "./ToggleRegistry";
-import { ToggleState } from "./ToggleTypes";
+import { ToggleState } from "./ToggleState";
 
-export function useToggleNode(id: string) {
+export function ToggleNode(id: string) {
   const [state, setState] = useState<ToggleState>("off");
   const [label, setLabel] = useState<string>("");
   const [ancestors, setAncestors] = useState<ToggleState[]>([]);

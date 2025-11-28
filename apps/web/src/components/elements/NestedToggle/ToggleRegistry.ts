@@ -1,8 +1,16 @@
 // ToggleRegistry.ts
-import { ToggleNode, ToggleState } from "./ToggleTypes";
+import { ToggleNode, ToggleState } from "./ToggleState";
 
 type Registry = Record<string, ToggleNode>;
 type Listener = () => void;
+
+// Optional helper type for tree configs like ToggleTree / ToggleFamily
+export interface ToggleTreeNodeDef {
+  id: string;
+  label: string;
+  parentId?: string;
+  state: ToggleState;
+}
 
 class ToggleRegistry {
   private registry: Registry = {};
@@ -21,7 +29,7 @@ class ToggleRegistry {
   }
 
   // -------------------------------------------------------------
-  // Registration
+  // Registration (per-node, usually from UI)
   // -------------------------------------------------------------
   register(
     node: Omit<ToggleNode, "children" | "desired"> & { desired?: "on" | "off" }
@@ -31,11 +39,17 @@ class ToggleRegistry {
     this.registry[node.id] = {
       ...existing,
       ...node,
-      desired: node.desired ?? (node.state === "on" ? "on" : "off"),
+      // If caller doesn't specify desired, keep existing.desired if present,
+      // otherwise infer from state.
+      desired:
+        node.desired ??
+        existing?.desired ??
+        (node.state === "on" ? "on" : "off"),
+      // Preserve existing children if any
       children: existing?.children || [],
     };
 
-    // attach to parent
+    // Attach to parent
     if (node.parentId) {
       const parent = this.registry[node.parentId];
       if (parent && !parent.children.includes(node.id)) {
@@ -43,7 +57,7 @@ class ToggleRegistry {
       }
     }
 
-    // compute correct effective state
+    // Compute correct effective state for this node
     this.recalculateNode(node.id);
 
     this.notify();
@@ -61,6 +75,49 @@ class ToggleRegistry {
     }
 
     delete this.registry[id];
+    this.notify();
+  }
+
+  // -------------------------------------------------------------
+  // Bulk load from a static tree definition
+  // (e.g., from toggleFamilyConfig.ts)
+  // -------------------------------------------------------------
+  loadFromTree(tree: Record<string, ToggleTreeNodeDef>) {
+    // Reset everything and rebuild from the tree
+    this.registry = {};
+
+    // 1) First pass: create base nodes
+    for (const key in tree) {
+      const def = tree[key];
+
+      this.registry[def.id] = {
+        id: def.id,
+        label: def.label,
+        parentId: def.parentId,
+        state: def.state,
+        desired: def.state === "on" ? "on" : "off",
+        children: [],
+      };
+    }
+
+    // 2) Second pass: wire up children
+    for (const key in tree) {
+      const def = tree[key];
+      if (def.parentId) {
+        const parent = this.registry[def.parentId];
+        if (parent && !parent.children.includes(def.id)) {
+          parent.children.push(def.id);
+        }
+      }
+    }
+
+    // 3) Third pass: recalculate effective state for all nodes
+    for (const key in tree) {
+      const def = tree[key];
+      this.recalculateNode(def.id);
+    }
+
+    // 4) Notify subscribers once
     this.notify();
   }
 
@@ -90,13 +147,13 @@ class ToggleRegistry {
     const ancestorOff = ancestors.some((a) => a.state === "off");
     const ancestorCued = ancestors.some((a) => a.state === "cued");
 
-    // root nodes can never be cued
+    // Root nodes can never be cued
     if (!node.parentId) {
       node.state = node.desired;
       return;
     }
 
-    // if ancestors block on → transform desired:on → cued
+    // If ancestors block "on" → transform desired:on → cued
     if ((ancestorOff || ancestorCued) && node.desired === "on") {
       node.state = "cued";
     } else {
@@ -125,7 +182,7 @@ class ToggleRegistry {
         child.state = child.desired;
       }
 
-      // continue downward
+      // Continue downward
       this.cascadeDown(childId);
     }
   }
