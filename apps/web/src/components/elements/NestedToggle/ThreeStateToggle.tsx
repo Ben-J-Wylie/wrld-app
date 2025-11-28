@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from "react";
+import React, { useMemo, useRef } from "react";
 import * as THREE from "three";
 
 import { Group } from "../../containers/SceneCore/Layers/Group";
@@ -11,44 +11,47 @@ import {
   ResponsiveValue,
 } from "../../containers/SceneCore/Utilities/BreakpointResolver";
 
+import { toggleRegistry } from "./ToggleRegistry";
+import { useToggleNode } from "./useToggleNode";
+
 type Vec3 = [number, number, number];
 
 export interface ThreeStateToggleProps {
+  /** MUST be unique */
+  id: string;
+
+  /** Optional: parent identifier for nested control */
+  parentId?: string;
+
   name?: string;
-  // ---- Responsive trough & slider sizing ----
+
   troughWidth?: ResponsiveValue<number>;
   troughHeight?: ResponsiveValue<number>;
   sliderWidth?: ResponsiveValue<number>;
   sliderHeight?: ResponsiveValue<number>;
 
-  // ---- Corner rounding ----
   radius?: ResponsiveValue<number>;
 
-  // ---- Placement ----
   position?: ResponsiveValue<Vec3>;
   rotation?: ResponsiveValue<Vec3>;
   scale?: ResponsiveValue<Vec3>;
 
-  // ---- Render order ----
   z?: number;
 
-  // ---- Colors (if no texture) ----
   troughColor?: string;
   sliderColor?: string;
-
-  // ---- Emit changes ----
-  onChange?: (state: "off" | "cued" | "on") => void;
 }
 
 export function ThreeStateToggle({
+  id,
+  parentId,
+
   name = "ThreeStateToggle",
-  // DEFAULTS (can be overridden by consumer)
+
   troughWidth = { mobile: 200, tablet: 200, desktop: 200 },
   troughHeight = { mobile: 50, tablet: 50, desktop: 50 },
-
   sliderWidth = { mobile: 75, tablet: 75, desktop: 75 },
   sliderHeight = { mobile: 45, tablet: 45, desktop: 45 },
-
   radius = { mobile: 5, tablet: 5, desktop: 5 },
 
   position = { mobile: [0, 0, 20], tablet: [0, 0, 20], desktop: [0, 0, 20] },
@@ -59,41 +62,54 @@ export function ThreeStateToggle({
 
   troughColor = "#afafaf",
   sliderColor = "#d5d5d5",
-
-  onChange,
 }: ThreeStateToggleProps) {
   const bp = useSceneStore((s) => s.breakpoint);
 
-  const [state, setState] = useState<"off" | "cued" | "on">("off");
+  // --------------------------------------------
+  // Register this node in the global registry
+  // --------------------------------------------
+  React.useEffect(() => {
+    toggleRegistry.register({
+      id,
+      label: name,
+      parentId,
+      state: "off",
+    });
 
+    return () => toggleRegistry.unregister(id);
+  }, [id, parentId, name]);
+
+  // --------------------------------------------
+  // Subscribe to the registry
+  // --------------------------------------------
+  const { state } = useToggleNode(id);
+
+  // --------------------------------------------
+  // Resolve responsive values
+  // --------------------------------------------
   const resolvedWidth = resolveResponsive(troughWidth, bp);
   const resolvedHeight = resolveResponsive(troughHeight, bp);
-
   const resolvedSliderWidth = resolveResponsive(sliderWidth, bp);
   const resolvedSliderHeight = resolveResponsive(sliderHeight, bp);
-
   const resolvedRadius = resolveResponsive(radius, bp);
 
   const resolvedPosition = resolveResponsive(position, bp);
   const resolvedRotation = resolveResponsive(rotation, bp);
   const resolvedScale = resolveResponsive(scale, bp);
 
-  // -------------------------------------------------------
-  // Cycle states when slider is clicked
-  // -------------------------------------------------------
-  function nextState() {
-    setState((prev) => {
-      const next = prev === "off" ? "cued" : prev === "cued" ? "on" : "off";
+  // --------------------------------------------
+  // Click handler — sends “desired = on/off”
+  // Registry computes effective off/cued/on
+  // --------------------------------------------
+  const handleClick = () => {
+    // user-intent toggle:
+    const desired = state === "off" ? "on" : "off";
+    toggleRegistry.updateState(id, desired);
+  };
 
-      onChange?.(next);
-      return next;
-    });
-  }
-
-  // -------------------------------------------------------
-  // Slider TARGET X positions per state
-  // Automatically scales with trough width
-  // -------------------------------------------------------
+  // --------------------------------------------
+  // Slider target X per registry state
+  // --------------------------------------------
   const targetX = useMemo(() => {
     switch (state) {
       case "off":
@@ -107,22 +123,21 @@ export function ThreeStateToggle({
 
   const sliderRef = useRef<THREE.Mesh>(null!);
 
-  // -------------------------------------------------------
-  // Smooth animation using useFrame
-  // -------------------------------------------------------
+  // --------------------------------------------
+  // Animate slider
+  // --------------------------------------------
   useFrame(() => {
     if (!sliderRef.current) return;
-
     sliderRef.current.position.x = THREE.MathUtils.lerp(
       sliderRef.current.position.x,
       targetX,
-      0.15 // animation speed
+      0.15
     );
   });
 
-  // -------------------------------------------------------
+  // --------------------------------------------
   // Render
-  // -------------------------------------------------------
+  // --------------------------------------------
   return (
     <Group
       name={name}
@@ -133,28 +148,28 @@ export function ThreeStateToggle({
     >
       {/* Trough */}
       <ImagePlane
-        name="Toggle Trough"
+        name={`${id}-Trough`}
         width={resolvedWidth}
         height={resolvedHeight}
         cornerRadius={resolvedRadius}
         position={[0, 0, z]}
         color={troughColor}
-        castShadow={true}
-        receiveShadow={true}
+        castShadow
+        receiveShadow
       />
 
       {/* Slider */}
       <ImagePlane
         ref={sliderRef}
-        name="Toggle Slider"
+        name={`${id}-Slider`}
         width={resolvedSliderWidth}
         height={resolvedSliderHeight}
         cornerRadius={resolvedRadius}
-        position={[targetX, 0, z + 10]} // initial position
+        position={[targetX, 0, z + 10]}
         color={sliderColor}
-        castShadow={true}
-        receiveShadow={true}
-        onPointerDown={() => nextState()}
+        castShadow
+        receiveShadow
+        onPointerDown={handleClick}
       />
     </Group>
   );
