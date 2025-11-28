@@ -2,7 +2,7 @@ import { Stage } from "@/components/containers/SceneCore/Stage/Stage";
 import { Cube } from "@/components/containers/SceneObjects/Geometry/Cube";
 import { Sphere } from "@/components/containers/SceneObjects/Geometry/Sphere";
 import { ImagePlane } from "@/components/containers/SceneObjects/Geometry/ImagePlane";
-import { Group } from "@/components/containers/SceneCore/Layers/Group";
+import { Group } from "@/components/CoreScene/Layers/Group";
 
 import banner from "./banner.png";
 

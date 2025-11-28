@@ -1,10 +1,10 @@
 import React, { useState } from "react";
 import { useResponsiveContext } from "../../containers/Responsive/ResponsiveContext";
 import ParallaxItem from "../../containers/Parallax/ParallaxItem";
-import WrldLogo from "../../elements/Logo/Logo";
-import Avatar from "../../elements/Avatar/Avatar";
-import MenuContainer from "../../elements/Menu/MenuContainer";
-import MenuEntry from "../../elements/Menu/MenuEntry";
+import WrldLogo from "../../Elements/Logo/Logo";
+import Avatar from "../../Elements/Avatar/Avatar";
+import MenuContainer from "../../Elements/Menu/MenuContainer";
+import MenuEntry from "../../Elements/Menu/MenuEntry";
 import "./Header.css";
 
 interface HeaderProps {

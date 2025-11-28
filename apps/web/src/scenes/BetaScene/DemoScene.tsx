@@ -1,11 +1,11 @@
 // MyScene.tsx
 import React from "react";
 
-import { Stage } from "../../components/containers/SceneCore/Stage";
-import { Backdrop } from "../../components/containers/SceneCore/Layers/Backdrop";
-import { CameraPin } from "../../components/containers/SceneCore/Layers/CameraPin";
-import { Group } from "../../components/containers/SceneCore/Layers/Group";
-import { Toggle3D } from "../../components/elements/_Toggle3D/Toggle3D";
+import { Stage } from "../../components/CoreScene/Stage";
+import { Backdrop } from "../../components/CoreScene/Layers/Backdrop";
+import { CameraPin } from "../../components/CoreScene/Layers/CameraPin";
+import { Group } from "../../components/CoreScene/Layers/Group";
+import { Toggle3D } from "../../components/Elements/_Old/_Toggle3D/Toggle3D";
 
 const backdropSizes = {
   mobile: { width: 720, height: 1920 },

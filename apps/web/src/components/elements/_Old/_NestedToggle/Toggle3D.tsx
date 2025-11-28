@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import * as THREE from "three";
 
 import { ImagePlane } from "../../containers/SceneObjects/Geometry/ImagePlane";
-import { Group } from "../../containers/SceneCore/Layers/Group";
+import { Group } from "../../../CoreScene/Layers/Group";
 
 import offPng from "./T_Off.png";
 import onPng from "./T_On.png";

@@ -3,7 +3,7 @@ import * as THREE from "three";
 import React, { forwardRef, useMemo } from "react";
 import { useLoader } from "@react-three/fiber";
 import { TextureLoader } from "three";
-import { useBreakpoint } from "../../../containers/SceneCore/Utilities/Breakpoints";
+import { useBreakpoint } from "../../../CoreScene/Utilities/Breakpoints";
 
 // --------------------------------------------------
 // Breakpoint type

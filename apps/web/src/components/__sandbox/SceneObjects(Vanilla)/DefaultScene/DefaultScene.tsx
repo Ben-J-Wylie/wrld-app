@@ -1,7 +1,7 @@
 import { Stage } from "@/components/containers/SceneCore/Stage/Stage";
 import { TextPlane } from "@/components/containers/SceneObjects/Geometry/TextPlane";
 import { ImagePlane } from "@/components/containers/SceneObjects/Geometry/ImagePlane";
-import { Group } from "@/components/containers/SceneCore/Layers/Group";
+import { Group } from "@/components/CoreScene/Layers/Group";
 
 import Image from "./Image.svg";
 

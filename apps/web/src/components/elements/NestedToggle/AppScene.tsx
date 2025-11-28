@@ -1,0 +1,96 @@
+// NestedToggleScene.tsx
+
+import { Backdrop } from "../../CoreScene/Layers/Backdrop";
+import { Stage } from "../../CoreScene/Stage";
+import { Group } from "../../CoreScene/Layers/Group";
+import { NestedToggle } from "./NestedToggle";
+
+// import { ToggleTree } from "../../elements/NestedToggle/ToggleTree";
+
+const backdropSizes = {
+  mobile: { width: 720, height: 1920 },
+  tablet: { width: 1280, height: 1280 },
+  desktop: { width: 1920, height: 720 },
+};
+
+export function AppScene() {
+  return (
+    <Stage backdrop={backdropSizes}>
+      {/* Wrapping group for convenience */}
+      <Group
+        name="NestedToggleGroup"
+        position={{
+          mobile: [0, 0, 10],
+          tablet: [0, 0, 10],
+          desktop: [0, 0, 10],
+        }}
+        rotation={{
+          mobile: [0, 0, 0],
+          tablet: [0, 0, 0],
+          desktop: [0, 0, 0],
+        }}
+        scale={{
+          mobile: [1, 1, 1],
+          tablet: [1, 1, 1],
+          desktop: [1, 1, 1],
+        }}
+        anchor={[0.5, 0.5, 0]}
+        visible={true}
+      >
+        {/* ============================================================ */}
+        {/* ROOT TOGGLE (level 1) */}
+        {/* ============================================================ */}
+        <NestedToggle
+          id="GlobalLive"
+          name="Global Live"
+          position={{
+            mobile: [0, 200, 0],
+            tablet: [0, 200, 0],
+            desktop: [0, 200, 0],
+          }}
+        />
+
+        {/* ============================================================ */}
+        {/* LEVEL 2 CHILDREN OF ROOT */}
+        {/* ============================================================ */}
+        <NestedToggle
+          id="CameraLive"
+          parentId="GlobalLive"
+          name="Camera Live"
+          position={{
+            mobile: [0, 80, 0],
+            tablet: [0, 80, 0],
+            desktop: [0, 80, 0],
+          }}
+        />
+
+        <NestedToggle
+          id="AudioLive"
+          parentId="GlobalLive"
+          name="Audio Live"
+          position={{
+            mobile: [0, -40, 0],
+            tablet: [0, -40, 0],
+            desktop: [0, -40, 0],
+          }}
+        />
+
+        {/* ============================================================ */}
+        {/* LEVEL 3 — Child of CameraLive */}
+        {/* ============================================================ */}
+        <NestedToggle
+          id="CameraFeature"
+          parentId="CameraLive"
+          name="Camera Feature"
+          position={{
+            mobile: [0, -160, 0],
+            tablet: [0, -160, 0],
+            desktop: [0, -160, 0],
+          }}
+        />
+      </Group>
+
+      <Backdrop />
+    </Stage>
+  );
+}

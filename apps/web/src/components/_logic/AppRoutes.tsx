@@ -1,6 +1,6 @@
 import React from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
-import HeroSection from "../features/HeroSection/HeroSection";
+import HeroSection from "../Features/HeroSection/HeroSection";
 import ProfilePage from "../pages/ProfilePage/ProfilePage";
 import SetupPage from "../pages/SetupPage/SetupPage";
 
