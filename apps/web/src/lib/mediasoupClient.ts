@@ -146,12 +146,35 @@ export class MediaSoupClient {
     await this.createRecvTransport();
   }
 
+  // lib/mediasoupClient.ts
+
   async publishTrack(track: MediaStreamTrack) {
     if (!this.device) await this.initDevice();
     if (!this.sendTransport) await this.createSendTransport();
 
+    console.log("🛰 MediaSoupClient.publishTrack: producing track", track);
+
     const producer = await this.sendTransport!.produce({ track });
     this.producers.set(producer.id, producer);
+
+    console.log(
+      "🛰 MediaSoupClient.publishTrack: producer created",
+      producer.id,
+      "kind:",
+      producer.kind
+    );
+
+    // 🔥 LOCAL SELF-VIEW
+    const selfStream = new MediaStream([track]);
+    this.localStream = selfStream;
+
+    console.log(
+      "🛰 MediaSoupClient.publishTrack: emitting onNewStream for self",
+      selfStream
+    );
+    this.onNewStream?.(selfStream, "self");
+
+    return producer;
   }
 
   stopProducerByKind(kind: "audio" | "video") {

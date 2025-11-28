@@ -12,10 +12,10 @@ export default defineConfig({
     port: 5173,
     https: {
       key: fs.readFileSync(
-        path.resolve(__dirname, "../../certs/localhost-key.pem")
+        path.resolve(__dirname, "../../certs/localhost+3-key.pem")
       ),
       cert: fs.readFileSync(
-        path.resolve(__dirname, "../../certs/localhost.pem")
+        path.resolve(__dirname, "../../certs/localhost+3.pem")
       ),
     },
     hmr: {

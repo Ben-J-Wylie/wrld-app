@@ -11,28 +11,28 @@ export interface ToggleTree {
 export const ToggleTree: Record<string, ToggleTree> = {
   GlobalLive: {
     id: "GlobalLive",
-    label: "Global Live",
+    label: "GlobalLive",
     parentId: undefined,
     state: "off",
   },
 
   CameraLive: {
     id: "CameraLive",
-    label: "Camera Live",
+    label: "CameraLive",
     parentId: "GlobalLive",
     state: "off",
   },
 
   CameraFeature: {
     id: "CameraFeature",
-    label: "Camera Feature",
+    label: "CameraFeature",
     parentId: "CameraLive",
     state: "off",
   },
 
   AudioLive: {
     id: "AudioLive",
-    label: "Audio Live",
+    label: "AudioLive",
     parentId: "GlobalLive",
     state: "off",
   },

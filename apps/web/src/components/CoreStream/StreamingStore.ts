@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export type StreamingFeature =
+export type StreamingStore =
   | "camera"
   | "frontCamera"
   | "backCamera"
@@ -13,12 +13,12 @@ export type StreamingFeature =
   | "chat";
 
 export interface StreamingState {
-  features: Record<StreamingFeature, boolean>;
-  setFeature: (key: StreamingFeature, value: boolean) => void;
-  toggleFeature: (key: StreamingFeature) => void;
+  features: Record<StreamingStore, boolean>;
+  setFeature: (key: StreamingStore, value: boolean) => void;
+  toggleFeature: (key: StreamingStore) => void;
 }
 
-const defaultFeatures: Record<StreamingFeature, boolean> = {
+const defaultFeatures: Record<StreamingStore, boolean> = {
   camera: false,
   frontCamera: false,
   backCamera: false,

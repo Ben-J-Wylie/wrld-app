@@ -3,13 +3,15 @@
 import { Backdrop } from "../../../CoreScene/Layers/Backdrop";
 import { Stage } from "../../../CoreScene/Stage";
 import { Group } from "../../../CoreScene/Layers/Group";
+
+import { ImagePlane } from "../../../CoreScene/Geometry/ImagePlane";
 import { NestedToggle } from "../../NestedToggle/NestedToggle";
 
-import { StreamingSync } from "../StreamingSync";
+import { StreamingSync } from "../../../CoreStream/StreamingSync";
 import { MediaSoupClient } from "../../../../lib/mediasoupClient";
 import { useRef, useEffect } from "react";
 
-import { CameraFeedPlane } from "../Camera/CameraFeedPlane";
+import { CameraFeedPlane } from "./CameraFeedPlane";
 
 const backdropSizes = {
   mobile: { width: 720, height: 1920 },
@@ -51,7 +53,7 @@ export function AppScene() {
         {/* ============================================================ */}
         <NestedToggle
           id="GlobalLive"
-          name="Global Live"
+          name="GlobalLive"
           position={{
             mobile: [0, 200, 0],
             tablet: [0, 200, 0],
@@ -64,37 +66,11 @@ export function AppScene() {
         {/* ============================================================ */}
         <NestedToggle
           id="CameraLive"
-          parentId="GlobalLive"
-          name="Camera Live"
+          name="CameraLive"
           position={{
             mobile: [0, 80, 0],
             tablet: [0, 80, 0],
             desktop: [0, 80, 0],
-          }}
-        />
-
-        <NestedToggle
-          id="AudioLive"
-          parentId="GlobalLive"
-          name="Audio Live"
-          position={{
-            mobile: [0, -40, 0],
-            tablet: [0, -40, 0],
-            desktop: [0, -40, 0],
-          }}
-        />
-
-        {/* ============================================================ */}
-        {/* LEVEL 3 */}
-        {/* ============================================================ */}
-        <NestedToggle
-          id="CameraFeature"
-          parentId="CameraLive"
-          name="Camera Feature"
-          position={{
-            mobile: [0, -160, 0],
-            tablet: [0, -160, 0],
-            desktop: [0, -160, 0],
           }}
         />
       </Group>
@@ -117,6 +93,13 @@ export function AppScene() {
         cornerRadius={{ mobile: 20, tablet: 20, desktop: 20 }}
         castShadow
         receiveShadow
+      />
+      <ImagePlane
+        name="DebugPlane"
+        color="red"
+        width={200}
+        height={120}
+        position={[0, -320, 5]}
       />
 
       <Backdrop />
