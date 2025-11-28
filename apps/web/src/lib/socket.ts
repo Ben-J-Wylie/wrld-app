@@ -1,4 +1,5 @@
 import { io } from "socket.io-client";
+import type { Socket } from "socket.io-client";
 
 //const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const MEDIASERVER_URL = import.meta.env.VITE_MEDIASERVER_URL;
@@ -28,7 +29,10 @@ socket.on("connect", () => {
   const settings = JSON.parse(localStorage.getItem("wrld_settings") || "{}");
   const wasLive = localStorage.getItem("wrld_isLive") === "true";
 
-  console.log("👤 Sending register with stable userId:", { username: user.username, userId });
+  console.log("👤 Sending register with stable userId:", {
+    username: user.username,
+    userId,
+  });
   socket.emit("register", { name: user.username, userId });
 
   if (wasLive) {
@@ -55,7 +59,6 @@ socket.on("resyncStreamState", () => {
   });
 });
 
-
 socket.on("peerDelta", (data) => {
   switch (data.type) {
     case "join":
@@ -71,25 +74,28 @@ socket.on("peerDelta", (data) => {
       // remove from state
       break;
   }
-
 });
 
-
-export async function registerAndWait(socket, username: string, userId: string) {
-  return new Promise<void>((resolve, reject) => {
-    console.log("👤 Sending register with stable userId:", { username, userId });
+export async function registerAndWait(
+  socket: Socket,
+  username: string,
+  userId: string
+) {
+  return new Promise<void>((resolve) => {
+    console.log("👤 Sending register with stable userId:", {
+      username,
+      userId,
+    });
 
     socket.emit("register", { name: username, userId }, (res: any) => {
       if (res?.ok) {
         console.log("✅ Registration acknowledged by server");
-        resolve();
       } else {
         console.warn("⚠️ Registration not acknowledged:", res);
-        resolve(); // don't block forever
       }
+      resolve();
     });
 
-    // optional: timeout safeguard
     setTimeout(() => {
       console.warn("⏳ Registration timed out, continuing anyway");
       resolve();
@@ -99,7 +105,10 @@ export async function registerAndWait(socket, username: string, userId: string) 
 
 export async function safeRegister(username: string, userId: string) {
   return new Promise<void>((resolve) => {
-    console.log("👤 Sending register with stable userId:", { username, userId });
+    console.log("👤 Sending register with stable userId:", {
+      username,
+      userId,
+    });
     socket.emit("register", { name: username, userId }, (res: any) => {
       if (res?.ok) {
         console.log("✅ Registration acknowledged by server");

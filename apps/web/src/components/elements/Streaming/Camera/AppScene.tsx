@@ -86,20 +86,13 @@ export function AppScene() {
         width={{ mobile: 200, tablet: 220, desktop: 260 }}
         height={{ mobile: 120, tablet: 140, desktop: 160 }}
         position={{
-          mobile: [0, -320, 0],
-          tablet: [0, -320, 0],
-          desktop: [0, -320, 0],
+          mobile: [0, -320, 50],
+          tablet: [0, -320, 50],
+          desktop: [0, -320, 50],
         }}
-        cornerRadius={{ mobile: 20, tablet: 20, desktop: 20 }}
+        cornerRadius={{ mobile: 4, tablet: 4, desktop: 4 }}
         castShadow
         receiveShadow
-      />
-      <ImagePlane
-        name="DebugPlane"
-        color="red"
-        width={200}
-        height={120}
-        position={[0, -320, 5]}
       />
 
       <Backdrop />

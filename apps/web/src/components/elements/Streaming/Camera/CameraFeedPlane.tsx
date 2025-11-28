@@ -4,13 +4,14 @@ import React, { useEffect, useRef, useState } from "react";
 import { VideoTexture, LinearFilter, SRGBColorSpace } from "three";
 import { Html } from "@react-three/drei";
 
-import { ImagePlane } from "../../../CoreScene/Geometry/ImagePlane";
+import { VideoPlane } from "../../../CoreScene/Geometry/VideoPlane"; // ⬅️ uses your new VideoPlane
 import { MediaSoupClient } from "../../../../lib/mediasoupClient";
 
 interface CameraFeedPlaneProps {
   msc: MediaSoupClient;
   peerId?: string;
   name?: string;
+
   width: any;
   height: any;
   position: any;
@@ -39,58 +40,95 @@ export function CameraFeedPlane({
   z = 0,
   visible = true,
 }: CameraFeedPlaneProps) {
-  // Hidden video element driving our VideoTexture
+  // Hidden-but-present HTML video element
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  // THREE.VideoTexture
+  // THREE.VideoTexture (created after canplay)
   const [texture, setTexture] = useState<VideoTexture | null>(null);
 
-  // Debug visibility flags
+  // Debug flags
   const [hasStream, setHasStream] = useState(false);
   const [attachedSrcObject, setAttachedSrcObject] = useState(false);
 
-  // -------------------------------------------------------
-  // Create VideoTexture when <video> exists
-  // -------------------------------------------------------
+  // ---------------------------------------------------------------------
+  // Create VideoTexture *after* video has metadata and is ready to play
+  // ---------------------------------------------------------------------
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
-    console.log("🎥 CameraFeedPlane: initial videoRef is ready");
+    const handleCanPlay = () => {
+      console.log("🎥 CameraFeedPlane: <video> canplay → creating texture");
 
-    video.muted = true;
-    video.autoplay = true;
-    video.playsInline = true;
+      const tex = new VideoTexture(video);
+      tex.minFilter = LinearFilter;
+      tex.magFilter = LinearFilter;
+      tex.colorSpace = SRGBColorSpace;
 
-    const tex = new VideoTexture(video);
-    tex.minFilter = LinearFilter;
-    tex.magFilter = LinearFilter;
-    tex.colorSpace = SRGBColorSpace;
-
-    setTexture(tex);
-    console.log("🎥 CameraFeedPlane: VideoTexture created", tex);
-
-    return () => {
-      tex.dispose();
+      setTexture(tex);
     };
+
+    video.addEventListener("canplay", handleCanPlay);
+    return () => video.removeEventListener("canplay", handleCanPlay);
   }, []);
 
-  // -------------------------------------------------------
-  // Handle incoming mediasoup streams
-  // -------------------------------------------------------
+  // ---------------------------------------------------------------------
+  // Attach LOCAL raw camera stream (for preview before Mediasoup consume)
+  // ---------------------------------------------------------------------
+  useEffect(() => {
+    if (peerId !== "self") return;
+    if (!msc.localStream) return;
+    const video = videoRef.current;
+    if (!video) return;
+
+    console.log(
+      "📺 [Local Preview] Attaching raw localStream",
+      msc.localStream
+    );
+    video.srcObject = msc.localStream;
+
+    video.muted = true;
+    video.playsInline = true;
+
+    // Force play attempt — required on Safari/iOS/Chrome
+    video
+      .play()
+      .catch((err) =>
+        console.warn("❌ video.play() failed for localStream:", err)
+      );
+
+    setAttachedSrcObject(true);
+    setHasStream(true);
+  }, [peerId, msc.localStream]);
+
+  // ---------------------------------------------------------------------
+  // Handle remote / Mediasoup self-consume streams
+  // ---------------------------------------------------------------------
   useEffect(() => {
     if (!msc) return;
 
     console.log("🔌 CameraFeedPlane: binding onNewStream handler for", peerId);
-
     const originalHandler = msc.onNewStream;
 
     msc.onNewStream = (stream, id) => {
       console.log("🔥 CameraFeedPlane: onNewStream fired", { stream, id });
 
       if (id === peerId && videoRef.current) {
-        console.log("📺 Attaching stream to <video>", stream);
-        videoRef.current.srcObject = stream;
+        const video = videoRef.current;
+
+        console.log("📺 Attaching Mediasoup stream to <video>", stream);
+        video.srcObject = stream;
+
+        video.muted = true;
+        video.playsInline = true;
+
+        // Required to unfreeze VideoTexture
+        video
+          .play()
+          .catch((err) =>
+            console.warn("❌ video.play() failed on onNewStream:", err)
+          );
+
         setAttachedSrcObject(true);
         setHasStream(true);
       }
@@ -104,9 +142,9 @@ export function CameraFeedPlane({
     };
   }, [msc, peerId]);
 
-  // -------------------------------------------------------
-  // Render debug overlay
-  // -------------------------------------------------------
+  // ---------------------------------------------------------------------
+  // 3D Debug Overlay
+  // ---------------------------------------------------------------------
   const DebugOverlay = () => (
     <Html position={[0, 0, 1]}>
       <div
@@ -121,28 +159,41 @@ export function CameraFeedPlane({
         <div>peerId: {peerId}</div>
         <div>hasStream: {String(hasStream)}</div>
         <div>attached: {String(attachedSrcObject)}</div>
-        <div>texture: {texture ? "ready" : "null"}</div>
+        <div>texture: {texture ? "ready ✔" : "null"}</div>
       </div>
     </Html>
   );
 
-  // -------------------------------------------------------
-  // Render plane + debug
-  // -------------------------------------------------------
+  // ---------------------------------------------------------------------
+  // Render invisible video + the VideoPlane
+  // ---------------------------------------------------------------------
   return (
     <>
-      {/* Hidden HTML video element */}
+      {/* Hidden-but-active <video> (NOT display:none!) */}
       <Html portal={{ current: document.body }}>
-        <video ref={videoRef} style={{ display: "none" }} />
+        <video
+          ref={videoRef}
+          muted
+          autoPlay
+          playsInline
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            width: "1px",
+            height: "1px",
+            opacity: 0,
+            pointerEvents: "none",
+            zIndex: -1,
+          }}
+        />
       </Html>
 
-      {/* Debug info in 3D scene */}
       <DebugOverlay />
 
-      {/* The actual video plane */}
-      <ImagePlane
+      <VideoPlane
         name={name}
-        texture={texture ?? undefined}
+        videoElement={videoRef.current ?? undefined}
         width={width}
         height={height}
         cornerRadius={cornerRadius}
