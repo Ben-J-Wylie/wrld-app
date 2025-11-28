@@ -90,9 +90,6 @@ export function AppScene() {
           tablet: [0, -320, 50],
           desktop: [0, -320, 50],
         }}
-        cornerRadius={{ mobile: 4, tablet: 4, desktop: 4 }}
-        castShadow
-        receiveShadow
       />
 
       <Backdrop />

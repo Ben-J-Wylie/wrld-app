@@ -14,7 +14,11 @@ export function CameraCapability(msc: MediaSoupClient): StreamingCapability {
       try {
         console.log("📷 CameraCapability: requesting getUserMedia...");
         stream = await navigator.mediaDevices.getUserMedia({
-          video: true,
+          video: {
+            width: { ideal: 640 }, // 🔑 reduce resolution for performance
+            height: { ideal: 360 },
+            frameRate: { ideal: 30, max: 30 },
+          },
           audio: false,
         });
         console.log("📷 CameraCapability: getUserMedia OK", stream);

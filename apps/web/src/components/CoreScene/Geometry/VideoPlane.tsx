@@ -1,6 +1,8 @@
-// VideoPlane.tsx
+// apps/web/src/wrld/CoreScene/Geometry/VideoPlane.tsx
+
 import * as THREE from "three";
-import React, { forwardRef, useEffect, useMemo, useRef, useState } from "react";
+import React, { forwardRef, useMemo, useRef } from "react";
+import { useFrame } from "@react-three/fiber";
 
 import { useSceneStore } from "../Store/SceneStore";
 import {
@@ -8,11 +10,8 @@ import {
   ResponsiveValue,
 } from "../Utilities/BreakpointResolver";
 
-import { createRoundedRectangleShape } from "./RoundedRectangle";
-
 type Vec3 = [number, number, number];
 
-// Convert degrees → radians
 function degVec3(v: Vec3): Vec3 {
   return [
     THREE.MathUtils.degToRad(v[0]),
@@ -23,203 +22,107 @@ function degVec3(v: Vec3): Vec3 {
 
 export interface VideoPlaneProps {
   name?: string;
-
-  /** Path to mp4/webm or external <video> element */
-  src?: string | null;
-  videoElement?: HTMLVideoElement | null;
+  texture?: THREE.VideoTexture | null;
 
   width?: ResponsiveValue<number>;
   height?: ResponsiveValue<number>;
-
-  /** Rounded corners */
-  cornerRadius?: ResponsiveValue<number>;
 
   position?: ResponsiveValue<Vec3>;
   rotation?: ResponsiveValue<Vec3>;
   scale?: ResponsiveValue<Vec3>;
 
-  z?: number; // renderOrder only
+  z?: number;
   visible?: boolean;
-
-  castShadow?: boolean;
-  receiveShadow?: boolean;
-
-  onClick?: (e: THREE.Event, hit: THREE.Intersection) => void;
-  onHover?: (e: THREE.Event | null, hit: THREE.Intersection | null) => void;
-
-  onPointerDown?: (e: any) => void;
 }
 
 export const VideoPlane = forwardRef<THREE.Mesh, VideoPlaneProps>(
   (
     {
-      name,
+      name = "VideoPlane",
+      texture,
 
-      src = null,
-      videoElement = null,
+      width = 320,
+      height = 180,
 
-      width = 100,
-      height = 100,
-      cornerRadius = 0,
-
-      position = [0, 0, 0],
-      rotation = [0, 0, 0],
-      scale = [1, 1, 1],
+      position,
+      rotation,
+      scale,
 
       z = 0,
       visible = true,
-
-      castShadow = true,
-      receiveShadow = true,
-
-      onClick,
-      onHover,
-      onPointerDown,
     },
     ref
   ) => {
-    const bp = useSceneStore((s) => s.breakpoint);
+    const meshRef = useRef<THREE.Mesh>(null!);
+    const materialRef = useRef<THREE.MeshBasicMaterial>(null!);
 
-    // ------------------------------------------
-    // Video element + VideoTexture creation
-    // ------------------------------------------
-    const videoRef = useRef<HTMLVideoElement | null>(null);
-    const [texture, setTexture] = useState<THREE.VideoTexture | null>(null);
-
-    useEffect(() => {
-      let mounted = true;
-
-      // Use provided element or create one
-      const vid =
-        videoElement ??
-        (() => {
-          if (!src) return null;
-
-          const el = document.createElement("video");
-          el.src = src;
-
-          el.crossOrigin = "anonymous";
-          el.loop = true;
-          el.muted = true;
-          el.playsInline = true;
-          el.autoplay = true;
-
-          el.play().catch(() => {});
-
-          return el;
-        })();
-
-      videoRef.current = vid;
-
-      if (vid) {
-        const tex = new THREE.VideoTexture(vid);
-        tex.colorSpace = THREE.SRGBColorSpace;
-        tex.needsUpdate = true;
-
-        if (mounted) setTexture(tex);
-      }
-
-      return () => {
-        mounted = false;
-      };
-    }, [src, videoElement]);
-
-    // ------------------------------------------
-    // Responsive values
-    // ------------------------------------------
-    const resolvedWidth = resolveResponsive(width, bp);
-    const resolvedHeight = resolveResponsive(height, bp);
-    const resolvedRadius = resolveResponsive(cornerRadius, bp);
-
-    const resolvedPosition = resolveResponsive(position, bp) as Vec3;
-    const rotationDeg = resolveResponsive(rotation, bp) as Vec3;
-    const resolvedRotation = degVec3(rotationDeg);
-    const resolvedScale = resolveResponsive(scale, bp) as Vec3;
-
-    // ------------------------------------------
-    // Geometry (plane or rounded rectangle)
-    // ------------------------------------------
-    const geometry = useMemo(() => {
-      const w = resolvedWidth;
-      const h = resolvedHeight;
-      const r = resolvedRadius ?? 0;
-
-      if (r <= 0.0001) {
-        return new THREE.PlaneGeometry(w, h);
-      }
-
-      const shape = createRoundedRectangleShape(w, h, r);
-      const geo = new THREE.ShapeGeometry(shape);
-
-      // Proper UV mapping
-      geo.computeBoundingBox();
-      const bbox = geo.boundingBox!;
-      const size = new THREE.Vector2(
-        bbox.max.x - bbox.min.x,
-        bbox.max.y - bbox.min.y
-      );
-
-      const uvAttr = geo.getAttribute("uv");
-      for (let i = 0; i < uvAttr.count; i++) {
-        const x = geo.attributes.position.getX(i) - bbox.min.x;
-        const y = geo.attributes.position.getY(i) - bbox.min.y;
-        uvAttr.setXY(i, x / size.x, y / size.y);
-      }
-
-      return geo;
-    }, [resolvedWidth, resolvedHeight, resolvedRadius]);
-
-    // ------------------------------------------
-    // Pointer handlers
-    // ------------------------------------------
-    const handlePointerMove = (e: any) => {
-      if (!onHover) return;
-      const hit = e.intersections?.[0] ?? null;
-      onHover(e, hit);
+    const setRefs = (node: THREE.Mesh | null) => {
+      meshRef.current = node as any;
+      if (typeof ref === "function") ref(node);
+      else if (ref && "current" in ref) (ref as any).current = node;
     };
 
-    const handlePointerOut = (e: any) => {
-      if (onHover) onHover(e, null);
+    const breakpoint = useSceneStore((s) => s.breakpoint);
+
+    const defaultVec3: ResponsiveValue<Vec3> = {
+      mobile: [0, 0, 0],
+      tablet: [0, 0, 0],
+      desktop: [0, 0, 0],
+    };
+    const defaultScale: ResponsiveValue<Vec3> = {
+      mobile: [1, 1, 1],
+      tablet: [1, 1, 1],
+      desktop: [1, 1, 1],
     };
 
-    const handleClick = (e: any) => {
-      if (!onClick) return;
-      const hit = e.intersections?.[0] ?? null;
-      onClick(e, hit);
-    };
+    const safePosition = position ?? defaultVec3;
+    const safeRotation = rotation ?? defaultVec3;
+    const safeScale = scale ?? defaultScale;
 
-    // ------------------------------------------
-    // Render
-    // ------------------------------------------
+    const resolvedWidth = resolveResponsive(width, breakpoint) ?? 320;
+    const resolvedHeight = resolveResponsive(height, breakpoint) ?? 180;
+
+    const resolvedPosition = useMemo<Vec3>(() => {
+      const base = resolveResponsive<Vec3>(safePosition, breakpoint);
+      return [base[0], base[1], (base[2] ?? 0) + z];
+    }, [safePosition, breakpoint, z]);
+
+    const resolvedRotation = useMemo<Vec3>(() => {
+      const v = resolveResponsive<Vec3>(safeRotation, breakpoint);
+      return degVec3(v);
+    }, [safeRotation, breakpoint]);
+
+    const resolvedScale = useMemo<Vec3>(() => {
+      return resolveResponsive<Vec3>(safeScale, breakpoint);
+    }, [safeScale, breakpoint]);
+
+    React.useEffect(() => {
+      if (!materialRef.current) return;
+      materialRef.current.map = texture ?? null;
+      materialRef.current.needsUpdate = true;
+    }, [texture]);
+
+    useFrame(() => {
+      if (texture && !(texture as any).__rvfcDriven) {
+        texture.needsUpdate = true;
+      }
+    });
+
     return (
-      <mesh
-        ref={ref}
-        name={name ?? ""}
+      <group
+        name={name}
         position={resolvedPosition}
         rotation={resolvedRotation}
         scale={resolvedScale}
-        castShadow={castShadow}
-        receiveShadow={receiveShadow}
-        renderOrder={z ?? 0}
         visible={visible}
-        onClick={handleClick}
-        onPointerDown={onPointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerOut={handlePointerOut}
-        geometry={geometry}
       >
-        <meshStandardMaterial
-          map={texture ?? undefined}
-          color={"#ffffff"}
-          transparent={false}
-          depthWrite={true}
-          depthTest={true}
-          toneMapped={true}
-          side={THREE.DoubleSide}
-        />
-      </mesh>
+        <mesh ref={setRefs}>
+          <planeGeometry args={[resolvedWidth, resolvedHeight]} />
+
+          {/* basic material: no lighting, no tone mapping, fastest possible */}
+          <meshBasicMaterial ref={materialRef} toneMapped={false} />
+        </mesh>
+      </group>
     );
   }
 );
-
-VideoPlane.displayName = "VideoPlane";
