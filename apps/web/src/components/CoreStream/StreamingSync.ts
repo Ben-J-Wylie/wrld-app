@@ -3,30 +3,56 @@
 import { useEffect } from "react";
 import { ToggleNode } from "../Elements/NestedToggle/ToggleNode";
 import { useStreamingStore } from "./StreamingStore";
+
 import { CameraCapability } from "../Elements/Streaming/Camera/CameraCapability";
+import { AudioCapability } from "../Elements/Streaming/Audio/AudioCapability";
+
 import { MediaSoupClient } from "../../lib/mediasoupClient";
 
 export function StreamingSync(msc: MediaSoupClient) {
   const { state: cameraState } = ToggleNode("CameraLive");
+  const { state: micState } = ToggleNode("AudioLive");
   const streaming = useStreamingStore();
 
+  // -----------------------------
+  // CAMERA SYNC
+  // -----------------------------
   useEffect(() => {
     console.log("🎛 StreamingSync: CameraLive state changed →", cameraState);
 
     const camera = CameraCapability(msc);
 
     if (cameraState === "on" || cameraState === "cued") {
-      console.log("🎛 StreamingSync: enabling camera feature");
       streaming.setFeature("camera", true);
-      camera.onEnable().catch((err) => {
-        console.error("🎛 StreamingSync: camera.onEnable failed", err);
-      });
+      camera
+        .onEnable()
+        .catch((err) => console.error("🎛 camera.onEnable failed", err));
     } else if (cameraState === "off") {
-      console.log("🎛 StreamingSync: disabling camera feature");
       streaming.setFeature("camera", false);
-      camera.onDisable().catch((err) => {
-        console.error("🎛 StreamingSync: camera.onDisable failed", err);
-      });
+      camera
+        .onDisable()
+        .catch((err) => console.error("🎛 camera.onDisable failed", err));
     }
   }, [cameraState]);
+
+  // -----------------------------
+  // MIC SYNC
+  // -----------------------------
+  useEffect(() => {
+    console.log("🎛 StreamingSync: AudioLive state changed →", micState);
+
+    const mic = AudioCapability(msc);
+
+    if (micState === "on" || micState === "cued") {
+      streaming.setFeature("mic", true);
+      mic
+        .onEnable()
+        .catch((err) => console.error("🎛 mic.onEnable failed", err));
+    } else if (micState === "off") {
+      streaming.setFeature("mic", false);
+      mic
+        .onDisable()
+        .catch((err) => console.error("🎛 mic.onDisable failed", err));
+    }
+  }, [micState]);
 }
