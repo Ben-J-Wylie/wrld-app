@@ -48,22 +48,31 @@ export function DemoScene() {
           src={shapePng} // ← PNG with transparency
           //   color="#66ccff"
           position={[0.5, 2, 3]}
-          rotation={[0, 0.5, 0]}
+          rotation={[0, 0.1, 0]}
           lightRef={lightRef}
         />
-        <ImagePlane
-          id="four"
-          src={shapePng} // ← PNG with transparency
-          //   color="#b41dff"
-          position={[0.8, 1.8, 3.5]}
-          rotation={[0, 0, 0]} // <— tilt on X
-          lightRef={lightRef}
-        />
+
         <ImagePlane
           id="three"
           src={shapePng} // ← PNG with transparency
           //   color="#66ff99"
           position={[-0.3, 1.4, 1.5]}
+          rotation={[0, 0, 0]}
+          lightRef={lightRef}
+        />
+        <ImagePlane
+          id="four"
+          src={shapePng} // ← PNG with transparency
+          //   color="#66ff99"
+          position={[-0.3, 1.4, 3.5]}
+          rotation={[0, -0.3, 0]}
+          lightRef={lightRef}
+        />
+        <ImagePlane
+          id="five"
+          src={shapePng} // ← PNG with transparency
+          //   color="#66ff99"
+          position={[-0.3, 1.4, 4]}
           rotation={[0, 0, 0]}
           lightRef={lightRef}
         />

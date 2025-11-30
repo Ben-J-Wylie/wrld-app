@@ -1,5 +1,5 @@
 // ImagePlane.tsx
-import React, { forwardRef, useRef, useMemo } from "react";
+import React, { forwardRef, useRef, useMemo, useLayoutEffect } from "react";
 import * as THREE from "three";
 import { FakeShadowCaster } from "./FakeShadowCaster";
 import { FakeShadowReceiver } from "./FakeShadowReceiver";
@@ -35,17 +35,37 @@ export const ImagePlane = forwardRef<THREE.Mesh, ImagePlaneProps>(
       tex.minFilter = THREE.LinearFilter;
       tex.magFilter = THREE.LinearFilter;
       tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+      tex.colorSpace = THREE.SRGBColorSpace;
       return tex;
     }, [src]);
 
+    // -----------------------------------------
+    // WORLD-Z BASED GEOMETRY RENDER ORDER
+    // -----------------------------------------
+    useLayoutEffect(() => {
+      if (!meshRef.current) return;
+
+      const obj = meshRef.current;
+      const wp = new THREE.Vector3();
+
+      // Compute once at mount (static objects)
+      obj.getWorldPosition(wp);
+
+      // Geometry gets even renderOrder
+      obj.renderOrder = wp.z * 2;
+    }, [position]);
+
     return (
       <group>
+        {/* Visible Image Plane */}
         <mesh ref={meshRef} position={position} rotation={rotation}>
           <planeGeometry args={[1, 1]} />
           {texture ? (
             <meshStandardMaterial
               map={texture}
               transparent={true}
+              depthWrite={false} // <-- REQUIRED for transparency to work properly
+              depthTest={true} // <-- Keep so geometry in front occludes correctly
               color={color}
             />
           ) : (
@@ -53,10 +73,10 @@ export const ImagePlane = forwardRef<THREE.Mesh, ImagePlaneProps>(
           )}
         </mesh>
 
-        {/* Receiver */}
+        {/* Shadow Receiver */}
         <FakeShadowReceiver id={id} meshRef={meshRef} />
 
-        {/* Caster with silhouette alphaMap */}
+        {/* Shadow Caster (silhouette shadow) */}
         <FakeShadowCaster
           id={id}
           targetRef={meshRef}
