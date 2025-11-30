@@ -43,12 +43,14 @@ export function DemoScene() {
           id="two"
           color="#66ccff"
           position={[0.5, 2, 3]}
+          rotation={[0, 0, 40]}
           lightRef={lightRef}
         />
         <ImagePlane
           id="four"
           color="#b41dff"
-          position={[0.5, 2, 5]}
+          position={[0.8, 1.8, 5]}
+          rotation={[Math.PI / 4, 50, 0]} // <— tilt on X
           lightRef={lightRef}
         />
         <ImagePlane
