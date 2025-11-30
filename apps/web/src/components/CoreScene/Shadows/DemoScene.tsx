@@ -2,12 +2,15 @@
 import React, { useRef } from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
-import { FakeShadowProvider } from "./FakeShadowContext";
-import { ImagePlane } from "./ImagePlane";
 import * as THREE from "three";
+
+import { FakeShadowProvider } from "./FakeShadowContext";
+import { FakeShadowReceiver } from "./FakeShadowReceiver";
+import { ImagePlane } from "./ImagePlane";
 
 export function DemoScene() {
   const lightRef = useRef<THREE.DirectionalLight>(null!);
+  const backdropRef = useRef<THREE.Mesh>(null!);
 
   return (
     <Canvas shadows={false} camera={{ position: [0, 0, 5], fov: 45 }}>
@@ -18,17 +21,18 @@ export function DemoScene() {
         {/* Directional Light */}
         <directionalLight
           ref={lightRef}
-          position={[0, 0, 20]}
+          position={[0, -20, 20]}
           intensity={1.5}
         />
 
-        {/* Backdrop */}
-        <mesh rotation={[0, 0, 0]} position={[0, 0, 0]}>
+        {/* Backdrop (also a receiver) */}
+        <mesh ref={backdropRef} rotation={[0, 0, 0]} position={[0, 0, 0]}>
           <planeGeometry args={[10, 10]} />
           <meshStandardMaterial color="#fafafa" />
         </mesh>
+        <FakeShadowReceiver id="backdrop" meshRef={backdropRef} />
 
-        {/* Color-only planes */}
+        {/* Color-only planes (each caster+receiver) */}
         <ImagePlane
           id="one"
           color="#ff6666"

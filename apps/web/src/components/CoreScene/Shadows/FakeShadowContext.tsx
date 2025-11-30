@@ -2,22 +2,32 @@
 import React from "react";
 import * as THREE from "three";
 
-export interface FakeShadowEntry {
+export interface ShadowCasterEntry {
   id: string;
-  target: React.RefObject<THREE.Object3D>;
-  shadow: React.RefObject<THREE.Mesh>;
+  targetRef: React.RefObject<THREE.Object3D>;
+}
+
+export interface ShadowReceiverEntry {
+  id: string;
+  meshRef: React.RefObject<THREE.Object3D>;
 }
 
 interface FakeShadowContextType {
-  entries: FakeShadowEntry[];
-  register: (e: FakeShadowEntry) => void;
-  unregister: (id: string) => void;
+  casters: ShadowCasterEntry[];
+  receivers: ShadowReceiverEntry[];
+  registerCaster: (entry: ShadowCasterEntry) => void;
+  unregisterCaster: (id: string) => void;
+  registerReceiver: (entry: ShadowReceiverEntry) => void;
+  unregisterReceiver: (id: string) => void;
 }
 
 export const FakeShadowContext = React.createContext<FakeShadowContextType>({
-  entries: [],
-  register: () => {},
-  unregister: () => {},
+  casters: [],
+  receivers: [],
+  registerCaster: () => {},
+  unregisterCaster: () => {},
+  registerReceiver: () => {},
+  unregisterReceiver: () => {},
 });
 
 export function FakeShadowProvider({
@@ -25,21 +35,42 @@ export function FakeShadowProvider({
 }: {
   children: React.ReactNode;
 }) {
-  const [entries, setEntries] = React.useState<FakeShadowEntry[]>([]);
+  const [casters, setCasters] = React.useState<ShadowCasterEntry[]>([]);
+  const [receivers, setReceivers] = React.useState<ShadowReceiverEntry[]>([]);
 
-  const register = React.useCallback((e: FakeShadowEntry) => {
-    setEntries((prev) => {
-      if (prev.find((p) => p.id === e.id)) return prev;
-      return [...prev, e];
+  const registerCaster = React.useCallback((entry: ShadowCasterEntry) => {
+    setCasters((prev) => {
+      if (prev.some((c) => c.id === entry.id)) return prev;
+      return [...prev, entry];
     });
   }, []);
 
-  const unregister = React.useCallback((id: string) => {
-    setEntries((prev) => prev.filter((e) => e.id !== id));
+  const unregisterCaster = React.useCallback((id: string) => {
+    setCasters((prev) => prev.filter((c) => c.id !== id));
+  }, []);
+
+  const registerReceiver = React.useCallback((entry: ShadowReceiverEntry) => {
+    setReceivers((prev) => {
+      if (prev.some((r) => r.id === entry.id)) return prev;
+      return [...prev, entry];
+    });
+  }, []);
+
+  const unregisterReceiver = React.useCallback((id: string) => {
+    setReceivers((prev) => prev.filter((r) => r.id !== id));
   }, []);
 
   return (
-    <FakeShadowContext.Provider value={{ entries, register, unregister }}>
+    <FakeShadowContext.Provider
+      value={{
+        casters,
+        receivers,
+        registerCaster,
+        unregisterCaster,
+        registerReceiver,
+        unregisterReceiver,
+      }}
+    >
       {children}
     </FakeShadowContext.Provider>
   );
