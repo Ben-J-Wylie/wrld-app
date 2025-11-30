@@ -21,7 +21,7 @@ export function DemoScene() {
         {/* Directional Light */}
         <directionalLight
           ref={lightRef}
-          position={[10, -10, 20]}
+          position={[10, -9, 20]}
           intensity={1.5}
         />
 

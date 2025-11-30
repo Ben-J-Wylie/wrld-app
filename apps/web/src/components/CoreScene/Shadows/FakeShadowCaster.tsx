@@ -1,4 +1,4 @@
-// FakeShadowCaster.tsx
+// FakeShadowCaster.tsx — with distance-based softness & opacity falloff
 import React, { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
@@ -21,7 +21,6 @@ export function FakeShadowCaster({
     React.useContext(FakeShadowContext);
 
   const shadowRefs = useRef(new Map<string, THREE.Mesh>());
-
   const setShadowRef = (receiverId: string) => (mesh: THREE.Mesh | null) => {
     if (mesh) shadowRefs.current.set(receiverId, mesh);
     else shadowRefs.current.delete(receiverId);
@@ -32,7 +31,7 @@ export function FakeShadowCaster({
     return () => unregisterCaster(id);
   }, [id, registerCaster, unregisterCaster, targetRef]);
 
-  // static caster corners in local space (planeGeometry 1x1 at z=0)
+  // static caster corners in local space
   const localCorners = [
     new THREE.Vector3(-0.5, -0.5, 0),
     new THREE.Vector3(-0.5, 0.5, 0),
@@ -40,20 +39,20 @@ export function FakeShadowCaster({
     new THREE.Vector3(0.5, -0.5, 0),
   ];
 
-  // scratch objects
+  // scratch
   const worldCorners = [
     new THREE.Vector3(),
     new THREE.Vector3(),
     new THREE.Vector3(),
     new THREE.Vector3(),
   ];
-
   const hitPoints = [
     new THREE.Vector3(),
     new THREE.Vector3(),
     new THREE.Vector3(),
     new THREE.Vector3(),
   ];
+  const tValues = [0, 0, 0, 0]; // <— new for softness
 
   const lightDir = new THREE.Vector3();
   const lightPos = new THREE.Vector3();
@@ -64,7 +63,6 @@ export function FakeShadowCaster({
 
   const tmp = new THREE.Vector3();
   const rayDir = new THREE.Vector3();
-
   const centroid = new THREE.Vector3();
 
   const edge1 = new THREE.Vector3();
@@ -79,7 +77,7 @@ export function FakeShadowCaster({
     const light = lightRef.current;
     if (!caster || !light) return;
 
-    // compute real light direction
+    // Light direction
     light.getWorldPosition(lightPos);
     light.target.getWorldPosition(lightTarget);
     lightDir.subVectors(lightTarget, lightPos).normalize();
@@ -87,7 +85,7 @@ export function FakeShadowCaster({
 
     caster.updateWorldMatrix(true, false);
 
-    // compute world corners of caster plane
+    // corners in world space
     for (let i = 0; i < 4; i++) {
       worldCorners[i].copy(localCorners[i]).applyMatrix4(caster.matrixWorld);
     }
@@ -103,8 +101,7 @@ export function FakeShadowCaster({
       receiver.getWorldPosition(planePoint);
       receiver.getWorldDirection(planeNormal).normalize();
 
-      // Ensure receiver normal faces *against* incoming light
-      // (so the "front" side is the one the light hits)
+      // Make the receiver normal face against the light direction
       if (planeNormal.dot(lightDir) > 0) {
         planeNormal.negate();
       }
@@ -116,6 +113,8 @@ export function FakeShadowCaster({
       }
 
       let valid = true;
+
+      // Ray-plane intersections for all 4 corners
       for (let i = 0; i < 4; i++) {
         const corner = worldCorners[i];
         tmp.subVectors(planePoint, corner);
@@ -126,6 +125,7 @@ export function FakeShadowCaster({
           break;
         }
 
+        tValues[i] = t; // <— store corner distance
         hitPoints[i].copy(corner).addScaledVector(rayDir, t);
       }
 
@@ -134,34 +134,33 @@ export function FakeShadowCaster({
         continue;
       }
 
-      // --- ensure the quad winding matches the receiver plane ---
+      // Winding correction
       edge1.subVectors(hitPoints[1], hitPoints[0]);
       edge2.subVectors(hitPoints[2], hitPoints[0]);
       quadNormal.crossVectors(edge1, edge2).normalize();
 
       if (quadNormal.dot(planeNormal) < 0) {
-        // Reverse the hit points so winding matches the receiver
         hitPoints.reverse();
+        tValues.reverse();
       }
 
       shadowMesh.visible = true;
 
-      // compute centroid of the quad in world space
+      // Centroid
       centroid.set(0, 0, 0);
       for (let i = 0; i < 4; i++) centroid.add(hitPoints[i]);
       centroid.multiplyScalar(0.25);
 
-      // build local basis (tangentU, tangentV) on the receiver plane
-      // pick an arbitrary "up" that's not parallel to planeNormal
+      // local basis on receiver plane
       const up =
         Math.abs(planeNormal.y) < 0.9
           ? new THREE.Vector3(0, 1, 0)
           : new THREE.Vector3(1, 0, 0);
 
-      tangentU.crossVectors(up, planeNormal).normalize(); // lies on plane
-      tangentV.crossVectors(planeNormal, tangentU).normalize(); // also on plane
+      tangentU.crossVectors(up, planeNormal).normalize();
+      tangentV.crossVectors(planeNormal, tangentU).normalize();
 
-      // ensure we have a 4-vertex quad geometry
+      // quad geometry
       let geom = shadowMesh.geometry;
       if (!geom || (geom.getAttribute("position")?.count ?? 0) !== 4) {
         geom = new THREE.BufferGeometry();
@@ -175,26 +174,46 @@ export function FakeShadowCaster({
 
       const pos = geom.getAttribute("position") as THREE.BufferAttribute;
 
-      // Fill positions in *local plane coordinates* (u, v, 0)
+      // Fill local (u,v) vertex positions
       for (let i = 0; i < 4; i++) {
-        const worldOffset = tmp.subVectors(hitPoints[i], centroid); // world offset from center
-
+        const worldOffset = tmp.subVectors(hitPoints[i], centroid);
         const u = worldOffset.dot(tangentU);
         const v = worldOffset.dot(tangentV);
-
-        pos.setXYZ(i, u, v, 0); // in local space, z=0 plane
+        pos.setXYZ(i, u, v, 0);
       }
 
       pos.needsUpdate = true;
 
-      // position shadowMesh at centroid (world)
+      // Position + small offset above receiver
       shadowMesh.position.copy(centroid);
+      shadowMesh.position.addScaledVector(planeNormal, 0.001);
 
-      // orient mesh so its local +Z points along planeNormal
+      // Orient so +Z points along plane normal
       shadowMesh.quaternion.setFromUnitVectors(
         new THREE.Vector3(0, 0, 1),
         planeNormal
       );
+
+      // ------------------------------------------------------------
+      // ⭐ Distance-based softness & opacity
+      // ------------------------------------------------------------
+      const avgDist =
+        (tValues[0] + tValues[1] + tValues[2] + tValues[3]) * 0.25;
+
+      // Softening: shadows get bigger with distance
+      const softnessBase = 1.0;
+      const softnessFactor = 0.1; // tweak to control blur growth
+      const softness = softnessBase + avgDist * softnessFactor;
+
+      shadowMesh.scale.set(softness, softness, 1);
+
+      // Opacity falloff
+      const baseOpacity = shadowOpacity ?? 0.4;
+      const opacityFalloff = 0.05; // tweak
+      const finalOpacity = Math.max(0, baseOpacity - avgDist * opacityFalloff);
+
+      (shadowMesh.material as THREE.MeshBasicMaterial).opacity = finalOpacity;
+      // ------------------------------------------------------------
     }
   });
 
