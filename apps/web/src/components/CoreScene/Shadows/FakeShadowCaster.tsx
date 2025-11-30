@@ -32,8 +32,7 @@ export function FakeShadowCaster({
     else shadowRefs.current.delete(receiverId);
   };
 
-  // register this caster in the context (not strictly required
-  // for projection, but useful if you ever want global introspection)
+  // register this caster in the context (mainly for introspection)
   useEffect(() => {
     registerCaster({ id, targetRef });
     return () => unregisterCaster(id);
@@ -41,19 +40,29 @@ export function FakeShadowCaster({
 
   // scratch objects to avoid allocations every frame
   const lightDir = useRef(new THREE.Vector3()).current;
+  const lightPos = useRef(new THREE.Vector3()).current;
+  const lightTargetPos = useRef(new THREE.Vector3()).current;
+
   const casterPos = useRef(new THREE.Vector3()).current;
   const planePoint = useRef(new THREE.Vector3()).current;
   const planeNormal = useRef(new THREE.Vector3()).current;
   const hitPoint = useRef(new THREE.Vector3()).current;
   const rayDir = useRef(new THREE.Vector3()).current;
+  const tmp = useRef(new THREE.Vector3()).current;
 
   useFrame(() => {
     const caster = targetRef.current;
     const light = lightRef.current;
     if (!caster || !light) return;
 
-    // lightDir: direction from light TOWARD the scene
-    light.getWorldDirection(lightDir).normalize();
+    // --- REAL directional light direction ---
+    // direction = targetWorldPos - lightWorldPos
+    light.getWorldPosition(lightPos);
+    light.target.getWorldPosition(lightTargetPos);
+    lightDir.subVectors(lightTargetPos, lightPos).normalize();
+
+    // ray direction *from caster along light direction*
+    rayDir.copy(lightDir);
 
     // caster world position
     caster.getWorldPosition(casterPos);
@@ -66,20 +75,21 @@ export function FakeShadowCaster({
       const shadowMesh = shadowRefs.current.get(receiverId);
       if (!receiver || !shadowMesh) continue;
 
-      // receiver plane: point + normal
+      // receiver plane: point + normal (in world space)
       receiver.getWorldPosition(planePoint);
-      receiver.getWorldDirection(planeNormal); // for a plane mesh this is its normal
-
-      // ray from caster opposite light direction
-      rayDir.copy(lightDir).negate();
+      receiver.getWorldDirection(planeNormal).normalize();
 
       const denom = rayDir.dot(planeNormal);
-      if (Math.abs(denom) < 1e-4) continue; // nearly parallel
+      if (Math.abs(denom) < 1e-4) continue; // nearly parallel → no hit
 
-      const t = planePoint.clone().sub(casterPos).dot(planeNormal) / denom;
-      if (t < 0) continue; // intersection behind caster
+      // t for intersection: caster + t * rayDir hits the plane
+      tmp.subVectors(planePoint, casterPos);
+      const t = tmp.dot(planeNormal) / denom;
 
-      hitPoint.copy(casterPos).add(rayDir.multiplyScalar(t));
+      if (t <= 0) continue; // intersection behind caster or exactly at caster
+
+      // final hit point
+      hitPoint.copy(casterPos).addScaledVector(rayDir, t);
 
       // position shadow on receiver plane
       shadowMesh.position.copy(hitPoint);
@@ -87,7 +97,7 @@ export function FakeShadowCaster({
       // align shadow orientation to receiver
       shadowMesh.quaternion.copy(receiver.quaternion);
 
-      // basic scale fudge – you can make this depend on distance if you want
+      // basic uniform scale (you can make this distance-based later)
       shadowMesh.scale.set(1.2, 1.2, 1);
     }
   });

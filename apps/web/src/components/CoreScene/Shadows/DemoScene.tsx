@@ -21,7 +21,7 @@ export function DemoScene() {
         {/* Directional Light */}
         <directionalLight
           ref={lightRef}
-          position={[0, -20, 20]}
+          position={[10, -10, 20]}
           intensity={1.5}
         />
 
@@ -43,6 +43,12 @@ export function DemoScene() {
           id="two"
           color="#66ccff"
           position={[0.5, 2, 3]}
+          lightRef={lightRef}
+        />
+        <ImagePlane
+          id="four"
+          color="#b41dff"
+          position={[0.5, 2, 5]}
           lightRef={lightRef}
         />
         <ImagePlane
