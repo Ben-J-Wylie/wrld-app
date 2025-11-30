@@ -196,7 +196,7 @@ export function FakeShadowCaster({
         blur;
 
       // Opacity fade
-      const finalOpacity = Math.max(0, shadowOpacity - avgDist * 0.05);
+      const finalOpacity = Math.max(0, shadowOpacity - avgDist * 0.01);
       (
         shadowMesh.material as THREE.ShaderMaterial
       ).uniforms.shadowOpacity.value = finalOpacity;
