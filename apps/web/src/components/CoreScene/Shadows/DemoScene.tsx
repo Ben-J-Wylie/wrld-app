@@ -37,13 +37,14 @@ export function DemoScene() {
           id="one"
           color="#ff6666"
           position={[0, 2, 1]}
+          rotation={[0, -0.2, 40]}
           lightRef={lightRef}
         />
         <ImagePlane
           id="two"
           color="#66ccff"
           position={[0.5, 2, 3]}
-          rotation={[0, 0, 40]}
+          rotation={[0, 1, 40]}
           lightRef={lightRef}
         />
         <ImagePlane
@@ -57,6 +58,7 @@ export function DemoScene() {
           id="three"
           color="#66ff99"
           position={[-0.3, 1.4, 1.5]}
+          rotation={[-0.2, -0.2, 40]}
           lightRef={lightRef}
         />
       </FakeShadowProvider>

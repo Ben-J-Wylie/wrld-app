@@ -1,4 +1,4 @@
-// FakeShadowCaster.tsx (fixed & working)
+// FakeShadowCaster.tsx
 import React, { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
@@ -32,7 +32,7 @@ export function FakeShadowCaster({
     return () => unregisterCaster(id);
   }, [id, registerCaster, unregisterCaster, targetRef]);
 
-  // static caster corners in local space
+  // static caster corners in local space (planeGeometry 1x1 at z=0)
   const localCorners = [
     new THREE.Vector3(-0.5, -0.5, 0),
     new THREE.Vector3(-0.5, 0.5, 0),
@@ -61,10 +61,18 @@ export function FakeShadowCaster({
 
   const planePoint = new THREE.Vector3();
   const planeNormal = new THREE.Vector3();
+
   const tmp = new THREE.Vector3();
   const rayDir = new THREE.Vector3();
 
   const centroid = new THREE.Vector3();
+
+  const edge1 = new THREE.Vector3();
+  const edge2 = new THREE.Vector3();
+  const quadNormal = new THREE.Vector3();
+
+  const tangentU = new THREE.Vector3();
+  const tangentV = new THREE.Vector3();
 
   useFrame(() => {
     const caster = targetRef.current;
@@ -95,6 +103,12 @@ export function FakeShadowCaster({
       receiver.getWorldPosition(planePoint);
       receiver.getWorldDirection(planeNormal).normalize();
 
+      // Ensure receiver normal faces *against* incoming light
+      // (so the "front" side is the one the light hits)
+      if (planeNormal.dot(lightDir) > 0) {
+        planeNormal.negate();
+      }
+
       const denom = rayDir.dot(planeNormal);
       if (Math.abs(denom) < 1e-4) {
         shadowMesh.visible = false;
@@ -120,15 +134,11 @@ export function FakeShadowCaster({
         continue;
       }
 
-      // --- FIX: ensure the quad faces the receiver plane ---
-      // Compute quad normal:
-      const edge1 = tmp.copy(hitPoints[1]).sub(hitPoints[0]);
-      const edge2 = new THREE.Vector3().copy(hitPoints[2]).sub(hitPoints[0]);
-      const quadNormal = new THREE.Vector3()
-        .crossVectors(edge1, edge2)
-        .normalize();
+      // --- ensure the quad winding matches the receiver plane ---
+      edge1.subVectors(hitPoints[1], hitPoints[0]);
+      edge2.subVectors(hitPoints[2], hitPoints[0]);
+      quadNormal.crossVectors(edge1, edge2).normalize();
 
-      // Check alignment with receiver normal:
       if (quadNormal.dot(planeNormal) < 0) {
         // Reverse the hit points so winding matches the receiver
         hitPoints.reverse();
@@ -136,12 +146,22 @@ export function FakeShadowCaster({
 
       shadowMesh.visible = true;
 
-      // compute centroid of the quad
+      // compute centroid of the quad in world space
       centroid.set(0, 0, 0);
       for (let i = 0; i < 4; i++) centroid.add(hitPoints[i]);
       centroid.multiplyScalar(0.25);
 
-      // build geometry in LOCAL space relative to centroid
+      // build local basis (tangentU, tangentV) on the receiver plane
+      // pick an arbitrary "up" that's not parallel to planeNormal
+      const up =
+        Math.abs(planeNormal.y) < 0.9
+          ? new THREE.Vector3(0, 1, 0)
+          : new THREE.Vector3(1, 0, 0);
+
+      tangentU.crossVectors(up, planeNormal).normalize(); // lies on plane
+      tangentV.crossVectors(planeNormal, tangentU).normalize(); // also on plane
+
+      // ensure we have a 4-vertex quad geometry
       let geom = shadowMesh.geometry;
       if (!geom || (geom.getAttribute("position")?.count ?? 0) !== 4) {
         geom = new THREE.BufferGeometry();
@@ -155,17 +175,22 @@ export function FakeShadowCaster({
 
       const pos = geom.getAttribute("position") as THREE.BufferAttribute;
 
+      // Fill positions in *local plane coordinates* (u, v, 0)
       for (let i = 0; i < 4; i++) {
-        const p = hitPoints[i];
-        pos.setXYZ(i, p.x - centroid.x, p.y - centroid.y, p.z - centroid.z);
+        const worldOffset = tmp.subVectors(hitPoints[i], centroid); // world offset from center
+
+        const u = worldOffset.dot(tangentU);
+        const v = worldOffset.dot(tangentV);
+
+        pos.setXYZ(i, u, v, 0); // in local space, z=0 plane
       }
 
       pos.needsUpdate = true;
 
-      // position shadowMesh at centroid
+      // position shadowMesh at centroid (world)
       shadowMesh.position.copy(centroid);
 
-      // orient mesh to receiver plane
+      // orient mesh so its local +Z points along planeNormal
       shadowMesh.quaternion.setFromUnitVectors(
         new THREE.Vector3(0, 0, 1),
         planeNormal
