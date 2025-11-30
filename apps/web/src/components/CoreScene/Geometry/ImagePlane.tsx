@@ -1,5 +1,7 @@
+// CoreScene/Geometry/ImagePlane.tsx
 import * as THREE from "three";
-import React, { forwardRef, useEffect, useMemo, useState } from "react";
+import React, { forwardRef, useEffect, useMemo, useState, useRef } from "react";
+
 import { TextureLoader } from "three";
 import { useSceneStore } from "../Store/SceneStore";
 import {
@@ -9,10 +11,15 @@ import {
 
 import { createRoundedRectangleShape } from "./RoundedRectangle";
 
+// --- NEW Fake shadow imports ---
+import { FakeShadowCaster } from "../Shadows/AttemptOne/FakeShadowCaster";
+import { FakeShadowReceiver } from "../Shadows/AttemptOne/FakeShadowReceiver";
+import { useFakeShadowGlobals } from "../Shadows/AttemptOne/FakeShadowGlobals";
+
 type Vec3 = [number, number, number];
 
 // --------------------------------------------------
-// Convert degrees → radians
+// Degrees → radians
 // --------------------------------------------------
 function degVec3(v: Vec3): Vec3 {
   return [
@@ -31,24 +38,30 @@ export interface ImagePlaneProps {
 
   width?: ResponsiveValue<number>;
   height?: ResponsiveValue<number>;
-
-  /** Rounded corners */
   cornerRadius?: ResponsiveValue<number>;
 
   position?: ResponsiveValue<Vec3>;
   rotation?: ResponsiveValue<Vec3>;
   scale?: ResponsiveValue<Vec3>;
 
-  z?: number; // renderOrder only
+  z?: number;
   visible?: boolean;
 
+  // Real shadows
   castShadow?: boolean;
   receiveShadow?: boolean;
 
+  // Fake shadow API
+  castFakeShadow?: boolean;
+  receiveFakeShadow?: boolean;
+  shadowOpacity?: number; // base opacity
+  shadowSoftness?: number; // penumbra growth factor
+  shadowOffset?: number; // (unused in new system)
+  shadowMaxDistance?: number;
+
+  // Pointer events
   onClick?: (e: THREE.Event, hit: THREE.Intersection) => void;
   onHover?: (e: THREE.Event | null, hit: THREE.Intersection | null) => void;
-
-  /** NEW — works on mobile */
   onPointerDown?: (e: any) => void;
 }
 
@@ -63,7 +76,6 @@ export const ImagePlane = forwardRef<THREE.Mesh, ImagePlaneProps>(
 
       width = 100,
       height = 100,
-
       cornerRadius = 0,
 
       position = [0, 0, 0],
@@ -71,22 +83,34 @@ export const ImagePlane = forwardRef<THREE.Mesh, ImagePlaneProps>(
       scale = [1, 1, 1],
 
       z = 0,
-
       visible = true,
 
       castShadow = true,
       receiveShadow = true,
 
+      castFakeShadow = false,
+      receiveFakeShadow = false,
+
+      shadowOpacity = 0.35,
+      shadowSoftness = 0.5,
+      shadowOffset = 0.0,
+      shadowMaxDistance = 2000,
+
       onClick,
       onHover,
       onPointerDown,
     },
-    ref
+    forwardedRef
   ) => {
     const bp = useSceneStore((s) => s.breakpoint);
 
+    const groupRef = useRef<THREE.Group>(null!);
+    const localMeshRef = useRef<THREE.Mesh>(null!);
+    const meshRef =
+      (forwardedRef as React.RefObject<THREE.Mesh>) ?? localMeshRef;
+
     // --------------------------------------------------
-    // Load texture
+    // Load image texture
     // --------------------------------------------------
     const [loadedTexture, setLoadedTexture] = useState<THREE.Texture | null>(
       null
@@ -130,12 +154,14 @@ export const ImagePlane = forwardRef<THREE.Mesh, ImagePlaneProps>(
     const resolvedRadius = resolveResponsive(cornerRadius, bp);
 
     const resolvedPosition = resolveResponsive(position, bp) as Vec3;
+
     const rotationDeg = resolveResponsive(rotation, bp) as Vec3;
     const resolvedRotation = degVec3(rotationDeg);
+
     const resolvedScale = resolveResponsive(scale, bp) as Vec3;
 
     // --------------------------------------------------
-    // Geometry (plane or rounded plane)
+    // Geometry
     // --------------------------------------------------
     const geometry = useMemo(() => {
       const w = resolvedWidth;
@@ -149,7 +175,7 @@ export const ImagePlane = forwardRef<THREE.Mesh, ImagePlaneProps>(
       const shape = createRoundedRectangleShape(w, h, r);
       const geo = new THREE.ShapeGeometry(shape);
 
-      // Proper UVs
+      // Recalculate UVs
       geo.computeBoundingBox();
       const bbox = geo.boundingBox!;
       const size = new THREE.Vector2(
@@ -187,36 +213,71 @@ export const ImagePlane = forwardRef<THREE.Mesh, ImagePlaneProps>(
     };
 
     // --------------------------------------------------
-    // Render
+    // Fake shadow globals: texture & lightDir
     // --------------------------------------------------
+    const { shadowTexture, lightDir } = useFakeShadowGlobals();
+
+    // Base blob size = roughly the plane size
+    const baseShadowSize = Math.max(resolvedWidth, resolvedHeight) * 1.1;
+
     return (
-      <mesh
-        ref={ref}
+      <group
+        ref={groupRef}
         name={name ?? ""}
         position={resolvedPosition}
         rotation={resolvedRotation}
         scale={resolvedScale}
         renderOrder={z ?? 0}
         visible={visible}
-        castShadow={castShadow}
-        receiveShadow={receiveShadow}
-        onClick={handleClick}
-        onPointerDown={onPointerDown} // NEW mobile click support
-        onPointerMove={handlePointerMove}
-        onPointerOut={handlePointerOut}
-        geometry={geometry}
       >
-        <meshStandardMaterial
-          map={finalTexture ?? undefined}
-          color={color}
-          alphaTest={0.3}
-          transparent={false}
-          depthWrite={true}
-          depthTest={true}
-          toneMapped={true}
-          side={THREE.DoubleSide}
-        />
-      </mesh>
+        {/* ------------------------------------------------------------------
+            CASTER: register this plane so others can receive its fake shadow
+           ------------------------------------------------------------------ */}
+        {castFakeShadow && (
+          <FakeShadowCaster active={castFakeShadow} meshRef={groupRef} />
+        )}
+
+        {/* ------------------------------------------------------------------
+            Visual Plane
+           ------------------------------------------------------------------ */}
+        <mesh
+          ref={meshRef}
+          castShadow={castShadow}
+          receiveShadow={receiveShadow}
+          geometry={geometry}
+          onClick={handleClick}
+          onPointerDown={onPointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerOut={handlePointerOut}
+        >
+          <meshStandardMaterial
+            map={finalTexture ?? undefined}
+            color={color}
+            alphaTest={0.3}
+            transparent={false}
+            depthWrite={true}
+            depthTest={true}
+            toneMapped={true}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+
+        {/* ------------------------------------------------------------------
+            RECEIVER: receive projected fake shadows from ALL casters
+           ------------------------------------------------------------------ */}
+        {receiveFakeShadow && shadowTexture && (
+          <FakeShadowReceiver
+            active={receiveFakeShadow}
+            receiverRef={groupRef}
+            texture={shadowTexture}
+            lightDir={lightDir}
+            baseSize={baseShadowSize}
+            softness={shadowSoftness}
+            maxDistance={shadowMaxDistance}
+            baseOpacity={shadowOpacity}
+          />
+        )}
+      </group>
     );
   }
 );

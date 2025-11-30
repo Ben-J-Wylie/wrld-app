@@ -1,6 +1,6 @@
 // apps/web/src/components/05-elements/MicSpectrum/MicSpectrum.tsx
 import React, { useEffect, useRef } from "react";
-import { socket } from "../../../lib/socket";
+import { socket } from "../../../../lib/socket";
 import "./MicSpectrum.css";
 
 interface MicSpectrumProps {

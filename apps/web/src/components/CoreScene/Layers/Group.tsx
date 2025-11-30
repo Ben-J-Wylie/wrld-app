@@ -18,7 +18,7 @@ function degVec3(v: Vec3): Vec3 {
     THREE.MathUtils.degToRad(v[2]),
   ];
 }
-
+console.log("[FILE] Group loaded");
 export interface GroupProps {
   name?: string;
   position?: ResponsiveValue<Vec3>; // degrees
@@ -29,6 +29,7 @@ export interface GroupProps {
   visible?: boolean;
   children?: React.ReactNode;
 }
+console.log("[RENDER] Group");
 
 /**
  * WrldGroup:

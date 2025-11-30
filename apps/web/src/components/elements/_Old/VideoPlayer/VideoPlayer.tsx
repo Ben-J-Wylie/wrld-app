@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { MediaSoupClient } from "../../../lib/mediasoupClient";
+import { MediaSoupClient } from "../../../../lib/mediasoupClient";
 import "./VideoPlayer.css";
 
 export default function VideoPlayer({
