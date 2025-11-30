@@ -1,16 +1,29 @@
 // ImagePlane.tsx
-import React, { forwardRef, useRef, useMemo, useLayoutEffect } from "react";
+import React, { forwardRef, useMemo, useRef } from "react";
 import * as THREE from "three";
-import { FakeShadowCaster } from "./FakeShadowCaster";
+
 import { FakeShadowReceiver } from "./FakeShadowReceiver";
+import { FakeShadowCaster } from "./FakeShadowCaster";
 
 export interface ImagePlaneProps {
   id: string;
+
+  /**
+   * PNG with alpha channel used both for visible image
+   * and for shadow masking.
+   */
   src?: string;
+
   color?: string;
+
   position?: [number, number, number];
   rotation?: [number, number, number];
+  scale?: [number, number, number];
+
   lightRef: React.RefObject<THREE.DirectionalLight>;
+
+  /** Cast shadows? */
+  castsShadow?: boolean;
 }
 
 export const ImagePlane = forwardRef<THREE.Mesh, ImagePlaneProps>(
@@ -21,13 +34,15 @@ export const ImagePlane = forwardRef<THREE.Mesh, ImagePlaneProps>(
       color = "#ffffff",
       position = [0, 0, 0],
       rotation = [0, 0, 0],
+      scale = [1, 1, 1],
       lightRef,
+      castsShadow = true,
     },
     ref
   ) {
     const meshRef = useRef<THREE.Mesh>(null!);
 
-    // Load silhouette texture (PNG with alpha)
+    // Load PNG with alpha
     const texture = useMemo(() => {
       if (!src) return null;
       const loader = new THREE.TextureLoader();
@@ -35,55 +50,45 @@ export const ImagePlane = forwardRef<THREE.Mesh, ImagePlaneProps>(
       tex.minFilter = THREE.LinearFilter;
       tex.magFilter = THREE.LinearFilter;
       tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
-      tex.colorSpace = THREE.SRGBColorSpace;
       return tex;
     }, [src]);
 
-    // -----------------------------------------
-    // WORLD-Z BASED GEOMETRY RENDER ORDER
-    // -----------------------------------------
-    useLayoutEffect(() => {
-      if (!meshRef.current) return;
-
-      const obj = meshRef.current;
-      const wp = new THREE.Vector3();
-
-      // Compute once at mount (static objects)
-      obj.getWorldPosition(wp);
-
-      // Geometry gets even renderOrder
-      obj.renderOrder = wp.z * 2;
-    }, [position]);
-
     return (
-      <group>
-        {/* Visible Image Plane */}
-        <mesh ref={meshRef} position={position} rotation={rotation}>
+      <>
+        {/* The visible object */}
+        <mesh
+          ref={(m) => {
+            meshRef.current = m!;
+            if (typeof ref === "function") ref(m!);
+            else if (ref) (ref as any).current = m;
+          }}
+          position={position}
+          rotation={rotation}
+          scale={scale}
+        >
           <planeGeometry args={[1, 1]} />
-          {texture ? (
-            <meshStandardMaterial
-              map={texture}
-              transparent={true}
-              depthWrite={false} // <-- REQUIRED for transparency to work properly
-              depthTest={true} // <-- Keep so geometry in front occludes correctly
-              color={color}
-            />
-          ) : (
-            <meshStandardMaterial color={color} />
-          )}
+          <meshBasicMaterial
+            map={texture || undefined}
+            color={texture ? undefined : color}
+            transparent={!!texture}
+            alphaTest={0.5} // ← CRITICAL FIX
+          />
         </mesh>
 
-        {/* Shadow Receiver */}
-        <FakeShadowReceiver id={id} meshRef={meshRef} />
+        {/* Register shadow receiver with mask */}
+        <FakeShadowReceiver id={id} meshRef={meshRef} alphaMap={texture} />
 
-        {/* Shadow Caster (silhouette shadow) */}
-        <FakeShadowCaster
-          id={id}
-          targetRef={meshRef}
-          lightRef={lightRef}
-          alphaMap={texture || undefined}
-        />
-      </group>
+        {/* Register caster if desired */}
+        {castsShadow && (
+          <FakeShadowCaster
+            id={id}
+            targetRef={meshRef}
+            lightRef={lightRef}
+            alphaMap={texture}
+            shadowOpacity={0.4}
+          />
+        )}
+      </>
     );
   }
 );

@@ -5,21 +5,28 @@ import { FakeShadowContext } from "./FakeShadowContext";
 
 export interface FakeShadowReceiverProps {
   id: string;
-  meshRef: React.RefObject<THREE.Object3D>;
+  meshRef: React.RefObject<THREE.Mesh>;
+
+  /**
+   * Mask texture used to clip shadows on this receiver.
+   * Usually the PNG used for this image plane.
+   */
+  alphaMap?: THREE.Texture | null;
 }
 
-/**
- * Registers a mesh as a shadow receiver.
- * Any FakeShadowCaster will project onto all registered receivers.
- */
-export function FakeShadowReceiver({ id, meshRef }: FakeShadowReceiverProps) {
+export function FakeShadowReceiver({
+  id,
+  meshRef,
+  alphaMap,
+}: FakeShadowReceiverProps) {
   const { registerReceiver, unregisterReceiver } =
     React.useContext(FakeShadowContext);
 
   useEffect(() => {
-    registerReceiver({ id, meshRef });
+    registerReceiver({ id, meshRef, alphaMap: alphaMap || null });
     return () => unregisterReceiver(id);
-  }, [id, meshRef, registerReceiver, unregisterReceiver]);
+  }, [id, meshRef, alphaMap, registerReceiver, unregisterReceiver]);
 
+  // Does not render anything
   return null;
 }

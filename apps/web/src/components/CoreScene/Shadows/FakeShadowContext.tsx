@@ -1,35 +1,42 @@
-// FakeShadowContext.tsx — Extended to support width & height on receivers
+// FakeShadowContext.tsx
 import React from "react";
 import * as THREE from "three";
+
+export interface ShadowReceiverEntry {
+  id: string;
+  meshRef: React.RefObject<THREE.Mesh>;
+
+  /**
+   * Mask texture for this receiver's plane.
+   * Usually the PNG used on the ImagePlane (its alpha channel).
+   * If null, the whole plane is considered solid.
+   */
+  alphaMap?: THREE.Texture | null;
+}
 
 export interface ShadowCasterEntry {
   id: string;
   targetRef: React.RefObject<THREE.Object3D>;
 }
 
-export interface ShadowReceiverEntry {
-  id: string;
-  meshRef: React.RefObject<THREE.Object3D>;
-  width?: number; // ← NEW (optional)
-  height?: number; // ← NEW (optional)
-}
-
 interface FakeShadowContextType {
-  casters: ShadowCasterEntry[];
   receivers: ShadowReceiverEntry[];
-  registerCaster: (entry: ShadowCasterEntry) => void;
-  unregisterCaster: (id: string) => void;
+  casters: ShadowCasterEntry[];
+
   registerReceiver: (entry: ShadowReceiverEntry) => void;
   unregisterReceiver: (id: string) => void;
+
+  registerCaster: (entry: ShadowCasterEntry) => void;
+  unregisterCaster: (id: string) => void;
 }
 
 export const FakeShadowContext = React.createContext<FakeShadowContextType>({
-  casters: [],
   receivers: [],
-  registerCaster: () => {},
-  unregisterCaster: () => {},
+  casters: [],
   registerReceiver: () => {},
   unregisterReceiver: () => {},
+  registerCaster: () => {},
+  unregisterCaster: () => {},
 });
 
 export function FakeShadowProvider({
@@ -37,46 +44,40 @@ export function FakeShadowProvider({
 }: {
   children: React.ReactNode;
 }) {
-  const [casters, setCasters] = React.useState<ShadowCasterEntry[]>([]);
   const [receivers, setReceivers] = React.useState<ShadowReceiverEntry[]>([]);
+  const [casters, setCasters] = React.useState<ShadowCasterEntry[]>([]);
 
-  // ---------------------------------------------------------
-  // CASTER REGISTRATION
-  // ---------------------------------------------------------
-  const registerCaster = React.useCallback((entry: ShadowCasterEntry) => {
-    setCasters((prev) => {
-      if (prev.some((c) => c.id === entry.id)) return prev;
-      return [...prev, entry];
-    });
-  }, []);
-
-  const unregisterCaster = React.useCallback((id: string) => {
-    setCasters((prev) => prev.filter((c) => c.id !== id));
-  }, []);
-
-  // ---------------------------------------------------------
-  // RECEIVER REGISTRATION (now accepts width/height)
-  // ---------------------------------------------------------
   const registerReceiver = React.useCallback((entry: ShadowReceiverEntry) => {
     setReceivers((prev) => {
-      if (prev.some((r) => r.id === entry.id)) return prev;
+      if (prev.some((p) => p.id === entry.id)) return prev;
       return [...prev, entry];
     });
   }, []);
 
   const unregisterReceiver = React.useCallback((id: string) => {
-    setReceivers((prev) => prev.filter((r) => r.id !== id));
+    setReceivers((prev) => prev.filter((p) => p.id !== id));
+  }, []);
+
+  const registerCaster = React.useCallback((entry: ShadowCasterEntry) => {
+    setCasters((prev) => {
+      if (prev.some((p) => p.id === entry.id)) return prev;
+      return [...prev, entry];
+    });
+  }, []);
+
+  const unregisterCaster = React.useCallback((id: string) => {
+    setCasters((prev) => prev.filter((p) => p.id !== id));
   }, []);
 
   return (
     <FakeShadowContext.Provider
       value={{
-        casters,
         receivers,
-        registerCaster,
-        unregisterCaster,
+        casters,
         registerReceiver,
         unregisterReceiver,
+        registerCaster,
+        unregisterCaster,
       }}
     >
       {children}
