@@ -1,4 +1,4 @@
-// FakeShadowCaster.tsx — with distance-based softness & opacity falloff
+// FakeShadowCaster.tsx — silhouette shadows with correct projected UVs
 import React, { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
@@ -9,6 +9,7 @@ export interface FakeShadowCasterProps {
   targetRef: React.RefObject<THREE.Object3D>;
   lightRef: React.RefObject<THREE.DirectionalLight>;
   shadowOpacity?: number;
+  alphaMap?: THREE.Texture; // silhouette PNG (alpha is used)
 }
 
 export function FakeShadowCaster({
@@ -16,6 +17,7 @@ export function FakeShadowCaster({
   targetRef,
   lightRef,
   shadowOpacity = 0.4,
+  alphaMap,
 }: FakeShadowCasterProps) {
   const { receivers, registerCaster, unregisterCaster } =
     React.useContext(FakeShadowContext);
@@ -26,12 +28,21 @@ export function FakeShadowCaster({
     else shadowRefs.current.delete(receiverId);
   };
 
+  // register caster
   useEffect(() => {
     registerCaster({ id, targetRef });
     return () => unregisterCaster(id);
   }, [id, registerCaster, unregisterCaster, targetRef]);
 
-  // static caster corners in local space
+  // Caster plane's original UV layout
+  const casterUVs = [
+    new THREE.Vector2(0, 0),
+    new THREE.Vector2(0, 1),
+    new THREE.Vector2(1, 1),
+    new THREE.Vector2(1, 0),
+  ];
+
+  // local plane corners
   const localCorners = [
     new THREE.Vector3(-0.5, -0.5, 0),
     new THREE.Vector3(-0.5, 0.5, 0),
@@ -40,37 +51,24 @@ export function FakeShadowCaster({
   ];
 
   // scratch
-  const worldCorners = [
-    new THREE.Vector3(),
-    new THREE.Vector3(),
-    new THREE.Vector3(),
-    new THREE.Vector3(),
-  ];
-  const hitPoints = [
-    new THREE.Vector3(),
-    new THREE.Vector3(),
-    new THREE.Vector3(),
-    new THREE.Vector3(),
-  ];
-  const tValues = [0, 0, 0, 0]; // <— new for softness
+  const worldCorners = Array.from({ length: 4 }, () => new THREE.Vector3());
+  const hitPoints = Array.from({ length: 4 }, () => new THREE.Vector3());
+  const tValues = [0, 0, 0, 0];
 
   const lightDir = new THREE.Vector3();
   const lightPos = new THREE.Vector3();
   const lightTarget = new THREE.Vector3();
-
   const planePoint = new THREE.Vector3();
   const planeNormal = new THREE.Vector3();
-
   const tmp = new THREE.Vector3();
   const rayDir = new THREE.Vector3();
   const centroid = new THREE.Vector3();
-
   const edge1 = new THREE.Vector3();
   const edge2 = new THREE.Vector3();
   const quadNormal = new THREE.Vector3();
-
   const tangentU = new THREE.Vector3();
   const tangentV = new THREE.Vector3();
+  const casterWorldPos = new THREE.Vector3();
 
   useFrame(() => {
     const caster = targetRef.current;
@@ -83,14 +81,16 @@ export function FakeShadowCaster({
     lightDir.subVectors(lightTarget, lightPos).normalize();
     rayDir.copy(lightDir);
 
+    // Caster transform
     caster.updateWorldMatrix(true, false);
+    caster.getWorldPosition(casterWorldPos);
 
-    // corners in world space
+    // Transform caster corners to world space
     for (let i = 0; i < 4; i++) {
       worldCorners[i].copy(localCorners[i]).applyMatrix4(caster.matrixWorld);
     }
 
-    // for each receiver
+    // For each receiver
     for (const { id: receiverId, meshRef } of receivers) {
       if (receiverId === id) continue;
 
@@ -101,7 +101,7 @@ export function FakeShadowCaster({
       receiver.getWorldPosition(planePoint);
       receiver.getWorldDirection(planeNormal).normalize();
 
-      // Make the receiver normal face against the light direction
+      // Make receiver face toward light
       if (planeNormal.dot(lightDir) > 0) {
         planeNormal.negate();
       }
@@ -112,21 +112,18 @@ export function FakeShadowCaster({
         continue;
       }
 
+      // Ray-plane intersections
       let valid = true;
-
-      // Ray-plane intersections for all 4 corners
       for (let i = 0; i < 4; i++) {
-        const corner = worldCorners[i];
-        tmp.subVectors(planePoint, corner);
+        tmp.subVectors(planePoint, worldCorners[i]);
         const t = tmp.dot(planeNormal) / denom;
-
         if (t <= 0) {
           valid = false;
           break;
         }
 
-        tValues[i] = t; // <— store corner distance
-        hitPoints[i].copy(corner).addScaledVector(rayDir, t);
+        tValues[i] = t;
+        hitPoints[i].copy(worldCorners[i]).addScaledVector(rayDir, t);
       }
 
       if (!valid) {
@@ -134,24 +131,22 @@ export function FakeShadowCaster({
         continue;
       }
 
-      // Winding correction
+      // Fix winding
       edge1.subVectors(hitPoints[1], hitPoints[0]);
       edge2.subVectors(hitPoints[2], hitPoints[0]);
       quadNormal.crossVectors(edge1, edge2).normalize();
-
       if (quadNormal.dot(planeNormal) < 0) {
         hitPoints.reverse();
         tValues.reverse();
+        casterUVs.reverse();
       }
-
-      shadowMesh.visible = true;
 
       // Centroid
       centroid.set(0, 0, 0);
       for (let i = 0; i < 4; i++) centroid.add(hitPoints[i]);
       centroid.multiplyScalar(0.25);
 
-      // local basis on receiver plane
+      // Local basis on receiver
       const up =
         Math.abs(planeNormal.y) < 0.9
           ? new THREE.Vector3(0, 1, 0)
@@ -160,74 +155,105 @@ export function FakeShadowCaster({
       tangentU.crossVectors(up, planeNormal).normalize();
       tangentV.crossVectors(planeNormal, tangentU).normalize();
 
-      // quad geometry
+      // Create quad geometry if needed
       let geom = shadowMesh.geometry;
-      if (!geom || (geom.getAttribute("position")?.count ?? 0) !== 4) {
+      if (
+        !geom ||
+        !geom.getAttribute("position") ||
+        geom.getAttribute("position").count !== 4
+      ) {
         geom = new THREE.BufferGeometry();
         geom.setIndex([0, 1, 2, 0, 2, 3]);
+
         geom.setAttribute(
           "position",
           new THREE.Float32BufferAttribute(new Float32Array(12), 3)
         );
+
+        // UVs (filled dynamically)
+        geom.setAttribute(
+          "uv",
+          new THREE.Float32BufferAttribute(new Float32Array(8), 2)
+        );
+
         shadowMesh.geometry = geom;
       }
 
-      const pos = geom.getAttribute("position") as THREE.BufferAttribute;
+      const posAttr = geom.getAttribute("position") as THREE.BufferAttribute;
+      const uvAttr = geom.getAttribute("uv") as THREE.BufferAttribute;
 
-      // Fill local (u,v) vertex positions
+      // Update quad positions + caster UVs
       for (let i = 0; i < 4; i++) {
-        const worldOffset = tmp.subVectors(hitPoints[i], centroid);
-        const u = worldOffset.dot(tangentU);
-        const v = worldOffset.dot(tangentV);
-        pos.setXYZ(i, u, v, 0);
+        // receiver-plane local coords
+        const w = tmp.subVectors(hitPoints[i], centroid);
+        const u = w.dot(tangentU);
+        const v = w.dot(tangentV);
+        posAttr.setXYZ(i, u, v, 0);
+
+        // Use *original caster plane UVs*
+        uvAttr.setXY(i, casterUVs[i].x, casterUVs[i].y);
       }
 
-      pos.needsUpdate = true;
+      posAttr.needsUpdate = true;
+      uvAttr.needsUpdate = true;
 
-      // Position + small offset above receiver
+      // Position quad above receiver
       shadowMesh.position.copy(centroid);
-      shadowMesh.position.addScaledVector(planeNormal, 0.001);
+      shadowMesh.position.addScaledVector(planeNormal, 0.01);
 
-      // Orient so +Z points along plane normal
       shadowMesh.quaternion.setFromUnitVectors(
         new THREE.Vector3(0, 0, 1),
         planeNormal
       );
 
-      // ------------------------------------------------------------
-      // ⭐ Distance-based softness & opacity
-      // ------------------------------------------------------------
+      // Softness & opacity falloff
       const avgDist =
         (tValues[0] + tValues[1] + tValues[2] + tValues[3]) * 0.25;
 
-      // Softening: shadows get bigger with distance
-      const softnessBase = 1.0;
-      const softnessFactor = 0.1; // tweak to control blur growth
-      const softness = softnessBase + avgDist * softnessFactor;
-
+      const softness = 1 + avgDist * 0.1;
       shadowMesh.scale.set(softness, softness, 1);
 
-      // Opacity falloff
-      const baseOpacity = shadowOpacity ?? 0.4;
-      const opacityFalloff = 0.05; // tweak
-      const finalOpacity = Math.max(0, baseOpacity - avgDist * opacityFalloff);
-
-      (shadowMesh.material as THREE.MeshBasicMaterial).opacity = finalOpacity;
-      // ------------------------------------------------------------
+      const finalOpacity = Math.max(0, shadowOpacity - avgDist * 0.05);
+      (
+        shadowMesh.material as THREE.ShaderMaterial
+      ).uniforms.shadowOpacity.value = finalOpacity;
     }
   });
 
+  // ------------------------------------------------------------
+  // SHADOW MESHES + custom inverted-alpha shader
+  // ------------------------------------------------------------
   return (
     <>
       {receivers
         .filter((r) => r.id !== id)
         .map((r) => (
           <mesh key={r.id} ref={setShadowRef(r.id)}>
-            <meshBasicMaterial
-              color="black"
+            <shaderMaterial
               transparent
-              opacity={shadowOpacity}
               depthWrite={false}
+              uniforms={{
+                alphaMap: { value: alphaMap },
+                shadowOpacity: { value: shadowOpacity },
+              }}
+              vertexShader={`
+                varying vec2 vUv;
+                void main() {
+                  vUv = uv;
+                  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }
+              `}
+              fragmentShader={`
+  varying vec2 vUv;
+  uniform sampler2D alphaMap;
+  uniform float shadowOpacity;
+
+  void main() {
+    float a = texture2D(alphaMap, vUv).a;
+    float mask = a;  // ❗️ correct orientation
+    gl_FragColor = vec4(0.0, 0.0, 0.0, mask * shadowOpacity);
+  }
+`}
             />
           </mesh>
         ))}

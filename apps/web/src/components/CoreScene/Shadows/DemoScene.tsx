@@ -8,6 +8,8 @@ import { FakeShadowProvider } from "./FakeShadowContext";
 import { FakeShadowReceiver } from "./FakeShadowReceiver";
 import { ImagePlane } from "./ImagePlane";
 
+import shapePng from "./shape.png";
+
 export function DemoScene() {
   const lightRef = useRef<THREE.DirectionalLight>(null!);
   const backdropRef = useRef<THREE.Mesh>(null!);
@@ -35,30 +37,34 @@ export function DemoScene() {
         {/* Color-only planes (each caster+receiver) */}
         <ImagePlane
           id="one"
-          color="#ff6666"
+          src={shapePng} // ← PNG with transparency
+          color="#ff6666" // optional tint
           position={[0, 2, 1]}
-          rotation={[0, -0.2, 40]}
+          rotation={[0, 0, 0]}
           lightRef={lightRef}
         />
         <ImagePlane
           id="two"
+          src={shapePng} // ← PNG with transparency
           color="#66ccff"
           position={[0.5, 2, 3]}
-          rotation={[0, 1, 40]}
+          rotation={[0, 0, 0]}
           lightRef={lightRef}
         />
         <ImagePlane
           id="four"
+          src={shapePng} // ← PNG with transparency
           color="#b41dff"
           position={[0.8, 1.8, 5]}
-          rotation={[Math.PI / 4, 50, 0]} // <— tilt on X
+          rotation={[0, 0, 0]} // <— tilt on X
           lightRef={lightRef}
         />
         <ImagePlane
           id="three"
+          src={shapePng} // ← PNG with transparency
           color="#66ff99"
           position={[-0.3, 1.4, 1.5]}
-          rotation={[-0.2, -0.2, 40]}
+          rotation={[0, 0, 0]}
           lightRef={lightRef}
         />
       </FakeShadowProvider>
