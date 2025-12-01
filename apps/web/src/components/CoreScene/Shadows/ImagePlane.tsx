@@ -85,7 +85,6 @@ export const ImagePlane = forwardRef<THREE.Mesh, ImagePlaneProps>(
             targetRef={meshRef}
             lightRef={lightRef}
             alphaMap={texture}
-            shadowOpacity={0.4}
           />
         )}
       </>

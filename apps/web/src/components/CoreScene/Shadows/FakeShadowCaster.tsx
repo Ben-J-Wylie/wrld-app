@@ -1,5 +1,5 @@
-// FakeShadowCaster.tsx — silhouette shadows with distance-blur, scale/fade,
-// AND per-receiver masking in plane space.
+// FakeShadowCaster.tsx — pure black silhouette shadows with distance blur,
+// per-receiver masking, and ONE global opacity multiplier.
 
 import React, { useEffect, useRef } from "react";
 import * as THREE from "three";
@@ -10,34 +10,38 @@ export interface FakeShadowCasterProps {
   id: string;
   targetRef: React.RefObject<THREE.Object3D>;
   lightRef: React.RefObject<THREE.DirectionalLight>;
-  shadowOpacity?: number;
-  alphaMap?: THREE.Texture | null; // silhouette PNG
+
+  /** Silhouette PNG */
+  alphaMap?: THREE.Texture | null;
+
+  /** NEW: global multiplier for all shadows */
+  globalShadowOpacity?: number;
 }
 
 export function FakeShadowCaster({
   id,
   targetRef,
   lightRef,
-  shadowOpacity = 0.4,
   alphaMap,
+  globalShadowOpacity = 0.5,
 }: FakeShadowCasterProps) {
   const { receivers, registerCaster, unregisterCaster } =
     React.useContext(FakeShadowContext);
 
-  // Shadow planes per receiver
+  // One shadow mesh per receiver
   const shadowRefs = useRef(new Map<string, THREE.Mesh>());
   const setShadowRef = (receiverId: string) => (mesh: THREE.Mesh | null) => {
     if (mesh) shadowRefs.current.set(receiverId, mesh);
     else shadowRefs.current.delete(receiverId);
   };
 
-  // Register this caster
+  // Register caster
   useEffect(() => {
     registerCaster({ id, targetRef });
     return () => unregisterCaster(id);
   }, [id, registerCaster, unregisterCaster, targetRef]);
 
-  // Base UVs and local quad corners
+  // Static caster UVs
   const baseCasterUVs = [
     new THREE.Vector2(0, 0),
     new THREE.Vector2(0, 1),
@@ -45,6 +49,7 @@ export function FakeShadowCaster({
     new THREE.Vector2(1, 0),
   ];
 
+  // Local caster quad
   const localCorners = [
     new THREE.Vector3(-0.5, -0.5, 0),
     new THREE.Vector3(-0.5, 0.5, 0),
@@ -52,14 +57,14 @@ export function FakeShadowCaster({
     new THREE.Vector3(0.5, -0.5, 0),
   ];
 
-  // Scratch variables
+  // Scratch
   const worldCorners = Array.from({ length: 4 }, () => new THREE.Vector3());
   const hitPoints = Array.from({ length: 4 }, () => new THREE.Vector3());
   const tValues = [0, 0, 0, 0];
 
+  const lightDir = new THREE.Vector3();
   const lightPos = new THREE.Vector3();
   const lightTarget = new THREE.Vector3();
-  const lightDir = new THREE.Vector3();
 
   const planePoint = new THREE.Vector3();
   const planeNormal = new THREE.Vector3();
@@ -95,15 +100,16 @@ export function FakeShadowCaster({
     lightDir.subVectors(lightTarget, lightPos).normalize();
     rayDir.copy(lightDir);
 
-    // Caster world transform and corners
+    // Caster world transform
     caster.updateWorldMatrix(true, false);
     caster.getWorldPosition(casterWorldPos);
 
+    // Caster quad → world space
     for (let i = 0; i < 4; i++) {
       worldCorners[i].copy(localCorners[i]).applyMatrix4(caster.matrixWorld);
     }
 
-    // Per receiver
+    // For each receiver
     for (const r of receivers) {
       if (r.id === id) continue;
 
@@ -115,7 +121,7 @@ export function FakeShadowCaster({
       receiver.getWorldPosition(planePoint);
       receiver.getWorldDirection(planeNormal).normalize();
 
-      // Force plane normal to face the light
+      // Make receiver normal face light
       if (planeNormal.dot(lightDir) > 0) planeNormal.negate();
 
       const denom = rayDir.dot(planeNormal);
@@ -124,7 +130,7 @@ export function FakeShadowCaster({
         continue;
       }
 
-      // Intersect caster corners with receiver plane
+      // Project caster corners onto receiver plane
       let valid = true;
       for (let i = 0; i < 4; i++) {
         tmp.subVectors(planePoint, worldCorners[i]);
@@ -136,17 +142,17 @@ export function FakeShadowCaster({
         tValues[i] = t;
         hitPoints[i].copy(worldCorners[i]).addScaledVector(rayDir, t);
       }
-
       if (!valid) {
         shadowMesh.visible = false;
         continue;
       }
 
-      // Fix winding
+      // Fix winding if needed
       const casterUVs = baseCasterUVs.map((v) => v.clone());
       edge1.subVectors(hitPoints[1], hitPoints[0]);
       edge2.subVectors(hitPoints[2], hitPoints[0]);
       quadNormal.crossVectors(edge1, edge2).normalize();
+
       if (quadNormal.dot(planeNormal) < 0) {
         hitPoints.reverse();
         tValues.reverse();
@@ -158,7 +164,7 @@ export function FakeShadowCaster({
       for (let i = 0; i < 4; i++) centroid.add(hitPoints[i]);
       centroid.multiplyScalar(0.25);
 
-      // Tangent basis
+      // Plane tangents
       const up =
         Math.abs(planeNormal.y) < 0.9
           ? new THREE.Vector3(0, 1, 0)
@@ -167,7 +173,7 @@ export function FakeShadowCaster({
       tangentU.crossVectors(up, planeNormal).normalize();
       tangentV.crossVectors(planeNormal, tangentU).normalize();
 
-      // Receiver extents in world space
+      // Receiver extents
       rx0.set(-0.5, 0, 0).applyMatrix4(receiver.matrixWorld);
       rx1.set(0.5, 0, 0).applyMatrix4(receiver.matrixWorld);
       const halfWidth = 0.5 * rx0.distanceTo(rx1);
@@ -176,7 +182,7 @@ export function FakeShadowCaster({
       ry1.set(0, 0.5, 0).applyMatrix4(receiver.matrixWorld);
       const halfHeight = 0.5 * ry0.distanceTo(ry1);
 
-      // BUFFER UPDATES
+      // Update buffer attributes
       const geom = shadowMesh.geometry as THREE.BufferGeometry;
       const posAttr = geom.getAttribute("position") as THREE.BufferAttribute;
       const uvAttr = geom.getAttribute("uv") as THREE.BufferAttribute;
@@ -185,7 +191,7 @@ export function FakeShadowCaster({
       ) as THREE.BufferAttribute;
 
       for (let i = 0; i < 4; i++) {
-        // Position in plane local space
+        // Shadow quad in plane-local coords
         localVec.subVectors(hitPoints[i], centroid);
         const u = localVec.dot(tangentU);
         const v = localVec.dot(tangentV);
@@ -194,20 +200,23 @@ export function FakeShadowCaster({
         // Caster UV
         uvAttr.setXY(i, casterUVs[i].x, casterUVs[i].y);
 
-        // Receiver mask UV
+        // Receiver UV
         offsetVec.subVectors(hitPoints[i], planePoint);
         const uPlane = offsetVec.dot(tangentU);
         const vPlane = offsetVec.dot(tangentV);
-        const uNorm = halfWidth > 1e-5 ? uPlane / (halfWidth * 2) + 0.5 : 0.5;
-        const vNorm = halfHeight > 1e-5 ? vPlane / (halfHeight * 2) + 0.5 : 0.5;
-        receiverUvAttr.setXY(i, uNorm, vNorm);
+
+        receiverUvAttr.setXY(
+          i,
+          uPlane / (halfWidth * 2) + 0.5,
+          vPlane / (halfHeight * 2) + 0.5
+        );
       }
 
       posAttr.needsUpdate = true;
       uvAttr.needsUpdate = true;
       receiverUvAttr.needsUpdate = true;
 
-      // Position & orientation
+      // Position & orient shadow mesh
       shadowMesh.position.copy(centroid);
       shadowMesh.position.addScaledVector(planeNormal, 0.001);
       shadowMesh.quaternion.setFromUnitVectors(
@@ -215,38 +224,32 @@ export function FakeShadowCaster({
         planeNormal
       );
 
-      // ORDERING
+      // Render order
       receiver.getWorldPosition(receiverWorldPos);
       const worldZ = receiverWorldPos.z;
       (receiver as any).renderOrder = worldZ * 2;
       shadowMesh.renderOrder = worldZ * 2 + 1;
 
-      // DISTANCE-BASED EFFECTS
+      // Distance blur ONLY
       const avgDist =
         (tValues[0] + tValues[1] + tValues[2] + tValues[3]) * 0.25;
 
-      // ----- IMPORTANT -----
-      // No mesh scaling. Mask must remain exact.
-      // shadowMesh.scale.set(1, 1, 1);
+      const blur = 0.001 + avgDist * 0.005;
+      (shadowMesh.material as THREE.ShaderMaterial).uniforms.blurRadius.value =
+        blur;
 
-      // Blur grows with distance (this acts like softness)
-      const blur = 0.005 + avgDist * 0.001;
+      // Apply global shadow opacity
       (
-        (shadowMesh.material as THREE.ShaderMaterial).uniforms.blurRadius as any
-      ).value = blur;
+        shadowMesh.material as THREE.ShaderMaterial
+      ).uniforms.globalShadowOpacity.value = globalShadowOpacity;
 
-      // Opacity fade
-      const finalOpacity = Math.max(0, shadowOpacity - avgDist * 0.03);
-      (
-        (shadowMesh.material as THREE.ShaderMaterial).uniforms
-          .shadowOpacity as any
-      ).value = finalOpacity;
-
-      shadowMesh.visible = finalOpacity > 0.001;
+      shadowMesh.visible = true;
     }
   });
 
-  // CREATE SHADOW PLANES FOR EACH RECEIVER
+  // ------------------------------------------------------------
+  // BUILD SHADOW MESHES
+  // ------------------------------------------------------------
   return (
     <>
       {receivers
@@ -270,7 +273,7 @@ export function FakeShadowCaster({
             return g;
           })();
 
-          const hasReceiverMask = !!r.alphaMap;
+          const hasMask = !!r.alphaMap;
 
           return (
             <mesh key={r.id} ref={setShadowRef(r.id)} geometry={geom}>
@@ -280,10 +283,15 @@ export function FakeShadowCaster({
                 depthTest={true}
                 uniforms={{
                   alphaMap: { value: alphaMap || null },
-                  receiverAlphaMap: { value: r.alphaMap || null },
-                  useReceiverMask: { value: hasReceiverMask },
-                  shadowOpacity: { value: shadowOpacity },
+                  receiverAlphaMap: {
+                    value: r.alphaMap || null,
+                  },
+                  useReceiverMask: { value: hasMask },
+
                   blurRadius: { value: 0.01 },
+
+                  // NEW global dimmer
+                  globalShadowOpacity: { value: globalShadowOpacity },
                 }}
                 vertexShader={`
                   attribute vec2 receiverUv;
@@ -292,8 +300,7 @@ export function FakeShadowCaster({
                   void main() {
                     vUv = uv;
                     vReceiverUv = receiverUv;
-                    gl_Position =
-                      projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
                   }
                 `}
                 fragmentShader={`
@@ -304,11 +311,11 @@ export function FakeShadowCaster({
                   uniform sampler2D receiverAlphaMap;
                   uniform bool useReceiverMask;
 
-                  uniform float shadowOpacity;
                   uniform float blurRadius;
+                  uniform float globalShadowOpacity;
 
                   void main() {
-                    // --- Blur silhouette ---
+                    // ==== BLUR SILHOUETTE ====
                     float a = 0.0;
                     float total = 0.0;
 
@@ -320,21 +327,24 @@ export function FakeShadowCaster({
                         total += w;
                       }
                     }
+
                     float casterAlpha = a / max(total, 1e-4);
 
-                    // --- Receiver mask ---
+                    // ==== RECEIVER MASK ====
                     if (useReceiverMask) {
                       if (vReceiverUv.x < 0.0 || vReceiverUv.x > 1.0 ||
-                          vReceiverUv.y < 0.0 || vReceiverUv.y > 1.0) discard;
+                          vReceiverUv.y < 0.0 || vReceiverUv.y > 1.0)
+                        discard;
 
                       float m = texture2D(receiverAlphaMap, vReceiverUv).a;
                       casterAlpha *= m;
                     }
 
-                    float finalAlpha = casterAlpha * shadowOpacity;
-                    if (finalAlpha <= 0.001) discard;
+                    if (casterAlpha <= 0.001) discard;
 
-                    gl_FragColor = vec4(0.0, 0.0, 0.0, finalAlpha);
+                    // ==== FINAL: PURE BLACK SHADOW × GLOBAL OPACITY ====
+                    gl_FragColor = vec4(0.0, 0.0, 0.0,
+                        casterAlpha * globalShadowOpacity);
                   }
                 `}
               />
