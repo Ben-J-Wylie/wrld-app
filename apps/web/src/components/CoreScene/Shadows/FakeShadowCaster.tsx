@@ -1,6 +1,6 @@
 // FakeShadowCaster.tsx — unified blur system,
 // PNG casters + analytic rectangle casters behave identically,
-// procedural silhouette is evaluated in caster-space UV (no rotation).
+// receiver mask now correctly follows receiver Z-rotation.
 
 import React, { useEffect, useRef } from "react";
 import * as THREE from "three";
@@ -37,7 +37,7 @@ export function FakeShadowCaster({
     return () => unregisterCaster(id);
   }, [id, registerCaster, unregisterCaster, targetRef]);
 
-  // Static caster UVs (caster-space, fixed)
+  // Static caster UVs (caster-space, fixed per corner)
   const casterUVs = [
     new THREE.Vector2(0, 0),
     new THREE.Vector2(0, 1),
@@ -45,7 +45,7 @@ export function FakeShadowCaster({
     new THREE.Vector2(1, 0),
   ];
 
-  // Local caster quad
+  // Local caster quad (unit square)
   const localCorners = [
     new THREE.Vector3(-0.5, -0.5, 0),
     new THREE.Vector3(-0.5, 0.5, 0),
@@ -67,8 +67,6 @@ export function FakeShadowCaster({
 
   const tmp = new THREE.Vector3();
   const centroid = new THREE.Vector3();
-  const tangentU = new THREE.Vector3();
-  const tangentV = new THREE.Vector3();
 
   const edge1 = new THREE.Vector3();
   const edge2 = new THREE.Vector3();
@@ -83,6 +81,12 @@ export function FakeShadowCaster({
   const rx1 = new THREE.Vector3();
   const ry0 = new THREE.Vector3();
   const ry1 = new THREE.Vector3();
+
+  // NEW: receiver basis (aligned with receiver's local X/Y)
+  const receiverU = new THREE.Vector3();
+  const receiverV = new THREE.Vector3();
+
+  const basisMatrix = new THREE.Matrix4();
 
   // ==========================
   // FRAME LOOP
@@ -159,30 +163,54 @@ export function FakeShadowCaster({
         casterUvs.reverse();
       }
 
-      // Centroid
+      // Centroid of projected quad
       centroid.set(0, 0, 0);
       for (let p of hitPoints) centroid.add(p);
       centroid.multiplyScalar(0.25);
 
-      // Tangents (plane-local axes)
-      const up =
-        Math.abs(planeNormal.y) < 0.9
-          ? new THREE.Vector3(0, 1, 0)
-          : new THREE.Vector3(1, 0, 0);
-
-      tangentU.crossVectors(up, planeNormal).normalize();
-      tangentV.crossVectors(planeNormal, tangentU).normalize();
-
-      // Receiver extents
+      // --------------------------------------------------
+      // Receiver basis: use receiver's own local X/Y axes
+      // so the alpha mask rotates with the plane.
+      // --------------------------------------------------
       rx0.set(-0.5, 0, 0).applyMatrix4(receiver.matrixWorld);
       rx1.set(0.5, 0, 0).applyMatrix4(receiver.matrixWorld);
-      const halfWidth = 0.5 * rx0.distanceTo(rx1);
-
       ry0.set(0, -0.5, 0).applyMatrix4(receiver.matrixWorld);
       ry1.set(0, 0.5, 0).applyMatrix4(receiver.matrixWorld);
+
+      const halfWidth = 0.5 * rx0.distanceTo(rx1);
       const halfHeight = 0.5 * ry0.distanceTo(ry1);
 
-      // Update geometry
+      // X axis: receiver local +X in world, projected to plane
+      receiverU.subVectors(rx1, rx0).normalize();
+      // Ensure it's exactly in the plane
+      receiverU
+        .subVectors(
+          receiverU,
+          planeNormal.clone().multiplyScalar(receiverU.dot(planeNormal))
+        )
+        .normalize();
+
+      // Y axis: from receiver local +Y in world, orthonormal to receiverU & planeNormal
+      receiverV.subVectors(ry1, ry0).normalize();
+      receiverV
+        .subVectors(
+          receiverV,
+          planeNormal.clone().multiplyScalar(receiverV.dot(planeNormal))
+        )
+        .normalize();
+
+      // If axes are degenerate, fall back to a generic orthonormal basis
+      if (receiverU.lengthSq() < 1e-6 || receiverV.lengthSq() < 1e-6) {
+        const up =
+          Math.abs(planeNormal.y) < 0.9
+            ? new THREE.Vector3(0, 1, 0)
+            : new THREE.Vector3(1, 0, 0);
+
+        receiverU.crossVectors(up, planeNormal).normalize();
+        receiverV.crossVectors(planeNormal, receiverU).normalize();
+      }
+
+      // Update geometry: coordinates in receiver's local (U,V) basis
       const geom = shadowMesh.geometry as THREE.BufferGeometry;
       const posAttr = geom.getAttribute("position") as THREE.BufferAttribute;
       const uvAttr = geom.getAttribute("uv") as THREE.BufferAttribute;
@@ -191,19 +219,20 @@ export function FakeShadowCaster({
       ) as THREE.BufferAttribute;
 
       for (let i = 0; i < 4; i++) {
-        // Projected quad coords (receiver-space)
+        // Shadow quad coords in receiver space
         localVec.subVectors(hitPoints[i], centroid);
-        const u = localVec.dot(tangentU);
-        const v = localVec.dot(tangentV);
+        const u = localVec.dot(receiverU);
+        const v = localVec.dot(receiverV);
         posAttr.setXYZ(i, u, v, 0);
 
-        // Caster-space UVs (static)
+        // Caster-space UVs (texture space)
         uvAttr.setXY(i, casterUvs[i].x, casterUvs[i].y);
 
-        // Receiver mask UVs
+        // Receiver alpha mask UVs (0..1 across its width/height in its own basis)
         offsetVec.subVectors(hitPoints[i], planePoint);
-        const uPlane = offsetVec.dot(tangentU);
-        const vPlane = offsetVec.dot(tangentV);
+        const uPlane = offsetVec.dot(receiverU);
+        const vPlane = offsetVec.dot(receiverV);
+
         receiverUvAttr.setXY(
           i,
           uPlane / (halfWidth * 2) + 0.5,
@@ -215,15 +244,14 @@ export function FakeShadowCaster({
       uvAttr.needsUpdate = true;
       receiverUvAttr.needsUpdate = true;
 
-      // Position/orient shadow mesh
+      // Position + full orientation: X→receiverU, Y→receiverV, Z→planeNormal
       shadowMesh.position.copy(centroid);
       shadowMesh.position.addScaledVector(planeNormal, 0.001);
-      shadowMesh.quaternion.setFromUnitVectors(
-        new THREE.Vector3(0, 0, 1),
-        planeNormal
-      );
 
-      // Render order
+      basisMatrix.makeBasis(receiverU, receiverV, planeNormal);
+      shadowMesh.quaternion.setFromRotationMatrix(basisMatrix);
+
+      // Render order (keep shadow just above receiver)
       receiver.getWorldPosition(receiverWorldPos);
       const worldZ = receiverWorldPos.z;
       (receiver as any).renderOrder = worldZ * 2;
@@ -262,7 +290,7 @@ export function FakeShadowCaster({
               new THREE.Float32BufferAttribute(new Float32Array(12), 3)
             );
 
-            // IMPORTANT: caster-space UVs (prevents rotation)
+            // caster-space UVs for PNG / analytic rect
             g.setAttribute(
               "uv",
               new THREE.Float32BufferAttribute(
@@ -271,6 +299,7 @@ export function FakeShadowCaster({
               )
             );
 
+            // receiver-space UVs for per-receiver alpha mask
             g.setAttribute(
               "receiverUv",
               new THREE.Float32BufferAttribute(new Float32Array(8), 2)
@@ -299,7 +328,6 @@ export function FakeShadowCaster({
                   varying vec2 vReceiverUv;
 
                   void main() {
-                    // uv is caster-space UV because of attribute we set
                     vCasterUv = uv;
                     vReceiverUv = receiverUv;
                     gl_Position = projectionMatrix *
@@ -320,7 +348,7 @@ export function FakeShadowCaster({
                   uniform float blurRadius;
                   uniform float globalShadowOpacity;
 
-                  // Analytic rectangle alpha (caster-space), no rotation
+                  // Analytic rectangle alpha in caster UV space
                   float rectBaseAlpha(vec2 uv) {
                     if (uv.x < 0.0 || uv.x > 1.0 ||
                         uv.y < 0.0 || uv.y > 1.0) return 0.0;
@@ -328,17 +356,15 @@ export function FakeShadowCaster({
                     vec2 edgeDist = min(uv, 1.0 - uv);
                     float d = min(edgeDist.x, edgeDist.y);
 
-                    // tiny feather to avoid aliasing
+                    // small feather to avoid aliasing
                     return smoothstep(0.0, 0.002, d);
                   }
 
                   void main() {
-                    float casterAlpha = 0.0;
-
                     float a = 0.0;
                     float total = 0.0;
 
-                    // Gaussian blur - same for PNG & no-PNG
+                    // Gaussian blur in UV space (same for PNG and rect)
                     for (float x = -4.0; x <= 4.0; x++) {
                       for (float y = -4.0; y <= 4.0; y++) {
                         vec2 off = vec2(x, y) * blurRadius;
@@ -356,14 +382,14 @@ export function FakeShadowCaster({
                       }
                     }
 
-                    casterAlpha = a / max(total, 1e-4);
+                    float casterAlpha = a / max(total, 1e-4);
 
-                    // Receiver masking
+                    // Receiver masking in its own rotated UV space
                     if (useReceiverMask) {
                       if (vReceiverUv.x < 0.0 || vReceiverUv.x > 1.0 ||
-                          vReceiverUv.y < 0.0 || vReceiverUv.y > 1.0)
+                          vReceiverUv.y < 0.0 || vReceiverUv.y > 1.0) {
                         discard;
-
+                      }
                       casterAlpha *= texture2D(receiverAlphaMap, vReceiverUv).a;
                     }
 

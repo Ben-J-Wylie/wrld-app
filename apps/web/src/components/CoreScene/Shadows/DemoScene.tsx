@@ -65,7 +65,7 @@ export function DemoScene() {
           //   src={shapePng} // ← PNG with transparency
           color="#66ff99"
           position={[0, 1, 3.2]}
-          rotation={[0, 0, 45]}
+          rotation={[0, 0, 0]}
           lightRef={lightRef}
         />
         <ImagePlane
