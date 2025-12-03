@@ -4,25 +4,16 @@ import * as THREE from "three";
 
 import { FakeShadowReceiver } from "./FakeShadowReceiver";
 import { FakeShadowCaster } from "./FakeShadowCaster";
+import { opaqueWhiteTex } from "./utilOpaqueWhiteTex";
 
 export interface ImagePlaneProps {
   id: string;
-
-  /**
-   * PNG with alpha channel used both for visible image
-   * and for shadow masking.
-   */
   src?: string;
-
   color?: string;
-
   position?: [number, number, number];
   rotation?: [number, number, number];
   scale?: [number, number, number];
-
   lightRef: React.RefObject<THREE.DirectionalLight>;
-
-  /** Cast shadows? */
   castsShadow?: boolean;
 }
 
@@ -53,9 +44,12 @@ export const ImagePlane = forwardRef<THREE.Mesh, ImagePlaneProps>(
       return tex;
     }, [src]);
 
+    // The mask is ALWAYS texture or opaquewhitetex
+    const alphaMask = texture || opaqueWhiteTex;
+
     return (
       <>
-        {/* The visible object */}
+        {/* Visible plane */}
         <mesh
           ref={(m) => {
             meshRef.current = m!;
@@ -71,20 +65,20 @@ export const ImagePlane = forwardRef<THREE.Mesh, ImagePlaneProps>(
             map={texture || undefined}
             color={texture ? undefined : color}
             transparent={!!texture}
-            alphaTest={0.5} // ← CRITICAL FIX
+            alphaTest={0.5}
           />
         </mesh>
 
-        {/* Register shadow receiver with mask */}
-        <FakeShadowReceiver id={id} meshRef={meshRef} alphaMap={texture} />
+        {/* Receiver always gets an alpha mask */}
+        <FakeShadowReceiver id={id} meshRef={meshRef} alphaMap={alphaMask} />
 
-        {/* Register caster if desired */}
+        {/* Caster always gets an alpha mask */}
         {castsShadow && (
           <FakeShadowCaster
             id={id}
             targetRef={meshRef}
             lightRef={lightRef}
-            alphaMap={texture}
+            alphaMap={alphaMask}
           />
         )}
       </>
