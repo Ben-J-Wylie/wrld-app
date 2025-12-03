@@ -64,7 +64,7 @@ export function DemoScene() {
           id="four"
           //   src={shapePng} // ← PNG with transparency
           color="#66ff99"
-          position={[-0.3, 1, 2]}
+          position={[0, 1, 3.2]}
           rotation={[0, 0, 0]}
           lightRef={lightRef}
         />

@@ -44,8 +44,13 @@ export const ImagePlane = forwardRef<THREE.Mesh, ImagePlaneProps>(
       return tex;
     }, [src]);
 
-    // The mask is ALWAYS texture or opaquewhitetex
-    const alphaMask = texture || opaqueWhiteTex;
+    // Receiver: always has a mask (PNG or solid white)
+    const receiverAlphaMask = texture || opaqueWhiteTex;
+
+    // Caster:
+    //  - if we have a PNG, use its alpha
+    //  - if we DON'T have a PNG, pass null so shader uses the procedural soft-rect branch
+    const casterAlphaMask = texture || null;
 
     return (
       <>
@@ -65,20 +70,24 @@ export const ImagePlane = forwardRef<THREE.Mesh, ImagePlaneProps>(
             map={texture || undefined}
             color={texture ? undefined : color}
             transparent={!!texture}
-            alphaTest={0.5}
+            alphaTest={texture ? 0.5 : 0.0}
           />
         </mesh>
 
         {/* Receiver always gets an alpha mask */}
-        <FakeShadowReceiver id={id} meshRef={meshRef} alphaMap={alphaMask} />
+        <FakeShadowReceiver
+          id={id}
+          meshRef={meshRef}
+          alphaMap={receiverAlphaMask}
+        />
 
-        {/* Caster always gets an alpha mask */}
+        {/* Caster: PNG casters use alpha map; solid planes use procedural rect + distance blur */}
         {castsShadow && (
           <FakeShadowCaster
             id={id}
             targetRef={meshRef}
             lightRef={lightRef}
-            alphaMap={alphaMask}
+            alphaMap={casterAlphaMask}
           />
         )}
       </>
