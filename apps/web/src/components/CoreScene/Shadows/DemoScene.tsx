@@ -62,11 +62,13 @@ export function DemoScene() {
         />
         <ImagePlane
           id="four"
-          //   src={shapePng} // ← PNG with transparency
           color="#66ff99"
-          position={[0, 1, 3.2]}
-          rotation={[0, 0, 0]}
+          position={[0, 1, 5]}
+          rotation={[0, 0, 45]}
           lightRef={lightRef}
+          cornerRadius={0.25}
+          edgeErode={0.1}
+          useProceduralMask={true}
         />
         <ImagePlane
           id="five"

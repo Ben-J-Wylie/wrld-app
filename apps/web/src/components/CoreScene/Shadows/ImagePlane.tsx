@@ -6,13 +6,67 @@ import { FakeShadowReceiver } from "./FakeShadowReceiver";
 import { FakeShadowCaster } from "./FakeShadowCaster";
 import { opaqueWhiteTex } from "./utilOpaqueWhiteTex";
 
+// -------------------------
+// Procedural rounded-rect alpha generator
+// -------------------------
+function makeProceduralAlphaMask(radius = 0, edgeErode = 0, resolution = 512) {
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = resolution;
+
+  const ctx = canvas.getContext("2d")!;
+  ctx.clearRect(0, 0, resolution, resolution);
+
+  const inset = edgeErode * resolution;
+  const r = radius * resolution * 0.5;
+  const rr = Math.max(0, r - inset);
+
+  const left = inset;
+  const right = resolution - inset;
+  const top = inset;
+  const bottom = resolution - inset;
+
+  ctx.fillStyle = "white";
+  ctx.beginPath();
+
+  ctx.moveTo(left + rr, top);
+  ctx.lineTo(right - rr, top);
+  ctx.quadraticCurveTo(right, top, right, top + rr);
+
+  ctx.lineTo(right, bottom - rr);
+  ctx.quadraticCurveTo(right, bottom, right - rr, bottom);
+
+  ctx.lineTo(left + rr, bottom);
+  ctx.quadraticCurveTo(left, bottom, left, bottom - rr);
+
+  ctx.lineTo(left, top + rr);
+  ctx.quadraticCurveTo(left, top, left + rr, top);
+
+  ctx.closePath();
+  ctx.fill();
+
+  const texture = new THREE.Texture(canvas);
+  texture.needsUpdate = true;
+  texture.minFilter = THREE.LinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+
+  return texture;
+}
+
+// -------------------------
+
 export interface ImagePlaneProps {
   id: string;
   src?: string;
   color?: string;
+
+  cornerRadius?: number; // 0–0.5
+  edgeErode?: number; // 0–0.2
+  useProceduralMask?: boolean;
+
   position?: [number, number, number];
   rotation?: [number, number, number];
   scale?: [number, number, number];
+
   lightRef: React.RefObject<THREE.DirectionalLight>;
   castsShadow?: boolean;
 }
@@ -23,6 +77,9 @@ export const ImagePlane = forwardRef<THREE.Mesh, ImagePlaneProps>(
       id,
       src,
       color = "#ffffff",
+      cornerRadius = 0.0,
+      edgeErode = 0.0,
+      useProceduralMask = false,
       position = [0, 0, 0],
       rotation = [0, 0, 0],
       scale = [1, 1, 1],
@@ -33,8 +90,8 @@ export const ImagePlane = forwardRef<THREE.Mesh, ImagePlaneProps>(
   ) {
     const meshRef = useRef<THREE.Mesh>(null!);
 
-    // Load PNG with alpha
-    const texture = useMemo(() => {
+    // PNG
+    const pngTexture = useMemo(() => {
       if (!src) return null;
       const loader = new THREE.TextureLoader();
       const tex = loader.load(src);
@@ -44,17 +101,18 @@ export const ImagePlane = forwardRef<THREE.Mesh, ImagePlaneProps>(
       return tex;
     }, [src]);
 
-    // Receiver: always has a mask (PNG or solid white)
-    const receiverAlphaMask = texture || opaqueWhiteTex;
+    // Procedural mask
+    const proceduralMask = useMemo(() => {
+      if (src && !useProceduralMask) return null;
+      return makeProceduralAlphaMask(cornerRadius, edgeErode, 512);
+    }, [src, cornerRadius, edgeErode, useProceduralMask]);
 
-    // Caster:
-    //  - if we have a PNG, use its alpha
-    //  - if we DON'T have a PNG, pass null so shader uses the procedural soft-rect branch
-    const casterAlphaMask = texture || null;
+    const effectiveMask = pngTexture || proceduralMask;
+    const effectiveCasterMask = pngTexture || proceduralMask || null;
 
     return (
       <>
-        {/* Visible plane */}
+        {/* VISIBLE PLANE */}
         <mesh
           ref={(m) => {
             meshRef.current = m!;
@@ -67,27 +125,28 @@ export const ImagePlane = forwardRef<THREE.Mesh, ImagePlaneProps>(
         >
           <planeGeometry args={[1, 1]} />
           <meshBasicMaterial
-            map={texture || undefined}
-            color={texture ? undefined : color}
-            transparent={!!texture}
-            alphaTest={texture ? 0.5 : 0.0}
+            map={pngTexture || undefined}
+            color={pngTexture ? undefined : color}
+            transparent={true}
+            alphaMap={effectiveMask} // ← ADD THIS
+            alphaTest={0.001} // ← so edges are clipped sharply
           />
         </mesh>
 
-        {/* Receiver always gets an alpha mask */}
+        {/* RECEIVER: CLIPS SHADOWS USING PNG OR PROCEDURAL MASK */}
         <FakeShadowReceiver
           id={id}
           meshRef={meshRef}
-          alphaMap={receiverAlphaMask}
+          alphaMap={effectiveMask || opaqueWhiteTex}
         />
 
-        {/* Caster: PNG casters use alpha map; solid planes use procedural rect + distance blur */}
+        {/* CASTER: USES SAME SILHOUETTE */}
         {castsShadow && (
           <FakeShadowCaster
             id={id}
             targetRef={meshRef}
             lightRef={lightRef}
-            alphaMap={casterAlphaMask}
+            alphaMap={effectiveCasterMask}
           />
         )}
       </>
