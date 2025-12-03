@@ -128,8 +128,8 @@ export const ImagePlane = forwardRef<THREE.Mesh, ImagePlaneProps>(
             map={pngTexture || undefined}
             color={pngTexture ? undefined : color}
             transparent={true}
-            alphaMap={effectiveMask} // ← ADD THIS
-            alphaTest={0.001} // ← so edges are clipped sharply
+            alphaMap={!pngTexture ? effectiveMask : null} // ⬅️ only for procedural masks
+            alphaTest={0.001}
           />
         </mesh>
 

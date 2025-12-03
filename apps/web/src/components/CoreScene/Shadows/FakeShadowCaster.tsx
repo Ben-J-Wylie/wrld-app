@@ -20,7 +20,7 @@ export function FakeShadowCaster({
   targetRef,
   lightRef,
   alphaMap,
-  globalShadowOpacity = 0.5,
+  globalShadowOpacity = 1,
 }: FakeShadowCasterProps) {
   const { receivers, registerCaster, unregisterCaster } =
     React.useContext(FakeShadowContext);
