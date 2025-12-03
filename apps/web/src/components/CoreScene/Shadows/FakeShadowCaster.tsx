@@ -1,5 +1,6 @@
 // FakeShadowCaster.tsx — pure black silhouette shadows with distance blur,
 // per-receiver masking, and ONE global opacity multiplier.
+// Now supports BOTH PNG casters AND solid-color casters (procedural soft-edged rect).
 
 import React, { useEffect, useRef } from "react";
 import * as THREE from "three";
@@ -11,10 +12,10 @@ export interface FakeShadowCasterProps {
   targetRef: React.RefObject<THREE.Object3D>;
   lightRef: React.RefObject<THREE.DirectionalLight>;
 
-  /** Silhouette PNG */
+  /** Silhouette PNG (optional). If absent, we use a procedural soft-edged rectangle. */
   alphaMap?: THREE.Texture | null;
 
-  /** NEW: global multiplier for all shadows */
+  /** Global multiplier for all shadows */
   globalShadowOpacity?: number;
 }
 
@@ -230,7 +231,7 @@ export function FakeShadowCaster({
       (receiver as any).renderOrder = worldZ * 2;
       shadowMesh.renderOrder = worldZ * 2 + 1;
 
-      // Distance blur ONLY
+      // Distance blur
       const avgDist =
         (tValues[0] + tValues[1] + tValues[2] + tValues[3]) * 0.25;
 
@@ -273,7 +274,8 @@ export function FakeShadowCaster({
             return g;
           })();
 
-          const hasMask = !!r.alphaMap;
+          const hasReceiverMask = !!r.alphaMap;
+          const hasCasterMap = !!alphaMap;
 
           return (
             <mesh key={r.id} ref={setShadowRef(r.id)} geometry={geom}>
@@ -286,11 +288,11 @@ export function FakeShadowCaster({
                   receiverAlphaMap: {
                     value: r.alphaMap || null,
                   },
-                  useReceiverMask: { value: hasMask },
+                  useReceiverMask: { value: hasReceiverMask },
+                  useCasterMap: { value: hasCasterMap },
 
                   blurRadius: { value: 0.01 },
 
-                  // NEW global dimmer
                   globalShadowOpacity: { value: globalShadowOpacity },
                 }}
                 vertexShader={`
@@ -310,25 +312,44 @@ export function FakeShadowCaster({
                   uniform sampler2D alphaMap;
                   uniform sampler2D receiverAlphaMap;
                   uniform bool useReceiverMask;
+                  uniform bool useCasterMap;
 
                   uniform float blurRadius;
                   uniform float globalShadowOpacity;
 
                   void main() {
-                    // ==== BLUR SILHOUETTE ====
-                    float a = 0.0;
-                    float total = 0.0;
+                    float casterAlpha = 0.0;
 
-                    for (float x = -4.0; x <= 4.0; x++) {
-                      for (float y = -4.0; y <= 4.0; y++) {
-                        vec2 off = vec2(x,y) * blurRadius;
-                        float w = exp(-(x*x + y*y) / 16.0);
-                        a += texture2D(alphaMap, vUv + off).a * w;
-                        total += w;
+                    // ==== CASTER MASK ====
+                    if (useCasterMap) {
+                      // BLUR SILHOUETTE FROM PNG
+                      float a = 0.0;
+                      float total = 0.0;
+
+                      for (float x = -4.0; x <= 4.0; x++) {
+                        for (float y = -4.0; y <= 4.0; y++) {
+                          vec2 off = vec2(x, y) * blurRadius;
+                          float w = exp(-(x*x + y*y) / 16.0);
+                          a += texture2D(alphaMap, vUv + off).a * w;
+                          total += w;
+                        }
                       }
-                    }
 
-                    float casterAlpha = a / max(total, 1e-4);
+                      casterAlpha = a / max(total, 1e-4);
+                    } else {
+                      // PROCEDURAL SOFT-EDGED RECTANGLE (for casters without PNG)
+                      // vUv is assumed to be roughly [0,1] across the shadow quad
+                      vec2 uv = vUv;
+                      // distance to nearest edge in UV space
+                      vec2 edgeDist = min(uv, 1.0 - uv);
+                      float d = min(edgeDist.x, edgeDist.y);
+
+                      // Feather controlled by blurRadius so it still grows with distance
+                      float feather = clamp(blurRadius * 50.0, 0.02, 0.4);
+
+                      // d = 0 at edge, ~0.5 at center; smoothstep gives 0 at edge, 1 inside
+                      casterAlpha = smoothstep(0.0, feather, d);
+                    }
 
                     // ==== RECEIVER MASK ====
                     if (useReceiverMask) {
