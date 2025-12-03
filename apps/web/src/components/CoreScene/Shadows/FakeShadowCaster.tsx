@@ -318,7 +318,8 @@ export function FakeShadowCaster({
                   alphaMap: { value: alphaMap || null },
                   receiverAlphaMap: { value: r.alphaMap || null },
                   useCasterMap: { value: !!alphaMap },
-                  useReceiverMask: { value: !!r.alphaMap },
+                  //   useReceiverMask: { value: !!r.alphaMap },
+                  useReceiverMask: { value: false },
                   blurRadius: { value: 0.01 },
                   globalShadowOpacity: { value: globalShadowOpacity },
                 }}

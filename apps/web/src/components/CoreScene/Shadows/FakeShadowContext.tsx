@@ -6,12 +6,11 @@ export interface ShadowReceiverEntry {
   id: string;
   meshRef: React.RefObject<THREE.Mesh>;
 
-  /**
-   * Mask texture for this receiver's plane.
-   * Usually the PNG used on the ImagePlane (its alpha channel).
-   * If null, the whole plane is considered solid.
-   */
+  /** Mask texture for the receiver */
   alphaMap?: THREE.Texture | null;
+
+  /** NEW — duplicate canvas mesh for shadow accumulation */
+  canvasRef?: React.RefObject<THREE.Mesh>;
 }
 
 export interface ShadowCasterEntry {
