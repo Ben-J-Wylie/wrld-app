@@ -498,7 +498,7 @@ export function FakeShadowCaster({
                   alphaMap: { value: alphaMap || null },
                   receiverAlphaMap: { value: null },
                   useCasterMap: { value: !!alphaMap },
-                  useReceiverMask: { value: false }, // disabled for now
+                  useReceiverMask: { value: true }, // disabled for now
                   blurRadius: { value: 0.01 },
                   globalShadowOpacity: { value: globalShadowOpacity },
                 }}
