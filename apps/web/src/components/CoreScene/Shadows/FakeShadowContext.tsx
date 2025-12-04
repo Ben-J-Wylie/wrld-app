@@ -9,8 +9,17 @@ export interface ShadowReceiverEntry {
   /** Mask texture for the receiver */
   alphaMap?: THREE.Texture | null;
 
-  /** NEW — duplicate canvas mesh for shadow accumulation */
+  /** Duplicate canvas mesh for shadow accumulation (in main scene) */
   canvasRef?: React.RefObject<THREE.Mesh>;
+
+  /** NEW: Offscreen render target where this receiver's shadows will be composited */
+  shadowRT?: THREE.WebGLRenderTarget | null;
+
+  /** NEW: Offscreen scene that holds the shadow quads / debug quad */
+  shadowScene?: THREE.Scene | null;
+
+  /** NEW: Camera used to render shadowScene into shadowRT */
+  shadowCamera?: THREE.OrthographicCamera | null;
 }
 
 export interface ShadowCasterEntry {
@@ -48,7 +57,18 @@ export function FakeShadowProvider({
 
   const registerReceiver = React.useCallback((entry: ShadowReceiverEntry) => {
     setReceivers((prev) => {
-      if (prev.some((p) => p.id === entry.id)) return prev;
+      const existing = prev.find((p) => p.id === entry.id);
+      if (existing) {
+        // Merge / update existing entry (keeps RT, scene, etc. if they already exist)
+        return prev.map((p) =>
+          p.id === entry.id
+            ? {
+                ...p,
+                ...entry,
+              }
+            : p
+        );
+      }
       return [...prev, entry];
     });
   }, []);
