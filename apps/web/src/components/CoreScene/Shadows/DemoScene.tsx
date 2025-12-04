@@ -6,6 +6,7 @@ import * as THREE from "three";
 
 import { FakeShadowProvider } from "./FakeShadowContext";
 import { FakeShadowReceiver } from "./FakeShadowReceiver";
+import { DebugRenderTargets } from "./DebugRenderTargets";
 import { ImagePlane } from "./ImagePlane";
 
 import shapePng from "./shape.png";
@@ -20,6 +21,7 @@ export function DemoScene() {
       <OrbitControls />
 
       <FakeShadowProvider>
+        <DebugRenderTargets />
         {/* Directional Light */}
         <directionalLight
           ref={lightRef}
