@@ -48,7 +48,7 @@ export function FakeShadowReceiver({
 
     // Offscreen scene
     const rtScene = new THREE.Scene();
-    rtScene.background = new THREE.Color(0x000000);
+    rtScene.background = null;
 
     // Ortho camera (frustum replaced when sized)
     const cam = new THREE.OrthographicCamera(-0.5, 0.5, 0.5, -0.5, 0.1, 10);
@@ -56,9 +56,13 @@ export function FakeShadowReceiver({
     cam.lookAt(0, 0, 0);
     rtScene.add(cam);
 
-    // Debug quad
+    // Debug quad (invisible, preserves scaling during RT sizing)
     const quadGeom = new THREE.PlaneGeometry(1, 1);
-    const quadMat = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+    const quadMat = new THREE.MeshBasicMaterial({
+      color: 0x00ff00,
+      opacity: 0.0, // turn off green
+      transparent: true,
+    });
     const quad = new THREE.Mesh(quadGeom, quadMat);
     rtScene.add(quad);
 
@@ -202,6 +206,10 @@ export function FakeShadowReceiver({
         opacity={1}
         transparent
         depthWrite={false}
+        depthTest={false} // << ensures shadow always draws in front
+        polygonOffset={true} // << gently pushes toward camera
+        polygonOffsetFactor={-1}
+        polygonOffsetUnits={-1}
       />
     </mesh>
   );
