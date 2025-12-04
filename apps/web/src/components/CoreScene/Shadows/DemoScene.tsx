@@ -49,7 +49,7 @@ export function DemoScene() {
           id="two"
           src={shapePng} // ← PNG with transparency
           //   color="#66ccff"
-          position={[0.5, 2, 3]}
+          position={[-0.2, 1, 3]}
           rotation={[0, 0, 0]}
           lightRef={lightRef}
         />
