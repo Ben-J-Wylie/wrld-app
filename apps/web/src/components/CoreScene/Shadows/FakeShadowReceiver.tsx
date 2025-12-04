@@ -20,7 +20,7 @@ export function FakeShadowReceiver({
 
   const { gl } = useThree();
 
-  // This is the duplicate mesh in the main scene that will show the composite shadow
+  // Duplicate “canvas” mesh for composited shadows
   const canvasRef = useRef<THREE.Mesh>(null!);
 
   // Offscreen render target + scene + camera
@@ -28,33 +28,35 @@ export function FakeShadowReceiver({
   const rtSceneRef = useRef<THREE.Scene | null>(null);
   const rtCameraRef = useRef<THREE.OrthographicCamera | null>(null);
 
-  // Simple debug quad inside the offscreen scene (just to prove it's working)
+  // Debug quad (optional)
   const debugQuadRef = useRef<THREE.Mesh | null>(null);
 
-  // Material on the canvas mesh (we'll assign the RT texture as its map)
+  // Canvas material
   const canvasMatRef = useRef<THREE.MeshBasicMaterial>(null!);
 
-  // Create RT / scene / camera once and register receiver (with RT info)
+  // -------------------------------------------------------------
+  // Create RenderTarget + Scene + Camera
+  // -------------------------------------------------------------
   useEffect(() => {
-    // --- Create render target ---
-    const rt = new THREE.WebGLRenderTarget(512, 512, {
+    // Start tiny — will be resized dynamically
+    const rt = new THREE.WebGLRenderTarget(4, 4, {
       minFilter: THREE.LinearFilter,
       magFilter: THREE.LinearFilter,
       format: THREE.RGBAFormat,
     });
     rt.texture.name = `ReceiverShadowRT_${id}`;
 
-    // --- Create offscreen scene ---
+    // Offscreen scene
     const rtScene = new THREE.Scene();
     rtScene.background = new THREE.Color(0x000000);
 
-    // --- Ortho camera in "shadow atlas" space (-0.5..0.5) ---
+    // Ortho camera (frustum replaced when sized)
     const cam = new THREE.OrthographicCamera(-0.5, 0.5, 0.5, -0.5, 0.1, 10);
     cam.position.set(0, 0, 1);
     cam.lookAt(0, 0, 0);
     rtScene.add(cam);
 
-    // --- Add a simple debug quad so we SEE something in the RT ---
+    // Debug quad
     const quadGeom = new THREE.PlaneGeometry(1, 1);
     const quadMat = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
     const quad = new THREE.Mesh(quadGeom, quadMat);
@@ -65,14 +67,14 @@ export function FakeShadowReceiver({
     rtCameraRef.current = cam;
     debugQuadRef.current = quad;
 
-    // Hook RT texture into the canvas material
+    // Assign RT texture
     if (canvasMatRef.current) {
       canvasMatRef.current.map = rt.texture;
       canvasMatRef.current.needsUpdate = true;
       canvasMatRef.current.transparent = true;
     }
 
-    // Register receiver with RT info
+    // Register receiver in global shadow context
     registerReceiver({
       id,
       meshRef,
@@ -86,7 +88,6 @@ export function FakeShadowReceiver({
     return () => {
       unregisterReceiver(id);
 
-      // Cleanup
       rt.dispose();
       quadGeom.dispose();
       quadMat.dispose();
@@ -94,17 +95,20 @@ export function FakeShadowReceiver({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, meshRef, alphaMap, gl, registerReceiver, unregisterReceiver]);
 
-  // Clone the receiver geometry once it exists
+  // -------------------------------------------------------------
+  // Clone geometry to canvas mesh
+  // -------------------------------------------------------------
   useEffect(() => {
     const receiverMesh = meshRef.current;
     const canvasMesh = canvasRef.current;
     if (!receiverMesh || !canvasMesh) return;
 
-    // Clone geometry (important!)
     canvasMesh.geometry = receiverMesh.geometry.clone();
   }, [meshRef]);
 
-  // Sync transform for the canvas mesh with the receiver mesh
+  // -------------------------------------------------------------
+  // Sync canvas transform to receiver
+  // -------------------------------------------------------------
   useFrame(() => {
     const mesh = meshRef.current;
     const canvas = canvasRef.current;
@@ -112,24 +116,66 @@ export function FakeShadowReceiver({
 
     mesh.updateWorldMatrix(true, false);
 
-    // Copy world position
     canvas.position.setFromMatrixPosition(mesh.matrixWorld);
-
-    // Copy rotation
     canvas.quaternion.setFromRotationMatrix(mesh.matrixWorld);
-
-    // Copy scale
     canvas.scale.copy(mesh.scale);
 
-    // Slight offset along normal so it sits just above the receiver
+    // Nudge forward
     const normal = new THREE.Vector3(0, 0, 1)
       .applyQuaternion(canvas.quaternion)
       .multiplyScalar(0.002);
-
     canvas.position.add(normal);
   });
 
-  // Render the offscreen scene into the RT each frame
+  // -------------------------------------------------------------
+  // CORRECT RT SIZING BASED ON GEOMETRY BOUNDS × SCALE
+  // -------------------------------------------------------------
+  const PIXELS_PER_WORLD_UNIT = 128;
+
+  useFrame(() => {
+    const receiver = meshRef.current;
+    const rt = rtRef.current;
+    const cam = rtCameraRef.current;
+    const quad = debugQuadRef.current;
+    if (!receiver || !rt || !cam) return;
+
+    receiver.updateWorldMatrix(true, false);
+
+    // 1. Read geometry bounds
+    const geom = receiver.geometry;
+    geom.computeBoundingBox();
+
+    const bb = geom.boundingBox!;
+    const geomW = bb.max.x - bb.min.x;
+    const geomH = bb.max.y - bb.min.y;
+
+    // 2. Multiply by mesh scale for FINAL world-space size
+    const worldW = geomW * receiver.scale.x;
+    const worldH = geomH * receiver.scale.y;
+
+    // 3. Convert to pixel dimensions
+    const targetW = Math.max(32, Math.round(worldW * PIXELS_PER_WORLD_UNIT));
+    const targetH = Math.max(32, Math.round(worldH * PIXELS_PER_WORLD_UNIT));
+
+    // 4. Only resize when needed
+    if (rt.width !== targetW || rt.height !== targetH) {
+      rt.setSize(targetW, targetH);
+
+      // Camera frustum matches geometry dimensions
+      cam.left = -worldW / 2;
+      cam.right = worldW / 2;
+      cam.top = worldH / 2;
+      cam.bottom = -worldH / 2;
+      cam.updateProjectionMatrix();
+
+      // Resize debug quad to match area coverage
+      if (quad) quad.scale.set(worldW, worldH, 1);
+    }
+  });
+
+  // -------------------------------------------------------------
+  // Render RT every frame
+  // -------------------------------------------------------------
   useFrame(() => {
     const rt = rtRef.current;
     const rtScene = rtSceneRef.current;
@@ -145,6 +191,9 @@ export function FakeShadowReceiver({
     gl.setRenderTarget(prevRT);
   });
 
+  // -------------------------------------------------------------
+  // Canvas mesh (composited shadow plane)
+  // -------------------------------------------------------------
   return (
     <mesh ref={canvasRef}>
       <meshBasicMaterial

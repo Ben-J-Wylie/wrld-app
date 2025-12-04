@@ -30,8 +30,13 @@ export function DemoScene() {
         />
 
         {/* Backdrop (also a receiver) */}
-        <mesh ref={backdropRef} rotation={[0, 0, 0]} position={[0, 0, 0]}>
-          <planeGeometry args={[10, 10]} />
+        <mesh
+          ref={backdropRef}
+          rotation={[0, 0, 0]}
+          position={[0, 0, 0]}
+          scale={[10, 10, 10]}
+        >
+          <planeGeometry args={[1, 1]} />
           <meshStandardMaterial color="#fafafa" />
         </mesh>
         <FakeShadowReceiver id="backdrop" meshRef={backdropRef} />
@@ -67,6 +72,7 @@ export function DemoScene() {
           color="#66ff99"
           position={[-0.4, 1, 2]}
           rotation={[0, 0, 45]}
+          scale={[1, 1, 1]}
           lightRef={lightRef}
           cornerRadius={0.25}
           edgeErode={0.1}
