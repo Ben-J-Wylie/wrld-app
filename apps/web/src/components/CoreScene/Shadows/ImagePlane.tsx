@@ -4,7 +4,7 @@ import * as THREE from "three";
 
 import { FakeShadowReceiver } from "./FakeShadowReceiver";
 import { FakeShadowCaster } from "./FakeShadowCaster";
-import { opaqueWhiteTex } from "./utilOpaqueWhiteTex";
+// import { opaqueWhiteTex } from "./utilOpaqueWhiteTex";
 
 // -------------------------
 // Procedural rounded-rect alpha generator
@@ -129,7 +129,7 @@ export const ImagePlane = forwardRef<THREE.Mesh, ImagePlaneProps>(
             color={pngTexture ? undefined : color}
             transparent={false}
             alphaMap={!pngTexture ? effectiveMask : null} // ⬅️ only for procedural masks
-            alphaTest={0.1}
+            alphaTest={1}
           />
         </mesh>
 
@@ -137,7 +137,7 @@ export const ImagePlane = forwardRef<THREE.Mesh, ImagePlaneProps>(
         <FakeShadowReceiver
           id={id}
           meshRef={meshRef}
-          alphaMap={effectiveMask || opaqueWhiteTex}
+          alphaMap={effectiveMask}
         />
 
         {/* CASTER: USES SAME SILHOUETTE */}

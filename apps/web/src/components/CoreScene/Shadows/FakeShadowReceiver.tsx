@@ -203,7 +203,7 @@ export function FakeShadowReceiver({
       <meshBasicMaterial
         ref={canvasMatRef}
         color="#ffffff"
-        opacity={0.8} // ← final shadow fade
+        opacity={0.5} // ← final shadow fade
         transparent
         premultipliedAlpha={false} // ⭐ REQUIRED for RT shadow fading
         depthWrite={false}
