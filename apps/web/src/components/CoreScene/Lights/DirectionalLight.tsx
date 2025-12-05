@@ -27,7 +27,7 @@ export function DirectionalLight({
   intensity = 2,
   position = [-200, 100, 500],
 
-  shadowRadius = 50.0,
+  shadowRadius = 40.0,
   shadowBias = -0.001,
   shadowNormalBias = 0.02,
 

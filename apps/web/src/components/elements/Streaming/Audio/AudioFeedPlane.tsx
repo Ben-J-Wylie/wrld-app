@@ -22,17 +22,6 @@ interface AudioFeedPlaneProps {
   debug?: boolean;
 }
 
-/**
- * AudioFeedPlane
- *
- * Responsibilities:
- * - Host a hidden <canvas> (via <Html portal>).
- * - Attach MediaStream (local or remote audio).
- * - Create ONE THREE.CanvasTexture.
- * - Drive updates via rAF, drawing an audio visualizer to the canvas.
- * - Render a shadow-casting ImagePlane behind the canvas (frame).
- * - Render a VideoPlane textured with the canvas (the visualizer).
- */
 export const AudioFeedPlane = memo(function AudioFeedPlane({
   msc,
   peerId = "self",
@@ -47,13 +36,10 @@ export const AudioFeedPlane = memo(function AudioFeedPlane({
   visible = true,
   debug = false,
 }: AudioFeedPlaneProps) {
-  // Hidden canvas
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-
-  // CanvasTexture to display the visualizer
   const [texture, setTexture] = useState<THREE.CanvasTexture | null>(null);
 
-  // Audio analyser bits
+  // Audio nodes / state
   const analyserRef = useRef<AnalyserNode | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
@@ -64,9 +50,28 @@ export const AudioFeedPlane = memo(function AudioFeedPlane({
 
   const baseZ = z ?? 0;
 
-  // ---------------------------------------------------------------------------
-  // Attach a MediaStream to the analyser
-  // ---------------------------------------------------------------------------
+  // ----------------------------------------------------------
+  // Prepare canvas size based on plane props
+  // ----------------------------------------------------------
+  const updateCanvasSize = useCallback(() => {
+    const c = canvasRef.current;
+    if (!c) return;
+
+    // double resolution for crisp UI
+    const w = (typeof width === "number" ? width : 300) * 2;
+    const h = (typeof height === "number" ? height : 100) * 2;
+
+    c.width = w;
+    c.height = h;
+  }, [width, height]);
+
+  useEffect(() => {
+    updateCanvasSize();
+  }, [updateCanvasSize]);
+
+  // ----------------------------------------------------------
+  // Connect audio stream → analyser → canvas visualizer
+  // ----------------------------------------------------------
   const attachStreamToAnalyser = useCallback(
     (stream: MediaStream | null) => {
       if (!stream) return;
@@ -74,14 +79,16 @@ export const AudioFeedPlane = memo(function AudioFeedPlane({
 
       const audioTracks = stream.getAudioTracks();
       if (!audioTracks.length) {
-        console.warn("AudioFeedPlane: No audio tracks available");
+        console.warn("AudioFeedPlane: No audio tracks in stream");
         return;
       }
+
+      console.log("🎧 AudioFeedPlane attaching audio stream:", stream);
 
       setAttachedSrc(true);
       setHasStream(true);
 
-      // Clean previous
+      // Cleanup previous
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       if (audioCtxRef.current) {
         try {
@@ -89,28 +96,31 @@ export const AudioFeedPlane = memo(function AudioFeedPlane({
         } catch {}
       }
 
+      // Create audio context
       const audioCtx = new (window.AudioContext ||
         (window as any).webkitAudioContext)();
       audioCtxRef.current = audioCtx;
 
+      // Safari fix — resume on user gesture
+      audioCtx.resume().catch(() => {});
+
+      // Create analyser
       const analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 512;
+      analyser.fftSize = 256; // optimized resolution
       analyserRef.current = analyser;
 
-      let source: MediaStreamAudioSourceNode | null = null;
+      // Stream → source → analyser
+      let source: MediaStreamAudioSourceNode;
       try {
         source = audioCtx.createMediaStreamSource(stream);
         source.connect(analyser);
         sourceRef.current = source;
       } catch (err) {
-        console.warn(
-          "AudioFeedPlane: Could not connect stream to analyser",
-          err
-        );
+        console.warn("AudioFeedPlane: Cannot connect stream to analyser:", err);
         return;
       }
 
-      // Create CanvasTexture once
+      // Create CanvasTexture if missing
       if (!texture) {
         const tex = new THREE.CanvasTexture(canvasRef.current);
         tex.minFilter = THREE.LinearFilter;
@@ -123,79 +133,74 @@ export const AudioFeedPlane = memo(function AudioFeedPlane({
         setTexture(tex);
       }
 
+      // Drawing loop
       const canvas = canvasRef.current;
       const ctx = canvas.getContext("2d")!;
       const bufferLength = analyser.frequencyBinCount;
       const dataArray = new Uint8Array(bufferLength);
 
-      let lastDraw = performance.now();
-
-      const draw = (t: number) => {
+      const draw = () => {
         rafRef.current = requestAnimationFrame(draw);
-
-        // ~30fps cap
-        if (t - lastDraw < 33) return;
-        lastDraw = t;
 
         analyser.getByteFrequencyData(dataArray);
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        const barWidth = (canvas.width / bufferLength) * 1.4;
 
+        const barW = (canvas.width / bufferLength) * 1.5;
         let x = 0;
+
         for (let i = 0; i < bufferLength; i++) {
           const v = dataArray[i] / 255;
           const h = v * canvas.height;
           ctx.fillStyle = `rgba(0, 224, 255, ${0.2 + v * 0.8})`;
-          ctx.fillRect(x, canvas.height - h, barWidth, h);
-          x += barWidth + 1;
+          ctx.fillRect(x, canvas.height - h, barW, h);
+          x += barW + 1;
         }
 
         if (texture) texture.needsUpdate = true;
       };
 
-      draw(performance.now());
+      draw();
     },
     [texture]
   );
 
-  // ---------------------------------------------------------------------------
-  // LOCAL preview (raw mic) if peerId === "self"
-  // ---------------------------------------------------------------------------
+  // ----------------------------------------------------------
+  // LOCAL mic preview
+  // ----------------------------------------------------------
   useEffect(() => {
     if (peerId !== "self") return;
     if (!msc.localMicStream) return;
 
-    console.log("🎤 [Local Mic] Attaching raw mic stream", msc.localMicStream);
+    console.log("🎤 AudioFeedPlane: Attaching LOCAL mic stream");
     attachStreamToAnalyser(msc.localMicStream);
   }, [peerId, msc.localMicStream, attachStreamToAnalyser]);
 
-  // ---------------------------------------------------------------------------
-  // REMOTE streams from Mediasoup
-  // ---------------------------------------------------------------------------
+  // ----------------------------------------------------------
+  // REMOTE audio via Mediasoup
+  // ----------------------------------------------------------
   useEffect(() => {
     if (!msc) return;
 
-    console.log("🔌 AudioFeedPlane: binding onNewStreamAudio for", peerId);
+    console.log("🔌 AudioFeedPlane: Binding onNewStream for audio for", peerId);
     const orig = msc.onNewStream;
 
     msc.onNewStream = (stream: MediaStream, id: string) => {
-      if (id === peerId) {
-        console.log("🎧 Attaching remote audio stream", stream);
+      if (id === peerId && stream.getAudioTracks().length > 0) {
+        console.log("🎧 Remote audio received — attaching");
         attachStreamToAnalyser(stream);
       }
       if (orig) orig(stream, id);
     };
 
     return () => {
-      console.log("🔌 AudioFeedPlane: restoring original onNewStream");
       msc.onNewStream = orig;
     };
   }, [msc, peerId, attachStreamToAnalyser]);
 
-  // ---------------------------------------------------------------------------
-  // Debug overlay
-  // ---------------------------------------------------------------------------
+  // ----------------------------------------------------------
+  // Debug overlay UI
+  // ----------------------------------------------------------
   const DebugOverlay = () =>
     !debug ? null : (
       <Html position={[0, 0, 2]}>
@@ -215,17 +220,12 @@ export const AudioFeedPlane = memo(function AudioFeedPlane({
       </Html>
     );
 
-  // ---------------------------------------------------------------------------
-  // Render
-  // ---------------------------------------------------------------------------
   return (
     <>
-      {/* Hidden-but-active <canvas> */}
+      {/* Hidden canvas */}
       <Html portal={{ current: document.body }}>
         <canvas
           ref={canvasRef}
-          width={300}
-          height={100}
           style={{
             position: "fixed",
             top: 0,
@@ -241,7 +241,7 @@ export const AudioFeedPlane = memo(function AudioFeedPlane({
 
       <DebugOverlay />
 
-      {/* Shadow-casting background frame */}
+      {/* Shadow frame */}
       <ImagePlane
         name={`${name}-ShadowFrame`}
         width={width}
@@ -250,13 +250,12 @@ export const AudioFeedPlane = memo(function AudioFeedPlane({
         rotation={rotation}
         scale={scale}
         z={baseZ}
-        castShadow={true}
+        castShadow
         receiveShadow={false}
-        color={"#ffffff"}
         visible={visible}
       />
 
-      {/* Visualizer texture plane */}
+      {/* Visualizer */}
       {texture && (
         <VideoPlane
           name={name}

@@ -3,12 +3,12 @@
 // DefaultScene.tsx
 import React from "react";
 
-import { Stage } from "../../containers/SceneCore/Stage";
-import { Backdrop } from "../../containers/SceneCore/Layers/Backdrop";
-import { CameraPin } from "../../containers/SceneCore/Layers/CameraPin";
-import { Group } from "../../containers/SceneCore/Layers/Group";
+import { Stage } from "../../CoreScene/Stage";
+import { Backdrop } from "../../CoreScene/Layers/Backdrop";
+import { CameraPin } from "../../CoreScene/Layers/CameraPin";
+import { Group } from "../../CoreScene/Layers/Group";
 
-import { ImagePlane } from "../../containers/SceneCore/Geometry/ImagePlane";
+import { ImagePlane } from "../../CoreScene/Geometry/ImagePlane";
 
 const backdropSizes = {
   mobile: { width: 720, height: 1920 },
@@ -16,7 +16,7 @@ const backdropSizes = {
   desktop: { width: 1920, height: 720 },
 };
 
-export function DefaultScene() {
+export function AppScene() {
   return (
     <Stage backdrop={backdropSizes}>
       <CameraPin

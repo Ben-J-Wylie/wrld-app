@@ -22,7 +22,7 @@ function degVec3(v: Vec3): Vec3 {
 
 export interface VideoPlaneProps {
   name?: string;
-  texture?: THREE.VideoTexture | null;
+  texture?: THREE.Texture | null;
 
   width?: ResponsiveValue<number>;
   height?: ResponsiveValue<number>;

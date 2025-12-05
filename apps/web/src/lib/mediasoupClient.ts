@@ -17,7 +17,11 @@ export class MediaSoupClient {
   sendTransport: mediasoupClient.types.Transport | null = null;
   recvTransport: mediasoupClient.types.Transport | null = null;
 
+  // Local raw camera stream
   localStream: MediaStream | null = null;
+
+  // 🔥 NEW: raw local microphone audio stream
+  localMicStream: MediaStream | null = null;
 
   remoteStreams = new Map<string, RemotePeerStreams>();
 
@@ -130,7 +134,7 @@ export class MediaSoupClient {
   }
 
   // -----------------------------------
-  // Publishing
+  // Publishing full local stream
   // -----------------------------------
   async publishLocalStream(stream: MediaStream) {
     if (!this.device) await this.initDevice();
@@ -146,8 +150,9 @@ export class MediaSoupClient {
     await this.createRecvTransport();
   }
 
-  // lib/mediasoupClient.ts
-
+  // -----------------------------------
+  // Publishing an individual track
+  // -----------------------------------
   async publishTrack(track: MediaStreamTrack) {
     if (!this.device) await this.initDevice();
     if (!this.sendTransport) await this.createSendTransport();
@@ -164,9 +169,16 @@ export class MediaSoupClient {
       producer.kind
     );
 
-    // 🔥 LOCAL SELF-VIEW
+    // 🔥 LOCAL SELF-VIEW STREAMS
     const selfStream = new MediaStream([track]);
-    this.localStream = selfStream;
+
+    if (track.kind === "video") {
+      this.localStream = selfStream;
+    }
+
+    if (track.kind === "audio") {
+      this.localMicStream = selfStream;
+    }
 
     console.log(
       "🛰 MediaSoupClient.publishTrack: emitting onNewStream for self",
@@ -187,14 +199,11 @@ export class MediaSoupClient {
   }
 
   // -----------------------------------
-  // Consuming
+  // Consuming remote streams
   // -----------------------------------
   async consume(producerId: string, peerId?: string) {
     if (!this.device) await this.initDevice();
-
-    if (!this.recvTransport) {
-      await this.createRecvTransport();
-    }
+    if (!this.recvTransport) await this.createRecvTransport();
 
     const data = await this.request("consume", {
       producerId,
@@ -248,6 +257,7 @@ export class MediaSoupClient {
   // -----------------------------------
   close() {
     this.localStream?.getTracks().forEach((t) => t.stop());
+    this.localMicStream?.getTracks().forEach((t) => t.stop());
 
     for (const entry of this.remoteStreams.values()) {
       entry.audio?.getTracks().forEach((t) => t.stop());
