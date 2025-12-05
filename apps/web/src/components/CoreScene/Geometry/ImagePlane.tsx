@@ -11,11 +11,6 @@ import {
 
 import { createRoundedRectangleShape } from "./RoundedRectangle";
 
-// --- NEW Fake shadow imports ---
-import { FakeShadowCaster } from "../Shadows/AttemptOne/FakeShadowCaster";
-import { FakeShadowReceiver } from "../Shadows/AttemptOne/FakeShadowReceiver";
-import { useFakeShadowGlobals } from "../Shadows/AttemptOne/FakeShadowGlobals";
-
 type Vec3 = [number, number, number];
 
 // --------------------------------------------------
@@ -51,14 +46,6 @@ export interface ImagePlaneProps {
   castShadow?: boolean;
   receiveShadow?: boolean;
 
-  // Fake shadow API
-  castFakeShadow?: boolean;
-  receiveFakeShadow?: boolean;
-  shadowOpacity?: number; // base opacity
-  shadowSoftness?: number; // penumbra growth factor
-  shadowOffset?: number; // (unused in new system)
-  shadowMaxDistance?: number;
-
   // Pointer events
   onClick?: (e: THREE.Event, hit: THREE.Intersection) => void;
   onHover?: (e: THREE.Event | null, hit: THREE.Intersection | null) => void;
@@ -85,16 +72,8 @@ export const ImagePlane = forwardRef<THREE.Mesh, ImagePlaneProps>(
       z = 0,
       visible = true,
 
-      castShadow = true,
-      receiveShadow = true,
-
-      castFakeShadow = false,
-      receiveFakeShadow = false,
-
-      shadowOpacity = 0.35,
-      shadowSoftness = 0.5,
-      shadowOffset = 0.0,
-      shadowMaxDistance = 2000,
+      castShadow = false,
+      receiveShadow = false,
 
       onClick,
       onHover,
@@ -213,13 +192,8 @@ export const ImagePlane = forwardRef<THREE.Mesh, ImagePlaneProps>(
     };
 
     // --------------------------------------------------
-    // Fake shadow globals: texture & lightDir
+    // Render
     // --------------------------------------------------
-    const { shadowTexture, lightDir } = useFakeShadowGlobals();
-
-    // Base blob size = roughly the plane size
-    const baseShadowSize = Math.max(resolvedWidth, resolvedHeight) * 1.1;
-
     return (
       <group
         ref={groupRef}
@@ -231,14 +205,7 @@ export const ImagePlane = forwardRef<THREE.Mesh, ImagePlaneProps>(
         visible={visible}
       >
         {/* ------------------------------------------------------------------
-            CASTER: register this plane so others can receive its fake shadow
-           ------------------------------------------------------------------ */}
-        {castFakeShadow && (
-          <FakeShadowCaster active={castFakeShadow} meshRef={groupRef} />
-        )}
-
-        {/* ------------------------------------------------------------------
-            Visual Plane
+            Visible Plane (REAL shadow compatible)
            ------------------------------------------------------------------ */}
         <mesh
           ref={meshRef}
@@ -261,22 +228,6 @@ export const ImagePlane = forwardRef<THREE.Mesh, ImagePlaneProps>(
             side={THREE.DoubleSide}
           />
         </mesh>
-
-        {/* ------------------------------------------------------------------
-            RECEIVER: receive projected fake shadows from ALL casters
-           ------------------------------------------------------------------ */}
-        {receiveFakeShadow && shadowTexture && (
-          <FakeShadowReceiver
-            active={receiveFakeShadow}
-            receiverRef={groupRef}
-            texture={shadowTexture}
-            lightDir={lightDir}
-            baseSize={baseShadowSize}
-            softness={shadowSoftness}
-            maxDistance={shadowMaxDistance}
-            baseOpacity={shadowOpacity}
-          />
-        )}
       </group>
     );
   }

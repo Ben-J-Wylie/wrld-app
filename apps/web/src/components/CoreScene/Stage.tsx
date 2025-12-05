@@ -14,7 +14,6 @@ import { useScrollController } from "./Controllers/useScrollController";
 
 import { AmbientLight } from "./Lights/AmbientLight";
 import { DirectionalLight } from "./Lights/DirectionalLight";
-import { FakeShadowProvider } from "./Shadows/AttemptOne/FakeShadowContext";
 
 /** --------------------------------------
  *  Props for Stage
@@ -48,7 +47,7 @@ function InnerScene({ children }: { children?: React.ReactNode }) {
   useScrollController(cameraRig, gl.domElement);
 
   return (
-    <FakeShadowProvider>
+    <>
       {/* Camera System */}
       <CameraSwitcher sceneCamRef={sceneCamRef} orbitCamRef={orbitCamRef} />
 
@@ -58,7 +57,7 @@ function InnerScene({ children }: { children?: React.ReactNode }) {
 
       {/* User's 3D Scene */}
       {children}
-    </FakeShadowProvider>
+    </>
   );
 }
 

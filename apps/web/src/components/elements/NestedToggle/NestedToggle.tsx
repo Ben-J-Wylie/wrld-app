@@ -47,7 +47,7 @@ export function NestedToggle({
   troughWidth = { mobile: 200, tablet: 200, desktop: 200 },
   troughHeight = { mobile: 50, tablet: 50, desktop: 50 },
   sliderWidth = { mobile: 75, tablet: 75, desktop: 75 },
-  sliderHeight = { mobile: 45, tablet: 45, desktop: 45 },
+  sliderHeight = { mobile: 40, tablet: 40, desktop: 40 },
   radius = { mobile: 5, tablet: 5, desktop: 5 },
 
   position = { mobile: [0, 0, 0], tablet: [0, 0, 0], desktop: [0, 0, 0] },
@@ -127,11 +127,11 @@ export function NestedToggle({
   const targetX = useMemo(() => {
     switch (state) {
       case "off":
-        return -0.25 * resolvedWidth;
+        return -0.15 * resolvedWidth;
       case "cued":
         return 0;
       case "on":
-        return +0.25 * resolvedWidth;
+        return +0.15 * resolvedWidth;
     }
   }, [state, resolvedWidth]);
 
