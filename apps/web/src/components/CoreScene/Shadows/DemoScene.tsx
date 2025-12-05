@@ -29,19 +29,17 @@ export function DemoScene() {
           intensity={1.5}
         />
 
-        {/* Backdrop (also a receiver) */}
-        <mesh
-          ref={backdropRef}
-          rotation={[0, 0, 0]}
-          position={[0, 0, 0]}
-          scale={[10, 10, 10]}
-        >
-          <planeGeometry args={[1, 1]} />
-          <meshStandardMaterial color="#fafafa" />
-        </mesh>
         <FakeShadowReceiver id="backdrop" meshRef={backdropRef} />
 
         {/* Color-only planes (each caster+receiver) */}
+        <ImagePlane
+          id="zero"
+          color="#ffffff" // optional tint
+          position={[0, 0, 0]}
+          rotation={[0, 0, 0]}
+          scale={[10, 10, 10]}
+          lightRef={lightRef}
+        />
         <ImagePlane
           id="one"
           src={shapePng} // ← PNG with transparency
@@ -70,8 +68,8 @@ export function DemoScene() {
         <ImagePlane
           id="four"
           color="#66ff99"
-          position={[-0.4, 1, 2]}
-          rotation={[0, 0, 45]}
+          position={[-0.4, 0.8, 2]}
+          rotation={[0, 0.1, 45]}
           scale={[1, 1, 1]}
           lightRef={lightRef}
           cornerRadius={0.25}

@@ -191,6 +191,10 @@ export function FakeShadowCaster({
 
       const geom = createShadowGeometry();
       const mat = createShadowMaterial(alphaMap || null, globalShadowOpacity);
+
+      // ⭐ Connect receiver mask
+      mat.uniforms.receiverAlphaMap.value = r.alphaMap || null;
+      mat.uniforms.useReceiverMask.value = true;
       const mesh = new THREE.Mesh(geom, mat);
       mesh.visible = false;
       r.shadowScene.add(mesh);
@@ -468,7 +472,8 @@ export function FakeShadowCaster({
 
       const worldMat = worldShadowMesh.material as THREE.ShaderMaterial;
       worldMat.uniforms.blurRadius.value = blur;
-      worldMat.uniforms.globalShadowOpacity.value = globalShadowOpacity;
+      // Make WORLD shadow quads invisible (we only want RT-based shadows now)
+      worldMat.uniforms.globalShadowOpacity.value = 0.0;
 
       if (rtShadowMesh) {
         const rtMat = rtShadowMesh.material as THREE.ShaderMaterial;
@@ -496,9 +501,9 @@ export function FakeShadowCaster({
                 depthTest={true}
                 uniforms={{
                   alphaMap: { value: alphaMap || null },
-                  receiverAlphaMap: { value: null },
+                  receiverAlphaMap: { value: r.alphaMap || null }, // ⭐ ADD THIS
                   useCasterMap: { value: !!alphaMap },
-                  useReceiverMask: { value: true }, // disabled for now
+                  useReceiverMask: { value: true }, // ⭐ ENABLE MASKING
                   blurRadius: { value: 0.01 },
                   globalShadowOpacity: { value: globalShadowOpacity },
                 }}

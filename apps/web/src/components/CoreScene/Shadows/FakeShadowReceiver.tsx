@@ -60,7 +60,7 @@ export function FakeShadowReceiver({
     const quadGeom = new THREE.PlaneGeometry(1, 1);
     const quadMat = new THREE.MeshBasicMaterial({
       color: 0x00ff00,
-      opacity: 0.0, // turn off green
+      opacity: 0, // turn off green
       transparent: true,
     });
     const quad = new THREE.Mesh(quadGeom, quadMat);
@@ -189,9 +189,9 @@ export function FakeShadowReceiver({
     const prevRT = gl.getRenderTarget();
 
     gl.setRenderTarget(rt);
-    gl.clearColor();
+    gl.setClearColor(0x000000, 0); // ← transparent clear
+    gl.clear(true, true, true);
     gl.render(rtScene, rtCamera);
-
     gl.setRenderTarget(prevRT);
   });
 
@@ -203,11 +203,12 @@ export function FakeShadowReceiver({
       <meshBasicMaterial
         ref={canvasMatRef}
         color="#ffffff"
-        opacity={1}
+        opacity={0.8} // ← final shadow fade
         transparent
+        premultipliedAlpha={false} // ⭐ REQUIRED for RT shadow fading
         depthWrite={false}
-        depthTest={false} // << ensures shadow always draws in front
-        polygonOffset={true} // << gently pushes toward camera
+        depthTest={true}
+        polygonOffset={true}
         polygonOffsetFactor={-1}
         polygonOffsetUnits={-1}
       />

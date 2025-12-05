@@ -127,9 +127,9 @@ export const ImagePlane = forwardRef<THREE.Mesh, ImagePlaneProps>(
           <meshBasicMaterial
             map={pngTexture || undefined}
             color={pngTexture ? undefined : color}
-            transparent={true}
+            transparent={false}
             alphaMap={!pngTexture ? effectiveMask : null} // ⬅️ only for procedural masks
-            alphaTest={0.001}
+            alphaTest={0.1}
           />
         </mesh>
 
