@@ -2,9 +2,17 @@ import { io, Socket } from "socket.io-client";
 import * as mediasoupClient from "mediasoup-client";
 import { socket } from "./socket";
 
+type MediaTag = "cam" | "mic" | "screen" | string;
+
 type RemotePeerStreams = {
+  // Legacy fields (still populated)
   audio?: MediaStream;
   video?: MediaStream;
+
+  // New, more specific fields
+  mic?: MediaStream;
+  camera?: MediaStream;
+  screen?: MediaStream;
 };
 
 export class MediaSoupClient {
@@ -17,10 +25,12 @@ export class MediaSoupClient {
   sendTransport: mediasoupClient.types.Transport | null = null;
   recvTransport: mediasoupClient.types.Transport | null = null;
 
-  // Local raw camera stream
+  // Legacy: single local video stream (camera)
   localStream: MediaStream | null = null;
 
-  // 🔥 NEW: raw local microphone audio stream
+  // More explicit local streams
+  localCameraStream: MediaStream | null = null;
+  localScreenStream: MediaStream | null = null;
   localMicStream: MediaStream | null = null;
 
   remoteStreams = new Map<string, RemotePeerStreams>();
@@ -32,7 +42,8 @@ export class MediaSoupClient {
   private _resolveReady!: () => void;
 
   // React callbacks
-  onNewStream?: (stream: MediaStream, id: string) => void;
+  // NOTE: third arg (mediaTag) is optional & backwards compatible
+  onNewStream?: (stream: MediaStream, id: string, mediaTag?: MediaTag) => void;
   onRemoveStream?: (id: string) => void;
   onPeerList?: (peers: { id: string; name: string }[] | string[]) => void;
 
@@ -56,13 +67,16 @@ export class MediaSoupClient {
       this.onPeerList?.(peers);
     });
 
-    this.socket.on("peerProducersUpdated", async ({ peerId, producers }) => {
-      if (this.remoteStreams.has(peerId)) {
-        for (const p of producers) {
-          await this.consume(p.id);
+    this.socket.on(
+      "peerProducersUpdated",
+      async ({ peerId, producers }: { peerId: string; producers: any[] }) => {
+        if (this.remoteStreams.has(peerId)) {
+          for (const p of producers) {
+            await this.consume(p.id, peerId);
+          }
         }
       }
-    });
+    );
   }
 
   // React setter
@@ -97,10 +111,18 @@ export class MediaSoupClient {
       );
     });
 
-    this.sendTransport.on("produce", async ({ kind, rtpParameters }, cb) => {
-      const { id } = await this.request("produce", { kind, rtpParameters });
-      cb({ id });
-    });
+    // IMPORTANT: include appData so server knows camera vs screen vs mic
+    this.sendTransport.on(
+      "produce",
+      async ({ kind, rtpParameters, appData }, cb) => {
+        const { id } = await this.request("produce", {
+          kind,
+          rtpParameters,
+          appData,
+        });
+        cb({ id });
+      }
+    );
   }
 
   async createRecvTransport() {
@@ -134,7 +156,7 @@ export class MediaSoupClient {
   }
 
   // -----------------------------------
-  // Publishing full local stream
+  // Publishing full local stream (legacy)
   // -----------------------------------
   async publishLocalStream(stream: MediaStream) {
     if (!this.device) await this.initDevice();
@@ -143,7 +165,13 @@ export class MediaSoupClient {
     this.localStream = stream;
 
     for (const track of stream.getTracks()) {
-      const producer = await this.sendTransport!.produce({ track });
+      const mediaTag: MediaTag =
+        track.kind === "video" ? "cam" : track.kind === "audio" ? "mic" : "";
+      const producer = await this.sendTransport!.produce({
+        track,
+        // Let server know what this is
+        appData: { mediaTag },
+      });
       this.producers.set(producer.id, producer);
     }
 
@@ -151,47 +179,81 @@ export class MediaSoupClient {
   }
 
   // -----------------------------------
-  // Publishing an individual track
+  // Publishing an individual track (cam / mic / screen)
   // -----------------------------------
-  async publishTrack(track: MediaStreamTrack) {
+  async publishTrack(track: MediaStreamTrack, mediaTag?: MediaTag) {
     if (!this.device) await this.initDevice();
     if (!this.sendTransport) await this.createSendTransport();
 
-    console.log("🛰 MediaSoupClient.publishTrack: producing track", track);
+    // Default mediaTag if not provided
+    if (!mediaTag) {
+      if (track.kind === "video") {
+        mediaTag = "cam";
+      } else if (track.kind === "audio") {
+        mediaTag = "mic";
+      }
+    }
 
-    const producer = await this.sendTransport!.produce({ track });
+    console.log(
+      "🛰 MediaSoupClient.publishTrack: producing track",
+      track,
+      "mediaTag:",
+      mediaTag
+    );
+
+    const producer = await this.sendTransport!.produce({
+      track,
+      appData: { mediaTag },
+    });
     this.producers.set(producer.id, producer);
 
     console.log(
       "🛰 MediaSoupClient.publishTrack: producer created",
       producer.id,
       "kind:",
-      producer.kind
+      producer.kind,
+      "mediaTag:",
+      mediaTag
     );
 
-    // 🔥 LOCAL SELF-VIEW STREAMS
+    // 🔥 LOCAL SELF-VIEW STREAMS — SEPARATE BY TAG
     const selfStream = new MediaStream([track]);
 
-    if (track.kind === "video") {
-      this.localStream = selfStream;
-    }
-
-    if (track.kind === "audio") {
+    if (mediaTag === "cam") {
+      this.localCameraStream = selfStream;
+      this.localStream = selfStream; // legacy alias
+    } else if (mediaTag === "screen") {
+      this.localScreenStream = selfStream;
+    } else if (mediaTag === "mic") {
       this.localMicStream = selfStream;
     }
 
     console.log(
       "🛰 MediaSoupClient.publishTrack: emitting onNewStream for self",
-      selfStream
+      selfStream,
+      "mediaTag:",
+      mediaTag
     );
-    this.onNewStream?.(selfStream, "self");
+    this.onNewStream?.(selfStream, "self", mediaTag);
 
     return producer;
   }
 
+  // Stop by kind (legacy: stops ALL video producers, e.g. cam + screen)
   stopProducerByKind(kind: "audio" | "video") {
     for (const [id, producer] of this.producers.entries()) {
       if (producer.kind === kind) {
+        producer.close();
+        this.producers.delete(id);
+      }
+    }
+  }
+
+  // NEW: stop by mediaTag (e.g. "cam" vs "screen")
+  stopProducerByMediaTag(tag: MediaTag) {
+    for (const [id, producer] of this.producers.entries()) {
+      const pTag = (producer.appData as any)?.mediaTag as MediaTag | undefined;
+      if (pTag === tag) {
         producer.close();
         this.producers.delete(id);
       }
@@ -205,7 +267,7 @@ export class MediaSoupClient {
     if (!this.device) await this.initDevice();
     if (!this.recvTransport) await this.createRecvTransport();
 
-    const data = await this.request("consume", {
+    const data: any = await this.request("consume", {
       producerId,
       rtpCapabilities: this.device!.rtpCapabilities,
     });
@@ -227,16 +289,32 @@ export class MediaSoupClient {
     this.consumers.set(consumer.id, consumer);
 
     const stream = new MediaStream([consumer.track]);
+
+    // Prefer explicit peerId arg, then server-provided peerId, then fallback to producerId
     const id = peerId || data.peerId || producerId;
+
+    const mediaTag: MediaTag | undefined =
+      data.appData?.mediaTag || data.mediaTag;
 
     const entry: RemotePeerStreams = this.remoteStreams.get(id) || {};
 
-    if (consumer.kind === "audio") entry.audio = stream;
-    if (consumer.kind === "video") entry.video = stream;
+    if (consumer.kind === "audio" || mediaTag === "mic") {
+      entry.audio = stream; // legacy
+      entry.mic = stream;
+    } else if (consumer.kind === "video") {
+      if (mediaTag === "screen") {
+        entry.screen = stream;
+      } else {
+        // Default / cam
+        entry.camera = stream;
+        entry.video = stream; // legacy alias (cam as primary video)
+      }
+    }
 
     this.remoteStreams.set(id, entry);
 
-    this.onNewStream?.(stream, id);
+    // Let React side know what this is
+    this.onNewStream?.(stream, id, mediaTag);
 
     this.request("resume", { consumerId: consumer.id }).catch(() => {});
 
@@ -257,11 +335,16 @@ export class MediaSoupClient {
   // -----------------------------------
   close() {
     this.localStream?.getTracks().forEach((t) => t.stop());
+    this.localCameraStream?.getTracks().forEach((t) => t.stop());
+    this.localScreenStream?.getTracks().forEach((t) => t.stop());
     this.localMicStream?.getTracks().forEach((t) => t.stop());
 
     for (const entry of this.remoteStreams.values()) {
       entry.audio?.getTracks().forEach((t) => t.stop());
       entry.video?.getTracks().forEach((t) => t.stop());
+      entry.camera?.getTracks().forEach((t) => t.stop());
+      entry.screen?.getTracks().forEach((t) => t.stop());
+      entry.mic?.getTracks().forEach((t) => t.stop());
     }
 
     this.sendTransport?.close();

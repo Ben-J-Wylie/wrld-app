@@ -11,7 +11,7 @@ import { StreamingSync } from "../../../CoreStream/StreamingSync";
 import { MediaSoupClient } from "../../../../lib/mediasoupClient";
 import { useRef, useEffect } from "react";
 
-import { AudioFeedPlane } from ".//AudioFeedPlane";
+import { ScreenFeedPlane } from "./ScreenFeedPlane";
 
 const backdropSizes = {
   mobile: { width: 720, height: 1920 },
@@ -65,8 +65,8 @@ export function AppScene() {
         {/* LEVEL 2 */}
         {/* ============================================================ */}
         <NestedToggle
-          id="AudioLive"
-          name="AudioLive"
+          id="ScreenLive"
+          name="ScreenLive"
           position={{
             mobile: [0, 80, 0],
             tablet: [0, 80, 0],
@@ -79,10 +79,10 @@ export function AppScene() {
       {/* OPTIONAL: Place camera feed on an image plane */}
       {/* -------------------------------------------- */}
 
-      <AudioFeedPlane
+      <ScreenFeedPlane
         msc={mscRef.current}
         peerId="self"
-        name="AudioFeed"
+        name="ScreenFeed"
         width={{ mobile: 200, tablet: 220, desktop: 260 }}
         height={{ mobile: 120, tablet: 140, desktop: 160 }}
         position={{

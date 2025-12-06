@@ -25,7 +25,7 @@ interface AudioFeedPlaneProps {
 export const AudioFeedPlane = memo(function AudioFeedPlane({
   msc,
   peerId = "self",
-  name = "AudioFeedPlane",
+  name = "AudioFeed",
 
   width,
   height,
@@ -185,12 +185,20 @@ export const AudioFeedPlane = memo(function AudioFeedPlane({
     console.log("🔌 AudioFeedPlane: Binding onNewStream for audio for", peerId);
     const orig = msc.onNewStream;
 
-    msc.onNewStream = (stream: MediaStream, id: string) => {
-      if (id === peerId && stream.getAudioTracks().length > 0) {
-        console.log("🎧 Remote audio received — attaching");
+    msc.onNewStream = (stream: MediaStream, id: string, mediaTag?: string) => {
+      // Prefer explicit tag from mediasoup
+      if (id === peerId && mediaTag === "mic") {
+        console.log("🎧 Remote MIC stream received — attaching");
         attachStreamToAnalyser(stream);
       }
-      if (orig) orig(stream, id);
+
+      // Backwards-compatible fallback (in case server hasn’t sent mediaTag)
+      else if (id === peerId && stream.getAudioTracks().length > 0) {
+        console.log("🎧 Remote audio (legacy) — attaching");
+        attachStreamToAnalyser(stream);
+      }
+
+      if (orig) orig(stream, id, mediaTag);
     };
 
     return () => {

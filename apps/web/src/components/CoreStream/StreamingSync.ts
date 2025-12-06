@@ -6,19 +6,22 @@ import { useStreamingStore } from "./StreamingStore";
 
 import { CameraCapability } from "../Elements/Streaming/Camera/CameraCapability";
 import { AudioCapability } from "../Elements/Streaming/Audio/AudioCapability";
+import { ScreenFeedCapability } from "../Elements/Streaming/Screen/ScreenFeedCapability";
 
 import { MediaSoupClient } from "../../lib/mediasoupClient";
 
 export function StreamingSync(msc: MediaSoupClient) {
   const { state: cameraState } = ToggleNode("CameraLive");
   const { state: micState } = ToggleNode("AudioLive");
+  const { state: screenState } = ToggleNode("ScreenLive");
+
   const streaming = useStreamingStore();
 
   // -----------------------------
   // CAMERA SYNC
   // -----------------------------
   useEffect(() => {
-    console.log("🎛 StreamingSync: CameraLive state changed →", cameraState);
+    console.log("🎛 StreamingSync: CameraLive state →", cameraState);
 
     const camera = CameraCapability(msc);
 
@@ -39,7 +42,7 @@ export function StreamingSync(msc: MediaSoupClient) {
   // MIC SYNC
   // -----------------------------
   useEffect(() => {
-    console.log("🎛 StreamingSync: AudioLive state changed →", micState);
+    console.log("🎛 StreamingSync: AudioLive state →", micState);
 
     const mic = AudioCapability(msc);
 
@@ -55,4 +58,25 @@ export function StreamingSync(msc: MediaSoupClient) {
         .catch((err) => console.error("🎛 mic.onDisable failed", err));
     }
   }, [micState]);
+
+  // -----------------------------
+  // SCREEN SHARE SYNC
+  // -----------------------------
+  useEffect(() => {
+    console.log("🖥 🎛 StreamingSync: ScreenLive state →", screenState);
+
+    const screen = ScreenFeedCapability(msc);
+
+    if (screenState === "on" || screenState === "cued") {
+      streaming.setFeature("screenShare", true);
+      screen
+        .onEnable()
+        .catch((err) => console.error("🎛 screen.onEnable failed", err));
+    } else if (screenState === "off") {
+      streaming.setFeature("screenShare", false);
+      screen
+        .onDisable()
+        .catch((err) => console.error("🎛 screen.onDisable failed", err));
+    }
+  }, [screenState]);
 }

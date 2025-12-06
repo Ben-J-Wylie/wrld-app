@@ -13,14 +13,12 @@ export function CameraCapability(msc: MediaSoupClient): StreamingCapability {
     onEnable: async () => {
       try {
         console.log("📷 CameraCapability: requesting getUserMedia...");
+
         stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            width: { ideal: 640 }, // 🔑 reduce resolution for performance
-            height: { ideal: 360 },
-            frameRate: { ideal: 30, max: 30 },
-          },
+          video: true,
           audio: false,
         });
+
         console.log("📷 CameraCapability: getUserMedia OK", stream);
 
         const videoTrack = stream.getVideoTracks()[0];
@@ -29,7 +27,10 @@ export function CameraCapability(msc: MediaSoupClient): StreamingCapability {
             "📷 CameraCapability: publishing video track",
             videoTrack
           );
-          await msc.publishTrack(videoTrack);
+
+          // ⭐ IMPORTANT: Tell mediasoup explicitly this is the CAMERA track
+          await msc.publishTrack(videoTrack, "cam");
+
           console.log("📷 CameraCapability: publishTrack resolved");
         } else {
           console.warn("📷 CameraCapability: no video track found");
@@ -45,7 +46,8 @@ export function CameraCapability(msc: MediaSoupClient): StreamingCapability {
       stream?.getTracks().forEach((t) => t.stop());
       stream = null;
 
-      msc.stopProducerByKind("video");
+      // ⭐ Updated: stop JUST the cam track, not screenshare
+      msc.stopProducerByMediaTag("cam");
     },
   };
 }

@@ -1,6 +1,4 @@
-// apps/web/src/wrld/Streaming/CameraFeedPlane.tsx
-
-import React, { useCallback, useEffect, useRef, useState, memo } from "react";
+import React, { memo, useCallback, useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { Html } from "@react-three/drei";
 
@@ -8,7 +6,10 @@ import { VideoPlane } from "../../../CoreScene/Geometry/VideoPlane";
 import { ImagePlane } from "../../../CoreScene/Geometry/ImagePlane";
 import { MediaSoupClient } from "../../../../lib/mediasoupClient";
 
-interface CameraFeedPlaneProps {
+// ------------------------------------------------------
+// ⭐ ADD THIS: Proper strongly typed props interface
+// ------------------------------------------------------
+interface ScreenFeedPlaneProps {
   msc: MediaSoupClient;
   peerId?: string;
   name?: string;
@@ -24,10 +25,13 @@ interface CameraFeedPlaneProps {
   debug?: boolean;
 }
 
-export const CameraFeedPlane = memo(function CameraFeedPlane({
+// ------------------------------------------------------
+// Component
+// ------------------------------------------------------
+export const ScreenFeedPlane = memo(function ScreenFeedPlane({
   msc,
   peerId = "self",
-  name = "CameraFeed",
+  name = "ScreenFeed",
 
   width,
   height,
@@ -37,21 +41,14 @@ export const CameraFeedPlane = memo(function CameraFeedPlane({
   z = 0,
   visible = true,
   debug = false,
-}: CameraFeedPlaneProps) {
+}: ScreenFeedPlaneProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
-
-  // Created once the <video> element can play
   const [texture, setTexture] = useState<THREE.VideoTexture | null>(null);
 
   const [hasStream, setHasStream] = useState(false);
-  const [attachedSrcObject, setAttachedSrcObject] = useState(false);
+  const [attached, setAttached] = useState(false);
 
-  const baseZ = z ?? 0;
-
-  // -------------------------------------------------------
-  // Attach a MediaStream to <video>
-  // -------------------------------------------------------
-  const attachStreamToVideo = useCallback((stream: MediaStream | null) => {
+  const attachStream = useCallback((stream: MediaStream | null) => {
     const video = videoRef.current;
     if (!video || !stream) return;
 
@@ -59,19 +56,15 @@ export const CameraFeedPlane = memo(function CameraFeedPlane({
     video.muted = true;
     video.playsInline = true;
 
-    video
-      .play()
-      .catch((err) =>
-        console.warn("❌ CameraFeedPlane: video.play() failed:", err)
-      );
+    video.play().catch((err) => {
+      console.warn("🖥 ScreenFeedPlane: video.play() failed:", err);
+    });
 
-    setAttachedSrcObject(true);
+    setAttached(true);
     setHasStream(true);
   }, []);
 
-  // -------------------------------------------------------
-  // Create THREE.VideoTexture when <video> can play
-  // -------------------------------------------------------
+  // Create VideoTexture when <video> can play
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -79,10 +72,9 @@ export const CameraFeedPlane = memo(function CameraFeedPlane({
     const handleCanPlay = () => {
       if (texture) return;
 
-      console.log("🎥 CameraFeedPlane: creating THREE.VideoTexture");
+      console.log("🖥 Screenshare: creating THREE.VideoTexture");
 
       const tex = new THREE.VideoTexture(video);
-
       tex.generateMipmaps = false;
       tex.minFilter = THREE.LinearFilter;
       tex.magFilter = THREE.LinearFilter;
@@ -93,7 +85,6 @@ export const CameraFeedPlane = memo(function CameraFeedPlane({
         tex.colorSpace;
 
       tex.needsUpdate = false;
-
       setTexture(tex);
     };
 
@@ -101,40 +92,35 @@ export const CameraFeedPlane = memo(function CameraFeedPlane({
     return () => video.removeEventListener("canplay", handleCanPlay);
   }, [texture]);
 
-  // -------------------------------------------------------
-  // LOCAL camera preview (raw getUserMedia before/alongside Mediasoup)
-  // -------------------------------------------------------
+  // Local screenshare preview (optional)
   useEffect(() => {
     if (peerId !== "self") return;
-    if (!msc.localCameraStream) return;
+    if (!msc.localScreenStream) return;
 
-    console.log("📺 [Local Preview] attaching localCameraStream");
-    attachStreamToVideo(msc.localCameraStream);
-  }, [peerId, msc.localCameraStream, attachStreamToVideo]);
+    console.log("🖥 [Local Preview] attaching localScreenStream");
+    attachStream(msc.localScreenStream);
+  }, [peerId, msc.localScreenStream, attachStream]);
 
-  // -------------------------------------------------------
-  // REMOTE Mediasoup streams - UPDATED with mediaTag filtering
-  // -------------------------------------------------------
+  // Bind mediasoup onNewStream with mediaTag filtering
   useEffect(() => {
     if (!msc) return;
 
-    console.log("🔌 CameraFeedPlane: binding onNewStream for peer", peerId);
     const orig = msc.onNewStream;
 
     msc.onNewStream = (stream: MediaStream, id: string, mediaTag?: string) => {
-      console.log("🔥 CameraFeedPlane onNewStream:", { id, mediaTag });
+      console.log("🖥 ScreenshareFeedPlane onNewStream", { id, mediaTag });
 
       if (id === peerId) {
-        // ⭐ Only use the CAM stream, not screen
-        if (mediaTag === "cam") {
-          console.log("📸 Attaching remote CAMERA stream");
-          attachStreamToVideo(stream);
+        // ⭐ Accept ONLY screenshare
+        if (mediaTag === "screen") {
+          console.log("🖥 Attaching SCREEN stream");
+          attachStream(stream);
         }
 
-        // Backwards compatibility path
+        // Legacy fallback
         else if (!mediaTag && stream.getVideoTracks().length > 0) {
-          console.log("📸 Attaching legacy remote video stream");
-          attachStreamToVideo(stream);
+          console.log("🖥 Fallback: attaching stream without tag");
+          attachStream(stream);
         }
       }
 
@@ -142,78 +128,56 @@ export const CameraFeedPlane = memo(function CameraFeedPlane({
     };
 
     return () => {
-      console.log("🔌 CameraFeedPlane: restoring original onNewStream");
       msc.onNewStream = orig;
     };
-  }, [msc, peerId, attachStreamToVideo]);
+  }, [msc, peerId, attachStream]);
 
-  // -------------------------------------------------------
-  // requestVideoFrameCallback for optimal texture updates
-  // -------------------------------------------------------
+  // RVFC for optimal updates
   useEffect(() => {
     const video = videoRef.current;
     const tex = texture;
-
     if (!video || !tex) return;
 
     const anyVideo = video as any;
-    const rvfcAvail = typeof anyVideo.requestVideoFrameCallback === "function";
-
-    if (!rvfcAvail) {
-      console.log(
-        "ℹ️ CameraFeedPlane: RVFC not available; fallback used in VideoPlane"
-      );
-      return;
-    }
+    if (typeof anyVideo.requestVideoFrameCallback !== "function") return;
 
     let handle: number;
-
     const onFrame = () => {
       tex.needsUpdate = true;
       handle = anyVideo.requestVideoFrameCallback(onFrame);
     };
-
     handle = anyVideo.requestVideoFrameCallback(onFrame);
 
     return () => {
-      if (anyVideo.cancelVideoFrameCallback) {
-        anyVideo.cancelVideoFrameCallback(handle);
-      }
+      if (handle) anyVideo.cancelVideoFrameCallback(handle);
     };
   }, [texture]);
 
-  // -------------------------------------------------------
-  // Debug panel
-  // -------------------------------------------------------
   const DebugOverlay = () =>
     !debug ? null : (
       <Html position={[0, 0, 1]}>
         <div
           style={{
             padding: "4px 8px",
-            background: "rgba(0,0,0,0.6)",
+            background: "rgba(0,0,0,0.7)",
             color: "white",
             fontSize: 12,
           }}
         >
           <div>peerId: {peerId}</div>
           <div>hasStream: {String(hasStream)}</div>
-          <div>attached: {String(attachedSrcObject)}</div>
+          <div>attached: {String(attached)}</div>
           <div>texture: {texture ? "ready ✔" : "null"}</div>
         </div>
       </Html>
     );
 
-  // -------------------------------------------------------
-  // Render video frame + video
-  // -------------------------------------------------------
   return (
     <>
-      {/* Hidden but active <video> */}
+      {/* Hidden DOM video */}
       <Html portal={{ current: document.body }}>
         <video
           ref={videoRef}
-          muted
           autoPlay
           playsInline
           style={{
@@ -232,13 +196,13 @@ export const CameraFeedPlane = memo(function CameraFeedPlane({
       <DebugOverlay />
 
       <ImagePlane
-        name={`${name}-ShadowFrame`}
+        name={`${name}-Frame`}
         width={width}
         height={height}
         position={position}
         rotation={rotation}
         scale={scale}
-        z={baseZ}
+        z={z}
         castShadow
         receiveShadow={false}
         color={"#ffffff"}
@@ -254,7 +218,7 @@ export const CameraFeedPlane = memo(function CameraFeedPlane({
           position={position}
           rotation={rotation}
           scale={scale}
-          z={baseZ + 1}
+          z={z + 1}
           visible={visible}
         />
       )}

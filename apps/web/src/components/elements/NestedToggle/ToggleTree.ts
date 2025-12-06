@@ -23,16 +23,23 @@ export const ToggleTree: Record<string, ToggleTree> = {
     state: "off",
   },
 
-  CameraFeature: {
-    id: "CameraFeature",
-    label: "CameraFeature",
-    parentId: "CameraLive",
-    state: "off",
-  },
+  // CameraFeature: {
+  //   id: "CameraFeature",
+  //   label: "CameraFeature",
+  //   parentId: "CameraLive",
+  //   state: "off",
+  // },
 
   AudioLive: {
     id: "AudioLive",
     label: "AudioLive",
+    parentId: "GlobalLive",
+    state: "off",
+  },
+
+  ScreenLive: {
+    id: "ScreenLive",
+    label: "ScreenLive",
     parentId: "GlobalLive",
     state: "off",
   },
