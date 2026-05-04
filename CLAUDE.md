@@ -7,6 +7,10 @@ instance working in this repo is immediately oriented.
 > **Human collaborators:** Ben (Mac, founder/dev) and Aaron (Windows, founder/dev).
 > Two-person team building WRLD's alpha.
 
+> **Sister repo:** `wrld-backend` (Fastify API). They share Clerk for auth,
+> share the API contract documented in wrld-backend/docs/API.md, and are
+> deployed independently.
+
 ---
 
 ## What WRLD is
@@ -30,7 +34,7 @@ The North Star UX:
 ```
 [wrld-app: React Native + Expo Router]
         │
-        ├── Auth: AWS Cognito (ca-central-1) — JWT-based
+        ├── Auth: Clerk — JWT-based, hosted (no AWS)
         │
         ├── HTTPS API ─────▶ [Hetzner box]
         │                         ├── Caddy (TLS auto-issue)
@@ -44,17 +48,19 @@ The North Star UX:
 **Key decisions:**
 
 - **Two repos:** `wrld-app` (this one) and `wrld-backend` (separate).
+- **Auth: Clerk**, chosen over AWS Cognito (rough DX) and self-hosted
+  Keycloak (ops burden). Clerk's React Native SDK handles signup/login UI,
+  email verification, password reset out of the box. Free tier covers 10k MAUs.
 - **Database: Postgres + PostGIS**, not DynamoDB. Multi-dimensional and
   geospatial queries dominate WRLD's workload.
-- **API: Fastify on Hetzner**, not Lambda. Co-located with mediasoup for alpha
-  to keep ops surface tiny. Migration path to separate boxes is documented.
+- **API: Fastify on Hetzner**, not Lambda. Co-located with mediasoup for alpha.
 - **ORM: Prisma** (Ben/Aaron familiar).
 - **Stream lifecycle source of truth: mediasoup → API webhooks** (Option B).
   When mediasoup says a producer started, we write the Stream row. Heartbeats
   every 30s; reaper job marks stale rows `isLive=false` if heartbeats stop.
-- **AWS scope:** Cognito only for now. SNS, S3 may come later.
-- **Cognito region:** `ca-central-1` (Montreal). Both founders are Pacific NW;
-  picked Canadian residency given Ben is in BC.
+- **Long-term provider mix:** Hetzner for media + API + DB (cheap egress —
+  critical for streaming). Clerk for auth. AWS or Cloudflare for utility
+  services (S3-compatible storage, CDN, push) when those phases come.
 
 ---
 
@@ -66,17 +72,18 @@ The North Star UX:
   dev client introduced in Phase 7 for `react-native-webrtc`)
 - **Expo Router** (file-based) for navigation
 - **TypeScript strict** everywhere
-- **Zustand** for client state
+- **Zustand** for client state (will become thinner once Clerk's hooks handle
+  auth state directly)
 - **TanStack Query** for server state
 - **Axios** for HTTP
-- **AsyncStorage** for persisted state (auth tokens, etc.)
+- **Clerk** (`@clerk/clerk-expo`) for auth — added in Phase 3
 - React 19 / RN 0.81
 
 ### Folder layout
 
 ```
 app/                       # Expo Router routes (file = route)
-├── _layout.tsx           # Root: providers (QueryClient, SafeArea, status bar)
+├── _layout.tsx           # Root: providers (ClerkProvider, QueryClient, SafeArea)
 ├── index.tsx             # Auth-aware redirect
 ├── (auth)/               # Logged-out group
 │   ├── login.tsx
@@ -102,8 +109,8 @@ src/
 
 - **No semicolons**, single quotes, trailing commas (see `.prettierrc`)
 - **2-space indent**, LF line endings (see `.editorconfig` + `.gitattributes`)
-- **Path aliases:** import from `@/...` instead of relative paths. `metro.config.js`
-  resolves `@/foo` → `src/foo` at runtime.
+- **Path aliases:** import from `@/...` instead of relative paths.
+  `metro.config.js` resolves `@/foo` → `src/foo` at runtime.
 - **Exact case in imports** (Mac is case-insensitive, CI is not)
 - **Arrow functions for components**, named exports
 - **One screen per file** in `app/`
@@ -137,8 +144,8 @@ We're building in slices so each phase is independently verifiable.
 | Phase | Status   | What                                                                                                                                                                                        |
 | ----- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1     | ✅ done  | Dev environment, Expo Router scaffold, auth/dashboard/stream placeholder screens, Zustand auth store, axios client, theme + UI primitives. Verified end-to-end on Ben's iPhone via Expo Go. |
-| 2     | next     | `wrld-backend` repo: Fastify + Prisma + PostGIS + Cognito JWT verify + mediasoup webhooks + Docker Compose + Hetzner deploy scripts                                                         |
-| 3     | upcoming | Real Cognito signup/login flow in app; email verification screen; `POST /auth/sync` after first login; token refresh in axios interceptor                                                   |
+| 2     | building | `wrld-backend` repo: Fastify + Prisma + PostGIS + Clerk JWT verify + mediasoup webhooks + Docker Compose + Hetzner deploy scripts                                                           |
+| 3     | next     | Real Clerk signup/login flow in app via `@clerk/clerk-expo`; replace Phase 1 stubs; axios interceptor pulls Clerk session token                                                             |
 | 4     | upcoming | App calls `GET /streams/near` for the globe; "go live" flow that connects to mediasoup with location                                                                                        |
 | 5     | upcoming | 3D globe via `expo-gl` + `three.js`; pins from streams API; tap → stream view                                                                                                               |
 | 6     | upcoming | Dashboard with stream layer arming (audio/video/overlays/chat — exact "layer" semantics TBD)                                                                                                |
@@ -167,6 +174,7 @@ The API + Postgres live in `wrld-backend`, deployed to a Hetzner box that
 also runs mediasoup. See its own `README.md` and `docs/` for ops.
 
 API base URL goes into this app's `.env` as `EXPO_PUBLIC_API_BASE_URL`.
+Clerk publishable key goes in as `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY`.
 
 ---
 
@@ -192,11 +200,14 @@ When in doubt, ask before assuming.
 
 - **Don't switch the database.** PostGIS was a deliberate choice over
   DynamoDB; revisiting requires explicit human decision.
+- **Don't switch auth providers.** Clerk was chosen deliberately over Cognito
+  and Keycloak; revisiting requires explicit human decision.
 - **Don't add Redis "just in case."** The two-user alpha doesn't need it.
-  Add when there's evidence of need.
 - **Don't add new state libraries.** Zustand + TanStack Query covers the app.
 - **Don't refactor working code without being asked.** New features only.
 - **Don't bypass the phase plan.** If asked for Phase 5 work while Phase 3
   isn't done, ask whether to skip ahead or finish in order.
 - **Don't preemptively add dependencies.** Ben's machine has tight file
   descriptor limits. Add deps as their phases need them, not in advance.
+- **Don't put `CLERK_SECRET_KEY` (`sk_...`) anywhere in this repo.** Only the
+  publishable key (`pk_...`) belongs in this codebase.
