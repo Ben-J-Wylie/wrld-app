@@ -141,15 +141,15 @@ Aaron is on Windows. To avoid breakage:
 
 We're building in slices so each phase is independently verifiable.
 
-| Phase | Status   | What                                                                                                                                                                                        |
-| ----- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1     | ✅ done  | Dev environment, Expo Router scaffold, auth/dashboard/stream placeholder screens, Zustand auth store, axios client, theme + UI primitives. Verified end-to-end on Ben's iPhone via Expo Go. |
-| 2     | building | `wrld-backend` repo: Fastify + Prisma + PostGIS + Clerk JWT verify + mediasoup webhooks + Docker Compose + Hetzner deploy scripts                                                           |
-| 3     | next     | Real Clerk signup/login flow in app via `@clerk/clerk-expo`; replace Phase 1 stubs; axios interceptor pulls Clerk session token                                                             |
-| 4     | upcoming | App calls `GET /streams/near` for the globe; "go live" flow that connects to mediasoup with location                                                                                        |
-| 5     | upcoming | 3D globe via `expo-gl` + `three.js`; pins from streams API; tap → stream view                                                                                                               |
-| 6     | upcoming | Dashboard with stream layer arming (audio/video/overlays/chat — exact "layer" semantics TBD)                                                                                                |
-| 7     | upcoming | Custom dev client; mediasoup-client integration; creator broadcast view; viewer consumption view; multi-angle hop UX                                                                        |
+| Phase | Status      | What                                                                                                                                                                                        |
+| ----- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1     | ✅ done     | Dev environment, Expo Router scaffold, auth/dashboard/stream placeholder screens, Zustand auth store, axios client, theme + UI primitives. Verified end-to-end on Ben's iPhone via Expo Go. |
+| 2     | in progress | Chunk 1 ✅ (local backend dev). Chunk 2 (Hetzner deploy) and Chunk 3 (mediasoup wiring) pending.                                                                                            |
+| 3     | next        | Real Clerk signup/login flow in app via `@clerk/clerk-expo`; replace Phase 1 stubs; axios interceptor pulls Clerk session token                                                             |
+| 4     | upcoming    | App calls `GET /streams/near` for the globe; "go live" flow that connects to mediasoup with location                                                                                        |
+| 5     | upcoming    | 3D globe via `expo-gl` + `three.js`; pins from streams API; tap → stream view                                                                                                               |
+| 6     | upcoming    | Dashboard with stream layer arming (audio/video/overlays/chat — exact "layer" semantics TBD)                                                                                                |
+| 7     | upcoming    | Custom dev client; mediasoup-client integration; creator broadcast view; viewer consumption view; multi-angle hop UX                                                                        |
 
 When Claude Code is asked to "do the next phase," verify the user means the
 next unstarted phase above and ask before scaffolding multiple phases at once.
