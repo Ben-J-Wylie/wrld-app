@@ -1,22 +1,32 @@
 import { View, Text, StyleSheet } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { useClerk, useAuth } from '@clerk/clerk-expo'
 import { Button } from '@/components/ui/Button'
 import { theme } from '@/lib/theme'
 import { useAuthStore } from '@/stores/authStore'
 
 export default function Globe() {
-  const logout = useAuthStore((s) => s.clearUser)
-  const user = useAuthStore((s) => s.user)
+  const { signOut } = useClerk()
+  const { isSignedIn } = useAuth()
+  const wrldUser = useAuthStore((s) => s.wrldUser)
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
         <Text style={styles.title}>🌍 Globe</Text>
-        <Text style={styles.subtitle}>
-          Phase 5: 3D globe of live streams renders here
-        </Text>
-        {user && <Text style={styles.user}>Signed in as {user.displayName}</Text>}
-        <Button label="Sign out" onPress={logout} variant="secondary" />
+        <Text style={styles.subtitle}>Phase 5: 3D globe of live streams renders here</Text>
+        {wrldUser && (
+          <Text style={styles.user}>Signed in as {wrldUser.displayName}</Text>
+        )}
+        {isSignedIn ? (
+          <Button label="Sign out" onPress={() => signOut()} variant="secondary" />
+        ) : (
+          <Button
+            label="Sign in"
+            onPress={() => { /* navigate to (auth)/login — Phase 6/7 modal flow */ }}
+            variant="secondary"
+          />
+        )}
       </View>
     </SafeAreaView>
   )

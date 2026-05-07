@@ -1,6 +1,6 @@
-import axios, { AxiosError, type InternalAxiosRequestConfig } from 'axios'
+import axios from 'axios'
 import { env } from '@/lib/env'
-import { useAuthStore } from '@/stores/authStore'
+import { getClerkToken } from '@/lib/clerkToken'
 
 export const apiClient = axios.create({
   baseURL: env.apiBaseUrl,
@@ -8,22 +8,11 @@ export const apiClient = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
-// Attach auth token to every request
-apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
-  const token = useAuthStore.getState().accessToken
+// Attach Clerk JWT when signed in; send no auth header when anonymous
+apiClient.interceptors.request.use(async (config) => {
+  const token = await getClerkToken()
   if (token && config.headers) {
     config.headers.Authorization = `Bearer ${token}`
   }
   return config
 })
-
-// On 401, clear auth (Phase 3 will add token refresh)
-apiClient.interceptors.response.use(
-  (response) => response,
-  async (error: AxiosError) => {
-    if (error.response?.status === 401) {
-      await useAuthStore.getState().clearUser()
-    }
-    return Promise.reject(error)
-  },
-)

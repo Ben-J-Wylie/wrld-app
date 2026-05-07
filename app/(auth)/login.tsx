@@ -1,22 +1,33 @@
-import { View, Text, StyleSheet } from 'react-native'
+import { useState } from 'react'
+import { View, Text, StyleSheet, Alert } from 'react-native'
 import { Link, router } from 'expo-router'
+import { useSignIn } from '@clerk/clerk-expo'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { theme } from '@/lib/theme'
-import { useAuthStore } from '@/stores/authStore'
-import { useState } from 'react'
+import { clerkError } from '@/lib/clerkError'
 
 export default function Login() {
+  const { signIn, setActive, isLoaded } = useSignIn()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const setUser = useAuthStore((s) => s.setUser)
+  const [loading, setLoading] = useState(false)
 
   const handleLogin = async () => {
-    // PHASE 3: Replace with real Cognito auth
-    // For now, this is a stub so navigation works
-    setUser({ id: 'stub', email, displayName: email.split('@')[0] ?? 'user' })
-    router.replace('/(app)/globe')
+    if (!isLoaded) return
+    setLoading(true)
+    try {
+      const result = await signIn.create({ identifier: email, password })
+      if (result.status === 'complete') {
+        await setActive({ session: result.createdSessionId })
+        router.replace('/(app)/globe')
+      }
+    } catch (err) {
+      Alert.alert('Sign in failed', clerkError(err, 'Please check your email and password'))
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -24,7 +35,6 @@ export default function Login() {
       <View style={styles.content}>
         <Text style={styles.title}>WRLD</Text>
         <Text style={styles.subtitle}>Sign in to continue</Text>
-
         <Input
           placeholder="Email"
           value={email}
@@ -38,9 +48,7 @@ export default function Login() {
           onChangeText={setPassword}
           secureTextEntry
         />
-
-        <Button label="Sign in" onPress={handleLogin} />
-
+        <Button label={loading ? 'Signing in...' : 'Sign in'} onPress={handleLogin} />
         <Link href="/(auth)/signup" style={styles.link}>
           Don&apos;t have an account? Sign up
         </Link>

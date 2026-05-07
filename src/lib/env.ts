@@ -19,20 +19,12 @@ function optional(value: string | undefined, fallback = ''): string {
 
 export const env = {
   apiBaseUrl: optional(process.env.EXPO_PUBLIC_API_BASE_URL, 'http://localhost:3000'),
-
-  // Filled in Phase 2 — keep optional until then
-  cognito: {
-    userPoolId: optional(process.env.EXPO_PUBLIC_COGNITO_USER_POOL_ID),
-    clientId: optional(process.env.EXPO_PUBLIC_COGNITO_CLIENT_ID),
-    region: optional(process.env.EXPO_PUBLIC_COGNITO_REGION, 'us-west-2'),
-  },
-
-  // Filled in Phase 7
-  mediasoupUrl: optional(process.env.EXPO_PUBLIC_MEDIASOUP_URL),
-
+  clerkPublishableKey: required(
+    'EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY',
+    process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY,
+  ),
+  mediasoupWssUrl: optional(process.env.EXPO_PUBLIC_MEDIASOUP_WSS_URL, 'wss://media.wrld.cam'),
   enableDevTools: process.env.EXPO_PUBLIC_ENABLE_DEV_TOOLS === 'true',
 }
 
-// Use `required()` once the relevant phase is wired up:
-// e.g. in Phase 3:  cognito: { userPoolId: required('COGNITO_USER_POOL_ID', process.env.EXPO_PUBLIC_COGNITO_USER_POOL_ID), ... }
 export { required }

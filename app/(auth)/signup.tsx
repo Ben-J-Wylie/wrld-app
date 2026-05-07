@@ -1,27 +1,77 @@
-import { View, Text, StyleSheet } from 'react-native'
+import { useState } from 'react'
+import { View, Text, StyleSheet, Alert } from 'react-native'
 import { Link, router } from 'expo-router'
+import { useSignUp } from '@clerk/clerk-expo'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { theme } from '@/lib/theme'
-import { useState } from 'react'
+import { clerkError } from '@/lib/clerkError'
 
 export default function Signup() {
+  const { signUp, setActive, isLoaded } = useSignUp()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [displayName, setDisplayName] = useState('')
+  const [code, setCode] = useState('')
+  const [pendingVerification, setPendingVerification] = useState(false)
+  const [loading, setLoading] = useState(false)
 
   const handleSignup = async () => {
-    // PHASE 3: Cognito signup + email verification
-    router.replace('/(auth)/login')
+    if (!isLoaded) return
+    setLoading(true)
+    try {
+      await signUp.create({ emailAddress: email, password })
+      await signUp.prepareEmailAddressVerification({ strategy: 'email_code' })
+      setPendingVerification(true)
+    } catch (err) {
+      Alert.alert('Sign up failed', clerkError(err, 'Could not create account'))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleVerify = async () => {
+    if (!isLoaded) return
+    setLoading(true)
+    try {
+      const result = await signUp.attemptEmailAddressVerification({ code })
+      if (result.status === 'complete') {
+        await setActive({ session: result.createdSessionId })
+        router.replace('/(app)/globe')
+      }
+    } catch (err) {
+      Alert.alert('Verification failed', clerkError(err, 'Invalid or expired code'))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (pendingVerification) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.content}>
+          <Text style={styles.title}>Check your email</Text>
+          <Text style={styles.subtitle}>Enter the code we sent to {email}</Text>
+          <Input
+            placeholder="Verification code"
+            value={code}
+            onChangeText={setCode}
+            keyboardType="number-pad"
+            autoComplete="one-time-code"
+          />
+          <Button
+            label={loading ? 'Verifying...' : 'Verify email'}
+            onPress={handleVerify}
+          />
+        </View>
+      </SafeAreaView>
+    )
   }
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
         <Text style={styles.title}>Create account</Text>
-
-        <Input placeholder="Display name" value={displayName} onChangeText={setDisplayName} />
         <Input
           placeholder="Email"
           value={email}
@@ -35,9 +85,7 @@ export default function Signup() {
           onChangeText={setPassword}
           secureTextEntry
         />
-
-        <Button label="Sign up" onPress={handleSignup} />
-
+        <Button label={loading ? 'Creating account...' : 'Sign up'} onPress={handleSignup} />
         <Link href="/(auth)/login" style={styles.link}>
           Already have an account? Sign in
         </Link>
@@ -55,6 +103,12 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     textAlign: 'center',
     marginBottom: 24,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: theme.colors.textMuted,
+    textAlign: 'center',
+    marginBottom: 16,
   },
   link: { color: theme.colors.accent, textAlign: 'center', marginTop: 16 },
 })
