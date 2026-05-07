@@ -7,9 +7,14 @@ instance working in this repo is immediately oriented.
 > **Human collaborators:** Ben (Mac, founder/dev) and Aaron (Windows, founder/dev).
 > Two-person team building WRLD's alpha.
 
-> **Sister repo:** `wrld-backend` (Fastify API). They share Clerk for auth,
-> share the API contract documented in wrld-backend/docs/API.md, and are
-> deployed independently.
+> **Sister repos:**
+>
+> - `wrld-backend` (Fastify API + Postgres + Caddy in Docker on the
+>   Hetzner box). Shares Clerk for auth and the API contract documented
+>   in `wrld-backend/docs/API.md`.
+> - `wrld-mediasoup` (mediasoup signaling server, runs natively on the
+>   same Hetzner box as a systemd service). The app connects to it over
+>   WSS for signaling and over WebRTC for media.
 
 ---
 
@@ -34,26 +39,30 @@ The North Star UX:
 ```
 [wrld-app: React Native + Expo Router]
         │
-        ├── Auth: Clerk — JWT-based, hosted (no AWS)
+        ├── Auth: Clerk (hosted, JWT, no AWS)
         │
-        ├── HTTPS API ─────▶ [Hetzner box]
-        │                         ├── Caddy (TLS auto-issue)
-        │                         ├── Fastify API (TypeScript)
-        │                         ├── Postgres + PostGIS
-        │                         └── mediasoup server (existing)
-        │
-        └── WebRTC ─────────▶ same Hetzner box (mediasoup)
+        ├── HTTPS  ──▶ api.wrld.cam   ─┐
+        ├── WSS    ──▶ media.wrld.cam ─┤── single Hetzner box (5.78.70.97)
+        └── WebRTC ──▶ media.wrld.cam ─┘   ├── Caddy in Docker (TLS, reverse proxy)
+                                            ├── Fastify API in Docker (api.wrld.cam)
+                                            ├── Postgres + PostGIS in Docker
+                                            └── mediasoup as systemd service on host
+                                                (media.wrld.cam, ports :3001 + RTC)
 ```
 
 **Key decisions:**
 
-- **Two repos:** `wrld-app` (this one) and `wrld-backend` (separate).
+- **Three repos:** `wrld-app` (this one), `wrld-backend`, and `wrld-mediasoup`.
 - **Auth: Clerk**, chosen over AWS Cognito (rough DX) and self-hosted
   Keycloak (ops burden). Clerk's React Native SDK handles signup/login UI,
   email verification, password reset out of the box. Free tier covers 10k MAUs.
 - **Database: Postgres + PostGIS**, not DynamoDB. Multi-dimensional and
   geospatial queries dominate WRLD's workload.
-- **API: Fastify on Hetzner**, not Lambda. Co-located with mediasoup for alpha.
+- **API: Fastify on Hetzner**, not Lambda. Same box as mediasoup for alpha.
+- **mediasoup runs natively on the host**, not in Docker. RTC port handling
+  and `ANNOUNCED_IP` semantics are simpler that way. The Caddy container
+  reaches it via the Docker compose-network gateway IP — see wrld-backend's
+  CLAUDE.md (Chunk 3a section) for the gnarly networking details.
 - **ORM: Prisma** (Ben/Aaron familiar).
 - **Stream lifecycle source of truth: mediasoup → API webhooks** (Option B).
   When mediasoup says a producer started, we write the Stream row. Heartbeats
@@ -141,18 +150,23 @@ Aaron is on Windows. To avoid breakage:
 
 We're building in slices so each phase is independently verifiable.
 
-| Phase | Status      | What                                                                                                                                                                                        |
-| ----- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1     | ✅ done     | Dev environment, Expo Router scaffold, auth/dashboard/stream placeholder screens, Zustand auth store, axios client, theme + UI primitives. Verified end-to-end on Ben's iPhone via Expo Go. |
-| 2     | in progress | Chunk 1 ✅ (local backend dev). Chunk 2 (Hetzner deploy) and Chunk 3 (mediasoup wiring) pending.                                                                                            |
-| 3     | next        | Real Clerk signup/login flow in app via `@clerk/clerk-expo`; replace Phase 1 stubs; axios interceptor pulls Clerk session token                                                             |
-| 4     | upcoming    | App calls `GET /streams/near` for the globe; "go live" flow that connects to mediasoup with location                                                                                        |
-| 5     | upcoming    | 3D globe via `expo-gl` + `three.js`; pins from streams API; tap → stream view                                                                                                               |
-| 6     | upcoming    | Dashboard with stream layer arming (audio/video/overlays/chat — exact "layer" semantics TBD)                                                                                                |
-| 7     | upcoming    | Custom dev client; mediasoup-client integration; creator broadcast view; viewer consumption view; multi-angle hop UX                                                                        |
+| Phase | Status   | What                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ----- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1     | ✅ done  | Dev environment, Expo Router scaffold, auth/dashboard/stream placeholder screens, Zustand auth store, axios client, theme + UI primitives. Verified end-to-end on Ben's iPhone via Expo Go.                                                                                                                                                                                                                                                                                            |
+| 2     | ✅ done  | Backend infrastructure. Chunk 1 ✅ (local backend dev), Chunk 2 ✅ (Hetzner deploy live at api.wrld.cam, end-to-end signup verified), Chunk 3a ✅ (mediasoup signaling server live at media.wrld.cam, 5 lifecycle calls wired).                                                                                                                                                                                                                                                        |
+| 3     | next     | App-side integration: real Clerk signup/login via `@clerk/clerk-expo` (replace Phase 1 stubs, axios interceptor pulls Clerk session token), AND the wrld-app side of mediasoup wiring (originally tracked as "Chunk 3b" in the backend session — connecting to wss://media.wrld.cam, joining/leaving stream rooms, basic test of API call cadence). Note that Phase 7 is where heavy WebRTC client logic lives; Phase 3 is just enough mediasoup-client to verify the full path works. |
+| 4     | upcoming | App calls `GET /streams/near` for the globe; "go live" flow that connects to mediasoup with location                                                                                                                                                                                                                                                                                                                                                                                   |
+| 5     | upcoming | 3D globe via `expo-gl` + `three.js`; pins from streams API; tap → stream view                                                                                                                                                                                                                                                                                                                                                                                                          |
+| 6     | upcoming | Dashboard with stream layer arming (audio/video/overlays/chat — exact "layer" semantics TBD)                                                                                                                                                                                                                                                                                                                                                                                           |
+| 7     | upcoming | Custom dev client; full mediasoup-client integration; creator broadcast view; viewer consumption view; multi-angle hop UX                                                                                                                                                                                                                                                                                                                                                              |
 
 When Claude Code is asked to "do the next phase," verify the user means the
 next unstarted phase above and ask before scaffolding multiple phases at once.
+
+> **Phase 3 ↔ Chunk 3b naming note:** The backend session split Phase 2 into
+> Chunk 1 (local), Chunk 2 (deploy), Chunk 3a (mediasoup server), and Chunk 3b
+> (mediasoup client in the app). What was called "Chunk 3b" in those
+> conversations is part of Phase 3 here. Same work, different naming convention.
 
 ---
 
@@ -166,15 +180,27 @@ npx expo start
 npx tsc --noEmit
 ```
 
+Production endpoints to point the app at:
+
+- API: `https://api.wrld.cam`
+- Mediasoup signaling: `wss://media.wrld.cam`
+
+Both go in `.env` under `EXPO_PUBLIC_*` keys (see "Backend repos" below).
+
 ---
 
-## Backend repo (separate)
+## Backend repos (separate)
 
-The API + Postgres live in `wrld-backend`, deployed to a Hetzner box that
-also runs mediasoup. See its own `README.md` and `docs/` for ops.
+The API + Postgres + Caddy live in `wrld-backend`, deployed via Docker
+Compose to a Hetzner box at `5.78.70.97`. The mediasoup signaling server
+lives in `wrld-mediasoup`, deployed as a host-side systemd service on the
+same box. See each repo's `CLAUDE.md` for ops detail.
 
-API base URL goes into this app's `.env` as `EXPO_PUBLIC_API_BASE_URL`.
-Clerk publishable key goes in as `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY`.
+This app's `.env`:
+
+- `EXPO_PUBLIC_API_BASE_URL=https://api.wrld.cam`
+- `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...` (added in Phase 3)
+- `EXPO_PUBLIC_MEDIASOUP_WSS_URL=wss://media.wrld.cam` (added in Phase 3)
 
 ---
 
@@ -211,3 +237,7 @@ When in doubt, ask before assuming.
   descriptor limits. Add deps as their phases need them, not in advance.
 - **Don't put `CLERK_SECRET_KEY` (`sk_...`) anywhere in this repo.** Only the
   publishable key (`pk_...`) belongs in this codebase.
+- **Don't put `INTERNAL_API_SECRET` anywhere in this repo.** That's the
+  shared secret between mediasoup and the API, server-to-server only. The
+  app never holds it. The app authenticates via Clerk JWT to the API and
+  via Clerk JWT to the mediasoup signaling server.
