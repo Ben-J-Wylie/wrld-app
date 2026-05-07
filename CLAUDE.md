@@ -241,3 +241,127 @@ When in doubt, ask before assuming.
   shared secret between mediasoup and the API, server-to-server only. The
   app never holds it. The app authenticates via Clerk JWT to the API and
   via Clerk JWT to the mediasoup signaling server.
+
+---
+
+## Anonymous viewing & auth model — architecture decision (Phase 3 prep)
+
+> **Decided** before Phase 3a (May 2026). This section documents the
+> intended auth model on the app side. wrld-backend CLAUDE.md has the
+> matching backend-side detail.
+
+## The product call
+
+Anonymous users — people who downloaded the app and haven't signed up
+— **can browse and watch live streams** without creating an account.
+Signup is required only when they try to do something tied to identity:
+go live, comment, favourite, follow, get notified.
+
+The signup prompt is a **modal triggered at the moment of attempted
+action**, not a gate at app launch. Phase 6/7 implements the modal
+flow; Phase 3 sets up the auth/anonymous split that makes it possible.
+
+## Anonymous = truly anonymous
+
+We deliberately rejected device-bound IDs and Clerk anonymous sessions.
+Anonymous viewers are unidentifiable +1s. The app does not generate or
+store any local UUID for them. They have no watch history, no
+carry-over at signup, no backend row.
+
+## What this means for the app code
+
+### Auth state has three states, not two
+
+The Clerk SDK gives us `useAuth()` which returns a signed-in / signed-out
+boolean (and a session token getter). For WRLD's purposes treat this
+as three states:
+
+1. **Loading** — Clerk SDK hasn't determined yet (initial app launch
+   for ~1-2s). Show a splash; don't make API calls.
+2. **Signed out** — Clerk says the user has no session. **This is the
+   anonymous state.** Allowed to browse, view streams, navigate the
+   globe. Cannot favourite, comment, broadcast.
+3. **Signed in** — Clerk has an authenticated session with a JWT. Full
+   feature access.
+
+Most app screens render the same UI for signed-out and signed-in. The
+difference shows up in:
+
+- Specific action buttons (favourite, comment, "go live") which are
+  either hidden or trigger a signup modal
+- The axios interceptor (next section)
+- The mediasoup-client connection (Phase 3b)
+
+### Axios interceptor sends JWT conditionally
+
+The interceptor in `src/api/client.ts` checks Clerk's auth state. If
+the user is signed in, it attaches `Authorization: Bearer <jwt>`. If
+signed out, it sends the request with no auth header. The wrld-backend
+API uses an `optionalAuth` middleware that accepts both cleanly.
+
+This means the same axios methods work for both anonymous and
+authenticated users — no parallel "anonymous client" needed.
+
+Errors handling: if the API returns 401 on a route the app expected to
+be authenticated, that's a real bug (we should know which routes need
+auth). If the API returns 401 on what the app thought was a public
+route, the app should treat it as a server-side auth-config issue, not
+silently retry.
+
+### Routes available to anonymous users (the navigable surface)
+
+By the end of Phase 3, anonymous users should be able to:
+
+- Open the app
+- See the globe (`(app)/globe`)
+- Tap a pin and see a stream's metadata
+- Open the stream view (`(app)/stream/[id]`) — though the WebRTC
+  consume path itself is Phase 7
+- Browse user public profiles (`/users/:id` API → eventual screen)
+
+Anonymous users should NOT be able to navigate to:
+
+- The dashboard (which is for going-live; meaningless without an account)
+- Any "edit profile" or settings screens
+- Any "your streams" / "your favourites" screens
+
+Phase 1 already has placeholder routing structure with `(auth)` and
+`(app)` route groups. The cleanest way to handle this is probably to
+allow anonymous users into `(app)` but gate specific actions/sub-routes
+inside it. The `(auth)` group remains the signin/signup screens.
+
+### Login/signup screens
+
+Phase 3a replaces the Phase 1 stub login/signup screens with real
+Clerk components from `@clerk/clerk-expo`. The user reaches them via:
+
+- Tapping "Sign in" / "Sign up" in the app's UI (e.g., a header button
+  on the globe screen)
+- Triggered automatically by the signup modal flow when an anonymous
+  user attempts a gated action
+
+Both paths land in the same `(auth)` route group. After successful
+auth, the user is redirected back to wherever they were.
+
+## What this means for the mediasoup-client (Phase 3b)
+
+The app's mediasoup-client wrapper:
+
+- **Connects to `wss://media.wrld.cam` unconditionally** — works for
+  both anonymous and authenticated users
+- **If signed in:** includes the Clerk JWT in the connection params,
+  enabling both consume and produce capabilities
+- **If signed out:** connects without a JWT, can only consume
+
+Going live (creating a producer) requires a JWT. The signaling server
+enforces this. The app's "go live" button only appears when signed in,
+or triggers the signup modal first when tapped while signed out.
+
+## Out of scope for Phase 3
+
+- The signup modal UX itself (Phase 6/7 — when comment/favourite/etc.
+  features land)
+- Anonymous-friendly empty states ("Sign up to save streams") on
+  screens that show user-specific data
+- Push notifications (Phase 4+)
+- Polished signed-out → signed-in transition animations
