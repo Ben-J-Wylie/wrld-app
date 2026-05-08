@@ -150,7 +150,6 @@ export default function Globe() {
     onPanResponderMove: (_, gs) => {
       const group = globeGroupRef.current
       if (!group) return
-      isDraggingRef.current = true
       const ddx = gs.dx - lastPanRef.current.dx
       const ddy = gs.dy - lastPanRef.current.dy
       lastPanRef.current = { dx: gs.dx, dy: gs.dy }
@@ -161,9 +160,10 @@ export default function Globe() {
       )
     },
     onPanResponderRelease: (_, gs) => {
-      const wasDrag = isDraggingRef.current
       isDraggingRef.current = false
-      if (!wasDrag) handleTap(gs.x0, gs.y0)
+      // Treat as a tap if total finger movement stayed under 8px
+      const moved = Math.sqrt(gs.dx * gs.dx + gs.dy * gs.dy)
+      if (moved < 8) handleTap(gs.x0, gs.y0)
     },
   })
 

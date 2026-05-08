@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ActivityIndicator } from 'react-native'
+import { View, Text, StyleSheet, ActivityIndicator, Pressable } from 'react-native'
 import { useState } from 'react'
 import { useLocalSearchParams, router } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -44,8 +44,18 @@ export default function StreamView() {
 
   const canGoLive = !!title.trim() && !!coords && !locationLoading
 
+  function handleBack() {
+    if (status === 'in-room') disconnect()
+    router.back()
+  }
+
   return (
     <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <Pressable onPress={handleBack} style={styles.backBtn} hitSlop={12}>
+          <Text style={styles.backArrow}>←</Text>
+        </Pressable>
+      </View>
       <View style={styles.content}>
         <Text style={styles.title}>{isNew ? 'Go Live' : 'Watch'}</Text>
 
@@ -133,6 +143,9 @@ const styles = StyleSheet.create({
   errorText: { ...theme.typography.body, color: theme.colors.danger, textAlign: 'center' },
   live: { ...theme.typography.heading, color: theme.colors.live },
   roomId: { ...theme.typography.caption, color: theme.colors.textMuted, fontFamily: 'monospace' },
+  header: { paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.sm },
+  backBtn: { alignSelf: 'flex-start' },
+  backArrow: { ...theme.typography.heading, color: theme.colors.text },
   actions: { width: '100%', gap: theme.spacing.sm, alignItems: 'center' },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
   roomInfo: { width: '100%', alignItems: 'center', gap: theme.spacing.md },
