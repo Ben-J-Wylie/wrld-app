@@ -79,6 +79,13 @@ export default function Globe() {
     updatePins()
   }, [streams, updatePins])
 
+  // Reset GL refs on mount so stale objects from a previous context don't leak
+  useEffect(() => {
+    globeGroupRef.current = null
+    pinMeshesRef.current = []
+    cameraRef.current = null
+  }, [])
+
   // Cancel the render loop on unmount
   useEffect(() => {
     return () => {
@@ -100,26 +107,22 @@ export default function Globe() {
       camera.position.z = 3
       cameraRef.current = camera
 
-      scene.add(new THREE.AmbientLight(0xffffff, 0.55))
-      const sun = new THREE.DirectionalLight(0xffffff, 0.9)
-      sun.position.set(5, 3, 5)
-      scene.add(sun)
-
       const group = new THREE.Group()
       globeGroupRef.current = group
       scene.add(group)
 
-      // Earth sphere — download asset first so loadAsync gets a local URI
+      // Earth sphere — MeshBasicMaterial avoids PBR shader compilation issues
+      // on Expo GL remount. NASA textures have baked-in lighting so it looks identical.
       const sphereGeo = new THREE.SphereGeometry(1, 64, 32)
       let earthMat: THREE.Material
       try {
         const asset = Asset.fromURI(EARTH_TEXTURE_URL)
         await asset.downloadAsync()
         const texture = (await loadAsync(asset)) as THREE.Texture
-        earthMat = new THREE.MeshStandardMaterial({ map: texture })
+        earthMat = new THREE.MeshBasicMaterial({ map: texture })
       } catch (err) {
         console.error('[Globe] texture load failed:', err)
-        earthMat = new THREE.MeshStandardMaterial({ color: 0x1a5588 })
+        earthMat = new THREE.MeshBasicMaterial({ color: 0x1a5588 })
       }
       group.add(new THREE.Mesh(sphereGeo, earthMat))
 
