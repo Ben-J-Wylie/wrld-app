@@ -97,10 +97,10 @@ app/                       # Expo Router routes (file = route)
 ├── (auth)/               # Logged-out group
 │   ├── login.tsx
 │   └── signup.tsx
-└── (app)/                # Logged-in group (tabs)
+└── (app)/                # Logged-in + anonymous group (tabs)
     ├── globe.tsx         # Phase 5: 3D globe of live streams (expo-gl + three)
-    ├── dashboard.tsx     # Phase 6: layer arming
-    └── stream/[id].tsx   # Phase 7: creator + viewer stream views
+    ├── dashboard.tsx     # Go Live / Join controls (Phase 3b test harness; Phase 6: layer arming)
+    └── stream/[id].tsx   # id=new → broadcaster; id=<roomId> → viewer (Phase 7: full WebRTC)
 
 src/
 ├── api/                  # Axios client + endpoint modules per resource
@@ -108,8 +108,11 @@ src/
 │   ├── ui/               # Primitives (Button, Input, ...)
 │   └── feature/          # Feature-specific components
 ├── features/             # Feature modules (auth, streams, ...)
-├── hooks/                # Custom React hooks
-├── lib/                  # env loader, theme tokens, utilities
+├── hooks/
+│   └── useSignaling.ts   # React hook wrapping signalingClient (connect, createRoom, joinRoom)
+├── lib/
+│   ├── mediasoupSignaling.ts  # Typed WebSocket signaling client (singleton: signalingClient)
+│   └── ...               # env loader, theme tokens, clerkToken, tokenCache
 ├── stores/               # Zustand stores
 └── types/                # Shared types
 ```
@@ -154,11 +157,11 @@ We're building in slices so each phase is independently verifiable.
 | ----- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1     | ✅ done  | Dev environment, Expo Router scaffold, auth/dashboard/stream placeholder screens, Zustand auth store, axios client, theme + UI primitives. Verified end-to-end on Ben's iPhone via Expo Go.                                                                                                                                                                                                                                                                                            |
 | 2     | ✅ done  | Backend infrastructure. Chunk 1 ✅ (local backend dev), Chunk 2 ✅ (Hetzner deploy live at api.wrld.cam, end-to-end signup verified), Chunk 3a ✅ (mediasoup signaling server live at media.wrld.cam, 5 lifecycle calls wired).                                                                                                                                                                                                                                                        |
-| 3     | next     | App-side integration: real Clerk signup/login via `@clerk/clerk-expo` (replace Phase 1 stubs, axios interceptor pulls Clerk session token), AND the wrld-app side of mediasoup wiring (originally tracked as "Chunk 3b" in the backend session — connecting to wss://media.wrld.cam, joining/leaving stream rooms, basic test of API call cadence). Note that Phase 7 is where heavy WebRTC client logic lives; Phase 3 is just enough mediasoup-client to verify the full path works. |
-| 4     | upcoming | App calls `GET /streams/near` for the globe; "go live" flow that connects to mediasoup with location                                                                                                                                                                                                                                                                                                                                                                                   |
+| 3     | ✅ done  | App-side mediasoup signaling (Expo Go, no native WebRTC yet). `src/lib/mediasoupSignaling.ts` — typed WebSocket client with promise-based protocol. `src/hooks/useSignaling.ts` — React hook managing connection/room state. `stream/[id].tsx` — broadcaster (id=new) and viewer (id=roomId) flows. Dashboard test controls (Go Live + room ID join). Verified end-to-end on Aaron's iPhone (broadcaster) and Ben's Android (viewer, room 7240) with wrld-backend receiving streamStarted. |
+| 4     | next     | App calls `GET /streams/near` for the globe; "go live" flow that connects to mediasoup with real location                                                                                                                                                                                                                                                                                                                                                                              |
 | 5     | upcoming | 3D globe via `expo-gl` + `three.js`; pins from streams API; tap → stream view                                                                                                                                                                                                                                                                                                                                                                                                          |
 | 6     | upcoming | Dashboard with stream layer arming (audio/video/overlays/chat — exact "layer" semantics TBD)                                                                                                                                                                                                                                                                                                                                                                                           |
-| 7     | upcoming | Custom dev client; full mediasoup-client integration; creator broadcast view; viewer consumption view; multi-angle hop UX                                                                                                                                                                                                                                                                                                                                                              |
+| 7     | upcoming | Custom dev client (EAS Build); `react-native-webrtc` + `mediasoup-client`; creator broadcast view; viewer consumption view; multi-angle hop UX                                                                                                                                                                                                                                                                                                                                        |
 
 When Claude Code is asked to "do the next phase," verify the user means the
 next unstarted phase above and ask before scaffolding multiple phases at once.
