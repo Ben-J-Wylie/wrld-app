@@ -5,6 +5,8 @@ export type User = {
   avatarUrl?: string
 }
 
+export type LayerType = 'camera' | 'audio'
+
 export type Stream = {
   id: string
   hostId: string
@@ -18,12 +20,6 @@ export type Stream = {
   thumbnailUrl?: string | null
   isLive: boolean
   mediasoupRoomId?: string | null
+  layers: LayerType[]
   distanceKm?: number
-}
-
-export type StreamLayer = {
-  id: string
-  type: 'audio' | 'video' | 'overlay' | 'chat'
-  enabled: boolean
-  config?: Record<string, unknown>
 }

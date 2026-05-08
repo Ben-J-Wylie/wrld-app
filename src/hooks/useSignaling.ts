@@ -40,7 +40,7 @@ export function useSignaling() {
     }
   }, [])
 
-  const createRoom = useCallback(async (meta: { title: string; lat: number; lng: number }) => {
+  const createRoom = useCallback(async (meta: { title: string; lat: number; lng: number; layers: string[] }) => {
     const id = await signalingClient.createRoom(meta)
     setRoomId(id)
     setStatus('in-room')
