@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { Dimensions, PanResponder, StyleSheet, Text, View } from 'react-native'
-import { router } from 'expo-router'
+import { router, useFocusEffect } from 'expo-router'
 import { Asset } from 'expo-asset'
 import { GLView } from 'expo-gl'
 import type { ExpoWebGLRenderingContext } from 'expo-gl'
@@ -15,6 +15,11 @@ import type { Stream } from '@/types'
 // Cloudless earth from three.js planet textures (confirmed 200 OK)
 const EARTH_TEXTURE_URL =
   'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/planets/earth_atmos_2048.jpg'
+
+// Module-level texture cache — ONE download for the app lifetime.
+// THREE.Texture stores image data; the actual WebGL texture is created per-renderer,
+// so this is safe to reuse across GL context recreations.
+let earthTexture: THREE.Texture | null = null
 
 function latLngToVec3(lat: number, lng: number, r = 1.02): THREE.Vector3 {
   const phi = (90 - lat) * (Math.PI / 180)
@@ -33,12 +38,19 @@ export default function Globe() {
     coords?.longitude ?? null,
   )
 
-  // ── Three.js refs (survive re-renders without triggering them) ─────────────
+  // ── Three.js refs ──────────────────────────────────────────────────────────
   const globeGroupRef = useRef<THREE.Group | null>(null)
   const pinMeshesRef = useRef<THREE.Mesh[]>([])
+  const pinGeoRef = useRef<THREE.SphereGeometry | null>(null)
   const streamsRef = useRef<Stream[]>([])
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null)
   const rafRef = useRef<number | null>(null)
+  const rendererRef = useRef<Renderer | null>(null)
+  const animateFnRef = useRef<(() => void) | null>(null)
+  // Generation counter: incremented on each onContextCreate call.
+  // Async setup checks its captured gen before starting the loop; if a newer
+  // call has started, this one exits without launching a second loop.
+  const setupGenRef = useRef(0)
 
   // ── Gesture refs ───────────────────────────────────────────────────────────
   const containerSizeRef = useRef({
@@ -58,12 +70,21 @@ export default function Globe() {
 
     pinMeshesRef.current.forEach((m) => {
       group.remove(m)
-      m.geometry.dispose()
       ;(m.material as THREE.Material).dispose()
+      // Don't dispose geometry per-mesh — it's shared; pinGeoRef owns it
     })
     pinMeshesRef.current = []
 
+    // Dispose the shared geometry exactly once
+    if (pinGeoRef.current) {
+      pinGeoRef.current.dispose()
+      pinGeoRef.current = null
+    }
+
+    if (streamsRef.current.length === 0) return
+
     const geo = new THREE.SphereGeometry(0.028, 8, 8)
+    pinGeoRef.current = geo
     streamsRef.current.forEach((s) => {
       if (s.lat == null || s.lng == null) return
       const mat = new THREE.MeshBasicMaterial({ color: 0xff3b5c })
@@ -79,29 +100,55 @@ export default function Globe() {
     updatePins()
   }, [streams, updatePins])
 
-  // Reset GL refs on mount so stale objects from a previous context don't leak
-  useEffect(() => {
-    globeGroupRef.current = null
-    pinMeshesRef.current = []
-    cameraRef.current = null
-  }, [])
+  // ── Focus lifecycle ────────────────────────────────────────────────────────
+  // Cancel the loop when the screen loses focus so we don't render into a
+  // potentially-destroyed GL surface. Resume on regain-focus if onContextCreate
+  // wasn't called again (surface survived).
+  useFocusEffect(
+    useCallback(() => {
+      if (rafRef.current === null && animateFnRef.current) {
+        animateFnRef.current()
+      }
+      return () => {
+        if (rafRef.current !== null) {
+          cancelAnimationFrame(rafRef.current)
+          rafRef.current = null
+        }
+      }
+    }, []),
+  )
 
-  // Cancel the render loop on unmount
+  // Full cleanup on unmount
   useEffect(() => {
     return () => {
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
+      try { rendererRef.current?.dispose() } catch {}
+      rendererRef.current = null
     }
   }, [])
 
   // ── GL scene bootstrap ─────────────────────────────────────────────────────
   const onContextCreate = useCallback(
     async (gl: ExpoWebGLRenderingContext) => {
-      // Cancel any loop left over from a previous GL surface (Android recreates the surface
-      // when the screen is covered by a stack screen, without unmounting the component).
+      // Stop any running loop and dispose the old renderer before creating a
+      // new one. Android recreates the GL surface (and calls onContextCreate
+      // again) when the screen is covered, without unmounting the component.
       if (rafRef.current !== null) {
         cancelAnimationFrame(rafRef.current)
         rafRef.current = null
       }
+      try { rendererRef.current?.dispose() } catch {}
+      rendererRef.current = null
+
+      // Capture this setup's generation. If onContextCreate fires again while
+      // we're still inside an await, the newer call increments setupGenRef and
+      // this call bails before launching a loop.
+      const gen = ++setupGenRef.current
+
+      globeGroupRef.current = null
+      pinMeshesRef.current = []
+      cameraRef.current = null
+      animateFnRef.current = null
 
       const { drawingBufferWidth: w, drawingBufferHeight: h } = gl
 
@@ -123,14 +170,24 @@ export default function Globe() {
       const sphereGeo = new THREE.SphereGeometry(1, 64, 32)
       let earthMat: THREE.Material
       try {
-        const asset = Asset.fromURI(EARTH_TEXTURE_URL)
-        await asset.downloadAsync()
-        const texture = (await loadAsync(asset)) as THREE.Texture
-        earthMat = new THREE.MeshBasicMaterial({ map: texture })
+        if (!earthTexture) {
+          const asset = Asset.fromURI(EARTH_TEXTURE_URL)
+          await asset.downloadAsync()
+          earthTexture = (await loadAsync(asset)) as THREE.Texture
+        } else {
+          // Force the new renderer to re-upload the image to the new GL context
+          earthTexture.needsUpdate = true
+        }
+        earthMat = new THREE.MeshBasicMaterial({ map: earthTexture })
       } catch (err) {
         console.error('[Globe] texture load failed:', err)
         earthMat = new THREE.MeshBasicMaterial({ color: 0x1a5588 })
       }
+
+      // A newer context setup has started — don't launch a stale loop
+      if (setupGenRef.current !== gen) return
+
+      rendererRef.current = renderer
       group.add(new THREE.Mesh(sphereGeo, earthMat))
 
       // Add any pins that arrived before the scene was ready
@@ -144,6 +201,7 @@ export default function Globe() {
         renderer.render(scene, camera)
         gl.endFrameEXP()
       }
+      animateFnRef.current = animate
       animate()
     },
     [updatePins],
