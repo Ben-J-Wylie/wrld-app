@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { Dimensions, PanResponder, StyleSheet, Text, View } from 'react-native'
 import { router } from 'expo-router'
+import { Asset } from 'expo-asset'
 import { GLView } from 'expo-gl'
 import type { ExpoWebGLRenderingContext } from 'expo-gl'
 import * as THREE from 'three'
@@ -11,9 +12,9 @@ import { useLocation } from '@/hooks/useLocation'
 import { useStreamsNear } from '@/hooks/useStreamsNear'
 import type { Stream } from '@/types'
 
-// NASA Blue Marble cloudless — same source, no cloud layer
+// Cloudless earth from three.js planet textures (confirmed 200 OK)
 const EARTH_TEXTURE_URL =
-  'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/land_ocean_ice_2048.jpg'
+  'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/planets/earth_atmos_2048.jpg'
 
 function latLngToVec3(lat: number, lng: number, r = 1.02): THREE.Vector3 {
   const phi = (90 - lat) * (Math.PI / 180)
@@ -108,13 +109,16 @@ export default function Globe() {
       globeGroupRef.current = group
       scene.add(group)
 
-      // Earth sphere — load remote texture, fall back to a flat blue if it fails
+      // Earth sphere — download asset first so loadAsync gets a local URI
       const sphereGeo = new THREE.SphereGeometry(1, 64, 32)
       let earthMat: THREE.Material
       try {
-        const texture = (await loadAsync(EARTH_TEXTURE_URL)) as THREE.Texture
+        const asset = Asset.fromURI(EARTH_TEXTURE_URL)
+        await asset.downloadAsync()
+        const texture = (await loadAsync(asset)) as THREE.Texture
         earthMat = new THREE.MeshStandardMaterial({ map: texture })
-      } catch {
+      } catch (err) {
+        console.error('[Globe] texture load failed:', err)
         earthMat = new THREE.MeshStandardMaterial({ color: 0x1a5588 })
       }
       group.add(new THREE.Mesh(sphereGeo, earthMat))
