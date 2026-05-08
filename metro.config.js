@@ -33,6 +33,10 @@ const blocked = [
   /coverage\/.*/,
   /backups\/.*/,
   /\.tmp\/.*/,
+  // three.js ships thousands of example files that Metro doesn't need to watch.
+  // Blocking them prevents EMFILE on file-descriptor-constrained Macs.
+  /node_modules\/three\/examples\/.*/,
+  /node_modules\/three\/src\/.*/,
 ]
 config.resolver.blockList = new RegExp(blocked.map((r) => r.source).join('|'))
 
