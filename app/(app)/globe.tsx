@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { Dimensions, PanResponder, StyleSheet, Text, View } from 'react-native'
-import { router, useFocusEffect } from 'expo-router'
+import { router } from 'expo-router'
 import { Asset } from 'expo-asset'
 import { GLView } from 'expo-gl'
 import type { ExpoWebGLRenderingContext } from 'expo-gl'
@@ -46,7 +46,6 @@ export default function Globe() {
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null)
   const rafRef = useRef<number | null>(null)
   const rendererRef = useRef<Renderer | null>(null)
-  const animateFnRef = useRef<(() => void) | null>(null)
   // Generation counter: incremented on each onContextCreate call.
   // Async setup checks its captured gen before starting the loop; if a newer
   // call has started, this one exits without launching a second loop.
@@ -100,24 +99,6 @@ export default function Globe() {
     updatePins()
   }, [streams, updatePins])
 
-  // ── Focus lifecycle ────────────────────────────────────────────────────────
-  // Cancel the loop when the screen loses focus so we don't render into a
-  // potentially-destroyed GL surface. Resume on regain-focus if onContextCreate
-  // wasn't called again (surface survived).
-  useFocusEffect(
-    useCallback(() => {
-      if (rafRef.current === null && animateFnRef.current) {
-        animateFnRef.current()
-      }
-      return () => {
-        if (rafRef.current !== null) {
-          cancelAnimationFrame(rafRef.current)
-          rafRef.current = null
-        }
-      }
-    }, []),
-  )
-
   // Full cleanup on unmount
   useEffect(() => {
     return () => {
@@ -148,7 +129,6 @@ export default function Globe() {
       globeGroupRef.current = null
       pinMeshesRef.current = []
       cameraRef.current = null
-      animateFnRef.current = null
 
       const { drawingBufferWidth: w, drawingBufferHeight: h } = gl
 
@@ -198,10 +178,15 @@ export default function Globe() {
         if (!isDraggingRef.current) {
           group.rotation.y += 0.0008
         }
-        renderer.render(scene, camera)
-        gl.endFrameEXP()
+        try {
+          renderer.render(scene, camera)
+          gl.endFrameEXP()
+        } catch {
+          // GL surface was destroyed; stop looping until onContextCreate fires again
+          if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
+          rafRef.current = null
+        }
       }
-      animateFnRef.current = animate
       animate()
     },
     [updatePins],
