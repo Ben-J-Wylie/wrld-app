@@ -201,6 +201,11 @@ export default function Globe() {
         if (!hasInteractedRef.current) {
           group.rotation.y += 0.0008
         }
+        // Keep pins at a constant screen size regardless of zoom level.
+        // Apparent size ∝ worldSize / cameraDistance, so scaling by cameraZ
+        // cancels the perspective foreshortening.
+        const pinScale = camera.position.z / 3
+        pinMeshesRef.current.forEach((m) => m.scale.setScalar(pinScale))
         try {
           renderer.render(scene, camera)
           gl.endFrameEXP()
