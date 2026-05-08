@@ -24,6 +24,7 @@ export type ServerMessage =
   | { type: 'produced'; id: string; roomId: string }
   | { type: 'consumed'; id: string; producerId: string; kind: string; rtpParameters: unknown }
   | { type: 'broadcasterLeft' }
+  | { type: 'viewerCountUpdated'; viewerCount: number }
   | { type: 'error'; message: string }
 
 class MediasoupSignalingClient {
@@ -64,6 +65,11 @@ class MediasoupSignalingClient {
   send(msg: ClientMessage) {
     if (!this.isConnected) throw new Error('Not connected')
     this.ws!.send(JSON.stringify(msg))
+  }
+
+  onMessage(cb: (msg: ServerMessage) => void): () => void {
+    this.msgCbs.add(cb)
+    return () => this.msgCbs.delete(cb)
   }
 
   onClose(cb: () => void): () => void {

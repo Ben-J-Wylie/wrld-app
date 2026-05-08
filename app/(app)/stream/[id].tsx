@@ -2,13 +2,11 @@ import { View, Text, StyleSheet, ActivityIndicator, Pressable } from 'react-nati
 import { useState } from 'react'
 import { useLocalSearchParams, router } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { useQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/Button'
 import { theme } from '@/lib/theme'
 import { useSignaling } from '@/hooks/useSignaling'
 import { useLocation } from '@/hooks/useLocation'
 import { useAuth } from '@clerk/clerk-expo'
-import { streamsApi } from '@/api/streams'
 import type { LayerType } from '@/types'
 
 const LAYER_LABELS: Record<LayerType, string> = {
@@ -28,19 +26,11 @@ export default function StreamView() {
     ? (paramLayers.split(',').filter(Boolean) as LayerType[])
     : []
 
-  const { status, roomId, error, setError, connect, createRoom, joinRoom, disconnect } =
+  const { status, roomId, viewerCount, error, setError, connect, createRoom, joinRoom, disconnect } =
     useSignaling()
   const { isSignedIn } = useAuth()
   const { coords, loading: locationLoading, error: locationError } = useLocation()
   const [activeLayer, setActiveLayer] = useState<LayerType | null>(null)
-
-  // Poll viewer count for the broadcaster once they're live
-  const { data: liveStream } = useQuery({
-    queryKey: ['stream', 'room', roomId],
-    queryFn: () => streamsApi.getByRoom(roomId!),
-    enabled: isNew && status === 'in-room' && roomId !== null,
-    refetchInterval: 15_000,
-  })
 
   async function handleGoLive() {
     const title = (paramTitle ?? '').trim()
@@ -164,11 +154,9 @@ export default function StreamView() {
                     </View>
                   ))}
                 </View>
-                {liveStream != null && (
-                  <Text style={styles.viewerCount}>
-                    {liveStream.viewerCount} {liveStream.viewerCount === 1 ? 'viewer' : 'viewers'}
-                  </Text>
-                )}
+                <Text style={styles.viewerCount}>
+                  {viewerCount} {viewerCount === 1 ? 'viewer' : 'viewers'}
+                </Text>
               </View>
             )}
 

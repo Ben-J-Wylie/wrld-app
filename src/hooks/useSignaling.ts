@@ -17,13 +17,22 @@ export function useSignaling() {
   const [status, setStatus] = useState<SignalingStatus>('idle')
   const [roomId, setRoomId] = useState<string | null>(null)
   const [producers, setProducers] = useState<Producer[]>([])
+  const [viewerCount, setViewerCount] = useState(0)
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const unsub = signalingClient.onMessage((msg) => {
+      if (msg.type === 'viewerCountUpdated') setViewerCount(msg.viewerCount)
+    })
+    return unsub
+  }, [])
 
   useEffect(() => {
     return signalingClient.onClose(() => {
       setStatus('idle')
       setRoomId(null)
       setProducers([])
+      setViewerCount(0)
     })
   }, [])
 
@@ -62,5 +71,5 @@ export function useSignaling() {
     setError(null)
   }, [])
 
-  return { status, roomId, producers, error, setError, connect, createRoom, joinRoom, disconnect }
+  return { status, roomId, producers, viewerCount, error, setError, connect, createRoom, joinRoom, disconnect }
 }
