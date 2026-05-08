@@ -11,9 +11,9 @@ import { useLocation } from '@/hooks/useLocation'
 import { useStreamsNear } from '@/hooks/useStreamsNear'
 import type { Stream } from '@/types'
 
-// NASA Blue Marble — 2048×1024, reasonable size, well-cached by CDN
+// NASA Blue Marble cloudless — same source, no cloud layer
 const EARTH_TEXTURE_URL =
-  'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/land_ocean_ice_cloud_2048.jpg'
+  'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/land_ocean_ice_2048.jpg'
 
 function latLngToVec3(lat: number, lng: number, r = 1.02): THREE.Vector3 {
   const phi = (90 - lat) * (Math.PI / 180)
