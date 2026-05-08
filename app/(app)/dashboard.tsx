@@ -27,7 +27,12 @@ export default function Dashboard() {
             style={styles.wide}
           />
         ) : (
-          <Text style={styles.muted}>Sign in to go live</Text>
+          <Button
+            label="Sign In"
+            onPress={() => router.push('/(auth)/login')}
+            variant="secondary"
+            style={styles.wide}
+          />
         )}
 
         <Input
