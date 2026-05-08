@@ -6,6 +6,6 @@ export function useStreamsNear(lat: number | null, lng: number | null, radiusKm 
     queryKey: ['streams', 'near', lat, lng, radiusKm],
     queryFn: () => streamsApi.near(lat!, lng!, radiusKm),
     enabled: lat !== null && lng !== null,
-    refetchInterval: 30_000,
+    refetchInterval: 5_000,
   })
 }
