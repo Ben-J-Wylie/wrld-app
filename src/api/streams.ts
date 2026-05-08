@@ -8,8 +8,15 @@ import type { Stream } from '@/types'
 
 export const streamsApi = {
   list: async (): Promise<Stream[]> => {
-    const res = await apiClient.get<Stream[]>('/streams')
-    return res.data
+    const res = await apiClient.get<{ streams: Stream[] }>('/streams')
+    return res.data.streams
+  },
+
+  near: async (lat: number, lng: number, radiusKm = 50): Promise<Stream[]> => {
+    const res = await apiClient.get<{ streams: Stream[] }>('/streams/near', {
+      params: { lat, lng, radiusKm },
+    })
+    return res.data.streams
   },
 
   get: async (id: string): Promise<Stream> => {

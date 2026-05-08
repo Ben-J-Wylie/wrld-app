@@ -1,9 +1,12 @@
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native'
+import { useState } from 'react'
 import { useLocalSearchParams, router } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Button } from '@/components/ui/Button'
+import { Input } from '@/components/ui/Input'
 import { theme } from '@/lib/theme'
 import { useSignaling } from '@/hooks/useSignaling'
+import { useLocation } from '@/hooks/useLocation'
 import { useAuth } from '@clerk/clerk-expo'
 
 export default function StreamView() {
@@ -12,12 +15,14 @@ export default function StreamView() {
   const { status, roomId, producers, error, setError, connect, createRoom, joinRoom, disconnect } =
     useSignaling()
   const { isSignedIn } = useAuth()
+  const [title, setTitle] = useState('')
+  const { coords, loading: locationLoading, error: locationError } = useLocation()
 
   async function handleGoLive() {
+    if (!title.trim() || !coords) return
     try {
       await connect()
-      // Phase 4 replaces placeholder meta with real title + location
-      await createRoom({ title: 'Test stream', lat: 0, lng: 0 })
+      await createRoom({ title: title.trim(), lat: coords.latitude, lng: coords.longitude })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to go live')
     }
@@ -37,6 +42,8 @@ export default function StreamView() {
     router.back()
   }
 
+  const canGoLive = !!title.trim() && !!coords && !locationLoading
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
@@ -44,10 +51,37 @@ export default function StreamView() {
 
         {status === 'idle' && (
           <View style={styles.actions}>
-            {isNew && isSignedIn && <Button label="Start stream" onPress={handleGoLive} />}
+            {isNew && isSignedIn && (
+              <>
+                <Input
+                  placeholder="Stream title"
+                  value={title}
+                  onChangeText={setTitle}
+                  style={styles.wide}
+                />
+                {locationLoading && (
+                  <View style={styles.statusRow}>
+                    <ActivityIndicator color={theme.colors.accent} size="small" />
+                    <Text style={styles.muted}>Detecting location…</Text>
+                  </View>
+                )}
+                {locationError && <Text style={styles.muted}>{locationError}</Text>}
+                {coords && !locationLoading && (
+                  <Text style={styles.muted}>
+                    {coords.latitude.toFixed(4)}, {coords.longitude.toFixed(4)}
+                  </Text>
+                )}
+                <Button
+                  label="Start stream"
+                  onPress={handleGoLive}
+                  disabled={!canGoLive}
+                  style={styles.wide}
+                />
+              </>
+            )}
             {isNew && !isSignedIn && <Text style={styles.muted}>Sign in to go live</Text>}
-            {!isNew && <Button label="Join stream" onPress={handleJoin} />}
-            <Button label="Back" onPress={() => router.back()} variant="secondary" />
+            {!isNew && <Button label="Join stream" onPress={handleJoin} style={styles.wide} />}
+            <Button label="Back" onPress={() => router.back()} variant="secondary" style={styles.wide} />
           </View>
         )}
 
@@ -102,4 +136,5 @@ const styles = StyleSheet.create({
   actions: { width: '100%', gap: theme.spacing.sm, alignItems: 'center' },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
   roomInfo: { width: '100%', alignItems: 'center', gap: theme.spacing.md },
+  wide: { width: '100%' },
 })
