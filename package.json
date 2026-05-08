@@ -38,5 +38,18 @@
     "@types/react": "~19.1.10",
     "@types/react-native": "^0.72.8",
     "typescript": "~5.9.2"
-  }
+  },
+  "description": "",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Ben-J-Wylie/wrld-app.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Ben-J-Wylie/wrld-app/issues"
+  },
+  "homepage": "https://github.com/Ben-J-Wylie/wrld-app#readme"
 }
