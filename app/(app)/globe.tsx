@@ -12,13 +12,12 @@ import { useLocation } from '@/hooks/useLocation'
 import { useStreamsNear } from '@/hooks/useStreamsNear'
 import type { Stream } from '@/types'
 
-// NASA Blue Marble Next Generation (December 2004) — 8192×4096, cloudless, ~6 MB first download
-const EARTH_TEXTURE_URL =
-  'https://eoimages.gsfc.nasa.gov/images/imagerecords/74000/74092/world.200412.3x8192x4096.jpg'
+// Bundled 8192×4096 earth texture (Solar System Scope, free for commercial use)
+const EARTH_ASSET = require('../../assets/images/earth.jpg')
 
-// Module-level texture cache — ONE download for the app lifetime.
-// THREE.Texture stores image data; the actual WebGL texture is created per-renderer,
-// so this is safe to reuse across GL context recreations.
+// Module-level texture cache — loaded once, reused across GL context recreations.
+// THREE.Texture holds image data; WebGL texture objects are per-renderer and
+// re-uploaded automatically by three.js when a new renderer encounters the object.
 let earthTexture: THREE.Texture | null = null
 
 function latLngToVec3(lat: number, lng: number, r = 1.02): THREE.Vector3 {
@@ -175,11 +174,11 @@ export default function Globe() {
       let earthMat: THREE.Material
       try {
         if (!earthTexture) {
-          const asset = Asset.fromURI(EARTH_TEXTURE_URL)
+          const asset = Asset.fromModule(EARTH_ASSET)
           await asset.downloadAsync()
           earthTexture = (await loadAsync(asset)) as THREE.Texture
         } else {
-          // Force the new renderer to re-upload the image to the new GL context
+          // Force the new renderer to re-upload to the new GL context
           earthTexture.needsUpdate = true
         }
         earthMat = new THREE.MeshBasicMaterial({ map: earthTexture })
