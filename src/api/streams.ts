@@ -20,8 +20,13 @@ export const streamsApi = {
   },
 
   get: async (id: string): Promise<Stream> => {
-    const res = await apiClient.get<Stream>(`/streams/${id}`)
-    return res.data
+    const res = await apiClient.get<{ stream: Stream }>(`/streams/${id}`)
+    return res.data.stream
+  },
+
+  getByRoom: async (roomId: string): Promise<Stream> => {
+    const res = await apiClient.get<{ stream: Stream }>(`/streams/room/${roomId}`)
+    return res.data.stream
   },
 
   create: async (input: { title: string; lat: number; lng: number }): Promise<Stream> => {

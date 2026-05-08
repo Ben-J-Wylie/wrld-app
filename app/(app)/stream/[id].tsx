@@ -2,11 +2,13 @@ import { View, Text, StyleSheet, ActivityIndicator, Pressable } from 'react-nati
 import { useState } from 'react'
 import { useLocalSearchParams, router } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { useQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/Button'
 import { theme } from '@/lib/theme'
 import { useSignaling } from '@/hooks/useSignaling'
 import { useLocation } from '@/hooks/useLocation'
 import { useAuth } from '@clerk/clerk-expo'
+import { streamsApi } from '@/api/streams'
 import type { LayerType } from '@/types'
 
 const LAYER_LABELS: Record<LayerType, string> = {
@@ -22,16 +24,23 @@ export default function StreamView() {
   }>()
   const isNew = id === 'new'
 
-  // Parse layers param (comma-separated from dashboard)
   const broadcastLayers: LayerType[] = paramLayers
     ? (paramLayers.split(',').filter(Boolean) as LayerType[])
     : []
 
-  const { status, roomId, producers, error, setError, connect, createRoom, joinRoom, disconnect } =
+  const { status, roomId, error, setError, connect, createRoom, joinRoom, disconnect } =
     useSignaling()
   const { isSignedIn } = useAuth()
   const { coords, loading: locationLoading, error: locationError } = useLocation()
   const [activeLayer, setActiveLayer] = useState<LayerType | null>(null)
+
+  // Poll viewer count for the broadcaster once they're live
+  const { data: liveStream } = useQuery({
+    queryKey: ['stream', 'room', roomId],
+    queryFn: () => streamsApi.getByRoom(roomId!),
+    enabled: isNew && status === 'in-room' && roomId !== null,
+    refetchInterval: 15_000,
+  })
 
   async function handleGoLive() {
     const title = (paramTitle ?? '').trim()
@@ -144,7 +153,7 @@ export default function StreamView() {
               <Text style={styles.roomId}>{roomId}</Text>
             </View>
 
-            {/* Broadcaster: show armed layers */}
+            {/* Broadcaster: armed layers + viewer count */}
             {isNew && broadcastLayers.length > 0 && (
               <View style={styles.section}>
                 <Text style={styles.sectionLabel}>BROADCASTING</Text>
@@ -155,22 +164,27 @@ export default function StreamView() {
                     </View>
                   ))}
                 </View>
+                {liveStream != null && (
+                  <Text style={styles.viewerCount}>
+                    {liveStream.viewerCount} {liveStream.viewerCount === 1 ? 'viewer' : 'viewers'}
+                  </Text>
+                )}
               </View>
             )}
 
-            {/* Viewer: layer switcher */}
-            {!isNew && producers.length > 0 && (
+            {/* Viewer: layer switcher based on what the broadcaster armed */}
+            {!isNew && broadcastLayers.length > 0 && (
               <View style={styles.section}>
                 <Text style={styles.sectionLabel}>LAYERS</Text>
                 <View style={styles.layerRow}>
-                  {(producers.map((p: { id: string; kind: string }) => p.kind) as LayerType[]).map((kind) => (
+                  {broadcastLayers.map((kind) => (
                     <Pressable
                       key={kind}
                       style={[styles.layerSwitchBtn, activeLayer === kind && styles.layerSwitchBtnActive]}
                       onPress={() => setActiveLayer(kind)}
                     >
                       <Text style={[styles.layerSwitchText, activeLayer === kind && styles.layerSwitchTextActive]}>
-                        {LAYER_LABELS[kind] ?? kind}
+                        {LAYER_LABELS[kind]}
                       </Text>
                     </Pressable>
                   ))}
@@ -211,6 +225,7 @@ const styles = StyleSheet.create({
   liveRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
   live: { ...theme.typography.heading, color: theme.colors.live },
   roomId: { ...theme.typography.caption, color: theme.colors.textMuted, fontFamily: 'monospace' },
+  viewerCount: { ...theme.typography.body, color: theme.colors.textMuted },
   header: { paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.sm },
   backBtn: { alignSelf: 'flex-start' },
   backArrow: { ...theme.typography.heading, color: theme.colors.text },

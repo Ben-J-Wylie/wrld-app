@@ -297,7 +297,10 @@ export default function Globe() {
       const idx = pinMeshesRef.current.indexOf(hits[0].object as THREE.Mesh)
       const stream = streamsRef.current[idx]
       if (stream?.mediasoupRoomId) {
-        router.push(`/(app)/stream/${stream.mediasoupRoomId}`)
+        router.push({
+          pathname: `/(app)/stream/${stream.mediasoupRoomId}`,
+          params: { layers: (stream.layers ?? []).join(',') },
+        })
       }
     }
   }
