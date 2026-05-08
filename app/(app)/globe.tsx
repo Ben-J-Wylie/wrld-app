@@ -12,9 +12,9 @@ import { useLocation } from '@/hooks/useLocation'
 import { useStreamsNear } from '@/hooks/useStreamsNear'
 import type { Stream } from '@/types'
 
-// Cloudless earth from three.js planet textures (confirmed 200 OK)
+// NASA Blue Marble Next Generation (December 2004) — 8192×4096, cloudless, ~6 MB first download
 const EARTH_TEXTURE_URL =
-  'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/planets/earth_atmos_2048.jpg'
+  'https://eoimages.gsfc.nasa.gov/images/imagerecords/74000/74092/world.200412.3x8192x4096.jpg'
 
 // Module-level texture cache — ONE download for the app lifetime.
 // THREE.Texture stores image data; the actual WebGL texture is created per-renderer,
@@ -50,14 +50,20 @@ export default function Globe() {
   // Async setup checks its captured gen before starting the loop; if a newer
   // call has started, this one exits without launching a second loop.
   const setupGenRef = useRef(0)
+  // Persist camera zoom and globe orientation across GL context recreations
+  const cameraZRef = useRef(3)
+  const savedRotationRef = useRef({ x: 0, y: 0 })
+  // Auto-orient to GPS once; stop idle auto-rotation after first user touch
+  const hasOrientedRef = useRef(false)
+  const hasInteractedRef = useRef(false)
 
   // ── Gesture refs ───────────────────────────────────────────────────────────
   const containerSizeRef = useRef({
     width: Dimensions.get('window').width,
     height: Dimensions.get('window').height,
   })
-  const isDraggingRef = useRef(false)
   const lastPanRef = useRef({ dx: 0, dy: 0 })
+  const lastPinchDistRef = useRef<number | null>(null)
 
   // Mirror streams into a ref so callbacks always see the latest list
   streamsRef.current = streams ?? []
@@ -99,6 +105,22 @@ export default function Globe() {
     updatePins()
   }, [streams, updatePins])
 
+  // Orient the globe to the user's GPS location on first fix.
+  // The default unrotated view shows ~90°W (Americas), so we rotate to wherever
+  // the user actually is. savedRotationRef persists this across context recreations.
+  useEffect(() => {
+    if (!coords || hasOrientedRef.current) return
+    const group = globeGroupRef.current
+    if (!group) return
+    hasOrientedRef.current = true
+    // Longitude: shift from the default 90°W view to the user's longitude
+    const rotY = -(coords.longitude + 90) * (Math.PI / 180)
+    const rotX = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, -coords.latitude * (Math.PI / 180)))
+    group.rotation.y = rotY
+    group.rotation.x = rotX
+    savedRotationRef.current = { x: rotX, y: rotY }
+  }, [coords])
+
   // Full cleanup on unmount
   useEffect(() => {
     return () => {
@@ -138,10 +160,12 @@ export default function Globe() {
 
       const scene = new THREE.Scene()
       const camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 100)
-      camera.position.z = 3
+      camera.position.z = cameraZRef.current
       cameraRef.current = camera
 
       const group = new THREE.Group()
+      group.rotation.x = savedRotationRef.current.x
+      group.rotation.y = savedRotationRef.current.y
       globeGroupRef.current = group
       scene.add(group)
 
@@ -175,7 +199,7 @@ export default function Globe() {
 
       const animate = () => {
         rafRef.current = requestAnimationFrame(animate)
-        if (!isDraggingRef.current) {
+        if (!hasInteractedRef.current) {
           group.rotation.y += 0.0008
         }
         try {
@@ -197,26 +221,51 @@ export default function Globe() {
     onStartShouldSetPanResponder: () => true,
     onMoveShouldSetPanResponder: () => true,
     onPanResponderGrant: () => {
-      isDraggingRef.current = false
+      hasInteractedRef.current = true
       lastPanRef.current = { dx: 0, dy: 0 }
+      lastPinchDistRef.current = null
     },
-    onPanResponderMove: (_, gs) => {
-      const group = globeGroupRef.current
-      if (!group) return
-      const ddx = gs.dx - lastPanRef.current.dx
-      const ddy = gs.dy - lastPanRef.current.dy
-      lastPanRef.current = { dx: gs.dx, dy: gs.dy }
-      group.rotation.y += ddx * 0.006
-      group.rotation.x = Math.max(
-        -Math.PI / 2,
-        Math.min(Math.PI / 2, group.rotation.x + ddy * 0.006),
-      )
+    onPanResponderMove: (evt, gs) => {
+      const touches = evt.nativeEvent.touches
+      if (touches.length === 2) {
+        // ── Pinch-to-zoom ──────────────────────────────────────────────────
+        const dx = touches[0].pageX - touches[1].pageX
+        const dy = touches[0].pageY - touches[1].pageY
+        const dist = Math.sqrt(dx * dx + dy * dy)
+        if (lastPinchDistRef.current !== null) {
+          const camera = cameraRef.current
+          if (camera) {
+            const newZ = Math.max(1.1, Math.min(8, camera.position.z * (lastPinchDistRef.current / dist)))
+            camera.position.z = newZ
+            cameraZRef.current = newZ
+          }
+        }
+        lastPinchDistRef.current = dist
+        // Reset drag origin so single-finger pan doesn't jump when pinch ends
+        lastPanRef.current = { dx: gs.dx, dy: gs.dy }
+      } else {
+        // ── Single-finger rotate ───────────────────────────────────────────
+        lastPinchDistRef.current = null
+        const group = globeGroupRef.current
+        if (!group) return
+        const ddx = gs.dx - lastPanRef.current.dx
+        const ddy = gs.dy - lastPanRef.current.dy
+        lastPanRef.current = { dx: gs.dx, dy: gs.dy }
+        group.rotation.y += ddx * 0.006
+        group.rotation.x = Math.max(
+          -Math.PI / 2,
+          Math.min(Math.PI / 2, group.rotation.x + ddy * 0.006),
+        )
+        savedRotationRef.current = { x: group.rotation.x, y: group.rotation.y }
+      }
     },
     onPanResponderRelease: (_, gs) => {
-      isDraggingRef.current = false
-      // Treat as a tap if total finger movement stayed under 8px
-      const moved = Math.sqrt(gs.dx * gs.dx + gs.dy * gs.dy)
-      if (moved < 8) handleTap(gs.x0, gs.y0)
+      const wasPinching = lastPinchDistRef.current !== null
+      lastPinchDistRef.current = null
+      if (!wasPinching) {
+        const moved = Math.sqrt(gs.dx * gs.dx + gs.dy * gs.dy)
+        if (moved < 8) handleTap(gs.x0, gs.y0)
+      }
     },
   })
 
