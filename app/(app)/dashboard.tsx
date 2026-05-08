@@ -5,11 +5,11 @@ import { useState } from 'react'
 import { theme } from '@/lib/theme'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
-import { useAuthStore } from '@/stores/authStore'
+import { useAuth } from '@clerk/clerk-expo'
 
 export default function Dashboard() {
   const [roomId, setRoomId] = useState('')
-  const wrldUser = useAuthStore((s) => s.wrldUser)
+  const { isSignedIn } = useAuth()
 
   return (
     <SafeAreaView style={styles.container}>
@@ -20,7 +20,7 @@ export default function Dashboard() {
         <View style={styles.divider} />
         <Text style={styles.label}>Phase 3b test</Text>
 
-        {wrldUser ? (
+        {isSignedIn ? (
           <Button
             label="Go Live"
             onPress={() => router.push('/(app)/stream/new')}

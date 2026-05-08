@@ -4,14 +4,14 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { Button } from '@/components/ui/Button'
 import { theme } from '@/lib/theme'
 import { useSignaling } from '@/hooks/useSignaling'
-import { useAuthStore } from '@/stores/authStore'
+import { useAuth } from '@clerk/clerk-expo'
 
 export default function StreamView() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const isNew = id === 'new'
   const { status, roomId, producers, error, setError, connect, createRoom, joinRoom, disconnect } =
     useSignaling()
-  const wrldUser = useAuthStore((s) => s.wrldUser)
+  const { isSignedIn } = useAuth()
 
   async function handleGoLive() {
     try {
@@ -44,8 +44,8 @@ export default function StreamView() {
 
         {status === 'idle' && (
           <View style={styles.actions}>
-            {isNew && wrldUser && <Button label="Start stream" onPress={handleGoLive} />}
-            {isNew && !wrldUser && <Text style={styles.muted}>Sign in to go live</Text>}
+            {isNew && isSignedIn && <Button label="Start stream" onPress={handleGoLive} />}
+            {isNew && !isSignedIn && <Text style={styles.muted}>Sign in to go live</Text>}
             {!isNew && <Button label="Join stream" onPress={handleJoin} />}
             <Button label="Back" onPress={() => router.back()} variant="secondary" />
           </View>
