@@ -41,8 +41,15 @@ const blocked = [
 config.resolver.blockList = new RegExp(blocked.map((r) => r.source).join('|'))
 
 // --- 3. Map `@/foo` -> `<projectRoot>/src/foo` ---
+const THREE_LOADER_STUB = path.resolve(projectRoot, 'stubs/threeLoaderStub.js')
+
 const defaultResolveRequest = config.resolver.resolveRequest
 config.resolver.resolveRequest = (context, moduleName, platform) => {
+  // expo-three unconditionally imports these loaders; we don't use them and
+  // three/examples/ is in the blockList, so redirect to an empty stub instead.
+  if (moduleName.startsWith('three/examples/jsm/loaders/')) {
+    return { type: 'sourceFile', filePath: THREE_LOADER_STUB }
+  }
   if (moduleName.startsWith('@/')) {
     const rewritten = path.resolve(projectRoot, 'src', moduleName.slice(2))
     return context.resolveRequest(context, rewritten, platform)

@@ -96,6 +96,13 @@ export default function Globe() {
   // ── GL scene bootstrap ─────────────────────────────────────────────────────
   const onContextCreate = useCallback(
     async (gl: ExpoWebGLRenderingContext) => {
+      // Cancel any loop left over from a previous GL surface (Android recreates the surface
+      // when the screen is covered by a stack screen, without unmounting the component).
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current)
+        rafRef.current = null
+      }
+
       const { drawingBufferWidth: w, drawingBufferHeight: h } = gl
 
       const renderer = new Renderer({ gl })
