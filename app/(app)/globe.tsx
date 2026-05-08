@@ -196,16 +196,26 @@ export default function Globe() {
       // Add any pins that arrived before the scene was ready
       updatePins()
 
+      // Reused vector — allocated once per context, not per frame
+      const _wp = new THREE.Vector3()
+      // Reference depth: camera at z=3, pin on the front face of the sphere (r=1.02)
+      const REF_DEPTH = 3 - 1.02
+
       const animate = () => {
         rafRef.current = requestAnimationFrame(animate)
         if (!hasInteractedRef.current) {
           group.rotation.y += 0.0008
         }
-        // Keep pins at a constant screen size regardless of zoom level.
-        // Apparent size ∝ worldSize / cameraDistance, so scaling by cameraZ
-        // cancels the perspective foreshortening.
-        const pinScale = camera.position.z / 3
-        pinMeshesRef.current.forEach((m) => m.scale.setScalar(pinScale))
+        // Maintain constant screen size: screen_size ∝ worldSize / depth.
+        // getWorldPosition accounts for group rotation, so each pin gets its
+        // actual camera-space depth (cameraZ − pin.z_world) regardless of
+        // where on the globe it sits.
+        const camZ = camera.position.z
+        pinMeshesRef.current.forEach((m) => {
+          m.getWorldPosition(_wp)
+          const depth = Math.max(0.01, camZ - _wp.z)
+          m.scale.setScalar(depth / REF_DEPTH)
+        })
         try {
           renderer.render(scene, camera)
           gl.endFrameEXP()
