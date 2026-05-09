@@ -24,7 +24,8 @@ export default function Login() {
         await setActive({ session: result.createdSessionId })
         router.replace('/(app)/globe')
       } else {
-        Alert.alert('Sign in incomplete', `Status: ${result.status}. Please try again or contact support.`)
+        const factors = JSON.stringify(result.availableSecondFactors ?? [])
+        Alert.alert('Sign in incomplete', `Status: ${result.status}\nFactors: ${factors}`)
       }
     } catch (err) {
       Alert.alert('Sign in failed', clerkError(err, 'Please check your email and password'))
