@@ -18,11 +18,13 @@ export function useSignaling() {
   const [roomId, setRoomId] = useState<string | null>(null)
   const [producers, setProducers] = useState<Producer[]>([])
   const [viewerCount, setViewerCount] = useState(0)
+  const [streamEnded, setStreamEnded] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     const unsub = signalingClient.onMessage((msg) => {
       if (msg.type === 'viewerCountUpdated') setViewerCount(msg.viewerCount)
+      if (msg.type === 'broadcasterLeft') setStreamEnded(true)
     })
     return unsub
   }, [])
@@ -72,5 +74,5 @@ export function useSignaling() {
     setError(null)
   }, [])
 
-  return { status, roomId, producers, viewerCount, error, setError, connect, createRoom, joinRoom, disconnect }
+  return { status, roomId, producers, viewerCount, streamEnded, error, setError, connect, createRoom, joinRoom, disconnect }
 }

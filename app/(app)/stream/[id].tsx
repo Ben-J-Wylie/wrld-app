@@ -28,7 +28,7 @@ export default function StreamView() {
     ? (paramSources.split(',').filter(Boolean) as SourceType[])
     : []
 
-  const { status, roomId, viewerCount, error: signalingError, setError, connect, createRoom, joinRoom, disconnect } =
+  const { status, roomId, viewerCount, streamEnded, error: signalingError, setError, connect, createRoom, joinRoom, disconnect } =
     useSignaling()
   const { localStream, remoteStream, error: mediaError, startBroadcasting, startViewing, cleanup } = useMediasoup()
   const { isSignedIn } = useAuth()
@@ -37,6 +37,8 @@ export default function StreamView() {
 
   const isCameraArmed = broadcastSources.includes('camera')
   const showCameraPreview = isNew && status === 'in-room' && !!localStream && isCameraArmed
+  const showRemoteVideo = !isNew && status === 'in-room' && !!remoteStream && broadcastSources.includes('camera')
+  const showOverlay = showCameraPreview || showRemoteVideo
 
   async function handleGoLive() {
     const title = (paramTitle ?? '').trim()
@@ -84,25 +86,36 @@ export default function StreamView() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Fullscreen camera preview behind everything when broadcasting */}
+      {/* Fullscreen local camera preview (broadcaster) */}
       {showCameraPreview && (
         <RTCView
           streamURL={(localStream as unknown as { toURL(): string }).toURL()}
           style={StyleSheet.absoluteFill}
           objectFit="cover"
-          mirror={isCameraArmed}
+          mirror={true}
+          zOrder={0}
+        />
+      )}
+
+      {/* Fullscreen remote stream (viewer) */}
+      {showRemoteVideo && (
+        <RTCView
+          streamURL={(remoteStream as unknown as { toURL(): string }).toURL()}
+          style={StyleSheet.absoluteFill}
+          objectFit="cover"
+          mirror={false}
           zOrder={0}
         />
       )}
 
       <View style={styles.header}>
         <Pressable onPress={handleBack} style={styles.backBtn} hitSlop={12}>
-          <Text style={[styles.backArrow, showCameraPreview && styles.overlayText]}>←</Text>
+          <Text style={[styles.backArrow, showOverlay && styles.overlayText]}>←</Text>
         </Pressable>
       </View>
 
       <View style={styles.content}>
-        {!showCameraPreview && (
+        {!showOverlay && (
           <Text style={styles.title}>{isNew ? 'Go Live' : 'Watch'}</Text>
         )}
 
@@ -161,12 +174,28 @@ export default function StreamView() {
           </View>
         )}
 
+        {/* ── Stream ended (viewer) ────────────────────────────── */}
+        {streamEnded && (
+          <View style={styles.actions}>
+            <Text style={styles.muted}>The stream has ended.</Text>
+            <Button label="Back" onPress={() => router.back()} variant="secondary" style={styles.wide} />
+          </View>
+        )}
+
+        {/* ── Viewer: waiting for stream to load ───────────────── */}
+        {!isNew && status === 'in-room' && !remoteStream && !streamEnded && (
+          <View style={styles.statusRow}>
+            <ActivityIndicator color={theme.colors.accent} />
+            <Text style={styles.muted}>Loading stream…</Text>
+          </View>
+        )}
+
         {/* ── In room ──────────────────────────────────────────── */}
-        {status === 'in-room' && (
-          <View style={[styles.roomInfo, showCameraPreview && styles.roomInfoOverlay]}>
+        {status === 'in-room' && !streamEnded && (!!remoteStream || isNew) && (
+          <View style={[styles.roomInfo, showOverlay && styles.roomInfoOverlay]}>
             <View style={styles.liveRow}>
               <Text style={styles.live}>● LIVE</Text>
-              {!showCameraPreview && (
+              {!showOverlay && (
                 <Text style={styles.roomId}>{roomId}</Text>
               )}
             </View>
@@ -174,9 +203,7 @@ export default function StreamView() {
             {/* Broadcaster */}
             {isNew && (
               <View style={styles.section}>
-                {showCameraPreview ? null : (
-                  <Text style={styles.sectionLabel}>BROADCASTING</Text>
-                )}
+                {!showOverlay && <Text style={styles.sectionLabel}>BROADCASTING</Text>}
                 <View style={styles.sourceRow}>
                   {broadcastSources.map((s) => (
                     <View key={s} style={styles.sourceActiveBadge}>
@@ -184,7 +211,7 @@ export default function StreamView() {
                     </View>
                   ))}
                 </View>
-                <Text style={[styles.viewerCount, showCameraPreview && styles.overlayText]}>
+                <Text style={[styles.viewerCount, showOverlay && styles.overlayText]}>
                   {viewerCount} {viewerCount === 1 ? 'viewer' : 'viewers'}
                 </Text>
               </View>
@@ -193,7 +220,7 @@ export default function StreamView() {
             {/* Viewer: source switcher */}
             {!isNew && broadcastSources.length > 0 && (
               <View style={styles.section}>
-                <Text style={styles.sectionLabel}>SOURCES</Text>
+                {!showOverlay && <Text style={styles.sectionLabel}>SOURCES</Text>}
                 <View style={styles.sourceRow}>
                   {broadcastSources.map((kind) => (
                     <Pressable
