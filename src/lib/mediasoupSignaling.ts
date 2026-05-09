@@ -1,7 +1,7 @@
 export type ClientMessage =
   | { type: 'authenticate'; token: string }
   | { type: 'getRtpCapabilities' }
-  | { type: 'createRoom'; title: string; lat: number; lng: number; layers: string[] }
+  | { type: 'createRoom'; title: string; lat: number; lng: number; sources: string[] }
   | { type: 'joinRoom'; roomId: string }
   | { type: 'createTransport'; direction: 'send' | 'recv' }
   | { type: 'connectTransport'; transportId: string; dtlsParameters: unknown }
@@ -128,7 +128,7 @@ class MediasoupSignalingClient {
     return reply.rtpCapabilities
   }
 
-  async createRoom(meta: { title: string; lat: number; lng: number; layers: string[] }): Promise<string> {
+  async createRoom(meta: { title: string; lat: number; lng: number; sources: string[] }): Promise<string> {
     this.send({ type: 'createRoom', ...meta })
     const reply = await this.waitFor('roomCreated')
     return reply.roomId

@@ -5,7 +5,7 @@ export type User = {
   avatarUrl?: string
 }
 
-export type LayerType = 'camera' | 'audio'
+export type SourceType = 'camera' | 'audio'
 
 export type Stream = {
   id: string
@@ -20,6 +20,6 @@ export type Stream = {
   thumbnailUrl?: string | null
   isLive: boolean
   mediasoupRoomId?: string | null
-  layers: LayerType[]
+  sources: SourceType[]
   distanceKm?: number
 }

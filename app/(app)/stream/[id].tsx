@@ -7,41 +7,41 @@ import { theme } from '@/lib/theme'
 import { useSignaling } from '@/hooks/useSignaling'
 import { useLocation } from '@/hooks/useLocation'
 import { useAuth } from '@clerk/clerk-expo'
-import type { LayerType } from '@/types'
+import type { SourceType } from '@/types'
 
-const LAYER_LABELS: Record<LayerType, string> = {
+const SOURCE_LABELS: Record<SourceType, string> = {
   camera: 'Camera',
   audio: 'Audio',
 }
 
 export default function StreamView() {
-  const { id, title: paramTitle, layers: paramLayers } = useLocalSearchParams<{
+  const { id, title: paramTitle, sources: paramSources } = useLocalSearchParams<{
     id: string
     title?: string
-    layers?: string
+    sources?: string
   }>()
   const isNew = id === 'new'
 
-  const broadcastLayers: LayerType[] = paramLayers
-    ? (paramLayers.split(',').filter(Boolean) as LayerType[])
+  const broadcastSources: SourceType[] = paramSources
+    ? (paramSources.split(',').filter(Boolean) as SourceType[])
     : []
 
   const { status, roomId, viewerCount, error, setError, connect, createRoom, joinRoom, disconnect } =
     useSignaling()
   const { isSignedIn } = useAuth()
   const { coords, loading: locationLoading, error: locationError } = useLocation()
-  const [activeLayer, setActiveLayer] = useState<LayerType | null>(null)
+  const [activeSource, setActiveLayer] = useState<SourceType | null>(null)
 
   async function handleGoLive() {
     const title = (paramTitle ?? '').trim()
-    if (!title || !coords || broadcastLayers.length === 0) return
+    if (!title || !coords || broadcastSources.length === 0) return
     try {
       await connect()
       await createRoom({
         title,
         lat: coords.latitude,
         lng: coords.longitude,
-        layers: broadcastLayers,
+        sources: broadcastSources,
       })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to go live')
@@ -67,7 +67,7 @@ export default function StreamView() {
     router.back()
   }
 
-  const canGoLive = !!paramTitle?.trim() && !!coords && !locationLoading && broadcastLayers.length > 0
+  const canGoLive = !!paramTitle?.trim() && !!coords && !locationLoading && broadcastSources.length > 0
 
   return (
     <SafeAreaView style={styles.container}>
@@ -88,11 +88,11 @@ export default function StreamView() {
                 {paramTitle ? (
                   <Text style={styles.streamTitle}>{paramTitle}</Text>
                 ) : null}
-                {broadcastLayers.length > 0 && (
+                {broadcastSources.length > 0 && (
                   <View style={styles.layerRow}>
-                    {broadcastLayers.map((l) => (
+                    {broadcastSources.map((l) => (
                       <View key={l} style={styles.layerBadge}>
-                        <Text style={styles.layerBadgeText}>{LAYER_LABELS[l]}</Text>
+                        <Text style={styles.layerBadgeText}>{SOURCE_LABELS[l]}</Text>
                       </View>
                     ))}
                   </View>
@@ -144,13 +144,13 @@ export default function StreamView() {
             </View>
 
             {/* Broadcaster: armed layers + viewer count */}
-            {isNew && broadcastLayers.length > 0 && (
+            {isNew && broadcastSources.length > 0 && (
               <View style={styles.section}>
                 <Text style={styles.sectionLabel}>BROADCASTING</Text>
                 <View style={styles.layerRow}>
-                  {broadcastLayers.map((l) => (
+                  {broadcastSources.map((l) => (
                     <View key={l} style={styles.layerActiveBadge}>
-                      <Text style={styles.layerActiveBadgeText}>{LAYER_LABELS[l]}</Text>
+                      <Text style={styles.layerActiveBadgeText}>{SOURCE_LABELS[l]}</Text>
                     </View>
                   ))}
                 </View>
@@ -161,18 +161,18 @@ export default function StreamView() {
             )}
 
             {/* Viewer: layer switcher based on what the broadcaster armed */}
-            {!isNew && broadcastLayers.length > 0 && (
+            {!isNew && broadcastSources.length > 0 && (
               <View style={styles.section}>
                 <Text style={styles.sectionLabel}>LAYERS</Text>
                 <View style={styles.layerRow}>
-                  {broadcastLayers.map((kind) => (
+                  {broadcastSources.map((kind) => (
                     <Pressable
                       key={kind}
-                      style={[styles.layerSwitchBtn, activeLayer === kind && styles.layerSwitchBtnActive]}
+                      style={[styles.layerSwitchBtn, activeSource === kind && styles.layerSwitchBtnActive]}
                       onPress={() => setActiveLayer(kind)}
                     >
-                      <Text style={[styles.layerSwitchText, activeLayer === kind && styles.layerSwitchTextActive]}>
-                        {LAYER_LABELS[kind]}
+                      <Text style={[styles.layerSwitchText, activeSource === kind && styles.layerSwitchTextActive]}>
+                        {SOURCE_LABELS[kind]}
                       </Text>
                     </Pressable>
                   ))}

@@ -7,9 +7,9 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { useAuth } from '@clerk/clerk-expo'
 import { useLocation } from '@/hooks/useLocation'
-import type { LayerType } from '@/types'
+import type { SourceType } from '@/types'
 
-const LAYERS: { type: LayerType; label: string; icon: string }[] = [
+const SOURCES: { type: SourceType; label: string; icon: string }[] = [
   { type: 'camera', label: 'Camera', icon: '📷' },
   { type: 'audio', label: 'Audio', icon: '🎙️' },
 ]
@@ -19,10 +19,10 @@ export default function Dashboard() {
   const { coords, loading: locationLoading, error: locationError } = useLocation()
 
   const [title, setTitle] = useState('')
-  const [readyLayers, setReadyLayers] = useState<Set<LayerType>>(new Set())
+  const [readySources, setReadySources] = useState<Set<SourceType>>(new Set())
 
-  function toggleLayer(type: LayerType) {
-    setReadyLayers((prev: Set<LayerType>) => {
+  function toggleSource(type: SourceType) {
+    setReadySources((prev: Set<SourceType>) => {
       const next = new Set(prev)
       if (next.has(type)) next.delete(type)
       else next.add(type)
@@ -31,12 +31,12 @@ export default function Dashboard() {
   }
 
   function handleGoLive() {
-    if (!title.trim() || !coords || readyLayers.size === 0) return
+    if (!title.trim() || !coords || readySources.size === 0) return
     router.push({
       pathname: '/(app)/stream/new',
       params: {
         title: title.trim(),
-        layers: Array.from(readyLayers).join(','),
+        sources: Array.from(readySources).join(','),
       },
     })
   }
@@ -46,7 +46,7 @@ export default function Dashboard() {
     !!title.trim() &&
     !!coords &&
     !locationLoading &&
-    readyLayers.size > 0
+    readySources.size > 0
 
   if (!isSignedIn) {
     return (
@@ -84,16 +84,16 @@ export default function Dashboard() {
 
         {/* Layer cards */}
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>LAYERS</Text>
-          <Text style={styles.sectionHint}>Choose what you'll broadcast. You can switch layers once live.</Text>
+          <Text style={styles.sectionLabel}>SOURCES</Text>
+          <Text style={styles.sectionHint}>Choose what you'll broadcast. You can switch sources once live.</Text>
           <View style={styles.layerGrid}>
-            {LAYERS.map(({ type, label, icon }) => {
-              const ready = readyLayers.has(type)
+            {SOURCES.map(({ type, label, icon }) => {
+              const ready = readySources.has(type)
               return (
                 <Pressable
                   key={type}
                   style={[styles.layerCard, ready && styles.layerCardReady]}
-                  onPress={() => toggleLayer(type)}
+                  onPress={() => toggleSource(type)}
                 >
                   <Text style={styles.layerIcon}>{icon}</Text>
                   <Text style={[styles.layerLabel, ready && styles.layerLabelReady]}>{label}</Text>
@@ -133,8 +133,8 @@ export default function Dashboard() {
           style={styles.wide}
         />
 
-        {readyLayers.size === 0 && (
-          <Text style={styles.hint}>Ready at least one layer to go live</Text>
+        {readySources.size === 0 && (
+          <Text style={styles.hint}>Ready at least one source to go live</Text>
         )}
       </View>
     </SafeAreaView>
