@@ -82,21 +82,21 @@ export default function Dashboard() {
           />
         </View>
 
-        {/* Layer cards */}
+        {/* Source cards */}
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>SOURCES</Text>
           <Text style={styles.sectionHint}>Choose what you'll broadcast. You can switch sources once live.</Text>
-          <View style={styles.layerGrid}>
+          <View style={styles.sourceGrid}>
             {SOURCES.map(({ type, label, icon }) => {
               const ready = readySources.has(type)
               return (
                 <Pressable
                   key={type}
-                  style={[styles.layerCard, ready && styles.layerCardReady]}
+                  style={[styles.sourceCard, ready && styles.sourceCardReady]}
                   onPress={() => toggleSource(type)}
                 >
-                  <Text style={styles.layerIcon}>{icon}</Text>
-                  <Text style={[styles.layerLabel, ready && styles.layerLabelReady]}>{label}</Text>
+                  <Text style={styles.sourceIcon}>{icon}</Text>
+                  <Text style={[styles.sourceLabel, ready && styles.sourceLabelReady]}>{label}</Text>
                   <View style={[styles.readyPill, ready && styles.readyPillActive]}>
                     <Text style={[styles.readyPillText, ready && styles.readyPillTextActive]}>
                       {ready ? 'READY' : 'OFF'}
@@ -157,8 +157,8 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
   },
   sectionHint: { ...theme.typography.caption, color: theme.colors.textMuted },
-  layerGrid: { flexDirection: 'row', gap: theme.spacing.sm },
-  layerCard: {
+  sourceGrid: { flexDirection: 'row', gap: theme.spacing.sm },
+  sourceCard: {
     flex: 1,
     backgroundColor: theme.colors.bgElevated,
     borderRadius: theme.radius.lg,
@@ -168,13 +168,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.xs,
   },
-  layerCardReady: {
+  sourceCardReady: {
     borderColor: theme.colors.live,
     backgroundColor: '#1A0A10',
   },
-  layerIcon: { fontSize: 28 },
-  layerLabel: { ...theme.typography.body, color: theme.colors.textMuted, fontWeight: '600' },
-  layerLabelReady: { color: theme.colors.text },
+  sourceIcon: { fontSize: 28 },
+  sourceLabel: { ...theme.typography.body, color: theme.colors.textMuted, fontWeight: '600' },
+  sourceLabelReady: { color: theme.colors.text },
   readyPill: {
     borderRadius: theme.radius.full,
     paddingHorizontal: theme.spacing.sm,
