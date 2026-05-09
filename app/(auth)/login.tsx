@@ -22,6 +22,8 @@ export default function Login() {
       if (result.status === 'complete') {
         await setActive({ session: result.createdSessionId })
         router.replace('/(app)/globe')
+      } else {
+        Alert.alert('Sign in incomplete', `Status: ${result.status}. Please try again or contact support.`)
       }
     } catch (err) {
       Alert.alert('Sign in failed', clerkError(err, 'Please check your email and password'))
