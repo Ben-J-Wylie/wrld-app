@@ -18,7 +18,8 @@ export default function Login() {
     if (!isLoaded) return
     setLoading(true)
     try {
-      const result = await signIn.create({ identifier: email, password })
+      await signIn.create({ identifier: email })
+      const result = await signIn.attemptFirstFactor({ strategy: 'password', password })
       if (result.status === 'complete') {
         await setActive({ session: result.createdSessionId })
         router.replace('/(app)/globe')
