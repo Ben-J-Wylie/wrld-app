@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { View, Text, StyleSheet, Alert } from 'react-native'
 import { Link, router } from 'expo-router'
-import { useSignIn } from '@clerk/clerk-expo'
+import { useSignIn, useAuth } from '@clerk/clerk-expo'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -10,9 +10,14 @@ import { clerkError } from '@/lib/clerkError'
 
 export default function Login() {
   const { signIn, setActive, isLoaded } = useSignIn()
+  const { isSignedIn } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (isSignedIn) router.replace('/(app)/globe')
+  }, [isSignedIn])
 
   const handleLogin = async () => {
     if (!isLoaded) return

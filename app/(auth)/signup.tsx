@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { View, Text, StyleSheet, Alert } from 'react-native'
 import { Link, router } from 'expo-router'
-import { useSignUp } from '@clerk/clerk-expo'
+import { useSignUp, useAuth } from '@clerk/clerk-expo'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -10,11 +10,16 @@ import { clerkError } from '@/lib/clerkError'
 
 export default function Signup() {
   const { signUp, setActive, isLoaded } = useSignUp()
+  const { isSignedIn } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [code, setCode] = useState('')
   const [pendingVerification, setPendingVerification] = useState(false)
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (isSignedIn) router.replace('/(app)/globe')
+  }, [isSignedIn])
 
   const handleSignup = async () => {
     if (!isLoaded) return
@@ -38,6 +43,8 @@ export default function Signup() {
       if (result.status === 'complete') {
         await setActive({ session: result.createdSessionId })
         router.replace('/(app)/globe')
+      } else {
+        Alert.alert('Verification incomplete', `Status: ${result.status}. Please try again.`)
       }
     } catch (err) {
       Alert.alert('Verification failed', clerkError(err, 'Invalid or expired code'))
