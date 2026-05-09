@@ -61,6 +61,7 @@ export function useSignaling() {
     setRoomId(id)
     setProducers(prods)
     setStatus('in-room')
+    return prods
   }, [])
 
   const disconnect = useCallback(() => {

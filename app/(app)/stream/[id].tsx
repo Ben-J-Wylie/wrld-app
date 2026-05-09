@@ -2,9 +2,11 @@ import { View, Text, StyleSheet, ActivityIndicator, Pressable } from 'react-nati
 import { useState } from 'react'
 import { useLocalSearchParams, router } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { RTCView } from 'react-native-webrtc'
 import { Button } from '@/components/ui/Button'
 import { theme } from '@/lib/theme'
 import { useSignaling } from '@/hooks/useSignaling'
+import { useMediasoup } from '@/hooks/useMediasoup'
 import { useLocation } from '@/hooks/useLocation'
 import { useAuth } from '@clerk/clerk-expo'
 import type { SourceType } from '@/types'
@@ -26,11 +28,15 @@ export default function StreamView() {
     ? (paramSources.split(',').filter(Boolean) as SourceType[])
     : []
 
-  const { status, roomId, viewerCount, error, setError, connect, createRoom, joinRoom, disconnect } =
+  const { status, roomId, viewerCount, error: signalingError, setError, connect, createRoom, joinRoom, disconnect } =
     useSignaling()
+  const { localStream, remoteStream, error: mediaError, startBroadcasting, startViewing, cleanup } = useMediasoup()
   const { isSignedIn } = useAuth()
   const { coords, loading: locationLoading, error: locationError } = useLocation()
-  const [activeSource, setActiveLayer] = useState<SourceType | null>(null)
+  const [activeSource, setActiveSource] = useState<SourceType | null>(null)
+
+  const isCameraArmed = broadcastSources.includes('camera')
+  const showCameraPreview = isNew && status === 'in-room' && !!localStream && isCameraArmed
 
   async function handleGoLive() {
     const title = (paramTitle ?? '').trim()
@@ -43,6 +49,7 @@ export default function StreamView() {
         lng: coords.longitude,
         sources: broadcastSources,
       })
+      await startBroadcasting(broadcastSources)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to go live')
     }
@@ -51,34 +58,53 @@ export default function StreamView() {
   async function handleJoin() {
     try {
       await connect()
-      await joinRoom(id)
+      const producers = await joinRoom(id)
+      await startViewing(producers)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to join stream')
     }
   }
 
   function handleLeave() {
+    cleanup()
     disconnect()
     router.back()
   }
 
   function handleBack() {
-    if (status === 'in-room') disconnect()
+    if (status === 'in-room') {
+      cleanup()
+      disconnect()
+    }
     router.back()
   }
 
   const canGoLive = !!paramTitle?.trim() && !!coords && !locationLoading && broadcastSources.length > 0
+  const displayError = signalingError ?? mediaError
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Fullscreen camera preview behind everything when broadcasting */}
+      {showCameraPreview && (
+        <RTCView
+          streamURL={(localStream as unknown as { toURL(): string }).toURL()}
+          style={StyleSheet.absoluteFill}
+          objectFit="cover"
+          mirror={isCameraArmed}
+          zOrder={0}
+        />
+      )}
+
       <View style={styles.header}>
         <Pressable onPress={handleBack} style={styles.backBtn} hitSlop={12}>
-          <Text style={styles.backArrow}>←</Text>
+          <Text style={[styles.backArrow, showCameraPreview && styles.overlayText]}>←</Text>
         </Pressable>
       </View>
 
       <View style={styles.content}>
-        <Text style={styles.title}>{isNew ? 'Go Live' : 'Watch'}</Text>
+        {!showCameraPreview && (
+          <Text style={styles.title}>{isNew ? 'Go Live' : 'Watch'}</Text>
+        )}
 
         {/* ── Idle ─────────────────────────────────────────────── */}
         {status === 'idle' && (
@@ -89,10 +115,10 @@ export default function StreamView() {
                   <Text style={styles.streamTitle}>{paramTitle}</Text>
                 ) : null}
                 {broadcastSources.length > 0 && (
-                  <View style={styles.layerRow}>
-                    {broadcastSources.map((l) => (
-                      <View key={l} style={styles.layerBadge}>
-                        <Text style={styles.layerBadgeText}>{SOURCE_LABELS[l]}</Text>
+                  <View style={styles.sourceRow}>
+                    {broadcastSources.map((s) => (
+                      <View key={s} style={styles.sourceBadge}>
+                        <Text style={styles.sourceBadgeText}>{SOURCE_LABELS[s]}</Text>
                       </View>
                     ))}
                   </View>
@@ -137,41 +163,45 @@ export default function StreamView() {
 
         {/* ── In room ──────────────────────────────────────────── */}
         {status === 'in-room' && (
-          <View style={styles.roomInfo}>
+          <View style={[styles.roomInfo, showCameraPreview && styles.roomInfoOverlay]}>
             <View style={styles.liveRow}>
               <Text style={styles.live}>● LIVE</Text>
-              <Text style={styles.roomId}>{roomId}</Text>
+              {!showCameraPreview && (
+                <Text style={styles.roomId}>{roomId}</Text>
+              )}
             </View>
 
-            {/* Broadcaster: armed layers + viewer count */}
-            {isNew && broadcastSources.length > 0 && (
+            {/* Broadcaster */}
+            {isNew && (
               <View style={styles.section}>
-                <Text style={styles.sectionLabel}>BROADCASTING</Text>
-                <View style={styles.layerRow}>
-                  {broadcastSources.map((l) => (
-                    <View key={l} style={styles.layerActiveBadge}>
-                      <Text style={styles.layerActiveBadgeText}>{SOURCE_LABELS[l]}</Text>
+                {showCameraPreview ? null : (
+                  <Text style={styles.sectionLabel}>BROADCASTING</Text>
+                )}
+                <View style={styles.sourceRow}>
+                  {broadcastSources.map((s) => (
+                    <View key={s} style={styles.sourceActiveBadge}>
+                      <Text style={styles.sourceActiveBadgeText}>{SOURCE_LABELS[s]}</Text>
                     </View>
                   ))}
                 </View>
-                <Text style={styles.viewerCount}>
+                <Text style={[styles.viewerCount, showCameraPreview && styles.overlayText]}>
                   {viewerCount} {viewerCount === 1 ? 'viewer' : 'viewers'}
                 </Text>
               </View>
             )}
 
-            {/* Viewer: layer switcher based on what the broadcaster armed */}
+            {/* Viewer: source switcher */}
             {!isNew && broadcastSources.length > 0 && (
               <View style={styles.section}>
-                <Text style={styles.sectionLabel}>LAYERS</Text>
-                <View style={styles.layerRow}>
+                <Text style={styles.sectionLabel}>SOURCES</Text>
+                <View style={styles.sourceRow}>
                   {broadcastSources.map((kind) => (
                     <Pressable
                       key={kind}
-                      style={[styles.layerSwitchBtn, activeSource === kind && styles.layerSwitchBtnActive]}
-                      onPress={() => setActiveLayer(kind)}
+                      style={[styles.sourceSwitchBtn, activeSource === kind && styles.sourceSwitchBtnActive]}
+                      onPress={() => setActiveSource(kind)}
                     >
-                      <Text style={[styles.layerSwitchText, activeSource === kind && styles.layerSwitchTextActive]}>
+                      <Text style={[styles.sourceSwitchText, activeSource === kind && styles.sourceSwitchTextActive]}>
                         {SOURCE_LABELS[kind]}
                       </Text>
                     </Pressable>
@@ -187,7 +217,7 @@ export default function StreamView() {
         {/* ── Error ────────────────────────────────────────────── */}
         {status === 'error' && (
           <View style={styles.actions}>
-            <Text style={styles.errorText}>{error}</Text>
+            <Text style={styles.errorText}>{displayError}</Text>
             <Button label="Retry" onPress={isNew ? handleGoLive : handleJoin} />
             <Button label="Back" onPress={() => router.back()} variant="secondary" />
           </View>
@@ -210,6 +240,7 @@ const styles = StyleSheet.create({
   streamTitle: { ...theme.typography.heading, color: theme.colors.text, textAlign: 'center' },
   muted: { ...theme.typography.body, color: theme.colors.textMuted, textAlign: 'center' },
   errorText: { ...theme.typography.body, color: theme.colors.danger, textAlign: 'center' },
+  overlayText: { color: '#fff', textShadowColor: 'rgba(0,0,0,0.6)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
   liveRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
   live: { ...theme.typography.heading, color: theme.colors.live },
   roomId: { ...theme.typography.caption, color: theme.colors.textMuted, fontFamily: 'monospace' },
@@ -220,6 +251,15 @@ const styles = StyleSheet.create({
   actions: { width: '100%', gap: theme.spacing.sm, alignItems: 'center' },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
   roomInfo: { width: '100%', alignItems: 'center', gap: theme.spacing.lg },
+  roomInfoOverlay: {
+    position: 'absolute',
+    bottom: theme.spacing.xl,
+    left: theme.spacing.lg,
+    right: theme.spacing.lg,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    borderRadius: theme.radius.lg,
+    padding: theme.spacing.md,
+  },
   wide: { width: '100%' },
   section: { width: '100%', gap: theme.spacing.sm, alignItems: 'center' },
   sectionLabel: {
@@ -228,8 +268,8 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 1.2,
   },
-  layerRow: { flexDirection: 'row', gap: theme.spacing.sm, flexWrap: 'wrap', justifyContent: 'center' },
-  layerBadge: {
+  sourceRow: { flexDirection: 'row', gap: theme.spacing.sm, flexWrap: 'wrap', justifyContent: 'center' },
+  sourceBadge: {
     borderRadius: theme.radius.full,
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: 4,
@@ -237,15 +277,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.border,
   },
-  layerBadgeText: { ...theme.typography.caption, color: theme.colors.textMuted, fontWeight: '600' },
-  layerActiveBadge: {
+  sourceBadgeText: { ...theme.typography.caption, color: theme.colors.textMuted, fontWeight: '600' },
+  sourceActiveBadge: {
     borderRadius: theme.radius.full,
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: 4,
     backgroundColor: theme.colors.live,
   },
-  layerActiveBadgeText: { ...theme.typography.caption, color: '#fff', fontWeight: '700' },
-  layerSwitchBtn: {
+  sourceActiveBadgeText: { ...theme.typography.caption, color: '#fff', fontWeight: '700' },
+  sourceSwitchBtn: {
     borderRadius: theme.radius.full,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
@@ -253,10 +293,10 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: theme.colors.border,
   },
-  layerSwitchBtnActive: {
+  sourceSwitchBtnActive: {
     borderColor: theme.colors.accent,
     backgroundColor: '#0D1830',
   },
-  layerSwitchText: { ...theme.typography.body, color: theme.colors.textMuted, fontWeight: '600' },
-  layerSwitchTextActive: { color: theme.colors.accent },
+  sourceSwitchText: { ...theme.typography.body, color: theme.colors.textMuted, fontWeight: '600' },
+  sourceSwitchTextActive: { color: theme.colors.accent },
 })
