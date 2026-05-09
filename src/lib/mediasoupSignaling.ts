@@ -139,6 +139,39 @@ class MediasoupSignalingClient {
     const reply = await this.waitFor('roomJoined')
     return reply.producers
   }
+
+  async createTransport(direction: 'send' | 'recv'): Promise<{
+    id: string
+    iceParameters: unknown
+    iceCandidates: unknown[]
+    dtlsParameters: unknown
+  }> {
+    this.send({ type: 'createTransport', direction })
+    const reply = await this.waitFor('transportCreated')
+    return { id: reply.id, iceParameters: reply.iceParameters, iceCandidates: reply.iceCandidates, dtlsParameters: reply.dtlsParameters }
+  }
+
+  async connectTransport(transportId: string, dtlsParameters: unknown): Promise<void> {
+    this.send({ type: 'connectTransport', transportId, dtlsParameters })
+    await this.waitFor('transportConnected')
+  }
+
+  async produce(kind: 'audio' | 'video', rtpParameters: unknown): Promise<string> {
+    this.send({ type: 'produce', kind, rtpParameters })
+    const reply = await this.waitFor('produced')
+    return reply.id
+  }
+
+  async consume(producerId: string, rtpCapabilities: unknown): Promise<{
+    id: string
+    producerId: string
+    kind: string
+    rtpParameters: unknown
+  }> {
+    this.send({ type: 'consume', producerId, rtpCapabilities })
+    const reply = await this.waitFor('consumed')
+    return { id: reply.id, producerId: reply.producerId, kind: reply.kind, rtpParameters: reply.rtpParameters }
+  }
 }
 
 export const signalingClient = new MediasoupSignalingClient()
