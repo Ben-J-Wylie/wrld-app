@@ -6,6 +6,7 @@ import { theme } from '@/lib/theme'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { useAuth } from '@clerk/clerk-expo'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useLocation } from '@/hooks/useLocation'
 import type { SourceType } from '@/types'
 
@@ -15,7 +16,13 @@ const SOURCES: { type: SourceType; label: string; icon: string }[] = [
 ]
 
 export default function Dashboard() {
-  const { isSignedIn, signOut } = useAuth()
+  const { isSignedIn } = useAuth()
+
+  async function handleSignOut() {
+    const keys = await AsyncStorage.getAllKeys()
+    await AsyncStorage.multiRemove(keys.filter((k) => k.includes('clerk')))
+    router.replace('/(auth)/login')
+  }
   const { coords, loading: locationLoading, error: locationError } = useLocation()
 
   const [title, setTitle] = useState('')
@@ -134,7 +141,7 @@ export default function Dashboard() {
         />
         <Button
           label="Sign Out"
-          onPress={() => signOut().then(() => router.replace('/(auth)/login'))}
+          onPress={handleSignOut}
           variant="secondary"
           style={styles.wide}
         />
