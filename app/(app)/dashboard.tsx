@@ -5,7 +5,7 @@ import { useState } from 'react'
 import { theme } from '@/lib/theme'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
-import { useAuth } from '@clerk/clerk-expo'
+import { useAuth, useClerk } from '@clerk/clerk-expo'
 import { useLocation } from '@/hooks/useLocation'
 import type { SourceType } from '@/types'
 
@@ -16,6 +16,7 @@ const SOURCES: { type: SourceType; label: string; icon: string }[] = [
 
 export default function Dashboard() {
   const { isSignedIn } = useAuth()
+  const { signOut } = useClerk()
   const { coords, loading: locationLoading, error: locationError } = useLocation()
 
   const [title, setTitle] = useState('')
@@ -130,6 +131,12 @@ export default function Dashboard() {
           label="Go Live"
           onPress={handleGoLive}
           disabled={!canGoLive}
+          style={styles.wide}
+        />
+        <Button
+          label="Sign Out"
+          onPress={() => signOut()}
+          variant="secondary"
           style={styles.wide}
         />
 
