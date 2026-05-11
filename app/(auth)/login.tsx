@@ -32,6 +32,7 @@ export default function Login() {
         Alert.alert('Sign in failed', 'Please check your email and password and try again.')
       }
     } catch (err) {
+      console.log('LOGIN ERROR', JSON.stringify(err))
       Alert.alert('Sign in failed', clerkError(err, 'Please check your email and password'))
     } finally {
       setLoading(false)
