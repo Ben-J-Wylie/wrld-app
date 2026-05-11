@@ -13,7 +13,8 @@
       "infoPlist": {
         "NSCameraUsageDescription": "WRLD uses your camera to broadcast live video.",
         "NSMicrophoneUsageDescription": "WRLD uses your microphone to broadcast live audio.",
-        "NSLocationWhenInUseUsageDescription": "WRLD uses your location to show nearby streams and tag your broadcast."
+        "NSLocationWhenInUseUsageDescription": "WRLD uses your location to show nearby streams and tag your broadcast.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
