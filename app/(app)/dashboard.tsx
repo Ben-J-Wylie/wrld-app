@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-native'
+import { View, Text, StyleSheet, Pressable, ActivityIndicator, DevSettings } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
 import { useState } from 'react'
@@ -21,7 +21,7 @@ export default function Dashboard() {
   async function handleSignOut() {
     const keys = await AsyncStorage.getAllKeys()
     await AsyncStorage.multiRemove(keys.filter((k) => k.includes('clerk')))
-    router.replace('/(auth)/login')
+    DevSettings.reload()
   }
   const { coords, loading: locationLoading, error: locationError } = useLocation()
 
