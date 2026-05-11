@@ -135,7 +135,7 @@ export default function Dashboard() {
         />
         <Button
           label="Sign Out"
-          onPress={() => signOut()}
+          onPress={() => signOut().then(() => router.replace('/(auth)/login'))}
           variant="secondary"
           style={styles.wide}
         />

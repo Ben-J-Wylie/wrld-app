@@ -22,3 +22,12 @@ if (typeof window !== 'undefined' && typeof window.dispatchEvent !== 'function')
 } else if (typeof window === 'undefined') {
   ;(global as unknown as Record<string, unknown>).window = { dispatchEvent: () => true }
 }
+
+// Clerk tries to set window.location.href after signOut — not available in React Native.
+if (typeof window !== 'undefined' && !window.location) {
+  Object.defineProperty(window, 'location', {
+    value: { href: '', assign: () => {}, replace: () => {} },
+    writable: true,
+    configurable: true,
+  })
+}
