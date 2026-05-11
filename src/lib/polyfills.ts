@@ -5,7 +5,7 @@ if (typeof document === 'undefined') {
   ;(document as unknown as Record<string, unknown>).hasFocus = () => true
 }
 
-// Clerk uses CustomEvent internally — not available in React Native.
+// Clerk uses CustomEvent and window.dispatchEvent internally — not available in React Native.
 if (typeof CustomEvent === 'undefined') {
   ;(global as unknown as Record<string, unknown>).CustomEvent = class CustomEvent {
     type: string
@@ -15,4 +15,10 @@ if (typeof CustomEvent === 'undefined') {
       this.detail = options?.detail ?? null
     }
   }
+}
+
+if (typeof window !== 'undefined' && typeof window.dispatchEvent !== 'function') {
+  ;(window as unknown as Record<string, unknown>).dispatchEvent = () => true
+} else if (typeof window === 'undefined') {
+  ;(global as unknown as Record<string, unknown>).window = { dispatchEvent: () => true }
 }
