@@ -20,7 +20,7 @@ const EARTH_ASSET = require('../../assets/images/earth.jpg')
 // re-uploaded automatically by three.js when a new renderer encounters the object.
 let earthTexture: THREE.Texture | null = null
 
-function latLngToVec3(lat: number, lng: number, r = 1.005): THREE.Vector3 {
+function latLngToVec3(lat: number, lng: number, r = 1.001): THREE.Vector3 {
   const phi = (90 - lat) * (Math.PI / 180)
   const theta = (lng + 180) * (Math.PI / 180)
   return new THREE.Vector3(
@@ -202,8 +202,8 @@ export default function Globe() {
 
       // Reused vector — allocated once per context, not per frame
       const _wp = new THREE.Vector3()
-      // Reference depth: camera at z=3, pin on the front face of the sphere (r=1.005)
-      const REF_DEPTH = 3 - 1.005
+      // Reference depth: camera at z=3, pin on the front face of the sphere (r=1.001)
+      const REF_DEPTH = 3 - 1.001
 
       const animate = () => {
         rafRef.current = requestAnimationFrame(animate)
@@ -215,8 +215,8 @@ export default function Globe() {
           group.rotation.y += vel.y
           group.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, group.rotation.x + vel.x))
           savedRotationRef.current = { x: group.rotation.x, y: group.rotation.y }
-          vel.x *= 0.92
-          vel.y *= 0.92
+          vel.x *= 0.88
+          vel.y *= 0.88
           if (Math.abs(vel.x) < 0.00005 && Math.abs(vel.y) < 0.00005) {
             velocityRef.current = { x: 0, y: 0 }
           }
@@ -281,7 +281,7 @@ export default function Globe() {
         const ddx = gs.dx - lastPanRef.current.dx
         const ddy = gs.dy - lastPanRef.current.dy
         lastPanRef.current = { dx: gs.dx, dy: gs.dy }
-        const panScale = 0.006 * ((cameraZRef.current - 1) / 4)
+        const panScale = 0.006 * ((cameraZRef.current - 1) / 5)
         group.rotation.y += ddx * panScale
         group.rotation.x = Math.max(
           -Math.PI / 2,
@@ -299,7 +299,7 @@ export default function Globe() {
           handleTap(gs.x0, gs.y0)
         } else {
           // px/ms from PanResponder × ~16ms/frame × pan scale = rad/frame
-          const scale = 0.006 * ((cameraZRef.current - 1) / 4)
+          const scale = 0.006 * ((cameraZRef.current - 1) / 5)
           velocityRef.current = {
             y: gs.vx * scale * 16,
             x: gs.vy * scale * 16,
