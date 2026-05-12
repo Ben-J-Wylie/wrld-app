@@ -25,11 +25,12 @@ export default function Login() {
     try {
       await signIn.create({ identifier: email })
       const result = await signIn.attemptFirstFactor({ strategy: 'password', password })
+      console.log('SIGNIN RESULT STATUS', result.status)
       if (result.status === 'complete') {
         await setActive({ session: result.createdSessionId })
         router.replace('/(app)/globe')
       } else {
-        Alert.alert('Sign in failed', 'Please check your email and password and try again.')
+        Alert.alert('Sign in failed', `Status: ${result.status}`)
       }
     } catch (err) {
       console.log('LOGIN ERROR', JSON.stringify(err))
