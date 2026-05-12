@@ -40,7 +40,6 @@ export default function StreamView() {
   const [controlsVisible, setControlsVisible] = useState(false)
   const [hopError, setHopError] = useState<string | null>(null)
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const autoJoinFiredRef = useRef(false)
 
   const isCameraArmed = broadcastSources.includes('camera')
   const showCameraPreview = isNew && status === 'in-room' && !!localStream && isCameraArmed
@@ -70,13 +69,13 @@ export default function StreamView() {
     }
   }, [])
 
-  // Auto-join on hop navigation
+  // Auto-join when id changes (hop) or on first mount with autoJoin param
   useEffect(() => {
-    if (!isNew && autoJoin === 'true' && status === 'idle' && !autoJoinFiredRef.current) {
-      autoJoinFiredRef.current = true
+    if (!isNew && autoJoin === 'true' && status === 'idle') {
       handleJoin()
     }
-  })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id])
 
   async function handleGoLive() {
     const title = (paramTitle ?? '').trim()
