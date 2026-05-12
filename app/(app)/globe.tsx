@@ -20,7 +20,7 @@ const EARTH_ASSET = require('../../assets/images/earth.jpg')
 // re-uploaded automatically by three.js when a new renderer encounters the object.
 let earthTexture: THREE.Texture | null = null
 
-function latLngToVec3(lat: number, lng: number, r = 1.04): THREE.Vector3 {
+function latLngToVec3(lat: number, lng: number, r = 1.005): THREE.Vector3 {
   const phi = (90 - lat) * (Math.PI / 180)
   const theta = (lng + 180) * (Math.PI / 180)
   return new THREE.Vector3(
@@ -55,6 +55,8 @@ export default function Globe() {
   // Auto-orient to GPS once; stop idle auto-rotation after first user touch
   const hasOrientedRef = useRef(false)
   const hasInteractedRef = useRef(false)
+  // Inertia velocity in radians/frame after a swipe
+  const velocityRef = useRef({ x: 0, y: 0 })
 
   // ── Gesture refs ───────────────────────────────────────────────────────────
   const containerSizeRef = useRef({
@@ -91,7 +93,7 @@ export default function Globe() {
     pinGeoRef.current = geo
     streamsRef.current.forEach((s) => {
       if (s.lat == null || s.lng == null) return
-      const mat = new THREE.MeshBasicMaterial({ color: 0xff3b5c })
+      const mat = new THREE.MeshBasicMaterial({ color: 0xff3b5c, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4 })
       const pin = new THREE.Mesh(geo, mat)
       pin.position.copy(latLngToVec3(s.lat, s.lng))
       group.add(pin)
@@ -158,7 +160,7 @@ export default function Globe() {
       renderer.setClearColor(0x0a0a0f)
 
       const scene = new THREE.Scene()
-      const camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 100)
+      const camera = new THREE.PerspectiveCamera(45, w / h, 0.01, 100)
       camera.position.z = cameraZRef.current
       cameraRef.current = camera
 
@@ -200,13 +202,24 @@ export default function Globe() {
 
       // Reused vector — allocated once per context, not per frame
       const _wp = new THREE.Vector3()
-      // Reference depth: camera at z=3, pin on the front face of the sphere (r=1.04)
-      const REF_DEPTH = 3 - 1.04
+      // Reference depth: camera at z=3, pin on the front face of the sphere (r=1.005)
+      const REF_DEPTH = 3 - 1.005
 
       const animate = () => {
         rafRef.current = requestAnimationFrame(animate)
         if (!hasInteractedRef.current) {
           group.rotation.y += 0.0008
+        }
+        const vel = velocityRef.current
+        if (vel.x !== 0 || vel.y !== 0) {
+          group.rotation.y += vel.y
+          group.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, group.rotation.x + vel.x))
+          savedRotationRef.current = { x: group.rotation.x, y: group.rotation.y }
+          vel.x *= 0.92
+          vel.y *= 0.92
+          if (Math.abs(vel.x) < 0.00005 && Math.abs(vel.y) < 0.00005) {
+            velocityRef.current = { x: 0, y: 0 }
+          }
         }
         // Maintain constant screen size: screen_size ∝ worldSize / depth.
         // getWorldPosition accounts for group rotation, so each pin gets its
@@ -238,6 +251,7 @@ export default function Globe() {
     onMoveShouldSetPanResponder: () => true,
     onPanResponderGrant: () => {
       hasInteractedRef.current = true
+      velocityRef.current = { x: 0, y: 0 }
       lastPanRef.current = { dx: 0, dy: 0 }
       lastPinchDistRef.current = null
     },
@@ -267,7 +281,7 @@ export default function Globe() {
         const ddx = gs.dx - lastPanRef.current.dx
         const ddy = gs.dy - lastPanRef.current.dy
         lastPanRef.current = { dx: gs.dx, dy: gs.dy }
-        const panScale = 0.006 * ((cameraZRef.current - 1) / 3)
+        const panScale = 0.006 * ((cameraZRef.current - 1) / 4)
         group.rotation.y += ddx * panScale
         group.rotation.x = Math.max(
           -Math.PI / 2,
@@ -281,7 +295,16 @@ export default function Globe() {
       lastPinchDistRef.current = null
       if (!wasPinching) {
         const moved = Math.sqrt(gs.dx * gs.dx + gs.dy * gs.dy)
-        if (moved < 8) handleTap(gs.x0, gs.y0)
+        if (moved < 8) {
+          handleTap(gs.x0, gs.y0)
+        } else {
+          // px/ms from PanResponder × ~16ms/frame × pan scale = rad/frame
+          const scale = 0.006 * ((cameraZRef.current - 1) / 4)
+          velocityRef.current = {
+            y: gs.vx * scale * 16,
+            x: gs.vy * scale * 16,
+          }
+        }
       }
     },
   })
