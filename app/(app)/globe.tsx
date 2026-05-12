@@ -267,7 +267,7 @@ export default function Globe() {
         const ddx = gs.dx - lastPanRef.current.dx
         const ddy = gs.dy - lastPanRef.current.dy
         lastPanRef.current = { dx: gs.dx, dy: gs.dy }
-        const panScale = 0.006 * (cameraZRef.current / 3)
+        const panScale = 0.006 * ((cameraZRef.current - 1) / 2)
         group.rotation.y += ddx * panScale
         group.rotation.x = Math.max(
           -Math.PI / 2,
