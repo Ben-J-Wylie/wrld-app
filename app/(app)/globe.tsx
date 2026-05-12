@@ -20,7 +20,7 @@ const EARTH_ASSET = require('../../assets/images/earth.jpg')
 // re-uploaded automatically by three.js when a new renderer encounters the object.
 let earthTexture: THREE.Texture | null = null
 
-function latLngToVec3(lat: number, lng: number, r = 1.02): THREE.Vector3 {
+function latLngToVec3(lat: number, lng: number, r = 1.04): THREE.Vector3 {
   const phi = (90 - lat) * (Math.PI / 180)
   const theta = (lng + 180) * (Math.PI / 180)
   return new THREE.Vector3(
@@ -200,8 +200,8 @@ export default function Globe() {
 
       // Reused vector — allocated once per context, not per frame
       const _wp = new THREE.Vector3()
-      // Reference depth: camera at z=3, pin on the front face of the sphere (r=1.02)
-      const REF_DEPTH = 3 - 1.02
+      // Reference depth: camera at z=3, pin on the front face of the sphere (r=1.04)
+      const REF_DEPTH = 3 - 1.04
 
       const animate = () => {
         rafRef.current = requestAnimationFrame(animate)
@@ -267,7 +267,7 @@ export default function Globe() {
         const ddx = gs.dx - lastPanRef.current.dx
         const ddy = gs.dy - lastPanRef.current.dy
         lastPanRef.current = { dx: gs.dx, dy: gs.dy }
-        const panScale = 0.006 * ((cameraZRef.current - 1) / 2.5)
+        const panScale = 0.006 * ((cameraZRef.current - 1) / 3)
         group.rotation.y += ddx * panScale
         group.rotation.x = Math.max(
           -Math.PI / 2,
