@@ -177,6 +177,8 @@ export default function Globe() {
           const asset = Asset.fromModule(EARTH_ASSET)
           await asset.downloadAsync()
           earthTexture = (await loadAsync(asset)) as THREE.Texture
+          earthTexture.anisotropy = renderer.capabilities.getMaxAnisotropy()
+          earthTexture.minFilter = THREE.LinearFilter
         } else {
           // Force the new renderer to re-upload to the new GL context
           earthTexture.needsUpdate = true
@@ -249,7 +251,7 @@ export default function Globe() {
         if (lastPinchDistRef.current !== null) {
           const camera = cameraRef.current
           if (camera) {
-            const newZ = Math.max(1.1, Math.min(8, camera.position.z * (lastPinchDistRef.current / dist)))
+            const newZ = Math.max(1.02, Math.min(8, camera.position.z * (lastPinchDistRef.current / dist)))
             camera.position.z = newZ
             cameraZRef.current = newZ
           }
