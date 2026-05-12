@@ -18,12 +18,11 @@ const SOURCE_LABELS: Record<SourceType, string> = {
 }
 
 export default function StreamView() {
-  const { id, streamId, title: paramTitle, sources: paramSources, autoJoin } = useLocalSearchParams<{
+  const { id, streamId, title: paramTitle, sources: paramSources } = useLocalSearchParams<{
     id: string
     streamId?: string
     title?: string
     sources?: string
-    autoJoin?: string
   }>()
   const isNew = id === 'new'
 
@@ -69,9 +68,9 @@ export default function StreamView() {
     }
   }, [])
 
-  // Auto-join when id changes (hop) or on first mount with autoJoin param
+  // Always auto-join when opening a stream as viewer
   useEffect(() => {
-    if (!isNew && autoJoin === 'true' && status === 'idle') {
+    if (!isNew && status === 'idle') {
       handleJoin()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -129,7 +128,6 @@ export default function StreamView() {
           id: target.mediasoupRoomId,
           streamId: target.id,
           sources: (target.sources ?? []).join(','),
-          autoJoin: 'true',
         },
       })
     } catch {
@@ -219,7 +217,6 @@ export default function StreamView() {
                 </>
               )}
               {isNew && !isSignedIn && <Text style={styles.muted}>Sign in to go live</Text>}
-              {!isNew && <Button label="Join stream" onPress={handleJoin} style={styles.wide} />}
               <Button label="Back" onPress={() => router.back()} variant="secondary" style={styles.wide} />
             </View>
           )}
