@@ -251,7 +251,7 @@ export default function Globe() {
         if (lastPinchDistRef.current !== null) {
           const camera = cameraRef.current
           if (camera) {
-            const newZ = Math.max(1.02, Math.min(8, camera.position.z * (lastPinchDistRef.current / dist)))
+            const newZ = Math.max(1.15, Math.min(8, camera.position.z * (lastPinchDistRef.current / dist)))
             camera.position.z = newZ
             cameraZRef.current = newZ
           }
@@ -267,10 +267,11 @@ export default function Globe() {
         const ddx = gs.dx - lastPanRef.current.dx
         const ddy = gs.dy - lastPanRef.current.dy
         lastPanRef.current = { dx: gs.dx, dy: gs.dy }
-        group.rotation.y += ddx * 0.006
+        const panScale = 0.006 * (cameraZRef.current / 3)
+        group.rotation.y += ddx * panScale
         group.rotation.x = Math.max(
           -Math.PI / 2,
-          Math.min(Math.PI / 2, group.rotation.x + ddy * 0.006),
+          Math.min(Math.PI / 2, group.rotation.x + ddy * panScale),
         )
         savedRotationRef.current = { x: group.rotation.x, y: group.rotation.y }
       }
