@@ -1,15 +1,16 @@
 import { View, Text, StyleSheet, ActivityIndicator, Pressable } from 'react-native'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLocalSearchParams, router } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { RTCView } from 'react-native-webrtc'
 import { Button } from '@/components/ui/Button'
+import { NearbyStreamsDrawer } from '@/components/feature/stream/NearbyStreamsDrawer'
 import { theme } from '@/lib/theme'
 import { useSignaling } from '@/hooks/useSignaling'
 import { useMediasoup } from '@/hooks/useMediasoup'
 import { useLocation } from '@/hooks/useLocation'
 import { useAuth } from '@clerk/clerk-expo'
-import type { SourceType } from '@/types'
+import type { Stream, SourceType } from '@/types'
 
 const SOURCE_LABELS: Record<SourceType, string> = {
   camera: 'Camera',
@@ -17,10 +18,12 @@ const SOURCE_LABELS: Record<SourceType, string> = {
 }
 
 export default function StreamView() {
-  const { id, title: paramTitle, sources: paramSources } = useLocalSearchParams<{
+  const { id, streamId, title: paramTitle, sources: paramSources, autoJoin } = useLocalSearchParams<{
     id: string
+    streamId?: string
     title?: string
     sources?: string
+    autoJoin?: string
   }>()
   const isNew = id === 'new'
 
@@ -34,11 +37,46 @@ export default function StreamView() {
   const { isSignedIn } = useAuth()
   const { coords, loading: locationLoading, error: locationError } = useLocation()
   const [activeSource, setActiveSource] = useState<SourceType | null>(null)
+  const [controlsVisible, setControlsVisible] = useState(false)
+  const [hopError, setHopError] = useState<string | null>(null)
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const autoJoinFiredRef = useRef(false)
 
   const isCameraArmed = broadcastSources.includes('camera')
   const showCameraPreview = isNew && status === 'in-room' && !!localStream && isCameraArmed
   const showRemoteVideo = !isNew && status === 'in-room' && !!remoteStream && broadcastSources.includes('camera')
   const showOverlay = showCameraPreview || showRemoteVideo
+  // Viewer shows controls on tap; broadcaster's overlay is always visible
+  const showControls = isNew || !showOverlay || controlsVisible || !!streamEnded
+
+  function scheduleHide() {
+    if (hideTimerRef.current) clearTimeout(hideTimerRef.current)
+    hideTimerRef.current = setTimeout(() => setControlsVisible(false), 3000)
+  }
+
+  function handleTap() {
+    if (controlsVisible) {
+      setControlsVisible(false)
+      if (hideTimerRef.current) clearTimeout(hideTimerRef.current)
+    } else {
+      setControlsVisible(true)
+      scheduleHide()
+    }
+  }
+
+  useEffect(() => {
+    return () => {
+      if (hideTimerRef.current) clearTimeout(hideTimerRef.current)
+    }
+  }, [])
+
+  // Auto-join on hop navigation
+  useEffect(() => {
+    if (!isNew && autoJoin === 'true' && status === 'idle' && !autoJoinFiredRef.current) {
+      autoJoinFiredRef.current = true
+      handleJoin()
+    }
+  })
 
   async function handleGoLive() {
     const title = (paramTitle ?? '').trim()
@@ -81,6 +119,25 @@ export default function StreamView() {
     router.back()
   }
 
+  function handleHop(target: Stream) {
+    if (!target.mediasoupRoomId || target.mediasoupRoomId === id) return
+    try {
+      cleanup()
+      disconnect()
+      router.replace({
+        pathname: '/(app)/stream/[id]',
+        params: {
+          id: target.mediasoupRoomId,
+          streamId: target.id,
+          sources: (target.sources ?? []).join(','),
+          autoJoin: 'true',
+        },
+      })
+    } catch {
+      setHopError('Failed to switch stream. Try again.')
+    }
+  }
+
   const canGoLive = !!paramTitle?.trim() && !!coords && !locationLoading && broadcastSources.length > 0
   const displayError = signalingError ?? mediaError
 
@@ -108,148 +165,173 @@ export default function StreamView() {
         />
       )}
 
+      {/* Tap-to-reveal layer for viewer fullscreen mode */}
+      {showRemoteVideo && (
+        <Pressable style={StyleSheet.absoluteFill} onPress={handleTap} />
+      )}
+
       <View style={styles.header}>
         <Pressable onPress={handleBack} style={styles.backBtn} hitSlop={12}>
           <Text style={[styles.backArrow, showOverlay && styles.overlayText]}>←</Text>
         </Pressable>
       </View>
 
-      <View style={styles.content}>
-        {!showOverlay && (
-          <Text style={styles.title}>{isNew ? 'Go Live' : 'Watch'}</Text>
-        )}
+      {showControls && (
+        <View style={styles.content}>
+          {!showOverlay && (
+            <Text style={styles.title}>{isNew ? 'Go Live' : 'Watch'}</Text>
+          )}
 
-        {/* ── Idle ─────────────────────────────────────────────── */}
-        {status === 'idle' && (
-          <View style={styles.actions}>
-            {isNew && isSignedIn && (
-              <>
-                {paramTitle ? (
-                  <Text style={styles.streamTitle}>{paramTitle}</Text>
-                ) : null}
-                {broadcastSources.length > 0 && (
+          {/* ── Idle ─────────────────────────────────────────────── */}
+          {status === 'idle' && (
+            <View style={styles.actions}>
+              {isNew && isSignedIn && (
+                <>
+                  {paramTitle ? (
+                    <Text style={styles.streamTitle}>{paramTitle}</Text>
+                  ) : null}
+                  {broadcastSources.length > 0 && (
+                    <View style={styles.sourceRow}>
+                      {broadcastSources.map((s) => (
+                        <View key={s} style={styles.sourceBadge}>
+                          <Text style={styles.sourceBadgeText}>{SOURCE_LABELS[s]}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                  {locationLoading && (
+                    <View style={styles.statusRow}>
+                      <ActivityIndicator color={theme.colors.accent} size="small" />
+                      <Text style={styles.muted}>Detecting location…</Text>
+                    </View>
+                  )}
+                  {locationError && <Text style={styles.muted}>{locationError}</Text>}
+                  {coords && !locationLoading && (
+                    <Text style={styles.muted}>
+                      {coords.latitude.toFixed(4)}, {coords.longitude.toFixed(4)}
+                    </Text>
+                  )}
+                  <Button
+                    label="Start stream"
+                    onPress={handleGoLive}
+                    disabled={!canGoLive}
+                    style={styles.wide}
+                  />
+                </>
+              )}
+              {isNew && !isSignedIn && <Text style={styles.muted}>Sign in to go live</Text>}
+              {!isNew && <Button label="Join stream" onPress={handleJoin} style={styles.wide} />}
+              <Button label="Back" onPress={() => router.back()} variant="secondary" style={styles.wide} />
+            </View>
+          )}
+
+          {/* ── Connecting ───────────────────────────────────────── */}
+          {(status === 'connecting' || status === 'connected' || status === 'authenticated') && (
+            <View style={styles.statusRow}>
+              <ActivityIndicator color={theme.colors.accent} />
+              <Text style={styles.muted}>
+                {status === 'connecting' && 'Connecting…'}
+                {status === 'connected' && 'Authenticating…'}
+                {status === 'authenticated' && 'Entering room…'}
+              </Text>
+            </View>
+          )}
+
+          {/* ── Stream ended (viewer) ────────────────────────────── */}
+          {streamEnded && (
+            <View style={styles.actions}>
+              <Text style={styles.muted}>The stream has ended.</Text>
+              <Button label="Back" onPress={() => router.back()} variant="secondary" style={styles.wide} />
+            </View>
+          )}
+
+          {/* ── Viewer: waiting for stream to load ───────────────── */}
+          {!isNew && status === 'in-room' && !remoteStream && !streamEnded && (
+            <View style={styles.statusRow}>
+              <ActivityIndicator color={theme.colors.accent} />
+              <Text style={styles.muted}>Loading stream…</Text>
+            </View>
+          )}
+
+          {/* ── In room ──────────────────────────────────────────── */}
+          {status === 'in-room' && !streamEnded && (!!remoteStream || isNew) && (
+            <View style={[styles.roomInfo, showOverlay && styles.roomInfoOverlay]}>
+              <View style={styles.liveRow}>
+                <Text style={styles.live}>● LIVE</Text>
+                {!showOverlay && (
+                  <Text style={styles.roomId}>{roomId}</Text>
+                )}
+              </View>
+
+              {/* Broadcaster */}
+              {isNew && (
+                <View style={styles.section}>
+                  {!showOverlay && <Text style={styles.sectionLabel}>BROADCASTING</Text>}
                   <View style={styles.sourceRow}>
                     {broadcastSources.map((s) => (
-                      <View key={s} style={styles.sourceBadge}>
-                        <Text style={styles.sourceBadgeText}>{SOURCE_LABELS[s]}</Text>
+                      <View key={s} style={styles.sourceActiveBadge}>
+                        <Text style={styles.sourceActiveBadgeText}>{SOURCE_LABELS[s]}</Text>
                       </View>
                     ))}
                   </View>
-                )}
-                {locationLoading && (
-                  <View style={styles.statusRow}>
-                    <ActivityIndicator color={theme.colors.accent} size="small" />
-                    <Text style={styles.muted}>Detecting location…</Text>
-                  </View>
-                )}
-                {locationError && <Text style={styles.muted}>{locationError}</Text>}
-                {coords && !locationLoading && (
-                  <Text style={styles.muted}>
-                    {coords.latitude.toFixed(4)}, {coords.longitude.toFixed(4)}
+                  <Text style={[styles.viewerCount, showOverlay && styles.overlayText]}>
+                    {viewerCount} {viewerCount === 1 ? 'viewer' : 'viewers'}
                   </Text>
-                )}
-                <Button
-                  label="Start stream"
-                  onPress={handleGoLive}
-                  disabled={!canGoLive}
-                  style={styles.wide}
-                />
-              </>
-            )}
-            {isNew && !isSignedIn && <Text style={styles.muted}>Sign in to go live</Text>}
-            {!isNew && <Button label="Join stream" onPress={handleJoin} style={styles.wide} />}
-            <Button label="Back" onPress={() => router.back()} variant="secondary" style={styles.wide} />
-          </View>
-        )}
-
-        {/* ── Connecting ───────────────────────────────────────── */}
-        {(status === 'connecting' || status === 'connected' || status === 'authenticated') && (
-          <View style={styles.statusRow}>
-            <ActivityIndicator color={theme.colors.accent} />
-            <Text style={styles.muted}>
-              {status === 'connecting' && 'Connecting…'}
-              {status === 'connected' && 'Authenticating…'}
-              {status === 'authenticated' && 'Entering room…'}
-            </Text>
-          </View>
-        )}
-
-        {/* ── Stream ended (viewer) ────────────────────────────── */}
-        {streamEnded && (
-          <View style={styles.actions}>
-            <Text style={styles.muted}>The stream has ended.</Text>
-            <Button label="Back" onPress={() => router.back()} variant="secondary" style={styles.wide} />
-          </View>
-        )}
-
-        {/* ── Viewer: waiting for stream to load ───────────────── */}
-        {!isNew && status === 'in-room' && !remoteStream && !streamEnded && (
-          <View style={styles.statusRow}>
-            <ActivityIndicator color={theme.colors.accent} />
-            <Text style={styles.muted}>Loading stream…</Text>
-          </View>
-        )}
-
-        {/* ── In room ──────────────────────────────────────────── */}
-        {status === 'in-room' && !streamEnded && (!!remoteStream || isNew) && (
-          <View style={[styles.roomInfo, showOverlay && styles.roomInfoOverlay]}>
-            <View style={styles.liveRow}>
-              <Text style={styles.live}>● LIVE</Text>
-              {!showOverlay && (
-                <Text style={styles.roomId}>{roomId}</Text>
+                </View>
               )}
+
+              {/* Viewer: source switcher */}
+              {!isNew && broadcastSources.length > 0 && (
+                <View style={styles.section}>
+                  {!showOverlay && <Text style={styles.sectionLabel}>SOURCES</Text>}
+                  <View style={styles.sourceRow}>
+                    {broadcastSources.map((kind) => (
+                      <Pressable
+                        key={kind}
+                        style={[styles.sourceSwitchBtn, activeSource === kind && styles.sourceSwitchBtnActive]}
+                        onPress={() => setActiveSource(kind)}
+                      >
+                        <Text style={[styles.sourceSwitchText, activeSource === kind && styles.sourceSwitchTextActive]}>
+                          {SOURCE_LABELS[kind]}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              <Button label="Leave" onPress={handleLeave} variant="danger" />
             </View>
+          )}
 
-            {/* Broadcaster */}
-            {isNew && (
-              <View style={styles.section}>
-                {!showOverlay && <Text style={styles.sectionLabel}>BROADCASTING</Text>}
-                <View style={styles.sourceRow}>
-                  {broadcastSources.map((s) => (
-                    <View key={s} style={styles.sourceActiveBadge}>
-                      <Text style={styles.sourceActiveBadgeText}>{SOURCE_LABELS[s]}</Text>
-                    </View>
-                  ))}
-                </View>
-                <Text style={[styles.viewerCount, showOverlay && styles.overlayText]}>
-                  {viewerCount} {viewerCount === 1 ? 'viewer' : 'viewers'}
-                </Text>
-              </View>
-            )}
+          {/* ── Error ────────────────────────────────────────────── */}
+          {status === 'error' && (
+            <View style={styles.actions}>
+              <Text style={styles.errorText}>{displayError}</Text>
+              <Button label="Retry" onPress={isNew ? handleGoLive : handleJoin} />
+              <Button label="Back" onPress={() => router.back()} variant="secondary" />
+            </View>
+          )}
 
-            {/* Viewer: source switcher */}
-            {!isNew && broadcastSources.length > 0 && (
-              <View style={styles.section}>
-                {!showOverlay && <Text style={styles.sectionLabel}>SOURCES</Text>}
-                <View style={styles.sourceRow}>
-                  {broadcastSources.map((kind) => (
-                    <Pressable
-                      key={kind}
-                      style={[styles.sourceSwitchBtn, activeSource === kind && styles.sourceSwitchBtnActive]}
-                      onPress={() => setActiveSource(kind)}
-                    >
-                      <Text style={[styles.sourceSwitchText, activeSource === kind && styles.sourceSwitchTextActive]}>
-                        {SOURCE_LABELS[kind]}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-              </View>
-            )}
+          {/* ── Hop error ────────────────────────────────────────── */}
+          {hopError && (
+            <View style={styles.actions}>
+              <Text style={styles.errorText}>{hopError}</Text>
+              <Button label="Dismiss" onPress={() => setHopError(null)} variant="secondary" />
+              <Button label="Back to globe" onPress={() => router.back()} variant="secondary" />
+            </View>
+          )}
+        </View>
+      )}
 
-            <Button label="Leave" onPress={handleLeave} variant="danger" />
-          </View>
-        )}
-
-        {/* ── Error ────────────────────────────────────────────── */}
-        {status === 'error' && (
-          <View style={styles.actions}>
-            <Text style={styles.errorText}>{displayError}</Text>
-            <Button label="Retry" onPress={isNew ? handleGoLive : handleJoin} />
-            <Button label="Back" onPress={() => router.back()} variant="secondary" />
-          </View>
-        )}
-      </View>
+      {/* Nearby streams drawer (viewer only) */}
+      {!isNew && streamId && (
+        <NearbyStreamsDrawer
+          currentStreamId={streamId}
+          visible={controlsVisible || !!streamEnded}
+          onHop={handleHop}
+        />
+      )}
     </SafeAreaView>
   )
 }

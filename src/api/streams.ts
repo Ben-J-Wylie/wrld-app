@@ -29,6 +29,11 @@ export const streamsApi = {
     return res.data.stream
   },
 
+  nearby: async (streamId: string): Promise<Stream[]> => {
+    const res = await apiClient.get<{ streams: Stream[] }>(`/streams/${streamId}/nearby`)
+    return res.data.streams
+  },
+
   create: async (input: { title: string; lat: number; lng: number }): Promise<Stream> => {
     const res = await apiClient.post<Stream>('/streams', input)
     return res.data

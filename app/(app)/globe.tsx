@@ -325,7 +325,7 @@ export default function Globe() {
       if (stream?.mediasoupRoomId) {
         router.push({
           pathname: `/(app)/stream/${stream.mediasoupRoomId}`,
-          params: { sources: (stream.sources ?? []).join(',') },
+          params: { streamId: stream.id, sources: (stream.sources ?? []).join(',') },
         })
       }
     }

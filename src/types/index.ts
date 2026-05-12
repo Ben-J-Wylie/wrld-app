@@ -22,4 +22,5 @@ export type Stream = {
   mediasoupRoomId?: string | null
   sources: SourceType[]
   distanceKm?: number
+  distanceMeters?: number
 }
