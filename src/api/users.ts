@@ -16,9 +16,7 @@ export const usersApi = {
     const ext = mimeType.split('/')[1] ?? 'jpg'
     const formData = new FormData()
     formData.append('file', { uri, type: mimeType, name: `avatar.${ext}` } as unknown as Blob)
-    const res = await apiClient.post<{ user: User }>('/users/me/avatar', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    })
+    const res = await apiClient.post<{ user: User }>('/users/me/avatar', formData)
     return res.data.user
   },
 

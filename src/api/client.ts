@@ -14,5 +14,9 @@ apiClient.interceptors.request.use(async (config) => {
   if (token && config.headers) {
     config.headers.Authorization = `Bearer ${token}`
   }
+  // Let React Native's XHR set Content-Type + boundary automatically for FormData
+  if (config.data instanceof FormData) {
+    config.headers.delete('Content-Type')
+  }
   return config
 })
