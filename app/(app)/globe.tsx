@@ -40,6 +40,17 @@ export default function Globe() {
 
   const [selectedStream, setSelectedStream] = useState<Stream | null>(null)
 
+  // Keep selectedStream fresh: clear it if it's no longer live, update data if it is.
+  useEffect(() => {
+    if (!selectedStream || !streams) return
+    const updated = streams.find((s) => s.id === selectedStream.id)
+    if (!updated) {
+      setSelectedStream(null)
+    } else if (updated !== selectedStream) {
+      setSelectedStream(updated)
+    }
+  }, [streams])
+
   // ── Three.js refs ──────────────────────────────────────────────────────────
   const globeGroupRef = useRef<THREE.Group | null>(null)
   const pinMeshesRef = useRef<THREE.Mesh[]>([])
