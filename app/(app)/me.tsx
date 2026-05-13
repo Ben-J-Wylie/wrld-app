@@ -37,6 +37,7 @@ export default function Me() {
   const [handleError, setHandleError] = useState('')
 
   const [avatarLoading, setAvatarLoading] = useState(false)
+  const [avatarError, setAvatarError] = useState('')
 
   function startEditName() {
     setDisplayName(user?.displayName ?? '')
@@ -106,12 +107,13 @@ export default function Me() {
     if (result.canceled || !result.assets[0]) return
     const asset = result.assets[0]
     setAvatarLoading(true)
+    setAvatarError('')
     try {
       const updated = await usersApi.uploadAvatar(asset.uri, asset.mimeType ?? 'image/jpeg')
       setCurrentUser(updated)
       setWrldUser(updated)
     } catch {
-      // non-fatal
+      setAvatarError('Upload failed — try again')
     } finally {
       setAvatarLoading(false)
     }
@@ -170,6 +172,7 @@ export default function Me() {
                 disabled={avatarLoading}
               />
             </View>
+            {!!avatarError && <Text style={styles.error}>{avatarError}</Text>}
           </View>
 
           {/* Display name */}
