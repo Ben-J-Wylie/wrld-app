@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef } from 'react'
-import { Dimensions, PanResponder, StyleSheet, Text, View } from 'react-native'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Dimensions, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native'
 import { router } from 'expo-router'
 import { Asset } from 'expo-asset'
 import { GLView } from 'expo-gl'
@@ -10,6 +10,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { theme } from '@/lib/theme'
 import { useLocation } from '@/hooks/useLocation'
 import { useStreamsNear } from '@/hooks/useStreamsNear'
+import { Avatar } from '@/components/feature/user/Avatar'
 import type { Stream } from '@/types'
 
 // Bundled 8192×4096 earth texture (Solar System Scope, free for commercial use)
@@ -36,6 +37,8 @@ export default function Globe() {
     coords?.latitude ?? null,
     coords?.longitude ?? null,
   )
+
+  const [selectedStream, setSelectedStream] = useState<Stream | null>(null)
 
   // ── Three.js refs ──────────────────────────────────────────────────────────
   const globeGroupRef = useRef<THREE.Group | null>(null)
@@ -322,13 +325,19 @@ export default function Globe() {
     if (hits.length > 0) {
       const idx = pinMeshesRef.current.indexOf(hits[0].object as THREE.Mesh)
       const stream = streamsRef.current[idx]
-      if (stream?.mediasoupRoomId) {
-        router.push({
-          pathname: `/(app)/stream/${stream.mediasoupRoomId}`,
-          params: { streamId: stream.id, sources: (stream.sources ?? []).join(',') },
-        })
-      }
+      if (stream) setSelectedStream(stream)
+    } else {
+      setSelectedStream(null)
     }
+  }
+
+  function joinSelectedStream() {
+    if (!selectedStream?.mediasoupRoomId) return
+    setSelectedStream(null)
+    router.push({
+      pathname: `/(app)/stream/${selectedStream.mediasoupRoomId}`,
+      params: { streamId: selectedStream.id, sources: (selectedStream.sources ?? []).join(',') },
+    })
   }
 
   const liveCount = streams?.length ?? 0
@@ -365,6 +374,36 @@ export default function Globe() {
           )}
         </SafeAreaView>
       </View>
+
+      {/* Stream card — shown when a pin is tapped */}
+      {selectedStream && (
+        <View style={styles.cardWrapper} pointerEvents="box-none">
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setSelectedStream(null)} />
+          <View style={styles.card}>
+            <View style={styles.cardLeft}>
+              {selectedStream.host && (
+                <Avatar
+                  avatarUrl={selectedStream.host.avatarUrl}
+                  displayName={selectedStream.host.displayName}
+                  size={44}
+                />
+              )}
+              <View style={styles.cardText}>
+                <Text style={styles.cardTitle} numberOfLines={1}>{selectedStream.title}</Text>
+                {selectedStream.host && (
+                  <Text style={styles.cardHandle}>@{selectedStream.host.handle}</Text>
+                )}
+                <Text style={styles.cardMeta}>
+                  {selectedStream.viewerCount} {selectedStream.viewerCount === 1 ? 'viewer' : 'viewers'}
+                </Text>
+              </View>
+            </View>
+            <Pressable style={styles.joinBtn} onPress={joinSelectedStream}>
+              <Text style={styles.joinBtnText}>Join</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
     </View>
   )
 }
@@ -393,4 +432,39 @@ const styles = StyleSheet.create({
   },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   hint: { ...theme.typography.body, color: theme.colors.textMuted },
+  cardWrapper: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: theme.spacing.lg,
+    paddingBottom: theme.spacing.xxl,
+  },
+  card: {
+    backgroundColor: theme.colors.bgElevated,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    padding: theme.spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.md,
+  },
+  cardLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+  },
+  cardText: { flex: 1, gap: 2 },
+  cardTitle: { ...theme.typography.body, color: theme.colors.text, fontWeight: '600' },
+  cardHandle: { ...theme.typography.caption, color: theme.colors.accent },
+  cardMeta: { ...theme.typography.caption, color: theme.colors.textMuted },
+  joinBtn: {
+    backgroundColor: theme.colors.live,
+    borderRadius: theme.radius.md,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  joinBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
 })

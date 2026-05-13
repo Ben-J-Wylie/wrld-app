@@ -1,5 +1,5 @@
 import '@/lib/polyfills'
-import { Stack } from 'expo-router'
+import { Stack, router } from 'expo-router'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -45,6 +45,14 @@ function RootNavigator() {
     }
   }, [isLoaded, isSignedIn])
 
+  // Redirect to onboarding when signed-in user still has a temp handle
+  const wrldUser = useAuthStore((s) => s.wrldUser)
+  useEffect(() => {
+    if (isLoaded && isSignedIn && wrldUser && wrldUser.handle.startsWith('user_')) {
+      router.replace('/onboarding')
+    }
+  }, [isLoaded, isSignedIn, wrldUser])
+
   if (!isLoaded) return null
 
   return (
@@ -52,6 +60,7 @@ function RootNavigator() {
       <Stack.Screen name="index" />
       <Stack.Screen name="(auth)" />
       <Stack.Screen name="(app)" />
+      <Stack.Screen name="onboarding" options={{ gestureEnabled: false }} />
     </Stack>
   )
 }

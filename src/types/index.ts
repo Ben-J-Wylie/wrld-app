@@ -1,8 +1,23 @@
 export type User = {
   id: string
+  clerkUserId: string
   email: string
+  handle: string
   displayName: string
-  avatarUrl?: string
+  avatarUrl: string | null
+  avatarUserSet: boolean
+  lastHandleChangeAt: string | null
+  createdAt: string
+}
+
+export type PublicUser = {
+  id: string
+  handle: string
+  displayName: string
+  avatarUrl: string | null
+  createdAt: string
+  followerCount: number
+  followingCount: number
 }
 
 export type SourceType = 'camera' | 'audio'
@@ -10,7 +25,7 @@ export type SourceType = 'camera' | 'audio'
 export type Stream = {
   id: string
   hostId: string
-  host?: { id: string; displayName: string; avatarUrl?: string | null }
+  host?: { id: string; handle: string; displayName: string; avatarUrl: string | null }
   hostDisplayName?: string
   title: string
   lat: number

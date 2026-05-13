@@ -15,8 +15,12 @@ export default function AppLayout() {
       }}
     >
       <Tabs.Screen name="globe" options={{ title: 'Globe' }} />
+      <Tabs.Screen name="search" options={{ title: 'Search' }} />
       <Tabs.Screen name="dashboard" options={{ title: 'Dashboard' }} />
+      <Tabs.Screen name="me" options={{ title: 'Me' }} />
       <Tabs.Screen name="stream/[id]" options={{ href: null }} />
+      <Tabs.Screen name="profile/[handle]" options={{ href: null }} />
+      <Tabs.Screen name="settings" options={{ href: null }} />
     </Tabs>
   )
 }

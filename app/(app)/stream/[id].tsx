@@ -5,11 +5,14 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { RTCView } from 'react-native-webrtc'
 import { Button } from '@/components/ui/Button'
 import { NearbyStreamsDrawer } from '@/components/feature/stream/NearbyStreamsDrawer'
+import { Avatar } from '@/components/feature/user/Avatar'
 import { theme } from '@/lib/theme'
 import { useSignaling } from '@/hooks/useSignaling'
 import { useMediasoup } from '@/hooks/useMediasoup'
 import { useLocation } from '@/hooks/useLocation'
+import { useStream } from '@/hooks/useStream'
 import { useAuth } from '@clerk/clerk-expo'
+import { useAuthStore } from '@/stores/authStore'
 import type { Stream, SourceType } from '@/types'
 
 const SOURCE_LABELS: Record<SourceType, string> = {
@@ -35,6 +38,12 @@ export default function StreamView() {
   const { localStream, remoteStream, error: mediaError, startBroadcasting, startViewing, cleanup } = useMediasoup()
   const { isSignedIn } = useAuth()
   const { coords, loading: locationLoading, error: locationError } = useLocation()
+  const wrldUser = useAuthStore((s: ReturnType<typeof useAuthStore.getState>) => s.wrldUser)
+  const { data: streamData } = useStream(!isNew ? streamId : null)
+
+  const broadcaster = isNew
+    ? (wrldUser ? { handle: wrldUser.handle, displayName: wrldUser.displayName, avatarUrl: wrldUser.avatarUrl } : null)
+    : (streamData?.host ?? null)
   const [activeSource, setActiveSource] = useState<SourceType | null>(null)
   const [controlsVisible, setControlsVisible] = useState(false)
   const [hopError, setHopError] = useState<string | null>(null)
@@ -259,6 +268,19 @@ export default function StreamView() {
                 )}
               </View>
 
+              {broadcaster && (
+                <View style={styles.broadcasterRow}>
+                  <Avatar
+                    avatarUrl={broadcaster.avatarUrl}
+                    displayName={broadcaster.displayName}
+                    size={32}
+                  />
+                  <Text style={[styles.broadcasterHandle, showOverlay && styles.overlayText]}>
+                    @{broadcaster.handle}
+                  </Text>
+                </View>
+              )}
+
               {/* Broadcaster */}
               {isNew && (
                 <View style={styles.section}>
@@ -404,4 +426,14 @@ const styles = StyleSheet.create({
   },
   sourceSwitchText: { ...theme.typography.body, color: theme.colors.textMuted, fontWeight: '600' },
   sourceSwitchTextActive: { color: theme.colors.accent },
+  broadcasterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+  },
+  broadcasterHandle: {
+    ...theme.typography.body,
+    color: theme.colors.textMuted,
+    fontWeight: '600',
+  },
 })
