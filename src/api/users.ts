@@ -1,4 +1,6 @@
 import { apiClient } from './client'
+import { getClerkToken } from '@/lib/clerkToken'
+import { env } from '@/lib/env'
 import type { User, PublicUser } from '@/types'
 
 export const usersApi = {
@@ -16,8 +18,15 @@ export const usersApi = {
     const ext = mimeType.split('/')[1] ?? 'jpg'
     const formData = new FormData()
     formData.append('file', { uri, type: mimeType, name: `avatar.${ext}` } as unknown as Blob)
-    const res = await apiClient.post<{ user: User }>('/users/me/avatar', formData)
-    return res.data.user
+    const token = await getClerkToken()
+    const res = await fetch(`${env.apiBaseUrl}/users/me/avatar`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    })
+    if (!res.ok) throw new Error(`Upload failed: ${res.status}`)
+    const data = await res.json() as { user: User }
+    return data.user
   },
 
   getUser: async (identifier: string): Promise<PublicUser> => {
