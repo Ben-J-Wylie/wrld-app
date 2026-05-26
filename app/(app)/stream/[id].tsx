@@ -8,6 +8,7 @@ import { NearbyStreamsDrawer } from '@/components/feature/stream/NearbyStreamsDr
 import { Avatar } from '@/components/feature/user/Avatar'
 import { theme } from '@/lib/theme'
 import { signalStreamDisconnected, signalStreamEnded } from '@/lib/streamSignals'
+import { streamsApi } from '@/api/streams'
 import { useSignaling } from '@/hooks/useSignaling'
 import { useMediasoup } from '@/hooks/useMediasoup'
 import { useLocation } from '@/hooks/useLocation'
@@ -49,6 +50,9 @@ export default function StreamView() {
   const [controlsVisible, setControlsVisible] = useState(false)
   const [hopError, setHopError] = useState<string | null>(null)
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Guards against double-navigation when multiple end signals arrive simultaneously
+  // (e.g. broadcasterLeft WS message + viewer WS close in the same render cycle).
+  const navigatingRef = useRef(false)
 
   const isCameraArmed = broadcastSources.includes('camera')
   const showCameraPreview = isNew && status === 'in-room' && !!localStream && isCameraArmed
@@ -71,25 +75,54 @@ export default function StreamView() {
     }
   }
 
-  // Viewer: broadcaster left → go to globe immediately with "ended" signal
-  useEffect(() => {
-    if (!streamEnded || isNew) return
+  // Single exit point for all viewer stream-end scenarios.
+  // navigatingRef ensures only the first trigger wins when multiple signals
+  // arrive in the same render cycle (e.g. broadcasterLeft + WS close together).
+  function exitToGlobe(kind: 'ended' | 'disconnected') {
+    if (navigatingRef.current) return
+    navigatingRef.current = true
     cleanup()
     disconnect()
-    signalStreamEnded()
-    router.navigate('/(app)/globe')
+    if (kind === 'ended') {
+      signalStreamEnded()
+    } else {
+      signalStreamDisconnected(broadcaster?.handle ?? null)
+    }
+    router.back()
+  }
+
+  // Fast path 1: server sent broadcasterLeft
+  useEffect(() => {
+    if (!streamEnded || isNew) return
+    exitToGlobe('ended')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [streamEnded])
 
-  // Viewer: connection dropped → go to globe immediately with "disconnected" signal
+  // Fast path 2: viewer's own WS dropped unexpectedly
   useEffect(() => {
     if (status !== 'dropped' || isNew) return
-    cleanup()
-    disconnect()
-    signalStreamDisconnected(broadcaster?.handle ?? null)
-    router.navigate('/(app)/globe')
+    exitToGlobe('disconnected')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status])
+
+  // Fallback: poll stream status every 10s.
+  // Catches cases where neither broadcasterLeft nor a clean WS close arrive
+  // (Android force-kill delay, iOS graceful-leave race, server-side quirks).
+  useEffect(() => {
+    if (isNew || !streamId || status !== 'in-room') return
+    const pollId = setInterval(async () => {
+      if (navigatingRef.current) { clearInterval(pollId); return }
+      try {
+        const s = await streamsApi.get(streamId)
+        if (!s.isLive) {
+          clearInterval(pollId)
+          exitToGlobe('ended')
+        }
+      } catch {}
+    }, 10_000)
+    return () => clearInterval(pollId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isNew, streamId, status])
 
   useEffect(() => {
     return () => {
