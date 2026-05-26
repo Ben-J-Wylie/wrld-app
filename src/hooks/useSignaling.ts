@@ -33,8 +33,16 @@ export function useSignaling() {
   }, [])
 
   useEffect(() => {
-    return signalingClient.onClose(() => {
-      setStatus(intentionalRef.current ? 'idle' : 'dropped')
+    return signalingClient.onClose((code) => {
+      if (intentionalRef.current) {
+        setStatus('idle')
+      } else if (code === 4001) {
+        // Server explicitly closed our socket because the broadcaster left.
+        // Treat identically to receiving a broadcasterLeft WS message.
+        setStreamEnded(true)
+      } else {
+        setStatus('dropped')
+      }
       intentionalRef.current = false
       setRoomId(null)
       setProducers([])

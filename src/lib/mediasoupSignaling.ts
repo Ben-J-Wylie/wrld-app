@@ -30,7 +30,7 @@ export type ServerMessage =
 class MediasoupSignalingClient {
   private ws: WebSocket | null = null
   private msgCbs = new Set<(msg: ServerMessage) => void>()
-  private closeCbs = new Set<() => void>()
+  private closeCbs = new Set<(code: number) => void>()
 
   connect(url: string): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -44,7 +44,7 @@ class MediasoupSignalingClient {
 
       ws.onopen = () => resolve()
       ws.onerror = () => reject(new Error('WebSocket connection failed'))
-      ws.onclose = () => this.closeCbs.forEach((cb) => cb())
+      ws.onclose = (event) => this.closeCbs.forEach((cb) => cb((event as CloseEvent).code ?? 1006))
       ws.onmessage = (event: MessageEvent) => {
         try {
           const msg: ServerMessage = JSON.parse(event.data as string)
@@ -75,7 +75,7 @@ class MediasoupSignalingClient {
     return () => this.msgCbs.delete(cb)
   }
 
-  onClose(cb: () => void): () => void {
+  onClose(cb: (code: number) => void): () => void {
     this.closeCbs.add(cb)
     return () => this.closeCbs.delete(cb)
   }
