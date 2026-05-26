@@ -88,7 +88,7 @@ export default function StreamView() {
     } else {
       signalStreamDisconnected(broadcaster?.handle ?? null)
     }
-    router.back()
+    router.navigate('/(app)/globe')
   }
 
   // Fast path 1: server sent broadcasterLeft
@@ -182,7 +182,7 @@ export default function StreamView() {
   function handleLeave() {
     cleanup()
     disconnect()
-    router.back()
+    router.navigate('/(app)/globe')
   }
 
   function handleBack() {
@@ -190,7 +190,7 @@ export default function StreamView() {
       cleanup()
       disconnect()
     }
-    router.back()
+    router.navigate('/(app)/globe')
   }
 
   function handleHop(target: Stream) {
@@ -293,7 +293,7 @@ export default function StreamView() {
                 </>
               )}
               {isNew && !isSignedIn && <Text style={styles.muted}>Sign in to go live</Text>}
-              <Button label="Back" onPress={() => router.back()} variant="secondary" style={styles.wide} />
+              <Button label="Back" onPress={() => router.navigate('/(app)/globe')} variant="secondary" style={styles.wide} />
             </View>
           )}
 
@@ -400,7 +400,7 @@ export default function StreamView() {
             <View style={styles.actions}>
               <Text style={styles.errorText}>{displayError}</Text>
               <Button label="Retry" onPress={isNew ? handleGoLive : handleJoin} />
-              <Button label="Back" onPress={() => router.back()} variant="secondary" />
+              <Button label="Back" onPress={() => router.navigate('/(app)/globe')} variant="secondary" />
             </View>
           )}
 
@@ -409,7 +409,7 @@ export default function StreamView() {
             <View style={styles.actions}>
               <Text style={styles.errorText}>{hopError}</Text>
               <Button label="Dismiss" onPress={() => setHopError(null)} variant="secondary" />
-              <Button label="Back to globe" onPress={() => router.back()} variant="secondary" />
+              <Button label="Back to globe" onPress={() => router.navigate('/(app)/globe')} variant="secondary" />
             </View>
           )}
         </View>
