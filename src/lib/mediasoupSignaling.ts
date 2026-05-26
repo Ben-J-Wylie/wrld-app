@@ -34,7 +34,10 @@ class MediasoupSignalingClient {
 
   connect(url: string): Promise<void> {
     return new Promise((resolve, reject) => {
-      this.ws?.close()
+      if (this.ws) {
+        this.ws.onclose = null
+        this.ws.close()
+      }
 
       const ws = new WebSocket(url)
       this.ws = ws
