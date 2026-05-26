@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ActivityIndicator, Pressable } from 'react-native'
+import { View, Text, StyleSheet, ActivityIndicator, Pressable, AppState } from 'react-native'
 import { useEffect, useRef, useState } from 'react'
 import { useLocalSearchParams, router } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -139,6 +139,21 @@ export default function StreamView() {
     handleJoin()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
+
+  // Broadcaster: close the WS when the app goes to background so the server
+  // immediately fires broadcasterLeft to all viewers. Without this, iOS/Android
+  // keeps the socket alive in background and viewers are stuck on a frozen frame.
+  useEffect(() => {
+    if (!isNew || status !== 'in-room') return
+    const sub = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'background') {
+        cleanup()
+        disconnect()
+      }
+    })
+    return () => sub.remove()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isNew, status])
 
   async function handleGoLive() {
     const title = (paramTitle ?? '').trim()
