@@ -53,6 +53,7 @@ export function useSignaling() {
   const connect = useCallback(async () => {
     setStatus('connecting')
     setError(null)
+    setStreamEnded(false)
     try {
       await signalingClient.connect(env.mediasoupWssUrl)
       setStatus('connected')

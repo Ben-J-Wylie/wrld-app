@@ -130,11 +130,13 @@ export default function StreamView() {
     }
   }, [])
 
-  // Always auto-join when opening a stream as viewer
+  // Auto-join (or re-join after a hop) whenever the room id changes.
+  // Reset navigatingRef so exitToGlobe works fresh for the new session.
   useEffect(() => {
-    if (!isNew && status === 'idle') {
-      handleJoin()
-    }
+    if (isNew) return
+    navigatingRef.current = false
+    cleanup()
+    handleJoin()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
@@ -251,12 +253,12 @@ export default function StreamView() {
 
       {showControls && (
         <View style={styles.content}>
-          {!showOverlay && (
-            <Text style={styles.title}>{isNew ? 'Go Live' : 'Watch'}</Text>
+          {!showOverlay && isNew && (
+            <Text style={styles.title}>Go Live</Text>
           )}
 
-          {/* ── Idle ─────────────────────────────────────────────── */}
-          {status === 'idle' && (
+          {/* ── Idle (broadcaster only) ───────────────────────────── */}
+          {status === 'idle' && isNew && (
             <View style={styles.actions}>
               {isNew && isSignedIn && (
                 <>
