@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Dimensions, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native'
-import { router } from 'expo-router'
+import { router, useFocusEffect } from 'expo-router'
+import { consumeStreamPaused } from '@/lib/streamSignals'
 import { Asset } from 'expo-asset'
 import { GLView } from 'expo-gl'
 import type { ExpoWebGLRenderingContext } from 'expo-gl'
@@ -39,6 +40,20 @@ export default function Globe() {
   )
 
   const [selectedStream, setSelectedStream] = useState<Stream | null>(null)
+  const [streamPausedBanner, setStreamPausedBanner] = useState(false)
+  const pausedBannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useFocusEffect(
+    useCallback(() => {
+      if (consumeStreamPaused()) {
+        setStreamPausedBanner(true)
+        pausedBannerTimerRef.current = setTimeout(() => setStreamPausedBanner(false), 4000)
+      }
+      return () => {
+        if (pausedBannerTimerRef.current) clearTimeout(pausedBannerTimerRef.current)
+      }
+    }, []),
+  )
 
   // Keep selectedStream fresh: clear it if it's no longer live, update data if it is.
   useEffect(() => {
@@ -383,6 +398,11 @@ export default function Globe() {
               <Text style={styles.hint}>No live streams nearby</Text>
             </View>
           )}
+          {streamPausedBanner && (
+            <View style={styles.pausedBanner}>
+              <Text style={styles.pausedBannerText}>Stream paused — connection lost</Text>
+            </View>
+          )}
         </SafeAreaView>
       </View>
 
@@ -478,4 +498,16 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.sm,
   },
   joinBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  pausedBanner: {
+    marginHorizontal: theme.spacing.lg,
+    marginTop: theme.spacing.sm,
+    backgroundColor: theme.colors.bgElevated,
+    borderRadius: theme.radius.md,
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    alignItems: 'center',
+  },
+  pausedBannerText: { ...theme.typography.caption, color: theme.colors.textMuted },
 })

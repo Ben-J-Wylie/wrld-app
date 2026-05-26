@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { signalingClient } from '@/lib/mediasoupSignaling'
 import { getClerkToken } from '@/lib/clerkToken'
 import { env } from '@/lib/env'
@@ -10,6 +10,7 @@ export type SignalingStatus =
   | 'authenticated'
   | 'in-room'
   | 'error'
+  | 'dropped'
 
 type Producer = { id: string; kind: string }
 
@@ -20,6 +21,8 @@ export function useSignaling() {
   const [viewerCount, setViewerCount] = useState(0)
   const [streamEnded, setStreamEnded] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Distinguishes intentional disconnect() calls from unexpected network drops.
+  const intentionalRef = useRef(false)
 
   useEffect(() => {
     const unsub = signalingClient.onMessage((msg) => {
@@ -31,7 +34,8 @@ export function useSignaling() {
 
   useEffect(() => {
     return signalingClient.onClose(() => {
-      setStatus('idle')
+      setStatus(intentionalRef.current ? 'idle' : 'dropped')
+      intentionalRef.current = false
       setRoomId(null)
       setProducers([])
       setViewerCount(0)
@@ -41,32 +45,50 @@ export function useSignaling() {
   const connect = useCallback(async () => {
     setStatus('connecting')
     setError(null)
-    await signalingClient.connect(env.mediasoupWssUrl)
-    setStatus('connected')
-
-    const token = await getClerkToken()
-    if (token) {
-      await signalingClient.authenticate(token)
-      setStatus('authenticated')
+    try {
+      await signalingClient.connect(env.mediasoupWssUrl)
+      setStatus('connected')
+      const token = await getClerkToken()
+      if (token) {
+        await signalingClient.authenticate(token)
+        setStatus('authenticated')
+      }
+    } catch (err) {
+      setStatus('error')
+      setError(err instanceof Error ? err.message : 'Connection failed')
+      throw err
     }
   }, [])
 
   const createRoom = useCallback(async (meta: { title: string; lat: number; lng: number; sources: string[] }) => {
-    const id = await signalingClient.createRoom(meta)
-    setRoomId(id)
-    setStatus('in-room')
-    return id
+    try {
+      const id = await signalingClient.createRoom(meta)
+      setRoomId(id)
+      setStatus('in-room')
+      return id
+    } catch (err) {
+      setStatus('error')
+      setError(err instanceof Error ? err.message : 'Failed to create room')
+      throw err
+    }
   }, [])
 
   const joinRoom = useCallback(async (id: string) => {
-    const prods = await signalingClient.joinRoom(id)
-    setRoomId(id)
-    setProducers(prods)
-    setStatus('in-room')
-    return prods
+    try {
+      const prods = await signalingClient.joinRoom(id)
+      setRoomId(id)
+      setProducers(prods)
+      setStatus('in-room')
+      return prods
+    } catch (err) {
+      setStatus('error')
+      setError(err instanceof Error ? err.message : 'Failed to join stream')
+      throw err
+    }
   }, [])
 
   const disconnect = useCallback(() => {
+    intentionalRef.current = true
     signalingClient.disconnect()
     setStatus('idle')
     setRoomId(null)
@@ -74,5 +96,16 @@ export function useSignaling() {
     setError(null)
   }, [])
 
-  return { status, roomId, producers, viewerCount, streamEnded, error, setError, connect, createRoom, joinRoom, disconnect }
+  return {
+    status, setStatus,
+    roomId,
+    producers,
+    viewerCount,
+    streamEnded,
+    error, setError,
+    connect,
+    createRoom,
+    joinRoom,
+    disconnect,
+  }
 }
