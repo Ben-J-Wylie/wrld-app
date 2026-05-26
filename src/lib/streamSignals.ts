@@ -1,11 +1,19 @@
-let _streamPaused = false
+export type StreamSignal =
+  | { kind: 'disconnected'; broadcasterHandle: string | null }
+  | { kind: 'ended' }
 
-export function signalStreamPaused() {
-  _streamPaused = true
+let _signal: StreamSignal | null = null
+
+export function signalStreamDisconnected(broadcasterHandle: string | null) {
+  _signal = { kind: 'disconnected', broadcasterHandle }
 }
 
-export function consumeStreamPaused(): boolean {
-  const v = _streamPaused
-  _streamPaused = false
+export function signalStreamEnded() {
+  _signal = { kind: 'ended' }
+}
+
+export function consumeStreamSignal(): StreamSignal | null {
+  const v = _signal
+  _signal = null
   return v
 }

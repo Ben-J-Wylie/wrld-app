@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Dimensions, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, Dimensions, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native'
 import { router, useFocusEffect } from 'expo-router'
-import { consumeStreamPaused } from '@/lib/streamSignals'
+import { consumeStreamSignal } from '@/lib/streamSignals'
+import { streamsApi } from '@/api/streams'
 import { Asset } from 'expo-asset'
 import { GLView } from 'expo-gl'
 import type { ExpoWebGLRenderingContext } from 'expo-gl'
 import * as THREE from 'three'
 import { Renderer, loadAsync } from 'expo-three'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { theme } from '@/lib/theme'
 import { useLocation } from '@/hooks/useLocation'
 import { useStreamsNear } from '@/hooks/useStreamsNear'
@@ -39,21 +40,99 @@ export default function Globe() {
     coords?.longitude ?? null,
   )
 
+  const insets = useSafeAreaInsets()
+
   const [selectedStream, setSelectedStream] = useState<Stream | null>(null)
-  const [streamPausedBanner, setStreamPausedBanner] = useState(false)
-  const pausedBannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  type BannerData =
+    | { kind: 'disconnected'; broadcasterHandle: string | null }
+    | { kind: 'ended' }
+    | { kind: 'resumed'; stream: Stream; broadcasterHandle: string | null }
+  const [banner, setBanner] = useState<BannerData | null>(null)
+  const bannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const bannerPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const coordsRef = useRef(coords)
+
+  useEffect(() => { coordsRef.current = coords }, [coords])
 
   useFocusEffect(
     useCallback(() => {
-      if (consumeStreamPaused()) {
-        setStreamPausedBanner(true)
-        pausedBannerTimerRef.current = setTimeout(() => setStreamPausedBanner(false), 4000)
-      }
-      return () => {
-        if (pausedBannerTimerRef.current) clearTimeout(pausedBannerTimerRef.current)
+      const signal = consumeStreamSignal()
+      if (!signal) return
+      if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current)
+      if (bannerPollRef.current) clearInterval(bannerPollRef.current)
+      if (signal.kind === 'ended') {
+        setBanner({ kind: 'ended' })
+      } else {
+        setBanner({ kind: 'disconnected', broadcasterHandle: signal.broadcasterHandle })
       }
     }, []),
   )
+
+  // Auto-dismiss 'ended' banner after 8s
+  useEffect(() => {
+    if (!banner || banner.kind !== 'ended') return
+    bannerTimerRef.current = setTimeout(() => setBanner(null), 8000)
+    return () => { if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current) }
+  }, [banner?.kind])
+
+  // Poll for broadcaster reconnect when banner is 'disconnected'
+  useEffect(() => {
+    if (!banner || banner.kind !== 'disconnected') return
+    const { broadcasterHandle } = banner
+
+    if (!broadcasterHandle) {
+      bannerTimerRef.current = setTimeout(() => setBanner(null), 5 * 60 * 1000)
+      return () => { if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current) }
+    }
+
+    let polls = 0
+    bannerPollRef.current = setInterval(async () => {
+      polls++
+      if (polls > 30) {
+        clearInterval(bannerPollRef.current!)
+        bannerPollRef.current = null
+        setBanner(null)
+        return
+      }
+      const c = coordsRef.current
+      if (!c) return
+      try {
+        const nearby = await streamsApi.near(c.latitude, c.longitude)
+        const resumed = nearby.find(
+          (s) => s.host?.handle === broadcasterHandle && s.isLive && s.mediasoupRoomId,
+        )
+        if (resumed?.mediasoupRoomId) {
+          clearInterval(bannerPollRef.current!)
+          bannerPollRef.current = null
+          setBanner({ kind: 'resumed', stream: resumed, broadcasterHandle })
+        }
+      } catch {}
+    }, 10_000)
+
+    return () => {
+      if (bannerPollRef.current) {
+        clearInterval(bannerPollRef.current)
+        bannerPollRef.current = null
+      }
+    }
+  }, [banner?.kind])
+
+  function dismissBanner() {
+    if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current)
+    if (bannerPollRef.current) clearInterval(bannerPollRef.current)
+    setBanner(null)
+  }
+
+  function handleBannerTap() {
+    if (!banner || banner.kind !== 'resumed' || !banner.stream.mediasoupRoomId) return
+    const { stream } = banner
+    dismissBanner()
+    router.push({
+      pathname: `/(app)/stream/${stream.mediasoupRoomId}`,
+      params: { streamId: stream.id, sources: stream.sources.join(',') },
+    })
+  }
 
   // Keep selectedStream fresh: clear it if it's no longer live, update data if it is.
   useEffect(() => {
@@ -398,13 +477,39 @@ export default function Globe() {
               <Text style={styles.hint}>No live streams nearby</Text>
             </View>
           )}
-          {streamPausedBanner && (
-            <View style={styles.pausedBanner}>
-              <Text style={styles.pausedBannerText}>Stream paused — connection lost</Text>
-            </View>
-          )}
         </SafeAreaView>
       </View>
+
+      {/* Stream reconnect banner — interactive, outside the pointerEvents="none" layer */}
+      {banner && (
+        <View style={[styles.bannerWrapper, { top: insets.top + 56 }]} pointerEvents="box-none">
+          <Pressable
+            style={[
+              styles.banner,
+              banner.kind === 'resumed' ? styles.bannerResumed : styles.bannerMuted,
+            ]}
+            onPress={banner.kind === 'resumed' ? handleBannerTap : undefined}
+          >
+            <View style={styles.bannerContent}>
+              {banner.kind === 'disconnected' && (
+                <>
+                  <ActivityIndicator size="small" color={theme.colors.textMuted} style={styles.bannerSpinner} />
+                  <Text style={styles.bannerText}>Stream disconnected — waiting to reconnect</Text>
+                </>
+              )}
+              {banner.kind === 'ended' && (
+                <Text style={styles.bannerText}>The stream has ended</Text>
+              )}
+              {banner.kind === 'resumed' && (
+                <Text style={[styles.bannerText, styles.bannerTextResumed]}>Stream resumed — tap to rejoin</Text>
+              )}
+            </View>
+            <Pressable onPress={dismissBanner} hitSlop={12} style={styles.bannerClose}>
+              <Text style={styles.bannerCloseText}>✕</Text>
+            </Pressable>
+          </Pressable>
+        </View>
+      )}
 
       {/* Stream card — shown when a pin is tapped */}
       {selectedStream && (
@@ -498,16 +603,33 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.sm,
   },
   joinBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
-  pausedBanner: {
-    marginHorizontal: theme.spacing.lg,
-    marginTop: theme.spacing.sm,
-    backgroundColor: theme.colors.bgElevated,
+  bannerWrapper: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    paddingHorizontal: theme.spacing.md,
+  },
+  banner: {
     borderRadius: theme.radius.md,
+    borderWidth: 1,
     paddingVertical: theme.spacing.sm,
     paddingHorizontal: theme.spacing.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: theme.spacing.sm,
   },
-  pausedBannerText: { ...theme.typography.caption, color: theme.colors.textMuted },
+  bannerMuted: {
+    backgroundColor: theme.colors.bgElevated,
+    borderColor: theme.colors.border,
+  },
+  bannerResumed: {
+    backgroundColor: '#0D2B1F',
+    borderColor: theme.colors.success,
+  },
+  bannerContent: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
+  bannerSpinner: { flexShrink: 0 },
+  bannerText: { ...theme.typography.caption, color: theme.colors.textMuted, flex: 1 },
+  bannerTextResumed: { color: theme.colors.success },
+  bannerClose: { flexShrink: 0 },
+  bannerCloseText: { ...theme.typography.caption, color: theme.colors.textMuted },
 })

@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/Button'
 import { NearbyStreamsDrawer } from '@/components/feature/stream/NearbyStreamsDrawer'
 import { Avatar } from '@/components/feature/user/Avatar'
 import { theme } from '@/lib/theme'
-import { signalStreamPaused } from '@/lib/streamSignals'
+import { signalStreamDisconnected, signalStreamEnded } from '@/lib/streamSignals'
 import { useSignaling } from '@/hooks/useSignaling'
 import { useMediasoup } from '@/hooks/useMediasoup'
 import { useLocation } from '@/hooks/useLocation'
@@ -20,8 +20,6 @@ const SOURCE_LABELS: Record<SourceType, string> = {
   camera: 'Camera',
   audio: 'Audio',
 }
-
-const RECONNECT_SECONDS = 30
 
 export default function StreamView() {
   const { id, streamId, title: paramTitle, sources: paramSources } = useLocalSearchParams<{
@@ -50,16 +48,13 @@ export default function StreamView() {
   const [activeSource, setActiveSource] = useState<SourceType | null>(null)
   const [controlsVisible, setControlsVisible] = useState(false)
   const [hopError, setHopError] = useState<string | null>(null)
-  const [reconnectCountdown, setReconnectCountdown] = useState<number | null>(null)
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const reconnectIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const isCameraArmed = broadcastSources.includes('camera')
   const showCameraPreview = isNew && status === 'in-room' && !!localStream && isCameraArmed
   const showRemoteVideo = !isNew && status === 'in-room' && !!remoteStream && broadcastSources.includes('camera')
   const showOverlay = showCameraPreview || showRemoteVideo
-  const showControls = isNew || !showOverlay || controlsVisible || !!streamEnded
+  const showControls = isNew || !showOverlay || controlsVisible
 
   function scheduleHide() {
     if (hideTimerRef.current) clearTimeout(hideTimerRef.current)
@@ -76,37 +71,29 @@ export default function StreamView() {
     }
   }
 
-  // Viewer reconnect: when connection drops unexpectedly, count down 30s then go to globe.
+  // Viewer: broadcaster left → go to globe immediately with "ended" signal
+  useEffect(() => {
+    if (!streamEnded || isNew) return
+    cleanup()
+    disconnect()
+    signalStreamEnded()
+    router.navigate('/(app)/globe')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [streamEnded])
+
+  // Viewer: connection dropped → go to globe immediately with "disconnected" signal
   useEffect(() => {
     if (status !== 'dropped' || isNew) return
-
-    setReconnectCountdown(RECONNECT_SECONDS)
-
-    reconnectIntervalRef.current = setInterval(() => {
-      setReconnectCountdown((c) => (c !== null && c > 0 ? c - 1 : c))
-    }, 1000)
-
-    reconnectTimerRef.current = setTimeout(() => {
-      clearInterval(reconnectIntervalRef.current!)
-      reconnectIntervalRef.current = null
-      cleanup()
-      disconnect()
-      signalStreamPaused()
-      router.navigate('/(app)/globe')
-    }, RECONNECT_SECONDS * 1000)
-
-    return () => {
-      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current)
-      if (reconnectIntervalRef.current) clearInterval(reconnectIntervalRef.current)
-      setReconnectCountdown(null)
-    }
-  }, [status, isNew])
+    cleanup()
+    disconnect()
+    signalStreamDisconnected(broadcaster?.handle ?? null)
+    router.navigate('/(app)/globe')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status])
 
   useEffect(() => {
     return () => {
       if (hideTimerRef.current) clearTimeout(hideTimerRef.current)
-      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current)
-      if (reconnectIntervalRef.current) clearInterval(reconnectIntervalRef.current)
     }
   }, [])
 
@@ -289,25 +276,6 @@ export default function StreamView() {
             </View>
           )}
 
-          {/* ── Stream ended (viewer received broadcasterLeft) ────── */}
-          {streamEnded && (
-            <View style={styles.actions}>
-              <Text style={styles.muted}>The stream has ended.</Text>
-              <Button label="Back" onPress={() => router.back()} variant="secondary" style={styles.wide} />
-            </View>
-          )}
-
-          {/* ── Viewer: connection dropped — reconnect countdown ──── */}
-          {status === 'dropped' && !isNew && !streamEnded && (
-            <View style={styles.actions}>
-              <ActivityIndicator color={theme.colors.accent} />
-              <Text style={styles.muted}>Reconnecting…</Text>
-              {reconnectCountdown !== null && (
-                <Text style={styles.countdown}>{reconnectCountdown}s</Text>
-              )}
-            </View>
-          )}
-
           {/* ── Broadcaster: connection dropped ───────────────────── */}
           {status === 'dropped' && isNew && (
             <View style={styles.actions}>
@@ -418,7 +386,7 @@ export default function StreamView() {
       {!isNew && streamId && (
         <NearbyStreamsDrawer
           currentStreamId={streamId}
-          visible={controlsVisible || !!streamEnded}
+          visible={controlsVisible}
           onHop={handleHop}
         />
       )}
@@ -439,7 +407,6 @@ const styles = StyleSheet.create({
   streamTitle: { ...theme.typography.heading, color: theme.colors.text, textAlign: 'center' },
   muted: { ...theme.typography.body, color: theme.colors.textMuted, textAlign: 'center' },
   errorText: { ...theme.typography.body, color: theme.colors.danger, textAlign: 'center' },
-  countdown: { ...theme.typography.title, color: theme.colors.text, fontVariant: ['tabular-nums'] },
   overlayText: { color: '#fff', textShadowColor: 'rgba(0,0,0,0.6)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
   liveRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
   live: { ...theme.typography.heading, color: theme.colors.live },
