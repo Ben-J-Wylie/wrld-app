@@ -218,7 +218,7 @@ We're building in slices so each phase is independently verifiable.
 | 6     | ✅ done  | Stream source arming. Dashboard rebuilt: camera + audio source toggle cards (tap to "ready"), title input, Go Live button (disabled until ≥1 source + title + GPS). Tapping Go Live navigates to `stream/new` with `title` + `sources` as route params. `stream/[id].tsx`: broadcaster sees armed sources as active badges + live viewer count (pushed instantly via WebSocket `viewerCountUpdated`); viewer sees source switcher built from the `sources` param passed by the globe on tap-to-join. Full stack: `Stream.sources String[]` column + migration; `POST /internal/streams/started` accepts sources; `GET /streams/near` + `GET /streams/:id` return sources; new `GET /streams/room/:roomId` endpoint for room lookup; mediasoup pushes `viewerCountUpdated` to broadcaster on every join/leave. `SourceType = 'camera' \| 'audio'` added to shared types. |
 | 7     | ✅ done  | Custom dev client (EAS Build); `react-native-webrtc` + `mediasoup-client`; broadcaster camera preview; viewer remote stream; multi-angle hop UX. **7a ✅** EAS project linked (`wrld-organization/wrld`, ID `35ab0828-46ac-477f-8ace-453105f6601e`), `react-native-webrtc ^124`, `mediasoup-client ^3.18`, `expo-dev-client ~6.0`, camera/mic/location permissions in `app.json`, Android APK built and installable. **7b ✅** `signalingClient` extended with `createTransport`, `connectTransport`, `produce`, `consume`. `useMediasoup` hook: `startBroadcasting(sources)` → getUserMedia → send transport → produce tracks; `startViewing(producers)` → recv transport → consume tracks into `remoteStream`; `cleanup()` tears down transports + stops tracks. Uses `ReactNative106` handler. **7c ✅** Broadcaster screen: `RTCView` fullscreen camera preview on go-live, translucent overlay with ● LIVE, viewer count, source badges, Leave. Audio-only falls back to standard layout. **7d ✅** Viewer screen: `RTCView` fullscreen remote stream, spinner while negotiating, `broadcasterLeft` WebSocket event sets `streamEnded` → shows "Stream has ended" UI. **7e ✅** Multi-angle hop UX. Tap viewer screen → controls overlay + `<NearbyStreamsDrawer>` slide up (auto-hide 3s); drawer shows horizontal row of nearby streams (within 100m of broadcaster's location) with title, source badges, distance; tap thumbnail → `cleanup()` + `router.replace()` → auto-join new stream immediately. Backend: `GET /streams/:id/nearby` (PostGIS ST_DWithin 100m, excludes self, returns `distanceMeters`, optionalAuth). App: `streamsApi.nearby(id)`, `useStreamsNearStream(id)` hook (polls 10s while drawer visible), `<NearbyStreamsDrawer>`, `<NearbyStreamThumbnail>`. Viewer screens always auto-join on mount (no manual join button). **7f ✅** 'See all' button in mini drawer header expands to full-height sheet (`<NearbyStreamRow>` vertical list with title, source icons, viewer count, distance). Tapping a row hops and closes the sheet; ✕ closes without hopping. Sheet auto-collapses when drawer hides. **Auth fixes ✅** Clerk v2 two-step sign-in; `document.hasFocus` polyfilled; login/signup redirect if already signed in. **iOS dev client ✅** Built and installed on both iPhones; `ITSAppUsesNonExemptEncryption: false`; both UDIDs registered. **Dev workflow:** install APK/IPA once; iterate with `npx expo start` + Metro hot reload. |
 | 8     | ✅ done  | v0.2 begins. Identity & profile. Onboarding wizard (`app/onboarding.tsx`): handle picker with `bad-words` profanity filter and `user_` reserved-prefix blocklist enforced server-side; 30-day hold between handle changes; avatar = generated initials fallback + optional upload from camera/gallery via `expo-image-picker`, stored on Hetzner at `/opt/wrld-media/avatars/`. Public profile page (`app/(app)/profile/[handle].tsx`): follower/following counts, follow/unfollow button (`FollowButton` with optimistic UI). Own profile / account settings (`app/(app)/me.tsx`, `app/(app)/settings.tsx`): inline display-name + handle editing, avatar change, sign out. Search (`app/(app)/search.tsx`): handle + displayName, prefix match. Globe updated with tap-to-preview stream card (Avatar, title, @handle, viewer count, Join button) replacing immediate navigate-on-tap. Stream view (`app/(app)/stream/[id].tsx`) shows broadcaster identity row (Avatar + @handle). Root layout redirects new users to onboarding when `handle.startsWith('user_')`. `Avatar` component in `src/components/feature/user/`. New hooks: `useCurrentUser`, `useUserProfile`, `useUserSearch`, `useStream`. New API module: `src/api/users.ts`. |
-| 9     | upcoming | Stream lifecycle reliability + verification gate. Failure-mode tour. Broadcaster network drop, broadcaster app backgrounded (ends stream gracefully; foreground prompts "resume?"), broadcaster force-quit, viewer network drop, viewer joining a just-ended stream race. Viewer's reconnect overlay: "Reconnecting..." for 30s, then graceful pop-back to globe with "Stream paused" banner (server's 90s heartbeat-reaper threshold gives broadcaster time to recover before server marks ended). Achieved when: Ben and Aaron deliberately try to break each other's streams in five specific ways (kill WiFi, swipe app away, lock phone for 60s, force-quit, walk into a basement), and each failure either recovers smoothly or shows a clean, accurate error. No silent failures, no app crashes, no zombie "live" streams in Postgres after a clearly disconnected broadcaster. |
+| 9     | ✅ done  | Stream lifecycle reliability. Every stream interruption — broadcaster force-quit, graceful leave, network drop, app backgrounded — sends the viewer back to the globe with a banner. Graceful leave → "Stream has ended" banner. Network drop / background → "Stream disconnected" banner that polls for broadcaster return; if stream resumes, banner turns green and is tappable to rejoin. Key work: typed `StreamSignal` module for cross-screen communication; `BannerData` union in globe with auto-dismiss (8s ended, 5-min reconnect poll); `exitToGlobe(kind)` with `navigatingRef` double-navigation guard in stream view; all viewer navigation uses `router.navigate('/(app)/globe')` (stream screen is a tab, not a stack — `router.back()` is a no-op from a tab); `AppState` listener disconnects broadcaster WS on app background so server immediately fires `broadcasterLeft` to viewers; server ping/pong reduced from 30s to 10s for faster connectivity-loss detection (≤20s); server closes viewer WS with code 4001 after `broadcasterLeft`; client maps code 4001 → `streamEnded` state; `setStreamEnded(false)` in `connect()` and `navigatingRef` reset on room-id change fix state persistence across multiple stream sessions (tab component is never unmounted); viewer idle UI removed — viewers are always redirected to globe, the "Watch" screen has no valid path. |
 | 10    | upcoming | Engagement. Chat in stream view (ephemeral — lost when stream ends; v0.3 may persist per-stream). Emoji burst reactions (Periscope-style hearts/etc, no per-message reacts). Favourite-a-streamer (follows the broadcaster, not the ephemeral stream). Anonymous users see chat + reactions but trigger the signup modal when they try to send/favourite. Achieved when: Ben watches Aaron, both can chat in real time, both can fire reactions, and an anonymous viewer who tries to chat is gracefully prompted to sign up. |
 | 11    | upcoming | Discovery & notifications. Push notifications: "someone you follow just went live" (on by default), "someone is streaming near you" (opt-in, default off). Notification preferences screen in account settings. APNs + FCM setup; server-side delivery with basic quiet-hours logic (suppress between 10pm–7am user local time; max 1 "nearby" notification per hour). Achieved when: Ben follows Aaron, Aaron goes live, Ben's phone receives a push notification, Ben taps it and lands directly in Aaron's stream. |
 | 12    | upcoming | Visual polish. Design system implemented across all existing screens via primitive components in `src/components/ui/`. Theme tokens in `src/lib/theme.ts` derived from the approved mocks. Consistent typography, spacing, color, motion across globe, dashboard, stream view, profile, settings, auth screens. No new broadcaster sensor sources in v0.2 — compass/gyro/accelerometer/torch are explicitly deferred to v0.3. Achieved when: opening any screen feels like the same product; the app no longer looks like a series of phase deliverables glued together. |
@@ -557,3 +557,71 @@ The app's mediasoup-client wrapper:
 Going live (creating a producer) requires a JWT. The signaling server enforces
 this. The app's "go live" button only appears when signed in, or triggers the
 signup modal first when tapped while signed out.
+
+---
+
+## Updates — May 2026 (Phase 9: stream lifecycle reliability)
+
+### Goal
+
+Every stream interruption — in any direction, on any platform — sends the viewer back to the globe with a descriptive banner. No silent failures, no frozen frames, no dead-end "Watch" screens.
+
+### Signal layer: `src/lib/streamSignals.ts`
+
+Typed module-level signal for passing stream-end reason across the stream→globe navigation boundary (React navigation unmounts the stream screen before the globe can read props):
+
+```ts
+type StreamSignal =
+  | { kind: 'disconnected'; broadcasterHandle: string | null }
+  | { kind: 'ended' }
+```
+
+`signalStreamEnded()` / `signalStreamDisconnected(handle)` write the signal; `consumeStreamSignal()` reads and clears it. Globe reads it on focus.
+
+### Globe banner: `app/(app)/globe.tsx`
+
+`BannerData` union type drives three visual states:
+
+- **`disconnected`** — muted banner, polls `streamsApi.get(streamId)` every 10s for up to 5 min. If stream comes back live, transitions to `resumed`.
+- **`ended`** — muted banner, auto-dismisses after 8s.
+- **`resumed`** — green banner, tappable to re-enter the stream with the same viewers.
+
+Banner is positioned using `useSafeAreaInsets` and rendered outside the `pointerEvents="none"` globe layer so it's interactive.
+
+### Stream view: `app/(app)/stream/[id].tsx`
+
+Three exit paths, all funnelling through a single `exitToGlobe(kind)` function:
+
+1. **Fast path 1** — `streamEnded` state becomes `true` (server sent `broadcasterLeft` WS message)
+2. **Fast path 2** — `status === 'dropped'` (viewer's own WS closed unexpectedly)
+3. **Fallback** — 10s poll on `streamsApi.get(streamId)`, catches cases where neither signal arrives (Android force-kill delay, iOS graceful-leave race, server quirks)
+
+`navigatingRef` guard ensures only the first trigger wins when multiple signals arrive simultaneously (e.g. `broadcasterLeft` message + WS close in the same cycle).
+
+**Critical navigation fix:** `stream/[id]` is a `Tabs.Screen` with `href: null` — it's a tab, not a stack screen. `router.back()` from a tab has no stack entry to return to and silently does nothing. All viewer exit paths use `router.navigate('/(app)/globe')` to explicitly switch tabs.
+
+**Broadcaster backgrounding:** `AppState.addEventListener('change', ...)` disconnects the broadcaster's WS when `nextState === 'background'`. This immediately triggers `closePeer` on the server, which fires `broadcasterLeft` to all viewers and closes their sockets with code 4001. Without this, iOS/Android keeps the WS alive in background and viewers are stuck on a frozen frame indefinitely. Only `'background'` triggers disconnect — `'inactive'` (call ringing, notification center) does not, avoiding false positives.
+
+**Session state reset between streams:** The tab component is never unmounted, so state from session N persists into session N+1. Fixed by:
+- `setStreamEnded(false)` inside `connect()` — every new WS connection is a clean slate
+- `navigatingRef.current = false` at the top of the `[id]` effect — reset guard for new session
+- `cleanup()` + `handleJoin()` always called on `id` change (removed `status === 'idle'` pre-check — after a WS close with code 4001, status stays `'in-room'` so the old guard never fired)
+
+**Viewer idle UI removed:** The "Watch" title and idle-state "Back" button served no valid viewer path. All viewer exit paths go to the globe; viewers are never intentionally left in idle state. The idle block is now gated on `isNew` (broadcaster only).
+
+### Signaling hook: `src/hooks/useSignaling.ts`
+
+- Added `'dropped'` to `SignalingStatus` union
+- `onClose` handler distinguishes: intentional → `'idle'`; code `4001` → `setStreamEnded(true)`; other → `'dropped'`
+- `setStreamEnded(false)` added to `connect()` to reset stale state from previous session
+
+### Signaling client: `src/lib/mediasoupSignaling.ts`
+
+- `closeCbs` typed as `Set<(code: number) => void>` — passes WS close code to subscribers
+- `ws.onclose = null` before closing stale WS in `connect()` — prevents the old socket's close event from firing into the new hook subscriber's callback
+- `onClose(cb)` updated to `cb: (code: number) => void`
+
+### Server changes (`wrld-mediasoup`)
+
+- **Ping/pong interval reduced from 30s to 10s** — zombie connections (force-killed clients, connectivity loss) now detected and terminated within 20s instead of 60s
+- **Viewer WS closed with code 4001 after `broadcasterLeft`** — ensures viewers detect stream end even if the `broadcasterLeft` WS message is lost or arrives after a race condition. Code 4001 is the canonical "stream ended" signal on the client.
