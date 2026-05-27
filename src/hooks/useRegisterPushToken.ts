@@ -6,16 +6,13 @@ import { usersApi } from '@/api/users'
 
 export function useRegisterPushToken(isSignedIn: boolean) {
   useEffect(() => {
-    console.log('Push: useRegisterPushToken effect fired, isSignedIn=', isSignedIn)
     if (!isSignedIn) return
 
     async function register() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const existing = await Notifications.getPermissionsAsync() as any
-      console.log('Push: permissions=', JSON.stringify(existing))
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const result = existing.granted ? existing : await Notifications.requestPermissionsAsync() as any
-      console.log('Push: result.granted=', result.granted)
       if (!result.granted) return
 
       // Android: set up a default notification channel
@@ -28,11 +25,9 @@ export function useRegisterPushToken(isSignedIn: boolean) {
         })
       }
 
-      console.log('Push: requesting Expo push token...')
       const tokenData = await Notifications.getExpoPushTokenAsync({
         projectId: '35ab0828-46ac-477f-8ace-453105f6601e',
       })
-      console.log('Push: got token', tokenData.data)
 
       const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
 
@@ -58,6 +53,6 @@ export function useRegisterPushToken(isSignedIn: boolean) {
       })
     }
 
-    register().catch((err) => console.error('Push token registration failed:', JSON.stringify(err), err?.message, err?.stack))
+    register().catch((err) => console.warn('Push token registration failed:', err))
   }, [isSignedIn])
 }
