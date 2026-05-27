@@ -14,6 +14,9 @@ export type SignalingStatus =
 
 type Producer = { id: string; kind: string }
 
+export type ChatMessage = { from: string; text: string; ts: number }
+export type Reaction = { from: string; kind: string; ts: number; id: number }
+
 export function useSignaling() {
   const [status, setStatus] = useState<SignalingStatus>('idle')
   const [roomId, setRoomId] = useState<string | null>(null)
@@ -21,6 +24,9 @@ export function useSignaling() {
   const [viewerCount, setViewerCount] = useState(0)
   const [streamEnded, setStreamEnded] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
+  const [reactions, setReactions] = useState<Reaction[]>([])
+  const reactionCounterRef = useRef(0)
   // Distinguishes intentional disconnect() calls from unexpected network drops.
   const intentionalRef = useRef(false)
 
@@ -28,6 +34,13 @@ export function useSignaling() {
     const unsub = signalingClient.onMessage((msg) => {
       if (msg.type === 'viewerCountUpdated') setViewerCount(msg.viewerCount)
       if (msg.type === 'broadcasterLeft') setStreamEnded(true)
+      if (msg.type === 'chatMessage') {
+        setChatMessages((prev) => [...prev, { from: msg.from, text: msg.text, ts: msg.ts }])
+      }
+      if (msg.type === 'reaction') {
+        const id = ++reactionCounterRef.current
+        setReactions((prev) => [...prev, { from: msg.from, kind: msg.kind, ts: msg.ts, id }])
+      }
     })
     return unsub
   }, [])
@@ -103,6 +116,23 @@ export function useSignaling() {
     setRoomId(null)
     setProducers([])
     setError(null)
+    setChatMessages([])
+    setReactions([])
+  }, [])
+
+  const sendChatMessage = useCallback((text: string, handle: string) => {
+    signalingClient.sendChatMessage(text, handle)
+    setChatMessages((prev) => [...prev, { from: handle, text, ts: Date.now() }])
+  }, [])
+
+  const sendReaction = useCallback((kind: string, handle: string) => {
+    signalingClient.sendReaction(kind, handle)
+    const id = ++reactionCounterRef.current
+    setReactions((prev) => [...prev, { from: handle, kind, ts: Date.now(), id }])
+  }, [])
+
+  const dismissReaction = useCallback((id: number) => {
+    setReactions((prev) => prev.filter((r) => r.id !== id))
   }, [])
 
   return {
@@ -112,9 +142,14 @@ export function useSignaling() {
     viewerCount,
     streamEnded,
     error, setError,
+    chatMessages,
+    reactions,
     connect,
     createRoom,
     joinRoom,
     disconnect,
+    sendChatMessage,
+    sendReaction,
+    dismissReaction,
   }
 }

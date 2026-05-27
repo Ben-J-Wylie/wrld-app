@@ -7,6 +7,8 @@ export type ClientMessage =
   | { type: 'connectTransport'; transportId: string; dtlsParameters: unknown }
   | { type: 'produce'; kind: 'audio' | 'video'; rtpParameters: unknown }
   | { type: 'consume'; producerId: string; rtpCapabilities: unknown }
+  | { type: 'chatMessage'; text: string; handle: string }
+  | { type: 'reaction'; kind: string; handle: string }
 
 export type ServerMessage =
   | { type: 'authenticated'; clerkUserId: string }
@@ -25,6 +27,8 @@ export type ServerMessage =
   | { type: 'consumed'; id: string; producerId: string; kind: string; rtpParameters: unknown }
   | { type: 'broadcasterLeft' }
   | { type: 'viewerCountUpdated'; viewerCount: number }
+  | { type: 'chatMessage'; from: string; text: string; ts: number }
+  | { type: 'reaction'; from: string; kind: string; ts: number }
   | { type: 'error'; message: string }
 
 class MediasoupSignalingClient {
@@ -174,6 +178,14 @@ class MediasoupSignalingClient {
     this.send({ type: 'consume', producerId, rtpCapabilities })
     const reply = await this.waitFor('consumed')
     return { id: reply.id, producerId: reply.producerId, kind: reply.kind, rtpParameters: reply.rtpParameters }
+  }
+
+  sendChatMessage(text: string, handle: string): void {
+    this.send({ type: 'chatMessage', text, handle })
+  }
+
+  sendReaction(kind: string, handle: string): void {
+    this.send({ type: 'reaction', kind, handle })
   }
 }
 

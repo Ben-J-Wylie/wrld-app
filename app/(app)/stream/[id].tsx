@@ -5,7 +5,11 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { RTCView } from 'react-native-webrtc'
 import { Button } from '@/components/ui/Button'
 import { NearbyStreamsDrawer } from '@/components/feature/stream/NearbyStreamsDrawer'
+import { ChatOverlay } from '@/components/feature/stream/ChatOverlay'
+import { ReactionLayer } from '@/components/feature/stream/ReactionLayer'
+import { AuthModal } from '@/components/feature/stream/AuthModal'
 import { Avatar } from '@/components/feature/user/Avatar'
+import { FollowButton } from '@/components/feature/user/FollowButton'
 import { theme } from '@/lib/theme'
 import { signalStreamDisconnected, signalStreamEnded } from '@/lib/streamSignals'
 import { streamsApi } from '@/api/streams'
@@ -35,8 +39,13 @@ export default function StreamView() {
     ? (paramSources.split(',').filter(Boolean) as SourceType[])
     : []
 
-  const { status, setStatus, roomId, viewerCount, streamEnded, error: signalingError, setError, connect, createRoom, joinRoom, disconnect } =
-    useSignaling()
+  const {
+    status, setStatus, roomId, viewerCount, streamEnded,
+    error: signalingError, setError,
+    chatMessages, reactions,
+    connect, createRoom, joinRoom, disconnect,
+    sendChatMessage, sendReaction, dismissReaction,
+  } = useSignaling()
   const { localStream, remoteStream, error: mediaError, startBroadcasting, startViewing, cleanup } = useMediasoup()
   const { isSignedIn } = useAuth()
   const { coords, loading: locationLoading, error: locationError } = useLocation()
@@ -49,6 +58,8 @@ export default function StreamView() {
   const [activeSource, setActiveSource] = useState<SourceType | null>(null)
   const [controlsVisible, setControlsVisible] = useState(false)
   const [hopError, setHopError] = useState<string | null>(null)
+  const [chatOpen, setChatOpen] = useState(false)
+  const [authModalVisible, setAuthModalVisible] = useState(false)
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Guards against double-navigation when multiple end signals arrive simultaneously
   // (e.g. broadcasterLeft WS message + viewer WS close in the same render cycle).
@@ -210,6 +221,14 @@ export default function StreamView() {
     router.navigate('/(app)/globe')
   }
 
+  function handleSendChat(text: string) {
+    sendChatMessage(text, wrldUser?.handle ?? 'user')
+  }
+
+  function handleReact(kind: string) {
+    sendReaction(kind, wrldUser?.handle ?? 'user')
+  }
+
   function handleHop(target: Stream) {
     if (!target.mediasoupRoomId || target.mediasoupRoomId === id) return
     try {
@@ -260,10 +279,21 @@ export default function StreamView() {
         <Pressable style={StyleSheet.absoluteFill} onPress={handleTap} />
       )}
 
-      <View style={styles.header}>
+      <View style={[styles.header, styles.headerRow]}>
         <Pressable onPress={handleBack} style={styles.backBtn} hitSlop={12}>
           <Text style={[styles.backArrow, showOverlay && styles.overlayText]}>←</Text>
         </Pressable>
+        {status === 'in-room' && !streamEnded && (
+          <Pressable
+            onPress={() => setChatOpen((o) => !o)}
+            style={styles.chatToggleBtn}
+            hitSlop={12}
+          >
+            <Text style={[styles.chatToggleText, showOverlay && styles.overlayText]}>
+              {chatOpen ? '✕' : '💬'}
+            </Text>
+          </Pressable>
+        )}
       </View>
 
       {showControls && (
@@ -368,6 +398,9 @@ export default function StreamView() {
                   <Text style={[styles.broadcasterHandle, showOverlay && styles.overlayText]}>
                     @{broadcaster.handle}
                   </Text>
+                  {!isNew && isSignedIn && broadcaster.handle && (
+                    <FollowButton handle={broadcaster.handle} />
+                  )}
                 </View>
               )}
 
@@ -440,6 +473,35 @@ export default function StreamView() {
           onHop={handleHop}
         />
       )}
+
+      {/* Chat panel */}
+      {chatOpen && status === 'in-room' && !streamEnded && (
+        <View style={styles.chatPanel}>
+          <ChatOverlay
+            messages={chatMessages}
+            isSignedIn={!!isSignedIn}
+            onSend={handleSendChat}
+            onAuthRequest={() => setAuthModalVisible(true)}
+          />
+        </View>
+      )}
+
+      {/* Reaction buttons + floating bursts */}
+      {status === 'in-room' && !streamEnded && (
+        <ReactionLayer
+          reactions={reactions}
+          isSignedIn={!!isSignedIn}
+          onReact={handleReact}
+          onAuthRequest={() => setAuthModalVisible(true)}
+          onDismiss={dismissReaction}
+        />
+      )}
+
+      <AuthModal
+        visible={authModalVisible}
+        onClose={() => setAuthModalVisible(false)}
+        onSuccess={() => setAuthModalVisible(false)}
+      />
     </SafeAreaView>
   )
 }
@@ -525,5 +587,20 @@ const styles = StyleSheet.create({
     ...theme.typography.body,
     color: theme.colors.textMuted,
     fontWeight: '600',
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  chatToggleBtn: { padding: theme.spacing.xs },
+  chatToggleText: { fontSize: 22, color: theme.colors.text },
+  chatPanel: {
+    position: 'absolute',
+    left: 0,
+    right: 90,
+    bottom: 0,
+    height: 320,
+    zIndex: 10,
   },
 })
