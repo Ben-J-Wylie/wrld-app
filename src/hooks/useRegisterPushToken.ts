@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import * as Notifications from 'expo-notifications'
+import * as Location from 'expo-location'
 import { Platform } from 'react-native'
 import { usersApi } from '@/api/users'
 
@@ -30,10 +31,25 @@ export function useRegisterPushToken(isSignedIn: boolean) {
 
       const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
 
+      // Best-effort location for nearby stream notifications
+      let lat: number | undefined
+      let lng: number | undefined
+      try {
+        const loc = await Location.getLastKnownPositionAsync()
+        if (loc) {
+          lat = loc.coords.latitude
+          lng = loc.coords.longitude
+        }
+      } catch {
+        // Location unavailable — nearby notifications won't fire, follow ones still will
+      }
+
       await usersApi.registerPushToken({
         token: tokenData.data,
         platform: Platform.OS === 'ios' ? 'ios' : 'android',
         timezone,
+        lat,
+        lng,
       })
     }
 
