@@ -26,6 +26,7 @@ export function useSignaling() {
   const [error, setError] = useState<string | null>(null)
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [reactions, setReactions] = useState<Reaction[]>([])
+  const [broadcasterPaused, setBroadcasterPaused] = useState(false)
   const reactionCounterRef = useRef(0)
   // Distinguishes intentional disconnect() calls from unexpected network drops.
   const intentionalRef = useRef(false)
@@ -34,6 +35,8 @@ export function useSignaling() {
     const unsub = signalingClient.onMessage((msg) => {
       if (msg.type === 'viewerCountUpdated') setViewerCount(msg.viewerCount)
       if (msg.type === 'broadcasterLeft') setStreamEnded(true)
+      if (msg.type === 'broadcasterPaused') setBroadcasterPaused(true)
+      if (msg.type === 'broadcasterResumed') setBroadcasterPaused(false)
       if (msg.type === 'chatMessage') {
         setChatMessages((prev) => [...prev, { from: msg.from, text: msg.text, ts: msg.ts }])
       }
@@ -118,6 +121,7 @@ export function useSignaling() {
     setError(null)
     setChatMessages([])
     setReactions([])
+    setBroadcasterPaused(false)
   }, [])
 
   const sendChatMessage = useCallback((text: string, handle: string) => {
@@ -130,6 +134,9 @@ export function useSignaling() {
     const id = ++reactionCounterRef.current
     setReactions((prev) => [...prev, { from: handle, kind, ts: Date.now(), id }])
   }, [])
+
+  const sendBroadcasterPaused = useCallback(() => signalingClient.sendBroadcasterPaused(), [])
+  const sendBroadcasterResumed = useCallback(() => signalingClient.sendBroadcasterResumed(), [])
 
   const dismissReaction = useCallback((id: number) => {
     setReactions((prev) => prev.filter((r) => r.id !== id))
@@ -144,6 +151,9 @@ export function useSignaling() {
     error, setError,
     chatMessages,
     reactions,
+    broadcasterPaused,
+    sendBroadcasterPaused,
+    sendBroadcasterResumed,
     connect,
     createRoom,
     joinRoom,

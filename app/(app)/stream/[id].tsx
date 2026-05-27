@@ -42,9 +42,10 @@ export default function StreamView() {
   const {
     status, setStatus, roomId, viewerCount, streamEnded,
     error: signalingError, setError,
-    chatMessages, reactions,
+    chatMessages, reactions, broadcasterPaused,
     connect, createRoom, joinRoom, disconnect,
     sendChatMessage, sendReaction, dismissReaction,
+    sendBroadcasterPaused, sendBroadcasterResumed,
   } = useSignaling()
   const { localStream, remoteStream, error: mediaError, startBroadcasting, startViewing, cleanup } = useMediasoup()
   const { isSignedIn } = useAuth()
@@ -173,6 +174,10 @@ export default function StreamView() {
       if (nextState === 'background') {
         cleanup()
         disconnect()
+      } else if (nextState === 'inactive') {
+        sendBroadcasterPaused()
+      } else if (nextState === 'active') {
+        sendBroadcasterResumed()
       }
     })
     return () => sub.remove()
@@ -388,6 +393,12 @@ export default function StreamView() {
             <View style={styles.statusRow}>
               <ActivityIndicator color={theme.colors.accent} />
               <Text style={styles.muted}>Loading stream…</Text>
+            </View>
+          )}
+
+          {!isNew && broadcasterPaused && !streamEnded && (
+            <View style={styles.pausedBanner}>
+              <Text style={styles.pausedText}>Stream paused · resuming shortly</Text>
             </View>
           )}
 
@@ -618,5 +629,20 @@ const styles = StyleSheet.create({
     bottom: 0,
     height: 320,
     zIndex: 10,
+  },
+  pausedBanner: {
+    position: 'absolute',
+    top: 80,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    borderRadius: 20,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.sm,
+    zIndex: 20,
+  },
+  pausedText: {
+    ...theme.typography.caption,
+    color: theme.colors.text,
+    fontWeight: '600',
   },
 })

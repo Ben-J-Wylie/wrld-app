@@ -9,6 +9,8 @@ export type ClientMessage =
   | { type: 'consume'; producerId: string; rtpCapabilities: unknown }
   | { type: 'chatMessage'; text: string; handle: string }
   | { type: 'reaction'; kind: string; handle: string }
+  | { type: 'broadcasterPaused' }
+  | { type: 'broadcasterResumed' }
 
 export type ServerMessage =
   | { type: 'authenticated'; clerkUserId: string }
@@ -26,6 +28,8 @@ export type ServerMessage =
   | { type: 'produced'; id: string; roomId: string }
   | { type: 'consumed'; id: string; producerId: string; kind: string; rtpParameters: unknown }
   | { type: 'broadcasterLeft' }
+  | { type: 'broadcasterPaused' }
+  | { type: 'broadcasterResumed' }
   | { type: 'viewerCountUpdated'; viewerCount: number }
   | { type: 'chatMessage'; from: string; text: string; ts: number }
   | { type: 'reaction'; from: string; kind: string; ts: number }
@@ -186,6 +190,14 @@ class MediasoupSignalingClient {
 
   sendReaction(kind: string, handle: string): void {
     this.send({ type: 'reaction', kind, handle })
+  }
+
+  sendBroadcasterPaused(): void {
+    this.send({ type: 'broadcasterPaused' })
+  }
+
+  sendBroadcasterResumed(): void {
+    this.send({ type: 'broadcasterResumed' })
   }
 }
 
