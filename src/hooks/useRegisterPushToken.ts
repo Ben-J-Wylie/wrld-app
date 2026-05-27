@@ -25,9 +25,11 @@ export function useRegisterPushToken(isSignedIn: boolean) {
         })
       }
 
+      console.log('Push: requesting Expo push token...')
       const tokenData = await Notifications.getExpoPushTokenAsync({
         projectId: '35ab0828-46ac-477f-8ace-453105f6601e',
       })
+      console.log('Push: got token', tokenData.data)
 
       const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
 
@@ -53,6 +55,6 @@ export function useRegisterPushToken(isSignedIn: boolean) {
       })
     }
 
-    register().catch((err) => console.warn('Push token registration failed:', err))
+    register().catch((err) => console.error('Push token registration failed:', JSON.stringify(err), err?.message, err?.stack))
   }, [isSignedIn])
 }
