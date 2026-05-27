@@ -220,7 +220,7 @@ We're building in slices so each phase is independently verifiable.
 | 8     | ✅ done  | v0.2 begins. Identity & profile. Onboarding wizard (`app/onboarding.tsx`): handle picker with `bad-words` profanity filter and `user_` reserved-prefix blocklist enforced server-side; 30-day hold between handle changes; avatar = generated initials fallback + optional upload from camera/gallery via `expo-image-picker`, stored on Hetzner at `/opt/wrld-media/avatars/`. Public profile page (`app/(app)/profile/[handle].tsx`): follower/following counts, follow/unfollow button (`FollowButton` with optimistic UI). Own profile / account settings (`app/(app)/me.tsx`, `app/(app)/settings.tsx`): inline display-name + handle editing, avatar change, sign out. Search (`app/(app)/search.tsx`): handle + displayName, prefix match. Globe updated with tap-to-preview stream card (Avatar, title, @handle, viewer count, Join button) replacing immediate navigate-on-tap. Stream view (`app/(app)/stream/[id].tsx`) shows broadcaster identity row (Avatar + @handle). Root layout redirects new users to onboarding when `handle.startsWith('user_')`. `Avatar` component in `src/components/feature/user/`. New hooks: `useCurrentUser`, `useUserProfile`, `useUserSearch`, `useStream`. New API module: `src/api/users.ts`. |
 | 9     | ✅ done  | Stream lifecycle reliability. Every stream interruption — broadcaster force-quit, graceful leave, network drop, app backgrounded — sends the viewer back to the globe with a banner. Graceful leave → "Stream has ended" banner. Network drop / background → "Stream disconnected" banner that polls for broadcaster return; if stream resumes, banner turns green and is tappable to rejoin. Key work: typed `StreamSignal` module for cross-screen communication; `BannerData` union in globe with auto-dismiss (8s ended, 5-min reconnect poll); `exitToGlobe(kind)` with `navigatingRef` double-navigation guard in stream view; all viewer navigation uses `router.navigate('/(app)/globe')` (stream screen is a tab, not a stack — `router.back()` is a no-op from a tab); `AppState` listener disconnects broadcaster WS on app background so server immediately fires `broadcasterLeft` to viewers; server ping/pong reduced from 30s to 10s for faster connectivity-loss detection (≤20s); server closes viewer WS with code 4001 after `broadcasterLeft`; client maps code 4001 → `streamEnded` state; `setStreamEnded(false)` in `connect()` and `navigatingRef` reset on room-id change fix state persistence across multiple stream sessions (tab component is never unmounted); viewer idle UI removed — viewers are always redirected to globe, the "Watch" screen has no valid path. |
 | 10    | ✅ done  | Engagement. Ephemeral chat + emoji reactions in stream view, follow-a-streamer, AuthModal for anonymous users. **Chat:** `chatMessage` fans out through mediasoup to all room peers; auth required to send; anon viewers see the thread but get `AuthModal` on send attempt; `ChatOverlay` component (scrolling list + send input); keyboard shifts panel up via `Keyboard` event listener (KAV doesn't work inside absolute-positioned containers). **Reactions:** 4 emoji types (❤️🔥👏😮); Periscope-style `Animated` upward-drift burst; auth required; anon gets `AuthModal`. **Follow:** `FollowButton` shown to all viewers; reads real `isFollowing` from `GET /users/:identifier` (backend now includes it when request is authenticated); anon tap opens `AuthModal`; local state syncs via `useEffect` on query data so it survives `showControls` remounts. **AuthModal:** bottom-sheet signup/signin matching existing Clerk flow (email + password; signup triggers email_code verification step). **Bug fixes in this phase:** (a) viewer re-joining same stream produced black screen — `useEffect([id])` is blind to tab re-focus; replaced with `useFocusEffect` so every screen focus triggers join; (b) `FollowButton` reset to "Follow" on remount because `initialFollowing` was always `false` — fixed by reading server state via `useUserProfile`. |
-| 11    | ✅ done  | Discovery & notifications. Expo Push Notifications (no Firebase needed — Expo routes to APNs/FCM; EAS manages credentials). `PushSubscription` table on backend (token, platform, timezone, lat/lng, rate-limit timestamp). Notification prefs on `User` (`notifyOnFollowedLive` default true, `notifyOnNearbyLive` default off). Fan-out on stream start: followers + nearby (10km Haversine, 1/hr rate limit). `useRegisterPushToken` hook: permission request, Android channel, Expo token → backend. Root layout: foreground notification display + notification-tap deep-link to stream. Settings screen: two preference toggles. **Key tech:** Expo Push free tier handles 100k users; no APNs/FCM config in app repo; `google-services.json` not needed (EAS manages FCM via `eas credentials`). |
+| 11    | ✅ done  | Discovery & notifications. Expo Push Notifications via Expo's servers (routes to APNs/FCM). `PushSubscription` table on backend (token, platform, timezone, lat/lng, rate-limit timestamp). Notification prefs on `User` (`notifyOnFollowedLive` default true, `notifyOnNearbyLive` default off). Fan-out on stream start: followers + nearby (10km Haversine, 1/hr rate limit — both temporarily relaxed to 100km + no limit for testing). `useRegisterPushToken` hook: permission request, Android channel, Expo token + last-known location → backend. Root layout: foreground notification display + notification-tap deep-link to stream. Settings screen: two preference toggles. **Credential setup (one-time):** iOS: `eas credentials` → APNs key (Ben's Apple account). Android: Firebase project `wrld-b1d2d`, `google-services.json` at repo root, FCM V1 service account uploaded via EAS dashboard. **Install `expo-notifications` with `npx expo install`, never `npm install`** — the latter grabs the latest SDK version which won't match the compiled native modules. Broadcaster pause banner: `'inactive'` AppState (iOS Control Center/Notification Center) sends `broadcasterPaused` signal through mediasoup; viewers see pill banner "Stream paused · resuming shortly"; `'active'` sends `broadcasterResumed`. Android `'inactive'` doesn't fire for notification shade — no freeze on Android. |
 | 12    | upcoming | Visual polish. Design system implemented across all existing screens via primitive components in `src/components/ui/`. Theme tokens in `src/lib/theme.ts` derived from the approved mocks. Consistent typography, spacing, color, motion across globe, dashboard, stream view, profile, settings, auth screens. No new broadcaster sensor sources in v0.2 — compass/gyro/accelerometer/torch are explicitly deferred to v0.3. Achieved when: opening any screen feels like the same product; the app no longer looks like a series of phase deliverables glued together. |
 | 13    | upcoming | Pre-v0.2 polish. Empty states, error states, first-time onboarding intro (a couple of screens introducing "what is WRLD"), globe initial orientation on user's location (not Central America), share-this-stream functionality (deep links via `wrld://stream/<id>` + Universal Links on `wrld.cam`). No App Store assets or public legal docs in v0.2 — this is an internal milestone for Ben + Aaron + small friends-and-family group, not a launch. Achieved when: Ben and Aaron each install the app on a fresh device, run through it top to bottom, and don't flinch at any rough edge. |
 
@@ -630,30 +630,50 @@ Three exit paths, all funnelling through a single `exitToGlobe(kind)` function:
 
 ## Updates — May 2026 (Phase 11: push notifications)
 
-### Push delivery: Expo Push (not APNs/FCM directly)
+### Push delivery: Expo Push
 
-Expo Push Notifications (`expo-notifications`) route through Expo's servers to APNs (iOS) and FCM (Android). No Firebase project or APNs keys needed in the app repo. Credentials are managed via `eas credentials` when building. Free tier supports ~1M notifications/month, production-ready at 100k users.
+Expo Push Notifications (`expo-notifications`) route through Expo's servers to APNs (iOS) and FCM (Android). Free tier supports ~1M notifications/month, production-ready at 100k users.
+
+**Critical: always install with `npx expo install expo-notifications`, never `npm install expo-notifications`.** `npm install` grabs the latest package version (e.g. SDK 56 when on SDK 54), which compiles native modules incompatible with the current dev client and crashes on startup with `Cannot find native module 'ExpoPushTokenManager'` or `AnyTypeCache` class-not-found errors.
+
+### Credential setup (one-time per platform)
+
+**iOS:** `eas credentials` → iOS → generates APNs key from Ben's Apple Developer account. Baked into the IPA at build time.
+
+**Android:** Firebase project `wrld-b1d2d` (`google-services.json` at repo root, referenced in `app.json` as `"googleServicesFile": "./google-services.json"`). FCM V1 service account JSON downloaded from Firebase Console → Project Settings → Service accounts → Generate new private key, then uploaded via EAS dashboard (expo.dev → project → Credentials → Android → FCM V1). Without this, `getExpoPushTokenAsync` fails with `E_REGISTRATION_FAILED: Default FirebaseApp is not initialized`.
 
 ### `src/hooks/useRegisterPushToken.ts`
 
-Runs once when the user signs in. Requests notification permission, sets up an Android notification channel (`'default'`), fetches the `ExpoPushToken` (using EAS `projectId`), and POSTs it to `POST /users/me/push-subscription` with platform + timezone.
+Runs once when the user signs in. Flow: request notification permission → set up Android channel → fetch `ExpoPushToken` (projectId hardcoded) → `Location.getLastKnownPositionAsync()` for lat/lng (best-effort, used for nearby notifications) → POST to `/users/me/push-subscription`.
 
 ### Root layout additions (`app/_layout.tsx`)
 
-- `Notifications.setNotificationHandler` — shows banners even when app is foregrounded
+- `Notifications.setNotificationHandler` — shows banners (`shouldShowBanner`, `shouldShowList`) even when app is foregrounded. Note: `shouldShowAlert` is deprecated, use the two new flags instead.
 - `useRegisterPushToken(!!isSignedIn)` called in `RootNavigator`
 - `Notifications.addNotificationResponseReceivedListener` — handles notification taps; navigates to `/(app)/stream/[id]` using `mediasoupRoomId`, `streamId`, `sources` from notification data payload
 
 ### Settings screen (`app/(app)/settings.tsx`)
 
 NOTIFICATIONS section with two `Switch` toggles:
-- **Someone I follow goes live** (default on) — calls `PATCH /users/me/notification-preferences`
-- **Live stream nearby** (default off) — same endpoint
+- **Someone I follow goes live** (default on)
+- **Live stream nearby** (default off)
 
-Initialized from `wrldUser` store; optimistic toggle with server revert on failure.
+Both call `PATCH /users/me/notification-preferences`. Initialized from `wrldUser` store; optimistic toggle with server revert on failure.
 
 ### `app.json` changes
 
-- `expo-notifications` plugin with color `#5B8CFF`, `defaultChannel: 'default'`, icon pointing to `assets/images/icon.png`
+- `expo-notifications` plugin: color `#5B8CFF`, `defaultChannel: 'default'`, icon `assets/images/icon.png`
+- `"googleServicesFile": "./google-services.json"` under `android` — required for FCM initialization
 - Android permissions: `RECEIVE_BOOT_COMPLETED`, `VIBRATE`, `POST_NOTIFICATIONS`
-- No `googleServicesFile` — not needed for Expo Push; FCM credentials managed by EAS
+
+### Testing config (temporary — restore before production)
+
+In `wrld-backend/src/services/notificationService.ts`:
+- `NEARBY_KM = 100` (production: 10)
+- Rate limit removed from nearby query (production: 1/hr per token, `lastNearbyNotifiedAt`)
+
+### Broadcaster pause banner (viewer UX)
+
+When the broadcaster's iOS app goes `'inactive'` (Control Center / Notification Center pulled down), the stream video freezes. The broadcaster sends a `broadcasterPaused` WebSocket signal; mediasoup fans it out to viewers who show a pill banner: "Stream paused · resuming shortly". When the overlay is dismissed, `'active'` fires and `broadcasterResumed` hides the banner.
+
+**Android note:** pulling down the notification shade does NOT trigger `'inactive'` on Android — the app stays `'active'` and the camera keeps streaming. The pause banner is effectively iOS-only. On Android, only `'background'` (home button, task switcher) is relevant, which ends the stream entirely (existing behavior).
