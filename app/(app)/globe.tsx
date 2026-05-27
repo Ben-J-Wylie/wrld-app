@@ -1,5 +1,5 @@
+import { Animated, ActivityIndicator, Dimensions, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ActivityIndicator, Dimensions, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native'
 import { router, useFocusEffect } from 'expo-router'
 import { consumeStreamSignal } from '@/lib/streamSignals'
 import { streamsApi } from '@/api/streams'
@@ -19,9 +19,22 @@ import type { Stream } from '@/types'
 const EARTH_ASSET = require('../../assets/images/earth.jpg')
 
 // Module-level texture cache — loaded once, reused across GL context recreations.
-// THREE.Texture holds image data; WebGL texture objects are per-renderer and
-// re-uploaded automatically by three.js when a new renderer encounters the object.
 let earthTexture: THREE.Texture | null = null
+
+// Pool constants
+const MESH_POOL_SIZE = 30
+const MAX_BADGES = 30
+const BADGE_SIZE = 26
+// Pixel distance between pin screen centres to be considered overlapping
+const CLUSTER_RADIUS_PX = 40
+
+type ClusterGroup = {
+  streams: Stream[]
+  centroidLat: number
+  centroidLng: number
+  screenX: number
+  screenY: number
+}
 
 function latLngToVec3(lat: number, lng: number, r = 1.001): THREE.Vector3 {
   const phi = (90 - lat) * (Math.PI / 180)
@@ -31,6 +44,67 @@ function latLngToVec3(lat: number, lng: number, r = 1.001): THREE.Vector3 {
     r * Math.cos(phi),
     r * Math.sin(phi) * Math.sin(theta),
   )
+}
+
+// Projects all streams to screen space and groups nearby ones into clusters.
+// Streams on the back face of the globe are silently excluded.
+function computeScreenClusters(
+  streams: Stream[],
+  camera: THREE.PerspectiveCamera,
+  group: THREE.Group,
+  width: number,
+  height: number,
+): ClusterGroup[] {
+  if (streams.length === 0) return []
+
+  const thresholdSq = CLUSTER_RADIUS_PX * CLUSTER_RADIUS_PX
+
+  // Project each stream to screen coords; null = back face or no coords
+  const screenPts: ({ x: number; y: number } | null)[] = streams.map((s) => {
+    if (s.lat == null || s.lng == null) return null
+    const v = latLngToVec3(s.lat, s.lng)
+    v.applyMatrix4(group.matrixWorld)
+    // Cull back face: visible if worldPos.z > 1 / cameraZ
+    if (v.z < 1 / camera.position.z) return null
+    v.project(camera)
+    return { x: ((v.x + 1) / 2) * width, y: ((1 - v.y) / 2) * height }
+  })
+
+  const assigned = new Set<number>()
+  const clusters: ClusterGroup[] = []
+
+  for (let i = 0; i < streams.length; i++) {
+    const si = streams[i]
+    const spi = screenPts[i]
+    if (assigned.has(i) || !si || !spi) continue
+    const cStreams: Stream[] = [si]
+    const cPts: { x: number; y: number }[] = [spi]
+    assigned.add(i)
+
+    for (let j = i + 1; j < streams.length; j++) {
+      const sj = streams[j]
+      const spj = screenPts[j]
+      if (assigned.has(j) || !sj || !spj) continue
+      // Distance from stream j to current cluster centroid
+      const cx = cPts.reduce((s, p) => s + p.x, 0) / cPts.length
+      const cy = cPts.reduce((s, p) => s + p.y, 0) / cPts.length
+      const dx = spj.x - cx
+      const dy = spj.y - cy
+      if (dx * dx + dy * dy < thresholdSq) {
+        cStreams.push(sj)
+        cPts.push(spj)
+        assigned.add(j)
+      }
+    }
+
+    const cx = cPts.reduce((s, p) => s + p.x, 0) / cPts.length
+    const cy = cPts.reduce((s, p) => s + p.y, 0) / cPts.length
+    const centroidLat = cStreams.reduce((s, st) => s + st.lat, 0) / cStreams.length
+    const centroidLng = cStreams.reduce((s, st) => s + st.lng, 0) / cStreams.length
+    clusters.push({ streams: cStreams, centroidLat, centroidLng, screenX: cx, screenY: cy })
+  }
+
+  return clusters
 }
 
 export default function Globe() {
@@ -43,6 +117,7 @@ export default function Globe() {
   const insets = useSafeAreaInsets()
 
   const [selectedStream, setSelectedStream] = useState<Stream | null>(null)
+  const [selectedCluster, setSelectedCluster] = useState<ClusterGroup | null>(null)
 
   type BannerData =
     | { kind: 'disconnected'; broadcasterHandle: string | null }
@@ -52,6 +127,13 @@ export default function Globe() {
   const bannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const bannerPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const coordsRef = useRef(coords)
+
+  // Badge counts drive the text content; positions are updated imperatively via Animated.Value
+  const [badgeCounts, setBadgeCounts] = useState<number[]>([])
+  const badgeXAnims = useRef(Array.from({ length: MAX_BADGES }, () => new Animated.Value(0))).current
+  const badgeYAnims = useRef(Array.from({ length: MAX_BADGES }, () => new Animated.Value(0))).current
+  const badgeOpacities = useRef(Array.from({ length: MAX_BADGES }, () => new Animated.Value(0))).current
+  const prevBadgeCountsRef = useRef<number[]>([])
 
   useEffect(() => { coordsRef.current = coords }, [coords])
 
@@ -134,7 +216,7 @@ export default function Globe() {
     })
   }
 
-  // Keep selectedStream fresh: clear it if it's no longer live, update data if it is.
+  // Keep selectedStream fresh when streams update
   useEffect(() => {
     if (!selectedStream || !streams) return
     const updated = streams.find((s) => s.id === selectedStream.id)
@@ -145,25 +227,33 @@ export default function Globe() {
     }
   }, [streams])
 
+  // Keep selectedCluster fresh when streams update
+  useEffect(() => {
+    if (!selectedCluster || !streams) return
+    const updated = selectedCluster.streams
+      .map((s) => streams.find((x) => x.id === s.id))
+      .filter((s): s is Stream => s != null)
+    if (updated.length === 0) {
+      setSelectedCluster(null)
+    } else {
+      setSelectedCluster((prev) => prev ? { ...prev, streams: updated } : null)
+    }
+  }, [streams])
+
   // ── Three.js refs ──────────────────────────────────────────────────────────
   const globeGroupRef = useRef<THREE.Group | null>(null)
-  const pinMeshesRef = useRef<THREE.Mesh[]>([])
+  const meshPoolRef = useRef<THREE.Mesh[]>([])
   const pinGeoRef = useRef<THREE.SphereGeometry | null>(null)
+  const clustersRef = useRef<ClusterGroup[]>([])
   const streamsRef = useRef<Stream[]>([])
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null)
   const rafRef = useRef<number | null>(null)
   const rendererRef = useRef<Renderer | null>(null)
-  // Generation counter: incremented on each onContextCreate call.
-  // Async setup checks its captured gen before starting the loop; if a newer
-  // call has started, this one exits without launching a second loop.
   const setupGenRef = useRef(0)
-  // Persist camera zoom and globe orientation across GL context recreations
   const cameraZRef = useRef(3)
   const savedRotationRef = useRef({ x: 0, y: 0 })
-  // Auto-orient to GPS once; stop idle auto-rotation after first user touch
   const hasOrientedRef = useRef(false)
   const hasInteractedRef = useRef(false)
-  // Inertia velocity in radians/frame after a swipe
   const velocityRef = useRef({ x: 0, y: 0 })
 
   // ── Gesture refs ───────────────────────────────────────────────────────────
@@ -174,55 +264,14 @@ export default function Globe() {
   const lastPanRef = useRef({ dx: 0, dy: 0 })
   const lastPinchDistRef = useRef<number | null>(null)
 
-  // Mirror streams into a ref so callbacks always see the latest list
   streamsRef.current = streams ?? []
 
-  // ── Pin management ─────────────────────────────────────────────────────────
-  const updatePins = useCallback(() => {
-    const group = globeGroupRef.current
-    if (!group) return
-
-    pinMeshesRef.current.forEach((m) => {
-      group.remove(m)
-      ;(m.material as THREE.Material).dispose()
-      // Don't dispose geometry per-mesh — it's shared; pinGeoRef owns it
-    })
-    pinMeshesRef.current = []
-
-    // Dispose the shared geometry exactly once
-    if (pinGeoRef.current) {
-      pinGeoRef.current.dispose()
-      pinGeoRef.current = null
-    }
-
-    if (streamsRef.current.length === 0) return
-
-    const geo = new THREE.SphereGeometry(0.028, 8, 8)
-    pinGeoRef.current = geo
-    streamsRef.current.forEach((s) => {
-      if (s.lat == null || s.lng == null) return
-      const mat = new THREE.MeshBasicMaterial({ color: 0xff3b5c, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4 })
-      const pin = new THREE.Mesh(geo, mat)
-      pin.position.copy(latLngToVec3(s.lat, s.lng))
-      group.add(pin)
-      pinMeshesRef.current.push(pin)
-    })
-  }, [])
-
-  // Sync pins whenever the streams query result changes
-  useEffect(() => {
-    updatePins()
-  }, [streams, updatePins])
-
-  // Orient the globe to the user's GPS location on first fix.
-  // The default unrotated view shows ~90°W (Americas), so we rotate to wherever
-  // the user actually is. savedRotationRef persists this across context recreations.
+  // Orient the globe to the user's GPS location on first fix
   useEffect(() => {
     if (!coords || hasOrientedRef.current) return
     const group = globeGroupRef.current
     if (!group) return
     hasOrientedRef.current = true
-    // Longitude: shift from the default 90°W view to the user's longitude
     const rotY = -(coords.longitude + 90) * (Math.PI / 180)
     const rotX = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, -coords.latitude * (Math.PI / 180)))
     group.rotation.y = rotY
@@ -242,9 +291,6 @@ export default function Globe() {
   // ── GL scene bootstrap ─────────────────────────────────────────────────────
   const onContextCreate = useCallback(
     async (gl: ExpoWebGLRenderingContext) => {
-      // Stop any running loop and dispose the old renderer before creating a
-      // new one. Android recreates the GL surface (and calls onContextCreate
-      // again) when the screen is covered, without unmounting the component.
       if (rafRef.current !== null) {
         cancelAnimationFrame(rafRef.current)
         rafRef.current = null
@@ -252,13 +298,22 @@ export default function Globe() {
       try { rendererRef.current?.dispose() } catch {}
       rendererRef.current = null
 
-      // Capture this setup's generation. If onContextCreate fires again while
-      // we're still inside an await, the newer call increments setupGenRef and
-      // this call bails before launching a loop.
       const gen = ++setupGenRef.current
 
+      // Clean up previous pool resources
+      meshPoolRef.current.forEach((m) => {
+        try { (m.material as THREE.Material).dispose() } catch {}
+      })
+      meshPoolRef.current = []
+      if (pinGeoRef.current) {
+        try { pinGeoRef.current.dispose() } catch {}
+        pinGeoRef.current = null
+      }
+      clustersRef.current = []
+      prevBadgeCountsRef.current = []
+      badgeOpacities.forEach((a) => a.setValue(0))
+
       globeGroupRef.current = null
-      pinMeshesRef.current = []
       cameraRef.current = null
 
       const { drawingBufferWidth: w, drawingBufferHeight: h } = gl
@@ -278,8 +333,7 @@ export default function Globe() {
       globeGroupRef.current = group
       scene.add(group)
 
-      // Earth sphere — MeshBasicMaterial avoids PBR shader compilation issues
-      // on Expo GL remount. NASA textures have baked-in lighting so it looks identical.
+      // Earth sphere
       const sphereGeo = new THREE.SphereGeometry(1, 64, 32)
       let earthMat: THREE.Material
       try {
@@ -290,7 +344,6 @@ export default function Globe() {
           earthTexture.anisotropy = renderer.capabilities.getMaxAnisotropy()
           earthTexture.minFilter = THREE.LinearFilter
         } else {
-          // Force the new renderer to re-upload to the new GL context
           earthTexture.needsUpdate = true
         }
         earthMat = new THREE.MeshBasicMaterial({ map: earthTexture })
@@ -299,25 +352,38 @@ export default function Globe() {
         earthMat = new THREE.MeshBasicMaterial({ color: 0x1a5588 })
       }
 
-      // A newer context setup has started — don't launch a stale loop
       if (setupGenRef.current !== gen) return
 
       rendererRef.current = renderer
       group.add(new THREE.Mesh(sphereGeo, earthMat))
 
-      // Add any pins that arrived before the scene was ready
-      updatePins()
+      // Pre-allocate mesh pool — all meshes share one geometry, each has its own material
+      const geo = new THREE.SphereGeometry(0.028, 8, 8)
+      pinGeoRef.current = geo
+      for (let i = 0; i < MESH_POOL_SIZE; i++) {
+        const mat = new THREE.MeshBasicMaterial({
+          color: 0xff3b5c,
+          polygonOffset: true,
+          polygonOffsetFactor: -1,
+          polygonOffsetUnits: -4,
+        })
+        const mesh = new THREE.Mesh(geo, mat)
+        mesh.visible = false
+        group.add(mesh)
+        meshPoolRef.current.push(mesh)
+      }
 
-      // Reused vector — allocated once per context, not per frame
+      // Reused scratch vector — allocated once per context, not per frame
       const _wp = new THREE.Vector3()
-      // Reference depth: camera at z=3, pin on the front face of the sphere (r=1.001)
       const REF_DEPTH = 3 - 1.001
 
       const animate = () => {
         rafRef.current = requestAnimationFrame(animate)
+
         if (!hasInteractedRef.current) {
           group.rotation.y += 0.0008
         }
+
         const vel = velocityRef.current
         if (vel.x !== 0 || vel.y !== 0) {
           group.rotation.y += vel.y
@@ -329,28 +395,70 @@ export default function Globe() {
             velocityRef.current = { x: 0, y: 0 }
           }
         }
-        // Maintain constant screen size: screen_size ∝ worldSize / depth.
-        // getWorldPosition accounts for group rotation, so each pin gets its
-        // actual camera-space depth (cameraZ − pin.z_world) regardless of
-        // where on the globe it sits.
+
+        // Ensure matrices are current before we project anything
+        group.updateWorldMatrix(false, false)
+
+        // Screen-space cluster computation
+        const { width, height } = containerSizeRef.current
+        const newClusters = computeScreenClusters(streamsRef.current, camera, group, width, height)
+        clustersRef.current = newClusters
+
+        // Update mesh pool: reposition, recolour, resize, show/hide
         const camZ = camera.position.z
-        pinMeshesRef.current.forEach((m) => {
-          m.getWorldPosition(_wp)
+        newClusters.forEach((cluster, i) => {
+          if (i >= meshPoolRef.current.length) return
+          const mesh = meshPoolRef.current[i]
+          mesh.position.copy(latLngToVec3(cluster.centroidLat, cluster.centroidLng))
+          mesh.visible = true
+          const isCluster = cluster.streams.length > 1
+          ;(mesh.material as THREE.MeshBasicMaterial).color.setHex(isCluster ? 0x5b8cff : 0xff3b5c)
+          // Scale to maintain constant screen size; clusters are 1.55× larger
+          mesh.getWorldPosition(_wp)
           const depth = Math.max(0.01, camZ - _wp.z)
-          m.scale.setScalar(depth / REF_DEPTH)
+          mesh.scale.setScalar((isCluster ? 1.55 : 1) * depth / REF_DEPTH)
         })
+        for (let i = newClusters.length; i < meshPoolRef.current.length; i++) {
+          meshPoolRef.current[i].visible = false
+        }
+
         try {
           renderer.render(scene, camera)
           gl.endFrameEXP()
         } catch {
-          // GL surface was destroyed; stop looping until onContextCreate fires again
           if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
           rafRef.current = null
+          return
+        }
+
+        // Update badge overlay positions after render (1-frame lag is imperceptible)
+        newClusters.forEach((cluster, i) => {
+          if (i >= MAX_BADGES) return
+          if (cluster.streams.length <= 1) {
+            badgeOpacities[i]!.setValue(0)
+            return
+          }
+          badgeXAnims[i]!.setValue(cluster.screenX - BADGE_SIZE / 2)
+          badgeYAnims[i]!.setValue(cluster.screenY - BADGE_SIZE / 2)
+          badgeOpacities[i]!.setValue(1)
+        })
+        for (let i = newClusters.length; i < MAX_BADGES; i++) {
+          badgeOpacities[i]!.setValue(0)
+        }
+
+        // Update badge count text only when cluster configuration changes
+        const newCounts = newClusters.map((c) => c.streams.length)
+        const countsKey = newCounts.join(',')
+        const prevKey = prevBadgeCountsRef.current.join(',')
+        if (countsKey !== prevKey) {
+          prevBadgeCountsRef.current = newCounts
+          setBadgeCounts(newCounts)
         }
       }
       animate()
     },
-    [updatePins],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
   )
 
   // ── Touch handling ─────────────────────────────────────────────────────────
@@ -366,9 +474,8 @@ export default function Globe() {
     onPanResponderMove: (evt, gs) => {
       const touches = evt.nativeEvent.touches
       if (touches.length === 2) {
-        // ── Pinch-to-zoom ──────────────────────────────────────────────────
-        const dx = touches[0].pageX - touches[1].pageX
-        const dy = touches[0].pageY - touches[1].pageY
+        const dx = touches[0]!.pageX - touches[1]!.pageX
+        const dy = touches[0]!.pageY - touches[1]!.pageY
         const dist = Math.sqrt(dx * dx + dy * dy)
         if (lastPinchDistRef.current !== null) {
           const camera = cameraRef.current
@@ -379,10 +486,8 @@ export default function Globe() {
           }
         }
         lastPinchDistRef.current = dist
-        // Reset drag origin so single-finger pan doesn't jump when pinch ends
         lastPanRef.current = { dx: gs.dx, dy: gs.dy }
       } else {
-        // ── Single-finger rotate ───────────────────────────────────────────
         lastPinchDistRef.current = null
         const group = globeGroupRef.current
         if (!group) return
@@ -406,7 +511,6 @@ export default function Globe() {
         if (moved < 8) {
           handleTap(gs.x0, gs.y0)
         } else {
-          // px/ms from PanResponder × ~16ms/frame × pan scale = rad/frame
           const scale = 0.006 * ((cameraZRef.current - 1) / 5)
           velocityRef.current = {
             y: gs.vx * scale * 16,
@@ -419,20 +523,34 @@ export default function Globe() {
 
   function handleTap(sx: number, sy: number) {
     const camera = cameraRef.current
-    if (!camera || pinMeshesRef.current.length === 0) return
+    if (!camera || meshPoolRef.current.length === 0) return
     const { width, height } = containerSizeRef.current
     const raycaster = new THREE.Raycaster()
     raycaster.setFromCamera(
       new THREE.Vector2((sx / width) * 2 - 1, -(sy / height) * 2 + 1),
       camera,
     )
-    const hits = raycaster.intersectObjects(pinMeshesRef.current)
+    // Only raycast against visible pool meshes
+    const visible = meshPoolRef.current.filter((m) => m.visible)
+    const hits = raycaster.intersectObjects(visible)
     if (hits.length > 0) {
-      const idx = pinMeshesRef.current.indexOf(hits[0].object as THREE.Mesh)
-      const stream = streamsRef.current[idx]
-      if (stream) setSelectedStream(stream)
+      const mesh = hits[0].object as THREE.Mesh
+      // Map back to original pool index to find the cluster
+      const poolIdx = meshPoolRef.current.indexOf(mesh)
+      const cluster = clustersRef.current[poolIdx]
+      if (cluster) {
+        if (cluster.streams.length === 1) {
+          const single = cluster.streams[0]
+          if (single) setSelectedStream(single)
+          setSelectedCluster(null)
+        } else {
+          setSelectedCluster(cluster)
+          setSelectedStream(null)
+        }
+      }
     } else {
       setSelectedStream(null)
+      setSelectedCluster(null)
     }
   }
 
@@ -442,6 +560,15 @@ export default function Globe() {
     router.push({
       pathname: `/(app)/stream/${selectedStream.mediasoupRoomId}`,
       params: { streamId: selectedStream.id, sources: (selectedStream.sources ?? []).join(',') },
+    })
+  }
+
+  function joinClusterStream(stream: Stream) {
+    if (!stream.mediasoupRoomId) return
+    setSelectedCluster(null)
+    router.push({
+      pathname: `/(app)/stream/${stream.mediasoupRoomId}`,
+      params: { streamId: stream.id, sources: (stream.sources ?? []).join(',') },
     })
   }
 
@@ -461,14 +588,35 @@ export default function Globe() {
       {/* Transparent touch-capture layer */}
       <View style={StyleSheet.absoluteFill} {...panResponder.panHandlers} />
 
+      {/* Cluster count badge overlays — positioned imperatively via Animated.Value each frame */}
+      <View style={StyleSheet.absoluteFill} pointerEvents="none">
+        {Array.from({ length: MAX_BADGES }, (_, i) => (
+          <Animated.View
+            key={i}
+            style={[
+              styles.badge,
+              {
+                opacity: badgeOpacities[i]!,
+                transform: [
+                  { translateX: badgeXAnims[i]! },
+                  { translateY: badgeYAnims[i]! },
+                ],
+              },
+            ]}
+          >
+            <Text style={styles.badgeText}>{badgeCounts[i] ?? ''}</Text>
+          </Animated.View>
+        ))}
+      </View>
+
       {/* UI overlay — pointerEvents="none" so touches fall through to the pan layer */}
       <View style={StyleSheet.absoluteFill} pointerEvents="none">
         <SafeAreaView style={styles.safeArea}>
           <View style={styles.header}>
             <Text style={styles.wordmark}>WRLD</Text>
             {liveCount > 0 && (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>{liveCount} LIVE</Text>
+              <View style={styles.liveBadge}>
+                <Text style={styles.liveBadgeText}>{liveCount} LIVE</Text>
               </View>
             )}
           </View>
@@ -511,7 +659,7 @@ export default function Globe() {
         </View>
       )}
 
-      {/* Stream card — shown when a pin is tapped */}
+      {/* Single stream card */}
       {selectedStream && (
         <View style={styles.cardWrapper} pointerEvents="box-none">
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setSelectedStream(null)} />
@@ -540,6 +688,43 @@ export default function Globe() {
           </View>
         </View>
       )}
+
+      {/* Cluster card — multiple streams at the same location */}
+      {selectedCluster && (
+        <View style={styles.cardWrapper} pointerEvents="box-none">
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setSelectedCluster(null)} />
+          <View style={styles.card}>
+            <Text style={styles.clusterHeader}>
+              {selectedCluster.streams.length} live streams here
+            </Text>
+            {selectedCluster.streams.map((stream) => (
+              <Pressable key={stream.id} style={styles.clusterRow} onPress={() => joinClusterStream(stream)}>
+                <View style={styles.cardLeft}>
+                  {stream.host && (
+                    <Avatar
+                      avatarUrl={stream.host.avatarUrl}
+                      displayName={stream.host.displayName}
+                      size={38}
+                    />
+                  )}
+                  <View style={styles.cardText}>
+                    <Text style={styles.cardTitle} numberOfLines={1}>{stream.title}</Text>
+                    {stream.host && (
+                      <Text style={styles.cardHandle}>@{stream.host.handle}</Text>
+                    )}
+                    <Text style={styles.cardMeta}>
+                      {stream.viewerCount} {stream.viewerCount === 1 ? 'viewer' : 'viewers'}
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.joinBtnSmall}>
+                  <Text style={styles.joinBtnText}>Join</Text>
+                </View>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      )}
     </View>
   )
 }
@@ -555,19 +740,41 @@ const styles = StyleSheet.create({
     paddingTop: theme.spacing.sm,
   },
   wordmark: { ...theme.typography.title, color: theme.colors.text },
-  badge: {
+  liveBadge: {
     backgroundColor: theme.colors.live,
     borderRadius: theme.radius.full,
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: 3,
   },
-  badgeText: {
+  liveBadgeText: {
     ...theme.typography.caption,
     color: '#fff',
     fontWeight: '700',
   },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   hint: { ...theme.typography.body, color: theme.colors.textMuted },
+
+  // Cluster count badge (rendered as a React Native overlay above the GL layer)
+  badge: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    width: BADGE_SIZE,
+    height: BADGE_SIZE,
+    borderRadius: BADGE_SIZE / 2,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    borderColor: theme.colors.accent,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  badgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: theme.colors.accent,
+    lineHeight: 12,
+  },
+
   cardWrapper: {
     position: 'absolute',
     bottom: 0,
@@ -582,9 +789,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.border,
     padding: theme.spacing.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.md,
+    gap: theme.spacing.sm,
   },
   cardLeft: {
     flex: 1,
@@ -601,8 +806,32 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.md,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
+    alignSelf: 'center',
+  },
+  joinBtnSmall: {
+    backgroundColor: theme.colors.live,
+    borderRadius: theme.radius.md,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 6,
+    alignSelf: 'center',
   },
   joinBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+
+  clusterHeader: {
+    ...theme.typography.caption,
+    color: theme.colors.textMuted,
+    fontWeight: '600',
+    paddingBottom: theme.spacing.xs,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+  },
+  clusterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+  },
+
   bannerWrapper: {
     position: 'absolute',
     left: 0,
