@@ -23,6 +23,7 @@
       "adaptiveIcon": {
         "backgroundColor": "#000000"
       },
+      "googleServicesFile": "./google-services.json",
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",
