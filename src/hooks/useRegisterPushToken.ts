@@ -6,13 +6,16 @@ import { usersApi } from '@/api/users'
 
 export function useRegisterPushToken(isSignedIn: boolean) {
   useEffect(() => {
+    console.log('Push: useRegisterPushToken effect fired, isSignedIn=', isSignedIn)
     if (!isSignedIn) return
 
     async function register() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const existing = await Notifications.getPermissionsAsync() as any
+      console.log('Push: permissions=', JSON.stringify(existing))
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const result = existing.granted ? existing : await Notifications.requestPermissionsAsync() as any
+      console.log('Push: result.granted=', result.granted)
       if (!result.granted) return
 
       // Android: set up a default notification channel
