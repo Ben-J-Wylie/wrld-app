@@ -17,7 +17,6 @@ import type { User } from '@/types'
 // Show notifications as banners even when the app is foregrounded
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: false,
     shouldShowBanner: true,
