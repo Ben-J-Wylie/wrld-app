@@ -8,6 +8,8 @@ export type User = {
   avatarUserSet: boolean
   lastHandleChangeAt: string | null
   createdAt: string
+  notifyOnFollowedLive: boolean
+  notifyOnNearbyLive: boolean
 }
 
 export type PublicUser = {

@@ -46,4 +46,28 @@ export const usersApi = {
   unfollow: async (handle: string): Promise<void> => {
     await apiClient.delete(`/users/${handle}/follow`)
   },
+
+  registerPushToken: async (data: {
+    token: string
+    platform: 'ios' | 'android'
+    timezone?: string
+    lat?: number
+    lng?: number
+  }): Promise<void> => {
+    await apiClient.post('/users/me/push-subscription', data)
+  },
+
+  unregisterPushToken: async (token: string): Promise<void> => {
+    await apiClient.delete('/users/me/push-subscription', { data: { token } })
+  },
+
+  updateNotificationPreferences: async (prefs: {
+    notifyOnFollowedLive?: boolean
+    notifyOnNearbyLive?: boolean
+  }): Promise<{ notifyOnFollowedLive: boolean; notifyOnNearbyLive: boolean }> => {
+    const res = await apiClient.patch<{
+      preferences: { notifyOnFollowedLive: boolean; notifyOnNearbyLive: boolean }
+    }>('/users/me/notification-preferences', prefs)
+    return res.data.preferences
+  },
 }

@@ -5,12 +5,25 @@ import { StatusBar } from 'expo-status-bar'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useEffect } from 'react'
 import { ClerkProvider, useAuth } from '@clerk/clerk-expo'
+import * as Notifications from 'expo-notifications'
 import { tokenCache } from '@/lib/tokenCache'
 import { env } from '@/lib/env'
 import { setClerkTokenGetter } from '@/lib/clerkToken'
 import { useAuthStore } from '@/stores/authStore'
+import { useRegisterPushToken } from '@/hooks/useRegisterPushToken'
 import { apiClient } from '@/api/client'
 import type { User } from '@/types'
+
+// Show notifications as banners even when the app is foregrounded
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+})
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -44,6 +57,31 @@ function RootNavigator() {
       clearWrldUser()
     }
   }, [isLoaded, isSignedIn])
+
+  // Register Expo push token when signed in
+  useRegisterPushToken(!!isSignedIn)
+
+  // Handle notification taps — navigate to the stream in the payload
+  useEffect(() => {
+    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+      const data = response.notification.request.content.data as {
+        streamId?: string
+        mediasoupRoomId?: string
+        sources?: string
+      }
+      if (data.mediasoupRoomId && data.streamId) {
+        router.navigate({
+          pathname: '/(app)/stream/[id]',
+          params: {
+            id: data.mediasoupRoomId,
+            streamId: data.streamId,
+            sources: data.sources ?? '',
+          },
+        })
+      }
+    })
+    return () => sub.remove()
+  }, [])
 
   // Redirect to onboarding when signed-in user still has a temp handle
   const wrldUser = useAuthStore((s) => s.wrldUser)
