@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet, ActivityIndicator, Pressable, AppState, Keyboard, Platform } from 'react-native'
-import { useEffect, useRef, useState } from 'react'
-import { useLocalSearchParams, router } from 'expo-router'
+import { useEffect, useRef, useState, useCallback } from 'react'
+import { useLocalSearchParams, router, useFocusEffect } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { RTCView } from 'react-native-webrtc'
 import { Button } from '@/components/ui/Button'
@@ -150,15 +150,19 @@ export default function StreamView() {
     return () => { showSub.remove(); hideSub.remove() }
   }, [])
 
-  // Auto-join (or re-join after a hop) whenever the room id changes.
-  // Reset navigatingRef so exitToGlobe works fresh for the new session.
-  useEffect(() => {
-    if (isNew) return
-    navigatingRef.current = false
-    cleanup()
-    handleJoin()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id])
+  // Auto-join on every screen focus (first visit, return after leaving, hop to
+  // different stream). useFocusEffect fires when the tab gains focus AND when
+  // its useCallback deps change while already focused — so id-changes (hops)
+  // are also caught without a separate useEffect.
+  useFocusEffect(
+    useCallback(() => {
+      if (isNew) return
+      navigatingRef.current = false
+      cleanup()
+      handleJoin()
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [id]),
+  )
 
   // Broadcaster: close the WS when the app goes to background so the server
   // immediately fires broadcasterLeft to all viewers. Without this, iOS/Android
