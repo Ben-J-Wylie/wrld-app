@@ -1,4 +1,4 @@
-import { Animated, ActivityIndicator, Dimensions, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, Dimensions, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { router, useFocusEffect } from 'expo-router'
 import { consumeStreamSignal } from '@/lib/streamSignals'
@@ -19,10 +19,10 @@ const EARTH_ASSET = require('../../assets/images/earth.jpg')
 let earthTexture: THREE.Texture | null = null
 
 const MESH_POOL_SIZE = 30
-const MAX_BADGES = 30
 const BADGE_SIZE = 26
 
 type GeoCluster = { streams: Stream[]; centroidLat: number; centroidLng: number }
+type BadgeInfo = { x: number; y: number; count: number }
 
 function latLngToVec3(lat: number, lng: number, r = 1.001): THREE.Vector3 {
   const phi = (90 - lat) * (Math.PI / 180)
@@ -97,12 +97,9 @@ export default function Globe() {
   const bannerPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const coordsRef = useRef(coords)
 
-  // Badge count text — only updated when cluster membership changes (not every frame)
-  const [badgeCounts, setBadgeCounts] = useState<number[]>([])
-  // Badge positions driven imperatively from the animate loop (zero React re-renders per frame)
-  const badgeXAnims = useRef(Array.from({ length: MAX_BADGES }, () => new Animated.Value(0))).current
-  const badgeYAnims = useRef(Array.from({ length: MAX_BADGES }, () => new Animated.Value(0))).current
-  const badgeOpacities = useRef(Array.from({ length: MAX_BADGES }, () => new Animated.Value(0))).current
+  // Badge overlays — plain React state, updated only when clusters change (not per-frame)
+  const [badges, setBadges] = useState<BadgeInfo[]>([])
+  const [badgesHidden, setBadgesHidden] = useState(false)
 
   useEffect(() => { coordsRef.current = coords }, [coords])
 
@@ -187,9 +184,6 @@ export default function Globe() {
   const clusterIsMultiRef = useRef<boolean[]>([])
   const lastClusteredZRef = useRef(-1)
   const lastStreamCountRef = useRef(-1)
-  // Suppress badge overlay during pinch so it never visibly lags behind the GL pin
-  const isPinchingRef = useRef(false)
-
   const streamsRef = useRef<Stream[]>([])
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null)
   const rafRef = useRef<number | null>(null)
@@ -247,7 +241,6 @@ export default function Globe() {
     lastStreamCountRef.current = -1
     globeGroupRef.current = null
     cameraRef.current = null
-    badgeOpacities.forEach(a => a.setValue(0))
 
     const { drawingBufferWidth: w, drawingBufferHeight: h } = gl
     const renderer = new Renderer({ gl })
@@ -322,10 +315,26 @@ export default function Globe() {
         meshPoolRef.current[i]!.visible = false
       }
 
-      // Only push badge count text updates when not mid-pinch
-      if (!isPinchingRef.current) {
-        setBadgeCounts(newClusters.map(c => c.streams.length))
+      // Project multi-cluster centroids to screen coordinates and update badge state.
+      // Plain React state — no Animated.Value overhead, no per-frame updates.
+      const camZ = camera.position.z
+      const { width, height } = containerSizeRef.current
+      const newBadges: BadgeInfo[] = []
+      group.updateWorldMatrix(false, false)
+      for (let i = 0; i < newClusters.length; i++) {
+        if (!clusterIsMultiRef.current[i]) continue
+        const localPos = clusterLocalPosRef.current[i]
+        if (!localPos) continue
+        _proj.copy(localPos).applyMatrix4(group.matrixWorld)
+        if (_proj.z < 1 / camZ) continue
+        _proj.project(camera)
+        newBadges.push({
+          x: ((_proj.x + 1) / 2) * width - BADGE_SIZE / 2,
+          y: ((1 - _proj.y) / 2) * height - BADGE_SIZE / 2,
+          count: newClusters[i]!.streams.length,
+        })
       }
+      setBadges(newBadges)
     }
 
     const animate = () => {
@@ -369,26 +378,6 @@ export default function Globe() {
       } catch {
         if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
         rafRef.current = null
-        return
-      }
-
-      // Per-frame: project cluster centroid positions to screen for badge overlay.
-      // Uses pre-allocated _proj — zero allocation. Hidden during pinch to prevent chasing.
-      const { width, height } = containerSizeRef.current
-      for (let i = 0; i < MAX_BADGES; i++) {
-        const isMulti = clusterIsMultiRef.current[i] ?? false
-        const localPos = clusterLocalPosRef.current[i]
-        if (i >= n || !isMulti || !localPos) {
-          badgeOpacities[i]!.setValue(0)
-          continue
-        }
-        _proj.copy(localPos).applyMatrix4(group.matrixWorld)
-        if (_proj.z < 1 / camZ) { badgeOpacities[i]!.setValue(0); continue }  // back face
-        _proj.project(camera)
-        badgeXAnims[i]!.setValue(((_proj.x + 1) / 2) * width - BADGE_SIZE / 2)
-        badgeYAnims[i]!.setValue(((1 - _proj.y) / 2) * height - BADGE_SIZE / 2)
-        // Keep opacity at 0 during pinch; badge is already positioned correctly for when it shows
-        if (!isPinchingRef.current) badgeOpacities[i]!.setValue(1)
       }
     }
     animate()
@@ -404,11 +393,11 @@ export default function Globe() {
       velocityRef.current = { x: 0, y: 0 }
       lastPanRef.current = { dx: 0, dy: 0 }
       lastPinchDistRef.current = null
+      setBadgesHidden(true)
     },
     onPanResponderMove: (evt, gs) => {
       const touches = evt.nativeEvent.touches
       if (touches.length === 2) {
-        isPinchingRef.current = true
         const dx = touches[0]!.pageX - touches[1]!.pageX
         const dy = touches[0]!.pageY - touches[1]!.pageY
         const dist = Math.sqrt(dx * dx + dy * dy)
@@ -437,12 +426,10 @@ export default function Globe() {
     onPanResponderRelease: (_, gs) => {
       const wasPinching = lastPinchDistRef.current !== null
       lastPinchDistRef.current = null
-      if (wasPinching) {
-        // Badges are now positioned correctly (we kept updating X/Y even while hidden).
-        // Show them immediately and push fresh badge counts.
-        isPinchingRef.current = false
-        setBadgeCounts(clustersRef.current.map(c => c.streams.length))
-      } else {
+      // Force badge recompute on next animate frame with the new camera/rotation state
+      lastClusteredZRef.current = -1
+      setBadgesHidden(false)
+      if (!wasPinching) {
         const moved = Math.sqrt(gs.dx * gs.dx + gs.dy * gs.dy)
         if (moved < 8) {
           handleTap(gs.x0, gs.y0)
@@ -499,20 +486,16 @@ export default function Globe() {
       <GLView style={StyleSheet.absoluteFill} onContextCreate={onContextCreate} />
       <View style={StyleSheet.absoluteFill} {...panResponder.panHandlers} />
 
-      {/* Badge overlays — positioned imperatively each frame via Animated.Value, no React re-render */}
-      <View style={StyleSheet.absoluteFill} pointerEvents="none">
-        {Array.from({ length: MAX_BADGES }, (_, i) => (
-          <Animated.View
-            key={i}
-            style={[styles.badge, {
-              opacity: badgeOpacities[i]!,
-              transform: [{ translateX: badgeXAnims[i]! }, { translateY: badgeYAnims[i]! }],
-            }]}
-          >
-            <Text style={styles.badgeText}>{badgeCounts[i] ?? ''}</Text>
-          </Animated.View>
-        ))}
-      </View>
+      {/* Badge overlays — plain React state, only mounted for actual multi-clusters */}
+      {!badgesHidden && badges.length > 0 && (
+        <View style={StyleSheet.absoluteFill} pointerEvents="none">
+          {badges.map((b, i) => (
+            <View key={i} style={[styles.badge, { left: b.x, top: b.y }]}>
+              <Text style={styles.badgeText}>{b.count}</Text>
+            </View>
+          ))}
+        </View>
+      )}
 
       <View style={StyleSheet.absoluteFill} pointerEvents="none">
         <SafeAreaView style={styles.safeArea}>
@@ -603,8 +586,6 @@ const styles = StyleSheet.create({
 
   badge: {
     position: 'absolute',
-    left: 0,
-    top: 0,
     width: BADGE_SIZE,
     height: BADGE_SIZE,
     borderRadius: BADGE_SIZE / 2,
