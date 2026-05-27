@@ -171,6 +171,7 @@ export default function StreamView() {
   useEffect(() => {
     if (!isNew || status !== 'in-room') return
     const sub = AppState.addEventListener('change', (nextState) => {
+      console.log('AppState change:', nextState)
       if (nextState === 'background') {
         cleanup()
         disconnect()
