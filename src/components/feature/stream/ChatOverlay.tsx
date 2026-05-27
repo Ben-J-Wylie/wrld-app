@@ -5,8 +5,6 @@ import {
   StyleSheet,
   FlatList,
   Pressable,
-  KeyboardAvoidingView,
-  Platform,
 } from 'react-native'
 import { useRef, useState } from 'react'
 import { theme } from '@/lib/theme'
@@ -31,11 +29,7 @@ export function ChatOverlay({ messages, isSignedIn, onSend, onAuthRequest }: Pro
   }
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-    >
+    <View style={styles.container}>
       <FlatList
         ref={listRef}
         data={messages}
@@ -83,7 +77,7 @@ export function ChatOverlay({ messages, isSignedIn, onSend, onAuthRequest }: Pro
           </Pressable>
         )}
       </View>
-    </KeyboardAvoidingView>
+    </View>
   )
 }
 

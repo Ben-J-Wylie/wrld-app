@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ActivityIndicator, Pressable, AppState } from 'react-native'
+import { View, Text, StyleSheet, ActivityIndicator, Pressable, AppState, Keyboard, Platform } from 'react-native'
 import { useEffect, useRef, useState } from 'react'
 import { useLocalSearchParams, router } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -60,6 +60,7 @@ export default function StreamView() {
   const [hopError, setHopError] = useState<string | null>(null)
   const [chatOpen, setChatOpen] = useState(false)
   const [authModalVisible, setAuthModalVisible] = useState(false)
+  const [keyboardHeight, setKeyboardHeight] = useState(0)
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Guards against double-navigation when multiple end signals arrive simultaneously
   // (e.g. broadcasterLeft WS message + viewer WS close in the same render cycle).
@@ -139,6 +140,14 @@ export default function StreamView() {
     return () => {
       if (hideTimerRef.current) clearTimeout(hideTimerRef.current)
     }
+  }, [])
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow'
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide'
+    const showSub = Keyboard.addListener(showEvent, (e) => setKeyboardHeight(e.endCoordinates.height))
+    const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardHeight(0))
+    return () => { showSub.remove(); hideSub.remove() }
   }, [])
 
   // Auto-join (or re-join after a hop) whenever the room id changes.
@@ -474,9 +483,9 @@ export default function StreamView() {
         />
       )}
 
-      {/* Chat panel */}
+      {/* Chat panel — bottom shifts up by keyboard height so input stays visible */}
       {chatOpen && status === 'in-room' && !streamEnded && (
-        <View style={styles.chatPanel}>
+        <View style={[styles.chatPanel, { bottom: keyboardHeight }]}>
           <ChatOverlay
             messages={chatMessages}
             isSignedIn={!!isSignedIn}
