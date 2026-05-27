@@ -397,11 +397,6 @@ export default function StreamView() {
             </View>
           )}
 
-          {!isNew && broadcasterPaused && !streamEnded && (
-            <View style={styles.pausedBanner}>
-              <Text style={styles.pausedText}>Stream paused · resuming shortly</Text>
-            </View>
-          )}
 
           {/* ── In room ──────────────────────────────────────────── */}
           {status === 'in-room' && !streamEnded && (!!remoteStream || isNew) && (
@@ -530,6 +525,12 @@ export default function StreamView() {
         onClose={() => setAuthModalVisible(false)}
         onSuccess={() => setAuthModalVisible(false)}
       />
+
+      {!isNew && broadcasterPaused && !streamEnded && (
+        <View style={styles.pausedBanner} pointerEvents="none">
+          <Text style={styles.pausedText}>Stream paused · resuming shortly</Text>
+        </View>
+      )}
     </SafeAreaView>
   )
 }
