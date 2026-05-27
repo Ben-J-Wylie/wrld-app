@@ -18,6 +18,7 @@ export type PublicUser = {
   createdAt: string
   followerCount: number
   followingCount: number
+  isFollowing: boolean
 }
 
 export type SourceType = 'camera' | 'audio'

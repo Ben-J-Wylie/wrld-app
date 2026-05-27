@@ -407,8 +407,11 @@ export default function StreamView() {
                   <Text style={[styles.broadcasterHandle, showOverlay && styles.overlayText]}>
                     @{broadcaster.handle}
                   </Text>
-                  {!isNew && isSignedIn && broadcaster.handle && (
-                    <FollowButton handle={broadcaster.handle} />
+                  {!isNew && broadcaster.handle && (
+                    <FollowButton
+                      handle={broadcaster.handle}
+                      onAuthRequest={!isSignedIn ? () => setAuthModalVisible(true) : undefined}
+                    />
                   )}
                 </View>
               )}

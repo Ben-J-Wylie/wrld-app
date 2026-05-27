@@ -1,19 +1,30 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { usersApi } from '@/api/users'
+import { useUserProfile } from '@/hooks/useUserProfile'
 import { Button } from '@/components/ui/Button'
 
 type Props = {
   handle: string
-  initialFollowing?: boolean
+  onAuthRequest?: () => void
 }
 
-export function FollowButton({ handle, initialFollowing = false }: Props) {
-  const [following, setFollowing] = useState(initialFollowing)
+export function FollowButton({ handle, onAuthRequest }: Props) {
+  const { data } = useUserProfile(handle)
+  const [following, setFollowing] = useState(data?.isFollowing ?? false)
   const [loading, setLoading] = useState(false)
   const queryClient = useQueryClient()
 
+  // Sync local state whenever the server data arrives or refreshes
+  useEffect(() => {
+    if (data?.isFollowing !== undefined) setFollowing(data.isFollowing)
+  }, [data?.isFollowing])
+
   async function toggle() {
+    if (onAuthRequest) {
+      onAuthRequest()
+      return
+    }
     setLoading(true)
     try {
       if (following) {
