@@ -11,6 +11,7 @@ export type User = {
   notifyOnFollowedLive: boolean
   notifyOnNearbyLive: boolean
   spaceBucks: number
+  stardust: number
 }
 
 export type PublicUser = {

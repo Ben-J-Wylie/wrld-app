@@ -239,7 +239,16 @@ export default function Me() {
             <Text style={styles.fieldLabel}>SPACE BUCKS</Text>
             <View style={styles.fieldRow}>
               <Text style={styles.fieldValue}>{user.spaceBucks} 🚀</Text>
-              <Text style={styles.hint}>${(user.spaceBucks / 100).toFixed(2)} value</Text>
+              <Text style={styles.hint}>spend-only · ${(user.spaceBucks / 100).toFixed(2)}</Text>
+            </View>
+          </View>
+
+          {/* Stardust balance */}
+          <View style={styles.field}>
+            <Text style={styles.fieldLabel}>STARDUST</Text>
+            <View style={styles.fieldRow}>
+              <Text style={styles.fieldValue}>{user.stardust} ✨</Text>
+              <Text style={styles.hint}>earned from tips · ${(user.stardust / 100).toFixed(2)}</Text>
             </View>
           </View>
 
