@@ -223,7 +223,7 @@ export default function Cashout() {
         <View style={styles.sliderContainer}>
           <Slider value={amount} max={readyStardust} onChange={setAmount} />
           <View style={styles.sliderLabels}>
-            <Text style={styles.sliderLabel}>0</Text>
+            <Text style={styles.sliderLabel}>{`${CASHOUT_MINIMUM / 1000}K MIN`}</Text>
             <Text style={styles.sliderLabel}>MAX</Text>
           </View>
         </View>
