@@ -199,11 +199,7 @@ export default function Cashout() {
         {/* Amount header row */}
         <View style={styles.amountHeader}>
           <Text style={styles.sectionLabel}>AMOUNT</Text>
-          {readyStardust > 0 && (
-            <Pressable onPress={() => setAmount(readyStardust)}>
-              <Text style={styles.cashOutAll}>CASH OUT ALL</Text>
-            </Pressable>
-          )}
+          <Text style={styles.amountMin}>min. {CASHOUT_MINIMUM.toLocaleString()} ✨ ({fmt(CASHOUT_MINIMUM)})</Text>
         </View>
 
         {/* Big amount + unit */}
@@ -374,11 +370,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 1,
   },
-  cashOutAll: {
+  amountMin: {
     ...theme.typography.caption,
-    color: GOLD,
-    fontWeight: '700',
-    letterSpacing: 0.5,
+    color: theme.colors.textMuted,
   },
 
   amountDisplay: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md },
