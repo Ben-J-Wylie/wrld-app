@@ -25,6 +25,21 @@ export type PublicUser = {
   isFollowing: boolean
 }
 
+export type WalletTransaction = {
+  id: string
+  type: 'spaceBucksSpent' | 'stardustEarned'
+  amount: number
+  counterpartHandle: string
+  streamTitle: string
+  createdAt: string
+}
+
+export type WalletData = {
+  spaceBucks: number
+  stardust: number
+  transactions: WalletTransaction[]
+}
+
 export type SourceType = 'camera' | 'audio'
 
 export type Stream = {

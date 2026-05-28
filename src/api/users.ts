@@ -1,7 +1,7 @@
 import { apiClient } from './client'
 import { getClerkToken } from '@/lib/clerkToken'
 import { env } from '@/lib/env'
-import type { User, PublicUser } from '@/types'
+import type { User, PublicUser, WalletData } from '@/types'
 
 export const usersApi = {
   getMe: async (): Promise<User> => {
@@ -59,6 +59,11 @@ export const usersApi = {
 
   unregisterPushToken: async (token: string): Promise<void> => {
     await apiClient.delete('/users/me/push-subscription', { data: { token } })
+  },
+
+  getWallet: async (): Promise<WalletData> => {
+    const res = await apiClient.get<WalletData>('/users/me/wallet')
+    return res.data
   },
 
   updateNotificationPreferences: async (prefs: {
