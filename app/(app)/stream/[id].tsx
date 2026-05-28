@@ -10,6 +10,7 @@ import { ReactionLayer } from '@/components/feature/stream/ReactionLayer'
 import { AuthModal } from '@/components/feature/stream/AuthModal'
 import { TipSheet } from '@/components/feature/stream/TipSheet'
 import { useInvalidateCurrentUser } from '@/hooks/useCurrentUser'
+import { useInvalidateWallet } from '@/hooks/useWallet'
 import { Avatar } from '@/components/feature/user/Avatar'
 import { FollowButton } from '@/components/feature/user/FollowButton'
 import { theme } from '@/lib/theme'
@@ -87,6 +88,7 @@ export default function StreamView() {
     sendBroadcasterPaused, sendBroadcasterResumed,
   } = useSignaling()
   const invalidateCurrentUser = useInvalidateCurrentUser()
+  const invalidateWallet = useInvalidateWallet()
   const { localStream, remoteStream, error: mediaError, facingMode, startBroadcasting, startViewing, switchCamera, cleanup } = useMediasoup()
   const { isSignedIn } = useAuth()
   const { coords, loading: locationLoading, error: locationError } = useLocation()
@@ -187,19 +189,21 @@ export default function StreamView() {
     }
   }, [])
 
-  // Invalidate currentUser cache when a tip is confirmed so Me screen balance updates
+  // Invalidate caches when a tip is confirmed (sender) so balances update live
   useEffect(() => {
     if (confirmedBalance === null) return
     invalidateCurrentUser()
+    invalidateWallet()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [confirmedBalance])
 
-  // Show broadcaster toast and refresh stardust balance when a tip arrives
+  // Show broadcaster toast and refresh balances when a tip arrives
   useEffect(() => {
     if (!isNew || tipEvents.length === 0) return
     const latest = tipEvents[tipEvents.length - 1]!
     setBroadcasterTipToast(`@${latest.handle} sent ${latest.amount} 🚀`)
     invalidateCurrentUser()
+    invalidateWallet()
     if (tipToastTimerRef.current) clearTimeout(tipToastTimerRef.current)
     tipToastTimerRef.current = setTimeout(() => setBroadcasterTipToast(null), 3000)
   // eslint-disable-next-line react-hooks/exhaustive-deps
