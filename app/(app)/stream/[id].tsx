@@ -15,6 +15,7 @@ import { Avatar } from '@/components/feature/user/Avatar'
 import { FollowButton } from '@/components/feature/user/FollowButton'
 import { theme } from '@/lib/theme'
 import { signalStreamDisconnected, signalStreamEnded } from '@/lib/streamSignals'
+import { activeBroadcast } from '@/lib/activeBroadcast'
 import { streamsApi } from '@/api/streams'
 import { useSignaling } from '@/hooks/useSignaling'
 import { useMediasoup } from '@/hooks/useMediasoup'
@@ -286,12 +287,14 @@ export default function StreamView() {
   }
 
   function handleStartNew() {
+    activeBroadcast.clear()
     cleanup()
     disconnect()
     router.replace('/(app)/dashboard')
   }
 
   function handleLeave() {
+    activeBroadcast.clear()
     cleanup()
     disconnect()
     router.navigate('/(app)/globe')

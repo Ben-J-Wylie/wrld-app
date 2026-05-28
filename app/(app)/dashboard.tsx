@@ -1,13 +1,14 @@
 import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { router } from 'expo-router'
-import { useState } from 'react'
+import { router, useFocusEffect } from 'expo-router'
+import { useState, useCallback } from 'react'
 import { theme } from '@/lib/theme'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { useAuth } from '@clerk/clerk-expo'
 import { useLocation } from '@/hooks/useLocation'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
+import { activeBroadcast } from '@/lib/activeBroadcast'
 import type { SourceType } from '@/types'
 
 const SOURCES: { type: SourceType; label: string; icon: string }[] = [
@@ -23,6 +24,18 @@ export default function Dashboard() {
   const [title, setTitle] = useState('')
   const [readySources, setReadySources] = useState<Set<SourceType>>(new Set())
 
+  // If the user is currently live and tabs back to dashboard, send them straight
+  // to their stream instead of the setup page.
+  useFocusEffect(useCallback(() => {
+    const active = activeBroadcast.get()
+    if (active) {
+      router.navigate({
+        pathname: '/(app)/stream/[id]',
+        params: { id: 'new', title: active.title, sources: active.sources },
+      })
+    }
+  }, []))
+
   function toggleSource(type: SourceType) {
     setReadySources((prev: Set<SourceType>) => {
       const next = new Set(prev)
@@ -34,12 +47,11 @@ export default function Dashboard() {
 
   function handleGoLive() {
     if (!title.trim() || !coords || readySources.size === 0) return
+    const params = { title: title.trim(), sources: Array.from(readySources).join(',') }
+    activeBroadcast.set(params)
     router.push({
       pathname: '/(app)/stream/new',
-      params: {
-        title: title.trim(),
-        sources: Array.from(readySources).join(','),
-      },
+      params,
     })
   }
 
