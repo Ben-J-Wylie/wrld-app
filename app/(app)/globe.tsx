@@ -18,11 +18,85 @@ import type { Stream } from '@/types'
 const EARTH_ASSET = require('../../assets/images/earth.jpg')
 let earthTexture: THREE.Texture | null = null
 
-const MESH_POOL_SIZE = 30
-const BADGE_SIZE = 26
+const POOL_SIZE = 30
 
 type GeoCluster = { streams: Stream[]; centroidLat: number; centroidLng: number }
-type BadgeInfo = { x: number; y: number; count: number }
+
+// 5×7 bitmap glyphs for digits and '+', encoded as row bitmasks (MSB = leftmost pixel)
+const GLYPH: Record<string, number[]> = {
+  '0': [0b01110, 0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b01110],
+  '1': [0b00100, 0b01100, 0b00100, 0b00100, 0b00100, 0b00100, 0b01110],
+  '2': [0b01110, 0b10001, 0b00001, 0b00010, 0b00100, 0b01000, 0b11111],
+  '3': [0b11110, 0b00001, 0b00001, 0b01110, 0b00001, 0b00001, 0b11110],
+  '4': [0b00010, 0b00110, 0b01010, 0b10010, 0b11111, 0b00010, 0b00010],
+  '5': [0b11111, 0b10000, 0b10000, 0b11110, 0b00001, 0b00001, 0b11110],
+  '6': [0b01110, 0b10000, 0b10000, 0b11110, 0b10001, 0b10001, 0b01110],
+  '7': [0b11111, 0b00001, 0b00010, 0b00100, 0b01000, 0b01000, 0b01000],
+  '8': [0b01110, 0b10001, 0b10001, 0b01110, 0b10001, 0b10001, 0b01110],
+  '9': [0b01110, 0b10001, 0b10001, 0b01111, 0b00001, 0b00001, 0b01110],
+  '+': [0b00000, 0b00100, 0b00100, 0b11111, 0b00100, 0b00100, 0b00000],
+}
+
+// Builds a DataTexture for a pin entirely in JS — no DOM canvas, works in expo-gl.
+// Circle fill + white border ring + soft quadratic glow halo.
+// Cluster pins also have the count baked in via a pixel-font rasteriser.
+function makePinTexture(count: number): THREE.DataTexture {
+  const S = 96
+  const cx = S / 2, cy = S / 2
+  const isCluster = count > 1
+  const circleR = isCluster ? 26 : 18
+  const borderR = circleR + 2
+  const glowR   = borderR + 14
+  const [fr, fg, fb] = isCluster ? [0x5b, 0x8c, 0xff] : [0xff, 0x3b, 0x5c]
+  const data = new Uint8Array(S * S * 4)
+
+  for (let y = 0; y < S; y++) {
+    for (let x = 0; x < S; x++) {
+      const dx = x - cx, dy = y - cy
+      const d = Math.sqrt(dx * dx + dy * dy)
+      const i = (y * S + x) * 4
+      if (d <= circleR) {
+        data[i] = fr; data[i+1] = fg; data[i+2] = fb; data[i+3] = 255
+      } else if (d <= borderR) {
+        data[i] = 255; data[i+1] = 255; data[i+2] = 255; data[i+3] = 255
+      } else if (d < glowR) {
+        const t = (glowR - d) / (glowR - borderR)
+        const a = Math.round(t * t * 120)
+        data[i] = fr; data[i+1] = fg; data[i+2] = fb; data[i+3] = a
+      }
+    }
+  }
+
+  if (isCluster) {
+    const label = count >= 10 ? '9+' : String(count)
+    const GW = 5, GH = 7, SC = 3
+    const totalW = label.length * (GW + 1) * SC - SC
+    const ox = Math.floor(cx - totalW / 2)
+    const oy = Math.floor(cy - (GH * SC) / 2)
+    for (let ci = 0; ci < label.length; ci++) {
+      const rows = GLYPH[label[ci]!]
+      if (!rows) continue
+      for (let row = 0; row < GH; row++) {
+        for (let col = 0; col < GW; col++) {
+          if (!((rows[row]! >> (GW - 1 - col)) & 1)) continue
+          for (let sy = 0; sy < SC; sy++) {
+            for (let sx = 0; sx < SC; sx++) {
+              const px = ox + ci * (GW + 1) * SC + col * SC + sx
+              const py = oy + row * SC + sy
+              if (px < 0 || px >= S || py < 0 || py >= S) continue
+              const i = (py * S + px) * 4
+              data[i] = 255; data[i+1] = 255; data[i+2] = 255; data[i+3] = 255
+            }
+          }
+        }
+      }
+    }
+  }
+
+  const tex = new THREE.DataTexture(data, S, S)
+  tex.needsUpdate = true
+  return tex
+}
 
 function latLngToVec3(lat: number, lng: number, r = 1.001): THREE.Vector3 {
   const phi = (90 - lat) * (Math.PI / 180)
@@ -43,24 +117,17 @@ function haversineRad(lat1: number, lng1: number, lat2: number, lng2: number): n
   return 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 }
 
-// Groups streams by geographic proximity.
-// Threshold is zoom-dependent: far zoom = larger radius, close zoom = smaller.
-// Runs only when zoom or streams change — NOT every frame.
 function buildGeoClusters(streams: Stream[], cameraZ: number): GeoCluster[] {
   if (streams.length === 0) return []
   const t = Math.max(0, Math.min(1, (cameraZ - 1.15) / (8 - 1.15)))
-  // 0.01 rad (~64 km) when close, 0.18 rad (~1150 km) when far
   const threshold = 0.01 + t * 0.17
-
   const assigned = new Set<number>()
   const groups: GeoCluster[] = []
-
   for (let i = 0; i < streams.length; i++) {
     const si = streams[i]
     if (!si || assigned.has(i) || si.lat == null || si.lng == null) continue
     const group: GeoCluster = { streams: [si], centroidLat: si.lat, centroidLng: si.lng }
     assigned.add(i)
-
     for (let j = i + 1; j < streams.length; j++) {
       const sj = streams[j]
       if (!sj || assigned.has(j) || sj.lat == null || sj.lng == null) continue
@@ -96,9 +163,6 @@ export default function Globe() {
   const bannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const bannerPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const coordsRef = useRef(coords)
-
-  // Badge overlays — plain React state, updated on cluster change and throttled during motion
-  const [badges, setBadges] = useState<BadgeInfo[]>([])
 
   useEffect(() => { coordsRef.current = coords }, [coords])
 
@@ -174,11 +238,12 @@ export default function Globe() {
 
   // ── Three.js refs ──────────────────────────────────────────────────────────
   const globeGroupRef = useRef<THREE.Group | null>(null)
-  const meshPoolRef = useRef<THREE.Mesh[]>([])
-  const pinGeoRef = useRef<THREE.SphereGeometry | null>(null)
-  // Stable cluster data — only updated on zoom/stream change, not every frame
+  // Sprite pool — each slot is either a single-stream pin or a cluster pin,
+  // texture baked with count + glow. No separate RN badge overlay needed.
+  const spritePoolRef = useRef<THREE.Sprite[]>([])
+  // Textures keyed by count ("1", "2", …, "9+"). Generated once, reused.
+  const textureCacheRef = useRef<Map<string, THREE.DataTexture>>(new Map())
   const clustersRef = useRef<GeoCluster[]>([])
-  // Pre-computed group-local Vector3 per cluster centroid — no per-frame allocation
   const clusterLocalPosRef = useRef<THREE.Vector3[]>([])
   const clusterIsMultiRef = useRef<boolean[]>([])
   const lastClusteredZRef = useRef(-1)
@@ -200,7 +265,6 @@ export default function Globe() {
 
   streamsRef.current = streams ?? []
 
-  // Force re-cluster on next animate frame when streams data changes
   useEffect(() => { lastStreamCountRef.current = -1 }, [streams])
 
   useEffect(() => {
@@ -219,6 +283,8 @@ export default function Globe() {
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
       try { rendererRef.current?.dispose() } catch {}
       rendererRef.current = null
+      textureCacheRef.current.forEach(t => { try { t.dispose() } catch {} })
+      textureCacheRef.current.clear()
     }
   }, [])
 
@@ -230,9 +296,10 @@ export default function Globe() {
 
     const gen = ++setupGenRef.current
 
-    meshPoolRef.current.forEach(m => { try { (m.material as THREE.Material).dispose() } catch {} })
-    meshPoolRef.current = []
-    if (pinGeoRef.current) { try { pinGeoRef.current.dispose() } catch {}; pinGeoRef.current = null }
+    spritePoolRef.current.forEach(s => { try { (s.material as THREE.Material).dispose() } catch {} })
+    spritePoolRef.current = []
+    textureCacheRef.current.forEach(t => { try { t.dispose() } catch {} })
+    textureCacheRef.current.clear()
     clustersRef.current = []
     clusterLocalPosRef.current = []
     clusterIsMultiRef.current = []
@@ -278,69 +345,47 @@ export default function Globe() {
     rendererRef.current = renderer
     group.add(new THREE.Mesh(sphereGeo, earthMat))
 
-    // Pre-allocate mesh pool
-    const geo = new THREE.SphereGeometry(0.028, 8, 8)
-    pinGeoRef.current = geo
-    for (let i = 0; i < MESH_POOL_SIZE; i++) {
-      const mat = new THREE.MeshBasicMaterial({ color: 0xff3b5c, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4 })
-      const mesh = new THREE.Mesh(geo, mat)
-      mesh.visible = false
-      group.add(mesh)
-      meshPoolRef.current.push(mesh)
+    // Pre-allocate sprite pool. SpriteMaterial with depthWrite:false so sprites
+    // don't occlude each other; depthTest:true so the globe hides back-face pins.
+    for (let i = 0; i < POOL_SIZE; i++) {
+      const mat = new THREE.SpriteMaterial({ transparent: true, depthTest: true, depthWrite: false })
+      const sprite = new THREE.Sprite(mat)
+      sprite.visible = false
+      group.add(sprite)
+      spritePoolRef.current.push(sprite)
     }
 
-    // Pre-allocated scratch vectors — zero per-frame allocation in steady state
     const _wp = new THREE.Vector3()
-    const _proj = new THREE.Vector3()
     const REF_DEPTH = 3 - 1.001
 
-    // Projects current multi-cluster centroids to screen coords and updates badge state.
-    // Called from applyClusterUpdate and throttled from animate during globe motion.
-    function refreshBadgePositions() {
-      const camZ = camera.position.z
-      const { width, height } = containerSizeRef.current
-      const newBadges: BadgeInfo[] = []
-      for (let i = 0; i < clustersRef.current.length; i++) {
-        if (!clusterIsMultiRef.current[i]) continue
-        const localPos = clusterLocalPosRef.current[i]
-        if (!localPos) continue
-        _proj.copy(localPos).applyMatrix4(group.matrixWorld)
-        if (_proj.z < 1 / camZ) continue
-        _proj.project(camera)
-        newBadges.push({
-          x: ((_proj.x + 1) / 2) * width - BADGE_SIZE / 2,
-          y: ((1 - _proj.y) / 2) * height - BADGE_SIZE / 2,
-          count: clustersRef.current[i]!.streams.length,
-        })
+    function getOrCreateTexture(count: number): THREE.DataTexture {
+      const key = count >= 10 ? '10+' : String(count)
+      let tex = textureCacheRef.current.get(key)
+      if (!tex) {
+        tex = makePinTexture(count)
+        textureCacheRef.current.set(key, tex)
       }
-      setBadges(newBadges)
+      return tex
     }
 
-    // Apply a new cluster result to the mesh pool and centroid cache.
-    // Only called when clusters change, not every frame.
     function applyClusterUpdate(newClusters: GeoCluster[]) {
       clustersRef.current = newClusters
       clusterLocalPosRef.current = newClusters.map(c => latLngToVec3(c.centroidLat, c.centroidLng))
       clusterIsMultiRef.current = newClusters.map(c => c.streams.length > 1)
 
       newClusters.forEach((cluster, i) => {
-        if (i >= meshPoolRef.current.length) return
-        const mesh = meshPoolRef.current[i]!
-        mesh.position.copy(clusterLocalPosRef.current[i]!)
-        mesh.visible = true
-        ;(mesh.material as THREE.MeshBasicMaterial).color.setHex(
-          cluster.streams.length > 1 ? 0x5b8cff : 0xff3b5c
-        )
+        if (i >= spritePoolRef.current.length) return
+        const sprite = spritePoolRef.current[i]!
+        sprite.position.copy(clusterLocalPosRef.current[i]!)
+        sprite.visible = true
+        const mat = sprite.material as THREE.SpriteMaterial
+        mat.map = getOrCreateTexture(cluster.streams.length)
+        mat.needsUpdate = true
       })
-      for (let i = newClusters.length; i < meshPoolRef.current.length; i++) {
-        meshPoolRef.current[i]!.visible = false
+      for (let i = newClusters.length; i < spritePoolRef.current.length; i++) {
+        spritePoolRef.current[i]!.visible = false
       }
-
-      group.updateWorldMatrix(false, false)
-      refreshBadgePositions()
     }
-
-    let badgeRefreshFrame = 0
 
     const animate = () => {
       rafRef.current = requestAnimationFrame(animate)
@@ -349,8 +394,7 @@ export default function Globe() {
       if (isAutoRotating) group.rotation.y += 0.0008
 
       const vel = velocityRef.current
-      const hasVelocity = vel.x !== 0 || vel.y !== 0
-      if (hasVelocity) {
+      if (vel.x !== 0 || vel.y !== 0) {
         group.rotation.y += vel.y
         group.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, group.rotation.x + vel.x))
         savedRotationRef.current = { x: group.rotation.x, y: group.rotation.y }
@@ -360,30 +404,24 @@ export default function Globe() {
 
       group.updateWorldMatrix(false, false)
 
-      // Refresh badge screen positions during motion (every 3rd frame ≈ 20fps)
-      // so they track the pin during inertia and auto-rotate without per-frame React updates.
-      if (hasVelocity || isAutoRotating) {
-        badgeRefreshFrame = (badgeRefreshFrame + 1) % 3
-        if (badgeRefreshFrame === 0) refreshBadgePositions()
-      }
-
       const camZ = camera.position.z
       const streamCount = streamsRef.current.length
 
-      // Re-cluster only when zoom shifts by >0.12 or streams change — not every frame
       if (Math.abs(camZ - lastClusteredZRef.current) > 0.12 || streamCount !== lastStreamCountRef.current) {
         lastClusteredZRef.current = camZ
         lastStreamCountRef.current = streamCount
         applyClusterUpdate(buildGeoClusters(streamsRef.current, camZ))
       }
 
-      // Per-frame: update mesh scales for constant screen size (uses _wp, no alloc)
+      // Per-frame: scale sprites for constant screen size regardless of zoom.
+      // Cluster pins are slightly larger than single-stream pins.
       const n = clustersRef.current.length
-      for (let i = 0; i < n && i < meshPoolRef.current.length; i++) {
-        const mesh = meshPoolRef.current[i]!
-        mesh.getWorldPosition(_wp)
+      for (let i = 0; i < n && i < spritePoolRef.current.length; i++) {
+        const sprite = spritePoolRef.current[i]!
+        sprite.getWorldPosition(_wp)
         const depth = Math.max(0.01, camZ - _wp.z)
-        mesh.scale.setScalar((clusterIsMultiRef.current[i] ? 1.55 : 1) * depth / REF_DEPTH)
+        const base = clusterIsMultiRef.current[i] ? 0.14 : 0.10
+        sprite.scale.setScalar(base * depth / REF_DEPTH)
       }
 
       try {
@@ -453,13 +491,14 @@ export default function Globe() {
 
   function handleTap(sx: number, sy: number) {
     const camera = cameraRef.current
-    if (!camera || meshPoolRef.current.length === 0) return
+    if (!camera || spritePoolRef.current.length === 0) return
     const { width, height } = containerSizeRef.current
     const raycaster = new THREE.Raycaster()
     raycaster.setFromCamera(new THREE.Vector2((sx / width) * 2 - 1, -(sy / height) * 2 + 1), camera)
-    const hits = raycaster.intersectObjects(meshPoolRef.current.filter(m => m.visible))
+    const visible = spritePoolRef.current.filter(s => s.visible)
+    const hits = raycaster.intersectObjects(visible)
     if (hits.length > 0) {
-      const poolIdx = meshPoolRef.current.indexOf(hits[0]!.object as THREE.Mesh)
+      const poolIdx = spritePoolRef.current.indexOf(hits[0]!.object as THREE.Sprite)
       const cluster = clustersRef.current[poolIdx]
       if (cluster) {
         if (cluster.streams.length === 1) {
@@ -495,17 +534,6 @@ export default function Globe() {
     <View style={styles.container} onLayout={e => { const { width, height } = e.nativeEvent.layout; containerSizeRef.current = { width, height } }}>
       <GLView style={StyleSheet.absoluteFill} onContextCreate={onContextCreate} />
       <View style={StyleSheet.absoluteFill} {...panResponder.panHandlers} />
-
-      {/* Badge overlays — plain React state, only mounted for actual multi-clusters */}
-      {badges.length > 0 && (
-        <View style={StyleSheet.absoluteFill} pointerEvents="none">
-          {badges.map((b, i) => (
-            <View key={i} style={[styles.badge, { left: b.x, top: b.y }]}>
-              <Text style={styles.badgeText}>{b.count}</Text>
-            </View>
-          ))}
-        </View>
-      )}
 
       <View style={StyleSheet.absoluteFill} pointerEvents="none">
         <SafeAreaView style={styles.safeArea}>
@@ -593,20 +621,6 @@ const styles = StyleSheet.create({
   liveBadgeText: { ...theme.typography.caption, color: '#fff', fontWeight: '700' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   hint: { ...theme.typography.body, color: theme.colors.textMuted },
-
-  badge: {
-    position: 'absolute',
-    width: BADGE_SIZE,
-    height: BADGE_SIZE,
-    borderRadius: BADGE_SIZE / 2,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 2,
-    borderColor: theme.colors.accent,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  badgeText: { fontSize: 10, fontWeight: '800', color: theme.colors.accent, lineHeight: 12 },
-
   cardWrapper: { position: 'absolute', bottom: 0, left: 0, right: 0, padding: theme.spacing.lg, paddingBottom: theme.spacing.xxl },
   card: { backgroundColor: theme.colors.bgElevated, borderRadius: theme.radius.lg, borderWidth: 1, borderColor: theme.colors.border, padding: theme.spacing.md, gap: theme.spacing.sm },
   cardLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
@@ -619,7 +633,6 @@ const styles = StyleSheet.create({
   joinBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
   clusterHeader: { ...theme.typography.caption, color: theme.colors.textMuted, fontWeight: '600', paddingBottom: theme.spacing.xs, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
   clusterRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm, paddingVertical: theme.spacing.xs },
-
   bannerWrapper: { position: 'absolute', left: 0, right: 0, paddingHorizontal: theme.spacing.md },
   banner: { borderRadius: theme.radius.md, borderWidth: 1, paddingVertical: theme.spacing.sm, paddingHorizontal: theme.spacing.md, flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
   bannerMuted: { backgroundColor: theme.colors.bgElevated, borderColor: theme.colors.border },
