@@ -222,7 +222,8 @@ We're building in slices so each phase is independently verifiable.
 | 10    | ✅ done  | Engagement. Ephemeral chat + emoji reactions in stream view, follow-a-streamer, AuthModal for anonymous users. **Chat:** `chatMessage` fans out through mediasoup to all room peers; auth required to send; anon viewers see the thread but get `AuthModal` on send attempt; `ChatOverlay` component (scrolling list + send input); keyboard shifts panel up via `Keyboard` event listener (KAV doesn't work inside absolute-positioned containers). **Reactions:** 4 emoji types (❤️🔥👏😮); Periscope-style `Animated` upward-drift burst; auth required; anon gets `AuthModal`. **Follow:** `FollowButton` shown to all viewers; reads real `isFollowing` from `GET /users/:identifier` (backend now includes it when request is authenticated); anon tap opens `AuthModal`; local state syncs via `useEffect` on query data so it survives `showControls` remounts. **AuthModal:** bottom-sheet signup/signin matching existing Clerk flow (email + password; signup triggers email_code verification step). **Bug fixes in this phase:** (a) viewer re-joining same stream produced black screen — `useEffect([id])` is blind to tab re-focus; replaced with `useFocusEffect` so every screen focus triggers join; (b) `FollowButton` reset to "Follow" on remount because `initialFollowing` was always `false` — fixed by reading server state via `useUserProfile`. |
 | 11    | ✅ done  | Discovery & notifications. Expo Push Notifications via Expo's servers (routes to APNs/FCM). `PushSubscription` table on backend (token, platform, timezone, lat/lng, rate-limit timestamp). Notification prefs on `User` (`notifyOnFollowedLive` default true, `notifyOnNearbyLive` default off). Fan-out on stream start: followers + nearby (10km Haversine, 1/hr rate limit — both temporarily relaxed to 100km + no limit for testing). `useRegisterPushToken` hook: permission request, Android channel, Expo token + last-known location → backend. Root layout: foreground notification display + notification-tap deep-link to stream. Settings screen: two preference toggles. **Credential setup (one-time):** iOS: `eas credentials` → APNs key (Ben's Apple account). Android: Firebase project `wrld-b1d2d`, `google-services.json` at repo root, FCM V1 service account uploaded via EAS dashboard. **Install `expo-notifications` with `npx expo install`, never `npm install`** — the latter grabs the latest SDK version which won't match the compiled native modules. Broadcaster pause banner: `'inactive'` AppState (iOS Control Center/Notification Center) sends `broadcasterPaused` signal through mediasoup; viewers see pill banner "Stream paused · resuming shortly"; `'active'` sends `broadcasterResumed`. Android `'inactive'` doesn't fire for notification shade — no freeze on Android. |
 | 12    | upcoming | Visual polish. Design system implemented across all existing screens via primitive components in `src/components/ui/`. Theme tokens in `src/lib/theme.ts` derived from the approved mocks. Consistent typography, spacing, color, motion across globe, dashboard, stream view, profile, settings, auth screens. No new broadcaster sensor sources in v0.2 — compass/gyro/accelerometer/torch are explicitly deferred to v0.3. Achieved when: opening any screen feels like the same product; the app no longer looks like a series of phase deliverables glued together. |
-| 13    | upcoming | Pre-v0.2 polish. Empty states, error states, first-time onboarding intro (a couple of screens introducing "what is WRLD"), globe initial orientation on user's location (not Central America), share-this-stream functionality (deep links via `wrld://stream/<id>` + Universal Links on `wrld.cam`). No App Store assets or public legal docs in v0.2 — this is an internal milestone for Ben + Aaron + small friends-and-family group, not a launch. Achieved when: Ben and Aaron each install the app on a fresh device, run through it top to bottom, and don't flinch at any rough edge. |
+| 13    | upcoming | Space Bucks + tipping. Server-side virtual currency (100 Space Bucks = $1) with no real money, no IAP, no KYC — friends-and-family only. Admin-seeded balances. Viewers tip broadcasters during live streams; tips deduct from sender and credit broadcaster atomically. **App:** `TipSheet` bottom sheet (presets 50 🚀 · $0.50 / 100 🚀 · $1 / 500 🚀 · $5 + custom amount, dollar equivalent shown on each chip); tip button in viewer controls overlay; auth gate for anonymous users. **Public burst:** `tipReceived` WebSocket message fans out to all peers in the room — floating animation with tipper handle + amount (same pattern as emoji reactions). **Broadcaster toast:** private pill banner showing "@handle sent N 🚀", auto-dismisses 3s, queues on rapid tips. **Balance:** shown in `TipSheet` before confirming + in Me screen. `SPACE_BUCKS_PER_DOLLAR = 100` named constant in both backend and app. |
+| 14    | upcoming | Pre-v0.2 polish. Empty states, error states, first-time onboarding intro (a couple of screens introducing "what is WRLD"), globe initial orientation on user's location (not Central America), share-this-stream functionality (deep links via `wrld://stream/<id>` + Universal Links on `wrld.cam`). No App Store assets or public legal docs in v0.2 — this is an internal milestone for Ben + Aaron + small friends-and-family group, not a launch. Achieved when: Ben and Aaron each install the app on a fresh device, run through it top to bottom, and don't flinch at any rough edge. |
 
 When Claude Code is asked to "do the next phase," verify the user means the
 next unstarted phase above and ask before scaffolding multiple phases at once.
@@ -236,7 +237,7 @@ next unstarted phase above and ask before scaffolding multiple phases at once.
 
 ## Phase parallelism
 
-Phases 8–13 aren't strictly sequential — some can run in parallel:
+Phases 8–14 aren't strictly sequential — some can run in parallel:
 
 - **Phase 8 (identity/profile) and Phase 12 (visual polish) can run in
   parallel.** Aaron drives Phase 8 (backend additions for follow, avatar
@@ -247,7 +248,10 @@ Phases 8–13 aren't strictly sequential — some can run in parallel:
 - **Phases 9, 10, 11 are sequential.** Don't add chat/reactions/push on top
   of unreliable streams; don't notify users about streams that can't be
   joined reliably.
-- **Phase 13 last.** Polish-on-polish only makes sense once the polishable
+- **Phase 12 (Ben) and Phase 13 (Aaron) run in parallel.** Ben owns the
+  design system; Aaron owns Space Bucks + tipping. They land independently
+  and merge to main continuously.
+- **Phase 14 last.** Polish-on-polish only makes sense once the polishable
   surfaces are settled.
 
 ---
@@ -275,9 +279,11 @@ any circumstance — the discipline of saying no is what makes v0.2 shippable:
 
 - **No recording / replay / playback.** Streams are ephemeral. Miss it, miss
   it. (See v0.3 commitments below.)
-- **No monetization** — no tipping, wallets, payments, gated content,
-  subscriptions. Money flows trigger KYC, fraud surface, regulatory questions,
-  app store review complications. None of that belongs in v0.2.
+- **No real-money payments, KYC, or IAP.** Space Bucks (Phase 13) are a
+  server-side virtual currency with no real money moving — balances are
+  admin-seeded, tips are balance transfers, no payment processor, no App Store
+  IAP, no KYC. Real payments, payout flows, Stripe/IAP integration, and KYC
+  are v0.3. Wallets, gated content, and subscriptions remain deferred.
 - **No broadcaster sensor sources beyond audio/video.** Compass, gyroscope,
   accelerometer, torch status, speed indicators — all deferred to v0.3. v0.2
   ships with just camera + audio sources, both already implemented in Phase 6.
@@ -352,9 +358,11 @@ not a blank page:
   Gyroscope, accelerometer, speed, torch status are secondary candidates.
   Decision deferred to v0.3 scoping; for v0.2 the data layer is just
   video + audio.
-- **Monetization.** Tipping, wallets, gated content, or subscription models.
-  Decision deferred entirely — payments architecture is a whole-quarter
-  discussion, not a feature ticket.
+- **Real-money payments layer.** Space Bucks tipping ships in v0.2 (Phase 13)
+  as a server-side virtual currency with no real money. v0.3 adds the payments
+  layer: Stripe or Apple/Google IAP, real purchase flows, payout to
+  broadcasters, KYC. Wallets, gated content, and subscriptions are also v0.3
+  scope — decision deferred until the v0.2 tipping mechanics are validated.
 
 **Pre-launch hardening (before any non-friends-and-family users):**
 
