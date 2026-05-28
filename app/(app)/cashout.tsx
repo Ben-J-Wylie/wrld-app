@@ -54,9 +54,10 @@ function Slider({
 
   const snap = useCallback((x: number) => {
     const { trackWidth, min, max, onChange } = state.current
-    if (!trackWidth || max <= min) return
+    if (!trackWidth || max < min) return
     const ratio = Math.max(0, Math.min(1, x / trackWidth))
-    onChange(Math.round(((ratio * (max - min)) + min) / 100) * 100)
+    const raw = Math.round(((ratio * (max - min)) + min) / 100) * 100
+    onChange(Math.max(min, Math.min(max, raw)))
   }, [])
 
   const panResponder = useRef(
@@ -101,7 +102,7 @@ export default function Cashout() {
 
   useFocusEffect(useCallback(() => {
     setSubmitted(false)
-    setAmount(0)
+    setAmount(CASHOUT_MINIMUM)
   }, []))
 
   if (isLoading || !data) {
