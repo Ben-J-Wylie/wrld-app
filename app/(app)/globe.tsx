@@ -547,11 +547,21 @@ export default function Globe() {
               </View>
             )}
           </View>
-          {liveCount === 0 && coords && (
-            <View style={styles.center}><Text style={styles.hint}>No live streams nearby</Text></View>
-          )}
         </SafeAreaView>
       </View>
+
+      {liveCount === 0 && coords && (
+        <View style={styles.emptyOverlay} pointerEvents="box-none">
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyEmoji}>🌍</Text>
+            <Text style={styles.emptyHeading}>No streams nearby</Text>
+            <Text style={styles.emptyBody}>Be the first to go live in your area</Text>
+            <Pressable style={styles.emptyBtn} onPress={() => router.push('/(app)/dashboard')}>
+              <Text style={styles.emptyBtnText}>Go live</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
 
       {banner && (
         <View style={[styles.bannerWrapper, { top: insets.top + 56 }]} pointerEvents="box-none">
@@ -621,8 +631,28 @@ const styles = StyleSheet.create({
   wordmark: { ...theme.typography.title, color: theme.colors.text },
   liveBadge: { backgroundColor: theme.colors.live, borderRadius: theme.radius.full, paddingHorizontal: theme.spacing.sm, paddingVertical: 3 },
   liveBadgeText: { ...theme.typography.caption, color: '#fff', fontWeight: '700' },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  hint: { ...theme.typography.body, color: theme.colors.textMuted },
+  emptyOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
+  emptyCard: {
+    backgroundColor: 'rgba(10, 10, 15, 0.88)',
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    padding: theme.spacing.xl,
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    maxWidth: 280,
+  },
+  emptyEmoji: { fontSize: 48, marginBottom: 4 },
+  emptyHeading: { ...theme.typography.heading, color: theme.colors.text, textAlign: 'center' },
+  emptyBody: { ...theme.typography.body, color: theme.colors.textMuted, textAlign: 'center', lineHeight: 20 },
+  emptyBtn: {
+    marginTop: theme.spacing.sm,
+    backgroundColor: theme.colors.live,
+    borderRadius: theme.radius.md,
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.xl,
+  },
+  emptyBtnText: { ...theme.typography.body, color: '#fff', fontWeight: '700' },
   cardWrapper: { position: 'absolute', bottom: 0, left: 0, right: 0, padding: theme.spacing.lg, paddingBottom: theme.spacing.xxl },
   card: { backgroundColor: theme.colors.bgElevated, borderRadius: theme.radius.lg, borderWidth: 1, borderColor: theme.colors.border, padding: theme.spacing.md, gap: theme.spacing.sm },
   cardLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },

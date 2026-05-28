@@ -35,12 +35,14 @@ export default function Search() {
 
       {!q.trim() && (
         <View style={styles.empty}>
+          <Text style={styles.emptyEmoji}>🔍</Text>
           <Text style={styles.emptyText}>Search for people on WRLD</Text>
         </View>
       )}
 
       {q.trim().length > 0 && !isFetching && users?.length === 0 && (
         <View style={styles.empty}>
+          <Text style={styles.emptyEmoji}>👤</Text>
           <Text style={styles.emptyText}>No users found for "{q}"</Text>
         </View>
       )}
@@ -84,7 +86,8 @@ const styles = StyleSheet.create({
   input: { flex: 1 },
   spinner: { width: 20 },
   list: { paddingHorizontal: theme.spacing.lg },
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: theme.spacing.sm },
+  emptyEmoji: { fontSize: 36 },
   emptyText: { ...theme.typography.body, color: theme.colors.textMuted },
   row: {
     flexDirection: 'row',

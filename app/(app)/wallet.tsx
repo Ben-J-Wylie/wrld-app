@@ -216,7 +216,9 @@ export default function Wallet() {
         ListHeaderComponent={header}
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Text style={styles.emptyText}>No transactions yet</Text>
+            <Text style={styles.emptyEmoji}>💳</Text>
+            <Text style={styles.emptyHeading}>No transactions yet</Text>
+            <Text style={styles.emptyText}>Top up or tip a streamer to get started</Text>
           </View>
         }
         contentContainerStyle={styles.listContent}
@@ -335,6 +337,8 @@ const styles = StyleSheet.create({
 
   separator: { height: 1, backgroundColor: theme.colors.border, marginLeft: 76 },
 
-  empty: { paddingVertical: theme.spacing.xl, alignItems: 'center' },
-  emptyText: { ...theme.typography.body, color: theme.colors.textMuted },
+  empty: { paddingVertical: theme.spacing.xxl, alignItems: 'center', gap: theme.spacing.sm },
+  emptyEmoji: { fontSize: 40 },
+  emptyHeading: { ...theme.typography.heading, color: theme.colors.text },
+  emptyText: { ...theme.typography.body, color: theme.colors.textMuted, textAlign: 'center' },
 })
