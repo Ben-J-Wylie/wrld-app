@@ -10,7 +10,7 @@ import {
   PanResponder,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { router } from 'expo-router'
+import { router, useFocusEffect } from 'expo-router'
 import { theme } from '@/lib/theme'
 import { useWallet, useInvalidateWallet } from '@/hooks/useWallet'
 import { useInvalidateCurrentUser } from '@/hooks/useCurrentUser'
@@ -95,6 +95,11 @@ export default function Cashout() {
   const [amount, setAmount] = useState(0)
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
+
+  useFocusEffect(useCallback(() => {
+    setSubmitted(false)
+    setAmount(0)
+  }, []))
 
   if (isLoading || !data) {
     return (
