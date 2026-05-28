@@ -277,7 +277,7 @@ export default function StreamView() {
           streamURL={(localStream as unknown as { toURL(): string }).toURL()}
           style={StyleSheet.absoluteFill}
           objectFit="cover"
-          mirror={facingMode === 'user'}
+          mirror={facingMode === 'environment'}
           zOrder={0}
         />
       )}
