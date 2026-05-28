@@ -1,7 +1,7 @@
 import { apiClient } from './client'
 import { getClerkToken } from '@/lib/clerkToken'
 import { env } from '@/lib/env'
-import type { User, PublicUser, WalletData } from '@/types'
+import type { User, PublicUser, WalletData, CashoutRequest } from '@/types'
 
 export const usersApi = {
   getMe: async (): Promise<User> => {
@@ -64,6 +64,16 @@ export const usersApi = {
   getWallet: async (): Promise<WalletData> => {
     const res = await apiClient.get<WalletData>('/users/me/wallet')
     return res.data
+  },
+
+  requestCashout: async (amount: number): Promise<{ request: CashoutRequest }> => {
+    const res = await apiClient.post<{ request: CashoutRequest }>('/users/me/cashout', { amount })
+    return res.data
+  },
+
+  getCashoutRequests: async (): Promise<CashoutRequest[]> => {
+    const res = await apiClient.get<{ requests: CashoutRequest[] }>('/users/me/cashout-requests')
+    return res.data.requests
   },
 
   topUpSpaceBucks: async (): Promise<{ spaceBucks: number }> => {

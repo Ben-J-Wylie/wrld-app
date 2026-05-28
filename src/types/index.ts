@@ -37,7 +37,18 @@ export type WalletTransaction = {
 export type WalletData = {
   spaceBucks: number
   stardust: number
+  lockedStardust: number
+  readyStardust: number
   transactions: WalletTransaction[]
+}
+
+export type CashoutRequest = {
+  id: string
+  amount: number
+  dollarValue: number
+  status: 'pending' | 'paid' | 'rejected'
+  createdAt: string
+  processedAt: string | null
 }
 
 export type SourceType = 'camera' | 'audio'

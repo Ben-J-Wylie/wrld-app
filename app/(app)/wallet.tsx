@@ -144,7 +144,7 @@ export default function Wallet() {
 
         <Pressable
           style={[styles.actionBtn, styles.actionBtnGold]}
-          onPress={() => Alert.alert('Coming soon', 'Stardust cash-out will be available in a future update.')}
+          onPress={() => router.push('/(app)/cashout')}
         >
           <Text style={styles.actionBtnIcon}>💸</Text>
           <Text style={styles.actionBtnLabel}>Cash out</Text>
