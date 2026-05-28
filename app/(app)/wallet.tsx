@@ -6,28 +6,26 @@ import {
   FlatList,
   Pressable,
   ScrollView,
-  Alert,
   ActivityIndicator,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
 import { useAuth } from '@clerk/clerk-expo'
 import { theme } from '@/lib/theme'
-import { useWallet, useInvalidateWallet } from '@/hooks/useWallet'
-import { useInvalidateCurrentUser } from '@/hooks/useCurrentUser'
-import { usersApi } from '@/api/users'
+import { useWallet } from '@/hooks/useWallet'
 import { Button } from '@/components/ui/Button'
 import type { WalletTransaction } from '@/types'
 
 const SPACE_BUCKS_PER_DOLLAR = 100
 
-type FilterKey = 'all' | 'spaceBucksSpent' | 'stardustEarned' | 'cashout'
+type FilterKey = 'all' | 'spaceBucksSpent' | 'stardustEarned' | 'cashout' | 'topup'
 
 const FILTERS: { key: FilterKey; label: string }[] = [
   { key: 'all', label: 'All' },
   { key: 'spaceBucksSpent', label: 'Space Bucks spent' },
   { key: 'stardustEarned', label: 'Stardust earned' },
   { key: 'cashout', label: 'Payouts' },
+  { key: 'topup', label: 'Top ups' },
 ]
 
 function formatDate(iso: string) {
@@ -43,8 +41,29 @@ const STATUS_LABEL: Record<string, string> = {
 
 function TransactionRow({ item }: { item: WalletTransaction }) {
   const isCashout = item.type === 'cashout'
+  const isTopup = item.type === 'topup'
   const isSpent = item.type === 'spaceBucksSpent'
   const dollars = `$${(item.amount / SPACE_BUCKS_PER_DOLLAR).toFixed(2)}`
+
+  if (isTopup) {
+    const price = item.priceCents != null ? `$${(item.priceCents / 100).toFixed(2)}` : null
+    return (
+      <View style={styles.txRow}>
+        <View style={[styles.txIcon, styles.txIconTopup]}>
+          <Text style={styles.txIconEmoji}>🚀</Text>
+        </View>
+        <View style={styles.txMiddle}>
+          <Text style={styles.txTitle}>Top up</Text>
+          {price && <Text style={styles.txSub}>{price} · test mode</Text>}
+          <Text style={styles.txDate}>{formatDate(item.createdAt)}</Text>
+        </View>
+        <View style={styles.txRight}>
+          <Text style={styles.txAmountTopup}>+{item.amount.toLocaleString()} 🚀</Text>
+          <Text style={styles.txDollars}>{dollars}</Text>
+        </View>
+      </View>
+    )
+  }
 
   if (isCashout) {
     const statusLabel = STATUS_LABEL[item.status ?? 'pending']
@@ -90,10 +109,7 @@ function TransactionRow({ item }: { item: WalletTransaction }) {
 export default function Wallet() {
   const { isSignedIn } = useAuth()
   const { data, isLoading } = useWallet()
-  const invalidateWallet = useInvalidateWallet()
-  const invalidateCurrentUser = useInvalidateCurrentUser()
   const [filter, setFilter] = useState<FilterKey>('all')
-  const [toppingUp, setToppingUp] = useState(false)
 
   if (!isSignedIn) {
     return (
@@ -144,19 +160,8 @@ export default function Wallet() {
       {/* Action buttons */}
       <View style={styles.actionsRow}>
         <Pressable
-          style={[styles.actionBtn, styles.actionBtnBlue, toppingUp && styles.actionBtnDisabled]}
-          disabled={toppingUp}
-          onPress={async () => {
-            setToppingUp(true)
-            try {
-              await usersApi.topUpSpaceBucks()
-              await Promise.all([invalidateWallet(), invalidateCurrentUser()])
-            } catch {
-              Alert.alert('Error', 'Top up failed — try again.')
-            } finally {
-              setToppingUp(false)
-            }
-          }}
+          style={[styles.actionBtn, styles.actionBtnBlue]}
+          onPress={() => router.push('/(app)/topup')}
         >
           <Text style={styles.actionBtnIcon}>＋</Text>
           <Text style={styles.actionBtnLabel}>Top up</Text>
@@ -314,6 +319,7 @@ const styles = StyleSheet.create({
   txIconSpent: { backgroundColor: `${theme.colors.accent}22` },
   txIconEarned: { backgroundColor: `${GOLD}22` },
   txIconCashout: { backgroundColor: '#ffffff11' },
+  txIconTopup: { backgroundColor: `${theme.colors.accent}22` },
   txIconEmoji: { fontSize: 20 },
   txMiddle: { flex: 1, gap: 2 },
   txTitle: { ...theme.typography.body, color: theme.colors.text, fontWeight: '600' },
@@ -324,6 +330,7 @@ const styles = StyleSheet.create({
   txAmountSpent: { color: theme.colors.textMuted },
   txAmountEarned: { color: GOLD },
   txAmountCashout: { ...theme.typography.body, fontWeight: '700', color: theme.colors.text },
+  txAmountTopup: { ...theme.typography.body, fontWeight: '700', color: theme.colors.accent },
   txDollars: { ...theme.typography.caption, color: theme.colors.textMuted },
 
   separator: { height: 1, backgroundColor: theme.colors.border, marginLeft: 76 },

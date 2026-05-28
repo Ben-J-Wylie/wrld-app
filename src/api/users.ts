@@ -76,8 +76,8 @@ export const usersApi = {
     return res.data.requests
   },
 
-  topUpSpaceBucks: async (): Promise<{ spaceBucks: number }> => {
-    const res = await apiClient.post<{ spaceBucks: number }>('/users/me/space-bucks/top-up')
+  topUpSpaceBucks: async (amount: number, priceCents: number): Promise<{ spaceBucks: number }> => {
+    const res = await apiClient.post<{ spaceBucks: number }>('/users/me/space-bucks/top-up', { amount, priceCents })
     return res.data
   },
 

@@ -20,6 +20,7 @@ export default function AppLayout() {
       <Tabs.Screen name="wallet" options={{ title: 'Wallet' }} />
       <Tabs.Screen name="me" options={{ title: 'Me' }} />
       <Tabs.Screen name="cashout" options={{ href: null }} />
+      <Tabs.Screen name="topup" options={{ href: null }} />
       <Tabs.Screen name="stream/[id]" options={{ href: null }} />
       <Tabs.Screen name="profile/[handle]" options={{ href: null }} />
       <Tabs.Screen name="settings" options={{ href: null }} />

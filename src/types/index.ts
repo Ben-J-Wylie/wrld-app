@@ -27,11 +27,12 @@ export type PublicUser = {
 
 export type WalletTransaction = {
   id: string
-  type: 'spaceBucksSpent' | 'stardustEarned' | 'cashout'
+  type: 'spaceBucksSpent' | 'stardustEarned' | 'cashout' | 'topup'
   amount: number
   counterpartHandle?: string
   streamTitle?: string
   status?: 'pending' | 'paid' | 'rejected'
+  priceCents?: number
   createdAt: string
 }
 
