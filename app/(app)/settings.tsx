@@ -27,7 +27,7 @@ export default function Settings() {
     }
     clearWrldUser()
     qc.clear()
-    router.replace('/(app)/globe')
+    router.navigate('/(app)/globe')
   }
 
   function confirmSignOut() {

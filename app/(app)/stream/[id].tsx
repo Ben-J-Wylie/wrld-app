@@ -290,7 +290,7 @@ export default function StreamView() {
     activeBroadcast.clear()
     cleanup()
     disconnect()
-    router.replace('/(app)/dashboard')
+    router.navigate('/(app)/dashboard')
   }
 
   function handleLeave() {

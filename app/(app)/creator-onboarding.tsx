@@ -551,7 +551,7 @@ export default function CreatorOnboarding() {
 
   useFocusEffect(useCallback(() => {
     if (currentUser?.creatorReady) {
-      router.replace('/(app)/dashboard')
+      router.navigate('/(app)/dashboard')
     }
   }, [currentUser?.creatorReady]))
 
@@ -712,8 +712,8 @@ export default function CreatorOnboarding() {
           locationStatus={locationStatus}
           notifStatus={notifStatus}
           precision={precision}
-          onGoLive={() => router.replace('/(app)/dashboard')}
-          onProfile={() => router.replace('/(app)/me')}
+          onGoLive={() => router.navigate('/(app)/dashboard')}
+          onProfile={() => router.navigate('/(app)/me')}
         />
       )}
     </SafeAreaView>
