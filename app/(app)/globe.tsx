@@ -258,7 +258,7 @@ export default function Globe() {
   const cameraZRef = useRef(3)
   // Default to central Europe (48°N 10°E) until GPS arrives
   const savedRotationRef = useRef({
-    x: -48 * (Math.PI / 180),
+    x: 48 * (Math.PI / 180),
     y: -(10 + 90) * (Math.PI / 180),
   })
   const hasOrientedRef = useRef(false)
@@ -279,7 +279,7 @@ export default function Globe() {
     if (!group) return
     hasOrientedRef.current = true
     const rotY = -(coords.longitude + 90) * (Math.PI / 180)
-    const rotX = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, -coords.latitude * (Math.PI / 180)))
+    const rotX = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, coords.latitude * (Math.PI / 180)))
     group.rotation.y = rotY; group.rotation.x = rotX
     savedRotationRef.current = { x: rotX, y: rotY }
   }, [coords])
@@ -335,7 +335,7 @@ export default function Globe() {
       hasOrientedRef.current = true
       const c = coordsRef.current
       const rotY = -(c.longitude + 90) * (Math.PI / 180)
-      const rotX = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, -c.latitude * (Math.PI / 180)))
+      const rotX = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, c.latitude * (Math.PI / 180)))
       group.rotation.x = rotX; group.rotation.y = rotY
       savedRotationRef.current = { x: rotX, y: rotY }
     }
