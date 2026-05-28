@@ -45,16 +45,21 @@ function Slider({
   onChange: (v: number) => void
 }) {
   const [trackWidth, setTrackWidth] = useState(0)
+  const viewRef = useRef<any>(null)
 
   // Keep mutable refs so PanResponder (created once) always has fresh values.
-  const state = useRef({ trackWidth: 0, min, max, onChange })
+  const state = useRef({ trackWidth: 0, pageX: 0, min, max, onChange })
   state.current.min = min
   state.current.max = max
   state.current.onChange = onChange
 
-  const snap = useCallback((x: number) => {
-    const { trackWidth, min, max, onChange } = state.current
+  // screenX is an absolute screen coordinate (gestureState.moveX / x0).
+  // We subtract the track's pageX so the calculation is immune to locationX
+  // coordinate-space drift that occurs inside ScrollViews.
+  const snap = useCallback((screenX: number) => {
+    const { trackWidth, pageX, min, max, onChange } = state.current
     if (!trackWidth || max < min) return
+    const x = screenX - pageX
     const ratio = Math.max(0, Math.min(1, x / trackWidth))
     const raw = Math.round(((ratio * (max - min)) + min) / 100) * 100
     onChange(Math.max(min, Math.min(max, raw)))
@@ -64,8 +69,8 @@ function Slider({
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: (e) => snap(e.nativeEvent.locationX),
-      onPanResponderMove: (e) => snap(e.nativeEvent.locationX),
+      onPanResponderGrant: (_, gs) => snap(gs.x0),
+      onPanResponderMove: (_, gs) => snap(gs.moveX),
     }),
   ).current
 
@@ -75,16 +80,18 @@ function Slider({
 
   return (
     <View
+      ref={viewRef}
       style={styles.sliderTrack}
-      onLayout={(e) => {
-        const w = e.nativeEvent.layout.width
-        state.current.trackWidth = w
-        setTrackWidth(w)
+      onLayout={() => {
+        viewRef.current?.measure((_: number, __: number, w: number, ___: number, pageX: number) => {
+          state.current.trackWidth = w
+          state.current.pageX = pageX
+          setTrackWidth(w)
+        })
       }}
       {...panResponder.panHandlers}
     >
       <View style={[styles.sliderFill, { width: fillPx + THUMB_SIZE / 2 }]} />
-      {/* pointerEvents="none" so touches always land on the track, not the thumb */}
       <View style={[styles.sliderThumb, { left: thumbLeft }]} pointerEvents="none" />
     </View>
   )
