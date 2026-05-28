@@ -27,7 +27,9 @@ export default function Settings() {
     }
     clearWrldUser()
     qc.clear()
-    router.navigate('/(app)/globe')
+    // Defer until after React commits the state-update re-renders triggered above;
+    // navigating synchronously fires into a mid-update navigator tree and is dropped.
+    setTimeout(() => router.navigate('/(app)/globe'), 0)
   }
 
   function confirmSignOut() {
