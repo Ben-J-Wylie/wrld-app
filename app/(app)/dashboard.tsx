@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { useAuth } from '@clerk/clerk-expo'
 import { useLocation } from '@/hooks/useLocation'
+import { useCurrentUser } from '@/hooks/useCurrentUser'
 import type { SourceType } from '@/types'
 
 const SOURCES: { type: SourceType; label: string; icon: string }[] = [
@@ -16,6 +17,7 @@ const SOURCES: { type: SourceType; label: string; icon: string }[] = [
 
 export default function Dashboard() {
   const { isSignedIn } = useAuth()
+  const { data: currentUser } = useCurrentUser()
   const { coords, loading: locationLoading, error: locationError } = useLocation()
 
   const [title, setTitle] = useState('')
@@ -53,11 +55,30 @@ export default function Dashboard() {
       <SafeAreaView style={styles.container}>
         <View style={styles.scroll}>
           <Text style={styles.title}>Go Live</Text>
-          <Text style={styles.muted}>Sign in to broadcast</Text>
+          <Text style={styles.muted}>Sign in to go live</Text>
           <Button
             label="Sign In"
             onPress={() => router.push('/(auth)/login')}
             variant="secondary"
+            style={styles.wide}
+          />
+        </View>
+      </SafeAreaView>
+    )
+  }
+
+  if (isSignedIn && currentUser && !currentUser.creatorReady) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.locked}>
+          <Text style={styles.lockedEmoji}>🎬</Text>
+          <Text style={styles.lockedTitle}>Become a creator</Text>
+          <Text style={styles.lockedBody}>
+            Complete a quick setup to unlock Go Live on WRLD. It only takes a minute.
+          </Text>
+          <Button
+            label="Get started"
+            onPress={() => router.push('/(app)/creator-onboarding')}
             style={styles.wide}
           />
         </View>
@@ -189,4 +210,20 @@ const styles = StyleSheet.create({
   errorText: { ...theme.typography.body, color: theme.colors.danger },
   hint: { ...theme.typography.caption, color: theme.colors.textMuted, textAlign: 'center' },
   wide: { width: '100%' },
+  locked: {
+    flex: 1,
+    padding: theme.spacing.lg,
+    justifyContent: 'center',
+    gap: theme.spacing.md,
+    alignItems: 'center',
+  },
+  lockedEmoji: { fontSize: 52, textAlign: 'center', marginBottom: theme.spacing.sm },
+  lockedTitle: { ...theme.typography.title, color: theme.colors.text, textAlign: 'center' },
+  lockedBody: {
+    ...theme.typography.body,
+    color: theme.colors.textMuted,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: theme.spacing.sm,
+  },
 })

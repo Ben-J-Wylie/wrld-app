@@ -19,6 +19,8 @@ export default function AppLayout() {
       <Tabs.Screen name="dashboard" options={{ title: 'Dashboard' }} />
       <Tabs.Screen name="wallet" options={{ title: 'Wallet' }} />
       <Tabs.Screen name="me" options={{ title: 'Me' }} />
+      <Tabs.Screen name="creator-onboarding" options={{ href: null }} />
+      <Tabs.Screen name="broadcaster-onboarding" options={{ href: null }} />
       <Tabs.Screen name="cashout" options={{ href: null }} />
       <Tabs.Screen name="topup" options={{ href: null }} />
       <Tabs.Screen name="stream/[id]" options={{ href: null }} />

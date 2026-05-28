@@ -81,6 +81,15 @@ export const usersApi = {
     return res.data
   },
 
+  saveCreatorOnboarding: async (data: {
+    dateOfBirth?: string
+    locationPrecision?: string
+    complete?: boolean
+  }): Promise<User> => {
+    const res = await apiClient.patch<{ user: User }>('/users/me/creator-onboarding', data)
+    return res.data.user
+  },
+
   updateNotificationPreferences: async (prefs: {
     notifyOnFollowedLive?: boolean
     notifyOnNearbyLive?: boolean
