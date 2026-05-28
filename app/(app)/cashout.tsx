@@ -35,25 +35,28 @@ function fmt(stardust: number) {
 
 function Slider({
   value,
+  min,
   max,
   onChange,
 }: {
   value: number
+  min: number
   max: number
   onChange: (v: number) => void
 }) {
   const [trackWidth, setTrackWidth] = useState(0)
 
   // Keep mutable refs so PanResponder (created once) always has fresh values.
-  const state = useRef({ trackWidth: 0, max, onChange })
+  const state = useRef({ trackWidth: 0, min, max, onChange })
+  state.current.min = min
   state.current.max = max
   state.current.onChange = onChange
 
   const snap = useCallback((x: number) => {
-    const { trackWidth, max, onChange } = state.current
-    if (!trackWidth || !max) return
+    const { trackWidth, min, max, onChange } = state.current
+    if (!trackWidth || max <= min) return
     const ratio = Math.max(0, Math.min(1, x / trackWidth))
-    onChange(Math.round((ratio * max) / 100) * 100)
+    onChange(Math.round(((ratio * (max - min)) + min) / 100) * 100)
   }, [])
 
   const panResponder = useRef(
@@ -65,7 +68,7 @@ function Slider({
     }),
   ).current
 
-  const fill = max > 0 ? Math.min(1, value / max) : 0
+  const fill = max > min ? Math.min(1, Math.max(0, (value - min) / (max - min))) : 0
   const fillPx = fill * Math.max(0, trackWidth - THUMB_SIZE)
   const thumbLeft = fill * Math.max(0, trackWidth - THUMB_SIZE)
 
@@ -221,7 +224,7 @@ export default function Cashout() {
 
         {/* Slider */}
         <View style={styles.sliderContainer}>
-          <Slider value={amount} max={readyStardust} onChange={setAmount} />
+          <Slider value={amount} min={CASHOUT_MINIMUM} max={readyStardust} onChange={setAmount} />
           <View style={styles.sliderLabels}>
             <Text style={styles.sliderLabel}>{`${CASHOUT_MINIMUM / 1000}K MIN`}</Text>
             <Text style={styles.sliderLabel}>MAX</Text>
