@@ -13,7 +13,7 @@ export type User = {
   spaceBucks: number
   stardust: number
   dateOfBirth?: string
-  locationPrecision?: 'city' | 'country' | 'off'
+  locationPrecision?: 'exact' | 'city' | 'country' | 'off'
   creatorReady: boolean
 }
 

@@ -19,7 +19,7 @@ import { useCurrentUser, useInvalidateCurrentUser, useSetCurrentUser } from '@/h
 import { usersApi } from '@/api/users'
 import { Avatar } from '@/components/feature/user/Avatar'
 
-type LocationPrecision = 'city' | 'country' | 'off'
+type LocationPrecision = 'exact' | 'city' | 'country' | 'off'
 type PermStatus = 'idle' | 'granted' | 'denied'
 
 const ACCENT = theme.colors.accent
@@ -260,6 +260,7 @@ function StepAvatar({
 // ─── Step 3: Location precision ───────────────────────────────────────────────
 
 const PRECISION_OPTIONS: { value: LocationPrecision; icon: string; label: string; desc: string }[] = [
+  { value: 'exact', icon: '🔵', label: 'Exact location', desc: 'Street-level blue dot — viewers see precisely where you are.' },
   { value: 'city', icon: '🏙️', label: 'City', desc: 'Your pin appears within a few miles — recommended.' },
   { value: 'country', icon: '🌍', label: 'Country', desc: 'Anywhere within your country. Less discoverable.' },
   { value: 'off', icon: '🔕', label: 'Off the map', desc: 'No pin shown. Only people with your link can find you.' },
@@ -483,8 +484,14 @@ function StepDone({
   onGoLive: () => void
   onProfile: () => void
 }) {
+  const precisionLabel: Record<LocationPrecision, string> = {
+    exact: 'exact — blue dot',
+    city: 'city precision',
+    country: 'country precision',
+    off: 'off — share by link',
+  }
   const locationLabel =
-    locationStatus === 'granted' ? `${precision} precision` :
+    locationStatus === 'granted' ? precisionLabel[precision] :
     locationStatus === 'denied' ? 'off — share by link' : 'skipped'
 
   return (
