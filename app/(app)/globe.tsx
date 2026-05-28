@@ -256,7 +256,11 @@ export default function Globe() {
   const rendererRef = useRef<Renderer | null>(null)
   const setupGenRef = useRef(0)
   const cameraZRef = useRef(3)
-  const savedRotationRef = useRef({ x: 0, y: 0 })
+  // Default to central Europe (48°N 10°E) until GPS arrives
+  const savedRotationRef = useRef({
+    x: -48 * (Math.PI / 180),
+    y: -(10 + 90) * (Math.PI / 180),
+  })
   const hasOrientedRef = useRef(false)
   const hasInteractedRef = useRef(false)
   const velocityRef = useRef({ x: 0, y: 0 })
@@ -325,6 +329,16 @@ export default function Globe() {
     group.rotation.y = savedRotationRef.current.y
     globeGroupRef.current = group
     scene.add(group)
+
+    // GPS may have arrived before GL setup completed — orient now if so
+    if (coordsRef.current && !hasOrientedRef.current) {
+      hasOrientedRef.current = true
+      const c = coordsRef.current
+      const rotY = -(c.longitude + 90) * (Math.PI / 180)
+      const rotX = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, -c.latitude * (Math.PI / 180)))
+      group.rotation.x = rotX; group.rotation.y = rotY
+      savedRotationRef.current = { x: rotX, y: rotY }
+    }
 
     const sphereGeo = new THREE.SphereGeometry(1, 64, 32)
     let earthMat: THREE.Material
