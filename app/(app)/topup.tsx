@@ -82,7 +82,7 @@ export default function TopUp() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
-          <Pressable onPress={() => router.back()} hitSlop={12}>
+          <Pressable onPress={() => router.navigate('/(app)/wallet')} hitSlop={12}>
             <Text style={styles.back}>←</Text>
           </Pressable>
           <Text style={styles.title}>Top up</Text>
@@ -94,7 +94,7 @@ export default function TopUp() {
           <Text style={styles.successBody}>
             {selected.amount.toLocaleString()} Space Bucks have been added to your wallet.
           </Text>
-          <Pressable style={styles.doneBtn} onPress={() => router.back()}>
+          <Pressable style={styles.doneBtn} onPress={() => router.navigate('/(app)/wallet')}>
             <Text style={styles.doneBtnText}>Done</Text>
           </Pressable>
         </View>
@@ -105,7 +105,7 @@ export default function TopUp() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12}>
+        <Pressable onPress={() => router.navigate('/(app)/wallet')} hitSlop={12}>
           <Text style={styles.back}>←</Text>
         </Pressable>
         <Text style={styles.title}>Top up</Text>
