@@ -11,6 +11,7 @@ export type ClientMessage =
   | { type: 'reaction'; kind: string; handle: string }
   | { type: 'broadcasterPaused' }
   | { type: 'broadcasterResumed' }
+  | { type: 'tip'; amount: number }
 
 export type ServerMessage =
   | { type: 'authenticated'; clerkUserId: string }
@@ -33,6 +34,8 @@ export type ServerMessage =
   | { type: 'viewerCountUpdated'; viewerCount: number }
   | { type: 'chatMessage'; from: string; text: string; ts: number }
   | { type: 'reaction'; from: string; kind: string; ts: number }
+  | { type: 'tipReceived'; handle: string; amount: number }
+  | { type: 'tipConfirmed'; newBalance: number }
   | { type: 'error'; message: string }
 
 class MediasoupSignalingClient {
@@ -198,6 +201,10 @@ class MediasoupSignalingClient {
 
   sendBroadcasterResumed(): void {
     this.send({ type: 'broadcasterResumed' })
+  }
+
+  sendTip(amount: number): void {
+    this.send({ type: 'tip', amount })
   }
 }
 

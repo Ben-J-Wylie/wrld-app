@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ActivityIndicator, Pressable, AppState, Keyboard, Platform } from 'react-native'
+import { View, Text, StyleSheet, ActivityIndicator, Pressable, AppState, Keyboard, Platform, Animated } from 'react-native'
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useLocalSearchParams, router, useFocusEffect } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -8,6 +8,8 @@ import { NearbyStreamsDrawer } from '@/components/feature/stream/NearbyStreamsDr
 import { ChatOverlay } from '@/components/feature/stream/ChatOverlay'
 import { ReactionLayer } from '@/components/feature/stream/ReactionLayer'
 import { AuthModal } from '@/components/feature/stream/AuthModal'
+import { TipSheet } from '@/components/feature/stream/TipSheet'
+import { useInvalidateCurrentUser } from '@/hooks/useCurrentUser'
 import { Avatar } from '@/components/feature/user/Avatar'
 import { FollowButton } from '@/components/feature/user/FollowButton'
 import { theme } from '@/lib/theme'
@@ -20,6 +22,41 @@ import { useStream } from '@/hooks/useStream'
 import { useAuth } from '@clerk/clerk-expo'
 import { useAuthStore } from '@/stores/authStore'
 import type { Stream, SourceType } from '@/types'
+import type { TipEvent } from '@/hooks/useSignaling'
+
+function FloatingTip({ tip, onDone }: { tip: TipEvent; onDone: (id: number) => void }) {
+  const translateY = useRef(new Animated.Value(0)).current
+  const opacity = useRef(new Animated.Value(1)).current
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(translateY, { toValue: -140, duration: 2400, useNativeDriver: true }),
+      Animated.sequence([
+        Animated.delay(1600),
+        Animated.timing(opacity, { toValue: 0, duration: 800, useNativeDriver: true }),
+      ]),
+    ]).start(() => onDone(tip.id))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  return (
+    <Animated.View style={[tipStyles.floating, { transform: [{ translateY }], opacity }]}>
+      <Text style={tipStyles.floatingText}>@{tip.handle} · {tip.amount} 🚀</Text>
+    </Animated.View>
+  )
+}
+
+const tipStyles = StyleSheet.create({
+  floating: { position: 'absolute', bottom: 0, left: 0, right: 0, alignItems: 'center' },
+  floatingText: {
+    ...theme.typography.caption,
+    color: '#fff',
+    backgroundColor: 'rgba(91,140,255,0.85)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    overflow: 'hidden',
+    fontWeight: '700',
+  },
+})
 
 const SOURCE_LABELS: Record<SourceType, string> = {
   camera: 'Camera',
@@ -43,10 +80,13 @@ export default function StreamView() {
     status, setStatus, roomId, viewerCount, streamEnded,
     error: signalingError, setError,
     chatMessages, reactions, broadcasterPaused,
+    tipEvents, confirmedBalance,
     connect, createRoom, joinRoom, disconnect,
     sendChatMessage, sendReaction, dismissReaction,
+    sendTip, dismissTip,
     sendBroadcasterPaused, sendBroadcasterResumed,
   } = useSignaling()
+  const invalidateCurrentUser = useInvalidateCurrentUser()
   const { localStream, remoteStream, error: mediaError, facingMode, startBroadcasting, startViewing, switchCamera, cleanup } = useMediasoup()
   const { isSignedIn } = useAuth()
   const { coords, loading: locationLoading, error: locationError } = useLocation()
@@ -61,8 +101,11 @@ export default function StreamView() {
   const [hopError, setHopError] = useState<string | null>(null)
   const [chatOpen, setChatOpen] = useState(false)
   const [authModalVisible, setAuthModalVisible] = useState(false)
+  const [tipSheetVisible, setTipSheetVisible] = useState(false)
+  const [broadcasterTipToast, setBroadcasterTipToast] = useState<string | null>(null)
   const [keyboardHeight, setKeyboardHeight] = useState(0)
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const tipToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Guards against double-navigation when multiple end signals arrive simultaneously
   // (e.g. broadcasterLeft WS message + viewer WS close in the same render cycle).
   const navigatingRef = useRef(false)
@@ -140,8 +183,26 @@ export default function StreamView() {
   useEffect(() => {
     return () => {
       if (hideTimerRef.current) clearTimeout(hideTimerRef.current)
+      if (tipToastTimerRef.current) clearTimeout(tipToastTimerRef.current)
     }
   }, [])
+
+  // Invalidate currentUser cache when a tip is confirmed so Me screen balance updates
+  useEffect(() => {
+    if (confirmedBalance === null) return
+    invalidateCurrentUser()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [confirmedBalance])
+
+  // Show broadcaster toast when a tip arrives (broadcaster-side only)
+  useEffect(() => {
+    if (!isNew || tipEvents.length === 0) return
+    const latest = tipEvents[tipEvents.length - 1]!
+    setBroadcasterTipToast(`@${latest.handle} sent ${latest.amount} 🚀`)
+    if (tipToastTimerRef.current) clearTimeout(tipToastTimerRef.current)
+    tipToastTimerRef.current = setTimeout(() => setBroadcasterTipToast(null), 3000)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tipEvents])
 
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow'
@@ -238,6 +299,17 @@ export default function StreamView() {
       disconnect()
     }
     router.navigate('/(app)/globe')
+  }
+
+  const tipBalance = confirmedBalance ?? (wrldUser?.spaceBucks ?? 0)
+
+  function handleTip(amount: number) {
+    sendTip(amount)
+  }
+
+  function handleTipPress() {
+    if (!isSignedIn) { setAuthModalVisible(true); return }
+    setTipSheetVisible(true)
   }
 
   function handleSendChat(text: string) {
@@ -431,6 +503,11 @@ export default function StreamView() {
                       onAuthRequest={!isSignedIn ? () => setAuthModalVisible(true) : undefined}
                     />
                   )}
+                  {!isNew && (
+                    <Pressable style={styles.tipBtn} onPress={handleTipPress} hitSlop={8}>
+                      <Text style={styles.tipBtnText}>🚀 Tip</Text>
+                    </Pressable>
+                  )}
                 </View>
               )}
 
@@ -532,6 +609,29 @@ export default function StreamView() {
         onClose={() => setAuthModalVisible(false)}
         onSuccess={() => setAuthModalVisible(false)}
       />
+
+      <TipSheet
+        visible={tipSheetVisible}
+        balance={tipBalance}
+        onClose={() => setTipSheetVisible(false)}
+        onTip={handleTip}
+      />
+
+      {/* Tip burst animations — visible to all peers */}
+      {status === 'in-room' && !streamEnded && (
+        <View style={styles.tipBurstArea} pointerEvents="none">
+          {tipEvents.map((t) => (
+            <FloatingTip key={t.id} tip={t} onDone={dismissTip} />
+          ))}
+        </View>
+      )}
+
+      {/* Broadcaster-only private toast */}
+      {isNew && broadcasterTipToast !== null && (
+        <View style={styles.broadcasterTipToast} pointerEvents="none">
+          <Text style={styles.broadcasterTipToastText}>{broadcasterTipToast}</Text>
+        </View>
+      )}
 
       {!isNew && broadcasterPaused && !streamEnded && (
         <View style={styles.pausedBanner} pointerEvents="none">
@@ -665,5 +765,35 @@ const styles = StyleSheet.create({
     ...theme.typography.caption,
     color: theme.colors.text,
     fontWeight: '600',
+  },
+  tipBtn: {
+    borderRadius: theme.radius.full,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 4,
+    backgroundColor: `${theme.colors.accent}22`,
+    borderWidth: 1,
+    borderColor: theme.colors.accent,
+  },
+  tipBtnText: { ...theme.typography.caption, color: theme.colors.accent, fontWeight: '700' },
+  tipBurstArea: {
+    position: 'absolute',
+    bottom: 100,
+    left: theme.spacing.lg,
+    width: 200,
+  },
+  broadcasterTipToast: {
+    position: 'absolute',
+    top: 120,
+    alignSelf: 'center',
+    backgroundColor: `${theme.colors.accent}CC`,
+    borderRadius: 20,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.sm,
+    zIndex: 20,
+  },
+  broadcasterTipToastText: {
+    ...theme.typography.caption,
+    color: '#fff',
+    fontWeight: '700',
   },
 })

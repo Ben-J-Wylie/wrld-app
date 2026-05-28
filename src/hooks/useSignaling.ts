@@ -16,6 +16,7 @@ type Producer = { id: string; kind: string }
 
 export type ChatMessage = { from: string; text: string; ts: number }
 export type Reaction = { from: string; kind: string; ts: number; id: number }
+export type TipEvent = { handle: string; amount: number; id: number }
 
 export function useSignaling() {
   const [status, setStatus] = useState<SignalingStatus>('idle')
@@ -27,7 +28,10 @@ export function useSignaling() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [reactions, setReactions] = useState<Reaction[]>([])
   const [broadcasterPaused, setBroadcasterPaused] = useState(false)
+  const [tipEvents, setTipEvents] = useState<TipEvent[]>([])
+  const [confirmedBalance, setConfirmedBalance] = useState<number | null>(null)
   const reactionCounterRef = useRef(0)
+  const tipCounterRef = useRef(0)
   // Distinguishes intentional disconnect() calls from unexpected network drops.
   const intentionalRef = useRef(false)
 
@@ -43,6 +47,13 @@ export function useSignaling() {
       if (msg.type === 'reaction') {
         const id = ++reactionCounterRef.current
         setReactions((prev) => [...prev, { from: msg.from, kind: msg.kind, ts: msg.ts, id }])
+      }
+      if (msg.type === 'tipReceived') {
+        const id = ++tipCounterRef.current
+        setTipEvents((prev) => [...prev, { handle: msg.handle, amount: msg.amount, id }])
+      }
+      if (msg.type === 'tipConfirmed') {
+        setConfirmedBalance(msg.newBalance)
       }
     })
     return unsub
@@ -122,6 +133,8 @@ export function useSignaling() {
     setChatMessages([])
     setReactions([])
     setBroadcasterPaused(false)
+    setTipEvents([])
+    setConfirmedBalance(null)
   }, [])
 
   const sendChatMessage = useCallback((text: string, handle: string) => {
@@ -137,9 +150,14 @@ export function useSignaling() {
 
   const sendBroadcasterPaused = useCallback(() => signalingClient.sendBroadcasterPaused(), [])
   const sendBroadcasterResumed = useCallback(() => signalingClient.sendBroadcasterResumed(), [])
+  const sendTip = useCallback((amount: number) => signalingClient.sendTip(amount), [])
 
   const dismissReaction = useCallback((id: number) => {
     setReactions((prev) => prev.filter((r) => r.id !== id))
+  }, [])
+
+  const dismissTip = useCallback((id: number) => {
+    setTipEvents((prev) => prev.filter((t) => t.id !== id))
   }, [])
 
   return {
@@ -152,8 +170,11 @@ export function useSignaling() {
     chatMessages,
     reactions,
     broadcasterPaused,
+    tipEvents,
+    confirmedBalance,
     sendBroadcasterPaused,
     sendBroadcasterResumed,
+    sendTip,
     connect,
     createRoom,
     joinRoom,
@@ -161,5 +182,6 @@ export function useSignaling() {
     sendChatMessage,
     sendReaction,
     dismissReaction,
+    dismissTip,
   }
 }

@@ -234,6 +234,15 @@ export default function Me() {
             <Text style={styles.hint}>Handle can be changed once every 30 days.</Text>
           </View>
 
+          {/* Space Bucks balance */}
+          <View style={styles.field}>
+            <Text style={styles.fieldLabel}>SPACE BUCKS</Text>
+            <View style={styles.fieldRow}>
+              <Text style={styles.fieldValue}>{user.spaceBucks} 🚀</Text>
+              <Text style={styles.hint}>${(user.spaceBucks / 100).toFixed(2)} value</Text>
+            </View>
+          </View>
+
           <View style={styles.divider} />
 
           {/* Settings */}

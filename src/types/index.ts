@@ -10,6 +10,7 @@ export type User = {
   createdAt: string
   notifyOnFollowedLive: boolean
   notifyOnNearbyLive: boolean
+  spaceBucks: number
 }
 
 export type PublicUser = {
