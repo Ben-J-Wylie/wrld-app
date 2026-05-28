@@ -232,7 +232,6 @@ export default function StreamView() {
   useEffect(() => {
     if (!isNew || status !== 'in-room') return
     const sub = AppState.addEventListener('change', (nextState) => {
-      console.log('AppState change:', nextState)
       if (nextState === 'background') {
         cleanup()
         disconnect()
@@ -382,15 +381,22 @@ export default function StreamView() {
           <Text style={[styles.backArrow, showOverlay && styles.overlayText]}>←</Text>
         </Pressable>
         {status === 'in-room' && !streamEnded && (
-          <Pressable
-            onPress={() => setChatOpen((o) => !o)}
-            style={styles.chatToggleBtn}
-            hitSlop={12}
-          >
-            <Text style={[styles.chatToggleText, showOverlay && styles.overlayText]}>
-              {chatOpen ? '✕' : '💬'}
-            </Text>
-          </Pressable>
+          <View style={styles.headerActions}>
+            {!isNew && (
+              <Pressable style={styles.tipHeaderBtn} onPress={handleTipPress} hitSlop={8}>
+                <Text style={styles.tipHeaderBtnText}>🚀 Tip</Text>
+              </Pressable>
+            )}
+            <Pressable
+              onPress={() => setChatOpen((o) => !o)}
+              style={styles.chatToggleBtn}
+              hitSlop={12}
+            >
+              <Text style={[styles.chatToggleText, showOverlay && styles.overlayText]}>
+                {chatOpen ? '✕' : '💬'}
+              </Text>
+            </Pressable>
+          </View>
         )}
       </View>
 
@@ -766,6 +772,16 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontWeight: '600',
   },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
+  tipHeaderBtn: {
+    borderRadius: theme.radius.full,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 4,
+    backgroundColor: `${theme.colors.accent}22`,
+    borderWidth: 1,
+    borderColor: theme.colors.accent,
+  },
+  tipHeaderBtnText: { ...theme.typography.caption, color: theme.colors.accent, fontWeight: '700' },
   tipBtn: {
     borderRadius: theme.radius.full,
     paddingHorizontal: theme.spacing.sm,
