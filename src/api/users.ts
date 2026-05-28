@@ -66,6 +66,11 @@ export const usersApi = {
     return res.data
   },
 
+  topUpSpaceBucks: async (): Promise<{ spaceBucks: number }> => {
+    const res = await apiClient.post<{ spaceBucks: number }>('/users/me/space-bucks/top-up')
+    return res.data
+  },
+
   updateNotificationPreferences: async (prefs: {
     notifyOnFollowedLive?: boolean
     notifyOnNearbyLive?: boolean

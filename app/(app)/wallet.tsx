@@ -13,7 +13,9 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
 import { useAuth } from '@clerk/clerk-expo'
 import { theme } from '@/lib/theme'
-import { useWallet } from '@/hooks/useWallet'
+import { useWallet, useInvalidateWallet } from '@/hooks/useWallet'
+import { useInvalidateCurrentUser } from '@/hooks/useCurrentUser'
+import { usersApi } from '@/api/users'
 import { Button } from '@/components/ui/Button'
 import type { WalletTransaction } from '@/types'
 
@@ -61,7 +63,10 @@ function TransactionRow({ item }: { item: WalletTransaction }) {
 export default function Wallet() {
   const { isSignedIn } = useAuth()
   const { data, isLoading } = useWallet()
+  const invalidateWallet = useInvalidateWallet()
+  const invalidateCurrentUser = useInvalidateCurrentUser()
   const [filter, setFilter] = useState<FilterKey>('all')
+  const [toppingUp, setToppingUp] = useState(false)
 
   if (!isSignedIn) {
     return (
@@ -118,8 +123,19 @@ export default function Wallet() {
       {/* Action buttons */}
       <View style={styles.actionsRow}>
         <Pressable
-          style={[styles.actionBtn, styles.actionBtnBlue]}
-          onPress={() => Alert.alert('Coming soon', 'Space Bucks top-ups will be available in a future update.')}
+          style={[styles.actionBtn, styles.actionBtnBlue, toppingUp && styles.actionBtnDisabled]}
+          disabled={toppingUp}
+          onPress={async () => {
+            setToppingUp(true)
+            try {
+              await usersApi.topUpSpaceBucks()
+              await Promise.all([invalidateWallet(), invalidateCurrentUser()])
+            } catch {
+              Alert.alert('Error', 'Top up failed — try again.')
+            } finally {
+              setToppingUp(false)
+            }
+          }}
         >
           <Text style={styles.actionBtnIcon}>＋</Text>
           <Text style={styles.actionBtnLabel}>Top up</Text>
@@ -238,6 +254,7 @@ const styles = StyleSheet.create({
   },
   actionBtnBlue: { backgroundColor: theme.colors.accent },
   actionBtnGold: { backgroundColor: GOLD },
+  actionBtnDisabled: { opacity: 0.5 },
   actionBtnIcon: { fontSize: 22 },
   actionBtnLabel: { ...theme.typography.body, color: '#fff', fontWeight: '700' },
   actionBtnSub: { ...theme.typography.caption, color: 'rgba(255,255,255,0.7)', fontWeight: '600', letterSpacing: 0.5 },
