@@ -21,12 +21,13 @@ import type { WalletTransaction } from '@/types'
 
 const SPACE_BUCKS_PER_DOLLAR = 100
 
-type FilterKey = 'all' | 'spaceBucksSpent' | 'stardustEarned'
+type FilterKey = 'all' | 'spaceBucksSpent' | 'stardustEarned' | 'cashout'
 
 const FILTERS: { key: FilterKey; label: string }[] = [
   { key: 'all', label: 'All' },
   { key: 'spaceBucksSpent', label: 'Space Bucks spent' },
   { key: 'stardustEarned', label: 'Stardust earned' },
+  { key: 'cashout', label: 'Payouts' },
 ]
 
 function formatDate(iso: string) {
@@ -34,9 +35,35 @@ function formatDate(iso: string) {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
+const STATUS_LABEL: Record<string, string> = {
+  pending: 'Pending',
+  paid: 'Paid',
+  rejected: 'Rejected',
+}
+
 function TransactionRow({ item }: { item: WalletTransaction }) {
+  const isCashout = item.type === 'cashout'
   const isSpent = item.type === 'spaceBucksSpent'
   const dollars = `$${(item.amount / SPACE_BUCKS_PER_DOLLAR).toFixed(2)}`
+
+  if (isCashout) {
+    const statusLabel = STATUS_LABEL[item.status ?? 'pending']
+    return (
+      <View style={styles.txRow}>
+        <View style={[styles.txIcon, styles.txIconCashout]}>
+          <Text style={styles.txIconEmoji}>💸</Text>
+        </View>
+        <View style={styles.txMiddle}>
+          <Text style={styles.txTitle}>Payout</Text>
+          <Text style={styles.txSub}>{statusLabel}</Text>
+          <Text style={styles.txDate}>{formatDate(item.createdAt)}</Text>
+        </View>
+        <View style={styles.txRight}>
+          <Text style={styles.txAmountCashout}>{dollars}</Text>
+        </View>
+      </View>
+    )
+  }
 
   return (
     <View style={styles.txRow}>
@@ -92,12 +119,6 @@ export default function Wallet() {
   const transactions = data.transactions.filter(
     (t) => filter === 'all' || t.type === filter,
   )
-
-  const counts: Record<FilterKey, number> = {
-    all: data.transactions.length,
-    spaceBucksSpent: data.transactions.filter((t) => t.type === 'spaceBucksSpent').length,
-    stardustEarned: data.transactions.filter((t) => t.type === 'stardustEarned').length,
-  }
 
   const header = (
     <>
@@ -165,7 +186,7 @@ export default function Wallet() {
             onPress={() => setFilter(f.key)}
           >
             <Text style={[styles.filterTabText, filter === f.key && styles.filterTabTextActive]}>
-              {f.label}{counts[f.key] > 0 ? ` ${counts[f.key]}` : ''}
+              {f.label}
             </Text>
           </Pressable>
         ))}
@@ -292,6 +313,7 @@ const styles = StyleSheet.create({
   },
   txIconSpent: { backgroundColor: `${theme.colors.accent}22` },
   txIconEarned: { backgroundColor: `${GOLD}22` },
+  txIconCashout: { backgroundColor: '#ffffff11' },
   txIconEmoji: { fontSize: 20 },
   txMiddle: { flex: 1, gap: 2 },
   txTitle: { ...theme.typography.body, color: theme.colors.text, fontWeight: '600' },
@@ -301,6 +323,7 @@ const styles = StyleSheet.create({
   txAmount: { ...theme.typography.body, fontWeight: '700' },
   txAmountSpent: { color: theme.colors.textMuted },
   txAmountEarned: { color: GOLD },
+  txAmountCashout: { ...theme.typography.body, fontWeight: '700', color: theme.colors.text },
   txDollars: { ...theme.typography.caption, color: theme.colors.textMuted },
 
   separator: { height: 1, backgroundColor: theme.colors.border, marginLeft: 76 },
