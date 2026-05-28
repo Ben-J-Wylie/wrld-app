@@ -47,7 +47,7 @@ export default function StreamView() {
     sendChatMessage, sendReaction, dismissReaction,
     sendBroadcasterPaused, sendBroadcasterResumed,
   } = useSignaling()
-  const { localStream, remoteStream, error: mediaError, startBroadcasting, startViewing, switchCamera, cleanup } = useMediasoup()
+  const { localStream, remoteStream, error: mediaError, facingMode, startBroadcasting, startViewing, switchCamera, cleanup } = useMediasoup()
   const { isSignedIn } = useAuth()
   const { coords, loading: locationLoading, error: locationError } = useLocation()
   const wrldUser = useAuthStore((s: ReturnType<typeof useAuthStore.getState>) => s.wrldUser)
@@ -277,7 +277,7 @@ export default function StreamView() {
           streamURL={(localStream as unknown as { toURL(): string }).toURL()}
           style={StyleSheet.absoluteFill}
           objectFit="cover"
-          mirror={true}
+          mirror={facingMode === 'user'}
           zOrder={0}
         />
       )}
