@@ -148,7 +148,7 @@ export default function Cashout() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
-          <Pressable onPress={() => router.back()} hitSlop={12}>
+          <Pressable onPress={() => router.navigate('/(app)/wallet')} hitSlop={12}>
             <Text style={styles.back}>←</Text>
           </Pressable>
           <Text style={styles.title}>Cash out</Text>
@@ -161,7 +161,7 @@ export default function Cashout() {
             We'll process your {amount.toLocaleString()} Stardust and send{' '}
             {fmt(net)} to your account email within 5–7 business days.
           </Text>
-          <Pressable style={styles.doneBtn} onPress={() => router.back()}>
+          <Pressable style={styles.doneBtn} onPress={() => router.navigate('/(app)/wallet')}>
             <Text style={styles.doneBtnText}>Done</Text>
           </Pressable>
         </View>
@@ -172,7 +172,7 @@ export default function Cashout() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12}>
+        <Pressable onPress={() => router.navigate('/(app)/wallet')} hitSlop={12}>
           <Text style={styles.back}>←</Text>
         </Pressable>
         <Text style={styles.title}>Cash out</Text>
