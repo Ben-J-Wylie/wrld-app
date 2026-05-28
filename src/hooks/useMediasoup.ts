@@ -12,6 +12,7 @@ export function useMediasoup() {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null)
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment')
 
   const sendTransport = useRef<Transport | null>(null)
   const recvTransport = useRef<Transport | null>(null)
@@ -24,8 +25,21 @@ export function useMediasoup() {
     return device
   }
 
+  const switchCamera = useCallback(() => {
+    const stream = localStreamRef.current
+    if (!stream) return
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const videoTrack = (stream as any).getVideoTracks()[0]
+    if (!videoTrack) return
+    // react-native-webrtc exposes _switchCamera() to flip between front/back
+    // without creating a new stream — the existing producer track continues uninterrupted
+    videoTrack._switchCamera()
+    setFacingMode(prev => prev === 'environment' ? 'user' : 'environment')
+  }, [])
+
   const startBroadcasting = useCallback(async (sources: SourceType[]) => {
     setError(null)
+    setFacingMode('environment')
     try {
       const device = await buildDevice()
 
@@ -96,7 +110,8 @@ export function useMediasoup() {
     setLocalStream(null)
     setRemoteStream(null)
     setError(null)
+    setFacingMode('environment')
   }, [])
 
-  return { localStream, remoteStream, error, startBroadcasting, startViewing, cleanup }
+  return { localStream, remoteStream, error, facingMode, startBroadcasting, startViewing, switchCamera, cleanup }
 }

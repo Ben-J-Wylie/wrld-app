@@ -47,7 +47,7 @@ export default function StreamView() {
     sendChatMessage, sendReaction, dismissReaction,
     sendBroadcasterPaused, sendBroadcasterResumed,
   } = useSignaling()
-  const { localStream, remoteStream, error: mediaError, startBroadcasting, startViewing, cleanup } = useMediasoup()
+  const { localStream, remoteStream, error: mediaError, facingMode, startBroadcasting, startViewing, switchCamera, cleanup } = useMediasoup()
   const { isSignedIn } = useAuth()
   const { coords, loading: locationLoading, error: locationError } = useLocation()
   const wrldUser = useAuthStore((s: ReturnType<typeof useAuthStore.getState>) => s.wrldUser)
@@ -277,7 +277,7 @@ export default function StreamView() {
           streamURL={(localStream as unknown as { toURL(): string }).toURL()}
           style={StyleSheet.absoluteFill}
           objectFit="cover"
-          mirror={true}
+          mirror={facingMode === 'user'}
           zOrder={0}
         />
       )}
@@ -291,6 +291,13 @@ export default function StreamView() {
           mirror={false}
           zOrder={0}
         />
+      )}
+
+      {/* Flip camera button (broadcaster only) */}
+      {showCameraPreview && (
+        <Pressable style={styles.flipBtn} onPress={switchCamera} hitSlop={12}>
+          <Text style={styles.flipBtnText}>⇄</Text>
+        </Pressable>
       )}
 
       {/* Tap-to-reveal layer for viewer fullscreen mode */}
@@ -632,6 +639,18 @@ const styles = StyleSheet.create({
     height: 320,
     zIndex: 10,
   },
+  flipBtn: {
+    position: 'absolute',
+    top: 60,
+    right: theme.spacing.lg,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  flipBtnText: { fontSize: 22, color: '#fff' },
   pausedBanner: {
     position: 'absolute',
     top: 80,
