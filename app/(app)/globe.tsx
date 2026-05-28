@@ -82,7 +82,7 @@ function makePinTexture(count: number): THREE.DataTexture {
           for (let sy = 0; sy < SC; sy++) {
             for (let sx = 0; sx < SC; sx++) {
               const px = ox + ci * (GW + 1) * SC + col * SC + sx
-              const py = oy + row * SC + sy
+              const py = oy + (GH - 1 - row) * SC + sy
               if (px < 0 || px >= S || py < 0 || py >= S) continue
               const i = (py * S + px) * 4
               data[i] = 255; data[i+1] = 255; data[i+2] = 255; data[i+3] = 255
@@ -94,6 +94,8 @@ function makePinTexture(count: number): THREE.DataTexture {
   }
 
   const tex = new THREE.DataTexture(data, S, S)
+  tex.minFilter = THREE.LinearFilter
+  tex.magFilter = THREE.LinearFilter
   tex.needsUpdate = true
   return tex
 }
