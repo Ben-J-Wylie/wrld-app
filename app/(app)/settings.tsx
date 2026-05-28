@@ -20,7 +20,11 @@ export default function Settings() {
   const [nearbyLive, setNearbyLive] = useState(wrldUser?.notifyOnNearbyLive ?? false)
 
   async function handleSignOut() {
-    await signOut()
+    try {
+      await signOut()
+    } catch {
+      // Clerk may throw in RN environments (e.g. CustomEvent polyfill gap); proceed anyway.
+    }
     clearWrldUser()
     qc.clear()
     router.replace('/(app)/globe')
