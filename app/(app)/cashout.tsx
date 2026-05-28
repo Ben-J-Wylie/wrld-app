@@ -206,8 +206,8 @@ export default function Cashout() {
         {/* Payout breakdown */}
         <View style={styles.breakdown}>
           <View style={styles.breakdownRow}>
-            <Text style={styles.breakdownLabel}>Net payout</Text>
-            <Text style={styles.breakdownValue}>{amount > 0 ? fmt(net) : '—'}</Text>
+            <Text style={styles.breakdownLabel}>Gross payout</Text>
+            <Text style={styles.breakdownValue}>{amount > 0 ? fmt(amount) : '—'}</Text>
           </View>
           <View style={styles.breakdownRow}>
             <Text style={styles.breakdownLabel}>Fee (5%)</Text>
