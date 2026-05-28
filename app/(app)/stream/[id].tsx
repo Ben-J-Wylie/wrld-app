@@ -194,11 +194,12 @@ export default function StreamView() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [confirmedBalance])
 
-  // Show broadcaster toast when a tip arrives (broadcaster-side only)
+  // Show broadcaster toast and refresh stardust balance when a tip arrives
   useEffect(() => {
     if (!isNew || tipEvents.length === 0) return
     const latest = tipEvents[tipEvents.length - 1]!
     setBroadcasterTipToast(`@${latest.handle} sent ${latest.amount} 🚀`)
+    invalidateCurrentUser()
     if (tipToastTimerRef.current) clearTimeout(tipToastTimerRef.current)
     tipToastTimerRef.current = setTimeout(() => setBroadcasterTipToast(null), 3000)
   // eslint-disable-next-line react-hooks/exhaustive-deps
