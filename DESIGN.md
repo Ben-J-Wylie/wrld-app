@@ -991,22 +991,1034 @@ inline because the abstraction value is too low.
 
 ### Features (`src/components/features/`)
 
-Currently present (carried forward from pre-Phase-12 work; locations updated
-to new structure during sub-phase 12.1):
+Populated from the 12.2 inventory pass. Features represent one domain
+thing each — a stream, a user, a clip, a wallet transaction, a wizard
+step affordance. They compose primitives and never compose other features
+(per Section 0's no-self-composition rule). Domain types are accepted as
+props; data fetching belongs to screens, not features.
 
-- Stream-related: `NearbyStreamsDrawer`, `NearbyStreamThumbnail`, `NearbyStreamRow`
-  (Phase 7/8)
-- User-related: `Avatar`, `FollowButton`
+**Carried forward from pre-Phase-12 work** (migrated to `features/` in 12.1a):
+`NearbyStreamsDrawer`, `NearbyStreamThumbnail`, `NearbyStreamRow`,
+`Avatar` (promoted to primitives in 12.4 — see Avatar primitive entry),
+`FollowButton`, `AuthModal`, `ChatOverlay`, `ReactionLayer`, `TipSheet`.
+Several of these refactor as the inventory below lands: `NearbyStream*`
+collapses into the new `StreamCard`; `ChatOverlay` splits into
+`ChatMessage` + `ChatComposer`; `ReactionLayer` becomes `ReactionRail` +
+`FloatingHearts`; `TipSheet` becomes a BottomSheet caller composing
+`AmountInput` and `PursesCard`.
 
-Phase 12 candidates (compose primitives):
+The 35 entries below are grouped by domain. Build order isn't strictly
+serial — features build after their primitives ship but otherwise can
+land in any order. Each entry includes the three-way audit.
 
-- `StreamCard` (refactor of NearbyStream\* into a unified primitive-composed card)
-- `HandleBadge`
-- `ChatBubble` (Phase 10 inline → extracted)
-- `ReactionBurst` (Phase 10 inline → extracted)
-- `DiscoveryHandoffCard` (the tap-to-preview card; **seam-as-feature today** — see 0.7)
+#### Stream / Discovery
 
-Entries added as feature components are migrated.
+##### `LivePill`
+
+- **Tier:** feature (composes Pill + animated dot)
+- **Location:** `src/components/features/stream/LivePill.tsx`
+- **Variants:** `default` (live fill + pulsing white dot), `compact` (smaller, for thumb overlays)
+- **Sizes:** sm (h:22), md (h:28)
+- **States:** default
+- **Used in:** populated in 12.6
+- **Tweak impact:** every LIVE marker — top strips, video thumbs, broadcast HUDs, banners
+
+**Mock says:** Iconic LIVE marker. Live-tone fill, pulsing white square
+or dot inside (1.4–1.6s animation), all-caps mono "LIVE" label with
+tracked letter-spacing. Appears in every mock that involves an active
+broadcast.
+
+**Code does:** Inline `<View>` + `<Text>` with `theme.colors.live` in
+several screens.
+
+**Gap / proposal:** Single feature owns the pulse animation +
+visual treatment. Composes Pill (live variant) + bespoke animated dot.
+
+---
+
+##### `StreamCard`
+
+- **Tier:** feature
+- **Location:** `src/components/features/stream/StreamCard.tsx`
+- **Variants:** `trending` (Globe bottom sheet — w:158), `preview` (Viewer Sheet — 16:10 hero), `compact` (sheet row)
+- **Sizes:** controlled by variant
+- **States:** default, pressed
+- **Used in:** populated in 12.6
+- **Tweak impact:** Globe trending rail, Viewer Sheet preview, search results, future feed surfaces
+
+**Mock says:** Thumbnail with overlay metadata (LivePill top-left,
+viewer count bottom-right, channel label bottom-left optional). Title +
+city/channel underneath. The `trending` variant is a 158×~140 card in a
+horizontal scroll. The `preview` variant is a 16:10 hero with a play
+button center + channel label corner.
+
+**Code does:** `NearbyStreamThumbnail` + `NearbyStreamRow` in
+`features/stream/`. Bespoke implementations. No shared shape.
+
+**Gap / proposal:** Unified StreamCard with the 3 variant families
+above. Old `NearbyStream*` components retire when callers migrate.
+
+---
+
+##### `ClipCard`
+
+- **Tier:** feature
+- **Location:** `src/components/features/clip/ClipCard.tsx`
+- **Variants:** `public` (Profile grid), `owner` (My Profile, with anon treatment + layer badges)
+- **Sizes:** controlled by variant
+- **States:** default, pressed, anon (owner only), draft (owner only)
+- **Used in:** populated in 12.6
+- **Tweak impact:** Profile clip grid, My Profile clip grid, any future replay surface
+
+**Mock says:** Thumbnail (16:11 aspect) with overlay metadata. Duration
+pill top-left, peak-viewer-count or anon-lock or draft pill top-right or
+bottom-right. Title + venue + date underneath. **Owner variant** adds a
+layer-badge row (5 small icon tiles showing which of CAM / AUD / LOC /
+ID / GYR were active during the recording). **Anon owner clips** get a
+desaturated + diagonal-stripe overlay and "ONLY VISIBLE TO YOU" caption.
+
+**Code does:** None — clips are new (v0.2 per re-baseline 2026-05-29).
+
+**Gap / proposal:** New feature. ClipCard renders a `Clip` domain object.
+Anon treatment is owner-variant-only (public-side excludes anon clips
+entirely — that's a parent's responsibility).
+
+---
+
+##### `StreamTile`
+
+- **Tier:** feature
+- **Location:** `src/components/features/stream/StreamTile.tsx`
+- **Variants:** `default` (Viewer Sheet sensor row)
+- **Sizes:** md (h:~80, min-width 84)
+- **States:** on (active layer), off (faded), pressed
+- **Used in:** populated in 12.6
+- **Tweak impact:** Viewer Sheet's STREAMS strip, future stream-source display surfaces
+
+**Mock says:** Vertical tile with icon-square (28×28) on top, mono-caps
+label in middle, value/spec below (e.g. "1080p", "48 kHz", "GPS", "192°"
+for compass heading, "OFF" for inactive). On-state: line-2 border tinted
+accent. Off-state: opacity 0.45.
+
+**Code does:** None — current Viewer Sheet feature is `NearbyStream*`
+patterns; no per-sensor tile.
+
+**Gap / proposal:** New feature. Renders a layer descriptor object
+(`{ kind, label, value, active }`). Composed by Viewer Sheet's
+`StreamStrip` section.
+
+---
+
+##### `CoordHUD`
+
+- **Tier:** feature
+- **Location:** `src/components/features/stream/CoordHUD.tsx`
+- **Variants:** `viewer-sheet` (4-column inline), `broadcast-live` (right-justified panel)
+- **Sizes:** controlled by variant
+- **States:** default
+- **Used in:** populated in 12.6
+- **Tweak impact:** Viewer Sheet meta block, Broadcast Live HUD overlay
+
+**Mock says:** Grid of label/value pairs (LAT / LON / ELEV / UPTIME,
+sometimes more). All mono, tabular-numeric values. Label is dim and
+small caps. Value is brighter, monospace.
+
+**Code does:** None.
+
+**Gap / proposal:** New feature accepting an array of `{ label, value }`
++ optional `pending` flag (renders dim). Variant controls layout
+(inline grid vs right-justified panel).
+
+---
+
+##### `VideoPreviewTile`
+
+- **Tier:** feature
+- **Location:** `src/components/features/stream/VideoPreviewTile.tsx`
+- **Variants:** `play` (with center play button), `live` (no play button, LivePill instead)
+- **Sizes:** controlled by aspect (16:10 default)
+- **States:** default, pressed
+- **Used in:** populated in 12.6
+- **Tweak impact:** Viewer Sheet preview, Clip Edit preview hero, future replay thumbnails
+
+**Mock says:** Aspect-ratio container with simulated camera/scene
+content. Grain texture overlay. Overlay metadata pills (LIVE top-left,
+viewer-count top-right, channel-label bottom-left). Optional center play
+button (semi-transparent circle + play icon).
+
+**Code does:** None as feature; Phase 7's `RTCView` is the real
+broadcast surface (not a preview).
+
+**Gap / proposal:** New feature for paused / preview / thumbnail states.
+Real-live broadcast uses Phase 7 `RTCView` directly (not VideoPreviewTile).
+
+---
+
+##### `ReactionRail`
+
+- **Tier:** feature (composes IconButton + count-badge Pill + animated FloatingHearts overlay)
+- **Location:** `src/components/features/stream/ReactionRail.tsx`
+- **Variants:** `default`
+- **Sizes:** md (44×44 per reaction button)
+- **States:** default, pressed (per button), on (per button — colored)
+- **Used in:** populated in 12.6
+- **Tweak impact:** Broadcast Live HUD, any future live reaction surface
+
+**Mock says:** Vertical column of round reaction buttons (44×44, glass
+backdrop). Each button has a small count-badge in the corner. On press,
+emits a FloatingHearts animation that drifts upward (Periscope-style).
+Active reaction state: live-tinted border + icon.
+
+**Code does:** `ReactionLayer` in `features/stream/` (Phase 10) handles
+hearts. No rail UI — current code has inline reaction buttons in
+stream view. Refactor merges into one feature.
+
+**Gap / proposal:** New combined feature replacing ReactionLayer +
+inline buttons. Composes the icon column + the floating animation overlay
+as one cohesive surface.
+
+---
+
+#### User / Identity
+
+##### `BroadcasterRow`
+
+- **Tier:** feature (composes Avatar + Text + FollowButton)
+- **Location:** `src/components/features/user/BroadcasterRow.tsx`
+- **Variants:** `default` (full row with Avatar + name + alias + follower-count + Follow), `chip` (compact rounded-pill version for HUD overlays)
+- **Sizes:** controlled by variant (default ~50px row, chip ~32px)
+- **States:** default
+- **Used in:** populated in 12.6
+- **Tweak impact:** Viewer Sheet, Broadcast Live, Profile, stream view broadcaster identity row
+
+**Mock says:** Avatar (sm/md) + name (sans) + handle alias (mono) +
+optional follower count + FollowButton on the right. The **chip**
+variant is a rounded-pill version with everything inline + glass blur,
+used in Broadcast Live's HUD.
+
+**Code does:** Inline composition in stream view's broadcaster identity
+header (Phase 8). No shared feature.
+
+**Gap / proposal:** Extract as feature. Variant prop controls the
+layout. `User` domain object passed as prop.
+
+---
+
+##### `MetaStrip`
+
+- **Tier:** feature
+- **Location:** `src/components/features/user/MetaStrip.tsx`
+- **Variants:** `default`
+- **Sizes:** md (2-row, ~28px tall)
+- **States:** default
+- **Used in:** populated in 12.6
+- **Tweak impact:** Profile header, My Profile header, future identity-with-metadata cards
+
+**Mock says:** 2-row dot-separated info pattern. Row 1: followers count
++ joined date. Row 2: region + pronouns (or any optional metadata). Mono
+font, dim ink, mid-dot separators.
+
+**Code does:** None.
+
+**Gap / proposal:** Accepts an array of `{ label, value }` pairs and
+renders them as dot-separated rows. Empty rows hidden (a user without
+pronouns just doesn't render that segment).
+
+---
+
+##### `PassportCard`
+
+- **Tier:** feature (composes Card + Text + SocialChip)
+- **Location:** `src/components/features/user/PassportCard.tsx`
+- **Variants:** `default`
+- **Sizes:** N/A (consumer)
+- **States:** default
+- **Used in:** populated in 12.6
+- **Tweak impact:** Profile, My Profile, future user-detail surfaces
+
+**Mock says:** A "passport" panel showing bio (sans body), social chips
+(SocialChip array), and a region row (icon + "FROM" label + value).
+Optional pronouns row. Missing fields just don't render. Composes Card
++ Text + the SocialChip feature.
+
+**Code does:** None — current Profile screen has inline bio rendering.
+
+**Gap / proposal:** Extract as feature that takes a `Passport` shape
+(`{ bio, region, pronouns, socials[] }`) and renders conditionally.
+
+---
+
+##### `SocialChip`
+
+- **Tier:** feature (composes Chip + brand-icon)
+- **Location:** `src/components/features/user/SocialChip.tsx`
+- **Variants:** `ig` (Instagram), `tt` (TikTok), `sc` (SoundCloud), `x` (Twitter/X — future)
+- **Sizes:** md (h:30)
+- **States:** default, pressed
+- **Used in:** populated in 12.6
+- **Tweak impact:** PassportCard, future identity surfaces
+
+**Mock says:** Chip with brand icon + handle. Each kind has its own
+brand glyph (Instagram circle-square, TikTok stylized "S", SoundCloud
+bars). Tap = opens platform's app or web fallback.
+
+**Code does:** None.
+
+**Gap / proposal:** Feature wrapping the Chip primitive with brand icon
+selection. Brand icons live in this feature's adjacent assets dir.
+
+---
+
+##### `AvatarPicker`
+
+- **Tier:** feature (composes Avatar + Button + image-picker logic)
+- **Location:** `src/components/features/user/AvatarPicker.tsx`
+- **Variants:** `default`
+- **Sizes:** md (72px avatar + side buttons)
+- **States:** default, picking (camera/gallery sheet visible), uploading
+- **Used in:** populated in 12.6
+- **Tweak impact:** Onboarding wizards (Viewer + Creator), Settings change-avatar flow
+
+**Mock says:** Avatar (lg) on left + a column of two action buttons on
+the right ("Take a photo" with camera icon, "Choose from photos" with
+gallery icon). Picker invokes `expo-image-picker` and shows uploading
+state in-place.
+
+**Code does:** Inline avatar picker in `OnboardingScreen.tsx`.
+
+**Gap / proposal:** Extract as feature. Owns the image-picker integration
+and upload-state UI. Emits the resulting URL/file via callback.
+
+---
+
+##### `AccountIDPill`
+
+- **Tier:** feature
+- **Location:** `src/components/features/user/AccountIDPill.tsx`
+- **Variants:** `default`
+- **Sizes:** sm (h:22)
+- **States:** default
+- **Used in:** populated in 12.6
+- **Tweak impact:** Settings, Change Handle confirm step, Change Handle success screen, future account-detail surfaces
+
+**Mock says:** Small mono-caps pill showing the user's internal account
+ID (e.g. "ACCT 0042-887-1156"). Line border, ink-faint background.
+Reinforces the identity-model framing that handle is changeable but
+account ID is permanent.
+
+**Code does:** None — current code doesn't surface account IDs to users.
+
+**Gap / proposal:** New feature. Accepts a `User` (uses `id` or
+generated display-format thereof). Surfaces in Settings + Change Handle
+flow per the re-baselined identity model (DESIGN.md decision log
+2026-05-29 indirectly via the handle-change mock).
+
+---
+
+#### Onboarding / Wizard
+
+##### `ContextBanner`
+
+- **Tier:** feature (composes Card + Icon + Text)
+- **Location:** `src/components/features/onboarding/ContextBanner.tsx`
+- **Variants:** `accent` (default, tinted accent), `warn` (warn-tinted, for stakes-raising context)
+- **Sizes:** md
+- **States:** default
+- **Used in:** populated in 12.6
+- **Tweak impact:** every wizard top — Viewer Onboarding, Creator Onboarding, gated-action flows
+
+**Mock says:** Top-of-wizard banner that acknowledges the user's entry
+context. E.g. "SIGN UP TO CHAT IN @KAI.DC'S STREAM" or "BECOME A CREATOR
+· 10 STEPS · ~3 MIN". Accent-tinted glass, mono-caps text, optional
+leading icon. Warn variant for higher-stakes flows.
+
+**Code does:** None.
+
+**Gap / proposal:** Feature accepting `{ icon, label, tone }`. Sits
+above the wizard's Head/Body/CTA scaffolding.
+
+---
+
+##### `AuthChoiceList`
+
+- **Tier:** feature (composes SocialAuthButton + Divider + Text)
+- **Location:** `src/components/features/auth/AuthChoiceList.tsx`
+- **Variants:** `default` (auto-selects platform order: iOS = Apple → Google → Email; Android = Google → Email)
+- **Sizes:** N/A
+- **States:** default
+- **Used in:** populated in 12.6
+- **Tweak impact:** Onboarding Viewer step 1, Onboarding Creator step 1, AuthModal
+
+**Mock says:** Vertical stack of SocialAuthButton items, an "OR" divider
+mid-stack, then a "Continue with email" Button. iOS shows Apple first
+(HIG); Android shows Google first.
+
+**Code does:** AuthModal currently has email-only sign-up (no social).
+
+**Gap / proposal:** New feature. Auto-detects platform via
+`Platform.OS`. Emits a callback with the chosen kind. Backend wiring
+for Apple / Google auth is a separate Aaron task; this feature only
+handles the UI.
+
+---
+
+##### `SocialAuthButton`
+
+- **Tier:** feature (composes Button primitive)
+- **Location:** `src/components/features/auth/SocialAuthButton.tsx`
+- **Variants:** `apple` (white-on-black per HIG), `google` (panel surface + brand icon), `email` (panel surface + generic mail icon)
+- **Sizes:** md (h:54)
+- **States:** default, pressed, loading
+- **Used in:** AuthChoiceList only (so far)
+- **Tweak impact:** Auth flows
+
+**Mock says:** See the variants. Brand icons baked in. Loading state
+replaces label with Spinner (matching icon color).
+
+**Code does:** None.
+
+**Gap / proposal:** Feature. Composes Button primitive with brand icon
+fixed by variant.
+
+---
+
+##### `PasswordStrengthMeter`
+
+- **Tier:** feature (composes ProgressBar variant + HelpText)
+- **Location:** `src/components/features/auth/PasswordStrengthMeter.tsx`
+- **Variants:** `default`
+- **Sizes:** md (3 segments, 3px height)
+- **States:** weak, ok, strong (driven by password input)
+- **Used in:** populated in 12.6
+- **Tweak impact:** Onboarding Viewer / Creator step 2, Settings password change
+
+**Mock says:** 3-segment indicator under the password Input. **Weak**
+(live red) = <8 chars or single class. **Ok** (warn yellow) = mid
+strength. **Strong** (accent) = 12+ chars + mixed classes. Paired with
+HelpText giving tone-matching feedback ("TOO SHORT — 8 CHARACTERS
+MINIMUM" / "ADD A NUMBER OR SYMBOL" / "STRONG").
+
+**Code does:** None.
+
+**Gap / proposal:** New feature with `score: 0 | 1 | 2 | 3` prop.
+Renders the segment fill + helper text. Score computation is the
+consumer's responsibility (or a separate exported util in
+`@/lib/passwordStrength.ts`).
+
+---
+
+##### `RulesChecklist`
+
+- **Tier:** feature
+- **Location:** `src/components/features/onboarding/RulesChecklist.tsx`
+- **Variants:** `default`
+- **Sizes:** md
+- **States:** default
+- **Used in:** populated in 12.6
+- **Tweak impact:** Handle picker rule visualization, password rule guidance
+
+**Mock says:** Vertical list of rule rows, each with a small status dot
++ label. **Met** = accent dot with check icon, ink label. **Bad** = live
+dot with X icon, live label. **Neutral** (not-yet-evaluated) = empty
+line dot, dim label. Compact mono labels in tracked caps.
+
+**Code does:** None.
+
+**Gap / proposal:** New feature accepting `rules: { label, status }[]`
+where status is `'met' | 'bad' | 'neutral'`. Used universally for any
+multi-rule validation visualization.
+
+---
+
+##### `SuggestionChipRow`
+
+- **Tier:** feature (composes Chip)
+- **Location:** `src/components/features/onboarding/SuggestionChipRow.tsx`
+- **Variants:** `default` (handle suggestions with @ prefix)
+- **Sizes:** md
+- **States:** default
+- **Used in:** populated in 12.6
+- **Tweak impact:** Handle picker (Onboarding + Change Handle), future tag-suggestion surfaces
+
+**Mock says:** Horizontal-wrapping row of suggestion chips. Each chip
+has an accent @ prefix + the suggested handle. Tap = fills the Input
+above.
+
+**Code does:** None.
+
+**Gap / proposal:** New feature accepting `suggestions: string[]` +
+`onPick`. Used wherever suggestion UI exists.
+
+---
+
+##### `ReassuranceCard`
+
+- **Tier:** feature (composes Card + Icon + Text)
+- **Location:** `src/components/features/onboarding/ReassuranceCard.tsx`
+- **Variants:** `default`
+- **Sizes:** md
+- **States:** default
+- **Used in:** populated in 12.6
+- **Tweak impact:** Handle wizard, Change Handle, Permission flows, any place a small reassuring info card belongs
+
+**Mock says:** Small card with icon-circle on left + body text on right.
+Reassuring messaging like "Your handle is changeable. Your account
+identity is permanent."
+
+**Code does:** None.
+
+**Gap / proposal:** New feature. Accepts `{ icon, body }` slot. Used
+wherever small inline info needs to land.
+
+---
+
+##### `DOBWheel`
+
+- **Tier:** feature
+- **Location:** `src/components/features/onboarding/DOBWheel.tsx`
+- **Variants:** `default`
+- **Sizes:** md (h:178, 3 columns)
+- **States:** default
+- **Used in:** populated in 12.6
+- **Tweak impact:** Onboarding age step (Viewer + Creator wizards)
+
+**Mock says:** iOS-style scroll wheel picker. 3 columns: month / day /
+year. Center selection band (line-2 borders top + bottom). Top + bottom
+fade gradient. Sans font, tabular-numeric. Selected center value is
+bright ink + 600 weight; neighbors are dimmed (opacity 0.55, 0.3).
+
+**Code does:** None.
+
+**Gap / proposal:** New feature. Custom RN implementation (no native
+DatePicker — the design wants this specific aesthetic). PanResponder-
+driven scroll on each column.
+
+---
+
+##### `PermissionPrePromptCard`
+
+- **Tier:** feature (composes Card + Icon + Text)
+- **Location:** `src/components/features/permissions/PermissionPrePromptCard.tsx`
+- **Variants:** `location`, `notifications`, `camera`, `microphone` (each provides default icon + default copy)
+- **Sizes:** N/A
+- **States:** default
+- **Used in:** populated in 12.6
+- **Tweak impact:** Pre-prompt sequences before any OS permission ask
+
+**Mock says:** Card with a large permission illustration (icon-in-frame
+with optional ping animation) + plain title + 2–3 bullet reasons in a
+list. Sets context before the OS prompt fires. Never manipulative —
+copy says what we want and what users get back.
+
+**Code does:** None. Current code calls expo-permissions APIs directly
+with no pre-prompt.
+
+**Gap / proposal:** New feature. Variants come with default icon + body
+copy that can be overridden via props. The OS prompt fires when the
+user taps the primary CTA ("Allow notifications"). Denial = wizard
+advances; never re-prompts.
+
+---
+
+##### `LegalAcceptanceCard`
+
+- **Tier:** feature (composes Card + Text + LegalLinkRow + ConsentRow)
+- **Location:** `src/components/features/onboarding/LegalAcceptanceCard.tsx`
+- **Variants:** `default` (US / ROW), `eu-gdpr` (with Essential/Analytics/Personalization toggles), `ca-ccpa` (with Do Not Sell toggle)
+- **Sizes:** N/A
+- **States:** default
+- **Used in:** populated in 12.6
+- **Tweak impact:** Onboarding Viewer step 7, Onboarding Creator final, future legal-acceptance surfaces
+
+**Mock says:** Card containing 3 link-rows (Terms of service / Community
+rules / Privacy policy), jurisdiction-detection badge, then jurisdiction-
+specific consent toggles, then "Agree & Continue" button. Three full
+variants for the three legal contexts.
+
+**Code does:** None.
+
+**Gap / proposal:** New feature. Detects jurisdiction via locale + IP
+heuristic at runtime (delegated to a helper). Renders the right variant.
+Emits resolved consent settings on submit.
+
+---
+
+##### `ConsentRow`
+
+- **Tier:** feature (composes Text + Toggle)
+- **Location:** `src/components/features/onboarding/ConsentRow.tsx`
+- **Variants:** `default`, `locked` (Essential, always-on, can't toggle off)
+- **Sizes:** md
+- **States:** off, on, locked-on
+- **Used in:** populated in 12.6
+- **Tweak impact:** LegalAcceptanceCard, Settings notification preferences, future consent surfaces
+
+**Mock says:** Row with title (sans body, ink) + description (mono caps,
+dim) on the left, Toggle on the right. Locked variant has the Toggle
+disabled in the on state.
+
+**Code does:** None as feature.
+
+**Gap / proposal:** Extract as feature. `{ title, description, on,
+onToggle, locked }` props.
+
+---
+
+##### `AgeGateCard`
+
+- **Tier:** feature (composes Card + Icon + Text + Button)
+- **Location:** `src/components/features/onboarding/AgeGateCard.tsx`
+- **Variants:** `default`
+- **Sizes:** lg (full-width centered)
+- **States:** default
+- **Used in:** populated in 12.6
+- **Tweak impact:** Onboarding age step refusal (terminal state — no retry)
+
+**Mock says:** Card with clock icon-circle (line-2 border) + heading
+("Wrld is 18+") + body explaining the refusal + secondary "Take me
+back" button. Centered, respectful tone. **Terminal — no retry, no
+"try a different date" link, no joke.**
+
+**Code does:** None — current age gate is just a date input with no
+explicit refusal surface.
+
+**Gap / proposal:** New feature. Wraps the design's refusal pattern
+verbatim. The terminal-no-retry behavior is structural — the parent
+wizard doesn't allow re-entry.
+
+---
+
+##### `LocationGranularityPicker`
+
+- **Tier:** feature (composes Card + GranularityCard sub-components)
+- **Location:** `src/components/features/onboarding/LocationGranularityPicker.tsx`
+- **Variants:** `default`
+- **Sizes:** N/A
+- **States:** selected option determines visual
+- **Used in:** populated in 12.6
+- **Tweak impact:** Creator wizard location step, future privacy-granularity surfaces
+
+**Mock says:** 4 radio cards (Bluedot — exact pin, City — fuzzy circle,
+Country — big shape, Private — eye-off). Each card has a map-style
+visual preview, title, description, and a radio bullet. Selected card
+has accent border + glow + accent radio fill. Bluedot warns
+(`data-tone="warn"`).
+
+**Code does:** None.
+
+**Gap / proposal:** New feature. The map-visual sub-components live as
+internal helpers (Bluedot pin, City fuzzy circle, Country shape, Private
+eye-off). Emits the chosen granularity (`'bluedot' | 'city' | 'country'
+| 'private'`).
+
+---
+
+#### Settings / Identity Management
+
+##### `SettingsRow`
+
+- **Tier:** feature (composes Icon + Text)
+- **Location:** `src/components/features/settings/SettingsRow.tsx`
+- **Variants:** `default`, `highlight` (accent-tinted background for primary identity row)
+- **Sizes:** md
+- **States:** default, pressed
+- **Used in:** populated in 12.6
+- **Tweak impact:** Settings, Wallet header (Top Up / Cash Out tiles also share patterns), future config surfaces
+
+**Mock says:** Grid: icon-tile (36×36) + col (title + value + optional
+AccountIDPill) + chevron arrow. Border-top separates from previous row.
+The **highlight** variant is accent-tinted background for the primary
+identity row (Handle).
+
+**Code does:** Settings screen has bespoke row rendering.
+
+**Gap / proposal:** Extract feature. Rows accept `{ icon, title, value,
+arrow }` plus optional `highlight` flag. Grouping into cards is the
+parent's responsibility.
+
+---
+
+##### `SwapCard`
+
+- **Tier:** feature (composes Card + Text + Icon)
+- **Location:** `src/components/features/identity/SwapCard.tsx`
+- **Variants:** `default`
+- **Sizes:** md
+- **States:** default
+- **Used in:** populated in 12.6
+- **Tweak impact:** Change Handle confirm step, future FROM/TO confirmation surfaces
+
+**Mock says:** Accent-tinted card showing "FROM" with strikethrough old
+value + accent arrow + "TO" with new value. Used when confirming a
+mutation that swaps one value for another.
+
+**Code does:** None.
+
+**Gap / proposal:** New feature. Accepts `{ fromLabel, fromValue,
+toLabel, toValue }`. Strikethrough applied to old value automatically.
+
+---
+
+##### `ToastBanner`
+
+- **Tier:** feature (composes Card + Icon + Text + dismiss)
+- **Location:** `src/components/features/feedback/ToastBanner.tsx`
+- **Variants:** `accent` (default), `warn`, `err`, `success`
+- **Sizes:** md
+- **States:** entering, visible, dismissing
+- **Used in:** populated in 12.6
+- **Tweak impact:** post-action confirmations, viewer-side ephemeral notices, post-tip broadcaster toast (Phase 13)
+
+**Mock says:** Accent-tinted card with icon + body + optional bold
+emphasis. Auto-dismiss after 3–5s. Floats above content.
+
+**Code does:** Phase 13 has a broadcaster-side post-tip toast inline in
+stream view. Refactor would consolidate.
+
+**Gap / proposal:** New shared feature. Single instance per surface
+(queues messages). Used for: post-handle-change confirmation, post-tip
+broadcaster toast, post-report submission, etc.
+
+---
+
+#### Monetization
+
+##### `PursesCard`
+
+- **Tier:** feature (composes Card + Text + currency glyphs)
+- **Location:** `src/components/features/wallet/PursesCard.tsx`
+- **Variants:** `dual` (Space Bucks + Star Dust hero), `single-sb`, `single-sd`
+- **Sizes:** md (hero), sm (context strip in Top Up / Cash Out)
+- **States:** default
+- **Used in:** populated in 12.6
+- **Tweak impact:** Wallet v2 hero, Top Up context strip, Cash Out hero
+
+**Mock says:** Dual-currency hero card showing Space Bucks balance and
+Star Dust balance side-by-side. Each side: accent-tinted (SB) or
+live-tinted (SD) glow, currency glyph (4-point star for SB, rose-cut
+gem for SD), big numeric balance (tabular), bottom row with $ equivalent
++ rate hint.
+
+**Code does:** Current Me screen surfaces Space Bucks balance inline. No
+dual-currency UI; no Star Dust yet.
+
+**Gap / proposal:** New feature. Both currencies = $0.01/unit per
+re-baseline. The 30% platform fee on transfer is invisible here (handled
+in TransactionRow / tip flow). Variant selects 1- or 2-currency
+display.
+
+---
+
+##### `TransactionRow`
+
+- **Tier:** feature
+- **Location:** `src/components/features/wallet/TransactionRow.tsx`
+- **Variants:** `tip-sent`, `tip-received`, `sub-paid` (mock-only v0.2), `sub-earned` (mock-only v0.2), `ppv-paid` (mock-only v0.2), `ppv-earned` (mock-only v0.2), `topup` (stubbed v0.2), `cashout` (stubbed v0.2), `promo`, `refund`, `hold`
+- **Sizes:** md
+- **States:** default, pending, pressed
+- **Used in:** populated in 12.6
+- **Tweak impact:** Wallet v2 transaction list, future transaction-detail surfaces
+
+**Mock says:** Grid: thumbnail-tile (40×40, colored by kind + currency
+direction) + meta column (title + sub) + amount column (mono, signed,
+USD equivalent below). Pending state shows "PENDING" label below
+amount.
+
+**Code does:** None.
+
+**Gap / proposal:** New feature. Variant kinds match the v0.2 + v0.3
+wallet model (see DESIGN.md decision log 2026-05-29 wallet entry).
+Subs + PPV variants ship but emit no real transactions in v0.2.
+
+---
+
+##### `BundleCard`
+
+- **Tier:** feature (composes Card + Pill + Text)
+- **Location:** `src/components/features/wallet/BundleCard.tsx`
+- **Variants:** `default`, `with-badge` (BEST VALUE / MOST POPULAR / VIP corner badge)
+- **Sizes:** md
+- **States:** default, selected, disabled
+- **Used in:** populated in 12.6
+- **Tweak impact:** Top Up bundle picker, future bundle surfaces
+
+**Mock says:** Radio card: pick bullet (22×22, animated fill) + body
+(token glyph + qty + per-token meta) + price column (USD price + per-
+unit savings %). Selected = accent border + glow. Optional corner badge
+(BEST VALUE accent / MOST POPULAR accent-hot / VIP ink).
+
+**Code does:** None — Top Up screen is a Phase 13 placeholder.
+
+**Gap / proposal:** New feature. Variants control the corner badge.
+Selected state managed by parent.
+
+---
+
+##### `AmountInput`
+
+- **Tier:** feature (composes Text + Slider + Pill — semantic numeric input)
+- **Location:** `src/components/features/wallet/AmountInput.tsx`
+- **Variants:** `tip` (uses Space Bucks glyph + accent), `cashout` (uses Star Dust glyph + live)
+- **Sizes:** md
+- **States:** default, focused, invalid (below min)
+- **Used in:** populated in 12.6
+- **Tweak impact:** TipSheet, Cash Out screen, future amount-entry surfaces
+
+**Mock says:** Large numeric input (40px, sans 600) with currency glyph
+prefix + unit pill suffix. USD equivalent shown below. Fee breakdown for
+Cash Out variant (shows net amount after platform fee). Slider beneath
+for snap-to-step adjustment. Preset chips (4-up grid) for quick amounts.
+
+**Code does:** TipSheet (Phase 13) has inline amount picker. Cashout has
+its own bespoke slider.
+
+**Gap / proposal:** Consolidate into one feature with variants for
+purpose. The slider primitive (12.4) handles the bar. Preset chips are
+external — passed as a separate prop or rendered alongside.
+
+---
+
+##### `BankCard`
+
+- **Tier:** feature (composes Card + Icon + Text + Button)
+- **Location:** `src/components/features/wallet/BankCard.tsx`
+- **Variants:** `default`
+- **Sizes:** md
+- **States:** default, pressed (Change button)
+- **Used in:** populated in 12.6
+- **Tweak impact:** Cash Out payee selection, future linked-account surfaces (stubbed v0.2 per re-baseline)
+
+**Mock says:** Card with bank icon-tile (38×38), meta column (bank name
+masked + last 4 digits), and a "Change" link button on the right.
+
+**Code does:** None — Cash Out is mock-only in v0.2 per re-baseline.
+
+**Gap / proposal:** New feature. Component ships v0.2; underlying bank-
+linking is v0.3.
+
+---
+
+#### Broadcasting / Live
+
+##### `FeedRow`
+
+- **Tier:** feature (composes Card + Icon-thumb + Text + Toggle)
+- **Location:** `src/components/features/broadcast/FeedRow.tsx`
+- **Variants:** one per layer (`cam`, `audio`, `screen`, `loc`, `gyro`, `compass`, `profile`)
+- **Sizes:** md (h:~80)
+- **States:** armed, broadcasting, denied, disabled
+- **Used in:** populated in 12.6
+- **Tweak impact:** Go Live arming screen
+
+**Mock says:** Row: animated thumb (76×60, layer-specific
+visualization — see `FeedThumb` next) + meta (label + detail) + Toggle.
+**Armed** state has accent-tinted border + tinted background. **Broadcasting**
+state has live-tinted border. **Denied** opacity 0.55 (OS permission
+declined).
+
+**Code does:** Current Dashboard has source-arming tiles for camera +
+audio (Phase 6). Refactor expands to 7 layers per re-baseline.
+
+**Gap / proposal:** New feature. Variant determines the thumb
+visualization (see FeedThumb sub-feature) + default detail copy.
+
+---
+
+##### `FeedThumb`
+
+- **Tier:** feature (sub-component of FeedRow; usable standalone)
+- **Location:** `src/components/features/broadcast/FeedThumb.tsx`
+- **Variants:** `cam` (viewfinder), `audio` (waveform bars), `screen` (mock device with traffic lights), `loc` (ping on grid), `gyro` (rotating 3D cube), `compass` (rotating rose), `profile` (avatar silhouette)
+- **Sizes:** md (76×60), lg (Clip Edit preview hero — uses larger variant)
+- **States:** default, paused (when parent is armed=false)
+- **Used in:** populated in 12.6
+- **Tweak impact:** Go Live FeedRow thumbs, Clip Edit preview fallbacks, future broadcast-layer visualizations
+
+**Mock says:** Per-layer animated mini visualization. Each layer has a
+distinct visual treatment that suggests its data shape (waveform for
+audio, ping-on-grid for location, rotating cube for gyro, etc.).
+
+**Code does:** None.
+
+**Gap / proposal:** New feature. Variant selects the SVG/Animated
+treatment. Pause behavior: when parent component prop `active=false`,
+animation freezes.
+
+---
+
+##### `GoBar`
+
+- **Tier:** feature (composes Pressable + Text + Icon)
+- **Location:** `src/components/features/broadcast/GoBar.tsx`
+- **Variants:** `default` (idle), `armed`, `counting` (countdown), `live`, `disabled`
+- **Sizes:** lg (h:64, full-width, r:20)
+- **States:** managed by variant
+- **Used in:** populated in 12.6
+- **Tweak impact:** Go Live docked bottom CTA
+
+**Mock says:** Big docked-bottom CTA with label + knob on the right.
+**Armed** = accent-tinted bg + glow. **Counting** = countdown ring
+overlay. **Live** = live-tinted bg + live-knob + intense glow. State
+transitions are dramatic.
+
+**Code does:** None — Phase 6 Dashboard has a simpler Go Live button.
+
+**Gap / proposal:** New feature. Manages own state via variant prop.
+
+---
+
+##### `ChatMessage`
+
+- **Tier:** feature (composes Text)
+- **Location:** `src/components/features/chat/ChatMessage.tsx`
+- **Variants:** `user` (default — dim handle), `mod` (accent-hot handle), `host` (live handle), `system` (mono caps, full-mono row)
+- **Sizes:** md
+- **States:** default
+- **Used in:** populated in 12.6
+- **Tweak impact:** Broadcast Live chat list, viewer chat overlay
+
+**Mock says:** Inline message: bold colored handle (role-coded) + plain
+body. **System** messages are full mono caps. Text-shadow for legibility
+over video.
+
+**Code does:** `ChatOverlay` in features renders chat messages inline.
+Refactor splits ChatOverlay into ChatMessage (this) + ChatComposer (next).
+
+**Gap / proposal:** New feature. Accepts `{ role, handle, body }`.
+
+---
+
+##### `ChatComposer`
+
+- **Tier:** feature (composes Input + IconButton)
+- **Location:** `src/components/features/chat/ChatComposer.tsx`
+- **Variants:** `default`
+- **Sizes:** md (h:40 round input + 40×40 send)
+- **States:** empty, has-text, sending, disabled (unauthenticated → AuthModal on tap)
+- **Used in:** populated in 12.6
+- **Tweak impact:** Broadcast Live composer, ChatOverlay refactor
+
+**Mock says:** Round 999-radius Input + circular accent send button. The
+input has a placeholder. Send disabled when empty.
+
+**Code does:** `ChatOverlay` inline composer. Refactor.
+
+**Gap / proposal:** Extract as feature.
+
+---
+
+#### Clip Editor
+
+##### `ClipPreview`
+
+- **Tier:** feature (composes Card + VideoPreviewTile + sub-fallbacks)
+- **Location:** `src/components/features/clip/ClipPreview.tsx`
+- **Variants:** `camera` (default video), `audio-only` (waveform fallback), `map-only` (loc fallback — no cam)
+- **Sizes:** lg (16:11 hero)
+- **States:** loading, playing, paused
+- **Used in:** populated in 12.6
+- **Tweak impact:** Clip Edit hero, future clip-detail surfaces
+
+**Mock says:** 16:11 hero preview. Three fallback states based on which
+layers were captured: camera (default), audio-only (animated waveform +
+"AUDIO ONLY" label), map-only (gridded background + pinging location pin).
+Always has playback controls overlaid (play button + progress bar +
+scrubber).
+
+**Code does:** None — clips are new per re-baseline.
+
+**Gap / proposal:** New feature. Variant determined by clip's
+`layerSet` (which layers were captured). Composes VideoPreviewTile for
+camera case; bespoke for fallbacks.
+
+---
+
+##### `Timeline`
+
+- **Tier:** feature
+- **Location:** `src/components/features/clip/Timeline.tsx`
+- **Variants:** `default`
+- **Sizes:** md (h:44)
+- **States:** default, scrubbing, trimming
+- **Used in:** populated in 12.6
+- **Tweak impact:** Clip Edit timeline, future video-editing surfaces
+
+**Mock says:** Track with waveform bars in the background, current
+playhead scrubber, optional trim handles defining the "active" region
+with accent borders + handles. Trimmed-out regions get a dark overlay
+with a hatched pattern.
+
+**Code does:** None.
+
+**Gap / proposal:** New feature. PanResponder-driven scrubber + trim-
+handle dragging. State tuple: `{ duration, scrub, trimStart, trimEnd }`.
+
+---
+
+##### `LayerEditorRow`
+
+- **Tier:** feature (composes Icon-tile + Text + Pill + Toggle + IconButton)
+- **Location:** `src/components/features/clip/LayerEditorRow.tsx`
+- **Variants:** `default`, `id-layer` (special treatment for ID layer toggling)
+- **Sizes:** md
+- **States:** on, off, deleted (perm-cut)
+- **Used in:** populated in 12.6
+- **Tweak impact:** Clip Edit layers panel
+
+**Mock says:** Row: icon-tile (34×34, accent-tinted when on) + col (name
++ tone-status pill + dim description) + Toggle + row-menu IconButton.
+**Deleted** state has live-tinted icon + strikethrough name + dashed
+hide-affordance. Permanent-cut action (live-tone outline button) appears
+when the row is selected.
+
+**Code does:** None.
+
+**Gap / proposal:** New feature. Accepts a `Layer` + `onToggle` +
+`onDelete`. ID-layer variant treats the toggle differently (anonymizes
+the clip retroactively).
+
+---
+
+#### Trust / Safety
+
+##### `ContextStrip`
+
+- **Tier:** feature (composes Card + Avatar + Text + LivePill)
+- **Location:** `src/components/features/report/ContextStrip.tsx`
+- **Variants:** `default`
+- **Sizes:** md
+- **States:** default
+- **Used in:** populated in 12.6
+- **Tweak impact:** Report flow context header, future "what you're reporting" surfaces
+
+**Mock says:** Card surfacing what's being reported: thumb (48×48 of the
+broadcast/clip) + meta column (title + sub) + LivePill on the right.
+
+**Code does:** None.
+
+**Gap / proposal:** New feature. Accepts a `ReportTarget` (broadcast |
+clip | user). Renders summary.
+
+---
+
+##### `ReasonRow`
+
+- **Tier:** feature
+- **Location:** `src/components/features/report/ReasonRow.tsx`
+- **Variants:** `default`
+- **Sizes:** md
+- **States:** default, selected, pressed
+- **Used in:** populated in 12.6
+- **Tweak impact:** Report flow step 1 (reason picker), future reason-picker surfaces
+
+**Mock says:** Selectable row: title (sans, bold) + description (mono
+caps, dim) + chevron. Selected = accent-tinted background + accent border
++ accent chevron.
+
+**Code does:** None.
+
+**Gap / proposal:** New feature. Used inside Report's reason list
+section.
 
 ### Sections (`src/components/sections/`)
 
