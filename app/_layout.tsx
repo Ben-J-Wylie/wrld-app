@@ -38,21 +38,29 @@ function RootNavigator() {
   const { isLoaded, isSignedIn, getToken } = useAuth()
   const setWrldUser = useAuthStore((s) => s.setWrldUser)
   const clearWrldUser = useAuthStore((s) => s.clearWrldUser)
+  const wasSignedIn = useRef(false)
 
   // Wire the Clerk token getter so the axios interceptor can attach JWTs
   useEffect(() => {
     setClerkTokenGetter(getToken)
   }, [getToken])
 
-  // Fetch the WRLD user record whenever auth state changes
+  // Fetch the WRLD user record whenever auth state changes.
+  // On sign-out transition, navigate to globe — this is the only reliable
+  // place to do it because Clerk's auth state is fully settled here.
   useEffect(() => {
     if (!isLoaded) return
     if (isSignedIn) {
+      wasSignedIn.current = true
       apiClient
         .get<{ user: User }>('/auth/me')
         .then((res) => setWrldUser(res.data.user))
         .catch(console.warn)
     } else {
+      if (wasSignedIn.current) {
+        router.navigate('/(app)/globe')
+      }
+      wasSignedIn.current = false
       clearWrldUser()
     }
   }, [isLoaded, isSignedIn])
