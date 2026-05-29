@@ -87,15 +87,13 @@ function RootNavigator() {
     return () => sub.remove()
   }, [])
 
-  // Redirect to creator onboarding when signed-in user still has a temp handle.
-  // Creator onboarding includes a handle-selection step, so it covers viewer
-  // stipulations too — no separate viewer onboarding needed for hired creators.
-  // Guard against redirect loop when the user is already inside an onboarding screen.
+  // Redirect to viewer onboarding when signed-in user still has a temp handle.
+  // Guard against redirect loop when already inside an onboarding screen.
   const wrldUser = useAuthStore((s) => s.wrldUser)
   useEffect(() => {
     if (isLoaded && isSignedIn && wrldUser && wrldUser.handle.startsWith('user_')) {
       if (!pathname.includes('onboarding')) {
-        router.replace('/(app)/creator-onboarding')
+        router.replace('/onboarding')
       }
     }
   }, [isLoaded, isSignedIn, wrldUser, pathname])

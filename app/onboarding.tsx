@@ -11,7 +11,7 @@ import { usersApi } from '@/api/users'
 import { useAuthStore } from '@/stores/authStore'
 import { useSetCurrentUser } from '@/hooks/useCurrentUser'
 
-type Step = 'handle' | 'avatar'
+type Step = 'handle' | 'avatar' | 'choice'
 
 export default function Onboarding() {
   const wrldUser = useAuthStore((s) => s.wrldUser)
@@ -73,26 +73,20 @@ export default function Onboarding() {
     }
   }
 
-  async function finishWithAvatar() {
-    if (!avatarUri) {
-      finish()
-      return
+  async function finishAvatar() {
+    if (avatarUri) {
+      setAvatarLoading(true)
+      try {
+        const updated = await usersApi.uploadAvatar(avatarUri, avatarMime)
+        setWrldUser(updated)
+        setCurrentUser(updated)
+      } catch {
+        // non-fatal
+      } finally {
+        setAvatarLoading(false)
+      }
     }
-    setAvatarLoading(true)
-    try {
-      const updated = await usersApi.uploadAvatar(avatarUri, avatarMime)
-      setWrldUser(updated)
-      setCurrentUser(updated)
-    } catch {
-      // non-fatal: skip avatar on upload error
-    } finally {
-      setAvatarLoading(false)
-      finish()
-    }
-  }
-
-  function finish() {
-    router.replace('/(app)/globe')
+    setStep('choice')
   }
 
   const displayForAvatar = wrldUser?.displayName ?? 'You'
@@ -139,6 +133,26 @@ export default function Onboarding() {
             </>
           )}
 
+          {step === 'choice' && (
+            <>
+              <Text style={styles.title}>What brings you to Wrld?</Text>
+              <Text style={styles.subtitle}>
+                You can always change this later.
+              </Text>
+              <Button
+                label="Watch live streams"
+                onPress={() => router.replace('/(app)/globe')}
+                style={styles.wide}
+              />
+              <Button
+                label="Go live as a creator"
+                onPress={() => router.replace('/(app)/creator-onboarding')}
+                variant="secondary"
+                style={styles.wide}
+              />
+            </>
+          )}
+
           {step === 'avatar' && (
             <>
               <Text style={styles.title}>Add a photo</Text>
@@ -166,7 +180,7 @@ export default function Onboarding() {
               />
               <Button
                 label={avatarUri ? 'Done' : 'Skip for now'}
-                onPress={finishWithAvatar}
+                onPress={finishAvatar}
                 loading={avatarLoading}
                 style={styles.wide}
               />

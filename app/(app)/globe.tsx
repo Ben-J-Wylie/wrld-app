@@ -315,7 +315,14 @@ export default function Globe() {
     cameraRef.current = null
 
     const { drawingBufferWidth: w, drawingBufferHeight: h } = gl
-    const renderer = new Renderer({ gl })
+    let renderer: InstanceType<typeof Renderer>
+    try {
+      renderer = new Renderer({ gl })
+    } catch {
+      // GL context not ready (e.g. tab mounted in background). expo-gl will
+      // fire onContextCreate again once the context is restored.
+      return
+    }
     renderer.setSize(w, h)
     renderer.setClearColor(0x0a0a0f)
 
