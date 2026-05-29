@@ -42,9 +42,6 @@ config.resolver.blockList = new RegExp(blocked.map((r) => r.source).join('|'))
 
 // --- 3. Map `@/foo` -> `<projectRoot>/src/foo` ---
 const THREE_LOADER_STUB = path.resolve(projectRoot, 'stubs/threeLoaderStub.js')
-// Stub until a new EAS dev client with the RNViewShot native module is installed.
-// Remove VIEW_SHOT_STUB and its resolver entry below after that build lands.
-const VIEW_SHOT_STUB = path.resolve(projectRoot, 'stubs/viewShotStub.js')
 
 const defaultResolveRequest = config.resolver.resolveRequest
 config.resolver.resolveRequest = (context, moduleName, platform) => {
@@ -52,9 +49,6 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
   // three/examples/ is in the blockList, so redirect to an empty stub instead.
   if (moduleName.startsWith('three/examples/jsm/loaders/')) {
     return { type: 'sourceFile', filePath: THREE_LOADER_STUB }
-  }
-  if (moduleName === 'react-native-view-shot') {
-    return { type: 'sourceFile', filePath: VIEW_SHOT_STUB }
   }
   if (moduleName.startsWith('@/')) {
     const rewritten = path.resolve(projectRoot, 'src', moduleName.slice(2))
