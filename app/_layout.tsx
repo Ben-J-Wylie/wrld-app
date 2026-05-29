@@ -1,5 +1,5 @@
 import '@/lib/polyfills'
-import { Stack, router } from 'expo-router'
+import { Stack, router, usePathname } from 'expo-router'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -38,6 +38,7 @@ function RootNavigator() {
   const { isLoaded, isSignedIn, getToken } = useAuth()
   const setWrldUser = useAuthStore((s) => s.setWrldUser)
   const clearWrldUser = useAuthStore((s) => s.clearWrldUser)
+  const pathname = usePathname()
   const everLoaded = useRef(false)
   if (isLoaded) everLoaded.current = true
 
@@ -86,13 +87,18 @@ function RootNavigator() {
     return () => sub.remove()
   }, [])
 
-  // Redirect to onboarding when signed-in user still has a temp handle
+  // Redirect to creator onboarding when signed-in user still has a temp handle.
+  // Creator onboarding includes a handle-selection step, so it covers viewer
+  // stipulations too — no separate viewer onboarding needed for hired creators.
+  // Guard against redirect loop when the user is already inside an onboarding screen.
   const wrldUser = useAuthStore((s) => s.wrldUser)
   useEffect(() => {
     if (isLoaded && isSignedIn && wrldUser && wrldUser.handle.startsWith('user_')) {
-      router.replace('/onboarding')
+      if (!pathname.includes('onboarding')) {
+        router.replace('/(app)/creator-onboarding')
+      }
     }
-  }, [isLoaded, isSignedIn, wrldUser])
+  }, [isLoaded, isSignedIn, wrldUser, pathname])
 
   if (!everLoaded.current) return null
 

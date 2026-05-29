@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import {
   View,
   Text,
@@ -16,14 +16,15 @@ import * as Notifications from 'expo-notifications'
 import * as ImagePicker from 'expo-image-picker'
 import { theme } from '@/lib/theme'
 import { useCurrentUser, useInvalidateCurrentUser, useSetCurrentUser } from '@/hooks/useCurrentUser'
+import { useAuthStore } from '@/stores/authStore'
 import { usersApi } from '@/api/users'
 import { Avatar } from '@/components/feature/user/Avatar'
 
 type LocationPrecision = 'exact' | 'city' | 'country' | 'off'
 type PermStatus = 'idle' | 'granted' | 'denied'
+type StepName = 'overview' | 'handle' | 'age' | 'avatar' | 'precision' | 'location' | 'notif' | 'camera' | 'tos' | 'done'
 
 const ACCENT = theme.colors.accent
-const STEPS = 8 // steps 0-7, step 8 = done
 
 // ─── Shared layout ────────────────────────────────────────────────────────────
 
@@ -86,7 +87,7 @@ function BulletList({ items }: { items: string[] }) {
   )
 }
 
-// ─── Step 0: Permissions overview ────────────────────────────────────────────
+// ─── Step: Overview ───────────────────────────────────────────────────────────
 
 function StepOverview({ onNext }: { onNext: () => void }) {
   return (
@@ -117,7 +118,50 @@ function StepOverview({ onNext }: { onNext: () => void }) {
   )
 }
 
-// ─── Step 1: Age verification ─────────────────────────────────────────────────
+// ─── Step: Handle ─────────────────────────────────────────────────────────────
+
+function StepHandle({
+  handle,
+  onChangeHandle,
+  error,
+  loading,
+  onNext,
+}: {
+  handle: string
+  onChangeHandle: (v: string) => void
+  error: string
+  loading: boolean
+  onNext: () => void
+}) {
+  return (
+    <StepContent>
+      <Text style={styles.stepTitle}>Choose your handle</Text>
+      <Text style={styles.stepSubtitle}>
+        This is how viewers find and mention you. You can change it once every 30 days.
+      </Text>
+      <View style={styles.handleRow}>
+        <Text style={styles.handleAt}>@</Text>
+        <TextInput
+          style={styles.handleInput}
+          value={handle}
+          onChangeText={v => onChangeHandle(v.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+          autoCapitalize="none"
+          autoCorrect={false}
+          autoFocus
+          placeholder="yourhandle"
+          placeholderTextColor={theme.colors.textMuted}
+          onSubmitEditing={onNext}
+          returnKeyType="done"
+        />
+      </View>
+      {!!error && <Text style={styles.errorText}>{error}</Text>}
+      <Text style={styles.handleHint}>3–20 characters. Letters, numbers, and underscores only.</Text>
+      <PrimaryBtn label="Continue" onPress={onNext} disabled={!handle.trim()} loading={loading} />
+    </StepContent>
+  )
+}
+
+// ─── Step: Age verification ───────────────────────────────────────────────────
 
 function StepAge({
   month, day, year,
@@ -208,7 +252,7 @@ function StepAge({
   )
 }
 
-// ─── Step 2: Avatar ───────────────────────────────────────────────────────────
+// ─── Step: Avatar ─────────────────────────────────────────────────────────────
 
 function StepAvatar({
   avatarUrl,
@@ -257,7 +301,7 @@ function StepAvatar({
   )
 }
 
-// ─── Step 3: Location precision ───────────────────────────────────────────────
+// ─── Step: Location precision ─────────────────────────────────────────────────
 
 const PRECISION_OPTIONS: { value: LocationPrecision; icon: string; label: string; desc: string }[] = [
   { value: 'exact', icon: '🔵', label: 'Exact location', desc: 'Street-level blue dot — viewers see precisely where you are.' },
@@ -309,7 +353,7 @@ function StepPrecision({
   )
 }
 
-// ─── Step 4: Location permission ──────────────────────────────────────────────
+// ─── Step: Location permission ────────────────────────────────────────────────
 
 function StepLocationPerm({
   status,
@@ -354,7 +398,7 @@ function StepLocationPerm({
   )
 }
 
-// ─── Step 5: Notifications permission ────────────────────────────────────────
+// ─── Step: Notifications permission ──────────────────────────────────────────
 
 function StepNotifPerm({
   status,
@@ -395,7 +439,7 @@ function StepNotifPerm({
   )
 }
 
-// ─── Step 6: Camera info ──────────────────────────────────────────────────────
+// ─── Step: Camera info ────────────────────────────────────────────────────────
 
 function StepCamera({ onNext }: { onNext: () => void }) {
   return (
@@ -414,7 +458,7 @@ function StepCamera({ onNext }: { onNext: () => void }) {
   )
 }
 
-// ─── Step 7: Terms ────────────────────────────────────────────────────────────
+// ─── Step: Terms ──────────────────────────────────────────────────────────────
 
 function StepTos({
   tosChecked,
@@ -469,7 +513,7 @@ function StepTos({
   )
 }
 
-// ─── Step 8: Done ─────────────────────────────────────────────────────────────
+// ─── Step: Done ───────────────────────────────────────────────────────────────
 
 function StepDone({
   locationStatus,
@@ -525,26 +569,47 @@ export default function CreatorOnboarding() {
   const { data: currentUser } = useCurrentUser()
   const invalidateCurrentUser = useInvalidateCurrentUser()
   const setCurrentUser = useSetCurrentUser()
+  const setWrldUser = useAuthStore((s) => s.setWrldUser)
 
-  const [step, setStep] = useState(0)
+  // Build the step list once when currentUser first loads.
+  // If the user still has a temp handle (user_xxx), inject a handle-selection
+  // step so creator onboarding is the only flow hired creators need.
+  const [stepList, setStepList] = useState<StepName[] | null>(null)
+  const [stepIndex, setStepIndex] = useState(0)
 
-  // Step 1: DOB
+  useEffect(() => {
+    if (!stepList && currentUser !== undefined) {
+      const needsHandle = currentUser?.handle.startsWith('user_') ?? true
+      setStepList([
+        'overview',
+        ...(needsHandle ? ['handle' as StepName] : []),
+        'age', 'avatar', 'precision', 'location', 'notif', 'camera', 'tos', 'done',
+      ])
+    }
+  }, [currentUser, stepList])
+
+  // Handle step
+  const [handle, setHandle] = useState('')
+  const [handleError, setHandleError] = useState('')
+  const [handleLoading, setHandleLoading] = useState(false)
+
+  // Age step
   const [month, setMonth] = useState('')
   const [day, setDay] = useState('')
   const [year, setYear] = useState('')
   const [dobError, setDobError] = useState<string | null>(null)
 
-  // Step 2: Avatar
+  // Avatar step
   const [uploading, setUploading] = useState(false)
 
-  // Step 3: Precision
+  // Precision step
   const [precision, setPrecision] = useState<LocationPrecision>('city')
 
-  // Step 4 & 5: Permissions
+  // Permission steps
   const [locationStatus, setLocationStatus] = useState<PermStatus>('idle')
   const [notifStatus, setNotifStatus] = useState<PermStatus>('idle')
 
-  // Step 7: ToS
+  // ToS step
   const [tosChecked, setTosChecked] = useState(false)
   const [rulesChecked, setRulesChecked] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -555,9 +620,35 @@ export default function CreatorOnboarding() {
     }
   }, [currentUser?.creatorReady]))
 
-  const advance = () => setStep(s => s + 1)
+  if (!stepList) return null
 
-  // ── DOB ──
+  const currentStep = stepList[stepIndex] ?? 'done'
+  const advance = () => setStepIndex(i => i + 1)
+  const progress = currentStep === 'done' ? 1 : (stepIndex + 1) / stepList.length
+
+  // ── Handle ──
+  async function handleHandleSubmit() {
+    const trimmed = handle.trim().toLowerCase()
+    if (!trimmed) { setHandleError('Handle is required'); return }
+    setHandleError('')
+    setHandleLoading(true)
+    try {
+      const updated = await usersApi.updateProfile({ handle: trimmed })
+      setWrldUser(updated)
+      setCurrentUser(updated)
+      advance()
+    } catch (err: unknown) {
+      const msg =
+        err && typeof err === 'object' && 'response' in err
+          ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
+          : null
+      setHandleError(msg ?? 'Handle unavailable — try another')
+    } finally {
+      setHandleLoading(false)
+    }
+  }
+
+  // ── Age ──
   function handleAgeContinue() {
     const m = parseInt(month, 10)
     const d = parseInt(day, 10)
@@ -618,7 +709,7 @@ export default function CreatorOnboarding() {
     if (granted) advance()
   }
 
-  // ── Final save (step 7 → 8) ──
+  // ── Final save (tos → done) ──
   async function handleComplete() {
     const m = parseInt(month, 10)
     const d = parseInt(day, 10)
@@ -642,19 +733,27 @@ export default function CreatorOnboarding() {
     }
   }
 
-  const progress = step >= STEPS ? 1 : (step + 1) / (STEPS + 1)
-
   return (
     <SafeAreaView style={styles.container}>
-      {step < STEPS && (
+      {currentStep !== 'done' && (
         <View style={styles.progressTrack}>
           <View style={[styles.progressFill, { width: `${Math.round(progress * 100)}%` as any }]} />
         </View>
       )}
 
-      {step === 0 && <StepOverview onNext={advance} />}
+      {currentStep === 'overview' && <StepOverview onNext={advance} />}
 
-      {step === 1 && (
+      {currentStep === 'handle' && (
+        <StepHandle
+          handle={handle}
+          onChangeHandle={setHandle}
+          error={handleError}
+          loading={handleLoading}
+          onNext={handleHandleSubmit}
+        />
+      )}
+
+      {currentStep === 'age' && (
         <StepAge
           month={month} day={day} year={year}
           setMonth={setMonth} setDay={setDay} setYear={setYear}
@@ -663,7 +762,7 @@ export default function CreatorOnboarding() {
         />
       )}
 
-      {step === 2 && (
+      {currentStep === 'avatar' && (
         <StepAvatar
           avatarUrl={currentUser?.avatarUrl ?? null}
           displayName={currentUser?.displayName ?? ''}
@@ -674,11 +773,11 @@ export default function CreatorOnboarding() {
         />
       )}
 
-      {step === 3 && (
+      {currentStep === 'precision' && (
         <StepPrecision value={precision} onChange={setPrecision} onNext={advance} />
       )}
 
-      {step === 4 && (
+      {currentStep === 'location' && (
         <StepLocationPerm
           status={locationStatus}
           onRequest={requestLocation}
@@ -686,7 +785,7 @@ export default function CreatorOnboarding() {
         />
       )}
 
-      {step === 5 && (
+      {currentStep === 'notif' && (
         <StepNotifPerm
           status={notifStatus}
           onRequest={requestNotifications}
@@ -694,9 +793,9 @@ export default function CreatorOnboarding() {
         />
       )}
 
-      {step === 6 && <StepCamera onNext={advance} />}
+      {currentStep === 'camera' && <StepCamera onNext={advance} />}
 
-      {step === 7 && (
+      {currentStep === 'tos' && (
         <StepTos
           tosChecked={tosChecked}
           rulesChecked={rulesChecked}
@@ -707,7 +806,7 @@ export default function CreatorOnboarding() {
         />
       )}
 
-      {step === 8 && (
+      {currentStep === 'done' && (
         <StepDone
           locationStatus={locationStatus}
           notifStatus={notifStatus}
@@ -776,7 +875,7 @@ const styles = StyleSheet.create({
   bulletDot: { ...theme.typography.body, color: theme.colors.accent, width: 12 },
   bulletText: { ...theme.typography.body, color: theme.colors.textMuted, flex: 1, lineHeight: 22 },
 
-  // Step 0 — overview
+  // Overview step
   overviewList: { gap: theme.spacing.md },
   overviewRow: {
     flexDirection: 'row',
@@ -793,7 +892,27 @@ const styles = StyleSheet.create({
   overviewLabel: { ...theme.typography.body, color: theme.colors.text, fontWeight: '700' },
   overviewDesc: { ...theme.typography.caption, color: theme.colors.textMuted, lineHeight: 18 },
 
-  // Step 1 — DOB
+  // Handle step
+  handleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    backgroundColor: theme.colors.bgElevated,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    paddingHorizontal: theme.spacing.md,
+  },
+  handleAt: { ...theme.typography.heading, color: theme.colors.textMuted },
+  handleInput: {
+    ...theme.typography.heading,
+    color: theme.colors.text,
+    flex: 1,
+    paddingVertical: theme.spacing.sm,
+  },
+  handleHint: { ...theme.typography.caption, color: theme.colors.textMuted },
+
+  // Age step
   dobRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
@@ -829,7 +948,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 
-  // Step 2 — Avatar
+  // Avatar step
   avatarCenter: { alignItems: 'center', paddingVertical: theme.spacing.md },
   avatarBtns: { gap: theme.spacing.sm },
   avatarBtn: {
@@ -845,7 +964,7 @@ const styles = StyleSheet.create({
   avatarBtnIcon: { fontSize: 22 },
   avatarBtnText: { ...theme.typography.body, color: theme.colors.text, fontWeight: '600' },
 
-  // Step 3 — Precision
+  // Precision step
   optionList: { gap: theme.spacing.sm },
   optionRow: {
     flexDirection: 'row',
@@ -870,7 +989,7 @@ const styles = StyleSheet.create({
   optionLabel: { ...theme.typography.body, color: theme.colors.text, fontWeight: '600' },
   optionDesc: { ...theme.typography.caption, color: theme.colors.textMuted, lineHeight: 18 },
 
-  // Step 7 — ToS
+  // ToS step
   tosList: { gap: theme.spacing.sm },
   tosRow: {
     flexDirection: 'row',
@@ -904,7 +1023,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
 
-  // Step 8 — Done
+  // Done step
   doneEmoji: { fontSize: 52, textAlign: 'center' },
   checklist: {
     gap: theme.spacing.sm,
