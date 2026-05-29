@@ -489,24 +489,505 @@ components; their entries note that.
 
 ### Primitives (`src/components/primitives/`)
 
-Currently shipped (Phase 1, pre-design-system, to be migrated in sub-phase 12.1):
+Populated from the 12.2 inventory pass against the 16 mocks. Each entry
+includes the three-way audit (mock says / code currently does / gap or
+proposed resolution) that drove its inclusion. "Used in" lists populate
+as screens migrate in sub-phase 12.6 — empty for now.
 
-- `Button.tsx` — to be redesigned in sub-phase 12.4
-- `Input.tsx` — to be redesigned in sub-phase 12.4
+**Currently shipped** (Phase 1, migrated to `primitives/` in sub-phase 12.1a;
+to be redesigned in 12.4): `Button.tsx`, `Input.tsx`.
 
-Planned bottom-up build order (later compose earlier — do not reorder
-without surfacing it):
+**Build order** (later compose earlier — do not reorder without surfacing
+it): Text → Icon → Pressable → Button + IconButton → Card → Input +
+Textarea → HelpText → Pill + Chip → Avatar → Toggle → ProgressBar →
+Spinner → BottomSheet → Slider → SegmentedToggle → Divider.
 
-1. `Text` (consumes typography tokens)
-2. `Pressable` (wraps RN Pressable with consistent press states from motion tokens)
-3. `Icon` (wraps `@expo/vector-icons`, themed — set TBD pending Figma audit)
-4. `Button` (composes Pressable + Text + Icon) — replaces existing
-5. `Card`
-6. `Input` — replaces existing
-7. `Badge`
-8. `Divider`, `Spacer`
+---
 
-Each primitive entry filled in as it ships. Empty entries until then.
+#### `Text`
+
+- **Tier:** primitive
+- **Location:** `src/components/primitives/Text.tsx`
+- **Variants:** `display`, `heading`, `body`, `caption`, `mono-caption`, `mono-label`
+- **Sizes:** baked into variants (no separate `size` prop)
+- **States:** default
+- **Used in:** populated in 12.6
+- **Tweak impact:** all text in the app — highest blast radius
+- **Last reviewed:** 2026-05-29
+
+**Mock says:** Two type families pair universally. **Inter Tight (sans)**
+for content text in 4 weights × 4 size roles: large display (26–32px / 600),
+heading (16–22px / 600), body (13–15px / 500), small caption (11–12px / 500).
+**JetBrains Mono** for tracked-out caps labels (10–11px / 500 / letter-spacing
+0.12–0.16em / UPPERCASE), value readouts, and timestamps. Tabular-numeric
+variant for numeric values that need vertical alignment.
+
+**Code does:** No `Text` primitive. RN `<Text>` with inline
+`theme.typography.X` spread.
+
+**Gap / proposal:** Extract `Text` primitive whose variant prop encodes the
+type role; each variant pulls from semantic typography tokens (12.3). Raw
+pixel values never appear in consumer code. The sans/mono pair is
+system-wide; mono variants pre-set `letterSpacing` + `textTransform: 'uppercase'`
+where appropriate.
+
+---
+
+#### `Icon`
+
+- **Tier:** primitive
+- **Location:** `src/components/primitives/Icon.tsx`
+- **Variants:** `currentColor` (inherits from parent text color)
+- **Sizes:** sm (10–12px), md (14–18px), lg (22–28px)
+- **States:** default
+- **Used in:** populated in 12.6
+- **Tweak impact:** every icon in the app
+- **Last reviewed:** 2026-05-29
+
+**Mock says:** Linear monoline SVG icons (stroke-only, 1.6–1.8 stroke
+width). Universal stroke-rounded line-cap and line-join. Icons always
+inherit `currentColor` so they tint with the parent's text token. Common
+sizes: 10–12px (badge / accent), 14–18px (button + control), 22–28px
+(hero illustration like the permission-pre-prompt bell).
+
+**Code does:** `@expo/vector-icons` (Feather + others) used inline with
+explicit color values.
+
+**Gap / proposal:** Wrap a curated icon set in an `Icon` primitive that
+accepts `name` + `size` + (optional) `color` props. Default color is
+`currentColor` (inheritance). Set TBD — the mock SVGs are bespoke, and
+`@expo/vector-icons` Feather covers ~80% of them; gaps go in
+`src/components/primitives/icons/` as one-off SVG components rendered by
+the same wrapper. No raw `<Svg>` in consumer code.
+
+---
+
+#### `Pressable`
+
+- **Tier:** primitive
+- **Location:** `src/components/primitives/Pressable.tsx`
+- **Variants:** `default`, `subtle` (smaller scale), `none` (no press feedback)
+- **Sizes:** N/A (sizing is the consumer's responsibility)
+- **States:** default, pressed
+- **Used in:** populated in 12.6
+- **Tweak impact:** every pressable surface in the app
+
+**Mock says:** Universal press affordance is `transform: scale(0.94–0.98)`
+on `:active`, with 180ms ease-out transition out. Larger surfaces use
+0.98–0.99; smaller buttons use 0.94–0.96.
+
+**Code does:** RN `Pressable` used directly with inline opacity changes.
+
+**Gap / proposal:** Wrap RN `Pressable` with a consistent press-scale
+animation driven by motion tokens (12.3). All higher-tier interactive
+primitives (Button, IconButton, Chip, Card-as-pressable, etc.) compose
+this one — never go through RN's raw Pressable.
+
+---
+
+#### `Button`
+
+- **Tier:** primitive (composes Pressable + Text + Icon)
+- **Location:** `src/components/primitives/Button.tsx`
+- **Variants:** `primary`, `secondary`, `skip`, `social` (with `Apple` / `Google` / `Email` sub-variants)
+- **Sizes:** `md` (h:44, content actions) and `lg` (h:54, primary CTAs)
+- **States:** default, pressed, disabled, loading
+- **Used in:** populated in 12.6
+- **Tweak impact:** every CTA in the app
+
+**Mock says:** **Primary** is accent fill with `#0a0c10` text, glow
+box-shadow (`0 0 30px rgba(accent, 0.18)`), h:54 / r:20 for top-level CTAs,
+h:48 / r:14 for sheet actions. **Secondary** is panel-hi surface with line
+border, same dimensions, no glow. **Skip** is type-only, hairline-underline,
+h:44, no fill. **Social** has brand-color background (Apple white-on-black
+per HIG, Google/Email panel-hi). Disabled = opacity 0.32, no glow.
+Optional leading-icon slot. Loading state replaces label with a Spinner of
+matching color.
+
+**Code does:** Existing `Button.tsx` has primary / secondary / ghost
+variants + disabled prop. No skip, no social, no loading, no leading-icon
+slot.
+
+**Gap / proposal:** Extend Button to the 4 documented variant families
+(primary / secondary / skip / social). Loading state added (inline spinner
+replaces label). Leading-icon slot via optional `icon` prop. Glow is a
+token-driven property on the primary variant — toggleable per surface via
+the `glow` boolean if it ends up too noisy at scale (see principle-conflict
+#6 in 12.2 calibration). Per principle ruling, button radius is `r:4` from
+tokens regardless of what the mocks render (mocks use r:20).
+
+---
+
+#### `IconButton`
+
+- **Tier:** primitive (composes Pressable + Icon)
+- **Location:** `src/components/primitives/IconButton.tsx`
+- **Variants:** `ghost` (transparent), `surface` (panel background), `accent` (filled)
+- **Sizes:** sm (32×32), md (36×36 — default), lg (44×44), xl (48×48 — Viewer Sheet action bar)
+- **States:** default, pressed, on, disabled
+- **Used in:** populated in 12.6
+- **Tweak impact:** every icon-only button — back, close, kebab, save, share, settings, etc.
+
+**Mock says:** Circular icon-only button used universally for top-bar
+navigation (back, close, kebab), settings entry, action-bar items
+(save/share heart on Viewer Sheet, with `on` state colored live red), and
+sheet headers. Glass `backdrop-filter:blur(10–14px)` on transparent or
+panel-tinted backgrounds. Hit target is at least 36×36 throughout.
+
+**Code does:** None as a standalone primitive. Inline RN `Pressable` +
+`<View>` wrappers in screens.
+
+**Gap / proposal:** New primitive that composes Pressable + Icon with a
+guaranteed circular hit target. The `on` state is opt-in via prop; tone
+is consumer-driven (typically `accent` or `live`).
+
+---
+
+#### `Card`
+
+- **Tier:** primitive
+- **Location:** `src/components/primitives/Card.tsx`
+- **Variants:** `panel` (semi-transparent + backdrop blur), `solid` (opaque panel-solid), `elevated` (panel-hi with stronger border), `accent` (accent-tinted glass)
+- **Sizes:** N/A (sizing is consumer)
+- **States:** default, pressed (if `pressable` prop set)
+- **Used in:** populated in 12.6
+- **Tweak impact:** every panel surface — stats card, filters card, passport card, wallet hero, alert banners, etc.
+
+**Mock says:** Pervasive container pattern: rounded rectangle, thin line
+border (1px `rgba(255,255,255,0.08)`), backdrop-blur for glass effect on
+the `panel` variant. r:14–22 depending on size. Padded interior. Sometimes
+pressable (acts as a hit target); often just decorative wrapping.
+
+**Code does:** Inline `<View>` + `StyleSheet.create({ card: {...} })`
+patterns scattered across screens — no shared primitive.
+
+**Gap / proposal:** Extract Card primitive with the 4 variant families. Per
+principle ruling, radius is r:4 from tokens (mocks render r:14–22; tokens
+override). Glass blur is opt-in via the `panel` variant — `solid` and
+`elevated` have no backdrop blur.
+
+---
+
+#### `Input`
+
+- **Tier:** primitive
+- **Location:** `src/components/primitives/Input.tsx`
+- **Variants:** `default`, `prefix` (e.g. `@` for handle), `multiline` (delegates to Textarea — see below)
+- **Sizes:** `md` (h:52, standard) and `lg` (h:60, hero like handle picker)
+- **States:** default, focus, valid, error, loading, disabled
+- **Used in:** populated in 12.6
+- **Tweak impact:** every form field in the app
+
+**Mock says:** 5 documented states. **Default** placeholder visible.
+**Focus** accent border + 4px accent glow + animated cursor. **Valid**
+right-affordance check icon + accent-tinted border. **Error**
+right-affordance X icon + live-tinted border + error helper underneath.
+**Loading** right-affordance spinner + dim helper. Right-affordance slot
+universally available. Pixel-font cursor blinks at 1s steps.
+
+**Code does:** Existing `Input.tsx` supports default + focused. No valid /
+error / loading affordance. No right-icon slot.
+
+**Gap / proposal:** Extend to 5 states. Add right-affordance slot
+(generic, accepts icon | spinner). Loading-in-input is the documented
+pattern for all async validation (handle uniqueness, email check, etc.) —
+never a screen-blocking spinner. HelpText (next entry) is a separate
+primitive composed *below* the Input by the consumer.
+
+---
+
+#### `Textarea`
+
+- **Tier:** primitive
+- **Location:** `src/components/primitives/Textarea.tsx`
+- **Variants:** `default`
+- **Sizes:** `md` (min-height 96px, resize-vertical)
+- **States:** default, focus, disabled
+- **Used in:** populated in 12.6
+- **Tweak impact:** multi-line input surfaces (Report flow notes, future moderation tools, etc.)
+
+**Mock says:** Multi-line variant of Input. Min-height 96px, resizable
+vertical. Same border + focus + radius treatment as Input. No right
+affordance (icons don't make sense in multi-line).
+
+**Code does:** None.
+
+**Gap / proposal:** Separate primitive (not an Input variant) because the
+multi-line interaction model is distinct: no right-affordance slot,
+different state set (loading isn't really a thing for textareas), and the
+resize ergonomics matter. Shares its visual treatment with Input via
+shared token consumption.
+
+---
+
+#### `HelpText`
+
+- **Tier:** primitive
+- **Location:** `src/components/primitives/HelpText.tsx`
+- **Variants:** `dim`, `ok`, `err`, `warn`
+- **Sizes:** uses `mono-caption` from Text primitive
+- **States:** default
+- **Used in:** populated in 12.6
+- **Tweak impact:** every form-field helper, validation message, instructional caption
+
+**Mock says:** Small mono-caps caption rendered immediately under a form
+field. Four tones: `dim` (ink-faint, neutral instruction like "3–20
+CHARACTERS"), `ok` (accent, "EMAIL LOOKS GOOD"), `err` (live, "TOO SHORT
+— 8 CHARACTERS MINIMUM"), `warn` (warn, "ADD A NUMBER OR SYMBOL").
+Universal pattern: tone matches the Input's state on the same field.
+
+**Code does:** None. Helper text inline as `<Text style={styles.help}>`.
+
+**Gap / proposal:** Extract HelpText with 4 tone variants. Token-driven
+colors. Pairs naturally with Input + Textarea.
+
+---
+
+#### `Pill`
+
+- **Tier:** primitive
+- **Location:** `src/components/primitives/Pill.tsx`
+- **Variants:** `default` (line border, transparent), `live` (live fill), `accent` (accent fill), `jurisdiction` (accent-tinted bg + accent text), `count-badge` (small numeric overlay)
+- **Sizes:** sm (h:22), md (h:28), lg (h:32)
+- **States:** default
+- **Used in:** populated in 12.6
+- **Tweak impact:** LIVE indicators, channel chips (CH 12), AcctID badge, follower-count badge, viewers chip, jurisdiction badges (EU · GDPR), recommended pill, anon pill, draft pill, peak count
+
+**Mock says:** Display-only marker — never interactive. Compact rounded
+shape (`r:5–8` mini, `r:999` pill). Wide use across mocks for status,
+identity, metadata. The Live variant has an animated pulsing dot inside.
+Some variants include a leading icon, some are pure text.
+
+**Code does:** Inline `<View>` with various pill styles scattered across
+screens — no primitive.
+
+**Gap / proposal:** Pill is the canonical display-only marker. Optional
+`leadingIcon` (defaults to no icon; LiveVariant supplies its own pulse).
+Distinct from Chip (next entry) because Pill is never pressable. Token-
+driven tones.
+
+---
+
+#### `Chip`
+
+- **Tier:** primitive (composes Pressable + Text + optional Icon)
+- **Location:** `src/components/primitives/Chip.tsx`
+- **Variants:** `default` (filter), `accent-tinted` (pressed accent), `suggestion` (accent-tinted with suggestions semantic)
+- **Sizes:** sm (h:28), md (h:30) — default, lg (h:36)
+- **States:** default, pressed (selected), disabled
+- **Used in:** populated in 12.6
+- **Tweak impact:** every filter chip — Globe category chips, My Profile filter chips, Cash Out preset chips, handle suggestions, tag chips
+
+**Mock says:** Pressable filter button. Pressed state = accent-tinted bg
++ accent border. Universal use for single-select filter rows (Globe
+categories, date filters), multi-select toggles (My Profile layer
+filters), and tag-style suggestions (handle picker).
+
+**Code does:** None as a primitive.
+
+**Gap / proposal:** Distinct from Pill because Chip is pressable and has
+a pressed state with explicit visual feedback (border + bg change).
+Composes Pressable + Text + optional leading-icon. Single-select vs
+multi-select behavior is the consumer's responsibility (Chip itself
+doesn't track group state).
+
+---
+
+#### `Avatar`
+
+- **Tier:** primitive
+- **Location:** `src/components/primitives/Avatar.tsx`
+- **Variants:** `initials`, `image`, `live` (with live-ring indicator)
+- **Sizes:** xs (24), sm (32), md (42), lg (72), xl (88)
+- **States:** default
+- **Used in:** populated in 12.6
+- **Tweak impact:** every user avatar — chat, profile header, broadcaster row, suggestion rows
+
+**Mock says:** Circle with either user-uploaded image or initials on a
+generated gradient (orange/brown for default). Larger sizes have a 2px
+inner border (`bg`) + 1px outer border (`line-2`) to set off against
+backdrops. Some surfaces use a "live ring" variant — accent-tinted outer
+ring with glow — to indicate the user is currently broadcasting.
+
+**Code does:** `Avatar.tsx` exists in `src/components/features/user/`
+(initials + image fallback already implemented). Needs promotion to
+primitives tier — it's domain-blind (just "circular user representation").
+
+**Gap / proposal:** Move from features → primitives. Add `live` variant
+(token-driven ring). Generalize the gradient generation to be deterministic
+from a seed (e.g. handle hash) so the same user gets the same fallback
+gradient every time.
+
+---
+
+#### `Toggle`
+
+- **Tier:** primitive
+- **Location:** `src/components/primitives/Toggle.tsx`
+- **Variants:** `default`
+- **Sizes:** md (44×26) — single canonical size
+- **States:** off, on, disabled
+- **Used in:** populated in 12.6
+- **Tweak impact:** every binary switch — consent rows, layer toggles, settings notifications, Clip Edit per-layer toggles
+
+**Mock says:** Animated track-and-thumb switch. Off = dark `#2a2e35`
+track + ink thumb. On = accent track + white thumb, animated translate
+(0 → +18px) with spring easing. Disabled = opacity 0.4.
+
+**Code does:** RN `Switch` used directly in settings.
+
+**Gap / proposal:** Wrap with custom Toggle primitive matching the mock
+treatment (RN's default switch doesn't match). Spring easing comes from
+motion tokens (12.3). Universal sizing.
+
+---
+
+#### `ProgressBar`
+
+- **Tier:** primitive
+- **Location:** `src/components/primitives/ProgressBar.tsx`
+- **Variants:** `segmented` (n equal segments), `dots` (n centered dots — fallback for short flows)
+- **Sizes:** md (3px height for bars, 6px for dots)
+- **States:** default
+- **Used in:** populated in 12.6
+- **Tweak impact:** wizard headers (Onboarding x 4 wizards), Report multi-step modal, future multi-step flows
+
+**Mock says:** Top of every wizard step. Bar variant for ≤10 steps,
+segmented and accent-filled-up-to-current. Dot variant for very short
+(2–4 step) flows. Visual: thin 3px bar, line color for unfilled, accent
+for filled, accent-line transition.
+
+**Code does:** None.
+
+**Gap / proposal:** Single ProgressBar primitive with both variants
+(`mode` prop: `bars` | `dots`). Consumer passes `total` + `current`.
+
+---
+
+#### `Spinner`
+
+- **Tier:** primitive
+- **Location:** `src/components/primitives/Spinner.tsx`
+- **Variants:** `default`
+- **Sizes:** xs (12), sm (14), md (16), lg (20)
+- **States:** default
+- **Used in:** populated in 12.6
+- **Tweak impact:** input loading affordance, button loading state, full-screen loading, network-pending indicators
+
+**Mock says:** Simple circular spinner — 2px stroke, accent-colored top
+arc, line-colored bottom, 0.7s rotation. Inherits color via
+`currentColor` so it tints with parent (e.g. Button loading uses
+`#0a0c10` on accent fill).
+
+**Code does:** RN `ActivityIndicator` used directly with `theme.colors.accent`.
+
+**Gap / proposal:** Replace `ActivityIndicator` with the custom Spinner
+primitive matching the mock's stroke treatment. The mock's spinner is
+visually distinct from RN's default (which feels "iOS native"). Token-
+driven color.
+
+---
+
+#### `BottomSheet`
+
+- **Tier:** primitive
+- **Location:** `src/components/primitives/BottomSheet.tsx`
+- **Variants:** `peek` (mini, ~196–320px), `expanded` (calc(100% - safe-area)), `full` (full-height)
+- **Sizes:** N/A (height is variant-driven)
+- **States:** closed, peek, expanded, dismissing
+- **Used in:** populated in 12.6
+- **Tweak impact:** Globe trending sheet, Viewer Sheet, AuthModal, TipSheet, NearbyStreamsDrawer, Exit-intent sheet, Quality sheet, Report modal, Action sheet (kebab) — basically every modal surface
+
+**Mock says:** Universal modal container pattern. Grabber handle
+(48×5 pill at top), rounded top corners (r:18–26), optional scrim
+behind, slide-up entry (translateY 100% → 0 with spring easing), swipe-
+down dismiss. Backdrop blur on the sheet body for glass effect (panel
+variant) or solid `panel-solid` bg. Header / body / footer scaffold.
+
+**Code does:** `NearbyStreamsDrawer` in `features/stream/` is a bespoke
+implementation. Other one-off sheet wrappers exist (AuthModal,
+TipSheet). No shared primitive.
+
+**Gap / proposal:** Extract BottomSheet primitive. Content is the
+consumer's responsibility (slotted children). The primitive provides:
+container + grabber + scrim + slide animation + dismiss gesture +
+height-mode handling. Existing one-offs (NearbyStreamsDrawer, AuthModal,
+TipSheet, Quality sheet, Action sheet) refactor to content-only callers.
+
+---
+
+#### `Slider`
+
+- **Tier:** primitive
+- **Location:** `src/components/primitives/Slider.tsx`
+- **Variants:** `accent` (default), `live` (for cashout amount), `warn`
+- **Sizes:** md (4px track, 20px thumb)
+- **States:** default, pressed (thumb-drag)
+- **Used in:** populated in 12.6
+- **Tweak impact:** Cash Out amount selector, future quantity/range inputs
+
+**Mock says:** Custom range input — thin track (4px), filled portion in
+tone-color (accent / live), 20px thumb with 2px tone-colored border + white
+fill + glow box-shadow. Min/max tick labels below in mono-caps. Snap-to-
+integer step.
+
+**Code does:** None (current `app/(app)/cashout.tsx` has its own
+PanResponder-based slider — code reusable but not extracted).
+
+**Gap / proposal:** Extract from existing Cashout slider into a primitive
+with tone variants. PanResponder pattern carries forward (works on iOS +
+Android). Snap-step is a consumer prop.
+
+---
+
+#### `SegmentedToggle`
+
+- **Tier:** primitive (composes Pressable + Text)
+- **Location:** `src/components/primitives/SegmentedToggle.tsx`
+- **Variants:** `default` (pressed = ink fill), `accent` (pressed = accent fill — for ANON-tagged selection on My Profile)
+- **Sizes:** md (h:30 — line-border, inside-padded pill row)
+- **States:** default, pressed (selected segment)
+- **Used in:** populated in 12.6
+- **Tweak impact:** My Profile VIS filter (ALL / PUBLIC / ANON), future 2–4 option single-selects
+
+**Mock says:** Multi-button row inside a single pill-shaped container.
+Single-select semantics — pressing one segment unpresses the others.
+Inside-padded 3px ring around the active segment. Mono-caps labels.
+Distinct from Chip (Chip is independent buttons; SegmentedToggle is
+mutually-exclusive group with shared container).
+
+**Code does:** None.
+
+**Gap / proposal:** New primitive accepting `options` (array of
+`{value, label}`), `value` (currently-selected), and `onChange`. Inside-
+padded animated indicator follows the selected option.
+
+---
+
+#### `Divider`
+
+- **Tier:** primitive
+- **Location:** `src/components/primitives/Divider.tsx`
+- **Variants:** `subtle` (line color), `strong` (line-2 color), `dashed`
+- **Sizes:** sm (1px) — single canonical size
+- **States:** default
+- **Used in:** populated in 12.6
+- **Tweak impact:** every horizontal line separator
+
+**Mock says:** Universal horizontal hairline used to separate consent
+rows, transaction rows, settings rows, action-sheet rows. Two weights
+(`line` / `line-2`) plus a dashed variant for "row-actions" dividers in
+Clip Edit.
+
+**Code does:** Inline `<View style={{ height: 1, backgroundColor:
+theme.colors.border }} />` patterns.
+
+**Gap / proposal:** Tiny primitive — barely deserves its own file but
+the tone variants justify the extraction. `Spacer` (flex-1 view) is
+NOT extracted; consumers use raw `<View style={{ flex: 1 }} />`
+inline because the abstraction value is too low.
+
+---
 
 ### Features (`src/components/features/`)
 
