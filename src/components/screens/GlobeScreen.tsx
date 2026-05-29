@@ -16,7 +16,7 @@ import { Avatar } from '@/components/features/user/Avatar'
 import type { Stream } from '@/types'
 import Mapbox from '@rnmapbox/maps'
 
-const EARTH_ASSET = require('../../assets/images/earth.jpg')
+const EARTH_ASSET = require('../../../assets/images/earth.jpg')
 let earthTexture: THREE.Texture | null = null
 
 const POOL_SIZE = 30
