@@ -207,6 +207,10 @@ class MediasoupSignalingClient {
   sendTip(amount: number): void {
     this.send({ type: 'tip', amount })
   }
+
+  sendThumbnail(base64: string): void {
+    if (this.isConnected) this.ws!.send(JSON.stringify({ type: 'thumbnail', data: base64 }))
+  }
 }
 
 export const signalingClient = new MediasoupSignalingClient()

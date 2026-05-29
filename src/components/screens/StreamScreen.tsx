@@ -1,5 +1,6 @@
 import { View, Text, StyleSheet, ActivityIndicator, Pressable, AppState, Keyboard, Platform, Animated } from 'react-native'
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { captureRef } from 'react-native-view-shot'
 import { useLocalSearchParams, router, useFocusEffect } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { RTCView } from 'react-native-webrtc'
@@ -19,6 +20,7 @@ import { activeBroadcast } from '@/lib/activeBroadcast'
 import { streamsApi } from '@/api/streams'
 import { useSignaling } from '@/hooks/useSignaling'
 import { useMediasoup } from '@/hooks/useMediasoup'
+import { signalingClient } from '@/lib/mediasoupSignaling'
 import { useLocation } from '@/hooks/useLocation'
 import { useStream } from '@/hooks/useStream'
 import { useAuth } from '@clerk/clerk-expo'
@@ -109,6 +111,7 @@ export function StreamScreen() {
   const [keyboardHeight, setKeyboardHeight] = useState(0)
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const tipToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const rtcViewRef = useRef<React.ComponentRef<typeof RTCView>>(null)
   // Guards against double-navigation when multiple end signals arrive simultaneously
   // (e.g. broadcasterLeft WS message + viewer WS close in the same render cycle).
   const navigatingRef = useRef(false)
@@ -264,6 +267,30 @@ export function StreamScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isNew, status])
 
+  // Thumbnail capture: every 2 minutes while broadcasting with camera,
+  // capture the RTCView and send the JPEG to mediasoup for storage.
+  useEffect(() => {
+    if (!isNew || status !== 'in-room' || !isCameraArmed) return
+    const capture = async () => {
+      if (!rtcViewRef.current) return
+      try {
+        const base64 = await captureRef(rtcViewRef, {
+          format: 'jpg',
+          quality: 0.6,
+          result: 'base64',
+          width: 480,
+        })
+        signalingClient.sendThumbnail(base64)
+      } catch {
+        // captureRef may fail on Android (SurfaceView); fail silently
+      }
+    }
+    capture()
+    const interval = setInterval(capture, 120_000)
+    return () => clearInterval(interval)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isNew, status, isCameraArmed])
+
   async function handleGoLive() {
     const title = (paramTitle ?? '').trim()
     if (!title || !coords || broadcastSources.length === 0) return
@@ -366,11 +393,13 @@ export function StreamScreen() {
       {/* Fullscreen local camera preview (broadcaster) */}
       {showCameraPreview && (
         <RTCView
+          ref={rtcViewRef}
           streamURL={(localStream as unknown as { toURL(): string }).toURL()}
           style={StyleSheet.absoluteFill}
           objectFit="cover"
           mirror={facingMode === 'user'}
           zOrder={0}
+          renderToHardwareTextureAndroid
         />
       )}
 
