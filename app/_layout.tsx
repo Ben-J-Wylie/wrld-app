@@ -3,12 +3,13 @@ import { Stack, router } from 'expo-router'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import { ClerkProvider, useAuth } from '@clerk/clerk-expo'
 import * as Notifications from 'expo-notifications'
 import { tokenCache } from '@/lib/tokenCache'
 import { env } from '@/lib/env'
 import { setClerkTokenGetter } from '@/lib/clerkToken'
+import { signOutSignal } from '@/lib/signOutSignal'
 import { useAuthStore } from '@/stores/authStore'
 import { useRegisterPushToken } from '@/hooks/useRegisterPushToken'
 import { apiClient } from '@/api/client'
@@ -38,7 +39,6 @@ function RootNavigator() {
   const { isLoaded, isSignedIn, getToken } = useAuth()
   const setWrldUser = useAuthStore((s) => s.setWrldUser)
   const clearWrldUser = useAuthStore((s) => s.clearWrldUser)
-  const wasSignedIn = useRef(false)
 
   // Wire the Clerk token getter so the axios interceptor can attach JWTs
   useEffect(() => {
@@ -51,17 +51,15 @@ function RootNavigator() {
   useEffect(() => {
     if (!isLoaded) return
     if (isSignedIn) {
-      wasSignedIn.current = true
       apiClient
         .get<{ user: User }>('/auth/me')
         .then((res) => setWrldUser(res.data.user))
         .catch(console.warn)
     } else {
-      if (wasSignedIn.current) {
+      clearWrldUser()
+      if (signOutSignal.consume()) {
         router.navigate('/(app)/globe')
       }
-      wasSignedIn.current = false
-      clearWrldUser()
     }
   }, [isLoaded, isSignedIn])
 

@@ -2,6 +2,7 @@ import { View, Text, StyleSheet, Alert, Switch } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
 import { useClerk } from '@clerk/clerk-expo'
+import { signOutSignal } from '@/lib/signOutSignal'
 import { theme } from '@/lib/theme'
 import { Button } from '@/components/ui/Button'
 import { useAuthStore } from '@/stores/authStore'
@@ -20,6 +21,7 @@ export default function Settings() {
   const [nearbyLive, setNearbyLive] = useState(wrldUser?.notifyOnNearbyLive ?? false)
 
   async function handleSignOut() {
+    signOutSignal.set()
     try {
       await signOut()
     } catch {
