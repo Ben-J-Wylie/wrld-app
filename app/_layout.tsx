@@ -3,7 +3,7 @@ import { Stack, router } from 'expo-router'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { ClerkProvider, useAuth } from '@clerk/clerk-expo'
 import * as Notifications from 'expo-notifications'
 import { tokenCache } from '@/lib/tokenCache'
@@ -38,6 +38,8 @@ function RootNavigator() {
   const { isLoaded, isSignedIn, getToken } = useAuth()
   const setWrldUser = useAuthStore((s) => s.setWrldUser)
   const clearWrldUser = useAuthStore((s) => s.clearWrldUser)
+  const everLoaded = useRef(false)
+  if (isLoaded) everLoaded.current = true
 
   // Wire the Clerk token getter so the axios interceptor can attach JWTs
   useEffect(() => {
@@ -92,7 +94,7 @@ function RootNavigator() {
     }
   }, [isLoaded, isSignedIn, wrldUser])
 
-  if (!isLoaded) return null
+  if (!everLoaded.current) return null
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
