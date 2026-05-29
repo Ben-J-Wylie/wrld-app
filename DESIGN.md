@@ -2022,16 +2022,294 @@ section.
 
 ### Sections (`src/components/sections/`)
 
-Candidates from the existing screen list — to be confirmed during the
-sub-phase 12.2 inventory pass against the mocks:
+Populated from the 12.2 inventory pass. Sections are regional patterns
+that repeat across two or more screens. The 12 entries below all meet
+that bar. Several patterns that *don't* meet it stay inline in their
+single home screen — flagged at the end.
 
-- `ProfileHeader` (header band for profile / venue / artist pages, if repeated)
-- `StreamGrid` (live-streams region used by dashboard / discovery surfaces)
-- `SettingsGroup` (settings page section pattern)
+##### `WizardShell`
 
-The Sections tier is justified only if regional patterns repeat across two or
-more screens. If the inventory pass finds no genuine repetition, sections
-above are downgraded to inline composition in the relevant screen.
+- **Tier:** section (composes IconButton + ProgressBar + ContextBanner + Text + ctas footer)
+- **Location:** `src/components/sections/WizardShell.tsx`
+- **Variants:** `default`
+- **Sizes:** N/A (full-screen)
+- **States:** default
+- **Used in:** populated in 12.6
+- **Tweak impact:** Onboarding Viewer (8 steps), Onboarding Creator (10 steps), Onboarding Handle (existing), Change Handle (2-step), future wizards
+
+**Mock says:** Universal wizard chrome. **Top nav** = IconButton (back) +
+ProgressBar (centered) + IconButton (close, ghost). Optional
+ContextBanner below. **Head** = h2 (display) + p (body). **Body** =
+slotted children. **Footer / ctas** = primary CTA + optional skip.
+Skip lives directly under the primary CTA — never above it, never in
+the header.
+
+**Code does:** OnboardingScreen has bespoke wizard chrome inline.
+
+**Gap / proposal:** Extract as the canonical wizard section. Children
+slot is the per-step content. ProgressBar driven by `{ total, current }`.
+Footer accepts primary CTA + optional `onSkip`. Used by all 4+ wizards.
+
+---
+
+##### `CategoryChipRow`
+
+- **Tier:** section (composes Chip in a horizontal scroll)
+- **Location:** `src/components/sections/CategoryChipRow.tsx`
+- **Variants:** `default`
+- **Sizes:** md
+- **States:** default
+- **Used in:** populated in 12.6
+- **Tweak impact:** Globe top, search results (future), any horizontally-scrollable single-select filter
+
+**Mock says:** Horizontally-scrollable row of Chip items. Single-select
+semantics — only one active at a time. Optional first chip is the
+"All" reset.
+
+**Code does:** None.
+
+**Gap / proposal:** Generic section accepting `categories: { id, label }[]`
++ `value` + `onChange`. Used by Globe Mobile's category filter; same
+shape works for future search-result filter chips.
+
+---
+
+##### `TrendingRail`
+
+- **Tier:** section (composes StreamCard in a horizontal scroll + section header)
+- **Location:** `src/components/sections/TrendingRail.tsx`
+- **Variants:** `default`
+- **Sizes:** md
+- **States:** default, loading, empty
+- **Used in:** populated in 12.6
+- **Tweak impact:** Globe Mobile bottom sheet, future discovery / "for you" surfaces
+
+**Mock says:** Section header ("Trending now" + "See all") + horizontal
+scroll of StreamCard items (158×~140). Tapping a card opens its stream.
+Empty state = "No streams nearby" message.
+
+**Code does:** None.
+
+**Gap / proposal:** Section accepting `streams: Stream[]` + `title` +
+`onTapAll`. Cards rendered via StreamCard (trending variant).
+
+---
+
+##### `StreamStrip`
+
+- **Tier:** section (composes StreamTile in a horizontal scroll + small header)
+- **Location:** `src/components/sections/StreamStrip.tsx`
+- **Variants:** `default`
+- **Sizes:** md
+- **States:** default
+- **Used in:** populated in 12.6
+- **Tweak impact:** Viewer Sheet sensor strip, future per-broadcast layer surfaces
+
+**Mock says:** Header ("STREAMS" + "X OF Y" count) + horizontal scroll
+of StreamTile items showing per-layer status (CAM 1080p, AUDIO 48 kHz,
+LOC GPS, etc.). Used to display which layers a broadcast is delivering.
+
+**Code does:** None.
+
+**Gap / proposal:** Section accepting `layers: Layer[]` (where `Layer
+= { kind, label, value, active }`). Renders header + horizontal
+StreamTile row.
+
+---
+
+##### `FilterCard`
+
+- **Tier:** section (composes Card + SegmentedToggle + Chip rows + clear control)
+- **Location:** `src/components/sections/FilterCard.tsx`
+- **Variants:** `default`, `wallet` (with currency dimension), `profile` (with VIS / LAYERS / DATE rows)
+- **Sizes:** md
+- **States:** default, has-filters-applied
+- **Used in:** populated in 12.6
+- **Tweak impact:** Wallet v2 transaction filters, My Profile clip filters, future complex-filter surfaces
+
+**Mock says:** Card containing multiple filter rows. **My Profile**
+variant: VIS (segmented ALL/PUBLIC/ANON) + LAYERS (multi-select chip
+row) + DATE (single-select chip row) + clear-filters action. **Wallet**
+variant: currency + kind + date row. Applied-state shows "X OF Y
+results" + Clear link.
+
+**Code does:** None.
+
+**Gap / proposal:** Generic FilterCard accepting filter-row definitions.
+Each row type (segmented / chip-multi / chip-single) is a primitive
+composition. Variant determines pre-set row structure.
+
+---
+
+##### `DayGroup`
+
+- **Tier:** section (composes Divider + Text + slotted children)
+- **Location:** `src/components/sections/DayGroup.tsx`
+- **Variants:** `default`
+- **Sizes:** md
+- **States:** default
+- **Used in:** populated in 12.6
+- **Tweak impact:** Wallet v2 transaction grouping, future timeline grouping surfaces
+
+**Mock says:** Day header (TODAY / YESTERDAY / APR 22) + summary on
+right (e.g. "+ 12.4K SB · - 4.2K SB") + slotted child rows (typically
+TransactionRow). Border-top separates from previous day's group.
+
+**Code does:** None.
+
+**Gap / proposal:** Generic section accepting `{ label, summary,
+children }`. Used by Wallet v2; same shape would work for chat-by-day,
+notifications-by-day, etc.
+
+---
+
+##### `ActionTilesRow`
+
+- **Tier:** section
+- **Location:** `src/components/sections/ActionTilesRow.tsx`
+- **Variants:** `default` (3-up grid), `4-up`
+- **Sizes:** md
+- **States:** default
+- **Used in:** populated in 12.6
+- **Tweak impact:** Wallet v2 quick actions (Top up / Cash out / Send), future shortcut surfaces
+
+**Mock says:** Equal-width grid of action tiles. Each tile = Card +
+icon + title + small descriptor. One tile in the grid may be marked
+`primary` (accent glow + tinted bg).
+
+**Code does:** None.
+
+**Gap / proposal:** Section accepting `tiles: ActionTile[]`. Tile shape
+= `{ icon, title, descriptor, onPress, primary }`. Generic enough to
+serve Wallet, Settings shortcuts, or any compact action shelf.
+
+---
+
+##### `PresetGrid`
+
+- **Tier:** section (composes Chip in a 4-up grid)
+- **Location:** `src/components/sections/PresetGrid.tsx`
+- **Variants:** `default`
+- **Sizes:** md (4-up gridded chips)
+- **States:** default
+- **Used in:** populated in 12.6
+- **Tweak impact:** Cash Out preset amounts, TipSheet preset amounts, Top Up bundle quick-picks (potentially), future quantity-preset surfaces
+
+**Mock says:** 4-up grid of Chip items showing preset values. Selected
+state = accent-tinted (or tone-tinted) chip. Tapping = sets a parent
+value (typically the AmountInput sibling).
+
+**Code does:** TipSheet has inline preset chips (Phase 13).
+
+**Gap / proposal:** Extract as generic preset picker. `presets: number[]`
++ `value` + `onChange`. Often paired with an AmountInput feature.
+
+---
+
+##### `ActionSheet`
+
+- **Tier:** section (composes BottomSheet + action rows + Cancel)
+- **Location:** `src/components/sections/ActionSheet.tsx`
+- **Variants:** `default`
+- **Sizes:** md
+- **States:** open, closed
+- **Used in:** populated in 12.6
+- **Tweak impact:** Profile kebab actions, Wallet v2 menus (potential), Clip Edit row-menus, future contextual-menu surfaces
+
+**Mock says:** Bottom sheet containing a header row (e.g. "@KAI.DC") +
+list of action rows (icon + label, optional warn-tone for destructive
+actions) + Cancel row at the bottom. Tap outside closes.
+
+**Code does:** Profile has bespoke kebab sheet inline.
+
+**Gap / proposal:** Section composing BottomSheet primitive + a list of
+ActionSheetRow features (defined as part of the section's API). Actions
+are passed as an array of `{ icon, label, onPress, tone }`.
+
+---
+
+##### `SettingsGroup`
+
+- **Tier:** section (composes Card + SettingsRow rows + section header)
+- **Location:** `src/components/sections/SettingsGroup.tsx`
+- **Variants:** `default`
+- **Sizes:** md
+- **States:** default
+- **Used in:** populated in 12.6
+- **Tweak impact:** Settings screen, Change Handle entry point, future settings-like surfaces
+
+**Mock says:** Section header (mono caps, dim — e.g. "IDENTITY",
+"VERIFICATION") + Card containing SettingsRow children with borders
+between them. Multiple groups stacked on a screen.
+
+**Code does:** Settings screen has inline group rendering.
+
+**Gap / proposal:** Section accepting `{ title, rows }`. Rows are an
+array of SettingsRow descriptors.
+
+---
+
+##### `InfoList`
+
+- **Tier:** section (composes Card + tonal info rows)
+- **Location:** `src/components/sections/InfoList.tsx`
+- **Variants:** `default`
+- **Sizes:** md
+- **States:** default
+- **Used in:** populated in 12.6
+- **Tweak impact:** Change Handle "what changes" panel, future consequence-disclosure surfaces
+
+**Mock says:** List of tonal info rows (keep / change / hold tones,
+each with a tone-colored badge + title + description). Used to disclose
+consequences of an action ("What stays with you / What's different /
+What's held").
+
+**Code does:** None.
+
+**Gap / proposal:** Section accepting `rows: { tone, icon, title, body }[]`.
+Each row tone uses a token-driven color (accent for "keep", warn for
+"change", neutral for "hold").
+
+---
+
+##### `LegalLinkList`
+
+- **Tier:** section (composes link rows)
+- **Location:** `src/components/sections/LegalLinkList.tsx`
+- **Variants:** `default`
+- **Sizes:** md
+- **States:** default
+- **Used in:** populated in 12.6
+- **Tweak impact:** All 3 LegalAcceptanceCard variants (US/ROW, EU, CA), future legal-disclosure surfaces
+
+**Mock says:** Vertical list of legal-document link rows: "Terms of
+service" / "Community rules" / "Privacy policy" — each as a tappable
+row with right chevron. Opens the document in a reader.
+
+**Code does:** None.
+
+**Gap / proposal:** Section accepting `docs: { label, onPress }[]`.
+Used by LegalAcceptanceCard variants and any future legal-link surfaces.
+
+---
+
+#### Sections that stay inline (single-screen only)
+
+These patterns appeared in only one mock and don't justify section-tier
+extraction. They live inline in their home screen until a second use case
+emerges:
+
+- **LayerPanel** (Clip Edit only — composes LayerEditorRow rows in a Card)
+- **TagsCard** (Clip Edit only — TagEditor in a Card)
+- **AgeGateRefusal** (single-screen, terminal state; the AgeGateCard
+  feature is the entire surface)
+- **StreamGrid** (was a candidate; mocks don't actually show a grid of
+  live streams — Globe is spatial, Profile clips are grid but those use
+  ClipGrid which is just a 2-column grid of ClipCard, simple enough to
+  stay inline)
+- **ProfileHeader** (was a candidate; the bcaster-row + meta-strip
+  combination doesn't reuse outside Profile / My Profile, and those two
+  screens have meaningfully different headers anyway)
 
 ### Scene elements
 
@@ -2115,22 +2393,42 @@ Routes (`app/`) and their implementations (`src/components/screens/`).
 "Migrated" indicates whether the screen has been rewritten against the new
 primitives/features/sections in sub-phase 12.6.
 
-| Route (shim)                     | Implementation                 | Purpose                                 | Migrated |
-| -------------------------------- | ------------------------------ | --------------------------------------- | -------- |
-| `app/index.tsx`                  | (auth-aware redirect, no impl) | Auth-aware redirect                     | n/a      |
-| `app/onboarding.tsx`             | `OnboardingScreen.tsx`         | Handle picker, avatar (Phase 8)         | no       |
-| `app/(auth)/login.tsx`           | `LoginScreen.tsx`              | Clerk sign-in                           | no       |
-| `app/(auth)/signup.tsx`          | `SignupScreen.tsx`             | Clerk sign-up + verify                  | no       |
-| `app/(app)/globe.tsx`            | `GlobeScreen.tsx`              | Globe (mounts `EarthScene`) + banners   | no       |
-| `app/(app)/dashboard.tsx`        | `DashboardScreen.tsx`          | Source arming + Go Live                 | no       |
-| `app/(app)/stream/[id].tsx`      | `StreamScreen.tsx`             | Broadcaster (id=new) / viewer (id=room) | no       |
-| `app/(app)/me.tsx`               | `MeScreen.tsx`                 | Own profile / account settings          | no       |
-| `app/(app)/profile/[handle].tsx` | `ProfileScreen.tsx`            | Public profile + follow                 | no       |
-| `app/(app)/search.tsx`           | `SearchScreen.tsx`             | User search                             | no       |
-| `app/(app)/settings.tsx`         | `SettingsScreen.tsx`           | Account + notifications                 | no       |
+| Route (shim)                          | Implementation                       | Purpose                                                                        | Migrated |
+| ------------------------------------- | ------------------------------------ | ------------------------------------------------------------------------------ | -------- |
+| `app/index.tsx`                       | (auth-aware redirect, no impl)       | Auth-aware redirect                                                            | n/a      |
+| `app/onboarding.tsx`                  | `OnboardingScreen.tsx`               | Handle picker, avatar (Phase 8) — refactor to compose WizardShell + steps      | no       |
+| `app/(auth)/login.tsx`                | `LoginScreen.tsx`                    | Clerk sign-in                                                                  | no       |
+| `app/(auth)/signup.tsx`                | `SignupScreen.tsx`                    | Clerk sign-up + verify                                                          | no       |
+| `app/(app)/globe.tsx`                  | `GlobeScreen.tsx`                     | Globe (mounts `EarthScene`) + banners + categories (new) + search bar (new)    | no       |
+| `app/(app)/dashboard.tsx`              | `DashboardScreen.tsx`                 | Source arming + Go Live — refactor to 7-layer (per re-baseline) + GoBar        | no       |
+| `app/(app)/stream/[id].tsx`            | `StreamScreen.tsx`                    | Broadcaster (id=new) / viewer (id=room) — broadcaster HUD overhauled           | no       |
+| `app/(app)/me.tsx`                     | `MeScreen.tsx`                        | Own profile / account settings + clip grid (new) + filters (new)               | no       |
+| `app/(app)/profile/[handle].tsx`       | `ProfileScreen.tsx`                   | Public profile + follow + clip grid (new)                                      | no       |
+| `app/(app)/search.tsx`                 | `SearchScreen.tsx`                    | User search (may merge into Globe search bar — TBD in 12.6)                    | no       |
+| `app/(app)/settings.tsx`               | `SettingsScreen.tsx`                  | Account + notifications — refactor to SettingsGroup pattern                     | no       |
+| `app/(app)/wallet.tsx`                 | `WalletScreen.tsx`                    | Wallet v2 — Space Bucks + Star Dust hero + transactions (Phase 13 → updated)   | no       |
+| `app/(app)/topup.tsx`                  | `TopUpScreen.tsx`                     | Top Up bundle picker (Phase 13 placeholder; IAP wiring v0.3)                    | no       |
+| `app/(app)/cashout.tsx`                | `CashoutScreen.tsx`                   | Cash Out amount + bank + KYC steps (Phase 13 placeholder; payout wiring v0.3) | no       |
+| `app/(app)/creator-onboarding.tsx`     | `CreatorOnboardingScreen.tsx`         | Creator wizard (Phase 13) — refactor to 10-step WizardShell + LocationGranularityPicker | no       |
+| `app/(app)/broadcaster-onboarding.tsx` | `BroadcasterOnboardingScreen.tsx`     | Redirect shim (legacy) — keep as-is                                            | n/a      |
+| `app/(app)/change-handle.tsx`          | `ChangeHandleScreen.tsx`              | **New** — settings flow for handle changes (4 frames; mock + Section 3 features) | no       |
+| `app/(app)/onboarding-viewer.tsx`      | `OnboardingViewerScreen.tsx`          | **New** — viewer-path wizard (anon → registered viewer, 8 steps)               | no       |
+| `app/(app)/clip-edit.tsx`              | `ClipEditScreen.tsx`                  | **New** — post-stream clip editor (per re-baseline 2026-05-29)                 | no       |
+| `app/(app)/report.tsx`                 | `ReportScreen.tsx`                    | **New** — user/stream reporting modal (multi-step)                             | no       |
 
-Migration order TBD. Recommend starting with the most visually opinionated
-screens (globe, stream view) since they expose the most token coverage.
+Existing screens above are migrated in 12.6 (refactored to compose the new
+primitives / features / sections). **New** screens are built in 12.6 as
+well — they have no existing implementations to refactor.
+
+Migration order recommendation:
+1. Start with the most visually opinionated existing screens (GlobeScreen,
+   StreamScreen) since they expose the most token coverage.
+2. Then settings + identity surfaces (SettingsScreen, MeScreen,
+   ProfileScreen, OnboardingScreen).
+3. Then monetization (WalletScreen, TopUpScreen, CashoutScreen).
+4. New screens (ChangeHandle, OnboardingViewer, ClipEdit, Report) build
+   in dependency order — they need primitives + features + sections from
+   12.4 / 12.5 in place first.
 
 ---
 
