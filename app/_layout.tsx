@@ -9,7 +9,6 @@ import * as Notifications from 'expo-notifications'
 import { tokenCache } from '@/lib/tokenCache'
 import { env } from '@/lib/env'
 import { setClerkTokenGetter } from '@/lib/clerkToken'
-import { signOutSignal } from '@/lib/signOutSignal'
 import { useAuthStore } from '@/stores/authStore'
 import { useRegisterPushToken } from '@/hooks/useRegisterPushToken'
 import { apiClient } from '@/api/client'
@@ -57,9 +56,6 @@ function RootNavigator() {
         .catch(console.warn)
     } else {
       clearWrldUser()
-      if (signOutSignal.consume()) {
-        router.navigate('/(app)/globe')
-      }
     }
   }, [isLoaded, isSignedIn])
 
