@@ -1,0 +1,582 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Wrld — Onboarding Components</title>
+<style>
+  @import url("https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap");
+  :root{
+    --bg:#070809; --bg-2:#0c0e11;
+    --panel:rgba(20,22,26,0.72); --panel-solid:#14171c; --panel-hi:#1a1e24;
+    --line:rgba(255,255,255,0.08); --line-2:rgba(255,255,255,0.14);
+    --ink:#ece9e2; --ink-dim:rgba(236,233,226,0.58); --ink-faint:rgba(236,233,226,0.34);
+    --accent:#3ea7ff; --accent-hot:#7fd0ff; --accent-glow:rgba(62,167,255,0.45);
+    --live:#ff4d4d; --live-glow:rgba(255,77,77,0.45);
+    --warn:#ffb95a;
+    --sans:"Inter Tight", ui-sans-serif, system-ui, sans-serif;
+    --mono:"JetBrains Mono", ui-monospace, monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:#0a0a0b;font-family:var(--sans);color:var(--ink);-webkit-font-smoothing:antialiased}
+  body{padding:48px}
+
+  .pageh{ max-width:1200px; margin:0 auto 48px; }
+  .pageh h1{ font:600 32px/1.1 var(--sans); letter-spacing:-0.025em; color:var(--ink); margin:0 0 6px; }
+  .pageh p{ font:500 13px/1.6 var(--sans); color:var(--ink-dim); max-width:640px; margin:0; }
+  .pageh .meta{ font:500 10px var(--mono); letter-spacing:0.16em; color:var(--ink-faint); margin-bottom:14px; }
+
+  .grid{
+    max-width:1200px; margin:0 auto;
+    display:grid; grid-template-columns:repeat(2, 1fr); gap:36px 28px;
+  }
+
+  .card{
+    background:var(--panel-solid); border:1px solid var(--line);
+    border-radius:18px; padding:22px;
+    display:flex; flex-direction:column; gap:14px;
+  }
+  .card.full{ grid-column:1 / -1 }
+  .card h2{ font:600 16px var(--sans); letter-spacing:-0.01em; color:var(--ink); margin:0 }
+  .card .desc{ font:500 11.5px/1.5 var(--sans); color:var(--ink-dim); margin:0; text-wrap:pretty }
+  .card .lab{ font:500 9.5px var(--mono); letter-spacing:0.16em; color:var(--ink-faint); }
+  .demo-row{ display:flex; flex-direction:column; gap:14px; padding:14px;
+    background:var(--bg); border-radius:12px; border:1px solid var(--line); }
+  .demo-row.dense{ gap:8px }
+
+  /* ── Progress indicator ── */
+  .pbar{ display:flex; gap:5px; padding:8px 0; }
+  .pbar span{ flex:1; height:3px; border-radius:999px; background:var(--line); transition:background .25s; }
+  .pbar span[data-on="true"]{ background:var(--accent) }
+  .pbar.dots{ justify-content:center; gap:8px; }
+  .pbar.dots span{ flex:none; width:6px; height:6px; border-radius:50%; }
+
+  /* ── Buttons ── */
+  .btn-primary{
+    height:54px; border-radius:20px; border:0;
+    background:var(--accent); color:#0a0c10;
+    font:600 15px var(--sans); cursor:pointer;
+    box-shadow:0 0 30px rgba(62,167,255,0.18);
+    transition:transform .18s; font-family:var(--sans);
+    width:100%;
+  }
+  .btn-primary[disabled]{ opacity:0.32; box-shadow:none; cursor:not-allowed }
+  .btn-secondary{
+    height:54px; border-radius:20px;
+    background:var(--panel-hi); border:1px solid var(--line-2); color:var(--ink);
+    font:600 14px var(--sans); cursor:pointer; font-family:var(--sans); width:100%;
+  }
+  .btn-skip{
+    height:48px; border-radius:14px;
+    background:transparent; border:0; color:var(--ink-dim);
+    font:500 13px var(--sans); cursor:pointer; font-family:var(--sans); width:100%;
+    text-decoration:underline; text-decoration-color:var(--line-2); text-underline-offset:4px;
+  }
+  .btn-back{
+    width:36px; height:36px; border-radius:50%;
+    background:transparent; border:1px solid var(--line);
+    color:var(--ink); display:grid; place-items:center; cursor:pointer; font-family:var(--sans);
+  }
+  .btn-social{
+    height:54px; border-radius:14px;
+    background:var(--panel-hi); border:1px solid var(--line-2); color:var(--ink);
+    display:flex; align-items:center; justify-content:center; gap:10px;
+    font:600 14px var(--sans); cursor:pointer; font-family:var(--sans); width:100%;
+    transition:background .2s;
+  }
+  .btn-social svg{ width:18px; height:18px }
+  .btn-social.apple{ background:#fff; color:#000; border-color:#fff }
+  .btn-social.email{ background:transparent }
+
+  /* ── Inputs ── */
+  .field{ display:flex; flex-direction:column; gap:6px }
+  .field label{ font:500 10px var(--mono); letter-spacing:0.14em; color:var(--ink-faint); padding:0 4px }
+  .input{
+    height:52px; border-radius:14px;
+    background:var(--panel-solid); border:1px solid var(--line);
+    color:var(--ink); padding:0 16px;
+    font:500 15px var(--sans); outline:none;
+    display:flex; align-items:center; gap:10px;
+    transition:border-color .2s, background .2s;
+  }
+  .input .placeholder{ color:var(--ink-faint) }
+  .input .ct{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .input[data-state="focus"]{ border-color:var(--accent); box-shadow:0 0 0 4px rgba(62,167,255,0.08) }
+  .input[data-state="valid"]{ border-color:rgba(62,167,255,0.4) }
+  .input[data-state="error"]{ border-color:rgba(255,77,77,0.5) }
+  .input[data-state="loading"]{ border-color:var(--line-2) }
+  .input .cursor{ width:1.5px; height:18px; background:var(--accent); margin-left:1px;
+    animation:blink 1s steps(1) infinite; }
+  @keyframes blink{ 50%{ opacity:0 } }
+  .input .icr{ flex:none; color:var(--ink-faint); display:grid; place-items:center; width:18px; height:18px; }
+  .input[data-state="valid"] .icr{ color:var(--accent) }
+  .input[data-state="error"] .icr{ color:var(--live) }
+  .input .spinner{
+    width:14px; height:14px; border-radius:50%;
+    border:2px solid var(--line); border-top-color:var(--accent);
+    animation:spin 0.7s linear infinite;
+  }
+  @keyframes spin{ to{ transform:rotate(360deg) } }
+  .help{ font:500 11px var(--mono); letter-spacing:0.04em; padding:0 4px; }
+  .help[data-tone="dim"]{ color:var(--ink-faint) }
+  .help[data-tone="ok"]{ color:var(--accent) }
+  .help[data-tone="err"]{ color:var(--live) }
+  .help[data-tone="warn"]{ color:var(--warn) }
+
+  /* Password strength meter */
+  .pwd-meter{ display:flex; gap:4px; padding:0 4px; }
+  .pwd-meter span{ flex:1; height:3px; border-radius:999px; background:var(--line); }
+  .pwd-meter span[data-on="weak"]{ background:var(--live) }
+  .pwd-meter span[data-on="ok"]{ background:var(--warn) }
+  .pwd-meter span[data-on="strong"]{ background:var(--accent) }
+
+  /* ── Permission pre-prompt template ── */
+  .pp-card{
+    background:var(--panel-solid); border:1px solid var(--line);
+    border-radius:20px; padding:24px 22px;
+    display:flex; flex-direction:column; gap:14px; align-items:flex-start;
+  }
+  .pp-card .ic{
+    width:56px; height:56px; border-radius:16px;
+    background:rgba(62,167,255,0.08); border:1px solid rgba(62,167,255,0.28);
+    color:var(--accent); display:grid; place-items:center;
+    box-shadow:0 0 24px rgba(62,167,255,0.12);
+  }
+  .pp-card .ic svg{ width:28px; height:28px }
+  .pp-card .t{ font:600 22px/1.18 var(--sans); letter-spacing:-0.02em; color:var(--ink); margin:0 }
+  .pp-card .d{ font:500 13.5px/1.55 var(--sans); color:var(--ink-dim); margin:0; text-wrap:pretty }
+  .pp-card .d b{ color:var(--ink); font-weight:500 }
+  .pp-card ul{ list-style:none; padding:0; margin:4px 0; display:flex; flex-direction:column; gap:8px;
+    font:500 12.5px/1.5 var(--sans); color:var(--ink-dim); }
+  .pp-card ul li{ display:flex; gap:10px; align-items:flex-start }
+  .pp-card ul li .b{ width:6px; height:6px; border-radius:50%; background:var(--accent);
+    margin-top:7px; flex:none; }
+
+  /* OS prompt mock */
+  .os-prompt{
+    background:#2a2c2e; border:1px solid rgba(255,255,255,0.1);
+    border-radius:14px; padding:18px 16px;
+    text-align:center; max-width:280px; margin:0 auto;
+    color:#fff; font-family:-apple-system, system-ui, sans-serif;
+  }
+  .os-prompt .h{ font-weight:600; font-size:15px; margin-bottom:6px }
+  .os-prompt .b{ font-size:12px; opacity:0.85; margin-bottom:14px; line-height:1.4 }
+  .os-prompt .acts{ display:flex; flex-direction:column; gap:0; border-top:1px solid rgba(255,255,255,0.1); margin:0 -16px -18px; }
+  .os-prompt .acts button{ background:transparent; border:0; color:#0a84ff;
+    padding:11px; font:400 15px var(--sans); border-bottom:1px solid rgba(255,255,255,0.1); cursor:pointer; font-family:inherit; }
+  .os-prompt .acts button:last-child{ border-bottom:0; font-weight:600 }
+
+  /* ── Legal acceptance ── */
+  .legal-card{
+    background:var(--panel-solid); border:1px solid var(--line);
+    border-radius:20px; padding:22px;
+    display:flex; flex-direction:column; gap:14px;
+  }
+  .legal-link{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:14px 16px; border-radius:12px;
+    background:rgba(255,255,255,0.03); border:1px solid var(--line);
+    font:500 13.5px var(--sans); color:var(--ink); cursor:pointer;
+  }
+  .legal-link .arr{ color:var(--ink-faint) }
+  .consent-row{
+    display:flex; align-items:center; justify-content:space-between; gap:14px;
+    padding:14px 4px;
+    border-bottom:1px solid var(--line);
+  }
+  .consent-row:last-child{ border-bottom:0 }
+  .consent-row .col{ display:flex; flex-direction:column; gap:4px }
+  .consent-row .t{ font:500 13.5px var(--sans); color:var(--ink); letter-spacing:-0.005em }
+  .consent-row .d{ font:500 11px var(--mono); color:var(--ink-dim); letter-spacing:0.04em; line-height:1.45; text-wrap:pretty }
+  .consent-row[data-locked="true"] .col .d{ color:var(--ink-faint) }
+  .toggle{
+    width:44px; height:26px; border-radius:999px;
+    background:#2a2e35; border:0; padding:0; flex:none;
+    position:relative; cursor:pointer; font-family:var(--sans);
+    transition:background .22s cubic-bezier(.4,1.4,.6,1);
+  }
+  .toggle::after{
+    content:""; position:absolute; top:3px; left:3px;
+    width:20px; height:20px; border-radius:50%; background:var(--ink);
+    transition:transform .22s cubic-bezier(.4,1.4,.6,1), background .22s;
+  }
+  .toggle[data-on="true"]{ background:var(--accent) }
+  .toggle[data-on="true"]::after{ transform:translateX(18px); background:#fff }
+  .toggle[disabled]{ opacity:0.4; cursor:not-allowed }
+  .juris{
+    display:inline-flex; align-items:center; gap:6px;
+    padding:5px 9px; border-radius:5px;
+    background:rgba(62,167,255,0.08); border:1px solid rgba(62,167,255,0.28);
+    color:var(--accent); font:500 9px var(--mono); letter-spacing:0.16em;
+    width:max-content;
+  }
+  .juris .dot{ width:5px; height:5px; border-radius:50%; background:currentColor }
+
+  /* ── Age gate refusal ── */
+  .agegate{
+    background:linear-gradient(180deg, #161922 0%, #0a0a0c 100%);
+    border:1px solid var(--line);
+    border-radius:20px; padding:32px 22px 24px;
+    display:flex; flex-direction:column; align-items:center; gap:18px; text-align:center;
+  }
+  .agegate .ic{
+    width:64px; height:64px; border-radius:50%;
+    background:rgba(255,255,255,0.04); border:1px solid var(--line-2);
+    color:var(--ink-dim); display:grid; place-items:center;
+  }
+  .agegate .ic svg{ width:30px; height:30px }
+  .agegate .t{ font:600 22px/1.2 var(--sans); letter-spacing:-0.02em; color:var(--ink); margin:0 }
+  .agegate .d{ font:500 13.5px/1.55 var(--sans); color:var(--ink-dim); margin:0; max-width:300px; text-wrap:pretty }
+  .agegate .d b{ color:var(--ink); font-weight:500 }
+
+  /* ── Exit-intent sheet ── */
+  .ei-host{
+    height:340px; border-radius:18px; overflow:hidden;
+    background:linear-gradient(180deg, #0e1116 0%, var(--bg) 100%);
+    border:1px solid var(--line);
+    position:relative;
+  }
+  .ei-host .scrim{ position:absolute; inset:0; background:rgba(0,0,0,0.7); }
+  .ei-sheet{
+    position:absolute; left:14px; right:14px; bottom:14px;
+    background:#0e1116; border:1px solid var(--line-2);
+    border-radius:24px; padding:22px 22px 18px;
+    display:flex; flex-direction:column; gap:14px;
+  }
+  .ei-sheet .grab{ width:36px; height:4px; border-radius:2px; background:var(--line-2);
+    margin:-10px auto 4px; }
+  .ei-sheet .t{ font:600 18px/1.25 var(--sans); letter-spacing:-0.015em; color:var(--ink); margin:0 }
+  .ei-sheet .d{ font:500 12.5px/1.55 var(--sans); color:var(--ink-dim); margin:0; text-wrap:pretty }
+  .ei-sheet .acts{ display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:6px }
+
+  /* iOS-ish phone scaffold for component demos */
+  .device{
+    width:100%; max-width:380px; margin:0 auto;
+    aspect-ratio: 402 / 280;
+    border-radius:18px;
+    background:var(--bg); border:1px solid var(--line);
+    padding:18px; display:flex; flex-direction:column; gap:12px;
+    position:relative;
+  }
+
+  .row2{ display:grid; grid-template-columns:1fr 1fr; gap:8px }
+  .row3{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px }
+</style>
+</head>
+<body>
+
+<div class="pageh">
+  <div class="meta">WRLD · ONBOARDING COMPONENT LIBRARY</div>
+  <h1>Onboarding components</h1>
+  <p>Primitives shared by the Viewer and Creator wizards. Each component shows every state the team needs to ship — default, focus, valid, error, loading where relevant — plus jurisdiction variants for the legal step.</p>
+</div>
+
+<div class="grid">
+
+  <!-- Progress indicator -->
+  <div class="card">
+    <span class="lab">PROGRESS · TOP OF EVERY STEP</span>
+    <h2>Progress indicator</h2>
+    <p class="desc">Thin segmented bar. Each segment is a step. Filled = done or current. Use bars (default) for ≤8 steps; fall back to dots for very short flows.</p>
+    <div class="demo-row">
+      <span class="lab" style="color:var(--ink-faint)">VIEWER · 8 STEPS · ON STEP 3</span>
+      <div class="pbar">
+        <span data-on="true"></span><span data-on="true"></span><span data-on="true"></span>
+        <span></span><span></span><span></span><span></span><span></span>
+      </div>
+      <span class="lab" style="color:var(--ink-faint); margin-top:8px">CREATOR · 10 STEPS · ON STEP 7</span>
+      <div class="pbar">
+        <span data-on="true"></span><span data-on="true"></span><span data-on="true"></span>
+        <span data-on="true"></span><span data-on="true"></span><span data-on="true"></span>
+        <span data-on="true"></span><span></span><span></span><span></span>
+      </div>
+      <span class="lab" style="color:var(--ink-faint); margin-top:8px">DOTS FALLBACK · STEP 2 OF 4</span>
+      <div class="pbar dots">
+        <span data-on="true"></span><span data-on="true"></span><span></span><span></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Buttons -->
+  <div class="card">
+    <span class="lab">PRIMARY · SECONDARY · SKIP · BACK</span>
+    <h2>Buttons</h2>
+    <p class="desc">Primary action is r:20 accent. Secondary uses panel surface. Skip is type-only with a hairline underline so it doesn't compete with continue. Back is the 36-circle icon button used everywhere.</p>
+    <div class="demo-row">
+      <button class="btn-primary">Continue</button>
+      <button class="btn-primary" disabled>Continue (disabled)</button>
+      <button class="btn-secondary">Sign in instead</button>
+      <button class="btn-skip">Skip for now</button>
+      <div style="display:flex; gap:10px; align-items:center; padding:0 4px">
+        <button class="btn-back" aria-label="Back">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <span style="font:500 11px var(--mono); letter-spacing:0.14em; color:var(--ink-faint)">BACK · ALWAYS TOP-LEFT EXCEPT STEP 1</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Social auth buttons -->
+  <div class="card">
+    <span class="lab">SOCIAL AUTH</span>
+    <h2>Social auth buttons</h2>
+    <p class="desc">Apple is iOS-only and renders white-on-black per HIG. Google and Email render in panel surface. Order on iOS: Apple → Google → Email. On Android: Google → Email.</p>
+    <div class="demo-row">
+      <button class="btn-social apple">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16.5 12.4c0-2.7 2.2-4 2.3-4-1.2-1.8-3.2-2-3.9-2-1.6-.2-3.2 1-4 1-.8 0-2.1-1-3.5-1-1.8 0-3.5 1.1-4.4 2.7-1.9 3.3-.5 8.1 1.4 10.7.9 1.3 2 2.7 3.4 2.7 1.4-.1 1.9-.9 3.5-.9 1.6 0 2.1.9 3.5.9 1.5 0 2.4-1.3 3.3-2.6 1-1.5 1.5-3 1.5-3.1-.1 0-2.9-1.1-2.9-4.4M14 4.5c.7-.9 1.2-2.1 1.1-3.3-1 0-2.2.7-3 1.5-.7.8-1.3 2-1.1 3.2 1.1.1 2.3-.6 3-1.4"/></svg>
+        Continue with Apple
+      </button>
+      <button class="btn-social">
+        <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.5 12.3c0-.8-.1-1.5-.2-2.2H12v4.3h5.9c-.3 1.4-1 2.6-2.3 3.4v2.8h3.7c2.2-2 3.4-5 3.4-8.3"/><path fill="#34A853" d="M12 23c3.1 0 5.7-1 7.6-2.8l-3.7-2.8c-1 .7-2.3 1.1-3.9 1.1-3 0-5.6-2-6.5-4.8H1.7v3c1.9 3.7 5.8 6.3 10.3 6.3"/><path fill="#FBBC04" d="M5.5 13.7c-.2-.7-.4-1.4-.4-2.2s.1-1.5.4-2.2v-3H1.7C1 7.8.5 9.3.5 11s.4 3.2 1.2 4.7l3.8-3"/><path fill="#EA4335" d="M12 4.4c1.7 0 3.2.6 4.4 1.7l3.3-3.3C17.7 1 15 0 12 0 7.5 0 3.6 2.6 1.7 6.3l3.8 3c.9-2.7 3.5-4.7 6.5-4.7"/></svg>
+        Continue with Google
+      </button>
+      <button class="btn-social email">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>
+        Continue with email
+      </button>
+    </div>
+  </div>
+
+  <!-- Input states -->
+  <div class="card">
+    <span class="lab">INPUTS · 5 STATES</span>
+    <h2>Input field states</h2>
+    <p class="desc">Every field designs all five states. Validation runs inline (debounced 400ms for network checks like uniqueness). Helper text changes tone with the field.</p>
+    <div class="demo-row dense">
+      <div class="field">
+        <label>EMAIL · DEFAULT</label>
+        <div class="input"><span class="ct"><span class="placeholder"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="50293f252210353d31393c7e333f3d">[email&#160;protected]</a></span></span></div>
+      </div>
+      <div class="field">
+        <label>EMAIL · FOCUS</label>
+        <div class="input" data-state="focus"><span class="ct">kai<span class="cursor"></span></span></div>
+      </div>
+      <div class="field">
+        <label>EMAIL · VALID</label>
+        <div class="input" data-state="valid">
+          <span class="ct"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="dfb4beb69facabaabbb6b0f1bbbc">[email&#160;protected]</a></span>
+          <span class="icr"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg></span>
+        </div>
+        <span class="help" data-tone="ok">EMAIL LOOKS GOOD</span>
+      </div>
+      <div class="field">
+        <label>EMAIL · ERROR</label>
+        <div class="input" data-state="error">
+          <span class="ct">kai@studio</span>
+          <span class="icr"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></span>
+        </div>
+        <span class="help" data-tone="err">MISSING DOMAIN — TRY <b style="font-weight:500">@STUDIO.DC</b></span>
+      </div>
+      <div class="field">
+        <label>USERNAME · LOADING</label>
+        <div class="input" data-state="loading">
+          <span class="ct">@kai.dc</span>
+          <span class="icr"><span class="spinner"></span></span>
+        </div>
+        <span class="help" data-tone="dim">CHECKING…</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Password strength meter -->
+  <div class="card">
+    <span class="lab">PASSWORD STRENGTH</span>
+    <h2>Password strength meter</h2>
+    <p class="desc">Three segments. Weak (live red) until min length + 1 character class. OK (warn) at moderate. Strong (accent) at 12+ chars with mixed classes.</p>
+    <div class="demo-row dense">
+      <div class="field">
+        <label>WEAK</label>
+        <div class="input"><span class="ct">••••</span></div>
+        <div class="pwd-meter"><span data-on="weak"></span><span></span><span></span></div>
+        <span class="help" data-tone="err">TOO SHORT — 8 CHARACTERS MINIMUM</span>
+      </div>
+      <div class="field">
+        <label>OK</label>
+        <div class="input"><span class="ct">••••••••</span></div>
+        <div class="pwd-meter"><span data-on="ok"></span><span data-on="ok"></span><span></span></div>
+        <span class="help" data-tone="warn">ADD A NUMBER OR SYMBOL TO STRENGTHEN</span>
+      </div>
+      <div class="field">
+        <label>STRONG</label>
+        <div class="input" data-state="valid"><span class="ct">••••••••••••</span></div>
+        <div class="pwd-meter"><span data-on="strong"></span><span data-on="strong"></span><span data-on="strong"></span></div>
+        <span class="help" data-tone="ok">STRONG</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Permission pre-prompt -->
+  <div class="card">
+    <span class="lab">PRE-PROMPT TEMPLATE</span>
+    <h2>Permission pre-prompt</h2>
+    <p class="desc">Pre-prompt sets context before the OS prompt fires. Icon + plain title + 2–3 reasons in bullet form. Never manipulative — copy says what we want and what users get back.</p>
+    <div class="demo-row">
+      <div class="pp-card">
+        <span class="ic">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a8 8 0 0 0-8 8c0 6 8 12 8 12s8-6 8-12a8 8 0 0 0-8-8z"/><circle cx="12" cy="10" r="3"/></svg>
+        </span>
+        <h3 class="t">Wrld uses your location while you broadcast</h3>
+        <p class="d">So viewers can find your stream on the globe at the granularity <b>you</b> choose. We never share your exact spot unless you turn bluedot on.</p>
+        <ul>
+          <li><span class="b"></span><span>Your stream pin is placed on the globe.</span></li>
+          <li><span class="b"></span><span>Used only while broadcasting — never in the background.</span></li>
+          <li><span class="b"></span><span>You pick the granularity (street → city → country).</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- OS prompt -->
+  <div class="card">
+    <span class="lab">OS PROMPT — TRIGGERED AFTER PRE-PROMPT</span>
+    <h2>OS permission prompt sequence</h2>
+    <p class="desc">Pre-prompt → "Continue" button → fires the OS dialog. If user denies in the OS dialog, fall through to the denied state — never re-prompt.</p>
+    <div class="demo-row">
+      <div class="os-prompt">
+        <div class="h">"Wrld" Would Like To Access<br/>Your Location</div>
+        <div class="b">Used to place your stream pin on the globe at the granularity you chose.</div>
+        <div class="acts">
+          <button>Allow Once</button>
+          <button>Allow While Using App</button>
+          <button>Don't Allow</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Legal default -->
+  <div class="card">
+    <span class="lab">LEGAL · DEFAULT (US, ROW)</span>
+    <h2>Legal acceptance — default</h2>
+    <p class="desc">Three docs as tappable links opening full-screen readers. Single primary "Agree & Continue" button. No checkboxes — interaction is the consent.</p>
+    <div class="demo-row">
+      <div class="legal-card">
+        <span class="lab" style="color:var(--ink-faint); margin-bottom:0">REVIEW BEFORE CONTINUING</span>
+        <div style="display:flex; flex-direction:column; gap:8px">
+          <div class="legal-link">Terms of service<span class="arr">›</span></div>
+          <div class="legal-link">Community rules<span class="arr">›</span></div>
+          <div class="legal-link">Privacy policy<span class="arr">›</span></div>
+        </div>
+        <p class="desc" style="margin:6px 0 4px">By tapping <b style="color:var(--ink); font-weight:500">Agree & Continue</b> you accept all three.</p>
+        <button class="btn-primary">Agree & Continue</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Legal EU/GDPR -->
+  <div class="card">
+    <span class="lab">LEGAL · EU / GDPR VARIANT</span>
+    <h2>Legal acceptance — EU</h2>
+    <p class="desc">Granular consent toggles for analytics + personalization. Required toggles (essential operations) are locked on. Detection is silent based on locale + IP.</p>
+    <div class="demo-row">
+      <div class="legal-card">
+        <span class="juris"><span class="dot"></span>EU · GDPR</span>
+        <div style="display:flex; flex-direction:column; gap:8px">
+          <div class="legal-link">Terms of service<span class="arr">›</span></div>
+          <div class="legal-link">Community rules<span class="arr">›</span></div>
+          <div class="legal-link">Privacy policy<span class="arr">›</span></div>
+        </div>
+        <div style="margin-top:6px">
+          <div class="consent-row" data-locked="true">
+            <div class="col">
+              <span class="t">Essential</span>
+              <span class="d">Required to run the service. Always on.</span>
+            </div>
+            <button class="toggle" data-on="true" disabled aria-label="Essential"></button>
+          </div>
+          <div class="consent-row">
+            <div class="col">
+              <span class="t">Analytics</span>
+              <span class="d">Anonymous usage stats. Helps us fix bugs.</span>
+            </div>
+            <button class="toggle" data-on="true" aria-label="Analytics"></button>
+          </div>
+          <div class="consent-row">
+            <div class="col">
+              <span class="t">Personalization</span>
+              <span class="d">Recommend streams based on what you watch.</span>
+            </div>
+            <button class="toggle" aria-label="Personalization"></button>
+          </div>
+        </div>
+        <button class="btn-primary">Agree & Continue</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Legal CA/CCPA -->
+  <div class="card">
+    <span class="lab">LEGAL · CALIFORNIA / CCPA VARIANT</span>
+    <h2>Legal acceptance — California</h2>
+    <p class="desc">"Do Not Sell or Share My Personal Information" toggle, set off by default (opt-in language honored).</p>
+    <div class="demo-row">
+      <div class="legal-card">
+        <span class="juris" style="color:var(--warn); border-color:rgba(255,159,40,0.32); background:rgba(255,159,40,0.08)"><span class="dot"></span>CALIFORNIA · CCPA</span>
+        <div style="display:flex; flex-direction:column; gap:8px">
+          <div class="legal-link">Terms of service<span class="arr">›</span></div>
+          <div class="legal-link">Community rules<span class="arr">›</span></div>
+          <div class="legal-link">Privacy policy<span class="arr">›</span></div>
+        </div>
+        <div style="margin-top:6px">
+          <div class="consent-row">
+            <div class="col">
+              <span class="t">Do Not Sell or Share My Info</span>
+              <span class="d">Opt out of sale or sharing of personal info to third parties.</span>
+            </div>
+            <button class="toggle" aria-label="Do not sell"></button>
+          </div>
+        </div>
+        <button class="btn-primary">Agree & Continue</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Age gate -->
+  <div class="card">
+    <span class="lab">AGE GATE · TERMINAL STATE</span>
+    <h2>Age gate refusal</h2>
+    <p class="desc">A real refusal. No retry, no "try a different date" link, no joke. Tone is respectful — they're a person being told no, and one day they will be 18.</p>
+    <div class="demo-row">
+      <div class="agegate">
+        <span class="ic">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+        </span>
+        <h3 class="t">Wrld is 18+</h3>
+        <p class="d">Live streaming carries adult risks we don't want to put on under-18s. <b>Come back when you turn 18</b> — we'll be here.</p>
+        <button class="btn-secondary" style="max-width:240px">Take me back</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Exit intent sheet -->
+  <div class="card">
+    <span class="lab">EXIT INTENT · SAVE PROGRESS SHEET</span>
+    <h2>Exit-intent sheet</h2>
+    <p class="desc">If a user backs out mid-flow with inputs entered, surface a sheet asking whether to save progress. Inputs are kept on device for 7 days; resume drops them into the same step.</p>
+    <div class="demo-row">
+      <div class="ei-host">
+        <div class="scrim"></div>
+        <div class="ei-sheet">
+          <div class="grab"></div>
+          <h3 class="t">Save your progress?</h3>
+          <p class="d">You're <b style="color:var(--ink); font-weight:500">3 of 8 steps</b> in. We can hold your email and username on this device for a week so you can pick up where you left off.</p>
+          <div class="acts">
+            <button class="btn-secondary" style="height:46px; border-radius:12px; font-size:13px">Discard</button>
+            <button class="btn-primary" style="height:46px; border-radius:12px; font-size:13px; box-shadow:none">Save & exit</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Notes -->
+  <div class="card full">
+    <span class="lab">USAGE NOTES</span>
+    <h2>How these compose</h2>
+    <p class="desc">Every wizard screen has the same shell: <b style="color:var(--ink); font-weight:500">back button · progress indicator · headline · supporting copy · primary content · primary CTA · skip (when allowed)</b>. Skip lives directly under the primary CTA — never above it, never in the header. Errors render inline beneath the offending input and color the input border live red. Loading states render in the input affordance (right side), not as a screen blocker. Permission pre-prompts always come before the OS prompt; if the OS prompt is denied, the wizard advances and the post-denial state lives downstream of onboarding (e.g., a creator with no location permission sees a banner on Go Live).</p>
+  </div>
+
+</div>
+
+<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script></body>
+</html>

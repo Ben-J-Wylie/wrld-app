@@ -1,0 +1,587 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Wrld — Change Handle</title>
+<style>
+  @import url("https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap");
+  :root{
+    --bg:#070809; --bg-2:#0c0e11;
+    --panel:rgba(20,22,26,0.72); --panel-solid:#14171c; --panel-hi:#1a1e24;
+    --line:rgba(255,255,255,0.08); --line-2:rgba(255,255,255,0.14);
+    --ink:#ece9e2; --ink-dim:rgba(236,233,226,0.58); --ink-faint:rgba(236,233,226,0.34);
+    --accent:#3ea7ff; --accent-hot:#7fd0ff; --accent-glow:rgba(62,167,255,0.45);
+    --live:#ff4d4d; --warn:#ffb95a;
+    --sans:"Inter Tight", ui-sans-serif, system-ui, sans-serif;
+    --mono:"JetBrains Mono", ui-monospace, monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:#0a0a0b;font-family:var(--sans);color:var(--ink);-webkit-font-smoothing:antialiased}
+  body{padding:48px 32px 80px}
+
+  .pageh{ max-width:1400px; margin:0 auto 36px }
+  .pageh .meta{ font:500 10px var(--mono); letter-spacing:0.16em; color:var(--ink-faint); margin-bottom:14px }
+  .pageh h1{ font:600 30px/1.1 var(--sans); letter-spacing:-0.025em; margin:0 0 8px }
+  .pageh p{ font:500 13px/1.6 var(--sans); color:var(--ink-dim); max-width:720px; margin:0 }
+  .pageh p b{ color:var(--ink); font-weight:500 }
+
+  .canvas{
+    max-width:1400px; margin:0 auto;
+    display:grid; grid-template-columns:repeat(4, 402px); gap:48px 24px;
+    justify-content:center;
+  }
+
+  .frame{ display:flex; flex-direction:column; gap:10px }
+  .frame .lab{ font:500 9.5px var(--mono); letter-spacing:0.16em; color:var(--ink-faint);
+    display:flex; gap:10px; align-items:baseline }
+  .frame .lab b{ color:var(--ink); font-weight:500 }
+  .frame .lab .num{ color:var(--accent) }
+
+  .phone{
+    width:402px; height:874px; border-radius:42px;
+    background:var(--bg); border:1px solid var(--line-2);
+    overflow:hidden; position:relative;
+    box-shadow:0 30px 60px rgba(0,0,0,0.4);
+  }
+  .notch{ position:absolute; top:11px; left:50%; transform:translateX(-50%);
+    width:126px; height:34px; border-radius:22px; background:#000; z-index:50; }
+  .home{ position:absolute; bottom:8px; left:50%; transform:translateX(-50%);
+    width:139px; height:5px; border-radius:100px; background:rgba(255,255,255,0.7); z-index:60; }
+  .statusbar{
+    position:absolute; top:21px; left:34px; right:34px; z-index:5;
+    display:flex; align-items:center; justify-content:space-between;
+    color:#fff; font:590 17px -apple-system, system-ui, sans-serif;
+  }
+  .statusbar .icns{ display:flex; align-items:center; gap:7px }
+  .statusbar svg{ display:block }
+
+  /* Generic top bar (settings + flow) */
+  .topbar{
+    position:absolute; top:64px; left:0; right:0; z-index:5;
+    padding:0 16px; height:44px;
+    display:grid; grid-template-columns:36px 1fr 36px; align-items:center; gap:10px;
+  }
+  .iconbtn{
+    width:36px; height:36px; border-radius:50%;
+    background:transparent; border:1px solid var(--line);
+    color:var(--ink); display:grid; place-items:center; cursor:pointer; font-family:var(--sans);
+  }
+  .iconbtn svg{ width:14px; height:14px }
+  .topbar .title{ font:600 14px var(--sans); letter-spacing:-0.005em; text-align:center; color:var(--ink) }
+  .topbar .sub{ font:500 9.5px var(--mono); letter-spacing:0.16em; color:var(--ink-faint); text-align:center; margin-top:2px }
+
+  /* ── Frame 1 (Settings) ── */
+  .settings-body{
+    position:absolute; top:118px; bottom:0; left:0; right:0; padding:8px 14px 30px;
+    overflow-y:auto;
+  }
+  .sec-h{
+    padding:18px 8px 8px;
+    font:500 10px var(--mono); letter-spacing:0.16em; color:var(--ink-faint);
+  }
+  .set-card{
+    background:var(--panel-solid); border:1px solid var(--line);
+    border-radius:16px; overflow:hidden;
+  }
+  .set-row{
+    display:grid; grid-template-columns:36px 1fr auto; gap:14px;
+    padding:14px 16px; align-items:center;
+    border-top:1px solid var(--line);
+  }
+  .set-row:first-child{ border-top:0 }
+  .set-row .ic{
+    width:36px; height:36px; border-radius:9px;
+    background:rgba(255,255,255,0.04); border:1px solid var(--line);
+    color:var(--ink-dim); display:grid; place-items:center;
+  }
+  .set-row .ic svg{ width:18px; height:18px }
+  .set-row .col{ display:flex; flex-direction:column; gap:3px; min-width:0 }
+  .set-row .t{ font:600 13.5px var(--sans); color:var(--ink); letter-spacing:-0.005em }
+  .set-row .v{ font:500 11px var(--mono); color:var(--ink-dim); letter-spacing:0.03em;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .set-row .v .at{ color:var(--accent) }
+  .set-row .arr{ color:var(--ink-faint); font:500 18px var(--mono); padding-right:2px }
+  .set-row.highlight{ background:rgba(62,167,255,0.04) }
+  .set-row.highlight .ic{ color:var(--accent); border-color:rgba(62,167,255,0.3); background:rgba(62,167,255,0.06) }
+  .pillID{
+    display:inline-flex; align-items:center; gap:6px;
+    padding:3px 7px; border-radius:5px;
+    background:rgba(255,255,255,0.04); border:1px solid var(--line-2);
+    color:var(--ink-faint); font:500 8.5px var(--mono); letter-spacing:0.16em;
+    margin-top:4px;
+  }
+  .pillID{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100% }
+  .pillID b{ color:var(--ink-dim); font-weight:500; font-variant-numeric:tabular-nums }
+
+  /* ── Frame 2 (Change screen) ── */
+  .body{
+    position:absolute; top:118px; bottom:120px; left:0; right:0;
+    padding:6px 22px 0; overflow:hidden;
+    display:flex; flex-direction:column; gap:14px;
+  }
+  .ctx{
+    display:inline-flex; align-items:center; gap:8px; align-self:flex-start;
+    padding:6px 11px 6px 9px; border-radius:999px;
+    background:rgba(62,167,255,0.06); border:1px solid rgba(62,167,255,0.28);
+    color:var(--accent); font:500 9.5px var(--mono); letter-spacing:0.16em;
+  }
+  .ctx .dot{ width:6px; height:6px; border-radius:50%; background:currentColor }
+  .h1{ font:600 26px/1.15 var(--sans); letter-spacing:-0.025em; margin:0; text-wrap:pretty }
+  .d1{ font:500 13.5px/1.55 var(--sans); color:var(--ink-dim); margin:0; text-wrap:pretty }
+  .d1 b{ color:var(--ink); font-weight:500 }
+
+  .field{ display:flex; flex-direction:column; gap:8px; margin-top:4px; }
+  .field-lab{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:0 4px; font:500 10px var(--mono); letter-spacing:0.14em; color:var(--ink-faint);
+  }
+  .field-lab > *{ white-space:nowrap }
+  .field-lab .count{ font-variant-numeric:tabular-nums; color:var(--ink-faint) }
+  .field-lab .count b{ color:var(--ink-dim); font-weight:500 }
+  .input{
+    height:60px; border-radius:16px;
+    background:var(--panel-solid); border:1px solid var(--line);
+    color:var(--ink); padding:0 18px;
+    display:flex; align-items:center; gap:6px;
+    transition:border-color .2s, box-shadow .2s;
+  }
+  .input .at{ font:500 22px var(--sans); color:var(--ink-faint) }
+  .input .ct{ flex:1; min-width:0; font:500 22px var(--sans); letter-spacing:-0.005em;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .input .icr{ flex:none; color:var(--ink-faint); width:22px; height:22px; display:grid; place-items:center }
+  .input[data-state="focus"]{ border-color:var(--accent); box-shadow:0 0 0 4px rgba(62,167,255,0.08) }
+  .input[data-state="focus"] .at{ color:var(--accent) }
+  .input[data-state="available"]{ border-color:rgba(62,167,255,0.4) }
+  .input[data-state="available"] .icr{ color:var(--accent) }
+  .input .cursor{ width:2px; height:24px; background:var(--accent);
+    margin-left:1px; animation:blink 1s steps(1) infinite }
+  @keyframes blink{ 50%{ opacity:0 } }
+  .help{ font:500 11px var(--mono); letter-spacing:0.04em; padding:0 4px; line-height:1.5 }
+  .help[data-tone="dim"]{ color:var(--ink-faint) }
+  .help[data-tone="ok"]{ color:var(--accent) }
+  .help b{ color:var(--ink); font-weight:500 }
+
+  .currentH{
+    margin-top:auto; padding:12px 14px; border-radius:12px;
+    background:rgba(255,255,255,0.025); border:1px solid var(--line);
+    display:flex; align-items:center; gap:12px;
+  }
+  .currentH .lbl{ font:500 9.5px var(--mono); letter-spacing:0.16em; color:var(--ink-faint) }
+  .currentH .h{ font:500 14px var(--sans); color:var(--ink); letter-spacing:-0.005em }
+  .currentH .h .at{ color:var(--ink-dim) }
+  .currentH .gap{ flex:1 }
+  .currentH .pip{
+    font:500 8.5px var(--mono); letter-spacing:0.16em; color:var(--ink-faint);
+    padding:4px 7px; border-radius:5px; border:1px solid var(--line-2); background:rgba(255,255,255,0.03);
+    white-space:nowrap; flex:none;
+  }
+
+  .foot{
+    position:absolute; left:0; right:0; bottom:0; z-index:6;
+    padding:14px 22px calc(28px + env(safe-area-inset-bottom, 0px));
+    background:linear-gradient(180deg, rgba(7,8,9,0) 0%, var(--bg) 30%);
+  }
+  .btn-primary{
+    height:54px; border-radius:20px; border:0; width:100%;
+    background:var(--accent); color:#0a0c10;
+    font:600 15px var(--sans); cursor:pointer; font-family:var(--sans);
+    box-shadow:0 0 30px rgba(62,167,255,0.18);
+  }
+  .btn-primary[disabled]{ opacity:0.32; box-shadow:none; cursor:not-allowed }
+  .btn-secondary{
+    height:54px; border-radius:20px; width:100%;
+    background:var(--panel-hi); border:1px solid var(--line-2); color:var(--ink);
+    font:600 14px var(--sans); cursor:pointer; font-family:var(--sans);
+  }
+
+  /* ── Frame 3 (Warning / confirm) ── */
+  .swap-card{
+    margin-top:6px;
+    padding:18px; border-radius:18px;
+    background:linear-gradient(180deg, rgba(62,167,255,0.06), rgba(62,167,255,0.01));
+    border:1px solid rgba(62,167,255,0.28);
+    display:flex; align-items:center; gap:14px;
+  }
+  .swap-card .pair{ flex:1; display:flex; flex-direction:column; gap:2px; min-width:0 }
+  .swap-card .pair .l{ font:500 9px var(--mono); letter-spacing:0.18em; color:var(--ink-faint) }
+  .swap-card .pair .h{
+    font:600 18px var(--sans); letter-spacing:-0.01em; color:var(--ink);
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+  .swap-card .pair .h.old{ color:var(--ink-dim); text-decoration:line-through; text-decoration-color:var(--line-2) }
+  .swap-card .pair .h .at{ color:var(--accent) }
+  .swap-card .arr{ color:var(--accent); flex:none; padding:0 2px }
+  .swap-card .arr svg{ width:20px; height:20px }
+
+  .info-list{
+    border-radius:16px; overflow:hidden;
+    background:var(--panel-solid); border:1px solid var(--line);
+  }
+  .info-row{
+    padding:14px 16px; display:grid; grid-template-columns:30px 1fr; gap:12px;
+    border-top:1px solid var(--line);
+  }
+  .info-row:first-child{ border-top:0 }
+  .info-row .badge{
+    width:30px; height:30px; border-radius:50%;
+    display:grid; place-items:center; flex:none;
+  }
+  .info-row[data-tone="keep"] .badge{
+    background:rgba(62,167,255,0.1); border:1px solid rgba(62,167,255,0.32); color:var(--accent);
+  }
+  .info-row[data-tone="change"] .badge{
+    background:rgba(255,159,40,0.1); border:1px solid rgba(255,159,40,0.32); color:var(--warn);
+  }
+  .info-row[data-tone="hold"] .badge{
+    background:rgba(255,255,255,0.04); border:1px solid var(--line-2); color:var(--ink-dim);
+  }
+  .info-row .badge svg{ width:13px; height:13px }
+  .info-row .col{ display:flex; flex-direction:column; gap:5px; min-width:0 }
+  .info-row .t{ font:600 13px var(--sans); color:var(--ink); letter-spacing:-0.005em }
+  .info-row .d{ font:500 11.5px/1.5 var(--sans); color:var(--ink-dim); text-wrap:pretty; }
+  .info-row .d b{ color:var(--ink); font-weight:500 }
+
+  .cooldown-pill{
+    align-self:flex-start; margin-top:2px;
+    display:inline-flex; align-items:center; gap:7px;
+    padding:7px 11px 7px 9px; border-radius:999px;
+    background:rgba(255,255,255,0.04); border:1px solid var(--line-2);
+    color:var(--ink-dim); font:500 10px var(--mono); letter-spacing:0.12em;
+  }
+  .cooldown-pill svg{ width:11px; height:11px; color:var(--ink-dim) }
+
+  /* ── Frame 4 (Success) ── */
+  .success{
+    position:absolute; inset:0;
+    display:flex; flex-direction:column;
+    background:
+      radial-gradient(80% 50% at 50% 18%, rgba(62,167,255,0.15), transparent 70%),
+      var(--bg);
+  }
+  .success-top{
+    position:absolute; top:64px; left:0; right:0; z-index:5;
+    padding:0 16px; height:44px;
+    display:grid; grid-template-columns:36px 1fr 36px; align-items:center;
+  }
+  .success-body{
+    position:absolute; top:140px; left:0; right:0;
+    padding:0 28px;
+    display:flex; flex-direction:column; gap:14px; align-items:center; text-align:center;
+  }
+  .success-glyph{
+    width:72px; height:72px; border-radius:50%;
+    background:rgba(62,167,255,0.1); border:1px solid rgba(62,167,255,0.4);
+    color:var(--accent); display:grid; place-items:center;
+    box-shadow:0 0 50px rgba(62,167,255,0.25);
+  }
+  .success-glyph svg{ width:34px; height:34px }
+  .success-h{ font:600 28px/1.15 var(--sans); letter-spacing:-0.025em; margin:0; text-wrap:balance }
+  .success-d{ font:500 14px/1.55 var(--sans); color:var(--ink-dim); margin:0; max-width:320px; text-wrap:pretty }
+  .success-d b{ color:var(--ink); font-weight:500 }
+  .new-h{
+    font:600 36px var(--sans); letter-spacing:-0.025em; color:var(--ink);
+    margin:6px 0 -4px;
+  }
+  .new-h .at{ color:var(--accent) }
+  .id-anchor{
+    margin-top:8px; padding:11px 13px; border-radius:12px;
+    background:rgba(255,255,255,0.025); border:1px solid var(--line);
+    display:flex; align-items:center; gap:10px; max-width:300px;
+  }
+  .id-anchor .ic{
+    width:26px; height:26px; border-radius:50%;
+    background:rgba(62,167,255,0.08); border:1px solid rgba(62,167,255,0.28);
+    color:var(--accent); display:grid; place-items:center; flex:none;
+  }
+  .id-anchor .ic svg{ width:13px; height:13px }
+  .id-anchor .t{ font:500 11px/1.45 var(--sans); color:var(--ink-dim); text-align:left }
+  .id-anchor .t b{ color:var(--ink); font-weight:500 }
+
+  /* Share preview */
+  .share-prev{
+    margin-top:12px; padding:14px;
+    border-radius:16px; background:var(--panel-solid); border:1px solid var(--line);
+    display:flex; flex-direction:column; gap:10px; text-align:left; max-width:340px; width:100%;
+  }
+  .share-prev .lbl{ font:500 9.5px var(--mono); letter-spacing:0.16em; color:var(--ink-faint) }
+  .share-prev .msg{
+    padding:11px 13px; border-radius:12px;
+    background:rgba(62,167,255,0.06); border:1px solid rgba(62,167,255,0.18);
+    font:500 12.5px/1.5 var(--sans); color:var(--ink); text-wrap:pretty;
+  }
+  .share-prev .msg .at{ color:var(--accent); font-weight:500 }
+  .share-prev .msg .old{ color:var(--ink-dim); text-decoration:line-through; text-decoration-color:var(--line-2) }
+
+  .success-foot{
+    position:absolute; left:0; right:0; bottom:0;
+    padding:14px 22px calc(28px + env(safe-area-inset-bottom, 0px));
+    background:linear-gradient(180deg, rgba(7,8,9,0) 0%, var(--bg) 30%);
+    display:flex; flex-direction:column; gap:8px;
+  }
+</style>
+</head>
+<body>
+
+<div class="pageh">
+  <div class="meta">WRLD · ACCOUNT SETTINGS · NEW FLOW</div>
+  <h1>Change handle</h1>
+  <p>Four screens. Settings entry → change input (same component as onboarding step 3) → consequences-and-confirm → success with share. Tone is informative, not alarming. Identity-model framing carried through: <b>handle changes, account stays.</b></p>
+</div>
+
+<div class="canvas">
+
+  <!-- ───────── Frame 1 — Settings entry point ───────── -->
+  <div class="frame">
+    <div class="lab"><span class="num">01</span><b>SETTINGS · ENTRY POINT</b></div>
+    <div class="phone">
+      <div class="notch"></div><div class="home"></div>
+      <div class="statusbar">
+        <span>9:41</span>
+        <span class="icns">
+          <svg width="19" height="12" viewBox="0 0 19 12"><rect x="0" y="7.5" width="3.2" height="4.5" rx="0.7" fill="#fff"/><rect x="4.8" y="5" width="3.2" height="7" rx="0.7" fill="#fff"/><rect x="9.6" y="2.5" width="3.2" height="9.5" rx="0.7" fill="#fff"/><rect x="14.4" y="0" width="3.2" height="12" rx="0.7" fill="#fff"/></svg>
+          <svg width="27" height="13" viewBox="0 0 27 13"><rect x="0.5" y="0.5" width="23" height="12" rx="3.5" stroke="#fff" stroke-opacity="0.4" fill="none"/><rect x="2" y="2" width="20" height="9" rx="2" fill="#fff"/></svg>
+        </span>
+      </div>
+      <div class="topbar">
+        <button class="iconbtn" aria-label="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+        <div>
+          <div class="title">Account</div>
+          <div class="sub">SETTINGS</div>
+        </div>
+        <span></span>
+      </div>
+      <div class="settings-body">
+
+        <div class="sec-h">IDENTITY</div>
+        <div class="set-card">
+          <div class="set-row highlight">
+            <span class="ic">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+            </span>
+            <div class="col">
+              <span class="t">Handle</span>
+              <span class="v"><span class="at">@</span>kai.dc</span>
+              <span class="pillID"><span style="opacity:0.6">ACCT</span><b>· 0042-887-1156</b></span>
+            </div>
+            <span class="arr">›</span>
+          </div>
+          <div class="set-row">
+            <span class="ic">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M5 21a7 7 0 0 1 14 0"/></svg>
+            </span>
+            <div class="col">
+              <span class="t">Display name</span>
+              <span class="v">Kai Studio</span>
+            </div>
+            <span class="arr">›</span>
+          </div>
+          <div class="set-row">
+            <span class="ic">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>
+            </span>
+            <div class="col">
+              <span class="t">Email</span>
+              <span class="v"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="eb808a82ab989f9e8f8284c58f88">[email&#160;protected]</a></span>
+            </div>
+            <span class="arr">›</span>
+          </div>
+        </div>
+
+        <div class="sec-h">VERIFICATION</div>
+        <div class="set-card">
+          <div class="set-row">
+            <span class="ic" style="color:var(--accent); border-color:rgba(62,167,255,0.32); background:rgba(62,167,255,0.06)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg>
+            </span>
+            <div class="col">
+              <span class="t">Identity verified</span>
+              <span class="v">ANCHORED TO ACCT 0042-887-1156</span>
+              <span style="display:none"></span>
+            </div>
+            <span class="arr">›</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ───────── Frame 2 — Change handle screen ───────── -->
+  <div class="frame">
+    <div class="lab"><span class="num">02</span><b>CHANGE HANDLE · PREFILLED</b></div>
+    <div class="phone">
+      <div class="notch"></div><div class="home"></div>
+      <div class="statusbar">
+        <span>9:41</span>
+        <span class="icns">
+          <svg width="19" height="12" viewBox="0 0 19 12"><rect x="0" y="7.5" width="3.2" height="4.5" rx="0.7" fill="#fff"/><rect x="4.8" y="5" width="3.2" height="7" rx="0.7" fill="#fff"/><rect x="9.6" y="2.5" width="3.2" height="9.5" rx="0.7" fill="#fff"/><rect x="14.4" y="0" width="3.2" height="12" rx="0.7" fill="#fff"/></svg>
+          <svg width="27" height="13" viewBox="0 0 27 13"><rect x="0.5" y="0.5" width="23" height="12" rx="3.5" stroke="#fff" stroke-opacity="0.4" fill="none"/><rect x="2" y="2" width="20" height="9" rx="2" fill="#fff"/></svg>
+        </span>
+      </div>
+      <div class="topbar">
+        <button class="iconbtn" aria-label="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+        <div>
+          <div class="title">Change handle</div>
+          <div class="sub">STEP 1 OF 2</div>
+        </div>
+        <span></span>
+      </div>
+      <div class="body">
+        <h2 class="h1">Pick a new handle</h2>
+        <p class="d1">Same rules as before. Same availability check. <b>Your followers, history, and verification</b> stay with your account.</p>
+
+        <div class="field">
+          <div class="field-lab"><span>NEW HANDLE</span><span class="count"><b>9</b> / 20</span></div>
+          <div class="input" data-state="available">
+            <span class="at">@</span>
+            <span class="ct">kaistudio</span>
+            <span class="icr"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg></span>
+          </div>
+          <span class="help" data-tone="ok"><b>@KAISTUDIO</b> IS AVAILABLE</span>
+        </div>
+        <span class="help" data-tone="dim" style="margin-top:4px">3–20 CHARACTERS · LETTERS, NUMBERS, UNDERSCORES</span>
+
+        <div class="currentH">
+          <span class="lbl">CURRENT</span>
+          <span class="h"><span class="at">@</span>kai.dc</span>
+          <span class="gap"></span>
+          <span class="pip">SINCE MAR 2024</span>
+        </div>
+      </div>
+      <div class="foot">
+        <button class="btn-primary">Review change</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───────── Frame 3 — Confirm / consequences ───────── -->
+  <div class="frame">
+    <div class="lab"><span class="num">03</span><b>BEFORE YOU CONFIRM · WHAT CHANGES</b></div>
+    <div class="phone">
+      <div class="notch"></div><div class="home"></div>
+      <div class="statusbar">
+        <span>9:41</span>
+        <span class="icns">
+          <svg width="19" height="12" viewBox="0 0 19 12"><rect x="0" y="7.5" width="3.2" height="4.5" rx="0.7" fill="#fff"/><rect x="4.8" y="5" width="3.2" height="7" rx="0.7" fill="#fff"/><rect x="9.6" y="2.5" width="3.2" height="9.5" rx="0.7" fill="#fff"/><rect x="14.4" y="0" width="3.2" height="12" rx="0.7" fill="#fff"/></svg>
+          <svg width="27" height="13" viewBox="0 0 27 13"><rect x="0.5" y="0.5" width="23" height="12" rx="3.5" stroke="#fff" stroke-opacity="0.4" fill="none"/><rect x="2" y="2" width="20" height="9" rx="2" fill="#fff"/></svg>
+        </span>
+      </div>
+      <div class="topbar">
+        <button class="iconbtn" aria-label="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+        <div>
+          <div class="title">Review the change</div>
+          <div class="sub">STEP 2 OF 2</div>
+        </div>
+        <span></span>
+      </div>
+      <div class="body" style="bottom:120px; gap:12px">
+
+        <div class="swap-card">
+          <div class="pair">
+            <span class="l">FROM</span>
+            <span class="h old"><span class="at">@</span>kai.dc</span>
+          </div>
+          <span class="arr">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </span>
+          <div class="pair">
+            <span class="l">TO</span>
+            <span class="h"><span class="at">@</span>kaistudio</span>
+          </div>
+        </div>
+
+        <div class="info-list">
+          <div class="info-row" data-tone="keep">
+            <span class="badge">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg>
+            </span>
+            <div class="col">
+              <span class="t">Stays with you</span>
+              <span class="d">Followers, follow lists, past streams, saved content, verification, and your <b>internal account identity</b>. None of it moves.</span>
+            </div>
+          </div>
+          <div class="info-row" data-tone="change">
+            <span class="badge">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18h.01"/></svg>
+            </span>
+            <div class="col">
+              <span class="t">What's different</span>
+              <span class="d">@-mentions and search switch over to <b>@kaistudio</b>. Old @-mentions in past comments and chats <b>won't link to you anymore</b> — anyone who knew you only by your old handle may not find you until you tell them.</span>
+            </div>
+          </div>
+          <div class="info-row" data-tone="hold">
+            <span class="badge">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+            </span>
+            <div class="col">
+              <span class="t">Your old handle is held for you</span>
+              <span class="d"><b>@kai.dc</b> enters a <b>30-day holding period</b>. No one else can claim it during that window — that's our protection against impersonation.</span>
+            </div>
+          </div>
+        </div>
+
+        <span class="cooldown-pill">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+          ONE CHANGE EVERY 30 DAYS
+        </span>
+      </div>
+      <div class="foot">
+        <button class="btn-primary">Confirm change to @kaistudio</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───────── Frame 4 — Success ───────── -->
+  <div class="frame">
+    <div class="lab"><span class="num">04</span><b>SUCCESS · LET PEOPLE KNOW</b></div>
+    <div class="phone">
+      <div class="notch"></div><div class="home"></div>
+      <div class="statusbar">
+        <span>9:41</span>
+        <span class="icns">
+          <svg width="19" height="12" viewBox="0 0 19 12"><rect x="0" y="7.5" width="3.2" height="4.5" rx="0.7" fill="#fff"/><rect x="4.8" y="5" width="3.2" height="7" rx="0.7" fill="#fff"/><rect x="9.6" y="2.5" width="3.2" height="9.5" rx="0.7" fill="#fff"/><rect x="14.4" y="0" width="3.2" height="12" rx="0.7" fill="#fff"/></svg>
+          <svg width="27" height="13" viewBox="0 0 27 13"><rect x="0.5" y="0.5" width="23" height="12" rx="3.5" stroke="#fff" stroke-opacity="0.4" fill="none"/><rect x="2" y="2" width="20" height="9" rx="2" fill="#fff"/></svg>
+        </span>
+      </div>
+      <div class="success">
+        <div class="success-top">
+          <span></span>
+          <div>
+            <div class="title" style="font:600 14px var(--sans); text-align:center; color:var(--ink); letter-spacing:-0.005em">Done</div>
+          </div>
+          <button class="iconbtn" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        </div>
+        <div class="success-body">
+          <span class="success-glyph">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg>
+          </span>
+          <h2 class="success-h">You're <span style="color:var(--accent)">@kaistudio</span> now</h2>
+          <p class="success-d">Your new handle is live. Everyone who follows you came along.</p>
+          <div class="id-anchor">
+            <span class="ic">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/></svg>
+            </span>
+            <span class="t">Same account underneath. <b>ACCT 0042-887-1156</b> · verification intact</span>
+          </div>
+
+          <div class="share-prev">
+            <span class="lbl">QUICK SHARE — PRE-FILLED</span>
+            <div class="msg">Heads up — I changed my Wrld handle. <span class="old">@kai.dc</span> is now <span class="at">@kaistudio</span>. Same me, same streams.</div>
+          </div>
+        </div>
+        <div class="success-foot">
+          <button class="btn-primary">
+            <span style="display:inline-flex; align-items:center; gap:8px; justify-content:center; width:100%">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8h16v-8M16 6l-4-4-4 4M12 2v14"/></svg>
+              Let people know
+            </span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script></body>
+</html>

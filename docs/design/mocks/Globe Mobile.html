@@ -1,0 +1,729 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Wrld — mobile</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#070809; --bg-2:#0c0e11;
+    --panel:rgba(18,20,24,0.72); --panel-solid:#121418;
+    --line:rgba(255,255,255,0.08); --line-2:rgba(255,255,255,0.14);
+    --ink:#ece9e2; --ink-dim:rgba(236,233,226,0.58); --ink-faint:rgba(236,233,226,0.34);
+    --dot:#3ea7ff; --dot-hot:#7fd0ff; --dot-glow:rgba(62,167,255,0.55);
+    --live:#ff4d4d;
+    --sans:"Inter Tight", ui-sans-serif, system-ui, sans-serif;
+    --mono:"JetBrains Mono", ui-monospace, monospace;
+  }
+  html[data-theme="light"]{
+    --bg:#efece4; --bg-2:#e7e3d8;
+    --panel:rgba(255,252,245,0.82); --panel-solid:#fbf8f1;
+    --line:rgba(20,18,14,0.10); --line-2:rgba(20,18,14,0.18);
+    --ink:#171512; --ink-dim:rgba(23,21,18,0.62); --ink-faint:rgba(23,21,18,0.38);
+    --dot:#1f4ed8; --dot-hot:#2f6bff; --dot-glow:rgba(31,78,216,0.35);
+    --live:#c8301f;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:#0a0a0b;font-family:var(--sans);-webkit-font-smoothing:antialiased;color:#eee}
+  body{display:grid;place-items:center;overflow:hidden}
+
+  /* Inside-phone styles */
+  .phone-root{
+    width:402px; height:874px; position:relative;
+    background:radial-gradient(900px 700px at 50% 55%, var(--bg-2) 0%, var(--bg) 75%);
+    color:var(--ink); overflow:hidden;
+    font-family:var(--sans);
+  }
+  html[data-theme="light"] .phone-root{background:radial-gradient(900px 700px at 50% 55%, #f4f1e8 0%, var(--bg) 75%)}
+
+  /* Top strip — below dynamic island */
+  .topstrip{
+    position:absolute; top:58px; left:0; right:0; padding:0 14px; z-index:30;
+    display:flex; gap:8px; align-items:center;
+  }
+  .brand{
+    display:flex;align-items:center;gap:8px;font-weight:600;font-size:14px;letter-spacing:-0.01em;
+  }
+  .brand .mark{width:18px;height:18px;border:1.5px solid currentColor;border-radius:50%;position:relative}
+  .brand .mark::before,.brand .mark::after{content:"";position:absolute;inset:0;border:1.5px solid currentColor;border-radius:50%}
+  .brand .mark::before{transform:scaleX(0.35)} .brand .mark::after{transform:scaleY(0.35)}
+  .livepill{
+    margin-left:auto; display:inline-flex;align-items:center;gap:6px;
+    font-family:var(--mono);font-size:10px;letter-spacing:0.1em;color:var(--ink-dim);
+    padding:6px 10px;border:1px solid var(--line);border-radius:999px;background:var(--panel);
+    backdrop-filter:blur(8px);
+  }
+  .livepill .d{width:6px;height:6px;border-radius:50%;background:var(--live);box-shadow:0 0 8px var(--live);animation:pulse 1.6s infinite}
+  @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.55;transform:scale(.7)}}
+
+  /* Search */
+  .search{
+    position:absolute; top:94px; left:14px; right:14px; z-index:30;
+    display:flex;align-items:center;gap:8px;
+    background:var(--panel);border:1px solid var(--line);border-radius:999px;
+    padding:10px 14px; backdrop-filter:blur(10px);
+  }
+  .search svg{opacity:.6;flex:none}
+  .search input{flex:1;background:none;border:0;outline:0;color:var(--ink);font:500 14px var(--sans)}
+  .search input::placeholder{color:var(--ink-faint)}
+
+  /* Category chip row */
+  .cats{
+    position:absolute; top:144px; left:0; right:0; z-index:30;
+    display:flex; gap:6px; overflow-x:auto; padding:2px 14px 4px;
+    -webkit-overflow-scrolling:touch;
+  }
+  .cats::-webkit-scrollbar{display:none}
+  .cat{
+    flex:none; font:500 12px var(--sans); color:var(--ink-dim);
+    padding:7px 12px; border-radius:999px; border:1px solid var(--line);
+    background:var(--panel); backdrop-filter:blur(8px); cursor:pointer;
+    white-space:nowrap;
+  }
+  .cat[aria-pressed="true"]{color:var(--bg); background:var(--ink); border-color:var(--ink)}
+
+  /* Globe canvas stage */
+  #stage{position:absolute; left:0; right:0; top:0; bottom:0; width:402px; height:874px; z-index:1; touch-action:none; overflow:hidden}
+  #globe,#dots{position:absolute; inset:0; width:100%; height:100%}
+  #dots{pointer-events:none}
+
+  /* HUD — bottom of globe area */
+  .hud{
+    position:absolute; left:14px; right:14px; bottom:220px; z-index:25;
+    display:flex; justify-content:space-between; align-items:end;
+    font-family:var(--mono); color:var(--ink-faint); font-size:10px; letter-spacing:0.08em;
+    pointer-events:none;
+  }
+  .hud .coords{display:grid;grid-template-columns:auto auto;gap:1px 10px;
+    background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:6px 8px;
+    backdrop-filter:blur(8px);
+  }
+  .hud .coords b{color:var(--ink);font-weight:500}
+  .hud .zoom{
+    display:flex; flex-direction:column; gap:4px; pointer-events:auto;
+  }
+  .hud .zoom button{
+    width:32px;height:32px; border-radius:10px; border:1px solid var(--line);
+    background:var(--panel); color:var(--ink); font:500 16px var(--sans); backdrop-filter:blur(8px);
+  }
+
+  /* Bottom sheet: trending */
+  .sheet{
+    position:absolute; left:0; right:0; bottom:34px; z-index:28;
+    background:var(--panel); backdrop-filter:blur(16px);
+    border-top:1px solid var(--line);
+    border-top-left-radius:20px; border-top-right-radius:20px;
+    padding:8px 14px 14px;
+    height:196px;
+  }
+  .sheet .grip{width:38px;height:4px;border-radius:4px;background:var(--line-2);margin:4px auto 8px}
+  .sheet .head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+  .sheet .head h4{margin:0;font:500 11px var(--mono);letter-spacing:0.14em;color:var(--ink-faint);text-transform:uppercase}
+  .sheet .head .more{font:500 12px var(--sans);color:var(--ink-dim)}
+  .sheet .scroll{display:flex;gap:10px;overflow-x:auto;padding-bottom:4px}
+  .sheet .scroll::-webkit-scrollbar{display:none}
+  .card{
+    flex:none; width:158px; border-radius:12px; overflow:hidden;
+    background:var(--bg-2); border:1px solid var(--line); cursor:pointer;
+  }
+  .card .thumb{
+    height:88px; position:relative;
+    background:
+      repeating-linear-gradient(135deg, rgba(255,255,255,0.04) 0 6px, rgba(255,255,255,0.08) 6px 12px),
+      linear-gradient(180deg,#0f1318,#181d24);
+  }
+  html[data-theme="light"] .card .thumb{background:repeating-linear-gradient(135deg,#c4baa2 0 6px,#b9af95 6px 12px)}
+  .card .thumb .live{
+    position:absolute;top:8px;left:8px;
+    background:var(--live);color:#fff;font:600 9px var(--mono);letter-spacing:0.14em;
+    padding:2px 5px;border-radius:3px;
+  }
+  .card .thumb .viewers{
+    position:absolute;bottom:6px;right:8px;
+    font:500 10px var(--mono);color:rgba(255,255,255,0.85);
+    text-shadow:0 1px 2px rgba(0,0,0,0.6);
+  }
+  .card .meta{padding:8px 10px 10px}
+  .card .title{font:600 12px var(--sans);letter-spacing:-0.005em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--ink)}
+  .card .city{font:500 10px var(--mono);color:var(--ink-faint);letter-spacing:0.06em;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+  /* Full-screen feed takeover (inside phone) */
+  .takeover{
+    position:absolute; inset:0; z-index:80;
+    background:#000; display:none; opacity:0; transition:opacity .25s;
+  }
+  .takeover.on{display:block; opacity:1}
+  .takeover .video{
+    position:absolute; inset:0;
+    background:
+      repeating-linear-gradient(135deg, rgba(255,255,255,0.025) 0 14px, rgba(255,255,255,0.055) 14px 28px),
+      radial-gradient(80% 60% at 50% 45%, #11161c 0%, #05070a 80%);
+  }
+  .takeover .noise{position:absolute;inset:0;opacity:.1;mix-blend-mode:overlay;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='0.7'/></svg>")}
+  .takeover .scan{position:absolute;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.35),transparent);animation:scan 5s linear infinite}
+  @keyframes scan{0%{top:-2px}100%{top:102%}}
+  .takeover .top{
+    position:absolute; top:58px; left:14px; right:14px; z-index:2;
+    display:flex; align-items:center; gap:10px;
+  }
+  .takeover .close{
+    width:36px;height:36px;border-radius:50%;border:0;
+    background:rgba(0,0,0,0.4);color:#fff;backdrop-filter:blur(10px);cursor:pointer;
+    display:grid;place-items:center;
+  }
+  .takeover .tag{
+    display:inline-flex;align-items:center;gap:8px;
+    font-family:var(--mono);font-size:10px;color:#fff;letter-spacing:0.1em;
+  }
+  .takeover .tag .live{background:var(--live);color:#fff;padding:3px 6px;border-radius:3px;font-weight:600}
+  .takeover .time{margin-left:auto;font-family:var(--mono);font-size:10px;color:rgba(255,255,255,0.7)}
+
+  .takeover .lower{
+    position:absolute; left:14px; right:14px; bottom:140px; color:#fff;
+  }
+  .takeover .lower h1{
+    margin:0; font:600 26px/1.1 var(--sans); letter-spacing:-0.02em;
+  }
+  .takeover .lower .sub{margin-top:5px;font:500 11px var(--mono);color:rgba(255,255,255,0.65);letter-spacing:0.06em}
+  .takeover .lower .stats{display:flex;gap:14px;margin-top:10px;font:500 11px var(--mono);color:rgba(255,255,255,0.7)}
+  .takeover .lower .stats b{color:#fff;font-weight:600}
+
+  .takeover .actions{
+    position:absolute; left:14px; right:14px; bottom:50px;
+    display:flex; gap:8px;
+  }
+  .takeover .actions button{
+    flex:1; height:44px; border-radius:12px; border:1px solid rgba(255,255,255,0.16);
+    background:rgba(255,255,255,0.08); color:#fff; font:600 13px var(--sans);
+    backdrop-filter:blur(10px);
+  }
+  .takeover .actions .primary{background:#fff;color:#111;border-color:#fff}
+
+  /* Hover card (desktop debug — rare on mobile) */
+  .hovercard{position:absolute;z-index:70;pointer-events:none;opacity:0;transition:opacity .12s;
+    background:var(--panel-solid);border:1px solid var(--line-2);border-radius:10px;padding:8px 10px;min-width:170px}
+  .hovercard.on{opacity:1}
+  .hovercard .t{font:600 12px var(--sans)} .hovercard .m{font:400 10px var(--mono);color:var(--ink-faint);margin-top:2px}
+</style>
+</head>
+<body>
+
+<!-- Outer stage holds the iOS frame centered -->
+<div id="outer" style="width:100%;height:100%;display:grid;place-items:center"></div>
+
+<!-- Scripts: React + Babel + iOS frame -->
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" data-presets="react">
+  // Minimal inline iOS frame (no external fetch race).
+  function IOSStatusBar({ dark }) {
+    const c = dark ? '#fff' : '#000';
+    return (
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',
+        padding:'21px 34px 19px', position:'relative', zIndex:20, width:'100%', boxSizing:'border-box'}}>
+        <span style={{fontFamily:'-apple-system,system-ui',fontWeight:590,fontSize:17,color:c}}>9:41</span>
+        <div style={{display:'flex',alignItems:'center',gap:7}}>
+          <svg width="19" height="12" viewBox="0 0 19 12"><rect x="0" y="7.5" width="3.2" height="4.5" rx="0.7" fill={c}/><rect x="4.8" y="5" width="3.2" height="7" rx="0.7" fill={c}/><rect x="9.6" y="2.5" width="3.2" height="9.5" rx="0.7" fill={c}/><rect x="14.4" y="0" width="3.2" height="12" rx="0.7" fill={c}/></svg>
+          <svg width="17" height="12" viewBox="0 0 17 12"><path d="M8.5 3.2C10.8 3.2 12.9 4.1 14.4 5.6L15.5 4.5C13.7 2.7 11.2 1.5 8.5 1.5C5.8 1.5 3.3 2.7 1.5 4.5L2.6 5.6C4.1 4.1 6.2 3.2 8.5 3.2Z" fill={c}/><path d="M8.5 6.8C9.9 6.8 11.1 7.3 12 8.2L13.1 7.1C11.8 5.9 10.2 5.1 8.5 5.1C6.8 5.1 5.2 5.9 3.9 7.1L5 8.2C5.9 7.3 7.1 6.8 8.5 6.8Z" fill={c}/><circle cx="8.5" cy="10.5" r="1.5" fill={c}/></svg>
+          <svg width="27" height="13" viewBox="0 0 27 13"><rect x="0.5" y="0.5" width="23" height="12" rx="3.5" stroke={c} strokeOpacity="0.35" fill="none"/><rect x="2" y="2" width="20" height="9" rx="2" fill={c}/><path d="M25 4.5V8.5C25.8 8.2 26.5 7.2 26.5 6.5C26.5 5.8 25.8 4.8 25 4.5Z" fill={c} fillOpacity="0.4"/></svg>
+        </div>
+      </div>
+    );
+  }
+  function IOSDevice({ children, width=402, height=874, dark=true }) {
+    return (
+      <div style={{
+        width, height, borderRadius:48, overflow:'hidden',
+        position:'relative', background: dark ? '#000' : '#F2F2F7',
+        boxShadow:'0 40px 80px rgba(0,0,0,0.35), 0 0 0 1px rgba(0,0,0,0.5)',
+        fontFamily:'-apple-system, system-ui, sans-serif',
+      }}>
+        <div style={{position:'absolute',top:11,left:'50%',transform:'translateX(-50%)',width:126,height:37,borderRadius:24,background:'#000',zIndex:50}}/>
+        <div style={{position:'absolute',top:0,left:0,right:0,zIndex:10}}><IOSStatusBar dark={dark}/></div>
+        <div style={{position:'absolute',inset:0}}>{children}</div>
+        <div style={{position:'absolute',bottom:0,left:0,right:0,zIndex:60,height:34,display:'flex',justifyContent:'center',alignItems:'flex-end',paddingBottom:8,pointerEvents:'none'}}>
+          <div style={{width:139,height:5,borderRadius:100,background:dark?'rgba(255,255,255,0.7)':'rgba(0,0,0,0.25)'}}/>
+        </div>
+      </div>
+    );
+  }
+
+  function fitPhone(){
+    const vh = window.innerHeight, vw = window.innerWidth;
+    const scale = Math.min(vw/(402+40), vh/(874+40), 1);
+    return { scale };
+  }
+  function Shell(){
+    const [s, setS] = React.useState(fitPhone());
+    React.useEffect(()=>{ const on=()=>setS(fitPhone()); window.addEventListener("resize",on); return ()=>window.removeEventListener("resize",on); },[]);
+    return (
+      <div style={{ transform:`scale(${s.scale})`, transformOrigin:"center" }}>
+        <IOSDevice width={402} height={874} dark={true}>
+          <div id="phone" className="phone-root"></div>
+        </IOSDevice>
+      </div>
+    );
+  }
+  ReactDOM.createRoot(document.getElementById("outer")).render(<Shell/>);
+</script>
+
+<!-- App — mounted into #phone after React renders -->
+<script>
+  // Data (trimmed seed set)
+  window.CATEGORIES = [
+    {id:"all",label:"All"},{id:"city",label:"Cities"},{id:"weather",label:"Weather"},
+    {id:"nature",label:"Nature"},{id:"events",label:"Events"},{id:"landmark",label:"Landmarks"}
+  ];
+  window.SEED_FEEDS = [
+    {city:"New York",country:"USA",lat:40.71,lon:-74.00,cat:"city",title:"Times Square · 7th Ave",chan:"CH 12",viewers:18400,hot:true},
+    {city:"San Francisco",country:"USA",lat:37.77,lon:-122.42,cat:"landmark",title:"Golden Gate overlook",chan:"CH 08",viewers:9120},
+    {city:"Chicago",country:"USA",lat:41.88,lon:-87.63,cat:"weather",title:"Lake Michigan — storm cell",chan:"CH 21",viewers:3400,hot:true},
+    {city:"Mexico City",country:"Mexico",lat:19.43,lon:-99.13,cat:"city",title:"Zócalo plaza",chan:"CH 17",viewers:6880},
+    {city:"Rio de Janeiro",country:"Brazil",lat:-22.91,lon:-43.17,cat:"landmark",title:"Copacabana · sunrise",chan:"CH 14",viewers:11200,hot:true},
+    {city:"Buenos Aires",country:"Argentina",lat:-34.60,lon:-58.38,cat:"city",title:"Obelisco · 9 de Julio",chan:"CH 22",viewers:3320},
+    {city:"London",country:"UK",lat:51.51,lon:-0.13,cat:"landmark",title:"Westminster · Thames",chan:"CH 02",viewers:22800,hot:true},
+    {city:"Paris",country:"France",lat:48.86,lon:2.35,cat:"landmark",title:"Trocadéro — tower view",chan:"CH 03",viewers:19500,hot:true},
+    {city:"Berlin",country:"Germany",lat:52.52,lon:13.40,cat:"events",title:"Brandenburger Tor · protest",chan:"CH 05",viewers:8420,hot:true},
+    {city:"Reykjavík",country:"Iceland",lat:64.13,lon:-21.82,cat:"nature",title:"Aurora · north-facing",chan:"CH 41",viewers:6400,hot:true},
+    {city:"Istanbul",country:"Türkiye",lat:41.01,lon:28.98,cat:"city",title:"Bosphorus · ferry pier",chan:"CH 27",viewers:3820},
+    {city:"Cairo",country:"Egypt",lat:30.04,lon:31.24,cat:"landmark",title:"Giza plateau — east face",chan:"CH 06",viewers:4520},
+    {city:"Cape Town",country:"S. Africa",lat:-33.92,lon:18.42,cat:"nature",title:"Table Mountain · cloud",chan:"CH 15",viewers:2380},
+    {city:"Nairobi",country:"Kenya",lat:-1.29,lon:36.82,cat:"nature",title:"Maasai Mara · waterhole",chan:"CH 38",viewers:9900,hot:true},
+    {city:"Tokyo",country:"Japan",lat:35.68,lon:139.69,cat:"city",title:"Shibuya crossing",chan:"CH 01",viewers:31200,hot:true},
+    {city:"Seoul",country:"S. Korea",lat:37.57,lon:126.98,cat:"city",title:"Gangnam · Teheran-ro",chan:"CH 13",viewers:8800},
+    {city:"Shanghai",country:"China",lat:31.23,lon:121.47,cat:"landmark",title:"Bund · Pudong skyline",chan:"CH 20",viewers:7620},
+    {city:"Hong Kong",country:"China",lat:22.32,lon:114.17,cat:"landmark",title:"Victoria Harbour",chan:"CH 25",viewers:6100},
+    {city:"Singapore",country:"Singapore",lat:1.35,lon:103.82,cat:"landmark",title:"Marina Bay · drone show",chan:"CH 28",viewers:14200,hot:true},
+    {city:"Mumbai",country:"India",lat:19.07,lon:72.88,cat:"city",title:"Marine Drive",chan:"CH 30",viewers:4120},
+    {city:"Dubai",country:"UAE",lat:25.20,lon:55.27,cat:"landmark",title:"Downtown · fountain",chan:"CH 35",viewers:5220},
+    {city:"Sydney",country:"Australia",lat:-33.86,lon:151.21,cat:"landmark",title:"Opera House · harbour",chan:"CH 37",viewers:10400,hot:true},
+    {city:"Svalbard",country:"Norway",lat:78.22,lon:15.63,cat:"nature",title:"Longyearbyen · polar night",chan:"CH 44",viewers:4200}
+  ];
+  window.CONTINENTS = [
+    [[-168,66],[-156,71],[-141,70],[-128,70],[-110,73],[-95,74],[-82,74],[-74,68],[-60,60],[-55,52],[-65,45],[-70,42],[-76,36],[-82,27],[-88,30],[-97,25],[-105,22],[-112,30],[-122,37],[-124,48],[-135,58],[-154,58],[-165,54],[-168,66]],
+    [[-55,82],[-22,80],[-25,74],[-40,60],[-55,66],[-62,76],[-55,82]],
+    [[-80,10],[-70,10],[-53,5],[-48,-5],[-40,-8],[-40,-22],[-52,-32],[-65,-42],[-72,-54],[-74,-45],[-71,-25],[-75,-14],[-81,0],[-80,10]],
+    [[-17,22],[-8,32],[10,35],[30,31],[35,22],[45,11],[51,11],[42,-1],[40,-12],[32,-25],[18,-34],[13,-20],[1,4],[-16,10],[-17,22]],
+    [[-10,36],[0,40],[14,45],[28,41],[30,45],[22,55],[8,54],[-4,52],[-10,54],[5,60],[20,70],[32,68],[50,68],[60,70],[70,72],[40,74],[10,68],[-8,58],[-10,50],[-10,36]],
+    [[30,45],[50,40],[62,38],[80,35],[92,28],[105,22],[118,22],[122,30],[125,42],[140,45],[155,60],[180,68],[180,75],[120,78],[70,76],[45,70],[40,60],[30,45]],
+    [[68,24],[73,18],[78,8],[82,17],[89,22],[91,26],[84,27],[73,28],[68,24]],
+    [[34,30],[48,24],[56,18],[52,13],[44,12],[38,16],[34,30]],
+    [[114,-22],[132,-12],[145,-15],[153,-28],[140,-38],[120,-34],[113,-26],[114,-22]],
+    [[95,5],[105,-5],[115,-8],[122,-3],[133,-3],[140,0],[122,2],[105,5],[95,5]],
+    [[131,31],[138,35],[142,41],[145,44],[138,37],[131,31]],
+    [[-10,51],[-5,58],[0,54],[-6,50],[-10,51]],
+    [[-180,-65],[-120,-72],[-60,-68],[0,-68],[60,-68],[120,-70],[180,-68],[180,-85],[-180,-85],[-180,-65]]
+  ];
+</script>
+
+<script>
+// Wait until the #phone div exists (React renders the iOS frame), then mount the app inside it.
+function mountApp(){
+  const phone = document.getElementById("phone");
+  if(!phone){ requestAnimationFrame(mountApp); return; }
+
+  // Inject the app's HTML into the phone root.
+  phone.innerHTML = `
+    <div class="topstrip">
+      <div class="brand"><span class="mark"></span>Wrld</div>
+      <span class="livepill"><span class="d"></span><span id="live-count">—</span> LIVE</span>
+    </div>
+    <div class="search">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="search" placeholder="Search city or event"/>
+    </div>
+    <div class="cats" id="cats"></div>
+    <div id="stage">
+      <canvas id="globe"></canvas>
+      <canvas id="dots"></canvas>
+    </div>
+    <div class="hovercard" id="hover"></div>
+    <div class="hud">
+      <div class="coords">
+        <span>LAT</span><b id="hud-lat">0°</b>
+        <span>LON</span><b id="hud-lon">0°</b>
+      </div>
+      <div class="zoom">
+        <button id="zoom-in">+</button>
+        <button id="zoom-out">−</button>
+      </div>
+    </div>
+    <div class="sheet">
+      <div class="grip"></div>
+      <div class="head"><h4>Trending now</h4><span class="more">See all</span></div>
+      <div class="scroll" id="trend"></div>
+    </div>
+    <div class="takeover" id="takeover">
+      <div class="video"></div><div class="noise"></div><div class="scan"></div>
+      <div class="top">
+        <button class="close" id="close-feed" aria-label="Close">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
+        <span class="tag"><span class="live">LIVE</span><span id="feed-channel">CH —</span></span>
+        <span class="time" id="feed-tstamp">—</span>
+      </div>
+      <div class="lower">
+        <h1 id="feed-title">—</h1>
+        <div class="sub" id="feed-sub">—</div>
+        <div class="stats">
+          <span><b id="feed-viewers">0</b> watching</span>
+          <span id="feed-bitrate">—</span>
+          <span id="feed-latency">—</span>
+        </div>
+      </div>
+      <div class="actions"><button>Save</button><button>Share</button><button class="primary">Open full</button></div>
+    </div>
+  `;
+
+  // ── state ──
+  const S = {
+    lon:20, lat:15, zoom:1.0,
+    targetLon:20, targetLat:15, targetZoom:1.0,
+    feeds:[], filter:"all", search:"", lastInteract:0,
+    autorotate:true, graticule:true, clusterThreshold:1.6,
+  };
+  const D2R = Math.PI/180;
+  const sel = s => phone.querySelector(s);
+  const selAll = s => phone.querySelectorAll(s);
+  const stage = sel("#stage");
+  const cG = sel("#globe"), cD = sel("#dots");
+  const gx = cG.getContext("2d"), dx = cD.getContext("2d");
+  const hoverCard = sel("#hover");
+
+  let W=0,H=0,DPR=1,CX=0,CY=0,R0=0;
+  function resize(){
+    DPR = Math.min(2, window.devicePixelRatio||1);
+    W = stage.offsetWidth; H = stage.offsetHeight;
+    for(const c of [cG,cD]){
+      c.width = W*DPR; c.height = H*DPR;
+      c.style.width = W+"px"; c.style.height = H+"px";
+      c.getContext("2d").setTransform(DPR,0,0,DPR,0,0);
+    }
+    CX = W/2; CY = H*0.42;    // shift globe up so sheet doesn't crop it
+    R0 = Math.min(W, H*0.7) * 0.44;
+  }
+  new ResizeObserver(resize).observe(stage);
+  resize();
+  setTimeout(resize, 100);
+  setTimeout(resize, 500);
+
+  function buildFeeds(target){
+    const out=[];
+    for(const f of SEED_FEEDS) out.push({...f,id:out.length});
+    let i=0;
+    while(out.length<target){
+      const b = SEED_FEEDS[i%SEED_FEEDS.length];
+      out.push({
+        ...b, id:out.length,
+        lat: b.lat + Math.sin(out.length*12.91)*3.2,
+        lon: b.lon + Math.cos(out.length*7.17)*4.4,
+        title: b.city + " · sub-cam",
+        chan: "CH "+(50+(out.length%40)),
+        viewers: Math.floor(b.viewers*(0.1+Math.random()*0.4)),
+        hot:false
+      });
+      i++;
+    }
+    return out.slice(0,target);
+  }
+
+  function project(lon,lat){
+    const λ=(lon-S.lon)*D2R, φ=lat*D2R, φ0=S.lat*D2R;
+    const cφ=Math.cos(φ),sφ=Math.sin(φ),cφ0=Math.cos(φ0),sφ0=Math.sin(φ0),cλ=Math.cos(λ),sλ=Math.sin(λ);
+    const cosC = sφ0*sφ + cφ0*cφ*cλ;
+    const R = R0*S.zoom;
+    return {x: CX+R*cφ*sλ, y: CY-R*(cφ0*sφ - sφ0*cφ*cλ), visible: cosC>0};
+  }
+
+  function drawGlobe(){
+    const ctx=gx, R=R0*S.zoom;
+    ctx.clearRect(0,0,W,H);
+    // glow
+    const g = ctx.createRadialGradient(CX,CY,R*0.95,CX,CY,R*1.28);
+    g.addColorStop(0,"rgba(62,167,255,0.22)"); g.addColorStop(1,"rgba(62,167,255,0)");
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(CX,CY,R*1.28,0,Math.PI*2); ctx.fill();
+    // ocean
+    const o = ctx.createRadialGradient(CX-R*0.3,CY-R*0.35,R*0.1,CX,CY,R*1.05);
+    o.addColorStop(0,"#16202c"); o.addColorStop(0.55,"#0c131c"); o.addColorStop(1,"#050709");
+    ctx.fillStyle=o; ctx.beginPath(); ctx.arc(CX,CY,R,0,Math.PI*2); ctx.fill();
+    ctx.save(); ctx.beginPath(); ctx.arc(CX,CY,R,0,Math.PI*2); ctx.clip();
+    // graticule
+    ctx.strokeStyle="rgba(255,255,255,0.05)"; ctx.lineWidth=1;
+    for(let lat=-75;lat<=75;lat+=15){
+      ctx.beginPath(); let started=false;
+      for(let lon=-180;lon<=180;lon+=6){
+        const p=project(lon,lat);
+        if(p.visible){ started?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y); started=true; } else started=false;
+      }
+      ctx.stroke();
+    }
+    for(let lon=-180;lon<180;lon+=15){
+      ctx.beginPath(); let started=false;
+      for(let lat=-85;lat<=85;lat+=4){
+        const p=project(lon,lat);
+        if(p.visible){ started?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y); started=true; } else started=false;
+      }
+      ctx.stroke();
+    }
+    // landmasses
+    ctx.fillStyle="#1a2028"; ctx.strokeStyle="rgba(255,255,255,0.08)"; ctx.lineWidth=0.75;
+    for(const poly of CONTINENTS){
+      ctx.beginPath(); let started=false;
+      for(const [lon,lat] of poly){
+        const p=project(lon,lat);
+        if(p.visible){ started?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y); started=true; } else started=false;
+      }
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+    }
+    // terminator
+    const t = ctx.createRadialGradient(CX+R*0.6,CY-R*0.2,R*0.1,CX,CY,R*1.05);
+    t.addColorStop(0,"rgba(0,0,0,0)"); t.addColorStop(1,"rgba(0,0,0,0.55)");
+    ctx.fillStyle=t; ctx.fillRect(CX-R,CY-R,R*2,R*2);
+    ctx.restore();
+    ctx.strokeStyle="rgba(255,255,255,0.16)"; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.arc(CX,CY,R,0,Math.PI*2); ctx.stroke();
+  }
+
+  function drawDots(){
+    const ctx=dx; ctx.clearRect(0,0,W,H);
+    const feeds = S.feeds.filter(f => {
+      if(S.filter!=="all" && f.cat!==S.filter) return false;
+      if(S.search){
+        const q = S.search.toLowerCase();
+        if(!(f.city+" "+f.country+" "+f.title).toLowerCase().includes(q)) return false;
+      }
+      return true;
+    });
+    const pts=[];
+    for(const f of feeds){
+      const p = project(f.lon,f.lat);
+      if(!p.visible) continue;
+      pts.push({f,x:p.x,y:p.y});
+    }
+    const base = 32; // slightly tighter on mobile
+    const cell = Math.max(12, base / Math.pow(S.zoom, S.clusterThreshold));
+    const buckets = new Map();
+    for(const p of pts){
+      const k = Math.floor(p.x/cell)+","+Math.floor(p.y/cell);
+      (buckets.get(k) || buckets.set(k,[]).get(k)).push(p);
+    }
+    const clusters=[];
+    for(const arr of buckets.values()){
+      if(arr.length===1) clusters.push({type:"single",...arr[0]});
+      else{
+        let sx=0,sy=0,hot=false,viewers=0;
+        for(const p of arr){sx+=p.x;sy+=p.y;if(p.f.hot)hot=true;viewers+=p.f.viewers}
+        clusters.push({type:"cluster",x:sx/arr.length,y:sy/arr.length,count:arr.length,hot,viewers,members:arr});
+      }
+    }
+    const now = performance.now()/1000;
+    const hits=[];
+    for(const c of clusters){
+      const hot = c.type==="single" ? c.f.hot : c.hot;
+      const baseR = c.type==="cluster" ? Math.min(16, 5 + Math.sqrt(c.count)*1.6) : (hot?5:3.6);
+      const pulseT = (Math.sin(now*2 + (c.x+c.y)*0.02)+1)/2;
+      const pulseR = baseR + 2 + pulseT*4;
+      const pulseA = 0.18 + (1-pulseT)*0.18;
+      ctx.beginPath(); ctx.arc(c.x,c.y,pulseR,0,Math.PI*2);
+      ctx.fillStyle = hot ? `rgba(255,110,110,${pulseA*0.9})` : `rgba(62,167,255,${pulseA})`;
+      ctx.fill();
+      const g = ctx.createRadialGradient(c.x,c.y,0,c.x,c.y,baseR*2.4);
+      g.addColorStop(0,"rgba(62,167,255,0.5)"); g.addColorStop(1,"rgba(62,167,255,0)");
+      ctx.fillStyle=g; ctx.beginPath(); ctx.arc(c.x,c.y,baseR*2.4,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(c.x,c.y,baseR,0,Math.PI*2);
+      ctx.fillStyle = hot ? "#ff6a6a" : "#3ea7ff"; ctx.fill();
+      ctx.beginPath(); ctx.arc(c.x - baseR*0.35, c.y - baseR*0.35, baseR*0.35, 0, Math.PI*2);
+      ctx.fillStyle="rgba(255,255,255,0.55)"; ctx.fill();
+      if(c.type==="cluster"){
+        ctx.fillStyle="#fff"; ctx.font="600 10px 'Inter Tight', sans-serif";
+        ctx.textAlign="center"; ctx.textBaseline="middle";
+        ctx.fillText(c.count, c.x, c.y);
+      }
+      hits.push({...c, r: baseR+6});
+    }
+    S._hits = hits;
+  }
+
+  function hitTest(x,y){
+    if(!S._hits) return null;
+    for(let i=S._hits.length-1;i>=0;i--){
+      const h = S._hits[i];
+      const dx_=h.x-x, dy_=h.y-y;
+      if(dx_*dx_+dy_*dy_ <= h.r*h.r) return h;
+    }
+    return null;
+  }
+
+  // ── gestures ──
+  const drag = { down:false,x:0,y:0,lon:0,lat:0,moved:false };
+  stage.addEventListener("pointerdown", e => {
+    drag.down=true; drag.x=e.clientX; drag.y=e.clientY;
+    drag.lon=S.lon; drag.lat=S.lat; drag.moved=false;
+    stage.setPointerCapture(e.pointerId);
+    S.lastInteract = performance.now();
+  });
+  stage.addEventListener("pointermove", e => {
+    const r=stage.getBoundingClientRect();
+    const scale = r.width / stage.offsetWidth || 1;
+    const lx = (e.clientX - r.left) / scale;
+    const ly = (e.clientY - r.top)  / scale;
+    if(!drag.down){
+      const h=hitTest(lx, ly);
+      if(h && h.type==="single"){
+        hoverCard.innerHTML = `<div class="t">${h.f.title}</div><div class="m">${h.f.city.toUpperCase()} · ${h.f.chan}</div>`;
+        hoverCard.style.left = (lx+10)+"px";
+        hoverCard.style.top  = (ly+10)+"px";
+        hoverCard.classList.add("on");
+      } else hoverCard.classList.remove("on");
+      return;
+    }
+    const dxp = (e.clientX-drag.x)/scale, dyp = (e.clientY-drag.y)/scale;
+    if(Math.hypot(dxp,dyp)>3) drag.moved=true;
+    const k = 0.3/S.zoom;
+    S.targetLon = drag.lon - dxp*k;
+    S.targetLat = Math.max(-85, Math.min(85, drag.lat + dyp*k));
+    S.lastInteract = performance.now();
+  });
+  stage.addEventListener("pointerup", e => {
+    drag.down=false;
+    if(!drag.moved){
+      const r=stage.getBoundingClientRect();
+      const scale = r.width / stage.offsetWidth || 1;
+      const lx = (e.clientX - r.left) / scale;
+      const ly = (e.clientY - r.top)  / scale;
+      const h=hitTest(lx, ly);
+      if(h){
+        if(h.type==="single") openFeed(h.f);
+        else {
+          // zoom into cluster centroid
+          S.targetZoom = Math.min(6, S.targetZoom * 1.8);
+        }
+      }
+    }
+    hoverCard.classList.remove("on");
+  });
+  stage.addEventListener("pointerleave", () => { drag.down=false; hoverCard.classList.remove("on"); });
+
+  // wheel (desktop preview)
+  stage.addEventListener("wheel", e => {
+    e.preventDefault();
+    S.targetZoom = Math.min(6, Math.max(1, S.targetZoom * Math.exp(-e.deltaY*0.0015)));
+    S.lastInteract = performance.now();
+  }, {passive:false});
+
+  // pinch
+  let pinch=null;
+  stage.addEventListener("touchstart", e => {
+    if(e.touches.length===2){
+      const [a,b]=e.touches;
+      pinch = { d:Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY), z:S.targetZoom };
+    }
+  });
+  stage.addEventListener("touchmove", e => {
+    if(pinch && e.touches.length===2){
+      const [a,b]=e.touches;
+      const d = Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);
+      S.targetZoom = Math.min(6, Math.max(1, pinch.z * (d/pinch.d)));
+      S.lastInteract = performance.now();
+      e.preventDefault();
+    }
+  }, {passive:false});
+  stage.addEventListener("touchend", () => pinch=null);
+
+  sel("#zoom-in").onclick  = () => { S.targetZoom = Math.min(6, S.targetZoom*1.3); S.lastInteract=performance.now(); };
+  sel("#zoom-out").onclick = () => { S.targetZoom = Math.max(1, S.targetZoom/1.3); S.lastInteract=performance.now(); };
+
+  // ── categories ──
+  const catsEl = sel("#cats");
+  CATEGORIES.forEach(c => {
+    const b = document.createElement("button");
+    b.className="cat"; b.dataset.cat=c.id;
+    b.setAttribute("aria-pressed", c.id==="all" ? "true":"false");
+    b.textContent=c.label;
+    b.onclick = () => {
+      S.filter = c.id;
+      selAll(".cat").forEach(x => x.setAttribute("aria-pressed", x.dataset.cat===c.id?"true":"false"));
+    };
+    catsEl.appendChild(b);
+  });
+
+  // ── search ──
+  sel("#search").addEventListener("input", e => {
+    S.search = e.target.value.trim();
+    const q = S.search.toLowerCase();
+    if(q.length>=3){
+      const hit = SEED_FEEDS.find(f => (f.city+" "+f.country).toLowerCase().includes(q));
+      if(hit){ S.targetLon=hit.lon; S.targetLat=hit.lat; S.targetZoom=Math.max(S.targetZoom,2.4); }
+    }
+  });
+
+  // ── trending rail (horizontal scroll cards) ──
+  function renderTrending(){
+    const list = S.feeds.filter(f => f.hot).slice(0,8);
+    sel("#trend").innerHTML = list.map(f => `
+      <div class="card" data-id="${f.id}">
+        <div class="thumb"><span class="live">LIVE</span><span class="viewers">${fmt(f.viewers)}</span></div>
+        <div class="meta">
+          <div class="title">${f.title}</div>
+          <div class="city">${f.city.toUpperCase()} · ${f.chan}</div>
+        </div>
+      </div>
+    `).join("");
+    selAll("#trend .card").forEach(el => el.onclick = () => {
+      const f = S.feeds.find(x => x.id === +el.dataset.id);
+      if(!f) return;
+      S.targetLon=f.lon; S.targetLat=f.lat; S.targetZoom=Math.max(S.targetZoom,2.6);
+      S.lastInteract=performance.now();
+      setTimeout(() => openFeed(f), 600);
+    });
+  }
+  function fmt(n){ return n>=1000 ? (n/1000).toFixed(n>=10000?0:1)+"k" : String(n); }
+
+  // ── takeover ──
+  const takeover = sel("#takeover");
+  function openFeed(f){
+    sel("#feed-title").textContent = f.title;
+    sel("#feed-sub").textContent = f.city + " · " + f.country;
+    sel("#feed-channel").textContent = f.chan + " · " + f.cat.toUpperCase();
+    sel("#feed-viewers").textContent = fmt(f.viewers);
+    sel("#feed-bitrate").textContent = (4+(f.viewers%20)/10).toFixed(1) + " Mbps";
+    sel("#feed-latency").textContent = (1.6+(f.viewers%10)/10).toFixed(1) + "s latency";
+    takeover.classList.add("on");
+  }
+  sel("#close-feed").onclick = () => takeover.classList.remove("on");
+
+  // ── clock ──
+  setInterval(() => {
+    const d=new Date();
+    const t = [d.getUTCHours(),d.getUTCMinutes(),d.getUTCSeconds()].map(n=>String(n).padStart(2,"0")).join(":");
+    sel("#feed-tstamp").textContent = t + " UTC";
+  }, 500);
+
+  // ── init & loop ──
+  S.feeds = buildFeeds(140);
+  sel("#live-count").textContent = S.feeds.length;
+  renderTrending();
+
+  function lerp(a,b,t){return a+(b-a)*t}
+  (function frame(){
+    const idle = performance.now() - S.lastInteract > 2400;
+    if(S.autorotate && idle && !drag.down) S.targetLon += 0.06;
+    S.lon  = lerp(S.lon,  S.targetLon,  0.14);
+    S.lat  = lerp(S.lat,  S.targetLat,  0.14);
+    S.zoom = lerp(S.zoom, S.targetZoom, 0.12);
+    sel("#hud-lat").textContent = S.lat.toFixed(1)+"°";
+    sel("#hud-lon").textContent = S.lon.toFixed(1)+"°";
+    drawGlobe(); drawDots();
+    requestAnimationFrame(frame);
+  })();
+}
+requestAnimationFrame(mountApp);
+</script>
+
+</body>
+</html>

@@ -1,0 +1,554 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Wrld — Profile</title>
+<style>
+  /* Tokens (inlined from system/tokens.css to avoid asset-fetch race) */
+  @import url("https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap");
+  :root{
+    --bg:#070809; --bg-2:#0c0e11;
+    --panel:rgba(20,22,26,0.72); --panel-solid:#14171c; --panel-hi:#1a1e24;
+    --line:rgba(255,255,255,0.08); --line-2:rgba(255,255,255,0.14);
+    --ink:#ece9e2; --ink-dim:rgba(236,233,226,0.58); --ink-faint:rgba(236,233,226,0.34);
+    --accent:#3ea7ff; --accent-hot:#7fd0ff; --accent-glow:rgba(62,167,255,0.45);
+    --live:#ff4d4d; --live-glow:rgba(255,77,77,0.45);
+    --sans:"Inter Tight", ui-sans-serif, system-ui, sans-serif;
+    --mono:"JetBrains Mono", ui-monospace, monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:#0a0a0b;font-family:var(--sans);color:var(--ink);-webkit-font-smoothing:antialiased}
+  body{display:grid;place-items:center;overflow:hidden}
+  .phone-root{
+    width:402px;height:874px;position:relative;overflow:hidden;
+    background:radial-gradient(900px 700px at 50% 0%, #141720 0%, var(--bg) 70%);
+    color:var(--ink);
+  }
+
+  /* Top bar — back, alias, kebab */
+  .topbar{
+    position:absolute; top:54px; left:0; right:0; z-index:30;
+    height:44px; padding:0 14px;
+    display:flex; align-items:center; justify-content:space-between;
+  }
+  .iconbtn{
+    width:36px;height:36px;border-radius:50%;
+    border:1px solid var(--line); background:rgba(0,0,0,0.4);
+    color:var(--ink); display:grid; place-items:center;
+    backdrop-filter:blur(10px); cursor:pointer; font-family:var(--sans);
+    transition:transform .18s, background .2s;
+  }
+  .iconbtn:active{ transform:scale(0.94) }
+  .topbar .alias-mini{
+    font:500 11px var(--mono); color:var(--ink-dim); letter-spacing:0.06em;
+    opacity:0;
+  }
+  .scroll[data-scrolled="true"] ~ .topbar .alias-mini{ opacity:1; transition:opacity .2s }
+
+  /* Backdrop strip — abstract place poster behind avatar */
+  .backdrop{
+    position:absolute; top:0; left:0; right:0; height:240px; z-index:1;
+    background:
+      radial-gradient(80% 100% at 30% 30%, rgba(62,167,255,0.18), transparent 60%),
+      radial-gradient(60% 80% at 80% 0%,   rgba(255,77,77,0.10),  transparent 60%),
+      linear-gradient(180deg, #1a1e26 0%, #0c0e11 100%);
+  }
+  .backdrop::after{
+    content:""; position:absolute; left:0; right:0; bottom:0; height:140px;
+    background:linear-gradient(180deg, rgba(7,8,9,0), var(--bg) 80%);
+  }
+
+  /* Scroll body */
+  .scroll{
+    position:absolute; inset:0; z-index:2;
+    overflow-y:auto; overflow-x:hidden; scrollbar-width:none;
+    padding:170px 0 30px;
+  }
+  .scroll::-webkit-scrollbar{display:none}
+
+  /* Header — avatar + alias + meta */
+  .head{
+    padding:0 18px;
+    display:flex; flex-direction:column; align-items:flex-start; gap:14px;
+  }
+  .avatar{
+    width:88px; height:88px; border-radius:50%;
+    background:
+      radial-gradient(circle at 35% 30%, #ffd6a3 0%, #d68957 40%, #6b3a1d 100%);
+    border:2px solid var(--bg);
+    box-shadow:0 0 0 1px var(--line-2), 0 8px 24px rgba(0,0,0,0.5);
+    display:grid; place-items:center; color:#2b1a0a;
+    font:600 32px/1 var(--sans); letter-spacing:-0.02em;
+    flex:none;
+  }
+  .head .name-row{
+    display:flex; flex-direction:column; gap:2px;
+  }
+  .head .name{
+    font:600 26px/1.1 var(--sans); letter-spacing:-0.02em;
+  }
+  .head .alias{
+    font:500 12px var(--mono); color:var(--ink-dim); letter-spacing:0.04em;
+  }
+
+  /* Meta strip — two intentional rows. Row 1: followers · joined. Row 2: region · pronouns */
+  .meta-strip{
+    display:flex; flex-direction:column; gap:5px;
+    font:500 11px var(--mono); color:var(--ink-dim); letter-spacing:0.06em;
+  }
+  .meta-row{ display:flex; flex-wrap:wrap; align-items:center; }
+  .meta-row span{ display:inline-flex; align-items:center; }
+  .meta-row span + span::before{
+    content:""; width:3px; height:3px; border-radius:50%;
+    background:var(--ink-faint); margin:0 9px;
+  }
+  .meta-strip b{ color:var(--ink); font-weight:500; margin-right:4px }
+
+  /* Action row — Follow + kebab */
+  .actions{
+    margin:6px 18px 22px;
+    display:grid; grid-template-columns:1fr 44px; gap:8px;
+  }
+  .follow{
+    height:44px; border-radius:999px; border:0;
+    background:var(--accent); color:#0a0c10;
+    font:600 14px var(--sans); letter-spacing:-0.005em;
+    cursor:pointer; transition:transform .18s, background .2s;
+    display:flex; align-items:center; justify-content:center; gap:8px;
+    box-shadow:0 0 24px rgba(62,167,255,0.16);
+    font-family:var(--sans);
+  }
+  .follow:active{ transform:scale(0.98) }
+  .follow[data-following="true"]{
+    background:transparent; color:var(--ink);
+    border:1px solid var(--line-2);
+    box-shadow:none;
+  }
+  .kebab{
+    width:44px; height:44px; border-radius:50%;
+    background:var(--panel); border:1px solid var(--line);
+    color:var(--ink-dim); display:grid; place-items:center;
+    backdrop-filter:blur(10px); cursor:pointer; font-family:var(--sans);
+  }
+  .kebab:active{ background:var(--panel-hi) }
+
+  /* Section heading */
+  .sec{ margin:0 0 22px }
+  .sec-head{
+    padding:0 18px 10px;
+    display:flex; align-items:baseline; justify-content:space-between;
+    font:500 10.5px var(--mono); color:var(--ink-faint); letter-spacing:0.14em;
+  }
+  .sec-head .r{ color:var(--ink-dim) }
+
+  /* Passport card */
+  .passport{
+    margin:0 18px;
+    padding:16px 18px;
+    border-radius:18px;
+    background:var(--panel); border:1px solid var(--line);
+    backdrop-filter:blur(12px);
+    display:flex; flex-direction:column; gap:14px;
+  }
+  .passport p.bio{
+    margin:0;
+    font:500 14px/1.5 var(--sans); color:var(--ink); text-wrap:pretty;
+  }
+  .pass-row{
+    display:flex; align-items:center; gap:10px;
+    font:500 12px var(--mono); color:var(--ink-dim); letter-spacing:0.04em;
+  }
+  .pass-row .ic{
+    width:14px; height:14px; color:var(--ink-faint);
+    display:inline-grid; place-items:center; flex:none;
+  }
+  .pass-row .lab{
+    color:var(--ink-faint); letter-spacing:0.12em; font-size:10px;
+    margin-right:2px;
+  }
+  .pass-row b{ color:var(--ink); font-weight:500 }
+
+  .socials{
+    display:flex; flex-wrap:wrap; gap:6px;
+  }
+  .social{
+    display:inline-flex; align-items:center; gap:6px;
+    height:30px; padding:0 11px; border-radius:999px;
+    border:1px solid var(--line-2); background:transparent;
+    color:var(--ink-dim);
+    font:500 11px var(--mono); letter-spacing:0.04em;
+    cursor:pointer; transition:border-color .2s, color .2s;
+  }
+  .social:active{ border-color:var(--ink-dim); color:var(--ink) }
+  .social .ic{ width:12px; height:12px; display:inline-grid; place-items:center }
+
+  /* Broadcasts grid */
+  .broadcasts{
+    margin:0 18px;
+    display:grid; grid-template-columns:1fr 1fr; gap:10px;
+  }
+  .bc-card{
+    border-radius:14px; overflow:hidden;
+    background:var(--panel-solid); border:1px solid var(--line);
+    cursor:pointer; transition:transform .18s, border-color .2s;
+  }
+  .bc-card:active{ transform:scale(0.99) }
+  .bc-thumb{
+    aspect-ratio: 16 / 11;
+    position:relative;
+    background:linear-gradient(135deg, #1a1d25, #0e1014);
+  }
+  .bc-thumb[data-theme="park"]{ background:
+    radial-gradient(70% 80% at 30% 80%, #2c4d2a, transparent 60%),
+    radial-gradient(40% 60% at 70% 30%, #4a6b5a, transparent 70%),
+    #0e1410; }
+  .bc-thumb[data-theme="sub"]{ background:
+    radial-gradient(60% 80% at 50% 100%, #2a3645, transparent 60%),
+    radial-gradient(30% 40% at 70% 30%, #ffb27d, transparent 70%),
+    #0e1118; }
+  .bc-thumb[data-theme="bridge"]{ background:
+    linear-gradient(180deg, #2a3a4a, #0e1118),
+    radial-gradient(40% 50% at 30% 60%, #ffa861, transparent 70%); }
+  .bc-thumb[data-theme="rooftop"]{ background:
+    linear-gradient(180deg, #1a1830, #0a0a14),
+    radial-gradient(50% 40% at 70% 80%, rgba(255,160,90,0.25), transparent 70%); }
+  .bc-thumb[data-theme="street"]{ background:
+    linear-gradient(180deg, #2b1818, #14080a),
+    radial-gradient(45% 50% at 50% 50%, rgba(255,180,90,0.3), transparent 70%); }
+  .bc-thumb[data-theme="club"]{ background:
+    radial-gradient(50% 60% at 50% 50%, rgba(255,77,77,0.35), transparent 70%),
+    linear-gradient(180deg, #1a0e15, #0a0810); }
+
+  .bc-pill{
+    position:absolute; top:8px; left:8px;
+    display:inline-flex; align-items:center; gap:5px;
+    padding:3px 7px 3px 6px; border-radius:6px;
+    background:rgba(0,0,0,0.55); border:1px solid var(--line-2);
+    color:var(--ink); backdrop-filter:blur(8px);
+    font:500 9px var(--mono); letter-spacing:0.12em;
+  }
+  .bc-peak{
+    position:absolute; right:8px; bottom:8px;
+    display:inline-flex; align-items:center; gap:4px;
+    padding:3px 7px; border-radius:6px;
+    background:rgba(0,0,0,0.55); border:1px solid var(--line-2);
+    color:var(--ink); backdrop-filter:blur(8px);
+    font:500 9.5px var(--mono); letter-spacing:0.04em;
+    font-variant-numeric:tabular-nums;
+  }
+  .bc-meta{
+    padding:10px 12px 11px;
+    display:flex; flex-direction:column; gap:4px;
+  }
+  .bc-meta .l{ font:600 13px/1.25 var(--sans); letter-spacing:-0.01em; color:var(--ink); 
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .bc-meta .s{ font:500 9.5px var(--mono); color:var(--ink-faint); letter-spacing:0.1em }
+
+  /* Empty state */
+  .empty{
+    margin:0 18px;
+    padding:28px 20px; text-align:center;
+    border:1px dashed var(--line-2); border-radius:18px;
+    color:var(--ink-faint);
+    font:500 11px var(--mono); letter-spacing:0.1em;
+  }
+
+  /* Action sheet (overlay for kebab) */
+  .sheet-bg{
+    position:absolute; inset:0; z-index:80;
+    background:rgba(0,0,0,0.55);
+    opacity:0; pointer-events:none; transition:opacity .2s;
+  }
+  .sheet-bg[data-open="true"]{ opacity:1; pointer-events:auto }
+  .sheet{
+    position:absolute; left:8px; right:8px; bottom:14px; z-index:81;
+    border-radius:22px; overflow:hidden;
+    background:var(--panel-solid); border:1px solid var(--line-2);
+    transform:translateY(20px); opacity:0; pointer-events:none;
+    transition:transform .25s cubic-bezier(.4,1.4,.6,1), opacity .2s;
+  }
+  .sheet[data-open="true"]{ transform:translateY(0); opacity:1; pointer-events:auto }
+  .sheet .row{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:16px 18px; border:0; border-top:1px solid var(--line);
+    background:transparent; color:var(--ink);
+    font:500 15px var(--sans); letter-spacing:-0.005em;
+    width:100%; text-align:left; cursor:pointer; font-family:var(--sans);
+  }
+  .sheet .row:first-child{ border-top:0 }
+  .sheet .row .ic{ color:var(--ink-dim); display:inline-grid; place-items:center }
+  .sheet .row[data-tone="warn"] .l,
+  .sheet .row[data-tone="warn"] .ic{ color:var(--live) }
+  .sheet .row .l{ display:flex; align-items:center; gap:14px }
+  .sheet .head{
+    padding:14px 18px 12px;
+    font:500 10.5px var(--mono); color:var(--ink-faint); letter-spacing:0.14em;
+    border-top:0;
+  }
+  .sheet .cancel{
+    margin-top:6px;
+    background:var(--panel-hi);
+    text-align:center; justify-content:center;
+    font-weight:600; color:var(--ink-dim);
+  }
+</style>
+</head>
+<body>
+<div id="outer" style="width:100%;height:100%;display:grid;place-items:center"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" data-presets="react">
+  // ── Phone frame (inline to avoid Babel external-fetch race) ──
+  function IOSStatusBar(){
+    const c = '#fff';
+    return (
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'21px 34px 19px',width:'100%',boxSizing:'border-box'}}>
+        <span style={{fontFamily:'-apple-system,system-ui',fontWeight:590,fontSize:17,color:c}}>9:41</span>
+        <div style={{display:'flex',alignItems:'center',gap:7}}>
+          <svg width="19" height="12" viewBox="0 0 19 12"><rect x="0" y="7.5" width="3.2" height="4.5" rx="0.7" fill={c}/><rect x="4.8" y="5" width="3.2" height="7" rx="0.7" fill={c}/><rect x="9.6" y="2.5" width="3.2" height="9.5" rx="0.7" fill={c}/><rect x="14.4" y="0" width="3.2" height="12" rx="0.7" fill={c}/></svg>
+          <svg width="17" height="12" viewBox="0 0 17 12"><path d="M8.5 3.2C10.8 3.2 12.9 4.1 14.4 5.6L15.5 4.5C13.7 2.7 11.2 1.5 8.5 1.5C5.8 1.5 3.3 2.7 1.5 4.5L2.6 5.6C4.1 4.1 6.2 3.2 8.5 3.2Z" fill={c}/><path d="M8.5 6.8C9.9 6.8 11.1 7.3 12 8.2L13.1 7.1C11.8 5.9 10.2 5.1 8.5 5.1C6.8 5.1 5.2 5.9 3.9 7.1L5 8.2C5.9 7.3 7.1 6.8 8.5 6.8Z" fill={c}/><circle cx="8.5" cy="10.5" r="1.5" fill={c}/></svg>
+          <svg width="27" height="13" viewBox="0 0 27 13"><rect x="0.5" y="0.5" width="23" height="12" rx="3.5" stroke={c} strokeOpacity="0.35" fill="none"/><rect x="2" y="2" width="20" height="9" rx="2" fill={c}/><path d="M25 4.5V8.5C25.8 8.2 26.5 7.2 26.5 6.5C26.5 5.8 25.8 4.8 25 4.5Z" fill={c} fillOpacity="0.4"/></svg>
+        </div>
+      </div>
+    );
+  }
+  function IOSDevice({ children }){
+    return (
+      <div style={{width:402,height:874,borderRadius:48,overflow:'hidden',position:'relative',background:'#000',boxShadow:'0 40px 80px rgba(0,0,0,0.35), 0 0 0 1px rgba(0,0,0,0.5)',fontFamily:'-apple-system,system-ui,sans-serif'}}>
+        <div style={{position:'absolute',top:11,left:'50%',transform:'translateX(-50%)',width:126,height:37,borderRadius:24,background:'#000',zIndex:50}}/>
+        <div style={{position:'absolute',top:0,left:0,right:0,zIndex:10}}><IOSStatusBar/></div>
+        <div style={{position:'absolute',inset:0}}>{children}</div>
+        <div style={{position:'absolute',bottom:0,left:0,right:0,zIndex:60,height:34,display:'flex',justifyContent:'center',alignItems:'flex-end',paddingBottom:8,pointerEvents:'none'}}>
+          <div style={{width:139,height:5,borderRadius:100,background:'rgba(255,255,255,0.7)'}}/>
+        </div>
+      </div>
+    );
+  }
+  function Shell({ children }){
+    const fit = () => {
+      const vh = window.innerHeight, vw = window.innerWidth;
+      return Math.min(vw/(402+40), vh/(874+40), 1);
+    };
+    const [s, setS] = React.useState(fit());
+    React.useEffect(() => {
+      const on = () => setS(fit());
+      window.addEventListener("resize", on);
+      return () => window.removeEventListener("resize", on);
+    }, []);
+    return (
+      <div style={{transform:`scale(${s})`,transformOrigin:"center"}}>
+        <IOSDevice>{children}</IOSDevice>
+      </div>
+    );
+  }
+
+  // ── Icons ────────────────────────────────────────────────────
+  const I = {
+    back:   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>,
+    kebab:  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>,
+    plus:   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>,
+    check:  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg>,
+    pin:    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M12 21s-7-7-7-12a7 7 0 0 1 14 0c0 5-7 12-7 12z"/><circle cx="12" cy="9" r="2.4"/></svg>,
+    person: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M5 21a7 7 0 0 1 14 0"/></svg>,
+    eye:    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>,
+    dot:    <svg width="6" height="6" viewBox="0 0 6 6" fill="currentColor"><circle cx="3" cy="3" r="3"/></svg>,
+    mute:   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M11 5L6 9H3v6h3l5 4V5z"/><path d="M22 9l-6 6M16 9l6 6"/></svg>,
+    block:  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M5.5 5.5l13 13"/></svg>,
+    flag:   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 21V4M5 4h12l-2 4 2 4H5"/></svg>,
+    share:  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v14M6 9l6-6 6 6"/><path d="M5 21h14"/></svg>,
+    // Brand glyphs (simplified, monoline)
+    ig:     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1.1" fill="currentColor"/></svg>,
+    tt:     <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M16 3h2c.4 2.6 2 4 4 4.3v2.4c-1.6 0-3-.4-4-1v6.6a5.6 5.6 0 1 1-5.6-5.6v2.6a3 3 0 1 0 3 3V3z"/></svg>,
+    sc:     <svg width="14" height="12" viewBox="0 0 28 16" fill="currentColor"><path d="M2 11v3M5 9v5M8 7v7M11 5v9M14 4v10c2 0 4-1.6 4-4 0-2.2-1.6-4-4-4M18 6c.8-.4 1.7-.6 2.6-.6 2.2 0 4 1.8 4 4 0 1.5-.7 2.7-1.9 3.4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" fill="none"/></svg>,
+  };
+
+  // ── Data ─────────────────────────────────────────────────────
+  // Anonymous broadcasts excluded from this list ENTIRELY — by design.
+  const ALL_BROADCASTS = [
+    { id:1, title:'Prospect Park · drum circle', city:'Brooklyn, NY',
+      date:'APR 22', dur:'0:42', peak:'1.2K', theme:'park', anon:false },
+    { id:2, title:'F train · Bedford pulse',    city:'Brooklyn, NY',
+      date:'APR 18', dur:'0:11', peak:'420',  theme:'sub',  anon:false },
+    { id:3, title:'Brooklyn Bridge sundown',     city:'New York, NY',
+      date:'APR 14', dur:'0:28', peak:'2.4K', theme:'bridge', anon:false },
+    { id:4, title:'Roof set · Bushwick',         city:'Brooklyn, NY',
+      date:'APR 09', dur:'1:14', peak:'3.1K', theme:'rooftop', anon:false },
+    { id:5, title:'Atlantic Ave · street fest',  city:'Brooklyn, NY',
+      date:'APR 02', dur:'0:36', peak:'880',  theme:'street', anon:false },
+    { id:6, title:'(anon)',                       city:'(anon)',
+      date:'MAR 28', dur:'0:22', peak:'310',  theme:'club',   anon:true },
+  ];
+
+  // Passport — fields can be missing; missing → don't render.
+  const PASSPORT = {
+    bio: "Field recordings, ferment & frequency. Resident broadcaster — Prospect Park drum circle, Tuesdays.",
+    region: "Brooklyn, NY",
+    pronouns: "they/them",
+    socials: [
+      { kind:'ig', label:'@kai.dc',     ic: I.ig },
+      { kind:'tt', label:'@kai',         ic: I.tt },
+      { kind:'sc', label:'kaidc',        ic: I.sc },
+    ],
+  };
+
+  // ── Components ───────────────────────────────────────────────
+  function MetaStrip({ followers, joined, region, pronouns }){
+    const row2 = [];
+    if(region)   row2.push(<span key="r">{region}</span>);
+    if(pronouns) row2.push(<span key="p">{pronouns}</span>);
+    return (
+      <div className="meta-strip">
+        <div className="meta-row">
+          <span><b>{followers}</b>followers</span>
+          <span>JOINED <b style={{marginLeft:4}}>{joined}</b></span>
+        </div>
+        {row2.length > 0 && <div className="meta-row">{row2}</div>}
+      </div>
+    );
+  }
+
+  function Passport({ p }){
+    if(!p) return null;
+    const hasAny = p.bio || p.region || (p.socials && p.socials.length);
+    if(!hasAny) return null;
+    return (
+      <div className="passport">
+        {p.bio && <p className="bio">{p.bio}</p>}
+        {p.socials && p.socials.length > 0 && (
+          <div className="socials">
+            {p.socials.map(s => (
+              <button key={s.kind} className="social">
+                <span className="ic">{s.ic}</span>{s.label}
+              </button>
+            ))}
+          </div>
+        )}
+        {p.region && (
+          <div className="pass-row">
+            <span className="ic">{I.pin}</span>
+            <span className="lab">FROM</span>
+            <b>{p.region}</b>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  function BroadcastCard({ b }){
+    return (
+      <div className="bc-card">
+        <div className="bc-thumb" data-theme={b.theme}>
+          <span className="bc-pill">{b.dur}</span>
+          <span className="bc-peak"><span style={{display:'inline-grid',placeItems:'center',color:'var(--ink-dim)'}}>{I.eye}</span>{b.peak}</span>
+        </div>
+        <div className="bc-meta">
+          <div className="l">{b.title}</div>
+          <div className="s">{b.city} · {b.date}</div>
+        </div>
+      </div>
+    );
+  }
+
+  function ActionSheet({ open, onClose }){
+    return (
+      <>
+        <div className="sheet-bg" data-open={open} onClick={onClose}/>
+        <div className="sheet" data-open={open} role="dialog">
+          <div className="head">@KAI.DC</div>
+          <button className="row">
+            <span className="l"><span className="ic">{I.share}</span>Share profile</span>
+          </button>
+          <button className="row">
+            <span className="l"><span className="ic">{I.mute}</span>Mute</span>
+          </button>
+          <button className="row" data-tone="warn">
+            <span className="l"><span className="ic">{I.block}</span>Block</span>
+          </button>
+          <button className="row" data-tone="warn">
+            <span className="l"><span className="ic">{I.flag}</span>Report</span>
+          </button>
+          <button className="row cancel" onClick={onClose}>Cancel</button>
+        </div>
+      </>
+    );
+  }
+
+  function Profile(){
+    const [following, setFollowing] = React.useState(false);
+    const [sheet, setSheet]         = React.useState(false);
+
+    // Public-facing only — anonymous broadcasts excluded entirely.
+    const broadcasts = ALL_BROADCASTS.filter(b => !b.anon);
+
+    return (
+      <div className="phone-root">
+        <div className="backdrop"/>
+
+        <div className="topbar">
+          <button className="iconbtn" aria-label="Back">{I.back}</button>
+          <button className="iconbtn" aria-label="More" onClick={()=>setSheet(true)}>{I.kebab}</button>
+        </div>
+
+        <div className="scroll">
+          <div className="head">
+            <div className="avatar">K</div>
+            <div className="name-row">
+              <div className="name">Kai DC</div>
+              <div className="alias">@kai.dc</div>
+            </div>
+            <MetaStrip
+              followers="1,284"
+              joined="MAR 2024"
+              region={PASSPORT.region}
+              pronouns={PASSPORT.pronouns}
+            />
+          </div>
+
+          <div className="actions">
+            <button
+              className="follow"
+              data-following={following}
+              onClick={()=>setFollowing(v=>!v)}
+            >
+              {following
+                ? <><span style={{display:'inline-grid',placeItems:'center'}}>{I.check}</span>Following</>
+                : <><span style={{display:'inline-grid',placeItems:'center'}}>{I.plus}</span>Follow</>
+              }
+            </button>
+            <button className="kebab" aria-label="More" onClick={()=>setSheet(true)}>{I.kebab}</button>
+          </div>
+
+          <div className="sec">
+            <div className="sec-head"><span>PASSPORT</span></div>
+            <Passport p={PASSPORT}/>
+          </div>
+
+          <div className="sec">
+            <div className="sec-head">
+              <span>RECENT BROADCASTS</span>
+              <span className="r">{broadcasts.length} · 30 DAYS</span>
+            </div>
+            {broadcasts.length === 0 ? (
+              <div className="empty">NO PUBLIC BROADCASTS YET</div>
+            ) : (
+              <div className="broadcasts">
+                {broadcasts.map(b => <BroadcastCard key={b.id} b={b}/>)}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <ActionSheet open={sheet} onClose={()=>setSheet(false)}/>
+      </div>
+    );
+  }
+
+  ReactDOM.createRoot(document.getElementById('outer')).render(
+    <Shell><Profile/></Shell>
+  );
+</script>
+</body>
+</html>

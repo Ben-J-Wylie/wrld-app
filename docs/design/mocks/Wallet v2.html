@@ -1,0 +1,698 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Wrld — Wallet</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* Inlined tokens — mirrors system/tokens.css */
+  :root{
+    --bg:#070809; --bg-2:#0c0e11;
+    --panel:rgba(20,22,26,0.72); --panel-solid:#14171c; --panel-hi:#1a1e24;
+    --line:rgba(255,255,255,0.08); --line-2:rgba(255,255,255,0.14);
+    --ink:#ece9e2; --ink-dim:rgba(236,233,226,0.58); --ink-faint:rgba(236,233,226,0.34);
+    --accent:#3ea7ff; --accent-hot:#7fd0ff; --accent-glow:rgba(62,167,255,0.45);
+    --live:#ff4d4d; --live-glow:rgba(255,77,77,0.45);
+    --sans:"Inter Tight", ui-sans-serif, system-ui, sans-serif;
+    --mono:"JetBrains Mono", ui-monospace, monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:#0a0a0b;font-family:var(--sans);color:var(--ink);-webkit-font-smoothing:antialiased}
+  body{display:grid;place-items:center;overflow:hidden}
+
+  .phone-root{
+    width:402px;height:874px;position:relative;overflow:hidden;
+    background:radial-gradient(900px 700px at 50% 0%, #141720 0%, var(--bg) 70%);
+    color:var(--ink);
+  }
+
+  /* ── Header ─────────────────────────────────────────────────────── */
+  .hdr{
+    position:relative; z-index:2;
+    padding:56px 18px 6px;
+    display:flex; align-items:flex-end; justify-content:space-between;
+  }
+  .hdr .title{ font:600 28px/1.1 var(--sans); letter-spacing:-0.02em }
+  .hdr .sub{ font:500 11px var(--mono); color:var(--ink-faint); letter-spacing:0.12em; margin-top:4px }
+  .iconbtn{
+    width:36px;height:36px;border-radius:50%; border:1px solid var(--line); background:var(--panel);
+    color:var(--ink); display:grid; place-items:center; backdrop-filter:blur(10px);
+    cursor:pointer; transition:transform .18s;
+  }
+  .iconbtn:active{ transform:scale(0.94) }
+
+  /* ── Scroll container ───────────────────────────────────────────── */
+  .scroll{
+    position:absolute; inset:124px 0 0 0; z-index:2;
+    overflow-y:auto; overflow-x:hidden; scrollbar-width:none;
+    padding:0 0 120px;
+  }
+  .scroll::-webkit-scrollbar{display:none}
+
+  /* ── Balance hero (dual currency) ───────────────────────────────── */
+  .heroes{
+    margin:10px 18px 18px;
+    display:grid; grid-template-columns:1fr 1fr; gap:8px;
+  }
+  .purse{
+    padding:16px 16px 14px;
+    border-radius:22px;
+    border:1px solid var(--line-2);
+    backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+    position:relative; overflow:hidden;
+    display:flex; flex-direction:column; gap:10px;
+  }
+  .purse.tok{
+    background:
+      radial-gradient(120% 90% at 100% -10%, rgba(62,167,255,0.18), transparent 65%),
+      linear-gradient(180deg, rgba(20,22,26,0.85), rgba(14,16,20,0.85));
+  }
+  .purse.dia{
+    background:
+      radial-gradient(120% 90% at 100% -10%, rgba(255,77,77,0.18), transparent 65%),
+      linear-gradient(180deg, rgba(20,22,26,0.85), rgba(14,16,20,0.85));
+  }
+  .purse .caplabel{
+    font:500 9.5px var(--mono); color:var(--ink-faint); letter-spacing:0.14em;
+    display:flex; align-items:center; gap:7px;
+  }
+  .purse .caplabel .dot{
+    width:5px;height:5px;border-radius:50%;
+  }
+  .purse.tok .caplabel .dot{ background:var(--accent); box-shadow:0 0 6px var(--accent-glow) }
+  .purse.dia .caplabel .dot{ background:var(--live);   box-shadow:0 0 6px var(--live-glow) }
+
+  .purse .bal{
+    display:flex; align-items:baseline; gap:6px;
+  }
+  .purse .glyph{
+    display:inline-grid; place-items:center;
+    width:20px;height:20px; transform:translateY(3px);
+  }
+  .purse.tok .glyph{ color:var(--accent) }
+  .purse.dia .glyph{ color:var(--live)   }
+  .purse .n{
+    font:600 30px/1 var(--sans); letter-spacing:-0.03em;
+    font-variant-numeric:tabular-nums; color:var(--ink);
+  }
+
+  .purse .usd{
+    margin-top:auto;
+    font:500 11px var(--mono); color:var(--ink-dim); letter-spacing:0.06em;
+    display:flex; align-items:center; justify-content:space-between; gap:6px;
+    padding-top:10px; border-top:1px solid var(--line);
+  }
+  .purse .usd b{ color:var(--ink); font-weight:500 }
+  .purse .rate{
+    font:500 9px var(--mono); color:var(--ink-faint); letter-spacing:0.12em;
+  }
+
+  .purse .delta{
+    display:inline-flex; align-items:center; gap:4px;
+    padding:2px 6px 2px 4px; border-radius:999px;
+    font:500 9.5px var(--mono); letter-spacing:0.08em; white-space:nowrap;
+  }
+  .purse.tok .delta{
+    background:rgba(62,167,255,0.14); color:var(--accent-hot);
+    border:1px solid rgba(62,167,255,0.3);
+  }
+  .purse.dia .delta{
+    background:rgba(255,77,77,0.14); color:#ff9a9a;
+    border:1px solid rgba(255,77,77,0.3);
+  }
+
+  /* ── Action tiles ───────────────────────────────────────────────── */
+  .actions{
+    display:grid; grid-template-columns:1fr 1fr 1fr;
+    gap:8px; margin:0 18px 22px;
+  }
+  .act{
+    display:flex; flex-direction:column; align-items:flex-start; justify-content:space-between;
+    padding:12px; height:92px; border-radius:16px;
+    background:var(--panel); border:1px solid var(--line);
+    backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
+    cursor:pointer; transition:border-color .2s, background .2s, transform .18s;
+    text-align:left;
+  }
+  .act:active{ transform:scale(0.98) }
+  .act .ico{
+    width:30px;height:30px;border-radius:8px;
+    background:rgba(62,167,255,0.12); color:var(--accent);
+    display:grid; place-items:center; border:1px solid rgba(62,167,255,0.24);
+  }
+  .act .t{ font:600 14px var(--sans); letter-spacing:-0.01em; color:var(--ink) }
+  .act .s{ font:500 10px var(--mono); color:var(--ink-faint); letter-spacing:0.1em; margin-top:2px }
+  .act.primary{
+    background:linear-gradient(180deg, rgba(62,167,255,0.14), rgba(62,167,255,0.04));
+    border-color:rgba(62,167,255,0.45);
+    box-shadow:0 0 30px rgba(62,167,255,0.18);
+  }
+  .act.primary .ico{ background:var(--accent); color:#0a0c10; border-color:var(--accent) }
+
+  .act.live .ico{
+    background:rgba(255,77,77,0.12); color:var(--live);
+    border-color:rgba(255,77,77,0.3);
+  }
+  .act.live{
+    border-color:rgba(255,77,77,0.25);
+  }
+
+  /* ── Filter row ─────────────────────────────────────────────────── */
+  .filters{
+    padding:0 0 10px; margin:0 0 10px;
+    display:flex; gap:6px; overflow-x:auto; scrollbar-width:none;
+    border-bottom:1px solid var(--line);
+  }
+  .filters::-webkit-scrollbar{display:none}
+  .filters .pad{ width:12px; flex:none }
+  .chip{
+    flex:none; display:inline-flex; align-items:center; gap:6px;
+    height:30px; padding:0 12px; border-radius:999px;
+    border:1px solid var(--line-2); background:transparent;
+    font:500 11.5px var(--sans); color:var(--ink-dim); letter-spacing:0;
+    cursor:pointer; transition:background .2s, color .2s, border-color .2s;
+  }
+  .chip b{
+    font:500 10px var(--mono); color:var(--ink-faint); letter-spacing:0.08em;
+  }
+  .chip[aria-pressed="true"]{
+    background:var(--ink); color:#0a0c10; border-color:var(--ink);
+  }
+  .chip[aria-pressed="true"] b{ color:#0a0c10; opacity:0.6 }
+
+  /* Section header (day) */
+  .daygrp{ margin-top:14px }
+  .daygrp:first-of-type{ margin-top:4px }
+  .dayhead{
+    display:flex; align-items:baseline; justify-content:space-between;
+    padding:0 18px 6px;
+    font:500 10.5px var(--mono); color:var(--ink-faint); letter-spacing:0.14em;
+  }
+  .dayhead .right{ color:var(--ink-dim); font-weight:500 }
+  .dayhead .right b{ color:var(--ink); font-weight:500 }
+
+  /* ── Transaction rows ───────────────────────────────────────────── */
+  .tx{
+    display:grid; grid-template-columns:40px 1fr auto; align-items:center; gap:12px;
+    padding:12px 18px;
+    border-top:1px solid var(--line);
+    transition:background .2s;
+  }
+  .tx:first-of-type{ border-top:0 }
+  .tx:active{ background:rgba(255,255,255,0.02) }
+
+  .tx .thumb{
+    width:40px;height:40px;border-radius:12px;
+    background:var(--panel-hi); border:1px solid var(--line);
+    display:grid; place-items:center;
+    color:var(--ink-dim);
+    position:relative;
+  }
+  .tx[data-kind="tip-sent"] .thumb     { color:var(--accent); background:rgba(62,167,255,0.08); border-color:rgba(62,167,255,0.3) }
+  .tx[data-kind="sub-paid"] .thumb     { color:var(--accent); background:rgba(62,167,255,0.08); border-color:rgba(62,167,255,0.3) }
+  .tx[data-kind="ppv-paid"] .thumb     { color:var(--accent); background:rgba(62,167,255,0.08); border-color:rgba(62,167,255,0.3) }
+  .tx[data-kind="tip-received"] .thumb { color:var(--live);   background:rgba(255,77,77,0.08); border-color:rgba(255,77,77,0.3) }
+  .tx[data-kind="sub-earned"] .thumb   { color:var(--live);   background:rgba(255,77,77,0.08); border-color:rgba(255,77,77,0.3) }
+  .tx[data-kind="ppv-earned"] .thumb   { color:var(--live);   background:rgba(255,77,77,0.08); border-color:rgba(255,77,77,0.3) }
+  .tx[data-kind="topup"] .thumb        { color:var(--accent); background:rgba(62,167,255,0.08); border-color:rgba(62,167,255,0.3) }
+  .tx[data-kind="cashout"] .thumb      { color:var(--live);   background:rgba(255,77,77,0.08); border-color:rgba(255,77,77,0.3) }
+  .tx[data-kind="promo"] .thumb        { color:var(--accent-hot); background:rgba(62,167,255,0.08); border-color:rgba(62,167,255,0.3) }
+  .tx[data-kind="refund"] .thumb       { color:var(--ink-dim); background:var(--panel-hi) }
+  .tx[data-kind="hold"] .thumb         { color:var(--ink-faint); background:var(--panel-hi) }
+
+  .tx .meta .l{ font:600 14px var(--sans); letter-spacing:-0.01em; color:var(--ink);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:210px;
+  }
+  .tx .meta .s{ font:500 10.5px var(--mono); color:var(--ink-faint); letter-spacing:0.08em; margin-top:2px;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:220px;
+  }
+  .tx .meta .s .sep{ color:var(--ink-faint); opacity:0.5; margin:0 4px }
+  .tx .meta .s .chan{ color:var(--ink-dim) }
+
+  .tx .amt{
+    text-align:right;
+    font:500 15px var(--mono); color:var(--ink);
+    font-variant-numeric:tabular-nums; letter-spacing:-0.01em;
+    display:inline-flex; align-items:center; gap:5px; justify-content:flex-end;
+  }
+  .tx .amt .cg{
+    display:inline-grid; place-items:center;
+    width:12px; height:12px; flex:none;
+  }
+  .tx[data-cur="tok"] .amt .cg{ color:var(--accent) }
+  .tx[data-cur="dia"] .amt .cg{ color:var(--live) }
+  .tx .amt .usd{
+    display:block; font:500 10px var(--mono); color:var(--ink-faint); letter-spacing:0.06em; margin-top:3px;
+  }
+  .tx[data-dir="in"][data-cur="tok"]  .amt { color:var(--accent-hot) }
+  .tx[data-dir="in"][data-cur="dia"]  .amt { color:#ff9a9a }
+  .tx[data-dir="out"] .amt { color:var(--ink) }
+  .tx .amt .stack{ display:flex; flex-direction:column; align-items:flex-end }
+
+  /* Pending hint */
+  .tx[data-pending="true"] .amt::after{
+    content:"PENDING";
+    display:block; margin-top:3px;
+    font:500 8.5px var(--mono); letter-spacing:0.14em; color:var(--ink-faint);
+  }
+  .tx[data-pending="true"] .thumb{ opacity:0.75 }
+
+  /* ── End-of-list note ───────────────────────────────────────────── */
+  .eod{
+    padding:22px 18px 14px;
+    font:500 10px var(--mono); color:var(--ink-faint); letter-spacing:0.14em;
+    text-align:center;
+  }
+  .eod span{ display:inline-block; padding:0 10px; position:relative }
+  .eod span::before, .eod span::after{
+    content:""; position:absolute; top:50%; width:40px; height:1px; background:var(--line-2);
+  }
+  .eod span::before{ right:100% }
+  .eod span::after { left:100% }
+
+  /* Tab bar (static footer) — matches system aesthetic */
+  .tabbar{
+    position:absolute; left:0; right:0; bottom:0; z-index:40;
+    padding:10px 12px 30px;
+    background:var(--bg);
+    border-top:1px solid var(--line);
+    display:grid; grid-template-columns:repeat(4,1fr); gap:4px;
+  }
+  .tabbar::before{
+    content:""; position:absolute; left:0; right:0; bottom:100%;
+    height:24px; pointer-events:none;
+    background:linear-gradient(180deg, rgba(7,8,9,0), var(--bg));
+  }
+  .tab{
+    display:flex; flex-direction:column; align-items:center; gap:3px;
+    padding:8px 0; border:0; background:transparent; cursor:pointer;
+    color:var(--ink-faint);
+  }
+  .tab[aria-current="true"]{ color:var(--ink) }
+  .tab .lab{ font:500 9.5px var(--mono); letter-spacing:0.12em }
+</style>
+</head>
+<body>
+<div id="outer" style="width:100%;height:100%;display:grid;place-items:center"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" data-presets="react">
+  // Inline phone frame
+  function IOSStatusBar({ dark=true }){
+    const c = dark ? '#fff' : '#000';
+    return (
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'21px 34px 19px',width:'100%',boxSizing:'border-box'}}>
+        <span style={{fontFamily:'-apple-system,system-ui',fontWeight:590,fontSize:17,color:c}}>9:41</span>
+        <div style={{display:'flex',alignItems:'center',gap:7}}>
+          <svg width="19" height="12" viewBox="0 0 19 12"><rect x="0" y="7.5" width="3.2" height="4.5" rx="0.7" fill={c}/><rect x="4.8" y="5" width="3.2" height="7" rx="0.7" fill={c}/><rect x="9.6" y="2.5" width="3.2" height="9.5" rx="0.7" fill={c}/><rect x="14.4" y="0" width="3.2" height="12" rx="0.7" fill={c}/></svg>
+          <svg width="17" height="12" viewBox="0 0 17 12"><path d="M8.5 3.2C10.8 3.2 12.9 4.1 14.4 5.6L15.5 4.5C13.7 2.7 11.2 1.5 8.5 1.5C5.8 1.5 3.3 2.7 1.5 4.5L2.6 5.6C4.1 4.1 6.2 3.2 8.5 3.2Z" fill={c}/><path d="M8.5 6.8C9.9 6.8 11.1 7.3 12 8.2L13.1 7.1C11.8 5.9 10.2 5.1 8.5 5.1C6.8 5.1 5.2 5.9 3.9 7.1L5 8.2C5.9 7.3 7.1 6.8 8.5 6.8Z" fill={c}/><circle cx="8.5" cy="10.5" r="1.5" fill={c}/></svg>
+          <svg width="27" height="13" viewBox="0 0 27 13"><rect x="0.5" y="0.5" width="23" height="12" rx="3.5" stroke={c} strokeOpacity="0.35" fill="none"/><rect x="2" y="2" width="20" height="9" rx="2" fill={c}/><path d="M25 4.5V8.5C25.8 8.2 26.5 7.2 26.5 6.5C26.5 5.8 25.8 4.8 25 4.5Z" fill={c} fillOpacity="0.4"/></svg>
+        </div>
+      </div>
+    );
+  }
+  function IOSDevice({ children, width=402, height=874 }){
+    return (
+      <div style={{
+        width,height,borderRadius:48,overflow:'hidden',position:'relative',
+        background:'#000', boxShadow:'0 40px 80px rgba(0,0,0,0.35), 0 0 0 1px rgba(0,0,0,0.5)',
+        fontFamily:'-apple-system,system-ui,sans-serif'
+      }}>
+        <div style={{position:'absolute',top:11,left:'50%',transform:'translateX(-50%)',width:126,height:37,borderRadius:24,background:'#000',zIndex:50}}/>
+        <div style={{position:'absolute',top:0,left:0,right:0,zIndex:10}}><IOSStatusBar dark/></div>
+        <div style={{position:'absolute',inset:0}}>{children}</div>
+        <div style={{position:'absolute',bottom:0,left:0,right:0,zIndex:60,height:34,display:'flex',justifyContent:'center',alignItems:'flex-end',paddingBottom:8,pointerEvents:'none'}}>
+          <div style={{width:139,height:5,borderRadius:100,background:'rgba(255,255,255,0.7)'}}/>
+        </div>
+      </div>
+    );
+  }
+  function fitPhone(){
+    const vh=window.innerHeight, vw=window.innerWidth;
+    return Math.min(vw/(402+40), vh/(874+40), 1);
+  }
+  function Shell({children}){
+    const [s,setS] = React.useState(fitPhone());
+    React.useEffect(()=>{ const on=()=>setS(fitPhone()); window.addEventListener('resize',on); return ()=>window.removeEventListener('resize',on); },[]);
+    return <div style={{transform:`scale(${s})`, transformOrigin:'center'}}><IOSDevice>{children}</IOSDevice></div>;
+  }
+
+  // ── Icons ────────────────────────────────────────────────────────
+  // TOKEN mark — 4-point star (cued / info / purchase semantic)
+  const Token = ({ size=22 }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+      <path d="M12 2 L13.8 9.2 L21 11 L13.8 12.8 L12 20 L10.2 12.8 L3 11 L10.2 9.2 Z"/>
+    </svg>
+  );
+  // DIAMOND mark — rose-cut gem (earnings / cash-out semantic)
+  const Diamond = ({ size=22 }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round">
+      <path d="M4 9 L8 3 L16 3 L20 9 L12 21 Z"/>
+      <path d="M4 9 L20 9"/>
+      <path d="M8 3 L12 9 L16 3"/>
+      <path d="M12 9 L12 21"/>
+    </svg>
+  );
+  const I = {
+    settings: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/></svg>,
+    plus:    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>,
+    out:     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 17l10-10M17 17V7H7"/></svg>,
+    loop:    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 2l4 4-4 4"/><path d="M3 12V8a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 12v4a4 4 0 0 1-4 4H3"/></svg>,
+    up:      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M18 15l-6-6-6 6"/></svg>,
+    down:    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6"/></svg>,
+    heart:   <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21s-7-4.5-9.5-9A5.5 5.5 0 0 1 12 6a5.5 5.5 0 0 1 9.5 6c-2.5 4.5-9.5 9-9.5 9z"/></svg>,
+    card:    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/><path d="M7 15h3"/></svg>,
+    bank:    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-5 9 5"/><path d="M5 9v9M9 9v9M15 9v9M19 9v9"/><path d="M3 20h18"/></svg>,
+    gift:    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M20 12v9H4v-9"/><path d="M2 7h20v5H2z"/><path d="M12 22V7"/><path d="M12 7a3 3 0 0 1-3-3 3 3 0 0 1 3-3 3 3 0 0 1 3 3 3 3 0 0 1-3 3z"/></svg>,
+    clock:   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>,
+    rev:     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v5h5"/></svg>,
+    home:    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>,
+    go:      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>,
+    you:     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>,
+  };
+
+  // ── Data ─────────────────────────────────────────────────────────
+  // TOKENS are purchased in-app (1 TOKEN = $0.01 at checkout).
+  // When a user transfers tokens (tip / PPV / sub) they become DIAMONDS for the
+  // recipient. Diamonds cash out at $0.005 (creators keep ~50% after rev-share).
+  const TOKEN_USD   = 0.01;
+  const DIAMOND_USD = 0.005;
+
+  const TOKEN_BAL   = 14280;   // spendable
+  const DIAMOND_BAL = 28640;   // earned, cashable
+
+  /*
+    kind:    tip-sent | tip-received | sub-paid | sub-earned | ppv-paid | ppv-earned |
+             topup | cashout | promo | refund | hold
+    cur:     tok | dia        (which balance the amt moves)
+    dir:     in  | out        (direction relative to that balance)
+  */
+  const TX = [
+    // TODAY
+    { day:'today', time:'21:04', kind:'tip-sent',     cur:'tok', dir:'out',
+      title:'Tip · @kai.dc',
+      sub:'CH 27 · Bosphorus · ferry pier', amt: -500 },
+    { day:'today', time:'20:18', kind:'sub-paid',     cur:'tok', dir:'out',
+      title:'Monthly sub · @aurora.is',
+      sub:'Aurora feed · renewed', amt: -2400 },
+    { day:'today', time:'18:44', kind:'promo',        cur:'tok', dir:'in',
+      title:'Weekly streak bonus',
+      sub:'7-day active · reward', amt: +120 },
+    { day:'today', time:'12:55', kind:'tip-received', cur:'dia', dir:'in',
+      title:'Tip · from @ren.koto',
+      sub:'Your broadcast · Prospect Park', amt: +210 },
+    { day:'today', time:'11:02', kind:'topup',        cur:'tok', dir:'in',
+      title:'Top-up · Visa ····4821',
+      sub:'App Store · receipt #WRL-82K4', amt: +5000 },
+
+    // YESTERDAY
+    { day:'yesterday', time:'22:31', kind:'tip-sent',     cur:'tok', dir:'out',
+      title:'Tip · @shibuya.live',
+      sub:'CH 01 · Shibuya crossing', amt: -1000 },
+    { day:'yesterday', time:'22:14', kind:'ppv-paid',     cur:'tok', dir:'out',
+      title:'PPV · @marina.sg',
+      sub:'Drone showcase · 60 min', amt: -800 },
+    { day:'yesterday', time:'15:12', kind:'tip-received', cur:'dia', dir:'in',
+      title:'Tip · from @ren.koto',
+      sub:'Your broadcast · Prospect Park', amt: +300 },
+    { day:'yesterday', time:'14:08', kind:'ppv-earned',   cur:'dia', dir:'in',
+      title:'PPV unlock · from @gio',
+      sub:'Sunset session · replay', amt: +560 },
+    { day:'yesterday', time:'09:48', kind:'refund',       cur:'tok', dir:'in',
+      title:'Refund · dropped stream',
+      sub:'CH 14 · Copacabana · auto', amt: +200 },
+
+    // APR 22
+    { day:'apr22', time:'19:55', kind:'cashout',      cur:'dia', dir:'out',
+      title:'Cash out · Bank ··5410',
+      sub:'To USD · ACH · 1–2 days', amt: -4000, pending:true },
+    { day:'apr22', time:'19:50', kind:'hold',         cur:'dia', dir:'out',
+      title:'Hold · cash-out review',
+      sub:'Auto-release on verify', amt: -0 },
+    { day:'apr22', time:'12:20', kind:'sub-earned',   cur:'dia', dir:'in',
+      title:'Monthly sub · from @lagos.ari',
+      sub:'Your channel · renewed', amt: +1680 },
+    { day:'apr22', time:'12:19', kind:'tip-received', cur:'dia', dir:'in',
+      title:'Tip · from @gio',
+      sub:'Your broadcast · Prospect Park', amt: +700 },
+
+    // APR 21
+    { day:'apr21', time:'20:10', kind:'topup',    cur:'tok', dir:'in',
+      title:'Top-up · Apple Pay',
+      sub:'App Store · receipt #WRL-81T9', amt: +10000 },
+    { day:'apr21', time:'20:02', kind:'tip-sent', cur:'tok', dir:'out',
+      title:'Tip · @golden.gate',
+      sub:'CH 08 · Golden Gate overlook', amt: -150 },
+    { day:'apr21', time:'08:35', kind:'tip-sent', cur:'tok', dir:'out',
+      title:'Tip · @marina.sg',
+      sub:'CH 28 · Marina Bay · drones', amt: -300 },
+
+    // APR 20
+    { day:'apr20', time:'23:12', kind:'tip-sent',     cur:'tok', dir:'out',
+      title:'Tip · @brandenburg',
+      sub:'CH 05 · Brandenburger Tor', amt: -500 },
+    { day:'apr20', time:'15:40', kind:'tip-received', cur:'dia', dir:'in',
+      title:'Tip · from @plum',
+      sub:'Your broadcast · Grand Army', amt: +200 },
+  ];
+
+  const DAY_LABELS = {
+    today:     ['TODAY',        'APR 24'],
+    yesterday: ['YESTERDAY',    'APR 23'],
+    apr22:     ['TUE · APR 22', ''],
+    apr21:     ['MON · APR 21', ''],
+    apr20:     ['SUN · APR 20', ''],
+  };
+
+  // ── Helpers ──────────────────────────────────────────────────────
+  const fmtN = (n) => {
+    const abs = Math.abs(n);
+    const s = abs.toLocaleString('en-US');
+    return (n<0 ? '−' : n>0 ? '+' : '') + s;
+  };
+  const fmtUsd = (n, cur) => {
+    const rate = cur==='dia' ? DIAMOND_USD : TOKEN_USD;
+    const abs = Math.abs(n) * rate;
+    return '$' + abs.toFixed(2);
+  };
+
+  const FILTERS = [
+    { id:'all',       label:'All',              match: () => true },
+    { id:'topups',    label:'Token top-ups',    match: t => t.kind==='topup' },
+    { id:'spent',     label:'Tokens spent',     match: t => t.cur==='tok' && t.dir==='out' },
+    { id:'earned',    label:'Diamonds earned',  match: t => t.cur==='dia' && t.dir==='in' },
+    { id:'cashout',   label:'Cash-outs',        match: t => t.kind==='cashout' || t.kind==='hold' },
+    { id:'other',     label:'Other',            match: t => ['promo','refund'].includes(t.kind) },
+  ];
+
+  // Per-kind row icon
+  const kindIcon = (k) => ({
+    'tip-sent':      I.heart,
+    'tip-received':  I.heart,
+    'sub-paid':      I.star,
+    'sub-earned':    I.star,
+    'ppv-paid':      I.play,
+    'ppv-earned':    I.play,
+    'topup':         I.card,
+    'cashout':       I.bank,
+    'promo':         I.gift,
+    'refund':        I.rev,
+    'hold':          I.clock,
+  }[k]);
+
+  // ── Components ───────────────────────────────────────────────────
+  function Row({ t }){
+    const showAmt = !(t.kind==='hold' && t.amt===0);
+    const Glyph = t.cur==='dia' ? Diamond : Token;
+    return (
+      <div className="tx" data-kind={t.kind} data-cur={t.cur} data-dir={t.dir} data-pending={!!t.pending}>
+        <div className="thumb">{kindIcon(t.kind)}</div>
+        <div className="meta">
+          <div className="l">{t.title}</div>
+          <div className="s">
+            <span className="chan">{t.sub}</span>
+            <span className="sep">·</span>
+            <span>{t.time}</span>
+          </div>
+        </div>
+        <div className="amt">
+          {showAmt ? (
+            <>
+              <span className="cg"><Glyph size={12}/></span>
+              <span className="stack">
+                <span>{fmtN(t.amt)}</span>
+                <span className="usd">{fmtUsd(t.amt, t.cur)}</span>
+              </span>
+            </>
+          ) : (
+            <span className="stack">
+              <span>—</span>
+              <span className="usd">ON HOLD</span>
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  function DayTotals({ day, txs }){
+    let tokNet=0, diaNet=0;
+    txs.forEach(t => {
+      if(t.kind==='hold' && t.amt===0) return;
+      if(t.cur==='tok') tokNet += t.amt;
+      else              diaNet += t.amt;
+    });
+    const [L,R] = DAY_LABELS[day];
+    return (
+      <div className="dayhead">
+        <span>{L}{R ? ` · ${R}` : ''}</span>
+        <span className="right">
+          {tokNet !== 0 && <>TOK <b>{tokNet>=0?'+':'−'}{Math.abs(tokNet).toLocaleString('en-US')}</b></>}
+          {tokNet !== 0 && diaNet !== 0 && <span style={{opacity:0.4, margin:'0 6px'}}>·</span>}
+          {diaNet !== 0 && <>DIA <b>{diaNet>=0?'+':'−'}{Math.abs(diaNet).toLocaleString('en-US')}</b></>}
+        </span>
+      </div>
+    );
+  }
+
+  function Wallet(){
+    const [filter, setFilter] = React.useState('all');
+
+    const filtered = React.useMemo(()=> {
+      const f = FILTERS.find(x => x.id===filter);
+      return TX.filter(f.match);
+    }, [filter]);
+
+    // Group by day in the order TX already has
+    const groups = React.useMemo(()=>{
+      const seen = [];
+      const map = {};
+      filtered.forEach(t => {
+        if(!map[t.day]){ map[t.day] = []; seen.push(t.day); }
+        map[t.day].push(t);
+      });
+      return seen.map(d => ({ day:d, txs: map[d] }));
+    }, [filtered]);
+
+    return (
+      <div className="phone-root">
+        <div className="hdr">
+          <div>
+            <div className="title">Wallet</div>
+            <div className="sub">@kai.dc</div>
+          </div>
+          <button className="iconbtn" aria-label="Settings">{I.settings}</button>
+        </div>
+
+        <div className="scroll">
+          {/* Dual-currency hero */}
+          <div className="heroes">
+            <div className="purse tok">
+              <div className="caplabel"><span className="dot"/>TOKENS</div>
+              <div className="bal">
+                <span className="glyph"><Token size={20}/></span>
+                <span className="n">{TOKEN_BAL.toLocaleString('en-US')}</span>
+              </div>
+              <div className="usd">
+                <span><b>${(TOKEN_BAL*TOKEN_USD).toFixed(2)}</b></span>
+                <span className="rate">$0.01 EA</span>
+              </div>
+            </div>
+            <div className="purse dia">
+              <div className="caplabel"><span className="dot"/>DIAMONDS</div>
+              <div className="bal">
+                <span className="glyph"><Diamond size={20}/></span>
+                <span className="n">{DIAMOND_BAL.toLocaleString('en-US')}</span>
+              </div>
+              <div className="usd">
+                <span><b>${(DIAMOND_BAL*DIAMOND_USD).toFixed(2)}</b></span>
+                <span className="rate">$0.005 EA</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Action tiles */}
+          <div className="actions">
+            <button className="act primary">
+              <div className="ico">{I.plus}</div>
+              <div>
+                <div className="t">Top up</div>
+                <div className="s">BUY TOKENS</div>
+              </div>
+            </button>
+            <button className="act live">
+              <div className="ico">{I.out}</div>
+              <div>
+                <div className="t">Cash out</div>
+                <div className="s">DIAMONDS · 1–2D</div>
+              </div>
+            </button>
+            <button className="act">
+              <div className="ico">{I.loop}</div>
+              <div>
+                <div className="t">Auto-reload</div>
+                <div className="s">OFF</div>
+              </div>
+            </button>
+          </div>
+
+          {/* Activity */}
+          <div className="filters">
+            <span className="pad"/>
+            {FILTERS.map(f => {
+              const count = TX.filter(f.match).length;
+              return (
+                <button
+                  key={f.id}
+                  className="chip"
+                  aria-pressed={filter===f.id}
+                  onClick={()=>setFilter(f.id)}
+                >
+                  {f.label} <b>{count}</b>
+                </button>
+              );
+            })}
+            <span className="pad"/>
+          </div>
+
+          {groups.length === 0 && (
+            <div className="eod" style={{paddingTop:44}}><span>NOTHING HERE</span></div>
+          )}
+
+          {groups.map(g => (
+            <div key={g.day} className="daygrp">
+              <DayTotals day={g.day} txs={g.txs}/>
+              <div>
+                {g.txs.map((t,i) => <Row key={i} t={t}/>)}
+              </div>
+            </div>
+          ))}
+
+          {groups.length > 0 && (
+            <div className="eod"><span>30 DAY STATEMENT · END</span></div>
+          )}
+        </div>
+
+        {/* Tab bar */}
+        <div className="tabbar">
+          <button className="tab"><div>{I.home}</div><span className="lab">HOME</span></button>
+          <button className="tab"><div>{I.go}</div><span className="lab">GO LIVE</span></button>
+          <button className="tab" aria-current="true"><div><Token size={18}/></div><span className="lab">WALLET</span></button>
+          <button className="tab"><div>{I.you}</div><span className="lab">YOU</span></button>
+        </div>
+      </div>
+    );
+  }
+
+  ReactDOM.createRoot(document.getElementById('outer')).render(
+    <Shell><Wallet/></Shell>
+  );
+</script>
+</body>
+</html>

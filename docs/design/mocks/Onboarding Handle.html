@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Wrld — Onboarding · Handle</title>
+<style>
+  @import url("https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap");
+  :root{
+    --bg:#070809; --bg-2:#0c0e11;
+    --panel:rgba(20,22,26,0.72); --panel-solid:#14171c; --panel-hi:#1a1e24;
+    --line:rgba(255,255,255,0.08); --line-2:rgba(255,255,255,0.14);
+    --ink:#ece9e2; --ink-dim:rgba(236,233,226,0.58); --ink-faint:rgba(236,233,226,0.34);
+    --accent:#3ea7ff; --accent-hot:#7fd0ff; --accent-glow:rgba(62,167,255,0.45);
+    --live:#ff4d4d; --warn:#ffb95a;
+    --sans:"Inter Tight", ui-sans-serif, system-ui, sans-serif;
+    --mono:"JetBrains Mono", ui-monospace, monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:#0a0a0b;font-family:var(--sans);color:var(--ink);-webkit-font-smoothing:antialiased}
+  body{padding:48px 32px 80px}
+
+  .pageh{ max-width:1400px; margin:0 auto 36px }
+  .pageh .meta{ font:500 10px var(--mono); letter-spacing:0.16em; color:var(--ink-faint); margin-bottom:14px }
+  .pageh h1{ font:600 30px/1.1 var(--sans); letter-spacing:-0.025em; margin:0 0 8px }
+  .pageh p{ font:500 13px/1.6 var(--sans); color:var(--ink-dim); max-width:720px; margin:0 }
+  .pageh p b{ color:var(--ink); font-weight:500 }
+
+  .canvas{
+    max-width:1400px; margin:0 auto;
+    display:grid; grid-template-columns:repeat(3, 402px); gap:48px 32px;
+    justify-content:center;
+  }
+
+  .frame{ display:flex; flex-direction:column; gap:10px }
+  .frame .lab{
+    font:500 9.5px var(--mono); letter-spacing:0.16em; color:var(--ink-faint);
+    display:flex; gap:10px; align-items:baseline;
+  }
+  .frame .lab b{ color:var(--ink); font-weight:500 }
+
+  .phone{
+    width:402px; height:874px; border-radius:42px;
+    background:var(--bg); border:1px solid var(--line-2);
+    overflow:hidden; position:relative;
+    box-shadow:0 30px 60px rgba(0,0,0,0.4);
+  }
+  .phone .notch{ position:absolute; top:11px; left:50%; transform:translateX(-50%);
+    width:126px; height:34px; border-radius:22px; background:#000; z-index:50; }
+  .phone .home{ position:absolute; bottom:8px; left:50%; transform:translateX(-50%);
+    width:139px; height:5px; border-radius:100px; background:rgba(255,255,255,0.7); z-index:60; }
+  .statusbar{
+    position:absolute; top:21px; left:34px; right:34px; z-index:5;
+    display:flex; align-items:center; justify-content:space-between;
+    color:#fff; font:590 17px -apple-system, system-ui, sans-serif;
+  }
+  .statusbar svg{ display:block }
+  .statusbar .icns{ display:flex; align-items:center; gap:7px }
+
+  .wiz{ position:absolute; inset:0; padding:64px 22px 0;
+    display:flex; flex-direction:column; }
+  .wiz-top{ display:flex; align-items:center; gap:14px; padding:8px 0 18px }
+  .btn-back{
+    width:36px; height:36px; border-radius:50%;
+    background:transparent; border:1px solid var(--line); flex:none;
+    color:var(--ink); display:grid; place-items:center;
+  }
+  .btn-back svg{ width:14px; height:14px }
+  .pbar{ flex:1; display:flex; gap:5px; padding:8px 0 }
+  .pbar span{ flex:1; height:3px; border-radius:999px; background:var(--line) }
+  .pbar span[data-on="true"]{ background:var(--accent) }
+
+  .wiz-body{ flex:1; min-height:0; overflow:hidden;
+    display:flex; flex-direction:column; gap:14px;
+    padding:6px 4px 0; }
+  .wiz-h{ font:600 28px/1.12 var(--sans); letter-spacing:-0.025em; margin:0; text-wrap:pretty }
+  .wiz-d{ font:500 13.5px/1.55 var(--sans); color:var(--ink-dim); margin:0; text-wrap:pretty }
+  .wiz-d b{ color:var(--ink); font-weight:500 }
+
+  /* Handle input */
+  .field{ display:flex; flex-direction:column; gap:8px; margin-top:6px; }
+  .field-lab{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:0 4px; font:500 10px var(--mono); letter-spacing:0.14em; color:var(--ink-faint);
+  }
+  .field-lab .count{ font-variant-numeric:tabular-nums; color:var(--ink-faint) }
+  .field-lab .count b{ color:var(--ink-dim); font-weight:500 }
+  .input{
+    height:60px; border-radius:16px;
+    background:var(--panel-solid); border:1px solid var(--line);
+    color:var(--ink); padding:0 18px;
+    display:flex; align-items:center; gap:6px;
+    transition:border-color .2s, box-shadow .2s;
+  }
+  .input .at{ font:500 22px var(--sans); color:var(--ink-faint); font-variant-numeric:tabular-nums }
+  .input .ct{ flex:1; min-width:0;
+    font:500 22px var(--sans); letter-spacing:-0.005em;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .input .ct.placeholder{ color:var(--ink-faint) }
+  .input .cursor{ width:2px; height:24px; background:var(--accent);
+    margin-left:1px; animation:blink 1s steps(1) infinite }
+  @keyframes blink{ 50%{ opacity:0 } }
+  .input .icr{ flex:none; color:var(--ink-faint); width:22px; height:22px; display:grid; place-items:center }
+  .input[data-state="focus"]{ border-color:var(--accent); box-shadow:0 0 0 4px rgba(62,167,255,0.08) }
+  .input[data-state="focus"] .at{ color:var(--accent) }
+  .input[data-state="checking"]{ border-color:var(--line-2) }
+  .input[data-state="available"]{ border-color:rgba(62,167,255,0.4) }
+  .input[data-state="available"] .icr{ color:var(--accent) }
+  .input[data-state="taken"], .input[data-state="invalid"], .input[data-state="reserved"], .input[data-state="too-short"]{ border-color:rgba(255,77,77,0.5) }
+  .input[data-state="taken"] .icr, .input[data-state="invalid"] .icr,
+  .input[data-state="reserved"] .icr, .input[data-state="too-short"] .icr{ color:var(--live) }
+  .input .spinner{
+    width:16px; height:16px; border-radius:50%;
+    border:2px solid var(--line); border-top-color:var(--accent);
+    animation:spin 0.7s linear infinite;
+  }
+  @keyframes spin{ to{ transform:rotate(360deg) } }
+
+  /* Helper line */
+  .help{ font:500 11px var(--mono); letter-spacing:0.04em; padding:0 4px; line-height:1.5; }
+  .help[data-tone="dim"]{ color:var(--ink-faint) }
+  .help[data-tone="ok"]{ color:var(--accent) }
+  .help[data-tone="err"]{ color:var(--live) }
+  .help[data-tone="warn"]{ color:var(--warn) }
+  .help b{ color:var(--ink); font-weight:500 }
+  .help .ic{ display:inline-grid; place-items:center; width:11px; height:11px; vertical-align:-2px; margin-right:5px }
+
+  /* Rules card */
+  .rules{
+    margin-top:4px; padding:12px 14px;
+    border-radius:12px;
+    background:rgba(255,255,255,0.025); border:1px solid var(--line);
+    display:flex; flex-direction:column; gap:7px;
+  }
+  .rules .r{
+    display:flex; align-items:center; gap:9px;
+    font:500 11px var(--mono); letter-spacing:0.04em; color:var(--ink-faint);
+  }
+  .rules .r .dot{
+    width:14px; height:14px; border-radius:50%;
+    border:1px solid var(--line-2); flex:none;
+    display:grid; place-items:center; color:transparent;
+  }
+  .rules .r[data-met="true"] .dot{ background:rgba(62,167,255,0.16); border-color:rgba(62,167,255,0.5); color:var(--accent) }
+  .rules .r[data-met="true"]{ color:var(--ink) }
+  .rules .r[data-met="bad"] .dot{ background:rgba(255,77,77,0.12); border-color:rgba(255,77,77,0.5); color:var(--live) }
+  .rules .r[data-met="bad"]{ color:var(--live) }
+  .rules .r .dot svg{ width:9px; height:9px }
+
+  /* Suggestions */
+  .sugg-h{
+    margin-top:8px; padding:0 4px;
+    font:500 9.5px var(--mono); letter-spacing:0.16em; color:var(--ink-faint);
+  }
+  .suggest{ display:flex; flex-wrap:wrap; gap:6px; padding:0 4px; }
+  .suggest .chip{
+    display:inline-flex; align-items:center; gap:5px;
+    padding:9px 13px 9px 11px; border-radius:999px;
+    background:rgba(62,167,255,0.06); border:1px solid rgba(62,167,255,0.32);
+    color:var(--ink); cursor:pointer;
+    font:500 13px var(--sans); letter-spacing:-0.005em;
+    font-family:var(--sans);
+  }
+  .suggest .chip .at{ color:var(--accent); font:500 13px var(--mono) }
+
+  /* Identity reassurance — light card */
+  .reassure{
+    margin-top:auto;
+    padding:12px 14px; border-radius:12px;
+    background:rgba(255,255,255,0.025); border:1px solid var(--line);
+    display:flex; gap:10px; align-items:flex-start;
+  }
+  .reassure .ic{
+    width:24px; height:24px; border-radius:50%;
+    background:rgba(62,167,255,0.08); border:1px solid rgba(62,167,255,0.25);
+    color:var(--accent); display:grid; place-items:center; flex:none;
+  }
+  .reassure .ic svg{ width:13px; height:13px }
+  .reassure .t{
+    font:500 11.5px/1.5 var(--sans); color:var(--ink-dim); text-wrap:pretty;
+  }
+  .reassure .t b{ color:var(--ink); font-weight:500 }
+
+  /* Bottom action bar */
+  .wiz-foot{ padding:12px 4px 26px; display:flex; flex-direction:column; gap:6px }
+  .btn-primary{
+    height:54px; border-radius:20px; border:0;
+    background:var(--accent); color:#0a0c10;
+    font:600 15px var(--sans); cursor:pointer; font-family:var(--sans); width:100%;
+    box-shadow:0 0 30px rgba(62,167,255,0.18);
+  }
+  .btn-primary[disabled]{ opacity:0.32; box-shadow:none; cursor:not-allowed }
+</style>
+</head>
+<body>
+
+<div class="pageh">
+  <div class="meta">WRLD · ONBOARDING WIZARD · UPDATED STEP 3</div>
+  <h1>Pick your handle</h1>
+  <p>Updated handle-selection screen. Six frames covering every state: empty, focused, checking, available, taken (with suggestions), and rule-violations (invalid characters, too short, reserved). The reassurance line at the bottom carries the new identity-model framing — handle is the social-facing identifier, while the underlying account stays put if it ever changes.</p>
+</div>
+
+<div class="canvas">
+
+  <!-- ───────── Frame 1 — Empty / first focus ───────── -->
+  <div class="frame">
+    <div class="lab"><b>3 · A</b><span>EMPTY · FIRST FOCUS</span></div>
+    <div class="phone">
+      <div class="notch"></div>
+      <div class="home"></div>
+      <div class="statusbar">
+        <span>9:41</span>
+        <span class="icns">
+          <svg width="19" height="12" viewBox="0 0 19 12"><rect x="0" y="7.5" width="3.2" height="4.5" rx="0.7" fill="#fff"/><rect x="4.8" y="5" width="3.2" height="7" rx="0.7" fill="#fff"/><rect x="9.6" y="2.5" width="3.2" height="9.5" rx="0.7" fill="#fff"/><rect x="14.4" y="0" width="3.2" height="12" rx="0.7" fill="#fff"/></svg>
+          <svg width="27" height="13" viewBox="0 0 27 13"><rect x="0.5" y="0.5" width="23" height="12" rx="3.5" stroke="#fff" stroke-opacity="0.4" fill="none"/><rect x="2" y="2" width="20" height="9" rx="2" fill="#fff"/></svg>
+        </span>
+      </div>
+      <div class="wiz">
+        <div class="wiz-top">
+          <button class="btn-back" aria-label="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+          <div class="pbar"><span data-on="true"></span><span data-on="true"></span><span data-on="true"></span><span></span><span></span><span></span><span></span><span></span></div>
+        </div>
+        <div class="wiz-body">
+          <h2 class="wiz-h">Pick your handle</h2>
+          <p class="wiz-d">This is how people will <b>find, follow, and @-mention you</b> on Wrld. You can change it later — your account stays the same underneath.</p>
+          <div class="field">
+            <div class="field-lab"><span>YOUR HANDLE</span><span class="count"><b>0</b> / 20</span></div>
+            <div class="input" data-state="focus">
+              <span class="at">@</span>
+              <span class="ct placeholder">your_handle</span>
+              <span class="cursor"></span>
+            </div>
+            <span class="help" data-tone="dim">3–20 CHARACTERS · LETTERS, NUMBERS, UNDERSCORES</span>
+          </div>
+        </div>
+        <div class="wiz-foot">
+          <div class="reassure">
+            <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></svg></span>
+            <span class="t"><b>Your handle is changeable.</b> Your account identity is permanent — followers, history, and verification stay with you even if you rename later.</span>
+          </div>
+          <button class="btn-primary" disabled>Continue</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───────── Frame 2 — Checking ───────── -->
+  <div class="frame">
+    <div class="lab"><b>3 · B</b><span>TYPING · DEBOUNCED CHECK</span></div>
+    <div class="phone">
+      <div class="notch"></div>
+      <div class="home"></div>
+      <div class="statusbar">
+        <span>9:41</span>
+        <span class="icns">
+          <svg width="19" height="12" viewBox="0 0 19 12"><rect x="0" y="7.5" width="3.2" height="4.5" rx="0.7" fill="#fff"/><rect x="4.8" y="5" width="3.2" height="7" rx="0.7" fill="#fff"/><rect x="9.6" y="2.5" width="3.2" height="9.5" rx="0.7" fill="#fff"/><rect x="14.4" y="0" width="3.2" height="12" rx="0.7" fill="#fff"/></svg>
+          <svg width="27" height="13" viewBox="0 0 27 13"><rect x="0.5" y="0.5" width="23" height="12" rx="3.5" stroke="#fff" stroke-opacity="0.4" fill="none"/><rect x="2" y="2" width="20" height="9" rx="2" fill="#fff"/></svg>
+        </span>
+      </div>
+      <div class="wiz">
+        <div class="wiz-top">
+          <button class="btn-back" aria-label="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+          <div class="pbar"><span data-on="true"></span><span data-on="true"></span><span data-on="true"></span><span></span><span></span><span></span><span></span><span></span></div>
+        </div>
+        <div class="wiz-body">
+          <h2 class="wiz-h">Pick your handle</h2>
+          <p class="wiz-d">This is how people will <b>find, follow, and @-mention you</b> on Wrld.</p>
+          <div class="field">
+            <div class="field-lab"><span>YOUR HANDLE</span><span class="count"><b>5</b> / 20</span></div>
+            <div class="input" data-state="checking">
+              <span class="at">@</span>
+              <span class="ct">kai.dc</span>
+              <span class="icr"><span class="spinner"></span></span>
+            </div>
+            <span class="help" data-tone="dim">CHECKING IF <b>@KAI.DC</b> IS AVAILABLE…</span>
+          </div>
+          <div class="rules">
+            <div class="r" data-met="true"><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg></span><span>3 TO 20 CHARACTERS</span></div>
+            <div class="r" data-met="true"><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg></span><span>LETTERS, NUMBERS, UNDERSCORES</span></div>
+            <div class="r"><span class="dot"></span><span>CASE-INSENSITIVE — <b style="color:var(--ink-dim)">KAI.DC</b> IS THE SAME AS <b style="color:var(--ink-dim)">kai.dc</b></span></div>
+          </div>
+        </div>
+        <div class="wiz-foot">
+          <button class="btn-primary" disabled>Continue</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───────── Frame 3 — Available ───────── -->
+  <div class="frame">
+    <div class="lab"><b>3 · C</b><span>AVAILABLE · CTA UNLOCKS</span></div>
+    <div class="phone">
+      <div class="notch"></div>
+      <div class="home"></div>
+      <div class="statusbar">
+        <span>9:41</span>
+        <span class="icns">
+          <svg width="19" height="12" viewBox="0 0 19 12"><rect x="0" y="7.5" width="3.2" height="4.5" rx="0.7" fill="#fff"/><rect x="4.8" y="5" width="3.2" height="7" rx="0.7" fill="#fff"/><rect x="9.6" y="2.5" width="3.2" height="9.5" rx="0.7" fill="#fff"/><rect x="14.4" y="0" width="3.2" height="12" rx="0.7" fill="#fff"/></svg>
+          <svg width="27" height="13" viewBox="0 0 27 13"><rect x="0.5" y="0.5" width="23" height="12" rx="3.5" stroke="#fff" stroke-opacity="0.4" fill="none"/><rect x="2" y="2" width="20" height="9" rx="2" fill="#fff"/></svg>
+        </span>
+      </div>
+      <div class="wiz">
+        <div class="wiz-top">
+          <button class="btn-back" aria-label="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+          <div class="pbar"><span data-on="true"></span><span data-on="true"></span><span data-on="true"></span><span></span><span></span><span></span><span></span><span></span></div>
+        </div>
+        <div class="wiz-body">
+          <h2 class="wiz-h">Pick your handle</h2>
+          <p class="wiz-d">This is how people will <b>find, follow, and @-mention you</b> on Wrld.</p>
+          <div class="field">
+            <div class="field-lab"><span>YOUR HANDLE</span><span class="count"><b>6</b> / 20</span></div>
+            <div class="input" data-state="available">
+              <span class="at">@</span>
+              <span class="ct">kai.dc</span>
+              <span class="icr"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg></span>
+            </div>
+            <span class="help" data-tone="ok"><b>@KAI.DC</b> IS AVAILABLE</span>
+          </div>
+          <div class="rules">
+            <div class="r" data-met="true"><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg></span><span>3 TO 20 CHARACTERS</span></div>
+            <div class="r" data-met="true"><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg></span><span>LETTERS, NUMBERS, UNDERSCORES</span></div>
+            <div class="r" data-met="true"><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg></span><span>NOT TAKEN BY ANOTHER ACCOUNT</span></div>
+          </div>
+        </div>
+        <div class="wiz-foot">
+          <div class="reassure">
+            <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></svg></span>
+            <span class="t"><b>You can change this later</b> from settings. Your followers and history follow your account, not your handle.</span>
+          </div>
+          <button class="btn-primary">Continue as @kai.dc</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───────── Frame 4 — Taken / suggestions ───────── -->
+  <div class="frame">
+    <div class="lab"><b>3 · D</b><span>TAKEN · SUGGESTIONS BASED ON DISPLAY NAME + ATTEMPT</span></div>
+    <div class="phone">
+      <div class="notch"></div>
+      <div class="home"></div>
+      <div class="statusbar">
+        <span>9:41</span>
+        <span class="icns">
+          <svg width="19" height="12" viewBox="0 0 19 12"><rect x="0" y="7.5" width="3.2" height="4.5" rx="0.7" fill="#fff"/><rect x="4.8" y="5" width="3.2" height="7" rx="0.7" fill="#fff"/><rect x="9.6" y="2.5" width="3.2" height="9.5" rx="0.7" fill="#fff"/><rect x="14.4" y="0" width="3.2" height="12" rx="0.7" fill="#fff"/></svg>
+          <svg width="27" height="13" viewBox="0 0 27 13"><rect x="0.5" y="0.5" width="23" height="12" rx="3.5" stroke="#fff" stroke-opacity="0.4" fill="none"/><rect x="2" y="2" width="20" height="9" rx="2" fill="#fff"/></svg>
+        </span>
+      </div>
+      <div class="wiz">
+        <div class="wiz-top">
+          <button class="btn-back" aria-label="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+          <div class="pbar"><span data-on="true"></span><span data-on="true"></span><span data-on="true"></span><span></span><span></span><span></span><span></span><span></span></div>
+        </div>
+        <div class="wiz-body">
+          <h2 class="wiz-h">Pick your handle</h2>
+          <p class="wiz-d">This is how people will <b>find, follow, and @-mention you</b> on Wrld.</p>
+          <div class="field">
+            <div class="field-lab"><span>YOUR HANDLE</span><span class="count"><b>3</b> / 20</span></div>
+            <div class="input" data-state="taken">
+              <span class="at">@</span>
+              <span class="ct">kai</span>
+              <span class="icr"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></span>
+            </div>
+            <span class="help" data-tone="err"><b>@KAI</b> IS ALREADY TAKEN — TRY ONE OF THESE</span>
+          </div>
+          <div class="sugg-h">SUGGESTIONS</div>
+          <div class="suggest">
+            <button class="chip"><span class="at">@</span>kai.dc</button>
+            <button class="chip"><span class="at">@</span>kai_dc</button>
+            <button class="chip"><span class="at">@</span>kai_studio</button>
+            <button class="chip"><span class="at">@</span>kaidc__</button>
+          </div>
+        </div>
+        <div class="wiz-foot">
+          <button class="btn-primary" disabled>Continue</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───────── Frame 5 — Invalid characters ───────── -->
+  <div class="frame">
+    <div class="lab"><b>3 · E</b><span>INVALID CHARACTERS · SPACE OR SYMBOL</span></div>
+    <div class="phone">
+      <div class="notch"></div>
+      <div class="home"></div>
+      <div class="statusbar">
+        <span>9:41</span>
+        <span class="icns">
+          <svg width="19" height="12" viewBox="0 0 19 12"><rect x="0" y="7.5" width="3.2" height="4.5" rx="0.7" fill="#fff"/><rect x="4.8" y="5" width="3.2" height="7" rx="0.7" fill="#fff"/><rect x="9.6" y="2.5" width="3.2" height="9.5" rx="0.7" fill="#fff"/><rect x="14.4" y="0" width="3.2" height="12" rx="0.7" fill="#fff"/></svg>
+          <svg width="27" height="13" viewBox="0 0 27 13"><rect x="0.5" y="0.5" width="23" height="12" rx="3.5" stroke="#fff" stroke-opacity="0.4" fill="none"/><rect x="2" y="2" width="20" height="9" rx="2" fill="#fff"/></svg>
+        </span>
+      </div>
+      <div class="wiz">
+        <div class="wiz-top">
+          <button class="btn-back" aria-label="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+          <div class="pbar"><span data-on="true"></span><span data-on="true"></span><span data-on="true"></span><span></span><span></span><span></span><span></span><span></span></div>
+        </div>
+        <div class="wiz-body">
+          <h2 class="wiz-h">Pick your handle</h2>
+          <p class="wiz-d">This is how people will <b>find, follow, and @-mention you</b> on Wrld.</p>
+          <div class="field">
+            <div class="field-lab"><span>YOUR HANDLE</span><span class="count"><b>11</b> / 20</span></div>
+            <div class="input" data-state="invalid">
+              <span class="at">@</span>
+              <span class="ct">kai studio!</span>
+              <span class="icr"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></span>
+            </div>
+            <span class="help" data-tone="err">NO SPACES OR SYMBOLS — TRY <b>KAI_STUDIO</b></span>
+          </div>
+          <div class="rules">
+            <div class="r" data-met="true"><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg></span><span>3 TO 20 CHARACTERS</span></div>
+            <div class="r" data-met="bad"><span class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></span><span>LETTERS, NUMBERS, UNDERSCORES ONLY</span></div>
+            <div class="r"><span class="dot"></span><span>CASE-INSENSITIVE FOR UNIQUENESS</span></div>
+          </div>
+        </div>
+        <div class="wiz-foot">
+          <button class="btn-primary" disabled>Continue</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───────── Frame 6 — Reserved word ───────── -->
+  <div class="frame">
+    <div class="lab"><b>3 · F</b><span>RESERVED WORD · SAME TREATMENT AS TAKEN</span></div>
+    <div class="phone">
+      <div class="notch"></div>
+      <div class="home"></div>
+      <div class="statusbar">
+        <span>9:41</span>
+        <span class="icns">
+          <svg width="19" height="12" viewBox="0 0 19 12"><rect x="0" y="7.5" width="3.2" height="4.5" rx="0.7" fill="#fff"/><rect x="4.8" y="5" width="3.2" height="7" rx="0.7" fill="#fff"/><rect x="9.6" y="2.5" width="3.2" height="9.5" rx="0.7" fill="#fff"/><rect x="14.4" y="0" width="3.2" height="12" rx="0.7" fill="#fff"/></svg>
+          <svg width="27" height="13" viewBox="0 0 27 13"><rect x="0.5" y="0.5" width="23" height="12" rx="3.5" stroke="#fff" stroke-opacity="0.4" fill="none"/><rect x="2" y="2" width="20" height="9" rx="2" fill="#fff"/></svg>
+        </span>
+      </div>
+      <div class="wiz">
+        <div class="wiz-top">
+          <button class="btn-back" aria-label="Back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+          <div class="pbar"><span data-on="true"></span><span data-on="true"></span><span data-on="true"></span><span></span><span></span><span></span><span></span><span></span></div>
+        </div>
+        <div class="wiz-body">
+          <h2 class="wiz-h">Pick your handle</h2>
+          <p class="wiz-d">This is how people will <b>find, follow, and @-mention you</b> on Wrld.</p>
+          <div class="field">
+            <div class="field-lab"><span>YOUR HANDLE</span><span class="count"><b>5</b> / 20</span></div>
+            <div class="input" data-state="reserved">
+              <span class="at">@</span>
+              <span class="ct">admin</span>
+              <span class="icr"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></span>
+            </div>
+            <span class="help" data-tone="err"><b>@ADMIN</b> IS RESERVED — PICK ANOTHER</span>
+          </div>
+          <div class="sugg-h">SUGGESTIONS</div>
+          <div class="suggest">
+            <button class="chip"><span class="at">@</span>kai.dc</button>
+            <button class="chip"><span class="at">@</span>kai_studio</button>
+            <button class="chip"><span class="at">@</span>kaidc</button>
+            <button class="chip"><span class="at">@</span>kai__dc</button>
+          </div>
+        </div>
+        <div class="wiz-foot">
+          <div class="reassure">
+            <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></svg></span>
+            <span class="t">A few handles are reserved for system roles, brand-protected names, and existing trademarks. <b>Anything personal is fair game.</b></span>
+          </div>
+          <button class="btn-primary" disabled>Continue</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

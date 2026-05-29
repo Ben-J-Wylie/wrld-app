@@ -1,0 +1,645 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Wrld — Cash out</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#070809; --bg-2:#0c0e11;
+    --panel:rgba(20,22,26,0.72); --panel-solid:#14171c; --panel-hi:#1a1e24;
+    --line:rgba(255,255,255,0.08); --line-2:rgba(255,255,255,0.14);
+    --ink:#ece9e2; --ink-dim:rgba(236,233,226,0.58); --ink-faint:rgba(236,233,226,0.34);
+    --accent:#3ea7ff; --accent-hot:#7fd0ff; --accent-glow:rgba(62,167,255,0.45);
+    --live:#ff4d4d; --live-hot:#ff9a9a; --live-glow:rgba(255,77,77,0.45);
+    --sans:"Inter Tight", ui-sans-serif, system-ui, sans-serif;
+    --mono:"JetBrains Mono", ui-monospace, monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:#0a0a0b;font-family:var(--sans);color:var(--ink);-webkit-font-smoothing:antialiased}
+  body{display:grid;place-items:center;overflow:hidden}
+
+  .phone-root{
+    width:402px;height:874px;position:relative;overflow:hidden;
+    background:radial-gradient(900px 700px at 50% 0%, #1a1416 0%, var(--bg) 70%);
+    color:var(--ink);
+  }
+
+  /* Header */
+  .hdr{
+    position:relative; z-index:2;
+    padding:56px 18px 6px;
+    display:flex; align-items:center; justify-content:space-between;
+  }
+  .hdr .ttl{
+    font:600 20px/1 var(--sans); letter-spacing:-0.01em;
+    position:absolute; left:50%; transform:translateX(-50%); top:58px;
+  }
+  .iconbtn{
+    width:36px;height:36px;border-radius:50%; border:1px solid var(--line); background:var(--panel);
+    color:var(--ink); display:grid; place-items:center; backdrop-filter:blur(10px);
+    cursor:pointer; transition:transform .18s;
+    font-family:var(--sans);
+  }
+  .iconbtn:active{ transform:scale(0.94) }
+
+  /* Scroll body */
+  .scroll{
+    position:absolute; inset:106px 0 112px 0; z-index:2;
+    overflow-y:auto; overflow-x:hidden; scrollbar-width:none;
+    padding:0 0 20px;
+  }
+  .scroll::-webkit-scrollbar{display:none}
+
+  /* Balance hero — diamonds, live-red */
+  .hero{
+    margin:6px 18px 14px;
+    padding:18px 18px 16px;
+    border-radius:22px;
+    background:
+      radial-gradient(120% 90% at 100% -10%, rgba(255,77,77,0.16), transparent 65%),
+      linear-gradient(180deg, rgba(20,22,26,0.85), rgba(14,16,20,0.85));
+    border:1px solid var(--line-2);
+    backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+    position:relative; overflow:hidden;
+  }
+  .hero .caplabel{
+    font:500 10px var(--mono); color:var(--ink-faint); letter-spacing:0.14em;
+    display:flex; align-items:center; gap:7px;
+  }
+  .hero .caplabel .dot{
+    width:5px;height:5px;border-radius:50%;
+    background:var(--live); box-shadow:0 0 6px var(--live-glow);
+  }
+  .hero .bal{
+    display:flex; align-items:baseline; gap:8px; margin-top:10px;
+  }
+  .hero .glyph{
+    display:inline-grid; place-items:center;
+    width:22px;height:22px; transform:translateY(3px);
+    color:var(--live);
+  }
+  .hero .n{
+    font:600 36px/1 var(--sans); letter-spacing:-0.03em;
+    font-variant-numeric:tabular-nums; color:var(--ink);
+  }
+  .hero .unit{
+    font:500 10px var(--mono); color:var(--ink-dim); letter-spacing:0.14em;
+    align-self:center; padding:3px 7px; border:1px solid var(--line-2); border-radius:6px;
+  }
+  .hero .usd{
+    margin-top:6px;
+    font:500 11px var(--mono); color:var(--ink-dim); letter-spacing:0.08em;
+  }
+  .hero .usd b{ color:var(--ink); font-weight:500 }
+  .hero .rate{
+    position:absolute; top:18px; right:18px;
+    font:500 9.5px var(--mono); color:var(--ink-faint); letter-spacing:0.14em;
+    text-align:right;
+  }
+  .hero .rate b{ color:var(--ink-dim); font-weight:500; display:block; margin-top:3px; letter-spacing:0.04em }
+
+  /* Section label */
+  .sec-head{
+    padding:4px 18px 10px;
+    display:flex; align-items:baseline; justify-content:space-between;
+  }
+  .sec-head .l{ font:500 10.5px var(--mono); color:var(--ink-faint); letter-spacing:0.14em }
+  .sec-head .r{
+    font:500 10px var(--mono); color:var(--accent); letter-spacing:0.12em;
+    cursor:pointer;
+  }
+
+  /* Amount input card */
+  .amount-card{
+    margin:0 18px 14px;
+    padding:22px 20px 18px;
+    border-radius:22px;
+    background:var(--panel); border:1px solid var(--line);
+    backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
+    transition:opacity .2s, filter .2s;
+  }
+  .amount-row{
+    display:flex; align-items:baseline; gap:8px;
+  }
+  .amount-row .glyph{
+    color:var(--live); display:inline-grid; place-items:center;
+    transform:translateY(2px);
+  }
+  .amount-input{
+    flex:1; min-width:0;
+    background:transparent; border:0; outline:0;
+    color:var(--ink); font:600 40px/1 var(--sans); letter-spacing:-0.03em;
+    font-variant-numeric:tabular-nums;
+    caret-color:var(--live);
+    padding:0;
+  }
+  .amount-input::-webkit-outer-spin-button,
+  .amount-input::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0 }
+  .amount-input[type=number]{ -moz-appearance:textfield }
+  .amount-input::placeholder{ color:var(--ink-faint) }
+  .amount-unit{
+    font:500 10px var(--mono); color:var(--ink-dim); letter-spacing:0.14em;
+    padding:3px 7px; border:1px solid var(--line-2); border-radius:6px;
+  }
+  .amount-usd{
+    margin-top:8px;
+    font:500 12px var(--mono); color:var(--ink-dim); letter-spacing:0.04em;
+    display:flex; align-items:center; justify-content:space-between;
+  }
+  .amount-usd b{ color:var(--ink); font-weight:500 }
+  .amount-usd .fee{
+    font:500 9.5px var(--mono); color:var(--ink-faint); letter-spacing:0.14em;
+  }
+
+  /* Slider */
+  .slider-wrap{ margin-top:16px; padding-top:14px; border-top:1px solid var(--line) }
+  .slider{
+    -webkit-appearance:none; appearance:none;
+    width:100%; height:4px; border-radius:999px;
+    background:linear-gradient(to right,
+      var(--live) 0%, var(--live) var(--pct,0%),
+      rgba(255,255,255,0.12) var(--pct,0%), rgba(255,255,255,0.12) 100%);
+    outline:none;
+  }
+  .slider::-webkit-slider-thumb{
+    -webkit-appearance:none; appearance:none;
+    width:20px; height:20px; border-radius:50%;
+    background:var(--ink); border:2px solid var(--live);
+    box-shadow:0 0 14px var(--live-glow);
+    cursor:pointer;
+  }
+  .slider::-moz-range-thumb{
+    width:20px; height:20px; border-radius:50%;
+    background:var(--ink); border:2px solid var(--live);
+    box-shadow:0 0 14px var(--live-glow); cursor:pointer;
+  }
+  .slider-ticks{
+    margin-top:6px;
+    display:flex; justify-content:space-between;
+    font:500 9px var(--mono); color:var(--ink-faint); letter-spacing:0.1em;
+  }
+
+  /* Preset chips */
+  .presets{
+    margin:0 18px 16px;
+    display:grid; grid-template-columns:repeat(4,1fr); gap:6px;
+  }
+  .preset{
+    height:36px; border-radius:10px;
+    background:var(--panel); border:1px solid var(--line);
+    font:500 11px var(--mono); color:var(--ink-dim); letter-spacing:0.08em;
+    cursor:pointer; transition:border-color .2s, background .2s, color .2s;
+    backdrop-filter:blur(10px);
+  }
+  .preset[aria-pressed="true"]{
+    background:rgba(255,77,77,0.12); border-color:rgba(255,77,77,0.5);
+    color:var(--live-hot);
+  }
+
+  /* Bank row */
+  .bank-card{
+    margin:0 18px 14px;
+    padding:14px 16px;
+    border-radius:16px;
+    background:var(--panel); border:1px solid var(--line);
+    backdrop-filter:blur(12px);
+    display:grid; grid-template-columns:38px 1fr auto; align-items:center; gap:12px;
+    transition:opacity .2s;
+  }
+  .bank-card .ic{
+    width:38px; height:38px; border-radius:10px;
+    background:var(--panel-hi); border:1px solid var(--line);
+    display:grid; place-items:center; color:var(--ink-dim);
+  }
+  .bank-card .meta{ display:flex; flex-direction:column; gap:3px; min-width:0 }
+  .bank-card .meta .l{ display:block; font:600 14px var(--sans); letter-spacing:-0.01em; color:var(--ink) }
+  .bank-card .meta .s{ display:block; font:500 10px var(--mono); color:var(--ink-faint); letter-spacing:0.1em; margin-top:3px }
+  .bank-card .chg{
+    border:0; background:transparent; color:var(--accent);
+    font:500 11px var(--mono); letter-spacing:0.08em; cursor:pointer;
+    padding:6px 8px;
+  }
+
+  /* Locked overlay: dimmed inputs */
+  .locked .amount-card,
+  .locked .presets,
+  .locked .bank-card,
+  .locked .slider-wrap{
+    opacity:0.38; pointer-events:none; filter:saturate(0.5);
+  }
+
+  /* Setup checklist */
+  .setup{
+    margin:0 18px 14px;
+    padding:16px 16px 14px;
+    border-radius:20px;
+    background:
+      radial-gradient(110% 100% at 100% 0%, rgba(255,77,77,0.1), transparent 70%),
+      linear-gradient(180deg, rgba(20,22,26,0.9), rgba(14,16,20,0.9));
+    border:1px solid rgba(255,77,77,0.3);
+    backdrop-filter:blur(14px);
+  }
+  .setup .setup-head{
+    display:flex; align-items:center; gap:8px;
+    padding-bottom:12px; border-bottom:1px solid var(--line);
+  }
+  .setup .setup-head .lock{
+    width:26px; height:26px; border-radius:8px;
+    background:rgba(255,77,77,0.12); border:1px solid rgba(255,77,77,0.3);
+    display:grid; place-items:center; color:var(--live);
+  }
+  .setup .setup-head .t{
+    font:600 14px var(--sans); letter-spacing:-0.01em; color:var(--ink);
+  }
+  .setup .setup-head .s{
+    font:500 10px var(--mono); color:var(--ink-faint); letter-spacing:0.1em; margin-top:2px;
+  }
+
+  .steps{ margin-top:10px }
+  .step{
+    display:grid; grid-template-columns:28px 1fr 16px; align-items:center; gap:12px;
+    padding:12px 4px;
+    border-bottom:1px solid var(--line);
+    text-align:left; width:100%;
+    background:transparent; border-top:0; border-left:0; border-right:0;
+    font-family:var(--sans); color:var(--ink);
+    cursor:pointer;
+  }
+  .step:last-child{ border-bottom:0 }
+  .step .num{
+    width:26px; height:26px; border-radius:50%;
+    background:rgba(255,77,77,0.12); border:1px solid rgba(255,77,77,0.35);
+    color:var(--live);
+    font:600 11px var(--mono); letter-spacing:0;
+    display:grid; place-items:center;
+  }
+  .step[data-done="true"] .num{
+    background:var(--ink); color:#0a0c10; border-color:var(--ink);
+  }
+  .step .meta{ display:flex; flex-direction:column; gap:3px; min-width:0 }
+  .step .meta .l{ display:block; font:600 14px var(--sans); letter-spacing:-0.01em; color:var(--ink) }
+  .step .meta .s{ display:block; font:500 10.5px var(--mono); color:var(--ink-faint); letter-spacing:0.08em; margin-top:3px }
+  .step .chev{ color:var(--ink-faint) }
+  .step[data-done="true"] .meta .l{ color:var(--ink-dim); text-decoration:line-through; text-decoration-color:var(--line-2) }
+  .step[data-done="true"] .meta .s{ color:var(--ink-faint) }
+
+  /* Bottom CTA */
+  .cta-bar{
+    position:absolute; left:0; right:0; bottom:0; z-index:40;
+    padding:10px 14px 30px;
+    background:linear-gradient(180deg, rgba(7,8,9,0), rgba(7,8,9,0.92) 28%, var(--bg) 60%);
+    display:flex; flex-direction:column; gap:8px;
+    pointer-events:none;
+  }
+  .cta-bar > *{ pointer-events:auto }
+
+  .cta{
+    height:64px; width:100%;
+    border-radius:20px; border:0;
+    background:var(--live); color:#120708;
+    font:600 16px var(--sans); letter-spacing:-0.01em;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:0 20px 0 22px;
+    cursor:pointer; transition:transform .18s, box-shadow .2s, opacity .2s;
+    box-shadow:0 0 40px rgba(255,77,77,0.25);
+    font-family:var(--sans);
+  }
+  .cta:active{ transform:scale(0.985) }
+  .cta .l{ display:flex; align-items:center; gap:10px }
+  .cta .l .glyph{ display:inline-grid; place-items:center }
+  .cta .r{ font:500 15px var(--mono); letter-spacing:-0.01em; font-variant-numeric:tabular-nums }
+  .cta[disabled],
+  .cta[data-locked="true"]{
+    background:var(--panel-solid); color:var(--ink-faint);
+    box-shadow:none; cursor:not-allowed;
+    border:1px solid var(--line);
+  }
+
+  .eta-note{
+    text-align:center;
+    font:500 9.5px var(--mono); color:var(--ink-faint); letter-spacing:0.12em;
+    display:flex; align-items:center; justify-content:center; gap:6px;
+  }
+
+  /* Tweak toggle strip (sits in bottom-left, not obtrusive) */
+  .state-toggle{
+    position:absolute; z-index:70; left:10px; top:96px;
+    display:flex; gap:4px; padding:3px; border-radius:999px;
+    background:rgba(0,0,0,0.55); border:1px solid var(--line-2);
+    backdrop-filter:blur(10px);
+  }
+  .state-toggle button{
+    border:0; background:transparent; cursor:pointer;
+    padding:5px 9px; border-radius:999px;
+    font:500 9px var(--mono); color:var(--ink-faint); letter-spacing:0.12em;
+  }
+  .state-toggle button[aria-pressed="true"]{
+    background:var(--ink); color:#0a0c10;
+  }
+</style>
+</head>
+<body>
+<div id="outer" style="width:100%;height:100%;display:grid;place-items:center"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" data-presets="react">
+  // ── Phone frame ────────────────────────────────────────────────
+  function IOSStatusBar(){
+    const c='#fff';
+    return (
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'21px 34px 19px',width:'100%',boxSizing:'border-box'}}>
+        <span style={{fontFamily:'-apple-system,system-ui',fontWeight:590,fontSize:17,color:c}}>9:41</span>
+        <div style={{display:'flex',alignItems:'center',gap:7}}>
+          <svg width="19" height="12" viewBox="0 0 19 12"><rect x="0" y="7.5" width="3.2" height="4.5" rx="0.7" fill={c}/><rect x="4.8" y="5" width="3.2" height="7" rx="0.7" fill={c}/><rect x="9.6" y="2.5" width="3.2" height="9.5" rx="0.7" fill={c}/><rect x="14.4" y="0" width="3.2" height="12" rx="0.7" fill={c}/></svg>
+          <svg width="17" height="12" viewBox="0 0 17 12"><path d="M8.5 3.2C10.8 3.2 12.9 4.1 14.4 5.6L15.5 4.5C13.7 2.7 11.2 1.5 8.5 1.5C5.8 1.5 3.3 2.7 1.5 4.5L2.6 5.6C4.1 4.1 6.2 3.2 8.5 3.2Z" fill={c}/><path d="M8.5 6.8C9.9 6.8 11.1 7.3 12 8.2L13.1 7.1C11.8 5.9 10.2 5.1 8.5 5.1C6.8 5.1 5.2 5.9 3.9 7.1L5 8.2C5.9 7.3 7.1 6.8 8.5 6.8Z" fill={c}/><circle cx="8.5" cy="10.5" r="1.5" fill={c}/></svg>
+          <svg width="27" height="13" viewBox="0 0 27 13"><rect x="0.5" y="0.5" width="23" height="12" rx="3.5" stroke={c} strokeOpacity="0.35" fill="none"/><rect x="2" y="2" width="20" height="9" rx="2" fill={c}/><path d="M25 4.5V8.5C25.8 8.2 26.5 7.2 26.5 6.5C26.5 5.8 25.8 4.8 25 4.5Z" fill={c} fillOpacity="0.4"/></svg>
+        </div>
+      </div>
+    );
+  }
+  function IOSDevice({ children }){
+    return (
+      <div style={{
+        width:402,height:874,borderRadius:48,overflow:'hidden',position:'relative',
+        background:'#000', boxShadow:'0 40px 80px rgba(0,0,0,0.35), 0 0 0 1px rgba(0,0,0,0.5)',
+        fontFamily:'-apple-system,system-ui,sans-serif'
+      }}>
+        <div style={{position:'absolute',top:11,left:'50%',transform:'translateX(-50%)',width:126,height:37,borderRadius:24,background:'#000',zIndex:50}}/>
+        <div style={{position:'absolute',top:0,left:0,right:0,zIndex:10}}><IOSStatusBar/></div>
+        <div style={{position:'absolute',inset:0}}>{children}</div>
+        <div style={{position:'absolute',bottom:0,left:0,right:0,zIndex:60,height:34,display:'flex',justifyContent:'center',alignItems:'flex-end',paddingBottom:8,pointerEvents:'none'}}>
+          <div style={{width:139,height:5,borderRadius:100,background:'rgba(255,255,255,0.7)'}}/>
+        </div>
+      </div>
+    );
+  }
+  function fitPhone(){
+    const vh=window.innerHeight, vw=window.innerWidth;
+    return Math.min(vw/(402+40), vh/(874+40), 1);
+  }
+  function Shell({children}){
+    const [s,setS] = React.useState(fitPhone());
+    React.useEffect(()=>{ const on=()=>setS(fitPhone()); window.addEventListener('resize',on); return ()=>window.removeEventListener('resize',on); },[]);
+    return <div style={{transform:`scale(${s})`, transformOrigin:'center'}}><IOSDevice>{children}</IOSDevice></div>;
+  }
+
+  // ── Glyphs / icons ─────────────────────────────────────────────
+  const Diamond = ({ size=22 }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round">
+      <path d="M4 9 L8 3 L16 3 L20 9 L12 21 Z"/>
+      <path d="M4 9 L20 9"/>
+      <path d="M8 3 L12 9 L16 3"/>
+      <path d="M12 9 L12 21"/>
+    </svg>
+  );
+  const Back = (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+  );
+  const Bank = (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 9l9-5 9 5"/><path d="M5 9v9M9 9v9M15 9v9M19 9v9"/><path d="M3 20h18"/>
+    </svg>
+  );
+  const Lock = (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="4" y="11" width="16" height="10" rx="2"/>
+      <path d="M8 11V7a4 4 0 0 1 8 0v4"/>
+    </svg>
+  );
+  const Chev = (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+  );
+  const Check = (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg>
+  );
+  const Clock = (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+  );
+
+  // ── Data ───────────────────────────────────────────────────────
+  const DIAMOND_USD  = 0.005;                // cash-out rate
+  const DIAMOND_BAL  = 28640;                // earned balance
+  const MIN_CASHOUT  = 2000;                 // 2,000 diamonds = $10 min
+  const FEE_FLAT_USD = 0.50;                 // flat ACH fee
+
+  const PRESETS = [1000, 5000, 10000, 'all'];
+
+  const usd = d => d * DIAMOND_USD;
+  const fmt = n => Math.round(n).toLocaleString('en-US');
+
+  // ── Screen ─────────────────────────────────────────────────────
+  function CashOut(){
+    // Starting state B (unlocked). Flip pill toggles to A (locked) for review.
+    const [unlocked, setUnlocked] = React.useState(true);
+    const [amount, setAmount]     = React.useState(5000);
+    const [touched, setTouched]   = React.useState(false);
+
+    // Clamp
+    const clamped = Math.max(0, Math.min(DIAMOND_BAL, amount || 0));
+    const pct     = (clamped / DIAMOND_BAL) * 100;
+    const gross   = usd(clamped);
+    const net     = Math.max(0, gross - FEE_FLAT_USD);
+    const below   = clamped > 0 && clamped < MIN_CASHOUT;
+
+    const onChange = (v) => {
+      const n = typeof v === 'string' ? parseInt(v.replace(/[^0-9]/g,''),10) || 0 : v;
+      setAmount(n); setTouched(true);
+    };
+
+    // Checklist state (state A — both unchecked; tap to toggle for demo)
+    const [kyc,  setKyc]  = React.useState(false);
+    const [bank, setBank] = React.useState(false);
+    const allDone = kyc && bank;
+
+    return (
+      <div className={"phone-root " + (unlocked ? "" : "locked")}>
+        {/* Dev toggle — lets reviewer compare states */}
+        <div className="state-toggle" role="group" aria-label="Account state">
+          <button aria-pressed={!unlocked} onClick={()=>setUnlocked(false)}>LOCKED</button>
+          <button aria-pressed={unlocked}  onClick={()=>setUnlocked(true)}>READY</button>
+        </div>
+
+        <div className="hdr">
+          <button className="iconbtn" aria-label="Back">{Back}</button>
+          <div className="ttl">Cash out</div>
+          <div style={{width:36}}/>
+        </div>
+
+        <div className="scroll">
+          {/* Balance hero */}
+          <div className="hero">
+            <div className="caplabel"><span className="dot"/>AVAILABLE</div>
+            <div className="bal">
+              <span className="glyph"><Diamond size={22}/></span>
+              <span className="n">{fmt(DIAMOND_BAL)}</span>
+              <span className="unit">DIAMONDS</span>
+            </div>
+            <div className="usd">≈ <b>${usd(DIAMOND_BAL).toFixed(2)} USD</b></div>
+            <div className="rate">
+              RATE
+              <b>$0.005 / DIA</b>
+            </div>
+          </div>
+
+          {/* Setup checklist appears when locked */}
+          {!unlocked && (
+            <div className="setup" style={{position:'relative', zIndex:3}}>
+              <div className="setup-head">
+                <div className="lock">{Lock}</div>
+                <div>
+                  <div className="t">Set up cash-out</div>
+                  <div className="s">TWO STEPS · ABOUT 3 MIN</div>
+                </div>
+              </div>
+              <div className="steps">
+                <button className="step" data-done={kyc} onClick={()=>setKyc(v=>!v)}>
+                  <span className="num">{kyc ? Check : '1'}</span>
+                  <span className="meta">
+                    <span className="l">Verify your identity</span>
+                    <span className="s">GOV ID · SELFIE · REQUIRED BY LAW</span>
+                  </span>
+                  <span className="chev">{Chev}</span>
+                </button>
+                <button className="step" data-done={bank} onClick={()=>setBank(v=>!v)}>
+                  <span className="num">{bank ? Check : '2'}</span>
+                  <span className="meta">
+                    <span className="l">Connect payout bank</span>
+                    <span className="s">ACH · US ONLY · PLAID</span>
+                  </span>
+                  <span className="chev">{Chev}</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="sec-head">
+            <span className="l">AMOUNT</span>
+            <span className="r" onClick={()=> unlocked && onChange(DIAMOND_BAL)}>CASH OUT ALL</span>
+          </div>
+
+          <div className="amount-card">
+            <div className="amount-row">
+              <span className="glyph"><Diamond size={22}/></span>
+              <input
+                className="amount-input"
+                type="number" inputMode="numeric"
+                value={clamped === 0 && !touched ? '' : clamped}
+                onChange={e => onChange(e.target.value)}
+                placeholder="0"
+                disabled={!unlocked}
+              />
+              <span className="amount-unit">DIA</span>
+            </div>
+            <div className="amount-usd">
+              <span>Net payout <b>${net.toFixed(2)}</b></span>
+              <span className="fee">FEE ${FEE_FLAT_USD.toFixed(2)}</span>
+            </div>
+
+            <div className="slider-wrap">
+              <input
+                type="range" className="slider"
+                min="0" max={DIAMOND_BAL} step="100"
+                value={clamped}
+                onChange={e => onChange(Number(e.target.value))}
+                style={{'--pct': pct + '%'}}
+                disabled={!unlocked}
+              />
+              <div className="slider-ticks">
+                <span>0</span>
+                <span>{fmt(DIAMOND_BAL/4)}</span>
+                <span>{fmt(DIAMOND_BAL/2)}</span>
+                <span>{fmt(DIAMOND_BAL*0.75)}</span>
+                <span>MAX</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="presets">
+            {PRESETS.map(p => {
+              const val = p === 'all' ? DIAMOND_BAL : p;
+              const lab = p === 'all' ? 'ALL' : (p >= 1000 ? (p/1000) + 'K' : p);
+              return (
+                <button
+                  key={String(p)}
+                  className="preset"
+                  aria-pressed={clamped === val}
+                  onClick={() => onChange(val)}
+                  disabled={!unlocked}
+                >
+                  {lab}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="sec-head"><span className="l">PAYOUT TO</span></div>
+          <div className="bank-card">
+            <div className="ic">{Bank}</div>
+            <div className="meta">
+              <div className="l">
+                {unlocked ? 'Chase ··5410' : 'No bank connected'}
+              </div>
+              <div className="s">
+                {unlocked ? 'ACH · USD · 1–2 BUSINESS DAYS' : 'COMPLETE SETUP TO PAY OUT'}
+              </div>
+            </div>
+            <button className="chg">{unlocked ? 'CHANGE' : 'SET UP'}</button>
+          </div>
+
+          {below && unlocked && (
+            <div style={{
+              margin:'0 18px 10px', padding:'10px 14px',
+              borderRadius:12, border:'1px solid rgba(255,77,77,0.3)',
+              background:'rgba(255,77,77,0.06)',
+              font:'500 10.5px var(--mono)', color:'var(--live-hot)',
+              letterSpacing:'0.08em'
+            }}>
+              MIN {fmt(MIN_CASHOUT)} DIAMONDS · ${usd(MIN_CASHOUT).toFixed(2)}
+            </div>
+          )}
+        </div>
+
+        {/* Bottom CTA */}
+        <div className="cta-bar">
+          {unlocked ? (
+            <button
+              className="cta"
+              disabled={clamped < MIN_CASHOUT}
+              data-locked={clamped < MIN_CASHOUT ? 'true' : undefined}
+            >
+              <span className="l">
+                <span className="glyph"><Diamond size={18}/></span>
+                Cash out {fmt(clamped)} diamonds
+              </span>
+              <span className="r">${net.toFixed(2)}</span>
+            </button>
+          ) : (
+            <button className="cta" data-locked="true">
+              <span className="l">
+                {Lock}
+                {allDone ? 'Enabling cash-out…' : 'Verify to enable cash-out'}
+              </span>
+              <span className="r">{kyc + bank}/2</span>
+            </button>
+          )}
+          <div className="eta-note">
+            {Clock} ARRIVES IN 1–2 BUSINESS DAYS
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  ReactDOM.createRoot(document.getElementById('outer')).render(
+    <Shell><CashOut/></Shell>
+  );
+</script>
+</body>
+</html>

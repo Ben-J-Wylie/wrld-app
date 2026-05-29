@@ -1,0 +1,488 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Wrld — My Profile (Creator)</title>
+<style>
+  @import url("https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap");
+  :root{
+    --bg:#070809; --bg-2:#0c0e11;
+    --panel:rgba(20,22,26,0.72); --panel-solid:#14171c; --panel-hi:#1a1e24;
+    --line:rgba(255,255,255,0.08); --line-2:rgba(255,255,255,0.14);
+    --ink:#ece9e2; --ink-dim:rgba(236,233,226,0.58); --ink-faint:rgba(236,233,226,0.34);
+    --accent:#3ea7ff; --accent-hot:#7fd0ff; --accent-glow:rgba(62,167,255,0.45);
+    --live:#ff4d4d; --live-glow:rgba(255,77,77,0.45);
+    --sans:"Inter Tight", ui-sans-serif, system-ui, sans-serif;
+    --mono:"JetBrains Mono", ui-monospace, monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:#0a0a0b;font-family:var(--sans);color:var(--ink);-webkit-font-smoothing:antialiased}
+  body{display:grid;place-items:center;overflow:hidden}
+
+  .phone-root{ width:402px;height:874px;position:relative;overflow:hidden;
+    background:radial-gradient(900px 700px at 50% 0%, #141720 0%, var(--bg) 70%); color:var(--ink); }
+
+  .topbar{ position:absolute; top:54px; left:0; right:0; z-index:30;
+    height:44px; padding:0 14px;
+    display:flex; align-items:center; justify-content:space-between; }
+  .iconbtn{ width:36px;height:36px;border-radius:50%;
+    border:1px solid var(--line); background:rgba(0,0,0,0.4);
+    color:var(--ink); display:grid; place-items:center;
+    backdrop-filter:blur(10px); cursor:pointer; font-family:var(--sans);
+    transition:transform .18s; }
+  .iconbtn:active{ transform:scale(0.94) }
+  .you-pill{ display:inline-flex; align-items:center; gap:6px;
+    padding:7px 11px 7px 9px; border-radius:999px;
+    background:rgba(0,0,0,0.4); border:1px solid var(--line-2);
+    backdrop-filter:blur(10px); color:var(--ink);
+    font:500 10px var(--mono); letter-spacing:0.16em; }
+  .you-pill .dot{ width:6px;height:6px;border-radius:50%;background:var(--accent);
+    box-shadow:0 0 8px var(--accent-glow); }
+
+  .backdrop{ position:absolute; top:0; left:0; right:0; height:240px; z-index:1;
+    background:radial-gradient(80% 100% at 30% 30%, rgba(62,167,255,0.18), transparent 60%),
+      radial-gradient(60% 80% at 80% 0%, rgba(255,77,77,0.10), transparent 60%),
+      linear-gradient(180deg, #1a1e26 0%, #0c0e11 100%); }
+  .backdrop::after{ content:""; position:absolute; left:0; right:0; bottom:0; height:140px;
+    background:linear-gradient(180deg, rgba(7,8,9,0), var(--bg) 80%); }
+
+  .scroll{ position:absolute; inset:0; z-index:2;
+    overflow-y:auto; overflow-x:hidden; scrollbar-width:none;
+    padding:170px 0 30px; }
+  .scroll::-webkit-scrollbar{display:none}
+
+  .head{ padding:0 18px; display:flex; flex-direction:column; align-items:flex-start; gap:14px; }
+  .avatar{ width:88px; height:88px; border-radius:50%;
+    background:radial-gradient(circle at 35% 30%, #ffd6a3 0%, #d68957 40%, #6b3a1d 100%);
+    border:2px solid var(--bg);
+    box-shadow:0 0 0 1px var(--line-2), 0 8px 24px rgba(0,0,0,0.5);
+    display:grid; place-items:center; color:#2b1a0a;
+    font:600 32px/1 var(--sans); letter-spacing:-0.02em; flex:none; }
+  .head .name{ font:600 26px/1.1 var(--sans); letter-spacing:-0.02em; }
+  .head .alias{ font:500 12px var(--mono); color:var(--ink-dim); letter-spacing:0.04em; margin-top:4px; }
+
+  .stats{ margin:6px 18px 14px;
+    display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;
+    padding:14px;
+    border-radius:18px;
+    background:var(--panel); border:1px solid var(--line);
+    backdrop-filter:blur(12px); }
+  .stat{ display:flex; flex-direction:column; gap:3px; }
+  .stat .v{ font:600 18px var(--sans); letter-spacing:-0.01em; color:var(--ink);
+    font-variant-numeric:tabular-nums; }
+  .stat .l{ font:500 9.5px var(--mono); color:var(--ink-faint); letter-spacing:0.14em; }
+
+  /* ── Filter region ────────────────────────────────────────────── */
+  .filters{ margin:0 18px 14px;
+    padding:14px;
+    border-radius:18px;
+    background:var(--panel); border:1px solid var(--line);
+    backdrop-filter:blur(12px);
+    display:flex; flex-direction:column; gap:12px; }
+
+  .frow{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .flabel{ font:500 9.5px var(--mono); color:var(--ink-faint); letter-spacing:0.14em;
+    flex:none; min-width:42px; }
+
+  /* Segmented ID toggle (primary) */
+  .seg{ display:flex; padding:3px;
+    background:rgba(255,255,255,0.04);
+    border:1px solid var(--line); border-radius:999px;
+    flex:1; }
+  .seg button{ flex:1;
+    padding:7px 10px; border:0;
+    background:transparent; color:var(--ink-dim);
+    font:500 10.5px var(--mono); letter-spacing:0.12em;
+    border-radius:999px; cursor:pointer;
+    transition:background .2s, color .2s;
+    font-family:var(--sans); }
+  .seg button[data-on="true"]{ background:var(--ink); color:#0a0c10; }
+  .seg button[data-on="true"][data-tone="anon"]{ background:var(--accent); color:#0a0c10 }
+
+  /* Layer chip-row */
+  .lchips{ display:flex; gap:6px; flex-wrap:wrap; flex:1; }
+  .lchip{ display:inline-flex; align-items:center; gap:5px;
+    padding:7px 10px 7px 8px; border-radius:999px;
+    background:transparent; border:1px solid var(--line-2);
+    color:var(--ink-dim); cursor:pointer;
+    font:500 10px var(--mono); letter-spacing:0.1em;
+    transition:all .18s; font-family:var(--sans); }
+  .lchip[data-on="true"]{ border-color:var(--accent); background:rgba(62,167,255,0.1); color:var(--ink); }
+  .lchip svg{ width:11px;height:11px }
+
+  /* Date radio */
+  .drow{ display:flex; gap:6px; flex:1; flex-wrap:wrap; }
+  .drow .lchip{ flex:1; min-width:62px; justify-content:center }
+
+  .clear{ background:transparent; border:0; color:var(--ink-faint);
+    font:500 10px var(--mono); letter-spacing:0.14em;
+    cursor:pointer; padding:6px 0; align-self:flex-end;
+    transition:color .2s; font-family:var(--sans); }
+  .clear:hover{ color:var(--ink-dim) }
+  .clear[disabled]{ visibility:hidden }
+
+  .applied{ display:flex; align-items:center; gap:6px;
+    font:500 10px var(--mono); color:var(--ink-faint); letter-spacing:0.12em;
+    margin-top:-4px; }
+  .applied b{ color:var(--accent); font-weight:500; margin-right:2px }
+
+  /* Section heads */
+  .sec-head{ padding:0 18px 10px;
+    display:flex; align-items:baseline; justify-content:space-between;
+    font:500 10.5px var(--mono); color:var(--ink-faint); letter-spacing:0.14em; }
+  .sec-head .r{ color:var(--ink-dim) }
+
+  /* Clip grid */
+  .clips{ margin:0 18px;
+    display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .clip{ border-radius:14px; overflow:hidden;
+    background:var(--panel-solid); border:1px solid var(--line);
+    cursor:pointer; transition:transform .18s, border-color .2s;
+    position:relative; }
+  .clip:active{ transform:scale(0.99) }
+  .clip[data-anon="true"]{ border-color:rgba(255,255,255,0.04) }
+
+  .thumb{ aspect-ratio: 16 / 11; position:relative; overflow:hidden;
+    background:linear-gradient(135deg, #1a1d25, #0e1014); }
+  .thumb[data-theme="park"]{ background:
+    radial-gradient(70% 80% at 30% 80%, #2c4d2a, transparent 60%),
+    radial-gradient(40% 60% at 70% 30%, #4a6b5a, transparent 70%), #0e1410; }
+  .thumb[data-theme="bar"]{ background:
+    radial-gradient(60% 70% at 50% 50%, rgba(255,77,77,0.25), transparent 70%),
+    linear-gradient(180deg, #2a1a1a, #0a0a14); }
+  .thumb[data-theme="club"]{ background:
+    radial-gradient(50% 60% at 50% 50%, rgba(255,77,77,0.35), transparent 70%),
+    linear-gradient(180deg, #1a0e15, #0a0810); }
+  .thumb[data-theme="bridge"]{ background:
+    linear-gradient(180deg, #2a3a4a, #0e1118),
+    radial-gradient(40% 50% at 30% 60%, #ffa861, transparent 70%); }
+  .thumb[data-theme="rooftop"]{ background:
+    linear-gradient(180deg, #1a1830, #0a0a14),
+    radial-gradient(50% 40% at 70% 80%, rgba(255,160,90,0.25), transparent 70%); }
+  .thumb[data-theme="street"]{ background:
+    linear-gradient(180deg, #2b1818, #14080a),
+    radial-gradient(45% 50% at 50% 50%, rgba(255,180,90,0.3), transparent 70%); }
+  .thumb[data-theme="venue"]{ background:
+    linear-gradient(180deg, #181828, #0a0a10),
+    radial-gradient(45% 55% at 70% 30%, rgba(62,167,255,0.25), transparent 70%); }
+  .thumb[data-theme="acoustic"]{ background:
+    linear-gradient(180deg, #1a1820, #0a0a0e),
+    radial-gradient(40% 50% at 50% 60%, rgba(255,200,140,0.18), transparent 70%); }
+
+  /* Anonymous treatment */
+  .clip[data-anon="true"] .thumb{ filter:saturate(0.4) brightness(0.65); }
+  .clip[data-anon="true"] .thumb::after{
+    content:""; position:absolute; inset:0;
+    background:repeating-linear-gradient(135deg, rgba(0,0,0,0.18) 0 4px, transparent 4px 8px);
+    pointer-events:none; }
+
+  .pill{ position:absolute; display:inline-flex; align-items:center; gap:5px;
+    padding:3px 7px 3px 6px; border-radius:6px;
+    background:rgba(0,0,0,0.55); border:1px solid var(--line-2);
+    color:var(--ink); backdrop-filter:blur(8px);
+    font:500 9px var(--mono); letter-spacing:0.12em; }
+  .pill.dur{ top:8px; left:8px }
+  .pill.peak{ right:8px; bottom:8px; font-variant-numeric:tabular-nums; letter-spacing:0.04em; }
+  .pill.anon{ top:8px; right:8px;
+    background:rgba(0,0,0,0.7); border-color:rgba(255,255,255,0.22); color:var(--ink); }
+  .pill.anon svg{ width:10px;height:10px }
+  .pill.draft{ top:8px; right:8px;
+    background:rgba(255,159,40,0.14); border-color:rgba(255,159,40,0.35); color:#ffb95a; }
+
+  .meta{ padding:9px 11px 10px; display:flex; flex-direction:column; gap:5px; }
+  .meta .l{ font:600 12.5px/1.25 var(--sans); letter-spacing:-0.005em; color:var(--ink);
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .meta .s{ font:500 9px var(--mono); color:var(--ink-faint); letter-spacing:0.1em }
+  .meta .ll{ display:flex; gap:4px; margin-top:1px; }
+  .meta .ll .lay{ width:18px; height:18px; border-radius:5px;
+    background:rgba(255,255,255,0.04); border:1px solid var(--line);
+    display:grid; place-items:center; color:var(--ink-faint); }
+  .meta .ll .lay[data-on="true"]{ color:var(--accent); border-color:rgba(62,167,255,0.32);
+    background:rgba(62,167,255,0.08) }
+  .meta .ll .lay[data-on="true"][data-id="true"]{ color:var(--ink); border-color:var(--line-2);
+    background:rgba(255,255,255,0.06) }
+  .meta .ll .lay svg{ width:10px;height:10px }
+  .clip[data-anon="true"] .meta .l{ color:var(--ink-dim) }
+  .clip[data-anon="true"] .meta::before{
+    content:"ONLY VISIBLE TO YOU";
+    display:block; font:500 8.5px var(--mono); letter-spacing:0.16em;
+    color:var(--ink-faint); margin-bottom:1px; }
+
+  .empty{ margin:0 18px; padding:34px 20px; text-align:center;
+    border:1px dashed var(--line-2); border-radius:18px;
+    color:var(--ink-faint); font:500 11px var(--mono); letter-spacing:0.1em; }
+
+  /* Tweaks panel */
+  .tweaks{ position:fixed; bottom:14px; right:14px; z-index:200;
+    display:flex; flex-direction:column; gap:6px;
+    padding:10px; border-radius:14px;
+    background:var(--panel-solid); border:1px solid var(--line-2);
+    box-shadow:0 12px 30px rgba(0,0,0,0.5);
+    font:500 10px var(--mono); letter-spacing:0.1em; color:var(--ink-dim); }
+  .tweaks .h{ color:var(--ink-faint); padding:2px 4px 4px; letter-spacing:0.16em; font-size:9px; }
+  .tweaks button{ padding:6px 10px; border:1px solid var(--line);
+    background:transparent; color:var(--ink-dim); border-radius:8px; cursor:pointer;
+    font:500 10px var(--mono); letter-spacing:0.1em; font-family:var(--sans);
+    text-align:left; }
+  .tweaks button[data-on="true"]{ border-color:var(--accent); color:var(--ink);
+    background:rgba(62,167,255,0.08); }
+</style>
+</head>
+<body>
+<div id="outer" style="width:100%;height:100%;display:grid;place-items:center"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" data-presets="react">
+  // ── Inline phone frame ──
+  function IOSStatusBar(){
+    const c='#fff';
+    return (<div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'21px 34px 19px',width:'100%',boxSizing:'border-box'}}>
+      <span style={{fontFamily:'-apple-system,system-ui',fontWeight:590,fontSize:17,color:c}}>9:41</span>
+      <div style={{display:'flex',alignItems:'center',gap:7}}>
+        <svg width="19" height="12" viewBox="0 0 19 12"><rect x="0" y="7.5" width="3.2" height="4.5" rx="0.7" fill={c}/><rect x="4.8" y="5" width="3.2" height="7" rx="0.7" fill={c}/><rect x="9.6" y="2.5" width="3.2" height="9.5" rx="0.7" fill={c}/><rect x="14.4" y="0" width="3.2" height="12" rx="0.7" fill={c}/></svg>
+        <svg width="17" height="12" viewBox="0 0 17 12"><path d="M8.5 3.2C10.8 3.2 12.9 4.1 14.4 5.6L15.5 4.5C13.7 2.7 11.2 1.5 8.5 1.5C5.8 1.5 3.3 2.7 1.5 4.5L2.6 5.6C4.1 4.1 6.2 3.2 8.5 3.2Z" fill={c}/><path d="M8.5 6.8C9.9 6.8 11.1 7.3 12 8.2L13.1 7.1C11.8 5.9 10.2 5.1 8.5 5.1C6.8 5.1 5.2 5.9 3.9 7.1L5 8.2C5.9 7.3 7.1 6.8 8.5 6.8Z" fill={c}/><circle cx="8.5" cy="10.5" r="1.5" fill={c}/></svg>
+        <svg width="27" height="13" viewBox="0 0 27 13"><rect x="0.5" y="0.5" width="23" height="12" rx="3.5" stroke={c} strokeOpacity="0.35" fill="none"/><rect x="2" y="2" width="20" height="9" rx="2" fill={c}/><path d="M25 4.5V8.5C25.8 8.2 26.5 7.2 26.5 6.5C26.5 5.8 25.8 4.8 25 4.5Z" fill={c} fillOpacity="0.4"/></svg>
+      </div></div>);
+  }
+  function IOSDevice({children}){
+    return (<div style={{width:402,height:874,borderRadius:48,overflow:'hidden',position:'relative',background:'#000',boxShadow:'0 40px 80px rgba(0,0,0,0.35), 0 0 0 1px rgba(0,0,0,0.5)',fontFamily:'-apple-system,system-ui,sans-serif'}}>
+      <div style={{position:'absolute',top:11,left:'50%',transform:'translateX(-50%)',width:126,height:37,borderRadius:24,background:'#000',zIndex:50}}/>
+      <div style={{position:'absolute',top:0,left:0,right:0,zIndex:10}}><IOSStatusBar/></div>
+      <div style={{position:'absolute',inset:0}}>{children}</div>
+      <div style={{position:'absolute',bottom:0,left:0,right:0,zIndex:60,height:34,display:'flex',justifyContent:'center',alignItems:'flex-end',paddingBottom:8,pointerEvents:'none'}}>
+        <div style={{width:139,height:5,borderRadius:100,background:'rgba(255,255,255,0.7)'}}/>
+      </div></div>);
+  }
+  function Shell({children}){
+    const fit=()=>{const vh=window.innerHeight,vw=window.innerWidth;return Math.min(vw/(402+40),vh/(874+40),1);}
+    const [s,setS]=React.useState(fit());
+    React.useEffect(()=>{const on=()=>setS(fit());window.addEventListener("resize",on);return()=>window.removeEventListener("resize",on);},[]);
+    return <div style={{transform:`scale(${s})`,transformOrigin:"center"}}><IOSDevice>{children}</IOSDevice></div>;
+  }
+
+  // ── Icons ──
+  const I = {
+    settings:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>,
+    cam: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7h4l2-2h6l2 2h4v12H3z"/><circle cx="12" cy="13" r="3.5"/></svg>,
+    mic: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>,
+    loc: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M12 21s-7-7-7-12a7 7 0 0 1 14 0c0 5-7 12-7 12z"/><circle cx="12" cy="9" r="2.4"/></svg>,
+    id:  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M5 21a7 7 0 0 1 14 0"/></svg>,
+    gyro:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="14" height="14" rx="2"/><path d="M5 9h14M9 5v14"/></svg>,
+    lock:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>,
+    eyeoff:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3l18 18"/><path d="M10.6 6.1A8 8 0 0 1 12 6c6 0 10 6 10 6a16 16 0 0 1-3 3.6M6.4 6.4A16 16 0 0 0 2 12s4 6 10 6a9 9 0 0 0 4-1"/></svg>,
+  };
+
+  // Layer key map for filter chips & clip badges
+  const LAYERS = [
+    { k:'cam',  ic:I.cam,  lab:'CAM'  },
+    { k:'mic',  ic:I.mic,  lab:'AUD'  },
+    { k:'loc',  ic:I.loc,  lab:'LOC'  },
+    { k:'id',   ic:I.id,   lab:'ID'   },
+    { k:'gyro', ic:I.gyro, lab:'GYR'  },
+  ];
+
+  // ── Clip data ───────────────────────────────────────────────
+  // Layer object marks which were enabled in the published clip.
+  // anon = true means ID was off, public-invisible.
+  const CLIPS = [
+    { id:'c1', title:'Atlantic Ave · drumline forming up', venue:'Williamsburg, BK',
+      date:'APR 26', dur:'0:42', peak:'1.4K', theme:'street',
+      layers:{cam:true,mic:true,loc:true,id:true,gyro:false}, anon:false, when:'recent' },
+    { id:'c2', title:'Acoustic break',  venue:'(anon)',
+      date:'APR 26', dur:'0:11', peak:'320', theme:'acoustic',
+      layers:{cam:false,mic:true,loc:false,id:false,gyro:false}, anon:true, when:'recent' },
+    { id:'c3', title:'Soundcheck · The Sultan',  venue:'Bushwick, BK',
+      date:'APR 24', dur:'0:08', peak:'180', theme:'venue',
+      layers:{cam:true,mic:true,loc:true,id:true,gyro:false}, anon:false, when:'week' },
+    { id:'c4', title:'Pre-set ambient',  venue:'(anon)',
+      date:'APR 24', dur:'0:14', peak:'95', theme:'club',
+      layers:{cam:false,mic:true,loc:false,id:false,gyro:false}, anon:true, when:'week', draft:true },
+    { id:'c5', title:'Roof set · main hour',  venue:'Bushwick, BK',
+      date:'APR 21', dur:'1:14', peak:'3.1K', theme:'rooftop',
+      layers:{cam:true,mic:true,loc:true,id:true,gyro:true}, anon:false, when:'week' },
+    { id:'c6', title:'Brooklyn Bridge sundown',  venue:'New York, NY',
+      date:'APR 14', dur:'0:28', peak:'2.4K', theme:'bridge',
+      layers:{cam:true,mic:true,loc:true,id:true,gyro:false}, anon:false, when:'month' },
+    { id:'c7', title:'Late call · payphone',  venue:'(anon)',
+      date:'APR 12', dur:'0:22', peak:'45', theme:'club',
+      layers:{cam:false,mic:true,loc:false,id:false,gyro:false}, anon:true, when:'month' },
+    { id:'c8', title:'Prospect Park · drum circle',  venue:'Brooklyn, NY',
+      date:'APR 09', dur:'0:36', peak:'880', theme:'park',
+      layers:{cam:true,mic:true,loc:true,id:true,gyro:false}, anon:false, when:'month' },
+  ];
+
+  function ClipCard({ c, onOpen }){
+    return (
+      <div className="clip" data-anon={c.anon} onClick={onOpen}>
+        <div className="thumb" data-theme={c.theme}>
+          <span className="pill dur">{c.dur}</span>
+          {c.anon
+            ? <span className="pill anon">{I.lock}<span>ANON</span></span>
+            : c.draft
+              ? <span className="pill draft">DRAFT</span>
+              : <span className="pill peak">{c.peak}</span>
+          }
+        </div>
+        <div className="meta">
+          <div className="l">{c.title}</div>
+          <div className="s">{c.venue.toUpperCase()} · {c.date}</div>
+          <div className="ll">
+            {LAYERS.map(L => (
+              <span key={L.k} className="lay" data-on={c.layers[L.k]} data-id={L.k==='id'}>{L.ic}</span>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Filter logic ─────────────────────────────────────────────
+  function applyFilters(clips, { idMode, layerSet, dateMode }){
+    return clips.filter(c => {
+      if(idMode === 'public' && c.anon) return false;
+      if(idMode === 'anon'   && !c.anon) return false;
+      if(layerSet.size > 0){
+        for(const k of layerSet) if(!c.layers[k]) return false;
+      }
+      if(dateMode === 'recent' && c.when !== 'recent') return false;
+      if(dateMode === 'week'   && !(c.when === 'recent' || c.when === 'week')) return false;
+      if(dateMode === 'month'  && c.when === 'older') return false;
+      return true;
+    });
+  }
+
+  // ── Tweaks: 3 demo states ─────────────────────────────────────
+  const STATES = {
+    default: { idMode:'all',    layers:[],            date:'all'    },
+    filtered:{ idMode:'all',    layers:['cam','loc'], date:'week'   },
+    anonOnly:{ idMode:'anon',   layers:[],            date:'all'    },
+  };
+
+  function App(){
+    const [demoKey, setDemoKey] = React.useState('default');
+    const [idMode, setIdMode]   = React.useState(STATES.default.idMode);
+    const [layers, setLayers]   = React.useState(new Set(STATES.default.layers));
+    const [dateMode, setDate]   = React.useState(STATES.default.date);
+
+    // When the demo state changes, sync filter state.
+    React.useEffect(() => {
+      const s = STATES[demoKey];
+      setIdMode(s.idMode);
+      setLayers(new Set(s.layers));
+      setDate(s.date);
+    }, [demoKey]);
+
+    const toggleLayer = (k) => {
+      setLayers(prev => {
+        const n = new Set(prev);
+        n.has(k) ? n.delete(k) : n.add(k);
+        return n;
+      });
+    };
+
+    const filtered = applyFilters(CLIPS, { idMode, layerSet:layers, dateMode });
+    const isFiltered = idMode !== 'all' || layers.size > 0 || dateMode !== 'all';
+    const clear = () => { setIdMode('all'); setLayers(new Set()); setDate('all'); };
+
+    const totals = {
+      all:  CLIPS.length,
+      pub:  CLIPS.filter(c=>!c.anon).length,
+      anon: CLIPS.filter(c=> c.anon).length,
+    };
+
+    return (
+      <div className="phone-root">
+        <div className="backdrop"/>
+
+        <div className="topbar">
+          <span className="you-pill"><span className="dot"/>YOUR PROFILE</span>
+          <button className="iconbtn" aria-label="Settings">{I.settings}</button>
+        </div>
+
+        <div className="scroll">
+          <div className="head">
+            <div className="avatar">K</div>
+            <div>
+              <div className="name">Kai DC</div>
+              <div className="alias">@kai.dc · BROOKLYN, NY</div>
+            </div>
+          </div>
+
+          <div className="stats">
+            <div className="stat"><span className="v">{totals.all}</span><span className="l">CLIPS</span></div>
+            <div className="stat"><span className="v">{totals.pub}</span><span className="l">PUBLIC</span></div>
+            <div className="stat"><span className="v">{totals.anon}</span><span className="l">ANON</span></div>
+          </div>
+
+          <div className="filters">
+            <div className="frow">
+              <span className="flabel">VIS</span>
+              <div className="seg" role="tablist">
+                <button data-on={idMode==='all'}    onClick={()=>setIdMode('all')}>ALL</button>
+                <button data-on={idMode==='public'} onClick={()=>setIdMode('public')}>PUBLIC</button>
+                <button data-on={idMode==='anon'} data-tone="anon" onClick={()=>setIdMode('anon')}>ANON</button>
+              </div>
+            </div>
+
+            <div className="frow">
+              <span className="flabel">LAYERS</span>
+              <div className="lchips">
+                {LAYERS.map(L => (
+                  <button key={L.k} className="lchip" data-on={layers.has(L.k)} onClick={()=>toggleLayer(L.k)}>
+                    {L.ic}<span>{L.lab}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="frow">
+              <span className="flabel">DATE</span>
+              <div className="drow">
+                <button className="lchip" data-on={dateMode==='recent'} onClick={()=>setDate('recent')}>RECENT</button>
+                <button className="lchip" data-on={dateMode==='week'}   onClick={()=>setDate('week')}>WEEK</button>
+                <button className="lchip" data-on={dateMode==='month'}  onClick={()=>setDate('month')}>MONTH</button>
+                <button className="lchip" data-on={dateMode==='all'}    onClick={()=>setDate('all')}>ALL</button>
+              </div>
+            </div>
+
+            {isFiltered && (
+              <div style={{display:'flex',alignItems:'center',gap:10,marginTop:-2}}>
+                <span className="applied"><b>{filtered.length}</b> OF {CLIPS.length} CLIPS</span>
+                <button className="clear" onClick={clear}>CLEAR FILTERS</button>
+              </div>
+            )}
+          </div>
+
+          <div className="sec-head">
+            <span>CLIPS</span>
+            <span className="r">{filtered.length} SHOWN</span>
+          </div>
+
+          {filtered.length === 0 ? (
+            <div className="empty">NO CLIPS MATCH</div>
+          ) : (
+            <div className="clips">
+              {filtered.map(c => <ClipCard key={c.id} c={c} onOpen={()=>{}}/>)}
+            </div>
+          )}
+        </div>
+
+        {/* Demo state switcher (treat as the Tweaks panel for this design) */}
+        <div className="tweaks">
+          <div className="h">DEMO STATE</div>
+          <button data-on={demoKey==='default'}  onClick={()=>setDemoKey('default')}>1 · DEFAULT</button>
+          <button data-on={demoKey==='filtered'} onClick={()=>setDemoKey('filtered')}>2 · FILTERED</button>
+          <button data-on={demoKey==='anonOnly'} onClick={()=>setDemoKey('anonOnly')}>3 · ANON ONLY</button>
+        </div>
+      </div>
+    );
+  }
+
+  ReactDOM.createRoot(document.getElementById('outer')).render(<Shell><App/></Shell>);
+</script>
+</body>
+</html>

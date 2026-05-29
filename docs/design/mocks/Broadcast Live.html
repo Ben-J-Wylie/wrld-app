@@ -1,0 +1,691 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Wrld — Broadcast Live</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* Inlined tokens — mirrors system/tokens.css */
+  :root{
+    --bg:#070809; --bg-2:#0c0e11;
+    --panel:rgba(20,22,26,0.72); --panel-solid:#14171c; --panel-hi:#1a1e24;
+    --line:rgba(255,255,255,0.08); --line-2:rgba(255,255,255,0.14);
+    --ink:#ece9e2; --ink-dim:rgba(236,233,226,0.58); --ink-faint:rgba(236,233,226,0.34);
+    --accent:#3ea7ff; --accent-hot:#7fd0ff; --accent-glow:rgba(62,167,255,0.45);
+    --live:#ff4d4d; --live-glow:rgba(255,77,77,0.45);
+    --sans:"Inter Tight", ui-sans-serif, system-ui, sans-serif;
+    --mono:"JetBrains Mono", ui-monospace, monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:#0a0a0b;font-family:var(--sans);color:var(--ink);-webkit-font-smoothing:antialiased}
+  body{display:grid;place-items:center;overflow:hidden}
+  /* ══════════════════════════════════════════════════════════════════
+     Broadcast Live — viewer HUD over an active broadcast
+     Dark-over-video; glass chrome; no generic drop shadows.
+     ══════════════════════════════════════════════════════════════ */
+
+  .phone-root{
+    width:402px;height:874px;position:relative;overflow:hidden;
+    background:#000;color:var(--ink);
+  }
+
+  /* ── "Video" backdrop (illustrative, not photographic) ──────────── */
+  .video{
+    position:absolute; inset:0; z-index:0;
+    background:
+      radial-gradient(120% 70% at 30% 20%, rgba(62,167,255,0.09), transparent 60%),
+      radial-gradient(90% 80% at 70% 85%, rgba(255,77,77,0.08), transparent 60%),
+      radial-gradient(70% 60% at 50% 50%, #0f1622 0%, #050709 85%);
+  }
+  .video::before{
+    /* subtle cityscape silhouette suggestion — coarse rectangles, editorial */
+    content:""; position:absolute; left:0; right:0; bottom:28%;
+    height:36%;
+    background:
+      linear-gradient(0deg, rgba(6,9,14,0.92), rgba(6,9,14,0.55) 40%, transparent),
+      repeating-linear-gradient(90deg,
+        rgba(15,20,28,0.9) 0 14px, transparent 14px 22px,
+        rgba(20,26,36,0.7) 22px 30px, transparent 30px 44px,
+        rgba(12,16,22,0.85) 44px 60px, transparent 60px 74px
+      );
+    mask-image: linear-gradient(180deg, transparent, #000 18%, #000 70%, transparent);
+  }
+  .video::after{
+    /* horizon glow */
+    content:""; position:absolute; left:0; right:0; bottom:28%;
+    height:2px;
+    background:linear-gradient(90deg, transparent, rgba(62,167,255,0.55), transparent);
+    filter:blur(1px);
+  }
+  .noise{
+    position:absolute;inset:0;z-index:1;opacity:.09;mix-blend-mode:overlay;pointer-events:none;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  }
+  .scan{
+    position:absolute;left:0;right:0;height:2px;z-index:1;
+    background:linear-gradient(90deg,transparent,rgba(255,255,255,0.28),transparent);
+    animation:scan 6s linear infinite; pointer-events:none;
+  }
+  @keyframes scan{0%{top:-2px}100%{top:102%}}
+
+  /* Vignette to pull HUD legibility */
+  .vignette{
+    position:absolute; inset:0; z-index:2; pointer-events:none;
+    background:
+      linear-gradient(180deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0) 18%, rgba(0,0,0,0) 55%, rgba(0,0,0,0.8) 100%),
+      linear-gradient(90deg, rgba(0,0,0,0.35), transparent 20%, transparent 80%, rgba(0,0,0,0.35));
+  }
+
+  /* Live ambient — 2px pulsing red inset border whenever a broadcast is active */
+  .phone-root.live::after{
+    content:""; position:absolute; inset:0; border-radius:0; pointer-events:none; z-index:55;
+    box-shadow: inset 0 0 0 2px rgba(255,77,77,0.7), inset 0 0 60px 6px rgba(255,77,77,0.12);
+    animation: liveFrame 2.2s ease-in-out infinite;
+  }
+  @keyframes liveFrame{
+    0%,100%{box-shadow: inset 0 0 0 2px rgba(255,77,77,0.55), inset 0 0 50px 4px rgba(255,77,77,0.10)}
+    50%{box-shadow: inset 0 0 0 2px rgba(255,77,77,0.9), inset 0 0 70px 10px rgba(255,77,77,0.18)}
+  }
+
+  /* ── Top bar ────────────────────────────────────────────────────── */
+  .topbar{
+    position:absolute; top:56px; left:14px; right:14px; z-index:10;
+    display:flex; align-items:center; gap:8px;
+  }
+  .iconbtn{
+    width:36px;height:36px;border-radius:50%;
+    border:1px solid var(--line); background:rgba(10,12,14,0.5);
+    backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+    color:var(--ink); display:grid; place-items:center; cursor:pointer;
+    transition:transform .18s, background .2s;
+  }
+  .iconbtn:active{ transform:scale(0.94) }
+
+  .live-pill{
+    display:inline-flex; align-items:center; gap:6px;
+    height:28px; padding:0 9px; border-radius:8px;
+    background:var(--live); color:#fff;
+    font:600 9px var(--mono); letter-spacing:0.14em;
+  }
+  .live-pill .blk{ width:8px; height:8px; background:#fff; border-radius:1px; animation:blink 1.4s ease-in-out infinite }
+  @keyframes blink{ 50%{opacity:0.35} }
+
+  .ch-chip{
+    display:inline-flex; align-items:center; gap:0;
+    height:28px; padding:0 10px; border-radius:8px;
+    border:1px solid var(--line-2); background:rgba(10,12,14,0.55);
+    backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+    font:500 10px var(--mono); letter-spacing:0.12em; color:var(--ink);
+    white-space:nowrap;
+  }
+  .ch-chip b{ color:var(--ink); font-weight:600; margin-right:6px }
+  .ch-chip i{ font-style:normal; color:var(--ink-dim) }
+
+  .viewers-chip{
+    margin-left:auto;
+    display:inline-flex; align-items:center; gap:6px;
+    height:28px; padding:0 10px; border-radius:8px;
+    border:1px solid var(--line); background:rgba(10,12,14,0.5);
+    backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+    font:500 11px var(--mono); letter-spacing:0.08em; color:var(--ink);
+  }
+  .viewers-chip svg{ opacity:0.7 }
+
+  /* ── Coord HUD (top-right under bar) ────────────────────────────── */
+  .hud{
+    position:absolute; top:104px; right:14px; z-index:10;
+    padding:10px 12px; border-radius:10px;
+    border:1px solid var(--line); background:rgba(10,12,14,0.45);
+    backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+    display:grid; grid-template-columns:max-content max-content; gap:4px 14px;
+    font:500 10px var(--mono); letter-spacing:0.06em;
+    text-align:right; justify-items:end; white-space:nowrap;
+  }
+  .hud .k{ color:var(--ink-faint); letter-spacing:0.14em }
+  .hud .v{ color:var(--ink); font-weight:500 }
+  .hud .v.live{ color:var(--live) }
+
+  /* ── Reaction rail (right side, vertical) ───────────────────────── */
+  .rail{
+    position:absolute; right:12px; bottom:340px; z-index:12;
+    display:flex; flex-direction:column; gap:10px; align-items:center;
+  }
+  .rail .react{
+    width:44px; height:44px; border-radius:50%;
+    border:1px solid var(--line); background:rgba(10,12,14,0.55);
+    backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+    color:var(--ink); display:grid; place-items:center; cursor:pointer;
+    position:relative; transition:transform .18s, border-color .2s;
+  }
+  .rail .react:active{ transform:scale(0.92) }
+  .rail .react .count{
+    position:absolute; top:-4px; right:-4px;
+    font:500 9px var(--mono); letter-spacing:0.08em;
+    background:var(--panel-hi); color:var(--ink);
+    border:1px solid var(--line-2); border-radius:999px;
+    padding:1px 5px; min-width:18px; text-align:center;
+  }
+  .rail .react[data-on="true"]{
+    border-color:rgba(255,77,77,0.55);
+    background:linear-gradient(180deg, rgba(255,77,77,0.14), rgba(255,77,77,0.04));
+  }
+  .rail .react[data-on="true"] svg{ color:var(--live) }
+
+  /* Floating hearts */
+  .hearts{
+    position:absolute; right:18px; bottom:390px;
+    width:40px; height:300px; z-index:11; pointer-events:none;
+  }
+  .hearts span{
+    position:absolute; bottom:0; left:50%;
+    color:var(--live); opacity:0;
+    animation: floatUp 2.8s ease-out forwards;
+  }
+  @keyframes floatUp{
+    0%   { transform:translate(-50%, 0) scale(0.6); opacity:0 }
+    15%  { opacity:1 }
+    100% { transform:translate(calc(-50% + var(--x,0px)), -340px) scale(1); opacity:0 }
+  }
+
+  /* ── Lower content: title + broadcaster ─────────────────────────── */
+  .lower{
+    position:absolute; left:14px; right:14px; bottom:340px; z-index:10;
+    display:flex; flex-direction:column; gap:12px;
+  }
+  .title{
+    font:600 28px/1.05 var(--sans); letter-spacing:-0.02em; color:var(--ink);
+    text-wrap:pretty;
+    text-shadow:0 2px 20px rgba(0,0,0,0.7);
+    max-width:300px;
+  }
+  .title .loc{ display:block; font:500 11px var(--mono); color:rgba(236,233,226,0.72); letter-spacing:0.12em; margin-top:6px; text-shadow:none }
+
+  .bcaster{
+    display:flex; align-items:center; gap:10px;
+    padding:8px 10px 8px 8px; border-radius:999px;
+    background:rgba(10,12,14,0.55); border:1px solid var(--line);
+    backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+    align-self:flex-start;
+  }
+  .bcaster .avatar{
+    width:32px;height:32px;border-radius:50%; flex:none;
+    background:
+      radial-gradient(circle at 50% 38%, #ece9e2 0%, #ece9e2 40%, transparent 41%),
+      linear-gradient(180deg,#3ea7ff,#1f4ed8);
+    position:relative; overflow:hidden;
+  }
+  .bcaster .avatar::after{
+    content:""; position:absolute; left:50%; bottom:2px; width:20px;height:8px;
+    background:#ece9e2; border-radius:10px 10px 0 0; transform:translateX(-50%);
+  }
+  .bcaster .who{ display:flex; flex-direction:column; gap:1px }
+  .bcaster .handle{ font:600 13px var(--sans); color:var(--ink); letter-spacing:-0.01em; display:flex; align-items:center; gap:5px }
+  .bcaster .handle .ver{
+    display:inline-grid; place-items:center; width:12px;height:12px; border-radius:50%;
+    background:var(--accent); color:#000;
+  }
+  .bcaster .meta{ font:500 10px var(--mono); color:var(--ink-faint); letter-spacing:0.1em }
+  .bcaster .follow{
+    margin-left:4px;
+    height:28px; padding:0 12px; border-radius:999px;
+    background:var(--ink); color:#0a0c10; border:0;
+    font:600 11px var(--sans); letter-spacing:0; cursor:pointer;
+    transition:transform .18s, background .2s;
+  }
+  .bcaster .follow:active{ transform:scale(0.96) }
+  .bcaster .follow[data-following="true"]{
+    background:transparent; color:var(--ink); border:1px solid var(--line-2);
+  }
+
+  /* ── Chat sheet (persistent bottom) ──────────────────────────────── */
+  .sheet{
+    position:absolute; left:0; right:0; bottom:0; z-index:20;
+    background:linear-gradient(180deg, rgba(7,8,9,0) 0%, rgba(7,8,9,0.55) 14%, rgba(7,8,9,0.92) 42%);
+    padding:14px 0 30px;
+    transition:transform .28s cubic-bezier(.4,1.4,.6,1);
+  }
+  .sheet .meta-strip{
+    display:flex; align-items:center; gap:6px; flex-wrap:wrap;
+    padding:0 18px 12px;
+  }
+  .sheet .grab{
+    width:38px;height:4px;border-radius:4px;background:rgba(255,255,255,0.22);
+    margin:0 auto 10px;
+  }
+  .sheet .chat-head{
+    display:flex; align-items:center; gap:8px; padding:0 18px 8px;
+    font:500 11px var(--mono); color:var(--ink-faint); letter-spacing:0.14em;
+  }
+  .sheet .chat-head b{ color:var(--ink); font-weight:600 }
+  .sheet .chat-head .live-dot{
+    width:6px;height:6px;border-radius:50%;background:var(--live);
+    box-shadow:0 0 8px var(--live-glow); animation:pulse 1.4s infinite;
+  }
+  @keyframes pulse{50%{opacity:.4;transform:scale(.8)}}
+
+  .chat-list{
+    padding:2px 18px 12px; display:flex; flex-direction:column; gap:8px;
+    max-height:160px; overflow-y:auto; scrollbar-width:none;
+    mask-image:linear-gradient(180deg, transparent, #000 24px, #000);
+  }
+  .chat-list::-webkit-scrollbar{ display:none }
+
+  .msg{
+    display:flex; align-items:baseline; gap:6px;
+    font:500 13px/1.35 var(--sans); color:var(--ink);
+    text-shadow:0 1px 4px rgba(0,0,0,0.6);
+  }
+  .msg .h{
+    font:600 12px var(--sans); letter-spacing:-0.01em;
+    flex:none;
+  }
+  .msg .h.mod{ color:var(--accent-hot) }
+  .msg .h.host{ color:var(--live) }
+  .msg .h.user{ color:var(--ink-dim) }
+  .msg .b{ color:var(--ink) }
+  .msg.system{
+    font:500 11px var(--mono); color:var(--ink-faint); letter-spacing:0.1em;
+    padding:2px 0;
+  }
+  .msg.system span{ color:var(--accent) }
+
+  .composer{
+    display:flex; align-items:center; gap:8px;
+    padding:6px 14px 0;
+  }
+  .composer .field{
+    flex:1; height:40px; border-radius:999px;
+    border:1px solid var(--line-2); background:rgba(20,22,26,0.6);
+    backdrop-filter:blur(12px);
+    padding:0 14px; color:var(--ink); font:500 14px var(--sans);
+    outline:none;
+  }
+  .composer .field::placeholder{ color:var(--ink-faint) }
+  .composer .send{
+    width:40px;height:40px; border-radius:50%;
+    border:1px solid var(--line-2); background:var(--accent);
+    color:#0a0c10; display:grid; place-items:center; cursor:pointer;
+    transition:transform .18s;
+  }
+  .composer .send:active{ transform:scale(0.94) }
+  .composer .send[disabled]{
+    background:var(--panel-hi); color:var(--ink-faint);
+    border-color:var(--line);
+  }
+
+  /* Chat collapsed: slide most of it down, keep composer area */
+  .sheet[data-collapsed="true"]{ transform:translateY(calc(100% - 150px)) }
+
+  /* ── Quality sheet (modal from bottom) ──────────────────────────── */
+  .scrim{
+    position:absolute; inset:0; z-index:70;
+    background:rgba(0,0,0,0.55); opacity:0; pointer-events:none;
+    transition:opacity .2s;
+  }
+  .scrim[data-open="true"]{ opacity:1; pointer-events:auto }
+  .qsheet{
+    position:absolute; left:10px; right:10px; bottom:20px; z-index:71;
+    background:var(--panel-solid); border:1px solid var(--line-2);
+    border-radius:26px; padding:18px 18px 22px;
+    transform:translateY(130%); transition:transform .28s cubic-bezier(.4,1.4,.6,1);
+  }
+  .scrim[data-open="true"] + .qsheet{ transform:translateY(0) }
+  .qsheet h3{
+    margin:0 0 4px; font:600 17px var(--sans); letter-spacing:-0.01em;
+  }
+  .qsheet .sub{ font:500 11px var(--mono); color:var(--ink-faint); letter-spacing:0.12em; margin-bottom:14px }
+  .qsheet .row{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:14px 2px; border-top:1px solid var(--line);
+    cursor:pointer;
+  }
+  .qsheet .row:first-of-type{ border-top:0 }
+  .qsheet .row .l{ font:500 15px var(--sans) }
+  .qsheet .row .r{ font:500 11px var(--mono); color:var(--ink-dim); letter-spacing:0.1em }
+  .qsheet .row[aria-selected="true"] .l{ color:var(--accent-hot) }
+  .qsheet .row .dot{
+    width:16px;height:16px;border-radius:50%;border:1px solid var(--line-2); margin-left:10px;
+  }
+  .qsheet .row[aria-selected="true"] .dot{
+    background:radial-gradient(circle, var(--accent) 40%, transparent 42%);
+    border-color:var(--accent);
+  }
+
+  /* ── Meta chip row (inside sheet header) ───────────────────────── */
+  .mini{
+    display:inline-flex; align-items:center; gap:5px;
+    height:22px; padding:0 8px; border-radius:999px;
+    border:1px solid var(--line); background:rgba(10,12,14,0.45);
+    backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
+    font:500 10px var(--mono); color:var(--ink-dim); letter-spacing:0.1em;
+  }
+  .mini b{ color:var(--ink); font-weight:500 }
+  .mini .dot{ width:5px;height:5px;border-radius:50%;background:var(--accent) }
+  .mini.hd .dot{ background:var(--accent-hot); box-shadow:0 0 6px var(--accent-glow) }
+</style>
+</head>
+<body>
+<div id="outer" style="width:100%;height:100%;display:grid;place-items:center"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" data-presets="react">
+  // Inlined phone frame — avoids Babel race where external .jsx transpiles after inline.
+  function IOSStatusBar({ dark=true }){
+    const c = dark ? '#fff' : '#000';
+    return (
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'21px 34px 19px',width:'100%',boxSizing:'border-box'}}>
+        <span style={{fontFamily:'-apple-system,system-ui',fontWeight:590,fontSize:17,color:c}}>9:41</span>
+        <div style={{display:'flex',alignItems:'center',gap:7}}>
+          <svg width="19" height="12" viewBox="0 0 19 12"><rect x="0" y="7.5" width="3.2" height="4.5" rx="0.7" fill={c}/><rect x="4.8" y="5" width="3.2" height="7" rx="0.7" fill={c}/><rect x="9.6" y="2.5" width="3.2" height="9.5" rx="0.7" fill={c}/><rect x="14.4" y="0" width="3.2" height="12" rx="0.7" fill={c}/></svg>
+          <svg width="17" height="12" viewBox="0 0 17 12"><path d="M8.5 3.2C10.8 3.2 12.9 4.1 14.4 5.6L15.5 4.5C13.7 2.7 11.2 1.5 8.5 1.5C5.8 1.5 3.3 2.7 1.5 4.5L2.6 5.6C4.1 4.1 6.2 3.2 8.5 3.2Z" fill={c}/><path d="M8.5 6.8C9.9 6.8 11.1 7.3 12 8.2L13.1 7.1C11.8 5.9 10.2 5.1 8.5 5.1C6.8 5.1 5.2 5.9 3.9 7.1L5 8.2C5.9 7.3 7.1 6.8 8.5 6.8Z" fill={c}/><circle cx="8.5" cy="10.5" r="1.5" fill={c}/></svg>
+          <svg width="27" height="13" viewBox="0 0 27 13"><rect x="0.5" y="0.5" width="23" height="12" rx="3.5" stroke={c} strokeOpacity="0.35" fill="none"/><rect x="2" y="2" width="20" height="9" rx="2" fill={c}/><path d="M25 4.5V8.5C25.8 8.2 26.5 7.2 26.5 6.5C26.5 5.8 25.8 4.8 25 4.5Z" fill={c} fillOpacity="0.4"/></svg>
+        </div>
+      </div>
+    );
+  }
+  function IOSDevice({ children, width=402, height=874 }){
+    return (
+      <div style={{
+        width,height,borderRadius:48,overflow:'hidden',position:'relative',
+        background:'#000', boxShadow:'0 40px 80px rgba(0,0,0,0.35), 0 0 0 1px rgba(0,0,0,0.5)',
+        fontFamily:'-apple-system,system-ui,sans-serif'
+      }}>
+        <div style={{position:'absolute',top:11,left:'50%',transform:'translateX(-50%)',width:126,height:37,borderRadius:24,background:'#000',zIndex:50}}/>
+        <div style={{position:'absolute',top:0,left:0,right:0,zIndex:10}}><IOSStatusBar dark/></div>
+        <div style={{position:'absolute',inset:0}}>{children}</div>
+        <div style={{position:'absolute',bottom:0,left:0,right:0,zIndex:60,height:34,display:'flex',justifyContent:'center',alignItems:'flex-end',paddingBottom:8,pointerEvents:'none'}}>
+          <div style={{width:139,height:5,borderRadius:100,background:'rgba(255,255,255,0.7)'}}/>
+        </div>
+      </div>
+    );
+  }
+  function fitPhone(){
+    const vh=window.innerHeight, vw=window.innerWidth;
+    return Math.min(vw/(402+40), vh/(874+40), 1);
+  }
+  function Shell({ children }){
+    const [s,setS] = React.useState(fitPhone());
+    React.useEffect(()=>{ const on=()=>setS(fitPhone()); window.addEventListener('resize',on); return ()=>window.removeEventListener('resize',on); },[]);
+    return (
+      <div style={{transform:`scale(${s})`, transformOrigin:'center'}}>
+        <IOSDevice width={402} height={874}>{children}</IOSDevice>
+      </div>
+    );
+  }
+</script>
+
+<script type="text/babel" data-presets="react">
+
+  // ── Icons ──────────────────────────────────────────────────────────
+  const I = {
+    back:  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>,
+    more:  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>,
+    eye:   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="2.5"/></svg>,
+    heart: <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21s-7-4.5-9.5-9A5.5 5.5 0 0 1 12 6a5.5 5.5 0 0 1 9.5 6c-2.5 4.5-9.5 9-9.5 9z"/></svg>,
+    heartSmall:<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21s-7-4.5-9.5-9A5.5 5.5 0 0 1 12 6a5.5 5.5 0 0 1 9.5 6c-2.5 4.5-9.5 9-9.5 9z"/></svg>,
+    bolt:  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z"/></svg>,
+    share: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>,
+    send:  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 11.5 21 3l-6 18-3-8-9-1.5z"/></svg>,
+    check: <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><polyline points="5 12 10 17 20 7"/></svg>,
+  };
+
+  // ── Seed chat ─────────────────────────────────────────────────────
+  const SEED_CHAT = [
+    { role:'system', text:'You joined · signal strong' },
+    { role:'user',   h:'@mika.s',     text:'the light rn 😮' },
+    { role:'user',   h:'@ari.42',     text:'from Lagos, tuning in' },
+    { role:'mod',    h:'@gio · MOD',  text:'keep chat kind ✨' },
+    { role:'user',   h:'@plum',       text:'is that the ferry?' },
+    { role:'host',   h:'@kai.dc · HOST', text:'yeah heading to kadıköy' },
+    { role:'user',   h:'@ren',        text:'wind sounds great' },
+    { role:'user',   h:'@ox',         text:'CH 27 bosphorus gang' },
+  ];
+
+  const RANDOM_SAYINGS = [
+    "gorgeous",
+    "ty for streaming",
+    "where is this exactly",
+    "the sound 👌",
+    "longtime viewer 🖤",
+    "pan left please",
+    "hi from warsaw",
+    "golden hour",
+    "reminds me of home",
+    "stay safe",
+  ];
+  const RANDOM_HANDLES = ['@lumen','@dash','@vex','@orla','@sim','@tatto','@koto','@ines','@marlo','@jax'];
+
+  // ── Chat message ──────────────────────────────────────────────────
+  function Msg({ m }){
+    if(m.role==='system'){
+      return <div className="msg system"><span>•</span> {m.text}</div>;
+    }
+    const hCls = m.role==='mod' ? 'mod' : m.role==='host' ? 'host' : 'user';
+    return (
+      <div className="msg">
+        <span className={"h "+hCls}>{m.h}</span>
+        <span className="b">{m.text}</span>
+      </div>
+    );
+  }
+
+  // ── Main ──────────────────────────────────────────────────────────
+  function BroadcastLive(){
+    const [elapsed, setElapsed] = React.useState(1247); // ~20:47 in
+    const [viewers, setViewers] = React.useState(18402);
+    const [liked, setLiked] = React.useState(false);
+    const [likeCount, setLikeCount] = React.useState(12400);
+    const [following, setFollowing] = React.useState(false);
+    const [collapsed, setCollapsed] = React.useState(false);
+    const [qOpen, setQOpen] = React.useState(false);
+    const [quality, setQuality] = React.useState('auto');
+    const [hearts, setHearts] = React.useState([]);
+    const [chat, setChat] = React.useState(SEED_CHAT);
+    const [draft, setDraft] = React.useState('');
+    const chatRef = React.useRef(null);
+
+    // Tick elapsed + drift viewers
+    React.useEffect(()=>{
+      const id = setInterval(()=>{
+        setElapsed(e => e+1);
+        setViewers(v => Math.max(500, v + Math.round((Math.random()-0.45)*40)));
+      }, 1000);
+      return ()=>clearInterval(id);
+    },[]);
+
+    // Random chat activity
+    React.useEffect(()=>{
+      const id = setInterval(()=>{
+        const h = RANDOM_HANDLES[Math.floor(Math.random()*RANDOM_HANDLES.length)];
+        const t = RANDOM_SAYINGS[Math.floor(Math.random()*RANDOM_SAYINGS.length)];
+        setChat(c => [...c.slice(-30), { role:'user', h, text:t }]);
+      }, 3400);
+      return ()=>clearInterval(id);
+    },[]);
+
+    // Auto-scroll chat
+    React.useEffect(()=>{
+      const el = chatRef.current;
+      if(el) el.scrollTop = el.scrollHeight;
+    },[chat]);
+
+    // Heart burst cleanup
+    React.useEffect(()=>{
+      if(hearts.length===0) return;
+      const id = setTimeout(()=>{
+        setHearts(h => h.slice(1));
+      }, 2900);
+      return ()=>clearTimeout(id);
+    },[hearts]);
+
+    const burst = () => {
+      const n = Date.now() + Math.random();
+      const x = (Math.random()-0.5)*36;
+      setHearts(h => [...h, {id:n, x}]);
+    };
+
+    const tapHeart = () => {
+      setLiked(true);
+      setLikeCount(c => c + 1);
+      burst();
+    };
+
+    const sendDraft = () => {
+      const t = draft.trim();
+      if(!t) return;
+      setChat(c => [...c, { role:'user', h:'@you', text:t }]);
+      setDraft('');
+    };
+
+    const fmtK = (n) => n>=1000 ? (n/1000).toFixed(n>=10000?0:1)+'K' : String(n);
+    const fmtT = (s) => {
+      const h=Math.floor(s/3600), m=Math.floor((s%3600)/60), r=s%60;
+      return (h?String(h).padStart(2,'0')+':':'') + String(m).padStart(2,'0')+':'+String(r).padStart(2,'0');
+    };
+
+    const QUALITIES = [
+      { id:'auto', label:'Auto', sub:'RECOMMENDED · 4.2 MBPS' },
+      { id:'hd',   label:'HD 1080p', sub:'6.0 MBPS' },
+      { id:'sd',   label:'SD 720p',  sub:'2.2 MBPS' },
+      { id:'ld',   label:'Low 360p', sub:'0.6 MBPS · DATA SAVER' },
+      { id:'audio',label:'Audio only', sub:'0.12 MBPS' },
+    ];
+
+    return (
+      <div className="phone-root live">
+        {/* video layer */}
+        <div className="video"/>
+        <div className="noise"/>
+        <div className="scan"/>
+        <div className="vignette"/>
+
+        {/* top bar */}
+        <div className="topbar">
+          <button className="iconbtn" aria-label="Back">{I.back}</button>
+          <span className="live-pill"><span className="blk"/>LIVE</span>
+          <span className="ch-chip"><b>CH 27</b><i>CITY</i></span>
+          <span className="viewers-chip">{I.eye}{fmtK(viewers)}</span>
+          <button className="iconbtn" aria-label="More" onClick={()=>setQOpen(true)}>{I.more}</button>
+        </div>
+
+        {/* coord HUD */}
+        <div className="hud">
+          <span className="k">CH</span>        <span className="v">27</span>
+          <span className="k">LAT</span>       <span className="v">41.011°N</span>
+          <span className="k">LON</span>       <span className="v">28.978°E</span>
+          <span className="k">UPTIME</span>    <span className="v live">{fmtT(elapsed)}</span>
+        </div>
+
+        {/* reaction rail */}
+        <div className="rail">
+          <button className="react" data-on={liked} onClick={tapHeart} aria-label="Like">
+            {I.heart}
+            <span className="count">{fmtK(likeCount)}</span>
+          </button>
+          <button className="react" onClick={burst} aria-label="Boost">
+            {I.bolt}
+            <span className="count">842</span>
+          </button>
+          <button className="react" aria-label="Share">
+            {I.share}
+          </button>
+        </div>
+
+        {/* floating hearts */}
+        <div className="hearts">
+          {hearts.map(h => (
+            <span key={h.id} style={{'--x': h.x+'px'}}>{I.heart}</span>
+          ))}
+        </div>
+
+        {/* lower block: title + broadcaster */}
+        <div className="lower">
+          <div className="title">
+            Bosphorus · ferry pier
+            <span className="loc">ISTANBUL · TÜRKIYE</span>
+          </div>
+
+          <div className="bcaster">
+            <div className="avatar"/>
+            <div className="who">
+              <div className="handle">
+                @kai.dc
+                <span className="ver">{I.check}</span>
+              </div>
+              <div className="meta">BROADCASTING · 20M</div>
+            </div>
+            <button
+              className="follow"
+              data-following={following}
+              onClick={()=>setFollowing(f=>!f)}
+            >{following ? 'FOLLOWING' : 'FOLLOW'}</button>
+          </div>
+        </div>
+
+        {/* chat sheet */}
+        <div className="sheet" data-collapsed={collapsed}>
+          <div className="meta-strip">
+            <span className="mini hd"><span className="dot"/>HD · <b>1080p</b></span>
+            <span className="mini"><span className="dot"/>AUDIO · <b>STEREO</b></span>
+            <span className="mini"><span className="dot"/>LATENCY · <b>1.4S</b></span>
+          </div>
+          <div className="grab" onClick={()=>setCollapsed(c=>!c)} style={{cursor:'pointer', marginTop:0, marginBottom:10}}/>
+          <div className="chat-head">
+            <span className="live-dot"/>
+            <span>LIVE CHAT · <b>{fmtK(viewers)} WATCHING</b></span>
+          </div>
+          <div className="chat-list" ref={chatRef}>
+            {chat.map((m,i) => <Msg key={i} m={m}/>)}
+          </div>
+          <div className="composer">
+            <input
+              className="field"
+              placeholder="Say something…"
+              value={draft}
+              onChange={e=>setDraft(e.target.value)}
+              onKeyDown={e=>{ if(e.key==='Enter') sendDraft() }}
+            />
+            <button
+              className="send"
+              onClick={sendDraft}
+              disabled={!draft.trim()}
+              aria-label="Send"
+            >{I.send}</button>
+          </div>
+        </div>
+
+        {/* quality bottom sheet */}
+        <div className="scrim" data-open={qOpen} onClick={()=>setQOpen(false)}/>
+        <div className="qsheet" role="dialog" aria-label="Quality">
+          <h3>Stream settings</h3>
+          <div className="sub">QUALITY · CH 27 · BOSPHORUS</div>
+          {QUALITIES.map(q => (
+            <div
+              key={q.id}
+              className="row"
+              aria-selected={quality===q.id}
+              onClick={()=>{ setQuality(q.id); setTimeout(()=>setQOpen(false), 160); }}
+            >
+              <div>
+                <div className="l">{q.label}</div>
+                <div className="r" style={{marginTop:3}}>{q.sub}</div>
+              </div>
+              <div className="dot"/>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  ReactDOM.createRoot(document.getElementById('outer')).render(
+    <Shell><BroadcastLive/></Shell>
+  );
+</script>
+</body>
+</html>
