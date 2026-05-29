@@ -619,7 +619,7 @@ export default function Globe() {
           >
             <Mapbox.Camera
               centerCoordinate={[mapCenter.lng, mapCenter.lat]}
-              zoomLevel={9}
+              zoomLevel={6}
               animationMode="flyTo"
               animationDuration={600}
             />
