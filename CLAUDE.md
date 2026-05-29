@@ -463,6 +463,12 @@ When in doubt, ask before assuming.
 - **Don't put `INTERNAL_API_SECRET` anywhere in this repo.** That's the
   shared secret between mediasoup and the API, server-to-server only. The
   app never holds it.
+- **Don't add `@rnmapbox/maps` to `app.json` plugins.** It is already
+  registered in `app.config.js` with the download token. Adding it to
+  `app.json` as well causes the plugin to run twice and breaks the build.
+- **Don't put either Mapbox token in committed files.** Both the public
+  (`pk.`) and secret download (`sk.`) tokens go in EAS secrets + local `.env`
+  only. GitHub secret scanning blocks `pk.` tokens in committed files.
 - **Don't scope v0.3 features into v0.2 phases.** Recording, monetization,
   sensor sources beyond audio/video, public-launch hardening — all deferred.
   See "v0.2 beta milestone" above for the non-goals list.
@@ -730,3 +736,116 @@ Performance note: at 1000 streams, ~500K haversine comparisons per rebuild, prod
 `stream/[id].tsx` additions:
 - Flip button (⇄, 44×44 rounded, top-right corner) visible during broadcaster camera preview
 - `RTCView mirror={facingMode === 'user'}` — front camera mirrored (natural selfie orientation), back camera unmirrored (correct real-world orientation)
+
+---
+
+## Updates — May 2026 (Globe: Mapbox street-level zoom handoff)
+
+### Overview
+
+Pinching in on the Three.js globe past a zoom threshold hands off to a Mapbox
+`MapView` (satellite + street labels style) centred on the exact lat/lng the
+user was looking at. Zooming back out in Mapbox returns to the globe. This is
+"Option 1" — Three.js for the outer view, Mapbox for close zoom — chosen over
+a full Mapbox replacement or Google Maps because it keeps the distinctive
+globe UX while enabling street-level detail at no extra infrastructure cost.
+
+### Package
+
+`@rnmapbox/maps@10.3.1` — installed with `npm install`, not `npx expo install`
+(the Expo wrapper isn't needed here). This is a **native module** — adding it
+requires a new EAS dev client build before the native code is available. The
+JS side installs with `npm ci`; the native side only lands via a build.
+
+### Token setup (two distinct tokens)
+
+| Token | Prefix | Purpose | Where it lives |
+|---|---|---|---|
+| Public / runtime | `pk.` | MapView tile requests at runtime | `.env` as `EXPO_PUBLIC_MAPBOX_TOKEN`; EAS secret for builds |
+| Secret download | `sk.` | Native SDK download during EAS build | EAS secret as `MAPBOX_DOWNLOADS_TOKEN` only — never in code |
+
+**Never commit either token.** GitHub secret scanning blocks `pk.` tokens too,
+even though they are technically "public". Both go in EAS secrets; both go
+in each developer's local `.env` (not tracked by git). Without
+`EXPO_PUBLIC_MAPBOX_TOKEN` in `.env`, Metro bundles an empty string, the map
+loads without tiles, and it shows a 401 error in the logs.
+
+To add/rotate tokens:
+```bash
+npx eas secret:create --scope project --name EXPO_PUBLIC_MAPBOX_TOKEN --value pk.…
+npx eas secret:create --scope project --name MAPBOX_DOWNLOADS_TOKEN --value sk.…
+```
+
+### `app.config.js`
+
+Dynamic config that extends `app.json` and injects `MAPBOX_DOWNLOADS_TOKEN`
+into the `@rnmapbox/maps` plugin at build time so the native SDK can download
+during EAS build. **Do NOT also add `@rnmapbox/maps` to the `plugins` array
+in `app.json`** — it is already registered here and double-registration causes
+the plugin to run twice.
+
+```js
+module.exports = ({ config }) => ({
+  ...config,
+  plugins: [
+    ...(config.plugins ?? []),
+    ['@rnmapbox/maps', {
+      RNMapboxMapsImpl: 'mapbox',
+      RNMapboxMapsDownloadToken: process.env.MAPBOX_DOWNLOADS_TOKEN ?? '',
+    }],
+  ],
+})
+```
+
+### `app/(app)/globe.tsx` — key constants and decisions
+
+```ts
+const MAPBOX_ACTIVATE_Z = 1.5      // globe camera Z ≤ this triggers handoff on pinch release
+const MAPBOX_DEACTIVATE_ZOOM = 3   // Mapbox zoom < this returns to globe
+// Initial Mapbox zoom on activation: 4 (large-country / region level)
+// Style: Mapbox.StyleURL.SatelliteStreet
+```
+
+**Activation fires on `onPanResponderRelease`, not during the move.** Firing
+mid-pinch (in `onPanResponderMove`) causes a mid-gesture conflict: the
+PanResponder blocks new gestures immediately while Mapbox is still loading,
+leaving the user stuck. Deferring to release lets the current pinch finish
+naturally, then Mapbox fades in cleanly.
+
+**Globe zoom clamps at `MAPBOX_ACTIVATE_Z`** (not a lower value) during a
+pinch — the user feels a soft stop, lifts fingers, and the handoff fires.
+
+**`mapboxActiveRef` (ref, not state)** is read inside the PanResponder closure
+for `onStartShouldSetPanResponder` / `onMoveShouldSetPanResponder`. State
+changes are async; refs are synchronous — critical here because the responder
+check fires in native event handlers.
+
+**`mapboxSettledRef`** becomes `true` 1.5 s after activation. Guards against
+`onCameraChanged` triggering deactivation during the initial camera flyTo
+animation, which passes through zoom values below `MAPBOX_DEACTIVATE_ZOOM`.
+
+**Lazy mount:** `mapboxEverActivated` state gates the `<Animated.View>` +
+`<Mapbox.MapView>` in the render tree. MapView mounts on first activation and
+stays mounted (invisible, `pointerEvents="none"`) when the globe is showing —
+no teardown/reinit cost on subsequent activations.
+
+**Coordinate math** (globe rotation → Mapbox centre):
+```ts
+// savedRotationRef.current = { x: rotX, y: rotY } in radians
+lat = rotX * (180 / Math.PI)
+lng = -(rotY * (180 / Math.PI)) - 90
+// Mapbox coordinate order: [longitude, latitude]
+```
+
+### Dev-client rebuild requirement
+
+Any time `@rnmapbox/maps` is added or upgraded, every developer must install
+a fresh EAS dev client build before the native module is available. The
+error `@rnmapbox/maps native code not available. Make sure you have linked
+the library and rebuild your app` means the running APK/IPA predates the
+native module. Check expo.dev → Builds for a recent development build, or
+trigger one:
+```bash
+npx eas build --platform android --profile development
+npx eas build --platform ios --profile development
+```
