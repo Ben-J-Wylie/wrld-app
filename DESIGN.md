@@ -437,18 +437,49 @@ the mocks must satisfy them, not the other way around.
 
 ### Token categories
 
-| Category   | Status  | Source of truth        |
-| ---------- | ------- | ---------------------- |
-| Colors     | partial | will derive from mocks |
-| Typography | partial | will derive from mocks |
-| Spacing    | partial | will derive from mocks |
-| Radius     | partial | will derive from mocks |
-| Motion     | missing | will derive from mocks |
-| Elevation  | missing | will derive from mocks |
+| Category   | Status   | Source of truth                                                |
+| ---------- | -------- | -------------------------------------------------------------- |
+| Colors     | ✅ shipped | `src/tokens/theme.ts` populated in sub-phase 12.3 (2026-05-29) |
+| Typography | ✅ shipped | Inter Tight + JetBrains Mono pair; 9 named roles                |
+| Spacing    | ✅ shipped | 4-grid scale: xxs/xs/sm/md/lg/xl/xxl/xxxl                       |
+| Radius     | ✅ shipped | Strict r:4 (`radius.md`) per principle ruling + `radius.full`   |
+| Motion     | ✅ shipped | timing (5 levels) + easing (3) + press (3 scales)               |
+| Elevation  | ✅ shipped | card / panel / sheet + opt-in glow (accent + live)              |
 
-Audit blocked on first asset drop (sub-phase 12.2). Once we have one or two
-key screens (globe + stream view recommended), the populated `theme.ts` is
-proposed for Ben's sign-off **before** writing a single primitive (sub-phase 12.3).
+The populated theme ships per the locked decisions in Section 6
+(2026-05-29 entries: radius / glow / warn / two-accents). Consumers
+import only `theme.*` — the palette layer is internal to `theme.ts`.
+
+### Font loading (12.4 pre-flight)
+
+The typography tokens reference Google Fonts family names
+(`InterTight_500Medium`, `InterTight_600SemiBold`, `IBMPlexMono_500Medium`).
+Before primitives can render text correctly in 12.4, the fonts need to
+be loaded via `expo-font`:
+
+```bash
+npx expo install @expo-google-fonts/inter-tight @expo-google-fonts/ibm-plex-mono expo-font
+```
+
+Then in `_layout.tsx` or a root font-loading boundary:
+
+```tsx
+import { useFonts, InterTight_500Medium, InterTight_600SemiBold } from '@expo-google-fonts/inter-tight'
+import { IBMPlexMono_500Medium } from '@expo-google-fonts/ibm-plex-mono'
+
+const [fontsLoaded] = useFonts({
+  InterTight_500Medium,
+  InterTight_600SemiBold,
+  IBMPlexMono_500Medium,
+})
+if (!fontsLoaded) return null  // splash
+```
+
+This is a 12.4 pre-flight task — primitives won't render typography
+correctly without it. **IBM Plex Mono** was chosen over JetBrains Mono
+because it reads as "engineering document / architectural drawing"
+rather than "code editor" — aligns with the references' technical-
+drawing aesthetic.
 
 ---
 
@@ -2455,6 +2486,90 @@ handled by the same patterns; the seam is not a separate motion category.
 
 Append-only. Most recent first. Each entry: date, decision, rationale,
 constraint it imposes downstream.
+
+### 2026-05-29 — Sub-phase 12.3 shipped: `src/tokens/theme.ts` populated
+
+The hybrid model is now real: internal `palette` (raw values), exported
+`theme.*` semantic layer. Components import only the semantic layer.
+
+**Course-correction surfaced mid-12.3** (recorded for posterity): The
+first draft of `theme.ts` derived aesthetic values from the 12.2 mocks —
+cool blue accent, two saturated colors (blue + red), cool-tinted
+panels with glass-blur defaults. That was wrong. **Mocks inform layout,
+functionality, and the component inventory; aesthetic comes from
+references + principles.** The corrected derivation comes from
+`docs/design/references/` (12 architectural drawings + 7 brutalist UI
+compositions) plus Section 1 principles. The references' palette is
+consistent across the set: warm cream backgrounds, dark ink line work,
+warm wood / rust / amber tones, **single saturated color = warm
+crimson red**, hairline grids + flat surfaces, no glass blur.
+
+**Locked rulings (aesthetic — references + principles win; mocks deviate):**
+
+- **Single accent = warm crimson red `#d92e3a`.** Used for every "look
+  here" role: LIVE indicator, primary CTA, focus rings, danger /
+  destructive treatments, accent badges. No separate `colors.live`
+  token. The mocks' two-color treatment (blue accent + red live) was
+  incorrect aesthetic input — references consistently show ONE
+  saturated color, and Section 1 Principle 2 says exactly that.
+- **Warm undertone.** Background, text, borders all have sepia / cream
+  tints (not cool white-grey). `bg.primary = #0d0b08` (sepia near-black);
+  `text.primary = #ece6d6` (warm cream). Border lines are warm cream
+  rgba, not cool white rgba.
+- **Flat surfaces with hairline borders are the default panel
+  treatment.** Glass `backdrop-filter:blur` exists as `colors.bg.glass`
+  for surfaces overlaying the globe (where dynamic backgrounds genuinely
+  need legibility help) but is NOT the default. References show flat
+  cream/charcoal surfaces with thin warm-tinted borders.
+- **Typography = Inter Tight (sans) + IBM Plex Mono (mono).** IBM Plex
+  Mono replaces JetBrains Mono — the references' technical-drawing
+  aesthetic reads as engineering-document, not code-screen.
+- **No #000 / no #fff** confirmed — every reference's palette stays
+  inside the inverted-newspaper rule.
+
+**Locked rulings (structural — unchanged from earlier rulings):**
+
+- **Radius scale:** strict `radius.md = 4` for all chrome surfaces;
+  `radius.full` for pills + circular buttons. Mocks render r:14–22 on
+  cards, buttons, and sheets; references show hard rectangular shapes.
+  Both inputs agree on the tight scale; tokens override the mocks'
+  visual radii.
+- **Glow:** opt-in per surface. `elevation.glow.accent` exists for
+  consumers to wire on specific CTAs (Go Live, hero onboarding steps);
+  `Button` primary does NOT default-glow. Avoids the "everything is
+  glowing" failure mode at scale.
+- **Warn:** kept as dedicated `colors.warn` (amber `#e6a23d`). Used by
+  PasswordStrengthMeter mid-tier + LegalAcceptanceCard CCPA jurisdiction
+  badge. Two surfaces today; reserves the slot.
+
+**Existing flat-access usages migrated atomically (same commit):** ~25
+files updated. Pattern: `theme.colors.bg` → `theme.colors.bg.primary`;
+`theme.colors.textMuted` → `theme.colors.text.muted`;
+`theme.colors.accent` → `theme.colors.accent.default`. Critically:
+`theme.colors.danger` AND `theme.colors.live` (both gone now) →
+`theme.colors.accent.default` (single-accent rule).
+`theme.typography.title` → `theme.typography.display`;
+`theme.radius.{sm,lg}` → `theme.radius.md` (strict r:4). Spacing scale
+shifted: `spacing.md` is now `12` (was `16`); existing surfaces using
+`md` get tighter padding. tsc baseline of 12 pre-existing errors
+unchanged (three.js types + Expo Router typed-route literals).
+
+**Imposes:**
+
+- Font loading (`expo-font` + Google Fonts) is a 12.4 pre-flight — see
+  Section 2's "Font loading" block. Without it, typography tokens
+  reference unloaded family names and fall back to system fonts.
+- Aaron's monetization-UI work is **green-lit** to start now per the
+  working agreement in Section 7. Compose either directly from tokens
+  (for surfaces shipping before 12.4 primitives) or from primitives
+  once 12.4 lands.
+- Existing screens visually shift dramatically when they next render:
+  blue → warm red, cool → warm undertones, large radii → r:4, glass
+  → flat. This is the design-system intent landing as a single visual
+  step; screen-level refinement happens during 12.6 migration.
+- **Methodological note:** future aesthetic decisions trace back to
+  `docs/design/references/` + Section 1 principles, NOT to
+  `docs/design/mocks/`. Mocks are inventory inputs only.
 
 ### 2026-05-29 — v0.2 wallet model: Space Bucks + Star Dust, 30% transfer fee
 

@@ -193,7 +193,7 @@ export function OnboardingScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.colors.bg },
+  container: { flex: 1, backgroundColor: theme.colors.bg.primary },
   flex: { flex: 1 },
   content: {
     padding: theme.spacing.lg,
@@ -201,18 +201,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingTop: theme.spacing.xxl,
   },
-  title: { ...theme.typography.title, color: theme.colors.text, textAlign: 'center' },
-  subtitle: { ...theme.typography.body, color: theme.colors.textMuted, textAlign: 'center' },
+  title: { ...theme.typography.display, color: theme.colors.text.primary, textAlign: 'center' },
+  subtitle: { ...theme.typography.body, color: theme.colors.text.muted, textAlign: 'center' },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
     width: '100%',
     gap: theme.spacing.xs,
   },
-  at: { ...theme.typography.heading, color: theme.colors.textMuted },
+  at: { ...theme.typography.heading, color: theme.colors.text.muted },
   handleInput: { flex: 1 },
-  error: { ...theme.typography.body, color: theme.colors.danger, textAlign: 'center' },
-  hint: { ...theme.typography.caption, color: theme.colors.textMuted, textAlign: 'center' },
+  error: { ...theme.typography.body, color: theme.colors.accent.default, textAlign: 'center' },
+  hint: { ...theme.typography.caption, color: theme.colors.text.muted, textAlign: 'center' },
   avatarPreview: { marginVertical: theme.spacing.md },
   wide: { width: '100%' },
 })

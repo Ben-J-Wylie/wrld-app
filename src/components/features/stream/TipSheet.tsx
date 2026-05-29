@@ -81,7 +81,7 @@ export function TipSheet({ visible, balance, onClose, onTip }: Props) {
           <TextInput
             style={styles.customInput}
             placeholder="Custom amount"
-            placeholderTextColor={theme.colors.textMuted}
+            placeholderTextColor={theme.colors.text.muted}
             keyboardType="number-pad"
             value={custom}
             onChangeText={(t) => { setCustom(t); setSelected(null) }}
@@ -112,9 +112,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.5)',
   },
   sheet: {
-    backgroundColor: theme.colors.bgElevated,
-    borderTopLeftRadius: theme.radius.lg,
-    borderTopRightRadius: theme.radius.lg,
+    backgroundColor: theme.colors.bg.elevated,
+    borderTopLeftRadius: theme.radius.md,
+    borderTopRightRadius: theme.radius.md,
     padding: theme.spacing.lg,
     paddingBottom: theme.spacing.xl,
     gap: theme.spacing.md,
@@ -123,18 +123,18 @@ const styles = StyleSheet.create({
     width: 36,
     height: 4,
     borderRadius: 2,
-    backgroundColor: theme.colors.border,
+    backgroundColor: theme.colors.border.subtle,
     alignSelf: 'center',
     marginBottom: theme.spacing.sm,
   },
   heading: {
     ...theme.typography.heading,
-    color: theme.colors.text,
+    color: theme.colors.text.primary,
     textAlign: 'center',
   },
   balance: {
     ...theme.typography.body,
-    color: theme.colors.textMuted,
+    color: theme.colors.text.muted,
     textAlign: 'center',
   },
   presetRow: {
@@ -148,42 +148,42 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.sm,
     borderRadius: theme.radius.md,
     borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.bg,
+    borderColor: theme.colors.border.subtle,
+    backgroundColor: theme.colors.bg.primary,
     gap: 2,
   },
   presetActive: {
-    borderColor: theme.colors.accent,
-    backgroundColor: `${theme.colors.accent}22`,
+    borderColor: theme.colors.accent.default,
+    backgroundColor: `${theme.colors.accent.default}22`,
   },
   presetLabel: {
     ...theme.typography.body,
-    color: theme.colors.text,
+    color: theme.colors.text.primary,
     fontWeight: '600',
   },
-  presetLabelActive: { color: theme.colors.accent },
+  presetLabelActive: { color: theme.colors.accent.default },
   presetSub: {
     ...theme.typography.caption,
-    color: theme.colors.textMuted,
+    color: theme.colors.text.muted,
   },
-  presetSubActive: { color: theme.colors.accent },
+  presetSubActive: { color: theme.colors.accent.default },
   customInput: {
     ...theme.typography.body,
-    color: theme.colors.text,
-    backgroundColor: theme.colors.bg,
+    color: theme.colors.text.primary,
+    backgroundColor: theme.colors.bg.primary,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.border.subtle,
     borderRadius: theme.radius.md,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
   },
   errorText: {
     ...theme.typography.caption,
-    color: theme.colors.danger,
+    color: theme.colors.accent.default,
     textAlign: 'center',
   },
   confirmBtn: {
-    backgroundColor: theme.colors.accent,
+    backgroundColor: theme.colors.accent.default,
     borderRadius: theme.radius.md,
     paddingVertical: theme.spacing.md,
     alignItems: 'center',

@@ -138,7 +138,7 @@ export function MeScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.center}>
-          <ActivityIndicator color={theme.colors.accent} />
+          <ActivityIndicator color={theme.colors.accent.default} />
         </View>
       </SafeAreaView>
     )
@@ -154,7 +154,7 @@ export function MeScreen() {
           {/* Avatar */}
           <View style={styles.avatarSection}>
             {avatarLoading ? (
-              <ActivityIndicator color={theme.colors.accent} size="large" />
+              <ActivityIndicator color={theme.colors.accent.default} size="large" />
             ) : (
               <Avatar avatarUrl={user.avatarUrl} displayName={user.displayName} size={88} />
             )}
@@ -268,7 +268,7 @@ export function MeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.colors.bg },
+  container: { flex: 1, backgroundColor: theme.colors.bg.primary },
   flex: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: theme.spacing.md },
   content: { padding: theme.spacing.lg, gap: theme.spacing.lg },
@@ -278,20 +278,20 @@ const styles = StyleSheet.create({
   field: { gap: theme.spacing.sm },
   fieldLabel: {
     ...theme.typography.caption,
-    color: theme.colors.textMuted,
+    color: theme.colors.text.muted,
     fontWeight: '700',
     letterSpacing: 1.2,
   },
   fieldRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  fieldValue: { ...theme.typography.body, color: theme.colors.text },
+  fieldValue: { ...theme.typography.body, color: theme.colors.text.primary },
   fieldInput: { width: '100%' },
   fieldBtns: { flexDirection: 'row', gap: theme.spacing.sm },
   handleInputRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs, width: '100%' },
-  at: { ...theme.typography.heading, color: theme.colors.textMuted },
+  at: { ...theme.typography.heading, color: theme.colors.text.muted },
   handleInput: { flex: 1 },
-  error: { ...theme.typography.caption, color: theme.colors.danger },
-  hint: { ...theme.typography.caption, color: theme.colors.textMuted },
-  divider: { height: 1, backgroundColor: theme.colors.border },
-  muted: { ...theme.typography.body, color: theme.colors.textMuted },
+  error: { ...theme.typography.caption, color: theme.colors.accent.default },
+  hint: { ...theme.typography.caption, color: theme.colors.text.muted },
+  divider: { height: 1, backgroundColor: theme.colors.border.subtle },
+  muted: { ...theme.typography.body, color: theme.colors.text.muted },
   wide: { width: '100%' },
 })

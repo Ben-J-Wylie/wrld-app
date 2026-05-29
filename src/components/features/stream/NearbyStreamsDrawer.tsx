@@ -123,8 +123,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(10,10,15,0.92)',
     paddingBottom: 32,
     paddingTop: 10,
-    borderTopLeftRadius: theme.radius.lg,
-    borderTopRightRadius: theme.radius.lg,
+    borderTopLeftRadius: theme.radius.md,
+    borderTopRightRadius: theme.radius.md,
   },
   drawerHeader: {
     flexDirection: 'row',
@@ -137,7 +137,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 4,
     borderRadius: 2,
-    backgroundColor: theme.colors.border,
+    backgroundColor: theme.colors.border.subtle,
   },
   seeAllBtn: {
     position: 'absolute',
@@ -145,7 +145,7 @@ const styles = StyleSheet.create({
   },
   seeAllText: {
     ...theme.typography.caption,
-    color: theme.colors.accent,
+    color: theme.colors.accent.default,
     fontWeight: '600',
   },
   list: {
@@ -158,12 +158,12 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: SHEET_HEIGHT,
-    backgroundColor: theme.colors.bg,
-    borderTopLeftRadius: theme.radius.lg,
-    borderTopRightRadius: theme.radius.lg,
+    backgroundColor: theme.colors.bg.primary,
+    borderTopLeftRadius: theme.radius.md,
+    borderTopRightRadius: theme.radius.md,
     borderWidth: 1,
     borderBottomWidth: 0,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.border.subtle,
   },
   sheetHeader: {
     flexDirection: 'row',
@@ -172,15 +172,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.lg,
     paddingVertical: theme.spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
+    borderBottomColor: theme.colors.border.subtle,
   },
   sheetTitle: {
     ...theme.typography.heading,
-    color: theme.colors.text,
+    color: theme.colors.text.primary,
   },
   closeBtn: {
     ...theme.typography.body,
-    color: theme.colors.textMuted,
+    color: theme.colors.text.muted,
   },
   sheetList: {
     padding: theme.spacing.md,

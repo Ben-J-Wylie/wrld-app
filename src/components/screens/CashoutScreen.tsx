@@ -316,7 +316,7 @@ export function CashoutScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.colors.bg },
+  container: { flex: 1, backgroundColor: theme.colors.bg.primary },
   center: {
     flex: 1,
     alignItems: 'center',
@@ -332,32 +332,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.lg,
     paddingVertical: theme.spacing.md,
   },
-  back: { ...theme.typography.heading, color: theme.colors.text, width: 32 },
-  title: { ...theme.typography.heading, color: theme.colors.text },
+  back: { ...theme.typography.heading, color: theme.colors.text.primary, width: 32 },
+  title: { ...theme.typography.heading, color: theme.colors.text.primary },
 
   content: { padding: theme.spacing.lg, gap: theme.spacing.lg, paddingBottom: theme.spacing.xl },
 
   statusRow: { flexDirection: 'row', gap: theme.spacing.sm },
   statusChip: {
     flex: 1,
-    borderRadius: theme.radius.lg,
+    borderRadius: theme.radius.md,
     padding: theme.spacing.md,
-    backgroundColor: theme.colors.bgElevated,
+    backgroundColor: theme.colors.bg.elevated,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.border.subtle,
     gap: 2,
   },
   statusChipReady: { borderColor: `${GOLD}55`, backgroundColor: GOLD_BG },
   statusLabel: {
     ...theme.typography.caption,
-    color: theme.colors.textMuted,
+    color: theme.colors.text.muted,
     fontWeight: '700',
     letterSpacing: 1,
   },
   statusLabelReady: { color: GOLD },
-  statusValue: { ...theme.typography.heading, color: theme.colors.text },
+  statusValue: { ...theme.typography.heading, color: theme.colors.text.primary },
   statusValueReady: { color: GOLD },
-  statusSub: { ...theme.typography.caption, color: theme.colors.textMuted },
+  statusSub: { ...theme.typography.caption, color: theme.colors.text.muted },
 
   amountHeader: {
     flexDirection: 'row',
@@ -366,33 +366,33 @@ const styles = StyleSheet.create({
   },
   sectionLabel: {
     ...theme.typography.caption,
-    color: theme.colors.textMuted,
+    color: theme.colors.text.muted,
     fontWeight: '700',
     letterSpacing: 1,
   },
   amountMin: {
     ...theme.typography.caption,
-    color: theme.colors.textMuted,
+    color: theme.colors.text.muted,
   },
 
   amountDisplay: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md },
-  amountNumber: { fontSize: 48, fontWeight: '700', color: theme.colors.text, flex: 1 },
+  amountNumber: { fontSize: 48, fontWeight: '700', color: theme.colors.text.primary, flex: 1 },
   amountUnit: {
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.xs,
-    backgroundColor: theme.colors.bgElevated,
+    backgroundColor: theme.colors.bg.elevated,
     borderRadius: theme.radius.md,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.border.subtle,
   },
-  amountUnitText: { ...theme.typography.body, color: theme.colors.textMuted, fontWeight: '600' },
+  amountUnitText: { ...theme.typography.body, color: theme.colors.text.muted, fontWeight: '600' },
 
   // Payout breakdown
   breakdown: {
-    backgroundColor: theme.colors.bgElevated,
-    borderRadius: theme.radius.lg,
+    backgroundColor: theme.colors.bg.elevated,
+    borderRadius: theme.radius.md,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.border.subtle,
     overflow: 'hidden',
   },
   breakdownRow: {
@@ -402,12 +402,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
   },
-  breakdownLabel: { ...theme.typography.body, color: theme.colors.textMuted },
-  breakdownValue: { ...theme.typography.body, color: theme.colors.text, fontWeight: '600' },
-  breakdownFee: { ...theme.typography.body, color: theme.colors.danger, fontWeight: '600' },
+  breakdownLabel: { ...theme.typography.body, color: theme.colors.text.muted },
+  breakdownValue: { ...theme.typography.body, color: theme.colors.text.primary, fontWeight: '600' },
+  breakdownFee: { ...theme.typography.body, color: theme.colors.accent.default, fontWeight: '600' },
   breakdownTotal: {
     borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
+    borderTopColor: theme.colors.border.subtle,
     backgroundColor: `${GOLD}11`,
   },
   breakdownTotalLabel: { ...theme.typography.body, color: GOLD, fontWeight: '700' },
@@ -442,7 +442,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   sliderLabels: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 2 },
-  sliderLabel: { ...theme.typography.caption, color: theme.colors.textMuted },
+  sliderLabel: { ...theme.typography.caption, color: theme.colors.text.muted },
 
   // Presets
   presets: { flexDirection: 'row', gap: theme.spacing.sm },
@@ -451,19 +451,19 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.sm,
     borderRadius: theme.radius.md,
     borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.bgElevated,
+    borderColor: theme.colors.border.subtle,
+    backgroundColor: theme.colors.bg.elevated,
     alignItems: 'center',
   },
   presetBtnActive: { borderColor: GOLD, backgroundColor: `${GOLD}22` },
   presetBtnDisabled: { opacity: 0.35 },
-  presetBtnText: { ...theme.typography.body, color: theme.colors.textMuted, fontWeight: '600' },
+  presetBtnText: { ...theme.typography.body, color: theme.colors.text.muted, fontWeight: '600' },
   presetBtnTextActive: { color: GOLD },
 
-  warning: { ...theme.typography.caption, color: theme.colors.danger, textAlign: 'center' },
+  warning: { ...theme.typography.caption, color: theme.colors.accent.default, textAlign: 'center' },
   notice: {
     ...theme.typography.caption,
-    color: theme.colors.textMuted,
+    color: theme.colors.text.muted,
     textAlign: 'center',
     lineHeight: 18,
   },
@@ -474,7 +474,7 @@ const styles = StyleSheet.create({
     paddingTop: theme.spacing.md,
     gap: theme.spacing.sm,
     borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
+    borderTopColor: theme.colors.border.subtle,
   },
   submitBtn: {
     backgroundColor: GOLD,
@@ -486,16 +486,16 @@ const styles = StyleSheet.create({
   submitText: { ...theme.typography.body, color: '#fff', fontWeight: '700' },
   footerNote: {
     ...theme.typography.caption,
-    color: theme.colors.textMuted,
+    color: theme.colors.text.muted,
     textAlign: 'center',
   },
 
   // Success
   successEmoji: { fontSize: 56 },
-  successHeading: { ...theme.typography.heading, color: theme.colors.text, textAlign: 'center' },
+  successHeading: { ...theme.typography.heading, color: theme.colors.text.primary, textAlign: 'center' },
   successBody: {
     ...theme.typography.body,
-    color: theme.colors.textMuted,
+    color: theme.colors.text.muted,
     textAlign: 'center',
     lineHeight: 22,
   },

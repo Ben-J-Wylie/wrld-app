@@ -21,7 +21,7 @@ export function ProfileScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.center}>
-          <ActivityIndicator color={theme.colors.accent} />
+          <ActivityIndicator color={theme.colors.accent.default} />
         </View>
       </SafeAreaView>
     )
@@ -84,22 +84,22 @@ export function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.colors.bg },
+  container: { flex: 1, backgroundColor: theme.colors.bg.primary },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   backRow: {
     paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.sm,
     paddingBottom: theme.spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
+    borderBottomColor: theme.colors.border.subtle,
   },
   content: {
     alignItems: 'center',
     padding: theme.spacing.lg,
     gap: theme.spacing.md,
   },
-  displayName: { ...theme.typography.heading, color: theme.colors.text, fontWeight: '700' },
-  handle: { ...theme.typography.body, color: theme.colors.textMuted },
+  displayName: { ...theme.typography.heading, color: theme.colors.text.primary, fontWeight: '700' },
+  handle: { ...theme.typography.body, color: theme.colors.text.muted },
   statsRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -107,10 +107,10 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.sm,
   },
   stat: { alignItems: 'center', gap: 2 },
-  statNum: { ...theme.typography.heading, color: theme.colors.text, fontWeight: '700' },
-  statLabel: { ...theme.typography.caption, color: theme.colors.textMuted },
-  statDivider: { width: 1, height: 32, backgroundColor: theme.colors.border },
+  statNum: { ...theme.typography.heading, color: theme.colors.text.primary, fontWeight: '700' },
+  statLabel: { ...theme.typography.caption, color: theme.colors.text.muted },
+  statDivider: { width: 1, height: 32, backgroundColor: theme.colors.border.subtle },
   actions: { width: '100%', gap: theme.spacing.sm },
-  muted: { ...theme.typography.body, color: theme.colors.textMuted },
+  muted: { ...theme.typography.body, color: theme.colors.text.muted },
   wide: { width: '100%' },
 })

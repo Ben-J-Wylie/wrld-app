@@ -126,7 +126,7 @@ export function WalletScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.center}>
-          <ActivityIndicator color={theme.colors.accent} />
+          <ActivityIndicator color={theme.colors.accent.default} />
         </View>
       </SafeAreaView>
     )
@@ -232,9 +232,9 @@ const GOLD = '#F59E0B'
 const GOLD_BG = '#2A1F00'
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.colors.bg },
+  container: { flex: 1, backgroundColor: theme.colors.bg.primary },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: theme.spacing.md },
-  muted: { ...theme.typography.body, color: theme.colors.textMuted },
+  muted: { ...theme.typography.body, color: theme.colors.text.muted },
   btn: { width: 160 },
 
   pageHeader: {
@@ -242,7 +242,7 @@ const styles = StyleSheet.create({
     paddingTop: theme.spacing.sm,
     paddingBottom: theme.spacing.md,
   },
-  pageTitle: { ...theme.typography.title, color: theme.colors.text },
+  pageTitle: { ...theme.typography.display, color: theme.colors.text.primary },
 
   listContent: { paddingBottom: theme.spacing.xl },
 
@@ -255,16 +255,16 @@ const styles = StyleSheet.create({
   },
   card: {
     flex: 1,
-    borderRadius: theme.radius.lg,
+    borderRadius: theme.radius.md,
     padding: theme.spacing.md,
     gap: 2,
   },
-  cardBlue: { backgroundColor: '#0D1830', borderWidth: 1, borderColor: `${theme.colors.accent}55` },
+  cardBlue: { backgroundColor: '#0D1830', borderWidth: 1, borderColor: `${theme.colors.accent.default}55` },
   cardGold: { backgroundColor: GOLD_BG, borderWidth: 1, borderColor: `${GOLD}55` },
-  cardLabel: { ...theme.typography.caption, color: theme.colors.textMuted, fontWeight: '700', letterSpacing: 1 },
-  cardAmount: { ...theme.typography.heading, color: theme.colors.text, marginTop: 4 },
-  cardSub: { ...theme.typography.caption, color: theme.colors.textMuted },
-  cardNote: { ...theme.typography.caption, color: theme.colors.textMuted, marginTop: 4, fontStyle: 'italic' },
+  cardLabel: { ...theme.typography.caption, color: theme.colors.text.muted, fontWeight: '700', letterSpacing: 1 },
+  cardAmount: { ...theme.typography.heading, color: theme.colors.text.primary, marginTop: 4 },
+  cardSub: { ...theme.typography.caption, color: theme.colors.text.muted },
+  cardNote: { ...theme.typography.caption, color: theme.colors.text.muted, marginTop: 4, fontStyle: 'italic' },
 
   // Action buttons
   actionsRow: {
@@ -275,12 +275,12 @@ const styles = StyleSheet.create({
   },
   actionBtn: {
     flex: 1,
-    borderRadius: theme.radius.lg,
+    borderRadius: theme.radius.md,
     padding: theme.spacing.md,
     alignItems: 'center',
     gap: 2,
   },
-  actionBtnBlue: { backgroundColor: theme.colors.accent },
+  actionBtnBlue: { backgroundColor: theme.colors.accent.default },
   actionBtnGold: { backgroundColor: GOLD },
   actionBtnDisabled: { opacity: 0.5 },
   actionBtnIcon: { fontSize: 22 },
@@ -293,15 +293,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
     borderRadius: theme.radius.full,
-    backgroundColor: theme.colors.bgElevated,
+    backgroundColor: theme.colors.bg.elevated,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.border.subtle,
   },
-  filterTabActive: { borderColor: theme.colors.accent, backgroundColor: `${theme.colors.accent}22` },
-  filterTabText: { ...theme.typography.caption, color: theme.colors.textMuted, fontWeight: '600' },
-  filterTabTextActive: { color: theme.colors.accent },
+  filterTabActive: { borderColor: theme.colors.accent.default, backgroundColor: `${theme.colors.accent.default}22` },
+  filterTabText: { ...theme.typography.caption, color: theme.colors.text.muted, fontWeight: '600' },
+  filterTabTextActive: { color: theme.colors.accent.default },
 
-  divider: { height: 1, backgroundColor: theme.colors.border, marginBottom: theme.spacing.sm },
+  divider: { height: 1, backgroundColor: theme.colors.border.subtle, marginBottom: theme.spacing.sm },
 
   // Transaction rows
   txRow: {
@@ -318,27 +318,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  txIconSpent: { backgroundColor: `${theme.colors.accent}22` },
+  txIconSpent: { backgroundColor: `${theme.colors.accent.default}22` },
   txIconEarned: { backgroundColor: `${GOLD}22` },
   txIconCashout: { backgroundColor: '#ffffff11' },
-  txIconTopup: { backgroundColor: `${theme.colors.accent}22` },
+  txIconTopup: { backgroundColor: `${theme.colors.accent.default}22` },
   txIconEmoji: { fontSize: 20 },
   txMiddle: { flex: 1, gap: 2 },
-  txTitle: { ...theme.typography.body, color: theme.colors.text, fontWeight: '600' },
-  txSub: { ...theme.typography.caption, color: theme.colors.textMuted },
-  txDate: { ...theme.typography.caption, color: theme.colors.textMuted },
+  txTitle: { ...theme.typography.body, color: theme.colors.text.primary, fontWeight: '600' },
+  txSub: { ...theme.typography.caption, color: theme.colors.text.muted },
+  txDate: { ...theme.typography.caption, color: theme.colors.text.muted },
   txRight: { alignItems: 'flex-end', gap: 2 },
   txAmount: { ...theme.typography.body, fontWeight: '700' },
-  txAmountSpent: { color: theme.colors.textMuted },
+  txAmountSpent: { color: theme.colors.text.muted },
   txAmountEarned: { color: GOLD },
-  txAmountCashout: { ...theme.typography.body, fontWeight: '700', color: theme.colors.text },
-  txAmountTopup: { ...theme.typography.body, fontWeight: '700', color: theme.colors.accent },
-  txDollars: { ...theme.typography.caption, color: theme.colors.textMuted },
+  txAmountCashout: { ...theme.typography.body, fontWeight: '700', color: theme.colors.text.primary },
+  txAmountTopup: { ...theme.typography.body, fontWeight: '700', color: theme.colors.accent.default },
+  txDollars: { ...theme.typography.caption, color: theme.colors.text.muted },
 
-  separator: { height: 1, backgroundColor: theme.colors.border, marginLeft: 76 },
+  separator: { height: 1, backgroundColor: theme.colors.border.subtle, marginLeft: 76 },
 
   empty: { paddingVertical: theme.spacing.xxl, alignItems: 'center', gap: theme.spacing.sm },
   emptyEmoji: { fontSize: 40 },
-  emptyHeading: { ...theme.typography.heading, color: theme.colors.text },
-  emptyText: { ...theme.typography.body, color: theme.colors.textMuted, textAlign: 'center' },
+  emptyHeading: { ...theme.typography.heading, color: theme.colors.text.primary },
+  emptyText: { ...theme.typography.body, color: theme.colors.text.muted, textAlign: 'center' },
 })

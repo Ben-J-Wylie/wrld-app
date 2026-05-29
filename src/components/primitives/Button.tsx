@@ -34,7 +34,7 @@ export function Button({
       ]}
     >
       {loading ? (
-        <ActivityIndicator color={theme.colors.text} />
+        <ActivityIndicator color={theme.colors.text.primary} />
       ) : (
         <Text style={[styles.label, variant === 'secondary' && styles.labelSecondary]}>
           {label}
@@ -52,15 +52,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 24,
   },
-  primary: { backgroundColor: theme.colors.accent },
+  primary: { backgroundColor: theme.colors.accent.default },
   secondary: {
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.border.subtle,
   },
-  danger: { backgroundColor: theme.colors.danger },
+  danger: { backgroundColor: theme.colors.accent.default },
   disabled: { opacity: 0.5 },
   pressed: { opacity: 0.8 },
-  label: { color: theme.colors.text, fontSize: 16, fontWeight: '600' },
-  labelSecondary: { color: theme.colors.text },
+  label: { color: theme.colors.text.primary, fontSize: 16, fontWeight: '600' },
+  labelSecondary: { color: theme.colors.text.primary },
 })

@@ -146,7 +146,7 @@ export function DashboardScreen() {
           <Text style={styles.sectionLabel}>LOCATION</Text>
           {locationLoading && (
             <View style={styles.row}>
-              <ActivityIndicator color={theme.colors.accent} size="small" />
+              <ActivityIndicator color={theme.colors.accent.default} size="small" />
               <Text style={styles.muted}>Detecting…</Text>
             </View>
           )}
@@ -174,53 +174,53 @@ export function DashboardScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.colors.bg },
+  container: { flex: 1, backgroundColor: theme.colors.bg.primary },
   scroll: {
     flex: 1,
     padding: theme.spacing.lg,
     gap: theme.spacing.md,
   },
-  title: { ...theme.typography.title, color: theme.colors.text, marginBottom: theme.spacing.sm },
+  title: { ...theme.typography.display, color: theme.colors.text.primary, marginBottom: theme.spacing.sm },
   section: { gap: theme.spacing.sm },
   sectionLabel: {
     ...theme.typography.caption,
-    color: theme.colors.textMuted,
+    color: theme.colors.text.muted,
     fontWeight: '700',
     letterSpacing: 1.2,
   },
-  sectionHint: { ...theme.typography.caption, color: theme.colors.textMuted },
+  sectionHint: { ...theme.typography.caption, color: theme.colors.text.muted },
   sourceGrid: { flexDirection: 'row', gap: theme.spacing.sm },
   sourceCard: {
     flex: 1,
-    backgroundColor: theme.colors.bgElevated,
-    borderRadius: theme.radius.lg,
+    backgroundColor: theme.colors.bg.elevated,
+    borderRadius: theme.radius.md,
     borderWidth: 1.5,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.border.subtle,
     padding: theme.spacing.md,
     alignItems: 'center',
     gap: theme.spacing.xs,
   },
   sourceCardReady: {
-    borderColor: theme.colors.live,
+    borderColor: theme.colors.accent.default,
     backgroundColor: '#1A0A10',
   },
   sourceIcon: { fontSize: 28 },
-  sourceLabel: { ...theme.typography.body, color: theme.colors.textMuted, fontWeight: '600' },
-  sourceLabelReady: { color: theme.colors.text },
+  sourceLabel: { ...theme.typography.body, color: theme.colors.text.muted, fontWeight: '600' },
+  sourceLabelReady: { color: theme.colors.text.primary },
   readyPill: {
     borderRadius: theme.radius.full,
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: 2,
-    backgroundColor: theme.colors.border,
+    backgroundColor: theme.colors.border.subtle,
     marginTop: theme.spacing.xs,
   },
-  readyPillActive: { backgroundColor: theme.colors.live },
-  readyPillText: { ...theme.typography.caption, color: theme.colors.textMuted, fontWeight: '700' },
+  readyPillActive: { backgroundColor: theme.colors.accent.default },
+  readyPillText: { ...theme.typography.caption, color: theme.colors.text.muted, fontWeight: '700' },
   readyPillTextActive: { color: '#fff' },
   row: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
-  muted: { ...theme.typography.body, color: theme.colors.textMuted },
-  errorText: { ...theme.typography.body, color: theme.colors.danger },
-  hint: { ...theme.typography.caption, color: theme.colors.textMuted, textAlign: 'center' },
+  muted: { ...theme.typography.body, color: theme.colors.text.muted },
+  errorText: { ...theme.typography.body, color: theme.colors.accent.default },
+  hint: { ...theme.typography.caption, color: theme.colors.text.muted, textAlign: 'center' },
   wide: { width: '100%' },
   locked: {
     flex: 1,
@@ -230,10 +230,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   lockedEmoji: { fontSize: 52, textAlign: 'center', marginBottom: theme.spacing.sm },
-  lockedTitle: { ...theme.typography.title, color: theme.colors.text, textAlign: 'center' },
+  lockedTitle: { ...theme.typography.display, color: theme.colors.text.primary, textAlign: 'center' },
   lockedBody: {
     ...theme.typography.body,
-    color: theme.colors.textMuted,
+    color: theme.colors.text.muted,
     textAlign: 'center',
     lineHeight: 22,
     marginBottom: theme.spacing.sm,

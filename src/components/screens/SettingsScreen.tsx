@@ -75,7 +75,7 @@ export function SettingsScreen() {
           <Switch
             value={followedLive}
             onValueChange={toggleFollowedLive}
-            trackColor={{ false: theme.colors.border, true: theme.colors.accent }}
+            trackColor={{ false: theme.colors.border.subtle, true: theme.colors.accent.default }}
             thumbColor="#fff"
           />
         </View>
@@ -90,7 +90,7 @@ export function SettingsScreen() {
           <Switch
             value={nearbyLive}
             onValueChange={toggleNearbyLive}
-            trackColor={{ false: theme.colors.border, true: theme.colors.accent }}
+            trackColor={{ false: theme.colors.border.subtle, true: theme.colors.accent.default }}
             thumbColor="#fff"
           />
         </View>
@@ -112,7 +112,7 @@ export function SettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.colors.bg },
+  container: { flex: 1, backgroundColor: theme.colors.bg.primary },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -121,18 +121,18 @@ const styles = StyleSheet.create({
     paddingTop: theme.spacing.sm,
     paddingBottom: theme.spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
+    borderBottomColor: theme.colors.border.subtle,
   },
-  title: { ...theme.typography.heading, color: theme.colors.text },
+  title: { ...theme.typography.heading, color: theme.colors.text.primary },
   section: {
     marginTop: theme.spacing.lg,
     borderTopWidth: 1,
     borderBottomWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.border.subtle,
   },
   sectionTitle: {
     ...theme.typography.caption,
-    color: theme.colors.textMuted,
+    color: theme.colors.text.muted,
     fontWeight: '700',
     letterSpacing: 1.2,
     paddingHorizontal: theme.spacing.lg,
@@ -146,9 +146,9 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
   },
   rowText: { flex: 1 },
-  rowLabel: { ...theme.typography.body, color: theme.colors.text, fontWeight: '500' },
-  rowSub: { ...theme.typography.caption, color: theme.colors.textMuted, marginTop: 2 },
-  divider: { height: 1, backgroundColor: theme.colors.border, marginLeft: theme.spacing.lg },
+  rowLabel: { ...theme.typography.body, color: theme.colors.text.primary, fontWeight: '500' },
+  rowSub: { ...theme.typography.caption, color: theme.colors.text.muted, marginTop: 2 },
+  divider: { height: 1, backgroundColor: theme.colors.border.subtle, marginLeft: theme.spacing.lg },
   bottom: {
     padding: theme.spacing.lg,
     gap: theme.spacing.md,
@@ -158,7 +158,7 @@ const styles = StyleSheet.create({
   wide: { width: '100%' },
   note: {
     ...theme.typography.caption,
-    color: theme.colors.textMuted,
+    color: theme.colors.text.muted,
     textAlign: 'center',
     lineHeight: 18,
   },

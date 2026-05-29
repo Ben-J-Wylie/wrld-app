@@ -57,7 +57,7 @@ export function ChatOverlay({ messages, isSignedIn, onSend, onAuthRequest }: Pro
               value={draft}
               onChangeText={setDraft}
               placeholder="Say something…"
-              placeholderTextColor={theme.colors.textMuted}
+              placeholderTextColor={theme.colors.text.muted}
               returnKeyType="send"
               onSubmitEditing={handleSend}
               maxLength={500}
@@ -100,17 +100,17 @@ const styles = StyleSheet.create({
   },
   handle: {
     ...theme.typography.caption,
-    color: theme.colors.accent,
+    color: theme.colors.accent.default,
     fontWeight: '600',
   },
   text: {
     ...theme.typography.caption,
-    color: theme.colors.text,
+    color: theme.colors.text.primary,
     flexShrink: 1,
   },
   empty: {
     ...theme.typography.caption,
-    color: theme.colors.textMuted,
+    color: theme.colors.text.muted,
     textAlign: 'center',
     marginTop: theme.spacing.md,
   },
@@ -118,7 +118,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
+    borderTopColor: theme.colors.border.subtle,
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: theme.spacing.sm,
     gap: theme.spacing.sm,
@@ -127,16 +127,16 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 36,
     borderRadius: theme.radius.full,
-    backgroundColor: theme.colors.bgElevated,
+    backgroundColor: theme.colors.bg.elevated,
     paddingHorizontal: theme.spacing.md,
-    color: theme.colors.text,
+    color: theme.colors.text.primary,
     fontSize: 14,
   },
   sendBtn: {
     width: 36,
     height: 36,
     borderRadius: theme.radius.full,
-    backgroundColor: theme.colors.accent,
+    backgroundColor: theme.colors.accent.default,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -146,14 +146,14 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 36,
     borderRadius: theme.radius.full,
-    backgroundColor: theme.colors.bgElevated,
+    backgroundColor: theme.colors.bg.elevated,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.border.subtle,
   },
   anonText: {
     ...theme.typography.caption,
-    color: theme.colors.textMuted,
+    color: theme.colors.text.muted,
   },
 })

@@ -102,20 +102,20 @@ export function SignupScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.colors.bg },
+  container: { flex: 1, backgroundColor: theme.colors.bg.primary },
   content: { flex: 1, padding: 24, justifyContent: 'center', gap: 16 },
   title: {
     fontSize: 32,
     fontWeight: '700',
-    color: theme.colors.text,
+    color: theme.colors.text.primary,
     textAlign: 'center',
     marginBottom: 24,
   },
   subtitle: {
     fontSize: 16,
-    color: theme.colors.textMuted,
+    color: theme.colors.text.muted,
     textAlign: 'center',
     marginBottom: 16,
   },
-  link: { color: theme.colors.accent, textAlign: 'center', marginTop: 16 },
+  link: { color: theme.colors.accent.default, textAlign: 'center', marginTop: 16 },
 })

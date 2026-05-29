@@ -30,7 +30,7 @@ export function SearchScreen() {
           autoCorrect={false}
           style={styles.input}
         />
-        {isFetching && <ActivityIndicator color={theme.colors.accent} style={styles.spinner} />}
+        {isFetching && <ActivityIndicator color={theme.colors.accent.default} style={styles.spinner} />}
       </View>
 
       {!q.trim() && (
@@ -73,14 +73,14 @@ function UserRow({ user, onPress }: { user: PublicUser; onPress: () => void }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.colors.bg },
+  container: { flex: 1, backgroundColor: theme.colors.bg.primary },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: theme.spacing.lg,
     paddingVertical: theme.spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
+    borderBottomColor: theme.colors.border.subtle,
     gap: theme.spacing.sm,
   },
   input: { flex: 1 },
@@ -88,18 +88,18 @@ const styles = StyleSheet.create({
   list: { paddingHorizontal: theme.spacing.lg },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: theme.spacing.sm },
   emptyEmoji: { fontSize: 36 },
-  emptyText: { ...theme.typography.body, color: theme.colors.textMuted },
+  emptyText: { ...theme.typography.body, color: theme.colors.text.muted },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: theme.spacing.md,
     gap: theme.spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
+    borderBottomColor: theme.colors.border.subtle,
   },
   rowText: { flex: 1, gap: 2 },
-  displayName: { ...theme.typography.body, color: theme.colors.text, fontWeight: '600' },
-  handle: { ...theme.typography.caption, color: theme.colors.textMuted },
+  displayName: { ...theme.typography.body, color: theme.colors.text.primary, fontWeight: '600' },
+  handle: { ...theme.typography.caption, color: theme.colors.text.muted },
   counts: {},
-  countText: { ...theme.typography.caption, color: theme.colors.textMuted },
+  countText: { ...theme.typography.caption, color: theme.colors.text.muted },
 })

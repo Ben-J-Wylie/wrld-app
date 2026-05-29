@@ -433,7 +433,7 @@ export function StreamScreen() {
                   )}
                   {locationLoading && (
                     <View style={styles.statusRow}>
-                      <ActivityIndicator color={theme.colors.accent} size="small" />
+                      <ActivityIndicator color={theme.colors.accent.default} size="small" />
                       <Text style={styles.muted}>Detecting location…</Text>
                     </View>
                   )}
@@ -459,7 +459,7 @@ export function StreamScreen() {
           {/* ── Connecting ───────────────────────────────────────── */}
           {(status === 'connecting' || status === 'connected' || status === 'authenticated') && (
             <View style={styles.statusRow}>
-              <ActivityIndicator color={theme.colors.accent} />
+              <ActivityIndicator color={theme.colors.accent.default} />
               <Text style={styles.muted}>
                 {status === 'connecting' && 'Connecting…'}
                 {status === 'connected' && 'Authenticating…'}
@@ -485,7 +485,7 @@ export function StreamScreen() {
           {/* ── Viewer: waiting for stream to load ───────────────── */}
           {!isNew && status === 'in-room' && !remoteStream && !streamEnded && (
             <View style={styles.statusRow}>
-              <ActivityIndicator color={theme.colors.accent} />
+              <ActivityIndicator color={theme.colors.accent.default} />
               <Text style={styles.muted}>Loading stream…</Text>
             </View>
           )}
@@ -657,7 +657,7 @@ export function StreamScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.colors.bg },
+  container: { flex: 1, backgroundColor: theme.colors.bg.primary },
   content: {
     flex: 1,
     padding: theme.spacing.lg,
@@ -665,18 +665,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.md,
   },
-  title: { ...theme.typography.title, color: theme.colors.text },
-  streamTitle: { ...theme.typography.heading, color: theme.colors.text, textAlign: 'center' },
-  muted: { ...theme.typography.body, color: theme.colors.textMuted, textAlign: 'center' },
-  errorText: { ...theme.typography.body, color: theme.colors.danger, textAlign: 'center' },
+  title: { ...theme.typography.display, color: theme.colors.text.primary },
+  streamTitle: { ...theme.typography.heading, color: theme.colors.text.primary, textAlign: 'center' },
+  muted: { ...theme.typography.body, color: theme.colors.text.muted, textAlign: 'center' },
+  errorText: { ...theme.typography.body, color: theme.colors.accent.default, textAlign: 'center' },
   overlayText: { color: '#fff', textShadowColor: 'rgba(0,0,0,0.6)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
   liveRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
-  live: { ...theme.typography.heading, color: theme.colors.live },
-  roomId: { ...theme.typography.caption, color: theme.colors.textMuted, fontFamily: 'monospace' },
-  viewerCount: { ...theme.typography.body, color: theme.colors.textMuted },
+  live: { ...theme.typography.heading, color: theme.colors.accent.default },
+  roomId: { ...theme.typography.caption, color: theme.colors.text.muted, fontFamily: 'monospace' },
+  viewerCount: { ...theme.typography.body, color: theme.colors.text.muted },
   header: { paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.sm },
   backBtn: { alignSelf: 'flex-start' },
-  backArrow: { ...theme.typography.heading, color: theme.colors.text },
+  backArrow: { ...theme.typography.heading, color: theme.colors.text.primary },
   actions: { width: '100%', gap: theme.spacing.sm, alignItems: 'center' },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
   roomInfo: { width: '100%', alignItems: 'center', gap: theme.spacing.lg },
@@ -686,14 +686,14 @@ const styles = StyleSheet.create({
     left: theme.spacing.lg,
     right: theme.spacing.lg,
     backgroundColor: 'rgba(0,0,0,0.45)',
-    borderRadius: theme.radius.lg,
+    borderRadius: theme.radius.md,
     padding: theme.spacing.md,
   },
   wide: { width: '100%' },
   section: { width: '100%', gap: theme.spacing.sm, alignItems: 'center' },
   sectionLabel: {
     ...theme.typography.caption,
-    color: theme.colors.textMuted,
+    color: theme.colors.text.muted,
     fontWeight: '700',
     letterSpacing: 1.2,
   },
@@ -702,32 +702,32 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.full,
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: 4,
-    backgroundColor: theme.colors.bgElevated,
+    backgroundColor: theme.colors.bg.elevated,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.border.subtle,
   },
-  sourceBadgeText: { ...theme.typography.caption, color: theme.colors.textMuted, fontWeight: '600' },
+  sourceBadgeText: { ...theme.typography.caption, color: theme.colors.text.muted, fontWeight: '600' },
   sourceActiveBadge: {
     borderRadius: theme.radius.full,
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: 4,
-    backgroundColor: theme.colors.live,
+    backgroundColor: theme.colors.accent.default,
   },
   sourceActiveBadgeText: { ...theme.typography.caption, color: '#fff', fontWeight: '700' },
   sourceSwitchBtn: {
     borderRadius: theme.radius.full,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
-    backgroundColor: theme.colors.bgElevated,
+    backgroundColor: theme.colors.bg.elevated,
     borderWidth: 1.5,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.border.subtle,
   },
   sourceSwitchBtnActive: {
-    borderColor: theme.colors.accent,
+    borderColor: theme.colors.accent.default,
     backgroundColor: '#0D1830',
   },
-  sourceSwitchText: { ...theme.typography.body, color: theme.colors.textMuted, fontWeight: '600' },
-  sourceSwitchTextActive: { color: theme.colors.accent },
+  sourceSwitchText: { ...theme.typography.body, color: theme.colors.text.muted, fontWeight: '600' },
+  sourceSwitchTextActive: { color: theme.colors.accent.default },
   broadcasterRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -735,7 +735,7 @@ const styles = StyleSheet.create({
   },
   broadcasterHandle: {
     ...theme.typography.body,
-    color: theme.colors.textMuted,
+    color: theme.colors.text.muted,
     fontWeight: '600',
   },
   headerRow: {
@@ -744,7 +744,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   chatToggleBtn: { padding: theme.spacing.xs },
-  chatToggleText: { fontSize: 22, color: theme.colors.text },
+  chatToggleText: { fontSize: 22, color: theme.colors.text.primary },
   chatPanel: {
     position: 'absolute',
     left: 0,
@@ -777,7 +777,7 @@ const styles = StyleSheet.create({
   },
   pausedText: {
     ...theme.typography.caption,
-    color: theme.colors.text,
+    color: theme.colors.text.primary,
     fontWeight: '600',
   },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
@@ -785,20 +785,20 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.full,
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: 4,
-    backgroundColor: `${theme.colors.accent}22`,
+    backgroundColor: `${theme.colors.accent.default}22`,
     borderWidth: 1,
-    borderColor: theme.colors.accent,
+    borderColor: theme.colors.accent.default,
   },
-  tipHeaderBtnText: { ...theme.typography.caption, color: theme.colors.accent, fontWeight: '700' },
+  tipHeaderBtnText: { ...theme.typography.caption, color: theme.colors.accent.default, fontWeight: '700' },
   tipBtn: {
     borderRadius: theme.radius.full,
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: 4,
-    backgroundColor: `${theme.colors.accent}22`,
+    backgroundColor: `${theme.colors.accent.default}22`,
     borderWidth: 1,
-    borderColor: theme.colors.accent,
+    borderColor: theme.colors.accent.default,
   },
-  tipBtnText: { ...theme.typography.caption, color: theme.colors.accent, fontWeight: '700' },
+  tipBtnText: { ...theme.typography.caption, color: theme.colors.accent.default, fontWeight: '700' },
   tipBurstArea: {
     position: 'absolute',
     bottom: 100,
@@ -809,7 +809,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 120,
     alignSelf: 'center',
-    backgroundColor: `${theme.colors.accent}CC`,
+    backgroundColor: `${theme.colors.accent.default}CC`,
     borderRadius: 20,
     paddingHorizontal: theme.spacing.lg,
     paddingVertical: theme.spacing.sm,

@@ -24,7 +24,7 @@ type LocationPrecision = 'exact' | 'city' | 'country' | 'off'
 type PermStatus = 'idle' | 'granted' | 'denied'
 type StepName = 'overview' | 'handle' | 'age' | 'avatar' | 'precision' | 'location' | 'notif' | 'camera' | 'tos' | 'done'
 
-const ACCENT = theme.colors.accent
+const ACCENT = theme.colors.accent.default
 
 // ─── Shared layout ────────────────────────────────────────────────────────────
 
@@ -149,7 +149,7 @@ function StepHandle({
           autoCorrect={false}
           autoFocus
           placeholder="yourhandle"
-          placeholderTextColor={theme.colors.textMuted}
+          placeholderTextColor={theme.colors.text.muted}
           onSubmitEditing={onNext}
           returnKeyType="done"
         />
@@ -197,7 +197,7 @@ function StepAge({
             }}
             keyboardType="number-pad"
             placeholder="MM"
-            placeholderTextColor={theme.colors.textMuted}
+            placeholderTextColor={theme.colors.text.muted}
             maxLength={2}
             returnKeyType="next"
             onSubmitEditing={() => dayRef.current?.focus()}
@@ -219,7 +219,7 @@ function StepAge({
             }}
             keyboardType="number-pad"
             placeholder="DD"
-            placeholderTextColor={theme.colors.textMuted}
+            placeholderTextColor={theme.colors.text.muted}
             maxLength={2}
             returnKeyType="next"
             onSubmitEditing={() => yearRef.current?.focus()}
@@ -237,7 +237,7 @@ function StepAge({
             onChangeText={v => setYear(v.replace(/\D/g, '').slice(0, 4))}
             keyboardType="number-pad"
             placeholder="YYYY"
-            placeholderTextColor={theme.colors.textMuted}
+            placeholderTextColor={theme.colors.text.muted}
             maxLength={4}
             returnKeyType="done"
             onSubmitEditing={onNext}
@@ -822,11 +822,11 @@ export function CreatorOnboardingScreen() {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.colors.bg },
+  container: { flex: 1, backgroundColor: theme.colors.bg.primary },
 
   progressTrack: {
     height: 3,
-    backgroundColor: theme.colors.border,
+    backgroundColor: theme.colors.border.subtle,
     marginHorizontal: theme.spacing.lg,
     marginTop: theme.spacing.sm,
     borderRadius: 2,
@@ -847,12 +847,12 @@ const styles = StyleSheet.create({
   },
 
   stepTitle: {
-    ...theme.typography.title,
-    color: theme.colors.text,
+    ...theme.typography.display,
+    color: theme.colors.text.primary,
   },
   stepSubtitle: {
     ...theme.typography.body,
-    color: theme.colors.textMuted,
+    color: theme.colors.text.muted,
     lineHeight: 22,
     marginTop: -theme.spacing.sm,
   },
@@ -867,50 +867,50 @@ const styles = StyleSheet.create({
   primaryBtnDisabled: { opacity: 0.4 },
   primaryBtnText: { ...theme.typography.body, color: '#fff', fontWeight: '700' },
   secondaryBtn: { alignItems: 'center', paddingVertical: theme.spacing.sm },
-  secondaryBtnText: { ...theme.typography.body, color: theme.colors.textMuted },
+  secondaryBtnText: { ...theme.typography.body, color: theme.colors.text.muted },
 
   // Bullet list
   bulletList: { gap: theme.spacing.sm },
   bulletRow: { flexDirection: 'row', gap: theme.spacing.sm },
-  bulletDot: { ...theme.typography.body, color: theme.colors.accent, width: 12 },
-  bulletText: { ...theme.typography.body, color: theme.colors.textMuted, flex: 1, lineHeight: 22 },
+  bulletDot: { ...theme.typography.body, color: theme.colors.accent.default, width: 12 },
+  bulletText: { ...theme.typography.body, color: theme.colors.text.muted, flex: 1, lineHeight: 22 },
 
   // Overview step
   overviewList: { gap: theme.spacing.md },
   overviewRow: {
     flexDirection: 'row',
     gap: theme.spacing.md,
-    backgroundColor: theme.colors.bgElevated,
-    borderRadius: theme.radius.lg,
+    backgroundColor: theme.colors.bg.elevated,
+    borderRadius: theme.radius.md,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.border.subtle,
     padding: theme.spacing.md,
     alignItems: 'flex-start',
   },
   overviewIcon: { fontSize: 24, width: 32, textAlign: 'center' },
   overviewText: { flex: 1, gap: 2 },
-  overviewLabel: { ...theme.typography.body, color: theme.colors.text, fontWeight: '700' },
-  overviewDesc: { ...theme.typography.caption, color: theme.colors.textMuted, lineHeight: 18 },
+  overviewLabel: { ...theme.typography.body, color: theme.colors.text.primary, fontWeight: '700' },
+  overviewDesc: { ...theme.typography.caption, color: theme.colors.text.muted, lineHeight: 18 },
 
   // Handle step
   handleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.xs,
-    backgroundColor: theme.colors.bgElevated,
+    backgroundColor: theme.colors.bg.elevated,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.border.subtle,
     borderRadius: theme.radius.md,
     paddingHorizontal: theme.spacing.md,
   },
-  handleAt: { ...theme.typography.heading, color: theme.colors.textMuted },
+  handleAt: { ...theme.typography.heading, color: theme.colors.text.muted },
   handleInput: {
     ...theme.typography.heading,
-    color: theme.colors.text,
+    color: theme.colors.text.primary,
     flex: 1,
     paddingVertical: theme.spacing.sm,
   },
-  handleHint: { ...theme.typography.caption, color: theme.colors.textMuted },
+  handleHint: { ...theme.typography.caption, color: theme.colors.text.muted },
 
   // Age step
   dobRow: {
@@ -922,16 +922,16 @@ const styles = StyleSheet.create({
   dobFieldYear: { flex: 1.6 },
   dobLabel: {
     ...theme.typography.caption,
-    color: theme.colors.textMuted,
+    color: theme.colors.text.muted,
     fontWeight: '700',
     letterSpacing: 0.8,
   },
   dobInput: {
     ...theme.typography.heading,
-    color: theme.colors.text,
-    backgroundColor: theme.colors.bgElevated,
+    color: theme.colors.text.primary,
+    backgroundColor: theme.colors.bg.elevated,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.border.subtle,
     borderRadius: theme.radius.md,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
@@ -939,12 +939,12 @@ const styles = StyleSheet.create({
   },
   dobSep: {
     ...theme.typography.heading,
-    color: theme.colors.textMuted,
+    color: theme.colors.text.muted,
     paddingBottom: theme.spacing.sm,
   },
   errorText: {
     ...theme.typography.caption,
-    color: theme.colors.danger ?? '#FF3B5C',
+    color: theme.colors.accent.default ?? '#FF3B5C',
     lineHeight: 18,
   },
 
@@ -955,14 +955,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.md,
-    backgroundColor: theme.colors.bgElevated,
-    borderRadius: theme.radius.lg,
+    backgroundColor: theme.colors.bg.elevated,
+    borderRadius: theme.radius.md,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.border.subtle,
     padding: theme.spacing.md,
   },
   avatarBtnIcon: { fontSize: 22 },
-  avatarBtnText: { ...theme.typography.body, color: theme.colors.text, fontWeight: '600' },
+  avatarBtnText: { ...theme.typography.body, color: theme.colors.text.primary, fontWeight: '600' },
 
   // Precision step
   optionList: { gap: theme.spacing.sm },
@@ -970,24 +970,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.md,
-    backgroundColor: theme.colors.bgElevated,
-    borderRadius: theme.radius.lg,
+    backgroundColor: theme.colors.bg.elevated,
+    borderRadius: theme.radius.md,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.border.subtle,
     padding: theme.spacing.md,
   },
   optionRowSelected: { borderColor: ACCENT, backgroundColor: `${ACCENT}11` },
   radio: {
     width: 20, height: 20, borderRadius: 10,
-    borderWidth: 2, borderColor: theme.colors.border,
+    borderWidth: 2, borderColor: theme.colors.border.subtle,
     alignItems: 'center', justifyContent: 'center',
   },
   radioSelected: { borderColor: ACCENT },
   radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: ACCENT },
   optionIcon: { fontSize: 20 },
   optionText: { flex: 1, gap: 2 },
-  optionLabel: { ...theme.typography.body, color: theme.colors.text, fontWeight: '600' },
-  optionDesc: { ...theme.typography.caption, color: theme.colors.textMuted, lineHeight: 18 },
+  optionLabel: { ...theme.typography.body, color: theme.colors.text.primary, fontWeight: '600' },
+  optionDesc: { ...theme.typography.caption, color: theme.colors.text.muted, lineHeight: 18 },
 
   // ToS step
   tosList: { gap: theme.spacing.sm },
@@ -995,23 +995,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.md,
-    backgroundColor: theme.colors.bgElevated,
-    borderRadius: theme.radius.lg,
+    backgroundColor: theme.colors.bg.elevated,
+    borderRadius: theme.radius.md,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.border.subtle,
     padding: theme.spacing.md,
   },
   checkbox: {
     width: 22, height: 22, borderRadius: 6,
-    borderWidth: 2, borderColor: theme.colors.border,
+    borderWidth: 2, borderColor: theme.colors.border.subtle,
     alignItems: 'center', justifyContent: 'center',
   },
   checkboxChecked: { backgroundColor: ACCENT, borderColor: ACCENT },
   checkmark: { color: '#fff', fontSize: 13, fontWeight: '700' },
-  tosLabel: { ...theme.typography.body, color: theme.colors.text, flex: 1 },
+  tosLabel: { ...theme.typography.body, color: theme.colors.text.primary, flex: 1 },
   requiredPill: {
     backgroundColor: `${ACCENT}22`,
-    borderRadius: theme.radius.sm,
+    borderRadius: theme.radius.md,
     paddingHorizontal: 6,
     paddingVertical: 2,
   },
@@ -1027,10 +1027,10 @@ const styles = StyleSheet.create({
   doneEmoji: { fontSize: 52, textAlign: 'center' },
   checklist: {
     gap: theme.spacing.sm,
-    backgroundColor: theme.colors.bgElevated,
-    borderRadius: theme.radius.lg,
+    backgroundColor: theme.colors.bg.elevated,
+    borderRadius: theme.radius.md,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.border.subtle,
     padding: theme.spacing.md,
   },
   checklistRow: {
@@ -1040,6 +1040,6 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   checklistIcon: { fontSize: 18, width: 26 },
-  checklistLabel: { ...theme.typography.body, color: theme.colors.text, flex: 1 },
-  checklistValue: { ...theme.typography.caption, color: theme.colors.textMuted },
+  checklistLabel: { ...theme.typography.body, color: theme.colors.text.primary, flex: 1 },
+  checklistValue: { ...theme.typography.caption, color: theme.colors.text.muted },
 })

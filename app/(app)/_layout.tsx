@@ -7,11 +7,11 @@ export default function AppLayout() {
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: theme.colors.bgElevated,
-          borderTopColor: theme.colors.border,
+          backgroundColor: theme.colors.bg.elevated,
+          borderTopColor: theme.colors.border.subtle,
         },
-        tabBarActiveTintColor: theme.colors.accent,
-        tabBarInactiveTintColor: theme.colors.textMuted,
+        tabBarActiveTintColor: theme.colors.accent.default,
+        tabBarInactiveTintColor: theme.colors.text.muted,
       }}
     >
       <Tabs.Screen name="globe" options={{ title: 'Globe' }} />

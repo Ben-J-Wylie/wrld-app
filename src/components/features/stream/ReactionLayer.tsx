@@ -129,7 +129,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.border.subtle,
   },
   reactionBtnPressed: { transform: [{ scale: 1.2 }] },
   emoji: { fontSize: 22 },

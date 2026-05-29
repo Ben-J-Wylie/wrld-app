@@ -31,9 +31,9 @@ export function Avatar({ avatarUrl, displayName, size = 40 }: Props) {
 }
 
 const styles = StyleSheet.create({
-  image: { backgroundColor: theme.colors.bgElevated },
+  image: { backgroundColor: theme.colors.bg.elevated },
   initials: {
-    backgroundColor: theme.colors.accentMuted,
+    backgroundColor: theme.colors.accent.bright,
     alignItems: 'center',
     justifyContent: 'center',
   },

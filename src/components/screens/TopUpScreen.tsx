@@ -16,7 +16,7 @@ import { useInvalidateCurrentUser } from '@/hooks/useCurrentUser'
 import { usersApi } from '@/api/users'
 
 const SPACE_BUCKS_PER_DOLLAR = 100
-const ACCENT = theme.colors.accent
+const ACCENT = theme.colors.accent.default
 const GREEN = '#10B981'
 const GOLD = '#F59E0B'
 
@@ -194,7 +194,7 @@ export function TopUpScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.colors.bg },
+  container: { flex: 1, backgroundColor: theme.colors.bg.primary },
   center: {
     flex: 1,
     alignItems: 'center',
@@ -210,15 +210,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.lg,
     paddingVertical: theme.spacing.md,
   },
-  back: { ...theme.typography.heading, color: theme.colors.text, width: 32 },
-  title: { ...theme.typography.heading, color: theme.colors.text },
+  back: { ...theme.typography.heading, color: theme.colors.text.primary, width: 32 },
+  title: { ...theme.typography.heading, color: theme.colors.text.primary },
 
   content: { padding: theme.spacing.lg, gap: theme.spacing.lg, paddingBottom: theme.spacing.xl },
 
   // Balance card
   balanceCard: {
-    backgroundColor: theme.colors.bgElevated,
-    borderRadius: theme.radius.lg,
+    backgroundColor: theme.colors.bg.elevated,
+    borderRadius: theme.radius.md,
     borderWidth: 1,
     borderColor: `${ACCENT}44`,
     padding: theme.spacing.md,
@@ -226,16 +226,16 @@ const styles = StyleSheet.create({
   },
   balanceLabel: {
     ...theme.typography.caption,
-    color: theme.colors.textMuted,
+    color: theme.colors.text.muted,
     fontWeight: '700',
     letterSpacing: 1,
   },
-  balanceAmount: { ...theme.typography.heading, color: theme.colors.text, marginTop: 4 },
-  balanceSub: { ...theme.typography.caption, color: theme.colors.textMuted },
+  balanceAmount: { ...theme.typography.heading, color: theme.colors.text.primary, marginTop: 4 },
+  balanceSub: { ...theme.typography.caption, color: theme.colors.text.muted },
 
   sectionLabel: {
     ...theme.typography.caption,
-    color: theme.colors.textMuted,
+    color: theme.colors.text.muted,
     fontWeight: '700',
     letterSpacing: 1,
   },
@@ -246,10 +246,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.md,
-    backgroundColor: theme.colors.bgElevated,
-    borderRadius: theme.radius.lg,
+    backgroundColor: theme.colors.bg.elevated,
+    borderRadius: theme.radius.md,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.border.subtle,
     padding: theme.spacing.md,
   },
   bundleRowSelected: {
@@ -266,7 +266,7 @@ const styles = StyleSheet.create({
     height: 20,
     borderRadius: 10,
     borderWidth: 2,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.border.subtle,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -281,14 +281,14 @@ const styles = StyleSheet.create({
   // Bundle info
   bundleInfo: { flex: 1, gap: 2 },
   bundleTopRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
-  bundleAmount: { ...theme.typography.body, color: theme.colors.text, fontWeight: '700' },
+  bundleAmount: { ...theme.typography.body, color: theme.colors.text.primary, fontWeight: '700' },
   bundleEmoji: { fontSize: 14 },
-  bundleRate: { ...theme.typography.caption, color: theme.colors.textMuted },
+  bundleRate: { ...theme.typography.caption, color: theme.colors.text.muted },
 
   badge: {
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: theme.radius.sm,
+    borderRadius: theme.radius.md,
   },
   badgeText: {
     fontSize: 10,
@@ -299,14 +299,14 @@ const styles = StyleSheet.create({
 
   bundlePrice: {
     ...theme.typography.body,
-    color: theme.colors.textMuted,
+    color: theme.colors.text.muted,
     fontWeight: '600',
   },
   bundlePriceSelected: { color: ACCENT, fontWeight: '700' },
 
   testNote: {
     ...theme.typography.caption,
-    color: theme.colors.textMuted,
+    color: theme.colors.text.muted,
     textAlign: 'center',
   },
 
@@ -315,7 +315,7 @@ const styles = StyleSheet.create({
     padding: theme.spacing.lg,
     paddingTop: theme.spacing.md,
     borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
+    borderTopColor: theme.colors.border.subtle,
   },
   buyBtn: {
     backgroundColor: ACCENT,
@@ -328,10 +328,10 @@ const styles = StyleSheet.create({
 
   // Success
   successEmoji: { fontSize: 56 },
-  successHeading: { ...theme.typography.heading, color: theme.colors.text, textAlign: 'center' },
+  successHeading: { ...theme.typography.heading, color: theme.colors.text.primary, textAlign: 'center' },
   successBody: {
     ...theme.typography.body,
-    color: theme.colors.textMuted,
+    color: theme.colors.text.muted,
     textAlign: 'center',
     lineHeight: 22,
   },

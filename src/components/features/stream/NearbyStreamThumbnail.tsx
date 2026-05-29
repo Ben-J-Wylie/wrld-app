@@ -30,16 +30,16 @@ export function NearbyStreamThumbnail({ stream, onPress }: Props) {
 const styles = StyleSheet.create({
   card: {
     width: 140,
-    backgroundColor: theme.colors.bgElevated,
-    borderRadius: theme.radius.lg,
+    backgroundColor: theme.colors.bg.elevated,
+    borderRadius: theme.radius.md,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.border.subtle,
     padding: theme.spacing.md,
     gap: theme.spacing.xs,
   },
   title: {
     ...theme.typography.body,
-    color: theme.colors.text,
+    color: theme.colors.text.primary,
     fontWeight: '600',
   },
   badges: {
@@ -47,8 +47,8 @@ const styles = StyleSheet.create({
     gap: theme.spacing.xs,
   },
   badge: {
-    backgroundColor: theme.colors.bg,
-    borderRadius: theme.radius.sm,
+    backgroundColor: theme.colors.bg.primary,
+    borderRadius: theme.radius.md,
     paddingHorizontal: 6,
     paddingVertical: 2,
   },
@@ -57,6 +57,6 @@ const styles = StyleSheet.create({
   },
   distance: {
     ...theme.typography.caption,
-    color: theme.colors.textMuted,
+    color: theme.colors.text.muted,
   },
 })
