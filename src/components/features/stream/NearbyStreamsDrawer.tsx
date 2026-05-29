@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { View, Text, FlatList, StyleSheet, Animated, Pressable, Dimensions } from 'react-native'
-import { theme } from '@/lib/theme'
+import { theme } from '@/tokens/theme'
 import { useStreamsNearStream } from '@/hooks/useStreamsNearStream'
 import { NearbyStreamThumbnail } from './NearbyStreamThumbnail'
 import { NearbyStreamRow } from './NearbyStreamRow'

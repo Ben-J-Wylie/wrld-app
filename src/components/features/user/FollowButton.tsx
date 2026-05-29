@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { usersApi } from '@/api/users'
 import { useUserProfile } from '@/hooks/useUserProfile'
-import { Button } from '@/components/ui/Button'
+import { Button } from '@/components/primitives/Button'
 
 type Props = {
   handle: string

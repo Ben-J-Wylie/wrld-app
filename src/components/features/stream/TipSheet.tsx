@@ -9,7 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native'
-import { theme } from '@/lib/theme'
+import { theme } from '@/tokens/theme'
 
 const SPACE_BUCKS_PER_DOLLAR = 100
 

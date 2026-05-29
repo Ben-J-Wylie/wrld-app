@@ -11,9 +11,9 @@ import {
 } from 'react-native'
 import { useState } from 'react'
 import { useSignIn, useSignUp } from '@clerk/clerk-expo'
-import { Input } from '@/components/ui/Input'
-import { Button } from '@/components/ui/Button'
-import { theme } from '@/lib/theme'
+import { Input } from '@/components/primitives/Input'
+import { Button } from '@/components/primitives/Button'
+import { theme } from '@/tokens/theme'
 import { clerkError } from '@/lib/clerkError'
 
 type Tab = 'signin' | 'signup'

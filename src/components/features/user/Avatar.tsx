@@ -1,5 +1,5 @@
 import { View, Text, Image, StyleSheet } from 'react-native'
-import { theme } from '@/lib/theme'
+import { theme } from '@/tokens/theme'
 
 type Props = {
   avatarUrl?: string | null

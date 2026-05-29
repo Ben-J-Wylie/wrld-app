@@ -7,7 +7,7 @@ import {
   Pressable,
 } from 'react-native'
 import { useRef, useState } from 'react'
-import { theme } from '@/lib/theme'
+import { theme } from '@/tokens/theme'
 import type { ChatMessage } from '@/hooks/useSignaling'
 
 type Props = {

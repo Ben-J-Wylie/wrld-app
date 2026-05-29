@@ -1,5 +1,5 @@
 import { TextInput, StyleSheet, type TextInputProps } from 'react-native'
-import { theme } from '@/lib/theme'
+import { theme } from '@/tokens/theme'
 
 export function Input(props: TextInputProps) {
   return (

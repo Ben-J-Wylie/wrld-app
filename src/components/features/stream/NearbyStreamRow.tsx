@@ -1,5 +1,5 @@
 import { View, Text, StyleSheet, Pressable } from 'react-native'
-import { theme } from '@/lib/theme'
+import { theme } from '@/tokens/theme'
 import type { Stream, SourceType } from '@/types'
 
 const SOURCE_ICONS: Record<SourceType, string> = { camera: '📷', audio: '🎙️' }

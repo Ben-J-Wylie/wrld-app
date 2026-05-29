@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router'
-import { theme } from '@/lib/theme'
+import { theme } from '@/tokens/theme'
 
 export default function AppLayout() {
   return (

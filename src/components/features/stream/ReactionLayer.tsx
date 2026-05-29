@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet, Pressable, Animated } from 'react-native'
 import { useEffect, useRef } from 'react'
-import { theme } from '@/lib/theme'
+import { theme } from '@/tokens/theme'
 import type { Reaction } from '@/hooks/useSignaling'
 
 const REACTION_EMOJIS: Record<string, string> = {
