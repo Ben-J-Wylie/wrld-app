@@ -401,7 +401,6 @@ export function StreamScreen() {
           objectFit="cover"
           mirror={facingMode === 'user'}
           zOrder={0}
-          renderToHardwareTextureAndroid
         />
       )}
 
