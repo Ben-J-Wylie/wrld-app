@@ -665,6 +665,39 @@ handled by the same patterns; the seam is not a separate motion category.
 Append-only. Most recent first. Each entry: date, decision, rationale,
 constraint it imposes downstream.
 
+### 2026-05-29 — Asset folder split: `mocks/` vs `references/`
+
+The original "Figma asset transport" decision (2026-05-27, below) named one
+folder — `docs/design/figma-exports/` — for "PNG/SVG exports from Figma."
+That framing was too narrow: design inputs include mood-board imagery, type
+specimens, color references, inspiration shots, and reference photography,
+none of which are mock screen frames and none of which earn an audit row
+in Section 3. **New layout:** `docs/design/mocks/` holds finished screen
+frames that drive the 12.2 three-way inventory pass; `docs/design/references/`
+holds everything else (mood-board, type, color, inspiration, photos).
+**Rationale:** the inventory pass scans only `mocks/`, so the parts list
+stays clean of unrelated reference imagery; `references/` is browseable
+context that informs token/aesthetic decisions without polluting the audit
+target. **Imposes:** mocks are named identifiably
+(`globe-portrait.png`, `stream-view-portrait.png`); references can use
+freer naming. Supersedes the location/scope clause of the 2026-05-27
+entry; the file-drop + pasted-mock-code transport itself is unchanged.
+
+### 2026-05-29 — Sub-phase 12.2 runs on a `design` branch
+
+CLAUDE.md's working style says all commits go directly to `main`. 12.2 is
+an explicit exception: the inventory pass iterates (Ben drops assets, I
+audit, principle conflicts surface, Ben resolves, audit re-runs) and may
+need force-pushes or rewrites mid-flight. Doing that on `main` would
+pollute history for Aaron. **New rule for 12.2 only:** the inventory work
+happens on Ben's `design` branch (tracked at `origin/design`). When the
+parts list and conflict resolutions are signed off, `design` merges into
+`main` as a single coherent step and the inventory work becomes shared
+ground. **Imposes:** Aaron continues working off `main` and is unaffected
+until the merge; `design` is Ben's exclusive editing surface for
+DESIGN.md until 12.2 ships. The convention reverts after merge — 12.3+
+go back to direct-to-main per the working style.
+
 ### 2026-05-28 — System structure formalized (Section 0)
 
 The system is two layers (classical + canvas) sharing tokens. The classical
@@ -878,15 +911,20 @@ regressions.
 
 ### 12.2 — Asset drop and inventory pass
 
-Ben drops Figma frames (and/or Claude-mock code) into
-`wrld-app/docs/design/figma-exports/`. Three-way audit (mock / current code /
-gap) for every distinct visual element. Populate Section 3 with one row per
-primitive, feature, section, and scene element discovered. Surface
-principle conflicts as a separate list for Ben's decision before any code
-changes (carry-over: the globe pin two-color conflict is already on this
-list — see Section 3).
+Ben drops finished screen frames (and/or Claude-mock code) into
+`wrld-app/docs/design/mocks/`; mood-board, type, color, inspiration, and
+reference photography go in `wrld-app/docs/design/references/`. The
+inventory pass scans only `mocks/`. Three-way audit (mock / current code /
+gap) for every distinct visual element in each mock. Populate Section 3
+with one row per primitive, feature, section, and scene element
+discovered. Surface principle conflicts as a separate list for Ben's
+decision before any code changes (carry-over: the globe pin two-color
+conflict is already on this list — see Section 3). 12.2 runs on the
+`design` branch — see the 2026-05-29 decision-log entry for the why and
+the merge rule.
 **Gate to 12.3:** Ben approves the parts list and resolves the principle-
-conflict list.
+conflict list. The `design` branch then merges into `main` and the
+inventory work becomes shared ground.
 
 ### 12.3 — Token audit and `theme.ts` proposal
 
