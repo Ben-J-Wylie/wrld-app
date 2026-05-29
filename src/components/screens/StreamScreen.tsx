@@ -1,6 +1,5 @@
 import { View, Text, StyleSheet, ActivityIndicator, Pressable, AppState, Keyboard, Platform, Animated } from 'react-native'
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { captureRef } from 'react-native-view-shot'
 import { useLocalSearchParams, router, useFocusEffect } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { RTCView } from 'react-native-webrtc'
@@ -274,6 +273,9 @@ export function StreamScreen() {
     const capture = async () => {
       if (!rtcViewRef.current) return
       try {
+        // Dynamic import so the missing native module doesn't crash the app
+        // before a new EAS dev client is built with react-native-view-shot.
+        const { captureRef } = await import('react-native-view-shot')
         const base64 = await captureRef(rtcViewRef, {
           format: 'jpg',
           quality: 0.6,
@@ -282,7 +284,7 @@ export function StreamScreen() {
         })
         signalingClient.sendThumbnail(base64)
       } catch {
-        // captureRef may fail on Android (SurfaceView); fail silently
+        // Native module not in current dev client, or SurfaceView on Android
       }
     }
     capture()
