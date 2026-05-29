@@ -99,12 +99,15 @@ The North Star UX:
 ### Folder layout
 
 Phase 12 introduces a tier-based structure for the design system. The
-authoritative spec is [DESIGN.md Section 0](DESIGN.md#0-system-structure); the
-folder migration runs in sub-phase 12.1. The tree below shows the **target**
-state — a few folders (`src/tokens/`, `src/components/primitives/`,
-`src/components/features/`, `src/components/sections/`, `src/components/screens/`,
-`src/canvas/`) come into being during 12.1; until then `src/components/ui/`
-and `src/components/feature/` still exist on disk.
+authoritative spec is [DESIGN.md Section 0](DESIGN.md#0-system-structure).
+The folder migration shipped in sub-phases 12.1a (folder renames + screen
+shims) and 12.1b (canvas extraction); the tree below describes the **current**
+state. `src/components/sections/` is the one tier-folder not yet on disk —
+per the reuse rule it materialises in 12.5 when the first section is built.
+Within `src/canvas/scenes/earth/` only `EarthScene.tsx` + `index.ts` +
+`assets/textures/` exist today; the sub-splits (`scene.ts`, `elements/`,
+`environment/`, `controls/`) are deferred until a second scene proves the
+shape — see [src/canvas/README.md](src/canvas/README.md).
 
 ```
 app/                       # Expo Router routes (file = route)

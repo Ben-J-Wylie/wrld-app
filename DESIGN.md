@@ -542,24 +542,42 @@ above are downgraded to inline composition in the relevant screen.
 
 ### Scene elements
 
-#### `src/canvas/scenes/earth/elements/`
+#### `src/canvas/scenes/earth/` — scene elements (currently inlined)
 
-- **`Globe.ts`** — the textured Earth sphere. Consumes the 8K texture from
-  `src/canvas/scenes/earth/assets/textures/`. Reads resolved token values for
-  any color tinting (currently none).
+After sub-phase 12.1b, the earth scene is one file (`EarthScene.tsx`) plus
+its index re-export and the 8K texture. Per the reuse rule (DESIGN.md 0.5),
+the within-scene splits (`elements/Globe.ts`, `elements/Pin.ts`, etc.)
+weren't extracted with only one concrete case to learn from — extraction
+happens on the second proven case (likely when a second scene lands in
+v0.3). The scene-element entries below refer to logical pieces inside
+`EarthScene.tsx`; the file path stays the same until extraction earns its
+keep.
 
-- **`Pin.ts`** — sprite-based stream pins on the globe. **Principle conflict
-  flagged (carry-over from pre-Section-0 inventory):** today uses two
-  saturated colors (`#5B8CFF` for clusters, `#FF3B5C` for singletons / `live`).
-  This conflicts with Principle 2 (single neon accent is the only saturated
-  element) and Principle 3 (one thing in focus). **Proposed resolution
-  (pending Ben's sign-off in 12.2):** collapse to a single accent state,
-  differentiate by _count_ not color. Carries over to inventory pass.
+- **Globe (logical)** — the textured Earth sphere. Lives inside
+  `EarthScene.tsx` as a `THREE.Mesh(SphereGeometry, MeshBasicMaterial)`
+  using the 8K texture from
+  `src/canvas/scenes/earth/assets/textures/earth-8k.jpg`. Currently uses
+  `MeshBasicMaterial` (unlit) — no `environment/lighting.ts` exists or is
+  needed yet. Reads no token-derived colors today.
 
-  Note this is a **scene element**, not a feature component. The previous
-  `GlobePin` entry's waffle ("currently inline in globe.tsx — sprite-based,
-  may stay so") is resolved by Section 0: it's not awkwardly-inline, it's
-  correctly classified as a canvas-tier scene element.
+- **Pin (logical)** — sprite-based stream pins on the globe. Lives inside
+  `EarthScene.tsx` as `makePinTexture(count)` (the DataTexture builder
+  with the pixel-font cluster-count rasteriser) plus the sprite pool
+  refs and the per-frame scale loop. **Principle conflict flagged
+  (carry-over from pre-Section-0 inventory):** today uses two saturated
+  colors (`#5B8CFF` for clusters, `#FF3B5C` for singletons / `live`).
+  This conflicts with Principle 2 (single neon accent is the only
+  saturated element) and Principle 3 (one thing in focus). **Proposed
+  resolution (pending Ben's sign-off in 12.2):** collapse to a single
+  accent state, differentiate by _count_ not color, plus a subtle scale
+  step. The resolution wires Pin into `src/canvas/stage/tokens.ts`
+  (which exists as a stub specifically to host the consumer).
+
+  Note this is a **scene element**, not a feature component. The earlier
+  `GlobePin` waffle ("currently inline in globe.tsx — sprite-based, may
+  stay so") is resolved by Section 0: it's correctly classified as a
+  canvas-tier scene element, even though it's inlined in `EarthScene.tsx`
+  for now rather than living in its own file.
 
 ### Screens (`src/components/screens/`)
 

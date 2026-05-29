@@ -40,21 +40,34 @@ layer never compose each other. They share tokens and meet only at the
 
 ## Current inhabitants
 
-- **`scenes/earth/`** — Level 1. The 3D globe with stream pins. Created
-  during sub-phase 12.1 by extracting the GL code currently inlined in
-  `app/(app)/globe.tsx`. Internal structure:
-  - `EarthScene.tsx` — React mount, lifecycle, seam wiring
-  - `scene.ts` — Three.js root, camera, render loop, exported `LEVEL`
-  - `elements/Globe.ts` — the textured Earth sphere
-  - `elements/Pin.ts` — sprite-based stream pins (principle-conflict
-    flagged in DESIGN.md Section 3; resolution lands in sub-phase 12.2)
-  - `environment/lighting.ts`
+- **`scenes/earth/`** — Level 1. The 3D globe with stream pins.
+  Extracted in sub-phase 12.1b from `app/(app)/globe.tsx`. Actual files
+  today:
+  - `EarthScene.tsx` — React mount, GL lifecycle, scene + camera + render
+    loop, sphere mesh + texture, pin sprite pool + DataTexture builder,
+    geographic clustering, PanResponder, GPS auto-orient, raycaster, and
+    the `LEVEL = 1` export. A single file by design: per the reuse rule
+    (DESIGN.md 0.5), within-scene splits aren't extracted until a second
+    scene proves the shape.
+  - `index.ts` — re-exports `EarthScene`, `LEVEL`, `EarthSceneProps`.
+  - `assets/textures/earth-8k.jpg` — the 8K Earth texture, colocated.
+
+  Deferred until at least two scenes exist (then extracted on the second
+  proven case):
+  - `scene.ts` (Three.js root split out of `EarthScene.tsx`)
+  - `elements/Globe.ts`, `elements/Pin.ts` — Pin in particular is named
+    in DESIGN.md Section 3 with a principle-conflict resolution pending
+    in 12.2; the conflict applies to the pin code wherever it lives, so
+    the split waits.
+  - `environment/lighting.ts` (no lighting today — `MeshBasicMaterial`
+    is unlit; would be created only if a scene adds a light)
   - `controls/cameraControls.ts`
-  - `assets/textures/earth-8k.jpg`
 
 - **`stage/`** — minimal today.
-  - `tokens.ts` — token-to-RGBA bridge. Universal from day one because
-    the token-consumption rule applies to every scene.
+  - `tokens.ts` — token-to-RGBA bridge (`hexToRgb`, `resolveColor`).
+    Universal from day one because the token-consumption rule applies to
+    every scene. No scene currently consumes it; positioned for the
+    pin-color resolution in 12.2.
 
 ## Anticipated inhabitants
 
