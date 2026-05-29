@@ -20,7 +20,7 @@ const EARTH_ASSET = require('../../assets/images/earth.jpg')
 let earthTexture: THREE.Texture | null = null
 
 const POOL_SIZE = 30
-const MAPBOX_ACTIVATE_Z = 1.08
+const MAPBOX_ACTIVATE_Z = 1.5
 const MAPBOX_DEACTIVATE_ZOOM = 7
 Mapbox.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '')
 
@@ -610,7 +610,7 @@ export default function Globe() {
         >
           <Mapbox.MapView
             style={StyleSheet.absoluteFill}
-            styleURL={Mapbox.StyleURL.Dark}
+            styleURL={Mapbox.StyleURL.SatelliteStreet}
             onCameraChanged={(state) => {
               if (mapboxSettledRef.current && state.properties.zoom < MAPBOX_DEACTIVATE_ZOOM) {
                 deactivateMapbox()
@@ -619,7 +619,7 @@ export default function Globe() {
           >
             <Mapbox.Camera
               centerCoordinate={[mapCenter.lng, mapCenter.lat]}
-              zoomLevel={14}
+              zoomLevel={9}
               animationMode="flyTo"
               animationDuration={600}
             />
