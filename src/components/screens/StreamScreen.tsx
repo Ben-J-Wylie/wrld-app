@@ -79,7 +79,7 @@ export function StreamScreen() {
     : []
 
   const {
-    status, setStatus, roomId, viewerCount, streamEnded, adminEnded,
+    status, setStatus, roomId, viewerCount, streamEnded, adminEnded, setAdminEnded,
     error: signalingError, setError,
     chatMessages, reactions, broadcasterPaused,
     tipEvents, confirmedBalance,
@@ -233,7 +233,11 @@ export function StreamScreen() {
   // are also caught without a separate useEffect.
   useFocusEffect(
     useCallback(() => {
-      if (isNew) return
+      if (isNew) {
+        // Clear any leftover admin-end state so the broadcaster can start fresh.
+        setAdminEnded(false)
+        return
+      }
       navigatingRef.current = false
       cleanup()
       handleJoin()

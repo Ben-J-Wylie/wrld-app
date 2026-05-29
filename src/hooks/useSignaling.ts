@@ -169,7 +169,7 @@ export function useSignaling() {
     producers,
     viewerCount,
     streamEnded,
-    adminEnded,
+    adminEnded, setAdminEnded,
     error, setError,
     chatMessages,
     reactions,
