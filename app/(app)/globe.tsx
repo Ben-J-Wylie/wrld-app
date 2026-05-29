@@ -21,7 +21,7 @@ let earthTexture: THREE.Texture | null = null
 
 const POOL_SIZE = 30
 const MAPBOX_ACTIVATE_Z = 1.5
-const MAPBOX_DEACTIVATE_ZOOM = 7
+const MAPBOX_DEACTIVATE_ZOOM = 3
 Mapbox.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '')
 
 type GeoCluster = { streams: Stream[]; centroidLat: number; centroidLng: number }
