@@ -665,6 +665,124 @@ handled by the same patterns; the seam is not a separate motion category.
 Append-only. Most recent first. Each entry: date, decision, rationale,
 constraint it imposes downstream.
 
+### 2026-05-29 — v0.2 wallet model: Space Bucks + Star Dust, 30% transfer fee
+
+The 12.2 inventory pass against the Wallet v2 / Top Up / Cash Out mocks
+surfaced a dual-currency system. Settled as follows, superseding the
+"Phase 13 Stardust, no real money" framing in CLAUDE.md.
+
+**Currencies (v0.2):**
+- **Space Bucks** — purchase / spend currency, $0.01 per unit
+  (`SPACE_BUCKS_PER_DOLLAR = 100`, the existing Phase 13 constant stays).
+- **Star Dust** — receive currency, also $0.01 per unit
+  (`STAR_DUST_PER_DOLLAR = 100`).
+- Both currencies have the same USD value per unit.
+
+**Transfer model:**
+- A tip of 100 Space Bucks → platform takes 30 Space Bucks worth as a
+  fee → recipient receives 70 Star Dust.
+- The 30% platform fee accrues as platform balance during v0.2 (no real
+  money is actually moving — see below).
+
+**Real-money interfaces — v0.2 = components built, behavior stubbed:**
+- **Top Up (IAP)** UI ships from mocks. Real payment processor (Stripe /
+  Apple IAP / Google Pay) is NOT wired in v0.2. Space Bucks remain
+  admin-seeded.
+- **Cash Out (ACH + KYC)** UI ships from mocks. Real bank payout is NOT
+  wired in v0.2. Star Dust balance accrues with no payout path.
+- **30% platform fee** is logical bookkeeping only — no actual money
+  flows.
+
+**Transaction kinds — v0.2 scope:**
+- Tipping (existing Phase 13) — only active transaction kind in v0.2.
+- Monthly subscriptions to creators — components built (TransactionRow
+  variants visible in mocks), NOT functional in v0.2. v0.3.
+- Pay-per-view (PPV) — same: components only, NOT functional in v0.2.
+  v0.3.
+
+**Rationale:** Aaron's monetization work continues in parallel. Per the
+"build components anyway" rule, all wallet UI in the mocks lands in v0.2
+even where the underlying real-money infrastructure is v0.3. The
+naming reverts to existing Phase 13 names (Space Bucks / Star Dust)
+rather than the mocks' Tokens / Diamonds — minimizes backend churn while
+the mocks' visual treatment carries forward.
+
+**Imposes:** CLAUDE.md's "No real-money payments" stays accurate for
+v0.2 (still no real money moves). CLAUDE.md's Phase 13 entry needs
+updating to reflect Star Dust as receive-side currency with 30% fee.
+Aaron's working agreement note in CLAUDE.md needs updating to reflect
+the new wallet shape. Section 3 inventory entries for wallet components
+flag the v0.3 boundary (which TransactionRow variants are mock-only).
+
+### 2026-05-29 — v0.2 sensor model: full 7-layer + anonymous broadcasts
+
+The Go Live, Viewer Sheet, My Profile, and Clip Edit mocks consistently
+show a 7-layer broadcaster model that expands `SourceType` significantly
+beyond camera/audio.
+
+**The 7 layers (v0.2):**
+- **Camera** — already supported.
+- **Audio** — already supported.
+- **Screen share** — iPhone whole-screen capture.
+- **Location** — GPS coords (already captured for globe placement, now
+  exposed as a toggleable layer).
+- **Gyro** — accelerometer + gyro at 60 Hz.
+- **Compass** — heading (true north).
+- **Profile (ID)** — the broadcaster identity layer. ID-off = anonymous
+  broadcast.
+
+**Anonymous broadcasts:** Turning ID off makes the broadcast private —
+visible only to the broadcaster on their own profile (My Profile, with
+the ANON visibility filter). Excluded from public Profile entirely.
+This is a privacy feature in the ID layer; not a new sensor.
+
+**Rationale:** The 5-layer model (CAM/AUD/LOC/ID/GYR) appears
+canonically across My Profile (filter chips), Viewer Sheet (sensor
+strip), and Clip Edit (post-edit layer toggle). Anon broadcasts are
+inseparable from the ID layer. Adding 5/7 layers post-v0.2 means
+restructuring the broadcaster data model twice. Better to land the
+expanded model once.
+
+**Imposes:** `SourceType = 'camera' | 'audio'` expands to a 7-element
+enum (or string union) in shared types. Broadcaster wiring
+(`useMediasoup`, Go Live arming UI, broadcast websocket payload, stream
+metadata) expands to support the new layers. CLAUDE.md's "No broadcaster
+sensor sources beyond audio/video" v0.2 non-goal is REMOVED. The v0.3
+commitment to broadcaster sensors is also REMOVED (it's now v0.2). Anon
+broadcast feature joins the v0.2 backlog.
+
+### 2026-05-29 — v0.2 clips: full recording + editor + per-layer post-edit
+
+The My Profile and Clip Edit mocks centre on "clips" — recorded
+segments of streams that persist on profile grids. Resolved as full
+v0.2 scope.
+
+**v0.2 clip surface:**
+- **Recording** — server-side capture of stream segments (likely HLS
+  via a mediasoup sidecar). Storage, retrieval, expiry policy all
+  v0.2 concerns.
+- **Clip metadata** — duration, peak viewer count, venue, layer-set
+  (which of the 7 layers were active during the recording).
+- **ClipCard / ClipGrid** — profile components rendering real clip data.
+  Anonymous clips visible only on My Profile, never on public Profile.
+- **Clip Edit** — full editor: video preview with playback controls,
+  timeline track with waveform, trim handles (active region + scrubber),
+  per-layer toggle (post-recording you can turn off CAM / AUD / LOC /
+  GYR / etc., or mark a layer "permanent cut"), tag editor, save state.
+
+**Rationale:** Clips are central to the creator value loop the mocks
+imply — broadcasts are no longer purely ephemeral. The components,
+recording infrastructure, and editor all couple tightly; deferring
+just the editor leaves a half-built clips feature in v0.2.
+
+**Imposes:** CLAUDE.md's "No recording / replay / playback" v0.2
+non-goal is REMOVED. CLAUDE.md's v0.3 "Recording / replay" commitment
+is REMOVED (now v0.2). v0.3 "Time machine" remains separately scoped
+(historical state of a stream, distinct from clips). Storage costs +
+hosting infrastructure are real v0.2 concerns. Section 3 inventory
+entries for ClipCard, Timeline, LayerPanel, and Clip Edit's
+screen-specific composition all reflect v0.2 functional state.
+
 ### 2026-05-29 — Asset folder split: `mocks/` vs `references/`
 
 The original "Figma asset transport" decision (2026-05-27, below) named one

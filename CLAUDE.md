@@ -247,8 +247,8 @@ We're building in slices so each phase is independently verifiable.
 | 9     | ✅ done  | Stream lifecycle reliability. Every stream interruption — broadcaster force-quit, graceful leave, network drop, app backgrounded — sends the viewer back to the globe with a banner. Graceful leave → "Stream has ended" banner. Network drop / background → "Stream disconnected" banner that polls for broadcaster return; if stream resumes, banner turns green and is tappable to rejoin. Key work: typed `StreamSignal` module for cross-screen communication; `BannerData` union in globe with auto-dismiss (8s ended, 5-min reconnect poll); `exitToGlobe(kind)` with `navigatingRef` double-navigation guard in stream view; all viewer navigation uses `router.navigate('/(app)/globe')` (stream screen is a tab, not a stack — `router.back()` is a no-op from a tab); `AppState` listener disconnects broadcaster WS on app background so server immediately fires `broadcasterLeft` to viewers; server ping/pong reduced from 30s to 10s for faster connectivity-loss detection (≤20s); server closes viewer WS with code 4001 after `broadcasterLeft`; client maps code 4001 → `streamEnded` state; `setStreamEnded(false)` in `connect()` and `navigatingRef` reset on room-id change fix state persistence across multiple stream sessions (tab component is never unmounted); viewer idle UI removed — viewers are always redirected to globe, the "Watch" screen has no valid path. |
 | 10    | ✅ done  | Engagement. Ephemeral chat + emoji reactions in stream view, follow-a-streamer, AuthModal for anonymous users. **Chat:** `chatMessage` fans out through mediasoup to all room peers; auth required to send; anon viewers see the thread but get `AuthModal` on send attempt; `ChatOverlay` component (scrolling list + send input); keyboard shifts panel up via `Keyboard` event listener (KAV doesn't work inside absolute-positioned containers). **Reactions:** 4 emoji types (❤️🔥👏😮); Periscope-style `Animated` upward-drift burst; auth required; anon gets `AuthModal`. **Follow:** `FollowButton` shown to all viewers; reads real `isFollowing` from `GET /users/:identifier` (backend now includes it when request is authenticated); anon tap opens `AuthModal`; local state syncs via `useEffect` on query data so it survives `showControls` remounts. **AuthModal:** bottom-sheet signup/signin matching existing Clerk flow (email + password; signup triggers email_code verification step). **Bug fixes in this phase:** (a) viewer re-joining same stream produced black screen — `useEffect([id])` is blind to tab re-focus; replaced with `useFocusEffect` so every screen focus triggers join; (b) `FollowButton` reset to "Follow" on remount because `initialFollowing` was always `false` — fixed by reading server state via `useUserProfile`. |
 | 11    | ✅ done  | Discovery & notifications. Expo Push Notifications via Expo's servers (routes to APNs/FCM). `PushSubscription` table on backend (token, platform, timezone, lat/lng, rate-limit timestamp). Notification prefs on `User` (`notifyOnFollowedLive` default true, `notifyOnNearbyLive` default off). Fan-out on stream start: followers + nearby (10km Haversine, 1/hr rate limit — both temporarily relaxed to 100km + no limit for testing). `useRegisterPushToken` hook: permission request, Android channel, Expo token + last-known location → backend. Root layout: foreground notification display + notification-tap deep-link to stream. Settings screen: two preference toggles. **Credential setup (one-time):** iOS: `eas credentials` → APNs key (Ben's Apple account). Android: Firebase project `wrld-b1d2d`, `google-services.json` at repo root, FCM V1 service account uploaded via EAS dashboard. **Install `expo-notifications` with `npx expo install`, never `npm install`** — the latter grabs the latest SDK version which won't match the compiled native modules. Broadcaster pause banner: `'inactive'` AppState (iOS Control Center/Notification Center) sends `broadcasterPaused` signal through mediasoup; viewers see pill banner "Stream paused · resuming shortly"; `'active'` sends `broadcasterResumed`. Android `'inactive'` doesn't fire for notification shade — no freeze on Android. |
-| 12    | in progress | Design system + visual polish. Authoritative spec: [DESIGN.md](DESIGN.md) (system structure in Section 0). Broken into eight sub-phases — 12.0 system structure (Section 0 + this CLAUDE.md update + `src/canvas/README.md`); 12.1 folder migration to the tier structure (`tokens/`, `components/{primitives,features,sections,screens}/`, `canvas/scenes/earth/`, `canvas/stage/`); 12.2 asset drop + inventory pass; 12.3 token audit + `src/tokens/theme.ts` (also the green light for Aaron's monetization UI work); 12.4 primitives bottom-up; 12.5 features + sections; 12.6 screen migration one-per-commit; 12.7 motion pass. Sub-phases run sequentially with gates between them. No new broadcaster sensor sources in v0.2 — compass/gyro/accelerometer/torch are explicitly deferred to v0.3. Achieved when: every screen uses only tokens (no hex literals), the component gallery renders all primitive variants, and Ben judges the app "feels like the same product." |
-| 13    | upcoming | Space Bucks + tipping. Server-side virtual currency (100 Space Bucks = $1) with no real money, no IAP, no KYC — friends-and-family only. Admin-seeded balances. Viewers tip broadcasters during live streams; tips deduct from sender and credit broadcaster atomically. **App:** `TipSheet` bottom sheet (presets 50 🚀 · $0.50 / 100 🚀 · $1 / 500 🚀 · $5 + custom amount, dollar equivalent shown on each chip); tip button in viewer controls overlay; auth gate for anonymous users. **Public burst:** `tipReceived` WebSocket message fans out to all peers in the room — floating animation with tipper handle + amount (same pattern as emoji reactions). **Broadcaster toast:** private pill banner showing "@handle sent N 🚀", auto-dismisses 3s, queues on rapid tips. **Balance:** shown in `TipSheet` before confirming + in Me screen. `SPACE_BUCKS_PER_DOLLAR = 100` named constant in both backend and app. |
+| 12    | in progress | Design system + visual polish. Authoritative spec: [DESIGN.md](DESIGN.md) (system structure in Section 0). Broken into eight sub-phases — 12.0 system structure (Section 0 + this CLAUDE.md update + `src/canvas/README.md`); 12.1 folder migration to the tier structure (`tokens/`, `components/{primitives,features,sections,screens}/`, `canvas/scenes/earth/`, `canvas/stage/`); 12.2 asset drop + inventory pass (re-baselined v0.2 scope — see DESIGN.md decision log 2026-05-29); 12.3 token audit + `src/tokens/theme.ts` (also the green light for Aaron's monetization UI work); 12.4 primitives bottom-up; 12.5 features + sections; 12.6 screen migration one-per-commit; 12.7 motion pass. Sub-phases run sequentially with gates between them. Achieved when: every screen uses only tokens (no hex literals), the component gallery renders all primitive variants, and Ben judges the app "feels like the same product." |
+| 13    | upcoming | Space Bucks + Star Dust + tipping. **Dual-currency model** (re-baselined 2026-05-29 — see DESIGN.md decision log). Space Bucks ($0.01) are spend-side, Star Dust ($0.01) are receive-side. Tipping 100 Space Bucks → 30 SB platform fee → recipient gets 70 Star Dust. Both currencies admin-seeded in v0.2 (no real-money IAP, no Cash Out — both deferred to v0.3 with the wallet UI shipping as components-built-but-stubbed). Tipping is the only functional transaction kind in v0.2; subscriptions + PPV components ship but are mock-data-only. **App:** `TipSheet` bottom sheet (presets 50 🚀 · $0.50 / 100 🚀 · $1 / 500 🚀 · $5 + custom amount); tip button in viewer controls overlay; auth gate for anonymous users. **Public burst:** `tipReceived` WebSocket message fans out, floating animation with tipper handle + amount. **Broadcaster toast:** private pill banner. **Balance:** shown in `TipSheet`, Me screen, and the new Wallet v2 screen. Constants: `SPACE_BUCKS_PER_DOLLAR = 100`, `STAR_DUST_PER_DOLLAR = 100`, `PLATFORM_FEE_PCT = 30`. |
 | 14    | upcoming | Pre-v0.2 polish. Empty states, error states, first-time onboarding intro (a couple of screens introducing "what is WRLD"), globe initial orientation on user's location (not Central America), share-this-stream functionality (deep links via `wrld://stream/<id>` + Universal Links on `wrld.cam`). No App Store assets or public legal docs in v0.2 — this is an internal milestone for Ben + Aaron + small friends-and-family group, not a launch. Achieved when: Ben and Aaron each install the app on a fresh device, run through it top to bottom, and don't flinch at any rough edge. |
 
 When Claude Code is asked to "do the next phase," verify the user means the
@@ -282,11 +282,21 @@ Phases 8–14 aren't strictly sequential — some can run in parallel:
 
 ### Current working agreement (Phase 12 era)
 
-Phase 13 (Space Bucks tipping) shipped to `main`. Aaron's ongoing parallel
-work — further monetization plumbing — stays **backend-only with placeholder
-UI** until `src/tokens/theme.ts` lands on `main` (sub-phase 12.3). Real
-WRLD-styled monetization screens are blocked behind that gate; until then,
-any monetization UI Aaron writes is throwaway scaffolding. The two repos
+Phase 13 (Space Bucks tipping) shipped to `main`. The 2026-05-29 v0.2
+re-baseline (see DESIGN.md decision log) reshapes Aaron's parallel work:
+- **Wallet model** is now Space Bucks (spend) + Star Dust (receive) with a
+  30% platform fee on transfer. Backend types + DB columns expand to
+  hold a dual-currency balance per user.
+- **No real-money interfaces ship in v0.2.** Top Up (IAP) and Cash Out
+  (ACH + KYC) are component-only — Aaron stubs them with admin-seeded
+  paths. Real Stripe / IAP / payouts are v0.3.
+- **Subscriptions + PPV components ship in v0.2 mocks but are mock-data
+  only.** Backend doesn't need to implement them in v0.2.
+
+Aaron's parallel work stays **backend-only with placeholder UI** until
+`src/tokens/theme.ts` lands on `main` (sub-phase 12.3). Real WRLD-styled
+monetization screens are blocked behind that gate; until then, any
+monetization UI Aaron writes is throwaway scaffolding. The two repos
 overlap minimally (Aaron → `wrld-backend`; Ben → `wrld-app`), so merge
 conflicts should be rare. `DESIGN.md` is Ben's exclusive on the `design`
 branch; `CLAUDE.md` is shared — whoever ships a phase updates it. See
@@ -314,18 +324,24 @@ device, run through it top to bottom, and don't flinch."
 ### Explicit non-goals for v0.2
 
 These are deferred to v0.3 or later. Don't scope them into v0.2 phases under
-any circumstance — the discipline of saying no is what makes v0.2 shippable:
+any circumstance — the discipline of saying no is what makes v0.2 shippable.
 
-- **No recording / replay / playback.** Streams are ephemeral. Miss it, miss
-  it. (See v0.3 commitments below.)
-- **No real-money payments, KYC, or IAP.** Space Bucks (Phase 13) are a
-  server-side virtual currency with no real money moving — balances are
-  admin-seeded, tips are balance transfers, no payment processor, no App Store
-  IAP, no KYC. Real payments, payout flows, Stripe/IAP integration, and KYC
-  are v0.3. Wallets, gated content, and subscriptions remain deferred.
-- **No broadcaster sensor sources beyond audio/video.** Compass, gyroscope,
-  accelerometer, torch status, speed indicators — all deferred to v0.3. v0.2
-  ships with just camera + audio sources, both already implemented in Phase 6.
+The 2026-05-29 re-baseline (DESIGN.md decision log) moved three previously-
+deferred items into v0.2: recording/replay (via clips), broadcaster sensor
+sources beyond audio/video (full 7-layer model), and the wallet UI (built but
+real-money interfaces stubbed). What remains deferred:
+
+- **No real-money payment movement.** The Wallet v2 / Top Up / Cash Out UI
+  components ship in v0.2, but no actual money flows. Top Up (IAP via
+  Stripe / Apple / Google) is NOT wired — Space Bucks remain admin-seeded.
+  Cash Out (ACH + KYC) is NOT wired — Star Dust accrues with no payout.
+  The 30% platform fee on transfers is logical bookkeeping only. Real
+  payments + payouts + KYC are v0.3.
+- **No subscriptions or PPV as functional features.** Mocks show monthly
+  subscriptions and pay-per-view as transaction-kind chips in the wallet,
+  but those are mock-data-only in v0.2. The TransactionRow component
+  variants for them ship; the underlying flow is v0.3. Tipping is the only
+  active monetization transaction in v0.2.
 - **No production-launch hardening.** Rate limiting, content moderation tooling
   beyond profanity-filtering handles, terms of service for external users, App
   Store submission assets, production Clerk separation, off-site backups. These
@@ -385,23 +401,23 @@ not a blank page:
 
 **Product features:**
 
-- **Recording / replay.** Server-side recording (probably HLS via a sidecar
-  process), persisted stream archives, viewer rewatch UI. This is the biggest
-  single infrastructure lift in the v0.3 backlog. Storage costs become real
-  even at modest scale (hours of HD video → GBs).
-- **Time machine.** Building on recording — earlier states of a stream or a
-  broadcaster's history. Specifics deferred; requires recording infrastructure
-  first.
-- **Broadcaster sensor sources beyond audio/video.** Compass orientation is the
-  most-likely first pick (matches the geographic framing of live streams).
-  Gyroscope, accelerometer, speed, torch status are secondary candidates.
-  Decision deferred to v0.3 scoping; for v0.2 the data layer is just
-  video + audio.
-- **Real-money payments layer.** Space Bucks tipping ships in v0.2 (Phase 13)
-  as a server-side virtual currency with no real money. v0.3 adds the payments
-  layer: Stripe or Apple/Google IAP, real purchase flows, payout to
-  broadcasters, KYC. Wallets, gated content, and subscriptions are also v0.3
-  scope — decision deferred until the v0.2 tipping mechanics are validated.
+- **Time machine.** Earlier states of a stream or a broadcaster's history —
+  distinct from clips (which v0.2 ships). Built on top of the v0.2 recording
+  infrastructure but with different access semantics.
+- **Real-money payments layer.** v0.2 ships the wallet UI (Wallet v2 + Top Up
+  + Cash Out) but all real-money paths are stubbed:
+  - Top Up via Stripe / Apple IAP / Google Pay (real money in).
+  - Cash Out via ACH bank transfer + KYC verification (real money out).
+  - The 30% platform fee on tips begins accruing as real platform balance
+    once real money is in the system.
+- **Subscriptions + PPV.** Monthly subscriptions to creators and pay-per-view
+  unlocks of specific content. The wallet TransactionRow component variants
+  for both ship in v0.2 as mock-only; v0.3 wires the actual subscription
+  billing cycle and PPV gating infrastructure.
+- **Additional broadcaster sensors.** v0.2 lands 7 layers (cam / audio /
+  screen / loc / gyro / compass / profile-ID). Future sensor candidates —
+  speed indicators, torch status, ambient temperature, motion intensity —
+  remain v0.3+ as needed.
 
 **Pre-launch hardening (before any non-friends-and-family users):**
 
