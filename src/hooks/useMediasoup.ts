@@ -25,16 +25,22 @@ export function useMediasoup() {
     return device
   }
 
+  const switchingCamera = useRef(false)
+
   const switchCamera = useCallback(() => {
+    if (switchingCamera.current) return
     const stream = localStreamRef.current
     if (!stream) return
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const videoTrack = (stream as any).getVideoTracks()[0]
     if (!videoTrack) return
+    switchingCamera.current = true
     // react-native-webrtc exposes _switchCamera() to flip between front/back
     // without creating a new stream — the existing producer track continues uninterrupted
     videoTrack._switchCamera()
     setFacingMode(prev => prev === 'environment' ? 'user' : 'environment')
+    // Android takes ~800ms to complete the switch; block re-entry until it's done
+    setTimeout(() => { switchingCamera.current = false }, 1_000)
   }, [])
 
   const startBroadcasting = useCallback(async (sources: SourceType[]) => {
