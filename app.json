@@ -34,7 +34,7 @@
         "android.permission.RECEIVE_BOOT_COMPLETED",
         "android.permission.VIBRATE",
         "android.permission.POST_NOTIFICATIONS"
-      ],
+      ]
     },
     "web": {
       "bundler": "metro"

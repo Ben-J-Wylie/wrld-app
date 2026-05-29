@@ -1,4 +1,4 @@
-import { ActivityIndicator, Dimensions, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, Animated, Dimensions, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { router, useFocusEffect } from 'expo-router'
 import { consumeStreamSignal } from '@/lib/streamSignals'
@@ -14,11 +14,15 @@ import { useLocation } from '@/hooks/useLocation'
 import { useStreamsNear } from '@/hooks/useStreamsNear'
 import { Avatar } from '@/components/feature/user/Avatar'
 import type { Stream } from '@/types'
+import Mapbox from '@rnmapbox/maps'
 
 const EARTH_ASSET = require('../../assets/images/earth.jpg')
 let earthTexture: THREE.Texture | null = null
 
 const POOL_SIZE = 30
+const MAPBOX_ACTIVATE_Z = 1.08
+const MAPBOX_DEACTIVATE_ZOOM = 7
+Mapbox.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '')
 
 type GeoCluster = { streams: Stream[]; centroidLat: number; centroidLng: number }
 
@@ -217,6 +221,39 @@ export default function Globe() {
     setBanner(null)
   }
 
+  function activateMapbox() {
+    if (mapboxActiveRef.current) return
+    const { x: rotX, y: rotY } = savedRotationRef.current
+    const lat = rotX * (180 / Math.PI)
+    const lng = -(rotY * (180 / Math.PI)) - 90
+    mapboxActiveRef.current = true
+    mapboxSettledRef.current = false
+    setMapboxEverActivated(true)
+    setMapboxActive(true)
+    setMapCenter({ lat, lng })
+    Animated.timing(mapboxFade, {
+      toValue: 1,
+      duration: 600,
+      useNativeDriver: true,
+    }).start()
+    setTimeout(() => { mapboxSettledRef.current = true }, 1500)
+  }
+
+  function deactivateMapbox() {
+    if (!mapboxActiveRef.current) return
+    mapboxActiveRef.current = false
+    setMapboxActive(false)
+    Animated.timing(mapboxFade, {
+      toValue: 0,
+      duration: 400,
+      useNativeDriver: true,
+    }).start()
+    if (cameraRef.current) {
+      cameraRef.current.position.z = MAPBOX_ACTIVATE_Z + 0.02
+      cameraZRef.current = MAPBOX_ACTIVATE_Z + 0.02
+    }
+  }
+
   function handleBannerTap() {
     if (!banner || banner.kind !== 'resumed' || !banner.stream.mediasoupRoomId) return
     const { stream } = banner
@@ -268,6 +305,12 @@ export default function Globe() {
   const containerSizeRef = useRef({ width: Dimensions.get('window').width, height: Dimensions.get('window').height })
   const lastPanRef = useRef({ dx: 0, dy: 0 })
   const lastPinchDistRef = useRef<number | null>(null)
+  const mapboxActiveRef = useRef(false)
+  const mapboxSettledRef = useRef(false)
+  const mapboxFade = useRef(new Animated.Value(0)).current
+  const [mapboxActive, setMapboxActive] = useState(false)
+  const [mapboxEverActivated, setMapboxEverActivated] = useState(false)
+  const [mapCenter, setMapCenter] = useState({ lat: 0, lng: 0 })
 
   streamsRef.current = streams ?? []
 
@@ -461,8 +504,8 @@ export default function Globe() {
 
   // ── Touch handling ─────────────────────────────────────────────────────────
   const panResponder = PanResponder.create({
-    onStartShouldSetPanResponder: () => true,
-    onMoveShouldSetPanResponder: () => true,
+    onStartShouldSetPanResponder: () => !mapboxActiveRef.current,
+    onMoveShouldSetPanResponder: () => !mapboxActiveRef.current,
     onPanResponderGrant: () => {
       hasInteractedRef.current = true
       velocityRef.current = { x: 0, y: 0 }
@@ -478,7 +521,7 @@ export default function Globe() {
         if (lastPinchDistRef.current !== null) {
           const c = cameraRef.current
           if (c) {
-            c.position.z = Math.max(1.15, Math.min(8, c.position.z * (lastPinchDistRef.current / dist)))
+            c.position.z = Math.max(MAPBOX_ACTIVATE_Z, Math.min(8, c.position.z * (lastPinchDistRef.current / dist)))
             cameraZRef.current = c.position.z
           }
         }
@@ -508,6 +551,8 @@ export default function Globe() {
           const scale = 0.006 * ((cameraZRef.current - 1) / 5)
           velocityRef.current = { y: gs.vx * scale * 16, x: gs.vy * scale * 16 }
         }
+      } else if (cameraZRef.current <= MAPBOX_ACTIVATE_Z) {
+        activateMapbox()
       }
     },
   })
@@ -557,6 +602,51 @@ export default function Globe() {
     <View style={styles.container} onLayout={e => { const { width, height } = e.nativeEvent.layout; containerSizeRef.current = { width, height } }}>
       <GLView style={StyleSheet.absoluteFill} onContextCreate={onContextCreate} />
       <View style={StyleSheet.absoluteFill} {...panResponder.panHandlers} />
+
+      {mapboxEverActivated && (
+        <Animated.View
+          style={[StyleSheet.absoluteFill, { opacity: mapboxFade }]}
+          pointerEvents={mapboxActive ? 'auto' : 'none'}
+        >
+          <Mapbox.MapView
+            style={StyleSheet.absoluteFill}
+            styleURL={Mapbox.StyleURL.Dark}
+            onCameraChanged={(state) => {
+              if (mapboxSettledRef.current && state.properties.zoom < MAPBOX_DEACTIVATE_ZOOM) {
+                deactivateMapbox()
+              }
+            }}
+          >
+            <Mapbox.Camera
+              centerCoordinate={[mapCenter.lng, mapCenter.lat]}
+              zoomLevel={14}
+              animationMode="flyTo"
+              animationDuration={600}
+            />
+            {streams?.filter(s => s.lat != null && s.lng != null).map(stream => (
+              <Mapbox.MarkerView
+                key={stream.id}
+                coordinate={[stream.lng!, stream.lat!]}
+              >
+                <Pressable
+                  style={styles.mapboxPinHit}
+                  onPress={() => { setSelectedStream(stream); setSelectedCluster(null) }}
+                >
+                  <View style={styles.mapboxPinDot} />
+                </Pressable>
+              </Mapbox.MarkerView>
+            ))}
+          </Mapbox.MapView>
+        </Animated.View>
+      )}
+
+      {mapboxActive && (
+        <View style={[styles.mapboxBackRow, { top: insets.top + 8 }]} pointerEvents="box-none">
+          <Pressable style={styles.mapboxBackBtn} onPress={deactivateMapbox}>
+            <Text style={styles.mapboxBackText}>← Globe</Text>
+          </Pressable>
+        </View>
+      )}
 
       <View style={StyleSheet.absoluteFill} pointerEvents="none">
         <SafeAreaView style={styles.safeArea}>
@@ -696,4 +786,24 @@ const styles = StyleSheet.create({
   bannerTextResumed: { color: theme.colors.success },
   bannerClose: { flexShrink: 0 },
   bannerCloseText: { ...theme.typography.caption, color: theme.colors.textMuted },
+  mapboxPinHit: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  mapboxPinDot: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: theme.colors.live,
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  mapboxBackRow: { position: 'absolute', left: 0, right: 0, paddingHorizontal: theme.spacing.lg },
+  mapboxBackBtn: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(10, 10, 15, 0.85)',
+    borderRadius: theme.radius.full,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.xs,
+  },
+  mapboxBackText: { ...theme.typography.caption, color: theme.colors.text },
 })
