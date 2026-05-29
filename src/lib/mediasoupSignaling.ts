@@ -36,6 +36,7 @@ export type ServerMessage =
   | { type: 'reaction'; from: string; kind: string; ts: number }
   | { type: 'tipReceived'; handle: string; amount: number }
   | { type: 'tipConfirmed'; newBalance: number }
+  | { type: 'adminEnded' }
   | { type: 'error'; message: string }
 
 class MediasoupSignalingClient {

@@ -24,6 +24,7 @@ export function useSignaling() {
   const [producers, setProducers] = useState<Producer[]>([])
   const [viewerCount, setViewerCount] = useState(0)
   const [streamEnded, setStreamEnded] = useState(false)
+  const [adminEnded, setAdminEnded] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [reactions, setReactions] = useState<Reaction[]>([])
@@ -39,6 +40,7 @@ export function useSignaling() {
     const unsub = signalingClient.onMessage((msg) => {
       if (msg.type === 'viewerCountUpdated') setViewerCount(msg.viewerCount)
       if (msg.type === 'broadcasterLeft') setStreamEnded(true)
+      if (msg.type === 'adminEnded') setAdminEnded(true)
       if (msg.type === 'broadcasterPaused') setBroadcasterPaused(true)
       if (msg.type === 'broadcasterResumed') setBroadcasterPaused(false)
       if (msg.type === 'chatMessage') {
@@ -81,6 +83,7 @@ export function useSignaling() {
     setStatus('connecting')
     setError(null)
     setStreamEnded(false)
+    setAdminEnded(false)
     try {
       await signalingClient.connect(env.mediasoupWssUrl)
       setStatus('connected')
@@ -166,6 +169,7 @@ export function useSignaling() {
     producers,
     viewerCount,
     streamEnded,
+    adminEnded,
     error, setError,
     chatMessages,
     reactions,

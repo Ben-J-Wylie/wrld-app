@@ -79,7 +79,7 @@ export function StreamScreen() {
     : []
 
   const {
-    status, setStatus, roomId, viewerCount, streamEnded,
+    status, setStatus, roomId, viewerCount, streamEnded, adminEnded,
     error: signalingError, setError,
     chatMessages, reactions, broadcasterPaused,
     tipEvents, confirmedBalance,
@@ -149,6 +149,15 @@ export function StreamScreen() {
     }
     router.navigate('/(app)/globe')
   }
+
+  // Admin force-ended: clean up media and let the UI show the explanation screen.
+  useEffect(() => {
+    if (!adminEnded || !isNew) return
+    activeBroadcast.clear()
+    cleanup()
+    disconnect()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adminEnded])
 
   // Fast path 1: server sent broadcasterLeft
   useEffect(() => {
@@ -370,6 +379,23 @@ export function StreamScreen() {
           mirror={false}
           zOrder={0}
         />
+      )}
+
+      {/* Admin force-ended screen (broadcaster only) */}
+      {adminEnded && isNew && (
+        <View style={[StyleSheet.absoluteFill, styles.adminEndedContainer]}>
+          <View style={styles.adminEndedContent}>
+            <Text style={styles.adminEndedTitle}>Stream Closed</Text>
+            <Text style={styles.adminEndedBody}>
+              An administrator has ended your stream.
+            </Text>
+            <Button
+              label="Back to globe"
+              onPress={() => router.navigate('/(app)/globe')}
+              style={styles.wide}
+            />
+          </View>
+        </View>
       )}
 
       {/* Flip camera button (broadcaster only) */}
@@ -819,5 +845,28 @@ const styles = StyleSheet.create({
     ...theme.typography.caption,
     color: '#fff',
     fontWeight: '700',
+  },
+  adminEndedContainer: {
+    backgroundColor: theme.colors.bg,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 50,
+  },
+  adminEndedContent: {
+    padding: theme.spacing.xl,
+    alignItems: 'center',
+    gap: theme.spacing.md,
+    maxWidth: 320,
+  },
+  adminEndedTitle: {
+    ...theme.typography.heading,
+    color: theme.colors.text,
+    textAlign: 'center',
+  },
+  adminEndedBody: {
+    ...theme.typography.body,
+    color: theme.colors.textMuted,
+    textAlign: 'center',
+    lineHeight: 24,
   },
 })
