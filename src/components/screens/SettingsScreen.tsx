@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, Alert, Switch } from 'react-native'
+import { View, Text, StyleSheet, Alert, Switch, Pressable } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
 import { useClerk } from '@clerk/clerk-expo'
@@ -62,6 +62,19 @@ export function SettingsScreen() {
       <View style={styles.header}>
         <Button label="← Back" onPress={() => router.back()} variant="secondary" />
         <Text style={styles.title}>Settings</Text>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>ACCOUNT</Text>
+        <Pressable style={styles.row} onPress={() => router.push('/(app)/subscription')}>
+          <View style={styles.rowText}>
+            <Text style={styles.rowLabel}>Plan</Text>
+            <Text style={styles.rowSub}>
+              {wrldUser?.tier === 'plus' ? 'Plus' : wrldUser?.tier === 'pro' ? 'Pro' : 'Free'} · View all plans
+            </Text>
+          </View>
+          <Text style={styles.rowArrow}>›</Text>
+        </Pressable>
       </View>
 
       <View style={styles.section}>
@@ -148,6 +161,7 @@ const styles = StyleSheet.create({
   rowText: { flex: 1 },
   rowLabel: { ...theme.typography.body, color: theme.colors.text, fontWeight: '500' },
   rowSub: { ...theme.typography.caption, color: theme.colors.textMuted, marginTop: 2 },
+  rowArrow: { fontSize: 20, color: theme.colors.textMuted, marginLeft: 4 },
   divider: { height: 1, backgroundColor: theme.colors.border, marginLeft: theme.spacing.lg },
   bottom: {
     padding: theme.spacing.lg,
