@@ -807,24 +807,42 @@ Vertical resize is delegated to the consumer (pass `style={{ height
 
 #### `HelpText`
 
-- **Tier:** primitive
+- **Tier:** primitive (composes `Text`)
 - **Location:** `src/components/primitives/HelpText.tsx`
-- **Variants:** `dim`, `ok`, `err`, `warn`
-- **Sizes:** uses `mono-caption` from Text primitive
+- **Tones:** `dim` (default), `ok`, `err`, `warn`
+- **Sizes:** uses `monoLabel` from the Text primitive (10/14, IBM Plex Mono 500, letter-spacing 1.6, UPPERCASE)
 - **States:** default
 - **Used in:** populated in 12.6
 - **Tweak impact:** every form-field helper, validation message, instructional caption
+- **Shipped:** 2026-05-30 (sub-phase 12.4 — ninth primitive)
+- **Last reviewed:** 2026-05-30
 
 **Mock says:** Small mono-caps caption rendered immediately under a form
 field. Four tones: `dim` (ink-faint, neutral instruction like "3–20
 CHARACTERS"), `ok` (accent, "EMAIL LOOKS GOOD"), `err` (live, "TOO SHORT
 — 8 CHARACTERS MINIMUM"), `warn` (warn, "ADD A NUMBER OR SYMBOL").
-Universal pattern: tone matches the Input's state on the same field.
 
-**Code does:** None. Helper text inline as `<Text style={styles.help}>`.
+**Code does (shipped):** Thin wrapper around `<Text variant="monoLabel">`
+that picks the color from the `tone` prop. Color map:
 
-**Gap / proposal:** Extract HelpText with 4 tone variants. Token-driven
-colors. Pairs naturally with Input + Textarea.
+| Tone | Token |
+|---|---|
+| `dim` | `text.subtle` |
+| `ok` | `accent.default` |
+| `err` | `accent.default` |
+| `warn` | `warn` |
+
+**Single-accent rule applied:** `ok` and `err` render with the same
+color. Differentiation is the *content* and the paired Input's
+affordance icon (check vs x), not a separate red/green pair. `warn` is
+the only non-accent tone (amber, used sparingly — PasswordStrengthMeter
+mid-tier, LegalAcceptanceCard CCPA jurisdiction badge).
+
+Pairs naturally with Input + Textarea — consumer composes inline (e.g.
+`<View style={{ gap: spacing.xs }}><Input state="error" /><HelpText
+tone="err">…</HelpText></View>`). Not built into Input itself.
+
+**Gap / proposal:** None — shipped.
 
 ---
 

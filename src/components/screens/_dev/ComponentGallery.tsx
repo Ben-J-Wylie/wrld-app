@@ -20,6 +20,7 @@ import { IconButton } from '@/components/primitives/IconButton'
 import { Card } from '@/components/primitives/Card'
 import { Input } from '@/components/primitives/Input'
 import { Textarea } from '@/components/primitives/Textarea'
+import { HelpText } from '@/components/primitives/HelpText'
 import { theme } from '@/tokens/theme'
 
 export function ComponentGallery() {
@@ -285,6 +286,27 @@ export function ComponentGallery() {
             <Textarea placeholder="Read-only" value="This content cannot be edited right now." onChangeText={() => {}} disabled />
           </Row>
         </Section>
+
+        <Section title="HelpText">
+          <Row label="dim (default)">
+            <HelpText>3–20 CHARACTERS</HelpText>
+          </Row>
+          <Row label="ok">
+            <HelpText tone="ok">EMAIL LOOKS GOOD</HelpText>
+          </Row>
+          <Row label="err">
+            <HelpText tone="err">TOO SHORT — 8 CHARACTERS MINIMUM</HelpText>
+          </Row>
+          <Row label="warn">
+            <HelpText tone="warn">ADD A NUMBER OR SYMBOL</HelpText>
+          </Row>
+          <Row label="paired with Input">
+            <View style={styles.helpPair}>
+              <Input placeholder="email@wrld.cam" value="ben@wrld" onChangeText={() => {}} state="error" autoCapitalize="none" />
+              <HelpText tone="err">CHECK THAT EMAIL DOMAIN</HelpText>
+            </View>
+          </Row>
+        </Section>
       </KeyboardAwareScrollView>
     </SafeAreaView>
   )
@@ -352,5 +374,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.sm,
     flexWrap: 'wrap',
+  },
+  helpPair: {
+    gap: theme.spacing.xs,
   },
 })
