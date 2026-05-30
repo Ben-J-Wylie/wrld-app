@@ -562,7 +562,7 @@ export function StreamScreen() {
                 </View>
               )}
 
-              <Button label="Leave" onPress={handleLeave} variant="danger" />
+              <Button label="Leave" onPress={handleLeave} variant="primary" />
             </View>
           )}
 

@@ -637,32 +637,40 @@ once they migrate in 12.6.
 
 - **Tier:** primitive (composes Pressable + Text + Icon)
 - **Location:** `src/components/primitives/Button.tsx`
-- **Variants:** `primary`, `secondary`, `skip`, `social` (with `Apple` / `Google` / `Email` sub-variants)
+- **Variants:** `primary`, `secondary`, `skip`, `social` (with `apple` / `google` / `email` sub-variants via the `social` prop)
 - **Sizes:** `md` (h:44, content actions) and `lg` (h:54, primary CTAs)
 - **States:** default, pressed, disabled, loading
 - **Used in:** populated in 12.6
 - **Tweak impact:** every CTA in the app
+- **Shipped:** 2026-05-30 (sub-phase 12.4 — fourth primitive; redesign of the Phase 1 placeholder)
+- **Last reviewed:** 2026-05-30
 
-**Mock says:** **Primary** is accent fill with `#0a0c10` text, glow
-box-shadow (`0 0 30px rgba(accent, 0.18)`), h:54 / r:20 for top-level CTAs,
-h:48 / r:14 for sheet actions. **Secondary** is panel-hi surface with line
-border, same dimensions, no glow. **Skip** is type-only, hairline-underline,
-h:44, no fill. **Social** has brand-color background (Apple white-on-black
-per HIG, Google/Email panel-hi). Disabled = opacity 0.32, no glow.
-Optional leading-icon slot. Loading state replaces label with a Spinner of
-matching color.
+**Mock says:** **Primary** is accent fill with cream label, optional glow
+box-shadow, h:54 for top-level CTAs / h:48 for sheet actions. **Secondary**
+is panel-hi surface with line border, no glow. **Skip** is type-only,
+hairline-underline, h:44, no fill. **Social** has brand-color background
+(Apple cream-on-ink per HIG-flipped-for-light, Google/Email panel-hi).
+Disabled = opacity 0.32, no glow. Optional leading-icon slot. Loading
+state replaces label with a Spinner of matching color.
 
-**Code does:** Existing `Button.tsx` has primary / secondary / ghost
-variants + disabled prop. No skip, no social, no loading, no leading-icon
-slot.
+**Code does (shipped):** Composes `Pressable` (variant `default` for the
+filled buttons, `none` for `skip`), `Text` (`bodyEmphasized` for filled,
+`body` with underline for `skip`), and `Icon` (md size for the optional
+leading slot). Heights h:44 (md) / h:54 (lg). **Radius locked at
+`radius.md` (r:4)** regardless of what the mocks render (mocks use
+r:14–20). `glow` is an opt-in boolean on `primary` — applies
+`elevation.glow.accent` shadow only when set so we don't auto-glow every
+CTA in the app. Loading state replaces the label with an
+`ActivityIndicator` tinted to the label color (will swap to the `Spinner`
+primitive when it lands later in 12.4).
 
-**Gap / proposal:** Extend Button to the 4 documented variant families
-(primary / secondary / skip / social). Loading state added (inline spinner
-replaces label). Leading-icon slot via optional `icon` prop. Glow is a
-token-driven property on the primary variant — toggleable per surface via
-the `glow` boolean if it ends up too noisy at scale (see principle-conflict
-#6 in 12.2 calibration). Per principle ruling, button radius is `r:4` from
-tokens regardless of what the mocks render (mocks use r:20).
+The Phase 1 `Button.tsx` had `primary | secondary | danger` variants;
+`danger` is removed — the locked single-accent rule has `primary`
+covering destructive too. Two existing callers (SettingsScreen sign-out
++ StreamScreen leave) migrated to `primary` in this commit.
+
+**Gap / proposal:** None — shipped. Swap `ActivityIndicator` → `Spinner`
+when the Spinner primitive lands later in 12.4.
 
 ---
 
@@ -671,23 +679,29 @@ tokens regardless of what the mocks render (mocks use r:20).
 - **Tier:** primitive (composes Pressable + Icon)
 - **Location:** `src/components/primitives/IconButton.tsx`
 - **Variants:** `ghost` (transparent), `surface` (panel background), `accent` (filled)
-- **Sizes:** sm (32×32), md (36×36 — default), lg (44×44), xl (48×48 — Viewer Sheet action bar)
+- **Sizes:** sm (32×32 / icon 14), md (36×36 / icon 16 — default), lg (44×44 / icon 20), xl (48×48 / icon 22 — action bars)
 - **States:** default, pressed, on, disabled
 - **Used in:** populated in 12.6
 - **Tweak impact:** every icon-only button — back, close, kebab, save, share, settings, etc.
+- **Shipped:** 2026-05-30 (sub-phase 12.4 — fifth primitive)
+- **Last reviewed:** 2026-05-30
 
 **Mock says:** Circular icon-only button used universally for top-bar
 navigation (back, close, kebab), settings entry, action-bar items
-(save/share heart on Viewer Sheet, with `on` state colored live red), and
-sheet headers. Glass `backdrop-filter:blur(10–14px)` on transparent or
-panel-tinted backgrounds. Hit target is at least 36×36 throughout.
+(save / share / heart with `on` state colored), and sheet headers. Hit
+target is at least 32×32 throughout.
 
-**Code does:** None as a standalone primitive. Inline RN `Pressable` +
-`<View>` wrappers in screens.
+**Code does (shipped):** Composes `Pressable` (always `default` variant
+press feedback) + `Icon`. Border-radius = `dim / 2` so it stays a
+perfect circle at any size. The `on` state overrides the variant's
+surface treatment with `accent.surface` + `accent.border` + accent icon
+color — used by reactions, save, heart. Glass blur from the mocks is NOT
+the default (per the flat-surfaces locked ruling); a consumer can wrap
+the IconButton in a glassy parent if needed. Icon size scales
+proportionally with hit target — roughly 40–50% of the button dimension.
+Mandatory `accessibilityLabel` since the button is icon-only.
 
-**Gap / proposal:** New primitive that composes Pressable + Icon with a
-guaranteed circular hit target. The `on` state is opt-in via prop; tone
-is consumer-driven (typically `accent` or `live`).
+**Gap / proposal:** None — shipped.
 
 ---
 

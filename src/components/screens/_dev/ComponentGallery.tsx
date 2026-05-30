@@ -14,6 +14,8 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { Text } from '@/components/primitives/Text'
 import { Icon } from '@/components/primitives/Icon'
 import { Pressable } from '@/components/primitives/Pressable'
+import { Button } from '@/components/primitives/Button'
+import { IconButton } from '@/components/primitives/IconButton'
 import { theme } from '@/tokens/theme'
 
 export function ComponentGallery() {
@@ -121,6 +123,84 @@ export function ComponentGallery() {
             </Pressable>
           </Row>
         </Section>
+
+        <Section title="Button">
+          <Row label="primary md">
+            <View style={styles.buttonRow}>
+              <Button label="Go live" onPress={() => {}} />
+              <Button label="With icon" onPress={() => {}} icon="zap" />
+            </View>
+          </Row>
+          <Row label="primary lg">
+            <Button label="Open broadcast" onPress={() => {}} size="lg" />
+          </Row>
+          <Row label="primary glow">
+            <Button label="Go live" onPress={() => {}} size="lg" glow />
+          </Row>
+          <Row label="secondary">
+            <View style={styles.buttonRow}>
+              <Button label="Cancel" onPress={() => {}} variant="secondary" />
+              <Button label="Back" onPress={() => {}} variant="secondary" icon="chevron-left" />
+            </View>
+          </Row>
+          <Row label="skip">
+            <Button label="Skip for now" onPress={() => {}} variant="skip" />
+          </Row>
+          <Row label="social apple">
+            <Button label="Continue with Apple" onPress={() => {}} variant="social" social="apple" />
+          </Row>
+          <Row label="social google">
+            <Button label="Continue with Google" onPress={() => {}} variant="social" social="google" />
+          </Row>
+          <Row label="social email">
+            <Button label="Continue with email" onPress={() => {}} variant="social" social="email" />
+          </Row>
+          <Row label="loading">
+            <Button label="Saving…" onPress={() => {}} loading />
+          </Row>
+          <Row label="disabled">
+            <Button label="Not yet" onPress={() => {}} disabled />
+          </Row>
+        </Section>
+
+        <Section title="IconButton">
+          <Row label="sm/md/lg/xl">
+            <View style={styles.iconRow}>
+              <IconButton name="x" onPress={() => {}} size="sm" accessibilityLabel="Close" variant="surface" />
+              <IconButton name="x" onPress={() => {}} accessibilityLabel="Close" variant="surface" />
+              <IconButton name="x" onPress={() => {}} size="lg" accessibilityLabel="Close" variant="surface" />
+              <IconButton name="x" onPress={() => {}} size="xl" accessibilityLabel="Close" variant="surface" />
+            </View>
+          </Row>
+          <Row label="ghost">
+            <View style={styles.iconRow}>
+              <IconButton name="chevron-left" onPress={() => {}} accessibilityLabel="Back" />
+              <IconButton name="more-horizontal" onPress={() => {}} accessibilityLabel="More" />
+              <IconButton name="settings" onPress={() => {}} accessibilityLabel="Settings" />
+            </View>
+          </Row>
+          <Row label="surface">
+            <View style={styles.iconRow}>
+              <IconButton name="bookmark" onPress={() => {}} accessibilityLabel="Save" variant="surface" size="xl" />
+              <IconButton name="share-2" onPress={() => {}} accessibilityLabel="Share" variant="surface" size="xl" />
+            </View>
+          </Row>
+          <Row label="accent">
+            <View style={styles.iconRow}>
+              <IconButton name="plus" onPress={() => {}} accessibilityLabel="Add" variant="accent" size="lg" />
+              <IconButton name="check" onPress={() => {}} accessibilityLabel="Confirm" variant="accent" size="lg" />
+            </View>
+          </Row>
+          <Row label="on state">
+            <View style={styles.iconRow}>
+              <IconButton name="heart" onPress={() => {}} accessibilityLabel="Favorite" variant="surface" size="lg" on />
+              <IconButton name="bookmark" onPress={() => {}} accessibilityLabel="Saved" variant="surface" size="lg" on />
+            </View>
+          </Row>
+          <Row label="disabled">
+            <IconButton name="trash-2" onPress={() => {}} accessibilityLabel="Delete" variant="surface" disabled />
+          </Row>
+        </Section>
       </ScrollView>
     </SafeAreaView>
   )
@@ -182,5 +262,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.border.subtle,
     gap: 2,
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    flexWrap: 'wrap',
   },
 })

@@ -113,7 +113,7 @@ export function SettingsScreen() {
         <Button
           label="Sign out"
           onPress={confirmSignOut}
-          variant="danger"
+          variant="primary"
           style={styles.wide}
         />
         <Text style={styles.note}>
