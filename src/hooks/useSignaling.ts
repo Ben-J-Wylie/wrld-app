@@ -25,6 +25,7 @@ export function useSignaling() {
   const [viewerCount, setViewerCount] = useState(0)
   const [streamEnded, setStreamEnded] = useState(false)
   const [adminEnded, setAdminEnded] = useState(false)
+  const [adminWarning, setAdminWarning] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [reactions, setReactions] = useState<Reaction[]>([])
@@ -41,6 +42,7 @@ export function useSignaling() {
       if (msg.type === 'viewerCountUpdated') setViewerCount(msg.viewerCount)
       if (msg.type === 'broadcasterLeft') setStreamEnded(true)
       if (msg.type === 'adminEnded') setAdminEnded(true)
+      if (msg.type === 'adminWarning') setAdminWarning(msg.message)
       if (msg.type === 'broadcasterPaused') setBroadcasterPaused(true)
       if (msg.type === 'broadcasterResumed') setBroadcasterPaused(false)
       if (msg.type === 'chatMessage') {
@@ -170,6 +172,7 @@ export function useSignaling() {
     viewerCount,
     streamEnded,
     adminEnded, setAdminEnded,
+    adminWarning, setAdminWarning,
     error, setError,
     chatMessages,
     reactions,

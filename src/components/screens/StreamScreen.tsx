@@ -80,6 +80,7 @@ export function StreamScreen() {
 
   const {
     status, setStatus, roomId, viewerCount, streamEnded, adminEnded, setAdminEnded,
+    adminWarning, setAdminWarning,
     error: signalingError, setError,
     chatMessages, reactions, broadcasterPaused,
     tipEvents, confirmedBalance,
@@ -384,6 +385,16 @@ export function StreamScreen() {
           mirror={false}
           zOrder={0}
         />
+      )}
+
+      {/* Admin warning banner (broadcaster only, dismissible) */}
+      {isNew && !!adminWarning && (
+        <View style={styles.adminWarningBanner}>
+          <Text style={styles.adminWarningText}>{adminWarning}</Text>
+          <Pressable onPress={() => setAdminWarning(null)} hitSlop={10}>
+            <Text style={styles.adminWarningDismiss}>✕</Text>
+          </Pressable>
+        </View>
       )}
 
       {/* Admin force-ended screen (broadcaster only) */}
@@ -849,6 +860,31 @@ const styles = StyleSheet.create({
   broadcasterTipToastText: {
     ...theme.typography.caption,
     color: '#fff',
+    fontWeight: '700',
+  },
+  adminWarningBanner: {
+    position: 'absolute',
+    top: 60,
+    left: theme.spacing.lg,
+    right: theme.spacing.lg,
+    backgroundColor: '#7C4A00',
+    borderRadius: 12,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    zIndex: 40,
+  },
+  adminWarningText: {
+    ...theme.typography.caption,
+    color: '#FFD580',
+    flex: 1,
+    lineHeight: 18,
+  },
+  adminWarningDismiss: {
+    ...theme.typography.caption,
+    color: '#FFD580',
     fontWeight: '700',
   },
   adminEndedContainer: {
