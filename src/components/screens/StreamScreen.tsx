@@ -250,7 +250,9 @@ export function StreamScreen() {
   // video orientation is known (fires once after camera starts).
   useEffect(() => {
     if (!isNew || status !== 'in-room' || !localStream) return
-    sendBroadcasterOrientation(videoIsLandscape ? 'landscape' : 'portrait')
+    // track.getSettings() on react-native-webrtc reports sensor-native dims:
+    // width > height = sensor native = phone held portrait. Inverted from intuition.
+    sendBroadcasterOrientation(videoIsLandscape ? 'portrait' : 'landscape')
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isNew, status, localStream, videoIsLandscape])
 
