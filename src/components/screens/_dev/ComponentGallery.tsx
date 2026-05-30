@@ -36,7 +36,6 @@ export function ComponentGallery() {
     <SafeAreaView style={styles.root}>
       <ScrollView
         contentContainerStyle={styles.scroll}
-        automaticallyAdjustKeyboardInsets
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="interactive"
       >
