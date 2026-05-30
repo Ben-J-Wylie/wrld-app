@@ -1,6 +1,7 @@
 import '@/lib/polyfills'
 import { Stack, router, usePathname } from 'expo-router'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
+import { KeyboardProvider } from 'react-native-keyboard-controller'
 import { StatusBar } from 'expo-status-bar'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useEffect, useRef } from 'react'
@@ -115,8 +116,10 @@ export default function RootLayout() {
     <ClerkProvider publishableKey={env.clerkPublishableKey} tokenCache={tokenCache}>
       <QueryClientProvider client={queryClient}>
         <SafeAreaProvider>
-          <StatusBar style="light" />
-          <RootNavigator />
+          <KeyboardProvider>
+            <StatusBar style="light" />
+            <RootNavigator />
+          </KeyboardProvider>
         </SafeAreaProvider>
       </QueryClientProvider>
     </ClerkProvider>

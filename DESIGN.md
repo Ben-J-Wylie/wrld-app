@@ -2228,7 +2228,7 @@ single home screen — flagged at the end.
 
 ##### `ScreenScroll`
 
-- **Tier:** section (composes SafeAreaView + ScrollView)
+- **Tier:** section (composes SafeAreaView + KeyboardAwareScrollView)
 - **Location:** `src/components/sections/ScreenScroll.tsx`
 - **Variants:** `default`
 - **Sizes:** N/A (full-screen wrapper)
@@ -2242,33 +2242,39 @@ repositioning the rest of the screen**, plus tap-on-adjacent-input
 behavior that doesn't dismiss the keyboard first. Not a visual concern;
 a behavior concern.
 
-**Code does (in the gallery, post-debug commit `9XXXXXX`):**
+**Code does (in the gallery today):**
 
 ```tsx
-<ScrollView
+<KeyboardAwareScrollView
   contentContainerStyle={{ paddingBottom: spacing.xxxl, ... }}
-  automaticallyAdjustKeyboardInsets
   keyboardShouldPersistTaps="handled"
   keyboardDismissMode="interactive"
+  bottomOffset={spacing.lg}
 >
   {children}
-</ScrollView>
+</KeyboardAwareScrollView>
 ```
 
-**No `KeyboardAvoidingView`.** The KAV + ScrollView pairing is the
-documented source of "screen jumps to top when keyboard opens" — KAV
-adds `paddingBottom` on keyboard show, which reflows the content
-layout, which on some RN versions invalidates the saved scroll position.
-`automaticallyAdjustKeyboardInsets` (iOS, RN 0.71+) adjusts the
-ScrollView's *content inset* — a virtual offset — instead of reflowing
-layout. Focused input scrolls into view; nothing else moves. Android's
-default `windowSoftInputMode=adjustResize` handles itself.
+`KeyboardAwareScrollView` comes from `react-native-keyboard-controller`
+(adopted 2026-05-30 — see decision-log entry). The library is
+purpose-built for RN's New Architecture (Fabric) and properly handles
+single-line UITextField first-responder behavior, which the plain
+ScrollView + various RN-built-in options could not. Requires
+`KeyboardProvider` at the root layout (already wired in
+`app/_layout.tsx`).
+
+**Why not plain `ScrollView` + RN built-ins?** Tried `KeyboardAvoiding-
+View` with `behavior='padding'` (reflow bug — scroll resets to 0),
+`automaticallyAdjustKeyboardInsets` (no-op for UITextField under
+Fabric), and a manual scroll-restore via keyboard listeners (partially
+worked). None handled UITextField cleanly under New Architecture. The
+library is the right level of abstraction for this problem.
 
 **Gap / proposal:** Extract as a section so every form-bearing screen
 wraps in `<ScreenScroll>{children}</ScreenScroll>` and inherits the
-proven config. Props: `contentContainerStyle`, `scrollRef`,
-`onScroll`. The Gallery becomes the first migrant; the 7 Input-using
-screens migrate during 12.6.
+proven config. Props: `contentContainerStyle`, `bottomOffset`,
+`scrollRef`, `onScroll`. The Gallery becomes the first migrant; the
+7 Input-using screens migrate during 12.6.
 
 **Reuse-rule note:** Section 0.5 normally says wait for the second
 proven case. Here the second case is on the immediate horizon (real
@@ -2719,6 +2725,53 @@ handled by the same patterns; the seam is not a separate motion category.
 
 Append-only. Most recent first. Each entry: date, decision, rationale,
 constraint it imposes downstream.
+
+### 2026-05-30 — Adopt `react-native-keyboard-controller` for keyboard handling
+
+Four rounds of RN-built-in attempts to make single-line `Input` focus
+behave like multi-line `Textarea` focus all failed under the app's
+New Architecture (`newArchEnabled: true` in `app.json`):
+
+| Round | Approach | Result |
+|---|---|---|
+| 1 (`4c391a4`) | `KeyboardAvoidingView` w/ `behavior='padding'` | Textarea OK; Input still snapped to top — KAV padding reflow invalidated saved scroll position |
+| 2 (`5419a9d`) | `automaticallyAdjustKeyboardInsets` on ScrollView, no KAV | Textarea OK; Input still snapped — no-op for UITextField under Fabric |
+| 3 (`12c39f5`) | Plain ScrollView, no special props | Textarea OK; Input still snapped — UIKit's built-in scrollRectToVisible on UITextField focus was the actual culprit |
+| 4 (`c2dcace`) | Manual scroll capture/restore via Keyboard.addListener | "A little better but still buggy" per Ben — iOS's scroll-to-(0,0) sometimes beats the willShow → didShow window |
+
+The root cause: under RN New Architecture on iOS, single-line
+TextInputs (UITextField) call UIKit's `scrollRectToVisible` on
+becomeFirstResponder. In nested layout contexts that calculation
+miscalculates as (0,0) — the page snaps to top. Multi-line TextInputs
+(UITextView) don't trigger the same call, which is why Textarea worked
+the whole time. RN's built-in keyboard tools all sit OUTSIDE this call
+path.
+
+**Decision:** Adopt `react-native-keyboard-controller` (v1.18.5,
+installed via `npx expo install`). It's purpose-built for the New
+Architecture and handles UITextField properly. Gallery's ScrollView
+becomes `KeyboardAwareScrollView`; `KeyboardProvider` lands at the
+root in `app/_layout.tsx`. Option 1 manual workaround is removed.
+
+**Imposes:**
+
+- **Dev client rebuild required.** The library has native iOS + Android
+  code; Ben must run `eas build --profile development --platform ios`
+  (and android) and reinstall before testing. From here on, dev clients
+  carry this dep.
+- `KeyboardProvider` stays at root indefinitely — every screen in the
+  app inherits the keyboard-handling foundation, not just form-bearing
+  ones.
+- The 12.5 `ScreenScroll` section now wraps `KeyboardAwareScrollView`
+  instead of plain `ScrollView`. The section gets `bottomOffset` and
+  `scrollRef` props.
+- During 12.6 migration, every form-bearing screen uses ScreenScroll
+  and drops its bespoke keyboard handling (no remaining KAV usages
+  anywhere in the app).
+- **Anti-pattern flag (updated):** `<KeyboardAvoidingView>` wrapping a
+  `<ScrollView>` AND plain `<ScrollView>` with single-line TextInputs
+  are both smells. Use ScreenScroll (or the library's
+  `KeyboardAwareScrollView` directly) instead.
 
 ### 2026-05-30 — `ScreenScroll` planned as a 12.5 section (ahead of 12.6 migration)
 
