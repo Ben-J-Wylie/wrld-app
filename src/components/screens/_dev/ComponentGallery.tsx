@@ -24,6 +24,7 @@ import { HelpText } from '@/components/primitives/HelpText'
 import { Pill } from '@/components/primitives/Pill'
 import { Chip } from '@/components/primitives/Chip'
 import { Avatar } from '@/components/primitives/Avatar'
+import { Toggle } from '@/components/primitives/Toggle'
 import { theme } from '@/tokens/theme'
 
 export function ComponentGallery() {
@@ -36,6 +37,8 @@ export function ComponentGallery() {
   const [textareaValue, setTextareaValue] = useState('')
   const [chipCategory, setChipCategory] = useState<'all' | 'cities'>('all')
   const [chipMulti, setChipMulti] = useState<Set<string>>(new Set(['cam']))
+  const [toggleA, setToggleA] = useState(false)
+  const [toggleB, setToggleB] = useState(true)
   const toggleMulti = (k: string) => {
     setChipMulti((prev) => {
       const next = new Set(prev)
@@ -378,6 +381,21 @@ export function ComponentGallery() {
           </Row>
           <Row label="disabled">
             <Chip label="Coming soon" disabled onPress={() => {}} />
+          </Row>
+        </Section>
+
+        <Section title="Toggle">
+          <Row label="off → tap me">
+            <Toggle value={toggleA} onValueChange={setToggleA} accessibilityLabel="Toggle A" />
+          </Row>
+          <Row label="on → tap me">
+            <Toggle value={toggleB} onValueChange={setToggleB} accessibilityLabel="Toggle B" />
+          </Row>
+          <Row label="disabled off">
+            <Toggle value={false} onValueChange={() => {}} disabled accessibilityLabel="Disabled off" />
+          </Row>
+          <Row label="disabled on">
+            <Toggle value={true} onValueChange={() => {}} disabled accessibilityLabel="Disabled on" />
           </Row>
         </Section>
 

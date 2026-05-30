@@ -1,9 +1,10 @@
-import { View, Text, StyleSheet, Alert, Switch, Pressable } from 'react-native'
+import { View, Text, StyleSheet, Alert, Pressable } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
 import { useClerk } from '@clerk/clerk-expo'
 import { theme } from '@/tokens/theme'
 import { Button } from '@/components/primitives/Button'
+import { Toggle } from '@/components/primitives/Toggle'
 import { useAuthStore } from '@/stores/authStore'
 import { useQueryClient } from '@tanstack/react-query'
 import { usersApi } from '@/api/users'
@@ -72,11 +73,10 @@ export function SettingsScreen() {
             <Text style={styles.rowLabel}>Someone I follow goes live</Text>
             <Text style={styles.rowSub}>Get notified when a streamer you follow starts streaming</Text>
           </View>
-          <Switch
+          <Toggle
             value={followedLive}
             onValueChange={toggleFollowedLive}
-            trackColor={{ false: theme.colors.border.subtle, true: theme.colors.accent.default }}
-            thumbColor="#fff"
+            accessibilityLabel="Notify when someone I follow goes live"
           />
         </View>
 
@@ -87,11 +87,10 @@ export function SettingsScreen() {
             <Text style={styles.rowLabel}>Live stream nearby</Text>
             <Text style={styles.rowSub}>Get notified when someone is streaming near your last location</Text>
           </View>
-          <Switch
+          <Toggle
             value={nearbyLive}
             onValueChange={toggleNearbyLive}
-            trackColor={{ false: theme.colors.border.subtle, true: theme.colors.accent.default }}
-            thumbColor="#fff"
+            accessibilityLabel="Notify when a live stream is nearby"
           />
         </View>
       </View>

@@ -957,23 +957,35 @@ via the `size: Size | number` API. The old feature file was deleted.
 
 #### `Toggle`
 
-- **Tier:** primitive
+- **Tier:** primitive (composes Pressable + Animated)
 - **Location:** `src/components/primitives/Toggle.tsx`
 - **Variants:** `default`
-- **Sizes:** md (44×26) — single canonical size
-- **States:** off, on, disabled
-- **Used in:** populated in 12.6
+- **Sizes:** single canonical size (track 44 × 26, thumb 22 × 22, padding 2)
+- **States:** off, on, disabled (opacity 0.4)
+- **Used in:** `SettingsScreen` (notification preferences — migrated from RN `Switch` in this commit)
 - **Tweak impact:** every binary switch — consent rows, layer toggles, settings notifications, Clip Edit per-layer toggles
+- **Shipped:** 2026-05-30 (sub-phase 12.4 — thirteenth primitive)
+- **Last reviewed:** 2026-05-30
 
-**Mock says:** Animated track-and-thumb switch. Off = dark `#2a2e35`
-track + ink thumb. On = accent track + white thumb, animated translate
-(0 → +18px) with spring easing. Disabled = opacity 0.4.
+**Mock says:** Animated track-and-thumb switch. Off = dark track + ink
+thumb. On = accent track + cream thumb, animated translate (0 → +18px)
+with spring easing.
 
-**Code does:** RN `Switch` used directly in settings.
+**Code does (shipped):** Composes `Pressable` (`variant="none"` so the
+scale animation doesn't fight the thumb motion) wrapping a single
+`Animated.View` thumb. Off: `border.strong` track + `text.primary`
+thumb. On: `accent.default` track + `text.inverse` thumb. Thumb
+translateX runs on `Animated.spring` (native driver, stiffness 220,
+damping 22, mass 0.9) for a tactile-but-quick flip. Track color flips
+synchronously since the eye follows the thumb. `accessibilityRole`
+`switch` and `accessibilityState.checked` are set so screen readers
+announce the state.
 
-**Gap / proposal:** Wrap with custom Toggle primitive matching the mock
-treatment (RN's default switch doesn't match). Spring easing comes from
-motion tokens (12.3). Universal sizing.
+SettingsScreen's two RN `Switch` callers (notification prefs) migrated
+to `Toggle` in this commit. RN `Switch` imports removed from the
+screen.
+
+**Gap / proposal:** None — shipped.
 
 ---
 
