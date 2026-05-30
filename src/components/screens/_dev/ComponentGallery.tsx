@@ -28,6 +28,7 @@ import { Toggle } from '@/components/primitives/Toggle'
 import { ProgressBar } from '@/components/primitives/ProgressBar'
 import { Spinner } from '@/components/primitives/Spinner'
 import { BottomSheet } from '@/components/primitives/BottomSheet'
+import { Slider } from '@/components/primitives/Slider'
 import { theme } from '@/tokens/theme'
 
 export function ComponentGallery() {
@@ -43,6 +44,9 @@ export function ComponentGallery() {
   const [toggleA, setToggleA] = useState(false)
   const [toggleB, setToggleB] = useState(true)
   const [sheetVariant, setSheetVariant] = useState<'peek' | 'expanded' | 'full' | null>(null)
+  const [sliderA, setSliderA] = useState(35)
+  const [sliderB, setSliderB] = useState(2)
+  const [sliderC, setSliderC] = useState(60)
   const toggleMulti = (k: string) => {
     setChipMulti((prev) => {
       const next = new Set(prev)
@@ -385,6 +389,21 @@ export function ComponentGallery() {
           </Row>
           <Row label="disabled">
             <Chip label="Coming soon" disabled onPress={() => {}} />
+          </Row>
+        </Section>
+
+        <Section title="Slider">
+          <Row label={`accent (${sliderA})`}>
+            <Slider value={sliderA} onValueChange={setSliderA} min={0} max={100} step={1} minLabel="0" maxLabel="100" />
+          </Row>
+          <Row label={`step 5, range 0–10 (${sliderB})`}>
+            <Slider value={sliderB} onValueChange={setSliderB} min={0} max={10} step={1} minLabel="0" maxLabel="10" />
+          </Row>
+          <Row label={`warn tone ($${sliderC})`}>
+            <Slider value={sliderC} onValueChange={setSliderC} min={0} max={200} step={5} tone="warn" minLabel="$0" maxLabel="$200" />
+          </Row>
+          <Row label="disabled">
+            <Slider value={50} onValueChange={() => {}} disabled minLabel="MIN" maxLabel="MAX" />
           </Row>
         </Section>
 

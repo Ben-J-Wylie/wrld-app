@@ -1092,23 +1092,34 @@ added via a `blur` prop once `expo-blur` lands.
 
 - **Tier:** primitive
 - **Location:** `src/components/primitives/Slider.tsx`
-- **Variants:** `accent` (default), `live` (for cashout amount), `warn`
-- **Sizes:** md (4px track, 20px thumb)
-- **States:** default, pressed (thumb-drag)
+- **Tones:** `accent` (default), `live` (semantic alias of accent under single-accent rule), `warn` (amber)
+- **Sizes:** md (4px track, 20px thumb) — single canonical size
+- **States:** default, pressed (thumb-drag), disabled (opacity 0.4)
 - **Used in:** populated in 12.6
 - **Tweak impact:** Cash Out amount selector, future quantity/range inputs
+- **Shipped:** 2026-05-30 (sub-phase 12.4 — seventeenth primitive)
+- **Last reviewed:** 2026-05-30
 
 **Mock says:** Custom range input — thin track (4px), filled portion in
-tone-color (accent / live), 20px thumb with 2px tone-colored border + white
-fill + glow box-shadow. Min/max tick labels below in mono-caps. Snap-to-
+tone-color, 20px thumb with 2px tone-colored border + cream fill + glow
+box-shadow. Optional min/max tick labels below in mono-caps. Snap-to-
 integer step.
 
-**Code does:** None (current `app/(app)/cashout.tsx` has its own
-PanResponder-based slider — code reusable but not extracted).
+**Code does (shipped):** PanResponder-driven. `onLayout` captures track
+width into a ref; drag is computed as `startValue + (dx / trackWidth)
+* range`, then snapped to `step` (defaults to 1, set ≤0 to disable
+snapping), then clamped to `[min, max]`. Filled portion's width
+follows the value/range ratio. Thumb absolute-positioned at
+`filledPx - THUMB/2` (centered on the leading edge), with the tone
+color as its border and `text.inverse` (cream) as its fill +
+`elevation.glow.accent`. Optional `minLabel`/`maxLabel` render below
+in `Text variant="monoLabel"`.
 
-**Gap / proposal:** Extract from existing Cashout slider into a primitive
-with tone variants. PanResponder pattern carries forward (works on iOS +
-Android). Snap-step is a consumer prop.
+The current `CashoutScreen` inline slider keeps its bespoke
+implementation until 12.6 migration — refactors to a caller of this
+primitive at that point.
+
+**Gap / proposal:** None — shipped.
 
 ---
 
