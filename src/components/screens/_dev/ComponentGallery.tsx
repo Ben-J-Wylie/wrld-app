@@ -29,6 +29,7 @@ import { ProgressBar } from '@/components/primitives/ProgressBar'
 import { Spinner } from '@/components/primitives/Spinner'
 import { BottomSheet } from '@/components/primitives/BottomSheet'
 import { Slider } from '@/components/primitives/Slider'
+import { SegmentedToggle } from '@/components/primitives/SegmentedToggle'
 import { theme } from '@/tokens/theme'
 
 export function ComponentGallery() {
@@ -47,6 +48,8 @@ export function ComponentGallery() {
   const [sliderA, setSliderA] = useState(35)
   const [sliderB, setSliderB] = useState(2)
   const [sliderC, setSliderC] = useState(60)
+  const [segVis, setSegVis] = useState<'all' | 'public' | 'anon'>('all')
+  const [segMode, setSegMode] = useState<'day' | 'week' | 'month' | 'year'>('week')
   const toggleMulti = (k: string) => {
     setChipMulti((prev) => {
       const next = new Set(prev)
@@ -389,6 +392,45 @@ export function ComponentGallery() {
           </Row>
           <Row label="disabled">
             <Chip label="Coming soon" disabled onPress={() => {}} />
+          </Row>
+        </Section>
+
+        <Section title="SegmentedToggle">
+          <Row label="3 options · default">
+            <SegmentedToggle
+              options={[
+                { value: 'all', label: 'ALL' },
+                { value: 'public', label: 'PUBLIC' },
+                { value: 'anon', label: 'ANON' },
+              ]}
+              value={segVis}
+              onChange={setSegVis}
+            />
+          </Row>
+          <Row label="4 options · accent">
+            <SegmentedToggle
+              options={[
+                { value: 'day', label: 'D' },
+                { value: 'week', label: 'W' },
+                { value: 'month', label: 'M' },
+                { value: 'year', label: 'Y' },
+              ]}
+              value={segMode}
+              onChange={setSegMode}
+              variant="accent"
+            />
+          </Row>
+          <Row label="disabled">
+            <SegmentedToggle
+              options={[
+                { value: 'a', label: 'A' },
+                { value: 'b', label: 'B' },
+                { value: 'c', label: 'C' },
+              ]}
+              value="b"
+              onChange={() => {}}
+              disabled
+            />
           </Row>
         </Section>
 

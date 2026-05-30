@@ -1127,23 +1127,37 @@ primitive at that point.
 
 - **Tier:** primitive (composes Pressable + Text)
 - **Location:** `src/components/primitives/SegmentedToggle.tsx`
-- **Variants:** `default` (pressed = ink fill), `accent` (pressed = accent fill — for ANON-tagged selection on My Profile)
-- **Sizes:** md (h:30 — line-border, inside-padded pill row)
-- **States:** default, pressed (selected segment)
+- **Variants:** `default` (active indicator `text.primary` warm-ink), `accent` (active indicator `accent.default` warm-crimson — for ANON-tagged segments on My Profile)
+- **Sizes:** single canonical h:30 (segments h:24 after 3px inner padding)
+- **States:** default, selected (per segment), disabled
 - **Used in:** populated in 12.6
 - **Tweak impact:** My Profile VIS filter (ALL / PUBLIC / ANON), future 2–4 option single-selects
+- **Shipped:** 2026-05-30 (sub-phase 12.4 — eighteenth primitive)
+- **Last reviewed:** 2026-05-30
 
 **Mock says:** Multi-button row inside a single pill-shaped container.
 Single-select semantics — pressing one segment unpresses the others.
-Inside-padded 3px ring around the active segment. Mono-caps labels.
-Distinct from Chip (Chip is independent buttons; SegmentedToggle is
-mutually-exclusive group with shared container).
+Inside-padded ring around the active segment. Mono-caps labels.
 
-**Code does:** None.
+**Code does (shipped):** Outer pill: `View` with `borderRadius: full`,
+line-strong border, 3px inner padding. Inside: equal-width segments
+(each `Pressable variant="none"` so the scale press feedback doesn't
+fight the indicator glide). Active indicator is an
+`Animated.View` absolutely positioned within the inner padding,
+animated via `Animated.spring` on `translateX` (native driver,
+stiffness 220, damping 22, mass 0.9) to `activeIndex * segWidth`.
+Active label = `text.inverse` (cream — reads on both ink and crimson
+indicators). Inactive label = `text.muted`.
 
-**Gap / proposal:** New primitive accepting `options` (array of
-`{value, label}`), `value` (currently-selected), and `onChange`. Inside-
-padded animated indicator follows the selected option.
+Generic over the option value type (`Props<T extends string>`) so
+consumers get exhaustive type safety on their unions
+(`'all' | 'public' | 'anon'`, etc.).
+
+Container is `alignSelf: 'stretch'` — width is the parent's. Wrap in a
+fixed-width parent for a compact pill, leave alone for a full-row
+segmented control.
+
+**Gap / proposal:** None — shipped.
 
 ---
 
