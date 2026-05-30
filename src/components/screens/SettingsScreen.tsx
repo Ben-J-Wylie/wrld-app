@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, Alert, Switch } from 'react-native'
+import { View, Text, StyleSheet, Alert, Switch, Pressable } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
 import { useClerk } from '@clerk/clerk-expo'
@@ -96,6 +96,19 @@ export function SettingsScreen() {
         </View>
       </View>
 
+      {__DEV__ && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>DEVELOPMENT</Text>
+          <Pressable style={styles.row} onPress={() => router.push('/(app)/gallery')}>
+            <View style={styles.rowText}>
+              <Text style={styles.rowLabel}>Component gallery</Text>
+              <Text style={styles.rowSub}>Primitives + features for sub-phase 12.4 review</Text>
+            </View>
+            <Text style={styles.chevron}>›</Text>
+          </Pressable>
+        </View>
+      )}
+
       <View style={styles.bottom}>
         <Button
           label="Sign out"
@@ -161,5 +174,9 @@ const styles = StyleSheet.create({
     color: theme.colors.text.muted,
     textAlign: 'center',
     lineHeight: 18,
+  },
+  chevron: {
+    ...theme.typography.heading,
+    color: theme.colors.text.subtle,
   },
 })
