@@ -27,6 +27,7 @@ import { Avatar } from '@/components/primitives/Avatar'
 import { Toggle } from '@/components/primitives/Toggle'
 import { ProgressBar } from '@/components/primitives/ProgressBar'
 import { Spinner } from '@/components/primitives/Spinner'
+import { BottomSheet } from '@/components/primitives/BottomSheet'
 import { theme } from '@/tokens/theme'
 
 export function ComponentGallery() {
@@ -41,6 +42,7 @@ export function ComponentGallery() {
   const [chipMulti, setChipMulti] = useState<Set<string>>(new Set(['cam']))
   const [toggleA, setToggleA] = useState(false)
   const [toggleB, setToggleB] = useState(true)
+  const [sheetVariant, setSheetVariant] = useState<'peek' | 'expanded' | 'full' | null>(null)
   const toggleMulti = (k: string) => {
     setChipMulti((prev) => {
       const next = new Set(prev)
@@ -386,6 +388,18 @@ export function ComponentGallery() {
           </Row>
         </Section>
 
+        <Section title="BottomSheet">
+          <Row label="peek (~280)">
+            <Button label="Open peek" onPress={() => setSheetVariant('peek')} variant="secondary" />
+          </Row>
+          <Row label="expanded">
+            <Button label="Open expanded" onPress={() => setSheetVariant('expanded')} variant="secondary" />
+          </Row>
+          <Row label="full">
+            <Button label="Open full" onPress={() => setSheetVariant('full')} variant="secondary" />
+          </Row>
+        </Section>
+
         <Section title="ProgressBar">
           <Row label="bars 3/8">
             <ProgressBar total={8} current={3} />
@@ -504,6 +518,23 @@ export function ComponentGallery() {
           </Row>
         </Section>
       </KeyboardAwareScrollView>
+
+      <BottomSheet
+        visible={sheetVariant !== null}
+        onClose={() => setSheetVariant(null)}
+        variant={sheetVariant ?? 'peek'}
+      >
+        <View style={styles.sheetBody}>
+          <Text variant="heading">BottomSheet · {sheetVariant ?? '—'}</Text>
+          <Text variant="body" color={theme.colors.text.muted}>
+            Drag the grabber down or tap the scrim to dismiss. Spring slide-up on
+            enter; tap-to-close on the scrim; swipe-down on the grabber. Content
+            here is consumer-rendered — the primitive only owns the container,
+            grabber, scrim, and animation.
+          </Text>
+          <Button label="Close" onPress={() => setSheetVariant(null)} variant="primary" />
+        </View>
+      </BottomSheet>
     </SafeAreaView>
   )
 }
@@ -585,5 +616,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.md,
     flexWrap: 'wrap',
+  },
+  sheetBody: {
+    flex: 1,
+    padding: theme.spacing.lg,
+    gap: theme.spacing.md,
   },
 })

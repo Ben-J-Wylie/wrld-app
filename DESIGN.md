@@ -1048,29 +1048,43 @@ resolved.
 
 #### `BottomSheet`
 
-- **Tier:** primitive
+- **Tier:** primitive (composes RN Modal + Animated + PanResponder + Pressable)
 - **Location:** `src/components/primitives/BottomSheet.tsx`
-- **Variants:** `peek` (mini, ~196–320px), `expanded` (calc(100% - safe-area)), `full` (full-height)
+- **Variants:** `peek` (mini, ~280 default — overridable via `peekHeight` prop), `expanded` (screen height minus top safe-area minus 40), `full` (screen height minus top safe-area)
 - **Sizes:** N/A (height is variant-driven)
-- **States:** closed, peek, expanded, dismissing
+- **States:** closed, opening, open, dismissing
 - **Used in:** populated in 12.6
 - **Tweak impact:** Globe trending sheet, Viewer Sheet, AuthModal, TipSheet, NearbyStreamsDrawer, Exit-intent sheet, Quality sheet, Report modal, Action sheet (kebab) — basically every modal surface
+- **Shipped:** 2026-05-30 (sub-phase 12.4 — sixteenth primitive)
+- **Last reviewed:** 2026-05-30
 
 **Mock says:** Universal modal container pattern. Grabber handle
-(48×5 pill at top), rounded top corners (r:18–26), optional scrim
-behind, slide-up entry (translateY 100% → 0 with spring easing), swipe-
-down dismiss. Backdrop blur on the sheet body for glass effect (panel
-variant) or solid `panel-solid` bg. Header / body / footer scaffold.
+(48×5 pill at top), rounded top corners, optional scrim behind,
+slide-up entry with spring easing, swipe-down dismiss. Header / body /
+footer scaffold is the consumer's.
 
-**Code does:** `NearbyStreamsDrawer` in `features/stream/` is a bespoke
-implementation. Other one-off sheet wrappers exist (AuthModal,
-TipSheet). No shared primitive.
+**Code does (shipped):** Wraps RN `Modal` (`transparent` +
+`animationType="none"` so we drive our own animation). Inner stack:
+scrim (`bg.overlay`, fade) → sheet (`bg.elevated`, hairline border,
+`elevation.sheet` shadow, top-rounded `radius.md`) → grabber row +
+slotted children. The sheet slides via `Animated.spring` on
+`translateY` (stiffness 220, damping 24) on the native driver;
+`PanResponder` on the grabber row lets the user swipe-down — beyond
+80px or velocity > 0.5 closes, else springs back. Scrim is tap-to-
+close (composes `Pressable variant="none"` to avoid scale animation).
 
-**Gap / proposal:** Extract BottomSheet primitive. Content is the
-consumer's responsibility (slotted children). The primitive provides:
-container + grabber + scrim + slide animation + dismiss gesture +
-height-mode handling. Existing one-offs (NearbyStreamsDrawer, AuthModal,
-TipSheet, Quality sheet, Action sheet) refactor to content-only callers.
+**Radius locked at `radius.md` (r:4)** — the mocks rendered r:18–26 but
+tokens win per the same precedent set by Card and Input. The sheet's
+visual identity is its bottom-anchored geometry + grabber, not corner
+radius.
+
+Existing one-offs (`NearbyStreamsDrawer`, `AuthModal`, `TipSheet`) keep
+their inline implementations until 12.6 migration — refactor to
+content-only callers of this primitive at that point.
+
+**Gap / proposal:** None — shipped. Backdrop blur for over-globe
+contexts is a v0.3 follow-on (matches Card's deferred blur plan), to be
+added via a `blur` prop once `expo-blur` lands.
 
 ---
 
