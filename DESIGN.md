@@ -1165,24 +1165,27 @@ segmented control.
 
 - **Tier:** primitive
 - **Location:** `src/components/primitives/Divider.tsx`
-- **Variants:** `subtle` (line color), `strong` (line-2 color), `dashed`
+- **Tones:** `subtle` (border.subtle, default), `strong` (border.strong), `dashed` (dashed border.subtle)
 - **Sizes:** sm (1px) — single canonical size
 - **States:** default
 - **Used in:** populated in 12.6
 - **Tweak impact:** every horizontal line separator
+- **Shipped:** 2026-05-30 (sub-phase 12.4 — nineteenth primitive)
+- **Last reviewed:** 2026-05-30
 
-**Mock says:** Universal horizontal hairline used to separate consent
-rows, transaction rows, settings rows, action-sheet rows. Two weights
-(`line` / `line-2`) plus a dashed variant for "row-actions" dividers in
-Clip Edit.
+**Mock says:** Universal horizontal hairline. Two solid weights plus a
+dashed variant for "row-actions" dividers in Clip Edit.
 
-**Code does:** Inline `<View style={{ height: 1, backgroundColor:
-theme.colors.border }} />` patterns.
+**Code does (shipped):** Tiny `<View>` wrapper. Solid tones use
+`backgroundColor` on a 1px-tall View. Dashed tone uses
+`borderBottomWidth: 1` + `borderStyle: 'dashed'` (RN's dashed border
+renders consistently across iOS/Android with this pattern).
 
-**Gap / proposal:** Tiny primitive — barely deserves its own file but
-the tone variants justify the extraction. `Spacer` (flex-1 view) is
-NOT extracted; consumers use raw `<View style={{ flex: 1 }} />`
-inline because the abstraction value is too low.
+`Spacer` (flex-1 View) is NOT extracted — consumers use raw
+`<View style={{ flex: 1 }} />` inline because the abstraction value
+is too low.
+
+**Gap / proposal:** None — shipped.
 
 ---
 
@@ -1190,28 +1193,28 @@ inline because the abstraction value is too low.
 
 - **Tier:** primitive
 - **Location:** `src/components/primitives/BrandMark.tsx`
-- **Variants:** `currentColor` (inherits parent text color)
-- **Sizes:** sm (18px), md (22px), lg (26px), hero (32px)
+- **Variants:** color-via-prop (defaults to `text.primary`; pass `color` to override)
+- **Sizes:** sm (18px), md (22px — default), lg (26px), hero (32px); raw number accepted
 - **States:** default
-- **Used in:** populated in 12.6
+- **Used in:** populated in 12.6 (GlobeScreen header — first migrant)
 - **Tweak impact:** GlobeScreen header, splash screen, share thumbnails, future logo composition
-- **Last reviewed:** 2026-05-29
+- **Shipped:** 2026-05-30 (sub-phase 12.4 — twentieth and final primitive)
+- **Last reviewed:** 2026-05-30
 
 **Mock says:** Hollow outer circle + two crossing inner ellipses (one
 scaled to ~0.35 on X, one on Y). Reads as meridian + parallel through a
 globe — a literal-but-fitting brand mark for a planet-of-streams product.
-Border-width scales with size (1.5px at sm, 2px at lg+).
+Border-width scales with size (1.5px at sm/md, 2px at lg/hero).
 
-**Code does:** None. GlobeScreen header today is wordmark-only ("WRLD"
-Text display, no mark).
+**Code does (shipped):** Three nested `View`s with `borderRadius: 50%`
+and `scaleX` / `scaleY` transforms. No SVG dependency. Color defaults
+to `text.primary` so the mark inherits the surface's ink color;
+consumers pass `color` to override (e.g. accent for hero CTAs). A
+`Logo` composition (BrandMark + wordmark Text) isn't extracted as a
+feature until a second header demands the same pairing — for now,
+inline in the GlobeScreen header during 12.6 migration.
 
-**Gap / proposal:** Drawn-with-Views primitive — three nested `View`s
-with `borderRadius: 50%` and `scaleX` / `scaleY` transforms. No SVG
-dependency. Color inherits via parent text token; consumers can override
-by wrapping in a `<Text>` with a custom color. A `Logo` composition
-(BrandMark + wordmark Text) isn't extracted as a feature until a second
-header demands the same pairing — for now, inline in the GlobeScreen
-header.
+**Gap / proposal:** None — shipped.
 
 ---
 

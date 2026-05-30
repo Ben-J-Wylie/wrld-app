@@ -30,6 +30,8 @@ import { Spinner } from '@/components/primitives/Spinner'
 import { BottomSheet } from '@/components/primitives/BottomSheet'
 import { Slider } from '@/components/primitives/Slider'
 import { SegmentedToggle } from '@/components/primitives/SegmentedToggle'
+import { Divider } from '@/components/primitives/Divider'
+import { BrandMark } from '@/components/primitives/BrandMark'
 import { theme } from '@/tokens/theme'
 
 export function ComponentGallery() {
@@ -395,6 +397,54 @@ export function ComponentGallery() {
           </Row>
         </Section>
 
+        <Section title="Divider">
+          <Row label="subtle">
+            <Divider />
+          </Row>
+          <Row label="strong">
+            <Divider tone="strong" />
+          </Row>
+          <Row label="dashed">
+            <Divider tone="dashed" />
+          </Row>
+          <Row label="between rows">
+            <View style={styles.dividerStack}>
+              <Text variant="body">First row</Text>
+              <Divider />
+              <Text variant="body">Second row</Text>
+              <Divider />
+              <Text variant="body">Third row</Text>
+            </View>
+          </Row>
+        </Section>
+
+        <Section title="BrandMark">
+          <Row label="sizes sm/md/lg/hero">
+            <View style={styles.avatarRow}>
+              <BrandMark size="sm" />
+              <BrandMark size="md" />
+              <BrandMark size="lg" />
+              <BrandMark size="hero" />
+            </View>
+          </Row>
+          <Row label="accent color">
+            <View style={styles.avatarRow}>
+              <BrandMark size="md" color={theme.colors.accent.default} />
+              <BrandMark size="lg" color={theme.colors.accent.default} />
+              <BrandMark size="hero" color={theme.colors.accent.default} />
+            </View>
+          </Row>
+          <Row label="raw number (48)">
+            <BrandMark size={48} />
+          </Row>
+          <Row label="paired with wordmark">
+            <View style={styles.brandPair}>
+              <BrandMark size="hero" />
+              <Text variant="display">WRLD</Text>
+            </View>
+          </Row>
+        </Section>
+
         <Section title="SegmentedToggle">
           <Row label="3 options · default">
             <SegmentedToggle
@@ -682,5 +732,14 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: theme.spacing.lg,
     gap: theme.spacing.md,
+  },
+  dividerStack: {
+    alignSelf: 'stretch',
+    gap: theme.spacing.sm,
+  },
+  brandPair: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
   },
 })
