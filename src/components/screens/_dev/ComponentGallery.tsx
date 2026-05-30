@@ -11,6 +11,7 @@
 import { ScrollView, View, StyleSheet } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Text } from '@/components/primitives/Text'
+import { Icon } from '@/components/primitives/Icon'
 import { theme } from '@/tokens/theme'
 
 export function ComponentGallery() {
@@ -31,6 +32,61 @@ export function ComponentGallery() {
           <Row label="monoLabel"><Text variant="monoLabel">streams</Text></Row>
           <Row label="monoCaption"><Text variant="monoCaption">BROOKLYN, NY</Text></Row>
           <Row label="monoValue"><Text variant="monoValue">40.6829° N</Text></Row>
+        </Section>
+
+        <Section title="Icon">
+          <Row label="sm (12)">
+            <View style={styles.iconRow}>
+              <Icon name="search" size="sm" />
+              <Icon name="map-pin" size="sm" />
+              <Icon name="eye" size="sm" />
+              <Icon name="camera" size="sm" />
+              <Icon name="mic" size="sm" />
+            </View>
+          </Row>
+          <Row label="md (16)">
+            <View style={styles.iconRow}>
+              <Icon name="search" />
+              <Icon name="map-pin" />
+              <Icon name="eye" />
+              <Icon name="camera" />
+              <Icon name="mic" />
+              <Icon name="bookmark" />
+              <Icon name="share-2" />
+              <Icon name="x" />
+            </View>
+          </Row>
+          <Row label="lg (24)">
+            <View style={styles.iconRow}>
+              <Icon name="search" size="lg" />
+              <Icon name="map-pin" size="lg" />
+              <Icon name="eye" size="lg" />
+              <Icon name="play" size="lg" />
+              <Icon name="maximize-2" size="lg" />
+            </View>
+          </Row>
+          <Row label="muted color">
+            <View style={styles.iconRow}>
+              <Icon name="search" color={theme.colors.text.muted} />
+              <Icon name="map-pin" color={theme.colors.text.muted} />
+              <Icon name="eye" color={theme.colors.text.muted} />
+            </View>
+          </Row>
+          <Row label="accent color">
+            <View style={styles.iconRow}>
+              <Icon name="zap" color={theme.colors.accent.default} />
+              <Icon name="heart" color={theme.colors.accent.default} />
+              <Icon name="bell" color={theme.colors.accent.default} />
+            </View>
+          </Row>
+          <Row label="raw number (20)">
+            <View style={styles.iconRow}>
+              <Icon name="chevron-right" size={20} />
+              <Icon name="check" size={20} />
+              <Icon name="plus" size={20} />
+              <Icon name="minus" size={20} />
+            </View>
+          </Row>
         </Section>
       </ScrollView>
     </SafeAreaView>
@@ -69,4 +125,10 @@ const styles = StyleSheet.create({
   },
   rowLabel: { width: 110, paddingTop: 2 },
   rowContent: { flex: 1 },
+  iconRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.md,
+    flexWrap: 'wrap',
+  },
 })

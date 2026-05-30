@@ -570,28 +570,34 @@ in pre-12.4 screens stay as-is until those screens migrate in 12.6.
 
 - **Tier:** primitive
 - **Location:** `src/components/primitives/Icon.tsx`
-- **Variants:** `currentColor` (inherits from parent text color)
-- **Sizes:** sm (10–12px), md (14–18px), lg (22–28px)
+- **Variants:** Feather glyph set (~280 monoline icons)
+- **Sizes:** sm (12px), md (16px, default), lg (24px); raw number accepted for fine control
 - **States:** default
 - **Used in:** populated in 12.6
 - **Tweak impact:** every icon in the app
+- **Shipped:** 2026-05-29 (sub-phase 12.4 — second primitive)
 - **Last reviewed:** 2026-05-29
 
-**Mock says:** Linear monoline SVG icons (stroke-only, 1.6–1.8 stroke
-width). Universal stroke-rounded line-cap and line-join. Icons always
-inherit `currentColor` so they tint with the parent's text token. Common
-sizes: 10–12px (badge / accent), 14–18px (button + control), 22–28px
-(hero illustration like the permission-pre-prompt bell).
+**Mock says:** Linear monoline SVG icons (stroke-only, ~1.6–1.8 stroke
+width). Universal stroke-rounded line-cap and line-join. Common sizes:
+10–12px (badge / accent), 14–18px (button + control), 22–28px (hero
+illustration like the permission-pre-prompt bell). Icons inherit the
+parent's text color so they tint with their surrounding context.
 
-**Code does:** `@expo/vector-icons` (Feather + others) used inline with
-explicit color values.
+**Code does (shipped):** Wraps `Feather` from `@expo/vector-icons`
+(installed 2026-05-29 via `npx expo install`). API: `name` (Feather
+glyph key) + `size` (`'sm' | 'md' | 'lg' | number`, default `'md'`) +
+`color` (default `theme.colors.text.primary`) + `accessibilityLabel`.
+Numeric sizes are accepted but should be rare — reach for sm/md/lg
+first. Pre-12.4 screens using `@expo/vector-icons` directly stay as-is
+until they migrate in 12.6.
 
-**Gap / proposal:** Wrap a curated icon set in an `Icon` primitive that
-accepts `name` + `size` + (optional) `color` props. Default color is
-`currentColor` (inheritance). Set TBD — the mock SVGs are bespoke, and
-`@expo/vector-icons` Feather covers ~80% of them; gaps go in
-`src/components/primitives/icons/` as one-off SVG components rendered by
-the same wrapper. No raw `<Svg>` in consumer code.
+**Gap / proposal:** Bespoke icons not in Feather (the brand mark, gyro
+grid, etc.) will land in `src/components/primitives/icons/` as one-off
+SVG components and slot into this same wrapper via a type-union on
+`name`. **Reuse rule (Section 0.5):** the folder + type-union exist only
+when the first bespoke icon ships. `BrandMark` is already its own
+primitive (drawn-with-Views) and is NOT routed through `Icon`.
 
 ---
 
