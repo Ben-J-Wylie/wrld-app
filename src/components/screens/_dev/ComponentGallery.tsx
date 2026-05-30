@@ -8,8 +8,8 @@
 // Reachable in dev via expo-router push to `/(app)/gallery`. The route
 // is registered with `href: null` so it does not appear in the tab bar.
 
-import { useState } from 'react'
-import { ScrollView, View, StyleSheet } from 'react-native'
+import { useEffect, useRef, useState } from 'react'
+import { Keyboard, ScrollView, View, StyleSheet } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Text } from '@/components/primitives/Text'
 import { Icon } from '@/components/primitives/Icon'
@@ -32,12 +32,54 @@ export function ComponentGallery() {
   const bump = (k: 'default' | 'subtle' | 'none') =>
     setPressCounts((c) => ({ ...c, [k]: c[k] + 1 }))
 
+  // ── Keyboard scroll-preserve workaround ──
+  // Under RN New Architecture + iOS, single-line TextInputs (UITextField)
+  // trigger UIKit's scrollRectToVisible on focus, which misresolves to
+  // (0,0) in our nested layout context — the page snaps to the top.
+  // Multiline TextInputs (UITextView) don't have this bug, which is why
+  // Textareas work fine. Until ScreenScroll lands in 12.5 with a proper
+  // abstraction (and we decide whether to adopt react-native-keyboard-
+  // controller), we patch it here: capture scroll position when the
+  // keyboard is about to appear, restore it once the keyboard finishes
+  // animating. The scrollY ref ignores updates during the restore window
+  // so iOS's bad scroll-to-0 doesn't poison our saved position.
+  const scrollRef = useRef<ScrollView>(null)
+  const scrollY = useRef(0)
+  const restoreTarget = useRef<number | null>(null)
+
+  useEffect(() => {
+    const willShow = Keyboard.addListener('keyboardWillShow', () => {
+      restoreTarget.current = scrollY.current
+    })
+    const didShow = Keyboard.addListener('keyboardDidShow', () => {
+      if (restoreTarget.current !== null) {
+        scrollRef.current?.scrollTo({ y: restoreTarget.current, animated: false })
+        restoreTarget.current = null
+      }
+    })
+    const willHide = Keyboard.addListener('keyboardWillHide', () => {
+      restoreTarget.current = null
+    })
+    return () => {
+      willShow.remove()
+      didShow.remove()
+      willHide.remove()
+    }
+  }, [])
+
   return (
     <SafeAreaView style={styles.root}>
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="interactive"
+        onScroll={(e) => {
+          if (restoreTarget.current === null) {
+            scrollY.current = e.nativeEvent.contentOffset.y
+          }
+        }}
+        scrollEventThrottle={16}
       >
         <Text variant="display">Component gallery</Text>
         <Text variant="caption" color={theme.colors.text.muted}>
