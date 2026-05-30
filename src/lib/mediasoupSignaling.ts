@@ -11,13 +11,15 @@ export type ClientMessage =
   | { type: 'reaction'; kind: string; handle: string }
   | { type: 'broadcasterPaused' }
   | { type: 'broadcasterResumed' }
+  | { type: 'broadcasterOrientation'; orientation: 'portrait' | 'landscape' }
   | { type: 'tip'; amount: number }
 
 export type ServerMessage =
   | { type: 'authenticated'; clerkUserId: string }
   | { type: 'rtpCapabilities'; rtpCapabilities: unknown }
   | { type: 'roomCreated'; roomId: string }
-  | { type: 'roomJoined'; producers: Array<{ id: string; kind: string }> }
+  | { type: 'roomJoined'; producers: Array<{ id: string; kind: string }>; orientation: 'portrait' | 'landscape' | null }
+  | { type: 'broadcasterOrientation'; orientation: 'portrait' | 'landscape' }
   | {
       type: 'transportCreated'
       id: string
@@ -150,10 +152,10 @@ class MediasoupSignalingClient {
     return reply.roomId
   }
 
-  async joinRoom(roomId: string): Promise<Array<{ id: string; kind: string }>> {
+  async joinRoom(roomId: string): Promise<{ producers: Array<{ id: string; kind: string }>; orientation: 'portrait' | 'landscape' | null }> {
     this.send({ type: 'joinRoom', roomId })
     const reply = await this.waitFor('roomJoined')
-    return reply.producers
+    return { producers: reply.producers, orientation: reply.orientation }
   }
 
   async createTransport(direction: 'send' | 'recv'): Promise<{
@@ -203,6 +205,10 @@ class MediasoupSignalingClient {
 
   sendBroadcasterResumed(): void {
     this.send({ type: 'broadcasterResumed' })
+  }
+
+  sendBroadcasterOrientation(orientation: 'portrait' | 'landscape'): void {
+    this.send({ type: 'broadcasterOrientation', orientation })
   }
 
   sendTip(amount: number): void {

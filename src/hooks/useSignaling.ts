@@ -116,7 +116,7 @@ export function useSignaling() {
 
   const joinRoom = useCallback(async (id: string) => {
     try {
-      const prods = await signalingClient.joinRoom(id)
+      const { producers: prods } = await signalingClient.joinRoom(id)
       setRoomId(id)
       setProducers(prods)
       setStatus('in-room')
@@ -155,6 +155,7 @@ export function useSignaling() {
 
   const sendBroadcasterPaused = useCallback(() => signalingClient.sendBroadcasterPaused(), [])
   const sendBroadcasterResumed = useCallback(() => signalingClient.sendBroadcasterResumed(), [])
+  const sendBroadcasterOrientation = useCallback((orientation: 'portrait' | 'landscape') => signalingClient.sendBroadcasterOrientation(orientation), [])
   const sendTip = useCallback((amount: number) => signalingClient.sendTip(amount), [])
 
   const dismissReaction = useCallback((id: number) => {
@@ -181,6 +182,7 @@ export function useSignaling() {
     confirmedBalance,
     sendBroadcasterPaused,
     sendBroadcasterResumed,
+    sendBroadcasterOrientation,
     sendTip,
     connect,
     createRoom,

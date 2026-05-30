@@ -87,11 +87,11 @@ export function StreamScreen() {
     connect, createRoom, joinRoom, disconnect,
     sendChatMessage, sendReaction, dismissReaction,
     sendTip, dismissTip,
-    sendBroadcasterPaused, sendBroadcasterResumed,
+    sendBroadcasterPaused, sendBroadcasterResumed, sendBroadcasterOrientation,
   } = useSignaling()
   const invalidateCurrentUser = useInvalidateCurrentUser()
   const invalidateWallet = useInvalidateWallet()
-  const { localStream, remoteStream, error: mediaError, facingMode, startBroadcasting, startViewing, switchCamera, cleanup } = useMediasoup()
+  const { localStream, remoteStream, error: mediaError, facingMode, videoIsLandscape, startBroadcasting, startViewing, switchCamera, cleanup } = useMediasoup()
   const { isSignedIn } = useAuth()
   const { coords, loading: locationLoading, error: locationError } = useLocation()
   const wrldUser = useAuthStore((s: ReturnType<typeof useAuthStore.getState>) => s.wrldUser)
@@ -245,6 +245,14 @@ export function StreamScreen() {
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [id]),
   )
+
+  // Broadcaster: signal orientation to admin viewers whenever the detected
+  // video orientation is known (fires once after camera starts).
+  useEffect(() => {
+    if (!isNew || status !== 'in-room' || !localStream) return
+    sendBroadcasterOrientation(videoIsLandscape ? 'landscape' : 'portrait')
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isNew, status, localStream, videoIsLandscape])
 
   // Broadcaster: close the WS when the app goes to background so the server
   // immediately fires broadcasterLeft to all viewers. Without this, iOS/Android
