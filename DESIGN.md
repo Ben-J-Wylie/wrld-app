@@ -2222,9 +2222,46 @@ section.
 ### Sections (`src/components/sections/`)
 
 Populated from the 12.2 inventory pass. Sections are regional patterns
-that repeat across two or more screens. The 12 entries below all meet
+that repeat across two or more screens. The 13 entries below all meet
 that bar. Several patterns that *don't* meet it stay inline in their
 single home screen — flagged at the end.
+
+##### `ScreenScroll`
+
+- **Tier:** section (composes SafeAreaView + KeyboardAvoidingView + ScrollView)
+- **Location:** `src/components/sections/ScreenScroll.tsx`
+- **Variants:** `default`
+- **Sizes:** N/A (full-screen wrapper)
+- **States:** default, keyboard-open
+- **Used in:** populated in 12.6
+- **Tweak impact:** every scrollable screen with focusable inputs — Gallery, Onboarding, Dashboard, Settings, Wallet, Profile editing, Report, Change Handle, AuthModal contents, etc.
+
+**Mock says:** Implicit — every form-bearing screen needs the keyboard
+to lift over content rather than crop the focused input, plus tap-on-
+adjacent-input behavior that doesn't dismiss the keyboard first. Not a
+visual concern; a behavior concern.
+
+**Code does:** ComponentGallery wires it inline (KeyboardAvoidingView
+with `behavior='padding'` on iOS + `keyboardShouldPersistTaps='handled'`
++ `keyboardDismissMode='interactive'` + paddingBottom for scroll
+breathing room — see commit `4c391a4`). Real screens with inputs (Login,
+Signup, Dashboard, Onboarding, Me, Search, AuthModal) currently do
+this inline-or-not-at-all per screen.
+
+**Gap / proposal:** Extract as a section so every form-bearing screen
+wraps in `<ScreenScroll>{children}</ScreenScroll>` and inherits the
+keyboard behavior + safe-area handling + scroll padding for free.
+Props: `contentContainerStyle`, `keyboardOffset`, `scrollRef`. The
+ComponentGallery becomes the first migrant; the existing 7 Input-using
+screens migrate during 12.6.
+
+**Reuse-rule note:** Section 0.5 normally says wait for the second
+proven case. Here the second case is on the immediate horizon (real
+screens during 12.6 will need it), and Ben flagged the inline pattern
+as work he'd rather not have to do per-screen. So this section is
+**ahead-of-12.6 work in 12.5** — see the 2026-05-30 decision-log entry.
+
+---
 
 ##### `WizardShell`
 
@@ -2667,6 +2704,39 @@ handled by the same patterns; the seam is not a separate motion category.
 
 Append-only. Most recent first. Each entry: date, decision, rationale,
 constraint it imposes downstream.
+
+### 2026-05-30 — `ScreenScroll` planned as a 12.5 section (ahead of 12.6 migration)
+
+Surfaced during 12.4 Input + Textarea review: tapping the Textarea in
+the deep-scroll ComponentGallery caused the screen to reposition to the
+top, hiding the focused field. The inline fix lands in commit `4c391a4`
+(KeyboardAvoidingView + `keyboardShouldPersistTaps='handled'` +
+`keyboardDismissMode='interactive'` + scroll paddingBottom). Ben
+flagged that this pattern will recur on every form-bearing screen and
+explicitly asked for it to land as a shared abstraction rather than
+inline-per-screen.
+
+**Decision:** `ScreenScroll` is added as a planned section (see
+Section 3) and ships in 12.5 ahead of 12.6 migration. The Gallery
+becomes the first migrant once the section is built; the 7 existing
+Input-using screens (Login, Signup, Onboarding, Dashboard, Me, Search,
+AuthModal) consume it during 12.6 instead of each rolling its own.
+
+**Reuse-rule note:** Section 0.5 normally says wait for the second
+proven case. Here the second case is imminent (12.6 migration would
+otherwise force the same inline pattern across many screens) and Ben
+explicitly opted for the abstraction. Worth recording as an
+intentional, named exception rather than letting it look like the rule
+was violated by accident.
+
+**Imposes:**
+
+- 12.5 gains a one-row scope addition (`ScreenScroll`) ahead of
+  WizardShell, CategoryChipRow, and the rest.
+- During 12.6, every form-bearing screen wraps in `<ScreenScroll>` and
+  drops its bespoke keyboard handling.
+- The Gallery's inline KAV (commit `4c391a4`) gets refactored to use
+  the section once it ships — first-migrant test.
 
 ### 2026-05-29 — Sub-phase 12.2 resolved: 7 conflict decisions for Globe + Viewer Sheet
 
