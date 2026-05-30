@@ -18,11 +18,12 @@
 // hero CTAs at the top level). Radius is locked at `radius.md` (r:4)
 // regardless of what the mocks render.
 
-import { ActivityIndicator, View, StyleSheet, type StyleProp, type ViewStyle } from 'react-native'
+import { View, StyleSheet, type StyleProp, type ViewStyle } from 'react-native'
 import type { ComponentProps } from 'react'
 import { Pressable } from './Pressable'
 import { Text } from './Text'
 import { Icon } from './Icon'
+import { Spinner } from './Spinner'
 import { theme } from '@/tokens/theme'
 
 type Variant = 'primary' | 'secondary' | 'skip' | 'social'
@@ -79,7 +80,7 @@ export function Button({
     >
       <View style={styles.content}>
         {loading ? (
-          <ActivityIndicator color={labelColor} />
+          <Spinner size="md" color={labelColor} />
         ) : (
           <>
             {icon && <Icon name={icon} size="md" color={labelColor} />}

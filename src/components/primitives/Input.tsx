@@ -30,7 +30,6 @@
 
 import { useState, type ReactNode } from 'react'
 import {
-  ActivityIndicator,
   StyleSheet,
   TextInput,
   View,
@@ -40,6 +39,7 @@ import {
 } from 'react-native'
 import { Text } from './Text'
 import { Icon } from './Icon'
+import { Spinner } from './Spinner'
 import { theme } from '@/tokens/theme'
 
 type Variant = 'default' | 'prefix'
@@ -123,7 +123,7 @@ function resolveAffordance(state: State, custom: ReactNode | undefined): ReactNo
   if (custom !== undefined) return custom
   if (state === 'valid') return <Icon name="check" size="md" color={theme.colors.accent.default} />
   if (state === 'error') return <Icon name="x" size="md" color={theme.colors.accent.default} />
-  if (state === 'loading') return <ActivityIndicator color={theme.colors.accent.default} />
+  if (state === 'loading') return <Spinner size="md" color={theme.colors.accent.default} />
   return null
 }
 

@@ -669,8 +669,7 @@ The Phase 1 `Button.tsx` had `primary | secondary | danger` variants;
 covering destructive too. Two existing callers (SettingsScreen sign-out
 + StreamScreen leave) migrated to `primary` in this commit.
 
-**Gap / proposal:** None — shipped. Swap `ActivityIndicator` → `Spinner`
-when the Spinner primitive lands later in 12.4.
+**Gap / proposal:** None — shipped. ✓ `Spinner` swap landed 2026-05-30.
 
 ---
 
@@ -771,9 +770,7 @@ get the new visual treatment. Caller-side custom border / bg styling
 (AuthModal) will sit over the new wrapper until those screens migrate
 in 12.6.
 
-**Gap / proposal:** Spinner inside loading state currently uses RN
-`ActivityIndicator`; swap to the `Spinner` primitive when it lands later
-in 12.4.
+**Gap / proposal:** None — shipped. ✓ `Spinner` swap landed 2026-05-30.
 
 ---
 
@@ -993,21 +990,27 @@ screen.
 
 - **Tier:** primitive
 - **Location:** `src/components/primitives/ProgressBar.tsx`
-- **Variants:** `segmented` (n equal segments), `dots` (n centered dots — fallback for short flows)
-- **Sizes:** md (3px height for bars, 6px for dots)
+- **Modes:** `bars` (default — segmented thin bars across width) | `dots` (centered row of small dots — short flows)
+- **Sizes:** bars 3px tall (rounded ends); dots 6px diameter
 - **States:** default
 - **Used in:** populated in 12.6
 - **Tweak impact:** wizard headers (Onboarding x 4 wizards), Report multi-step modal, future multi-step flows
+- **Shipped:** 2026-05-30 (sub-phase 12.4 — fourteenth primitive)
+- **Last reviewed:** 2026-05-30
 
-**Mock says:** Top of every wizard step. Bar variant for ≤10 steps,
-segmented and accent-filled-up-to-current. Dot variant for very short
-(2–4 step) flows. Visual: thin 3px bar, line color for unfilled, accent
-for filled, accent-line transition.
+**Mock says:** Top of every wizard step. Bar mode for ≤10 steps,
+segmented and accent-filled-up-to-current. Dot mode for very short
+(2–4 step) flows. Visual: thin bar, line color for unfilled, accent
+for filled.
 
-**Code does:** None.
+**Code does (shipped):** Single primitive, two modes. `bars` renders
+`total` flex-1 items in a row with a 4px gap, each 3px tall; `dots`
+renders `total` 6×6 circles centered with an 8px gap. Filled items
+take `accent.default`, unfilled take `border.strong`. Consumer passes
+`total` and `current` (number of completed steps; 0 = nothing, `total`
+= done). `total < 1` renders nothing.
 
-**Gap / proposal:** Single ProgressBar primitive with both variants
-(`mode` prop: `bars` | `dots`). Consumer passes `total` + `current`.
+**Gap / proposal:** None — shipped.
 
 ---
 
@@ -1016,22 +1019,30 @@ for filled, accent-line transition.
 - **Tier:** primitive
 - **Location:** `src/components/primitives/Spinner.tsx`
 - **Variants:** `default`
-- **Sizes:** xs (12), sm (14), md (16), lg (20)
+- **Sizes:** xs (12), sm (14), md (16 — default), lg (20); raw number accepted
 - **States:** default
-- **Used in:** populated in 12.6
+- **Used in:** `Button.loading`, `Input.state="loading"` — both swapped from RN `ActivityIndicator` in this commit
 - **Tweak impact:** input loading affordance, button loading state, full-screen loading, network-pending indicators
+- **Shipped:** 2026-05-30 (sub-phase 12.4 — fifteenth primitive)
+- **Last reviewed:** 2026-05-30
 
 **Mock says:** Simple circular spinner — 2px stroke, accent-colored top
-arc, line-colored bottom, 0.7s rotation. Inherits color via
-`currentColor` so it tints with parent (e.g. Button loading uses
-`#0a0c10` on accent fill).
+arc, line-colored bottom, 0.7s linear rotation. Color overridable so it
+reads against any surface (e.g. Button primary loading uses
+`text.inverse` on the accent fill).
 
-**Code does:** RN `ActivityIndicator` used directly with `theme.colors.accent`.
+**Code does (shipped):** The classic "border ring with one colored side
+rotating" trick — no SVG, no native module, works under New
+Architecture. A single `Animated.View` with `borderWidth: 2`,
+`borderColor: border.strong`, `borderTopColor: <color>`, rotated via
+`Animated.timing` on the native driver in a 700ms linear loop. Default
+color is `accent.default`. The loop is stopped on unmount.
 
-**Gap / proposal:** Replace `ActivityIndicator` with the custom Spinner
-primitive matching the mock's stroke treatment. The mock's spinner is
-visually distinct from RN's default (which feels "iOS native"). Token-
-driven color.
+Button + Input swapped from RN `ActivityIndicator` to `Spinner` in this
+commit — the pending notes on those two Section 3 entries are now
+resolved.
+
+**Gap / proposal:** None — shipped.
 
 ---
 

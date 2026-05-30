@@ -25,6 +25,8 @@ import { Pill } from '@/components/primitives/Pill'
 import { Chip } from '@/components/primitives/Chip'
 import { Avatar } from '@/components/primitives/Avatar'
 import { Toggle } from '@/components/primitives/Toggle'
+import { ProgressBar } from '@/components/primitives/ProgressBar'
+import { Spinner } from '@/components/primitives/Spinner'
 import { theme } from '@/tokens/theme'
 
 export function ComponentGallery() {
@@ -381,6 +383,47 @@ export function ComponentGallery() {
           </Row>
           <Row label="disabled">
             <Chip label="Coming soon" disabled onPress={() => {}} />
+          </Row>
+        </Section>
+
+        <Section title="ProgressBar">
+          <Row label="bars 3/8">
+            <ProgressBar total={8} current={3} />
+          </Row>
+          <Row label="bars 1/4">
+            <ProgressBar total={4} current={1} />
+          </Row>
+          <Row label="bars complete">
+            <ProgressBar total={5} current={5} />
+          </Row>
+          <Row label="dots 2/4">
+            <ProgressBar total={4} current={2} mode="dots" />
+          </Row>
+          <Row label="dots 1/3">
+            <ProgressBar total={3} current={1} mode="dots" />
+          </Row>
+        </Section>
+
+        <Section title="Spinner">
+          <Row label="sizes xs/sm/md/lg">
+            <View style={styles.iconRow}>
+              <Spinner size="xs" />
+              <Spinner size="sm" />
+              <Spinner size="md" />
+              <Spinner size="lg" />
+            </View>
+          </Row>
+          <Row label="muted color">
+            <Spinner color={theme.colors.text.muted} />
+          </Row>
+          <Row label="raw number (28)">
+            <Spinner size={28} />
+          </Row>
+          <Row label="in a Button">
+            <Button label="Saving…" onPress={() => {}} loading />
+          </Row>
+          <Row label="in an Input">
+            <Input value="checking handle…" onChangeText={() => {}} state="loading" />
           </Row>
         </Section>
 
