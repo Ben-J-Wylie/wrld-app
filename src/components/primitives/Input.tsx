@@ -88,7 +88,7 @@ export function Input({
       ]}
     >
       {variant === 'prefix' && prefix && (
-        <Text variant="body" color={theme.colors.text.muted}>
+        <Text variant="body" color={theme.colors.text.muted} style={styles.prefix}>
           {prefix}
         </Text>
       )}
@@ -130,7 +130,7 @@ function resolveAffordance(state: State, custom: ReactNode | undefined): ReactNo
 const styles = StyleSheet.create({
   wrapper: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'stretch',
     backgroundColor: theme.colors.bg.elevated,
     borderRadius: theme.radius.md,
     borderWidth: 1,
@@ -139,14 +139,17 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    alignSelf: 'stretch',
     color: theme.colors.text.primary,
     fontSize: 16,
     fontFamily: theme.typography.body.fontFamily,
     paddingVertical: 0,
   },
+  prefix: {
+    alignSelf: 'center',
+  },
   affordance: {
     minWidth: 20,
+    alignSelf: 'center',
     alignItems: 'center',
     justifyContent: 'center',
   },
