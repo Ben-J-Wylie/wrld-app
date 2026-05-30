@@ -10,7 +10,8 @@ export function useWallet() {
     queryKey: WALLET_KEY,
     queryFn: usersApi.getWallet,
     enabled: !!isSignedIn,
-    staleTime: 1000 * 30,
+    staleTime: 1000 * 15,
+    refetchInterval: 1000 * 15,
   })
 }
 

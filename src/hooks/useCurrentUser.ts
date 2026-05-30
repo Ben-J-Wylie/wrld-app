@@ -11,7 +11,8 @@ export function useCurrentUser() {
     queryKey: CURRENT_USER_KEY,
     queryFn: usersApi.getMe,
     enabled: !!isSignedIn,
-    staleTime: 1000 * 60 * 5,
+    staleTime: 1000 * 60,
+    refetchInterval: 1000 * 60,
   })
 }
 
