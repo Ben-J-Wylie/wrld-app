@@ -16,10 +16,12 @@ import { Icon } from '@/components/primitives/Icon'
 import { Pressable } from '@/components/primitives/Pressable'
 import { Button } from '@/components/primitives/Button'
 import { IconButton } from '@/components/primitives/IconButton'
+import { Card } from '@/components/primitives/Card'
 import { theme } from '@/tokens/theme'
 
 export function ComponentGallery() {
   const [pressCounts, setPressCounts] = useState({ default: 0, subtle: 0, none: 0 })
+  const [cardTaps, setCardTaps] = useState(0)
   const bump = (k: 'default' | 'subtle' | 'none') =>
     setPressCounts((c) => ({ ...c, [k]: c[k] + 1 }))
 
@@ -199,6 +201,39 @@ export function ComponentGallery() {
           </Row>
           <Row label="disabled">
             <IconButton name="trash-2" onPress={() => {}} accessibilityLabel="Delete" variant="surface" disabled />
+          </Row>
+        </Section>
+
+        <Section title="Card">
+          <Row label="panel">
+            <Card>
+              <Text variant="bodyEmphasized">Atlantic Ave · drumline</Text>
+              <Text variant="monoCaption" color={theme.colors.text.muted}>1.4K watching · 0.4 mi</Text>
+            </Card>
+          </Row>
+          <Row label="solid">
+            <Card variant="solid">
+              <Text variant="bodyEmphasized">Lightest surface</Text>
+              <Text variant="monoCaption" color={theme.colors.text.muted}>cards floating over canvas</Text>
+            </Card>
+          </Row>
+          <Row label="elevated">
+            <Card variant="elevated">
+              <Text variant="bodyEmphasized">Stronger contrast</Text>
+              <Text variant="monoCaption" color={theme.colors.text.muted}>panel-hi + strong border</Text>
+            </Card>
+          </Row>
+          <Row label="accent">
+            <Card variant="accent">
+              <Text variant="bodyEmphasized" color={theme.colors.accent.default}>Brand-tinted highlight</Text>
+              <Text variant="monoCaption" color={theme.colors.text.muted}>accent.surface + accent.border</Text>
+            </Card>
+          </Row>
+          <Row label="pressable">
+            <Card pressable onPress={() => setCardTaps((n) => n + 1)}>
+              <Text variant="bodyEmphasized">Tap the whole card</Text>
+              <Text variant="monoCaption" color={theme.colors.text.muted}>{cardTaps} taps · subtle scale 0.98</Text>
+            </Card>
           </Row>
         </Section>
       </ScrollView>

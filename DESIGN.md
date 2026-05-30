@@ -709,24 +709,30 @@ Mandatory `accessibilityLabel` since the button is icon-only.
 
 - **Tier:** primitive
 - **Location:** `src/components/primitives/Card.tsx`
-- **Variants:** `panel` (semi-transparent + backdrop blur), `solid` (opaque panel-solid), `elevated` (panel-hi with stronger border), `accent` (accent-tinted glass)
+- **Variants:** `panel` (bg.panel + subtle border — default), `solid` (bg.elevated + subtle border — lightest), `elevated` (bg.panelHi + strong border — strongest contrast), `accent` (accent.surface + accent.border)
 - **Sizes:** N/A (sizing is consumer)
 - **States:** default, pressed (if `pressable` prop set)
 - **Used in:** populated in 12.6
 - **Tweak impact:** every panel surface — stats card, filters card, passport card, wallet hero, alert banners, etc.
+- **Shipped:** 2026-05-30 (sub-phase 12.4 — sixth primitive)
+- **Last reviewed:** 2026-05-30
 
 **Mock says:** Pervasive container pattern: rounded rectangle, thin line
-border (1px `rgba(255,255,255,0.08)`), backdrop-blur for glass effect on
-the `panel` variant. r:14–22 depending on size. Padded interior. Sometimes
-pressable (acts as a hit target); often just decorative wrapping.
+border, backdrop-blur for glass effect over the globe. r:14–22 in mocks,
+padded interior. Sometimes pressable; often just decorative wrapping.
 
-**Code does:** Inline `<View>` + `StyleSheet.create({ card: {...} })`
-patterns scattered across screens — no shared primitive.
+**Code does (shipped):** Four flat-surface variants, 1px border,
+`radius.md` (r:4 — tokens win over the mocks' r:14–22 per the locked
+principle ruling), `padding: spacing.lg` (16) by default. The
+`pressable` prop wraps the contents in `Pressable` (subtle variant —
+scale 0.98, appropriate for larger surfaces). Otherwise renders a plain
+`View`. **Glass blur is NOT shipped in v0.2** — per the 12.3 locked
+ruling, flat surfaces with hairline borders are the default panel
+treatment. An over-globe glass opt-in lands later once `expo-blur` is
+wired up.
 
-**Gap / proposal:** Extract Card primitive with the 4 variant families. Per
-principle ruling, radius is r:4 from tokens (mocks render r:14–22; tokens
-override). Glass blur is opt-in via the `panel` variant — `solid` and
-`elevated` have no backdrop blur.
+**Gap / proposal:** None for v0.2. Glass blur is a v0.3 opt-in (via a
+`blur` boolean prop or a separate variant) once `expo-blur` is added.
 
 ---
 
