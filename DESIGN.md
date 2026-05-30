@@ -740,27 +740,40 @@ wired up.
 
 - **Tier:** primitive
 - **Location:** `src/components/primitives/Input.tsx`
-- **Variants:** `default`, `prefix` (e.g. `@` for handle), `multiline` (delegates to Textarea — see below)
+- **Variants:** `default`, `prefix` (e.g. `@` for handle)
 - **Sizes:** `md` (h:52, standard) and `lg` (h:60, hero like handle picker)
-- **States:** default, focus, valid, error, loading, disabled
+- **States:** default, focus (auto-tracked), valid, error, loading, disabled
 - **Used in:** populated in 12.6
 - **Tweak impact:** every form field in the app
+- **Shipped:** 2026-05-30 (sub-phase 12.4 — seventh primitive; redesign of the Phase 1 placeholder)
+- **Last reviewed:** 2026-05-30
 
 **Mock says:** 5 documented states. **Default** placeholder visible.
-**Focus** accent border + 4px accent glow + animated cursor. **Valid**
-right-affordance check icon + accent-tinted border. **Error**
-right-affordance X icon + live-tinted border + error helper underneath.
-**Loading** right-affordance spinner + dim helper. Right-affordance slot
-universally available. Pixel-font cursor blinks at 1s steps.
+**Focus** accent border + accent glow. **Valid** right-affordance check
+icon + accent border. **Error** right-affordance X icon + accent border
+(single-accent rule: error distinguishes by icon, not by a separate
+color). **Loading** right-affordance spinner — for async validation
+(handle uniqueness, email check), never a screen-blocking modal.
 
-**Code does:** Existing `Input.tsx` supports default + focused. No valid /
-error / loading affordance. No right-icon slot.
+**Code does (shipped):** Extends RN `TextInputProps` so every native prop
+(value, onChangeText, keyboardType, autoCapitalize, secureTextEntry,
+autoComplete, …) keeps working unchanged for existing callers. `state`
+prop drives the border color + right-affordance slot. Focus state is
+tracked internally via the native focus/blur events. Accent glow applies
+to any non-default state (focus, valid, error, loading). `prefix` prop
++ `variant='prefix'` renders an inline leading token (e.g. `@`).
+`rightAffordance` prop overrides the state-derived affordance. `style`
+applies to the outer wrapper (layout/positioning); the inner TextInput
+draws from theme typography directly.
 
-**Gap / proposal:** Extend to 5 states. Add right-affordance slot
-(generic, accepts icon | spinner). Loading-in-input is the documented
-pattern for all async validation (handle uniqueness, email check, etc.) —
-never a screen-blocking spinner. HelpText (next entry) is a separate
-primitive composed *below* the Input by the consumer.
+Phase 1 callers continue to work: they pass plain TextInputProps and
+get the new visual treatment. Caller-side custom border / bg styling
+(AuthModal) will sit over the new wrapper until those screens migrate
+in 12.6.
+
+**Gap / proposal:** Spinner inside loading state currently uses RN
+`ActivityIndicator`; swap to the `Spinner` primitive when it lands later
+in 12.4.
 
 ---
 
@@ -769,22 +782,26 @@ primitive composed *below* the Input by the consumer.
 - **Tier:** primitive
 - **Location:** `src/components/primitives/Textarea.tsx`
 - **Variants:** `default`
-- **Sizes:** `md` (min-height 96px, resize-vertical)
-- **States:** default, focus, disabled
+- **Sizes:** `md` (min-height 96px)
+- **States:** default, focus (auto-tracked), disabled
 - **Used in:** populated in 12.6
 - **Tweak impact:** multi-line input surfaces (Report flow notes, future moderation tools, etc.)
+- **Shipped:** 2026-05-30 (sub-phase 12.4 — eighth primitive)
+- **Last reviewed:** 2026-05-30
 
-**Mock says:** Multi-line variant of Input. Min-height 96px, resizable
-vertical. Same border + focus + radius treatment as Input. No right
-affordance (icons don't make sense in multi-line).
+**Mock says:** Multi-line variant of Input. Min-height 96px. Same
+border + focus + radius treatment as Input. No right affordance (icons
+don't make sense inline with multi-line content).
 
-**Code does:** None.
+**Code does (shipped):** Separate primitive (not an Input variant)
+because the multi-line interaction model is distinct: no right
+affordance slot, no loading state, no prefix. Min-height 96. Focus
+state is auto-tracked; accent border + accent glow on focus matches
+Input. Shares visual treatment via the same token consumption.
+Vertical resize is delegated to the consumer (pass `style={{ height
+}}` or similar).
 
-**Gap / proposal:** Separate primitive (not an Input variant) because the
-multi-line interaction model is distinct: no right-affordance slot,
-different state set (loading isn't really a thing for textareas), and the
-resize ergonomics matter. Shares its visual treatment with Input via
-shared token consumption.
+**Gap / proposal:** None — shipped.
 
 ---
 

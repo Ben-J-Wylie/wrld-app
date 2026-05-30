@@ -17,11 +17,18 @@ import { Pressable } from '@/components/primitives/Pressable'
 import { Button } from '@/components/primitives/Button'
 import { IconButton } from '@/components/primitives/IconButton'
 import { Card } from '@/components/primitives/Card'
+import { Input } from '@/components/primitives/Input'
+import { Textarea } from '@/components/primitives/Textarea'
 import { theme } from '@/tokens/theme'
 
 export function ComponentGallery() {
   const [pressCounts, setPressCounts] = useState({ default: 0, subtle: 0, none: 0 })
   const [cardTaps, setCardTaps] = useState(0)
+  const [inputDefault, setInputDefault] = useState('')
+  const [inputHandle, setInputHandle] = useState('benwy')
+  const [inputValid, setInputValid] = useState('ben@wrld.cam')
+  const [inputError, setInputError] = useState('taken')
+  const [textareaValue, setTextareaValue] = useState('')
   const bump = (k: 'default' | 'subtle' | 'none') =>
     setPressCounts((c) => ({ ...c, [k]: c[k] + 1 }))
 
@@ -234,6 +241,42 @@ export function ComponentGallery() {
               <Text variant="bodyEmphasized">Tap the whole card</Text>
               <Text variant="monoCaption" color={theme.colors.text.muted}>{cardTaps} taps · subtle scale 0.98</Text>
             </Card>
+          </Row>
+        </Section>
+
+        <Section title="Input">
+          <Row label="default md">
+            <Input placeholder="Email" value={inputDefault} onChangeText={setInputDefault} keyboardType="email-address" autoCapitalize="none" />
+          </Row>
+          <Row label="default lg">
+            <Input placeholder="What's happening?" value="" onChangeText={() => {}} size="lg" />
+          </Row>
+          <Row label="prefix (handle)">
+            <Input variant="prefix" prefix="@" value={inputHandle} onChangeText={setInputHandle} autoCapitalize="none" />
+          </Row>
+          <Row label="valid state">
+            <Input value={inputValid} onChangeText={setInputValid} state="valid" autoCapitalize="none" />
+          </Row>
+          <Row label="error state">
+            <Input value={inputError} onChangeText={setInputError} state="error" autoCapitalize="none" />
+          </Row>
+          <Row label="loading state">
+            <Input value="checking…" onChangeText={() => {}} state="loading" />
+          </Row>
+          <Row label="disabled">
+            <Input placeholder="Can't edit" value="" onChangeText={() => {}} disabled />
+          </Row>
+          <Row label="secure">
+            <Input placeholder="Password" value="••••••••" onChangeText={() => {}} secureTextEntry />
+          </Row>
+        </Section>
+
+        <Section title="Textarea">
+          <Row label="default">
+            <Textarea placeholder="Describe what's happening…" value={textareaValue} onChangeText={setTextareaValue} />
+          </Row>
+          <Row label="disabled">
+            <Textarea placeholder="Read-only" value="This content cannot be edited right now." onChangeText={() => {}} disabled />
           </Row>
         </Section>
       </ScrollView>
