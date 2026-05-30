@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Wrld — Streams Strip · C2 options</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* Same aesthetic-honesty note as the C1 option mocks: dark/blue/glass to keep
+     the comparison structural. Locked light/crimson tokens apply later in 12.5.
+
+     Context for this mock: C1=C is decided (inline card for both pin and
+     cluster). The streams strip needs a new home — this mock places it as a
+     SECOND ROW inside the inline single-pin card. The toggle at the top picks
+     between the three C2 sub-options:
+       a. Show all 5 chips (CAM / AUDIO / LOC / GYRO / CMP) with v0.3 sensors
+          permanently OFF.
+       b. Show only the chips the broadcaster has armed (v0.2 = CAM + AUDIO).
+       c. Hide the strip entirely in v0.2 — inline card has no second row. */
+
+  :root{
+    --bg:#070809; --bg-2:#0c0e11;
+    --panel:rgba(20,22,26,0.72); --panel-solid:#14171c; --panel-hi:#1a1e24;
+    --line:rgba(255,255,255,0.08); --line-2:rgba(255,255,255,0.14);
+    --ink:#ece9e2; --ink-dim:rgba(236,233,226,0.58); --ink-faint:rgba(236,233,226,0.34);
+    --accent:#3ea7ff; --accent-glow:rgba(62,167,255,0.45);
+    --live:#ff4d4d; --live-glow:rgba(255,77,77,0.45);
+    --sans:"Inter Tight", ui-sans-serif, system-ui, sans-serif;
+    --mono:"JetBrains Mono", ui-monospace, monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:#0a0a0b;font-family:var(--sans);color:var(--ink);-webkit-font-smoothing:antialiased}
+  body{display:grid;place-items:center;overflow:hidden}
+
+  .device{width:402px;height:874px;border-radius:48px;overflow:hidden;position:relative;background:#000;box-shadow:0 40px 80px rgba(0,0,0,0.35), 0 0 0 1px rgba(0,0,0,0.5)}
+  .notch{position:absolute;top:11px;left:50%;transform:translateX(-50%);width:126px;height:37px;border-radius:24px;background:#000;z-index:50}
+  .home{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);width:139px;height:5px;border-radius:100px;background:rgba(255,255,255,0.7);z-index:60}
+  .status{position:absolute;top:0;left:0;right:0;height:55px;z-index:10;display:flex;align-items:center;justify-content:space-between;padding:21px 34px 19px;color:#fff;font-family:-apple-system,system-ui,sans-serif}
+  .status .t{font-weight:600;font-size:17px}
+  .status .r{font:600 13px monospace;opacity:0.85}
+
+  .phone-root{position:absolute;inset:0;overflow:hidden}
+
+  .canvas-bg{position:absolute;inset:0;z-index:0;background:radial-gradient(900px 700px at 50% 35%, #1a2030 0%, #0b0d11 60%, #050608 100%)}
+  .globe{position:absolute;left:50%;top:280px;transform:translateX(-50%);width:560px;height:560px;border-radius:50%;
+    background:radial-gradient(40% 50% at 30% 30%, rgba(62,167,255,0.35), transparent 60%),
+               radial-gradient(60% 70% at 70% 70%, rgba(20,30,55,0.9), transparent 60%),
+               radial-gradient(circle at 50% 50%, #1a2230 0%, #0a0e16 70%);
+    box-shadow:0 0 120px rgba(62,167,255,0.18), inset -40px -50px 120px rgba(0,0,0,0.6);
+    opacity:0.55}
+  .dot{position:absolute;width:8px;height:8px;border-radius:50%;background:var(--live);box-shadow:0 0 12px var(--live-glow)}
+  .dot.acc{background:var(--accent);box-shadow:0 0 12px var(--accent-glow)}
+
+  .swap{position:absolute;top:62px;left:50%;transform:translateX(-50%);z-index:90;display:flex;gap:4px;padding:4px;border-radius:999px;background:rgba(0,0,0,0.6);backdrop-filter:blur(10px);border:1px solid var(--line-2)}
+  .swap button{background:transparent;border:0;color:var(--ink-dim);font:500 10px var(--mono);letter-spacing:0.12em;padding:6px 10px;border-radius:999px;cursor:pointer}
+  .swap button.on{background:var(--ink);color:#000}
+
+  .topstrip{position:absolute;top:100px;left:14px;right:14px;z-index:5;height:32px;padding:0 12px;display:flex;align-items:center;gap:10px;border-radius:10px;background:var(--panel);border:1px solid var(--line);backdrop-filter:blur(12px);font:500 10.5px var(--mono);color:var(--ink-dim);letter-spacing:0.12em}
+  .live-dot{width:7px;height:7px;border-radius:50%;background:var(--live);box-shadow:0 0 10px var(--live-glow);animation:pulse 1.6s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.45}}
+  .topstrip b{color:var(--ink);font-weight:500}
+
+  /* ── Inline single-pin card (Option C from C1) ── */
+  .icard{position:absolute;left:14px;right:14px;bottom:34px;z-index:20;background:var(--panel-solid);border:1px solid var(--line-2);border-radius:18px;padding:14px;box-shadow:0 -12px 40px rgba(0,0,0,0.45);display:flex;flex-direction:column;gap:12px}
+
+  .row1{display:flex;align-items:center;gap:12px}
+  .av{width:44px;height:44px;border-radius:50%;background:radial-gradient(circle at 35% 30%, #ffd6a3 0%, #d68957 40%, #6b3a1d 100%);display:grid;place-items:center;font:600 16px var(--sans);color:#2b1a0a;border:1px solid var(--line-2);flex:none}
+  .col{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+  .title{font:600 14px var(--sans);color:var(--ink);letter-spacing:-0.005em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .handle{font:500 11px var(--mono);color:var(--accent);letter-spacing:0.06em}
+  .meta{font:500 10.5px var(--mono);color:var(--ink-dim);letter-spacing:0.06em}
+  .join-btn{flex:none;height:36px;padding:0 18px;border-radius:999px;background:var(--accent);color:#0a0c10;border:0;font:600 13px var(--sans);cursor:pointer}
+
+  /* ── Streams strip row (the C2 question) ── */
+  .strip-wrap{display:flex;flex-direction:column;gap:6px;padding-top:10px;border-top:1px solid var(--line)}
+  .strip-head{display:flex;align-items:baseline;justify-content:space-between;font:500 9px var(--mono);color:var(--ink-faint);letter-spacing:0.14em}
+  .streams{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}
+  .streams::-webkit-scrollbar{display:none}
+  .stream{flex:none;min-width:68px;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,0.03);border:1px solid var(--line);display:flex;flex-direction:column;gap:4px;align-items:flex-start}
+  .stream[data-on="true"]{border-color:rgba(62,167,255,0.4);background:rgba(62,167,255,0.06)}
+  .stream[data-on="false"]{opacity:0.4}
+  .stream .ic{width:22px;height:22px;border-radius:6px;background:rgba(255,255,255,0.04);border:1px solid var(--line);display:grid;place-items:center;color:var(--ink-dim)}
+  .stream[data-on="true"] .ic{color:var(--accent);background:rgba(62,167,255,0.08);border-color:rgba(62,167,255,0.25)}
+  .stream .lab{font:500 8.5px var(--mono);letter-spacing:0.14em;color:var(--ink-dim)}
+  .stream[data-on="true"] .lab{color:var(--ink)}
+  .stream .ct{font:500 9.5px var(--mono);color:var(--ink-dim);letter-spacing:0.04em;font-variant-numeric:tabular-nums}
+  .stream[data-on="true"] .ct{color:var(--ink)}
+
+  /* ── Sub-option visibility ── */
+  /* (a) show all five */
+  [data-c2="a"] .strip-wrap{display:flex}
+  [data-c2="a"] .stream[data-source="cam"]{display:flex}
+  [data-c2="a"] .stream[data-source="audio"]{display:flex}
+  [data-c2="a"] .stream[data-source="loc"]{display:flex}
+  [data-c2="a"] .stream[data-source="gyro"]{display:flex}
+  [data-c2="a"] .stream[data-source="comp"]{display:flex}
+  /* in (a), v0.3 sources show as OFF */
+  [data-c2="a"] .stream[data-source="loc"]{opacity:0.4}
+  [data-c2="a"] .stream[data-source="gyro"]{opacity:0.4}
+  [data-c2="a"] .stream[data-source="comp"]{opacity:0.4}
+
+  /* (b) only armed sources */
+  [data-c2="b"] .strip-wrap{display:flex}
+  [data-c2="b"] .stream[data-source="cam"]{display:flex}
+  [data-c2="b"] .stream[data-source="audio"]{display:flex}
+  [data-c2="b"] .stream[data-source="loc"]{display:none}
+  [data-c2="b"] .stream[data-source="gyro"]{display:none}
+  [data-c2="b"] .stream[data-source="comp"]{display:none}
+
+  /* (c) hide the strip entirely */
+  [data-c2="c"] .strip-wrap{display:none}
+
+  .label{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,0.5);font:500 11px var(--mono);letter-spacing:0.14em;pointer-events:none;text-align:center}
+  .label b{color:rgba(255,255,255,0.75);font-weight:500}
+</style>
+</head>
+<body>
+
+<div class="device" id="root" data-c2="a">
+  <div class="notch"></div>
+  <div class="status"><span class="t">9:41</span><span class="r">● ● ●</span></div>
+
+  <div class="phone-root">
+    <div class="canvas-bg"></div>
+    <div class="globe"></div>
+    <span class="dot"     style="top:340px;left:140px"></span>
+    <span class="dot acc" style="top:300px;left:260px"></span>
+    <span class="dot acc" style="top:420px;left:200px"></span>
+    <span class="dot"     style="top:240px;left:230px"></span>
+    <span class="dot acc" style="top:480px;left:300px"></span>
+
+    <div class="topstrip">
+      <span class="live-dot"></span>
+      <span><b>147</b> LIVE NOW</span>
+      <span style="margin-left:auto;color:var(--ink-faint)">BROOKLYN</span>
+    </div>
+
+    <!-- Inline single-pin card with optional second-row streams strip -->
+    <div class="icard">
+      <div class="row1">
+        <div class="av">K</div>
+        <div class="col">
+          <div class="title">Atlantic Ave · street fest, drumline forming up</div>
+          <div class="handle">@kai.dc</div>
+          <div class="meta">1.4K watching · 0.4 mi</div>
+        </div>
+        <button class="join-btn">Join</button>
+      </div>
+
+      <div class="strip-wrap">
+        <div class="strip-head">
+          <span>STREAMS</span>
+          <span class="meta-on" style="color:var(--ink-dim)"></span>
+        </div>
+        <div class="streams">
+          <div class="stream" data-source="cam" data-on="true">
+            <span class="ic"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h4l2-2h6l2 2h4v12H3z"/><circle cx="12" cy="13" r="3.5"/></svg></span>
+            <span class="lab">CAM</span>
+            <span class="ct">1080p</span>
+          </div>
+          <div class="stream" data-source="audio" data-on="true">
+            <span class="ic"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></span>
+            <span class="lab">AUDIO</span>
+            <span class="ct">48 kHz</span>
+          </div>
+          <div class="stream" data-source="loc" data-on="false">
+            <span class="ic"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg></span>
+            <span class="lab">LOC</span>
+            <span class="ct">OFF</span>
+          </div>
+          <div class="stream" data-source="gyro" data-on="false">
+            <span class="ic"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="14" height="14" rx="2"/><path d="M5 9h14M9 5v14"/></svg></span>
+            <span class="lab">GYRO</span>
+            <span class="ct">OFF</span>
+          </div>
+          <div class="stream" data-source="comp" data-on="false">
+            <span class="ic"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M14.5 9.5L13 13l-3.5 1.5L11 11z" fill="currentColor"/></svg></span>
+            <span class="lab">CMP</span>
+            <span class="ct">OFF</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scenario toggle -->
+    <div class="swap" role="tablist" aria-label="Sub-option">
+      <button data-c="a" class="on">A · ALL 5</button>
+      <button data-c="b">B · ARMED ONLY</button>
+      <button data-c="c">C · HIDE</button>
+    </div>
+  </div>
+
+  <div class="home"></div>
+</div>
+
+<div class="label">C2 — STREAMS STRIP IN THE INLINE CARD<br><b>A:</b> show all 5 (v0.3 sources OFF) · <b>B:</b> only what's armed (v0.2 = 2) · <b>C:</b> hide until v0.3</div>
+
+<script>
+  const root = document.getElementById('root')
+  document.querySelectorAll('.swap button').forEach(b => {
+    b.onclick = () => {
+      document.querySelectorAll('.swap button').forEach(x => x.classList.toggle('on', x === b))
+      root.dataset.c2 = b.dataset.c
+    }
+  })
+</script>
+</body>
+</html>

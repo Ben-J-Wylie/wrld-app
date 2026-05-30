@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Wrld — Stream-state banner · C6 variants</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* Same aesthetic-honesty note: dark/blue/glass to keep the comparison
+     structural; locked tokens apply later in 12.5.
+
+     C6 question: do we extract the existing stream-state banner from
+     GlobeScreen.tsx into a `StreamStateBanner` feature with three variants?
+     The behavior is already shipped in Phase 9; this mock just shows what
+     each variant looks like so you can judge whether they belong as one
+     feature row in Section 3.
+
+     Variants:
+       A. DISCONNECTED — spinner + "Stream disconnected — waiting to reconnect"
+       B. ENDED        — "The stream has ended" (auto-dismisses 8s)
+       C. RESUMED      — accent-tinted, tappable "Stream resumed — tap to rejoin"
+
+     Layout: banner sits below the header (wordmark + LIVE pill) so it doesn't
+     obscure the search bar or chip row. */
+
+  :root{
+    --bg:#070809; --bg-2:#0c0e11;
+    --panel:rgba(20,22,26,0.72); --panel-solid:#14171c; --panel-hi:#1a1e24;
+    --line:rgba(255,255,255,0.08); --line-2:rgba(255,255,255,0.14);
+    --ink:#ece9e2; --ink-dim:rgba(236,233,226,0.58); --ink-faint:rgba(236,233,226,0.34);
+    --accent:#3ea7ff; --accent-glow:rgba(62,167,255,0.45);
+    --live:#ff4d4d; --live-glow:rgba(255,77,77,0.45);
+    --sans:"Inter Tight", ui-sans-serif, system-ui, sans-serif;
+    --mono:"JetBrains Mono", ui-monospace, monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:#0a0a0b;font-family:var(--sans);color:var(--ink);-webkit-font-smoothing:antialiased}
+  body{display:grid;place-items:center;overflow:hidden}
+
+  .device{width:402px;height:874px;border-radius:48px;overflow:hidden;position:relative;background:#000;box-shadow:0 40px 80px rgba(0,0,0,0.35), 0 0 0 1px rgba(0,0,0,0.5)}
+  .notch{position:absolute;top:11px;left:50%;transform:translateX(-50%);width:126px;height:37px;border-radius:24px;background:#000;z-index:50}
+  .home{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);width:139px;height:5px;border-radius:100px;background:rgba(255,255,255,0.7);z-index:60}
+  .status{position:absolute;top:0;left:0;right:0;height:55px;z-index:10;display:flex;align-items:center;justify-content:space-between;padding:21px 34px 19px;color:#fff;font-family:-apple-system,system-ui,sans-serif}
+  .status .t{font-weight:600;font-size:17px}
+  .status .r{font:600 13px monospace;opacity:0.85}
+
+  .phone-root{position:absolute;inset:0;overflow:hidden}
+
+  .canvas-bg{position:absolute;inset:0;z-index:0;background:radial-gradient(900px 700px at 50% 55%, #1a2030 0%, #0b0d11 60%, #050608 100%)}
+  .globe{position:absolute;left:50%;top:240px;transform:translateX(-50%);width:520px;height:520px;border-radius:50%;
+    background:radial-gradient(40% 50% at 30% 30%, rgba(62,167,255,0.30), transparent 60%),
+               radial-gradient(60% 70% at 70% 70%, rgba(20,30,55,0.9), transparent 60%),
+               radial-gradient(circle at 50% 50%, #1a2230 0%, #0a0e16 70%);
+    box-shadow:0 0 120px rgba(62,167,255,0.18), inset -40px -50px 120px rgba(0,0,0,0.6);
+    opacity:0.65}
+  .dot{position:absolute;width:7px;height:7px;border-radius:50%;background:var(--live);box-shadow:0 0 12px var(--live-glow)}
+  .dot.acc{background:var(--accent);box-shadow:0 0 12px var(--accent-glow)}
+
+  .swap{position:absolute;top:62px;left:50%;transform:translateX(-50%);z-index:90;display:flex;gap:4px;padding:4px;border-radius:999px;background:rgba(0,0,0,0.6);backdrop-filter:blur(10px);border:1px solid var(--line-2)}
+  .swap button{background:transparent;border:0;color:var(--ink-dim);font:500 10px var(--mono);letter-spacing:0.12em;padding:6px 10px;border-radius:999px;cursor:pointer}
+  .swap button.on{background:var(--ink);color:#000}
+
+  /* ── Header (C5=C: WRLD hero + mark) ── */
+  .header{position:absolute;left:14px;right:14px;top:106px;z-index:5;display:flex;align-items:center;justify-content:space-between}
+  .brand{display:flex;align-items:center;gap:10px;color:var(--ink)}
+  .brand .mark{width:26px;height:26px;border:2px solid currentColor;border-radius:50%;position:relative;flex:none}
+  .brand .mark::before,.brand .mark::after{content:"";position:absolute;inset:0;border:2px solid currentColor;border-radius:50%}
+  .brand .mark::before{transform:scaleX(0.35)}
+  .brand .mark::after{transform:scaleY(0.35)}
+  .wordmark{font:600 28px var(--sans);letter-spacing:-0.02em;color:var(--ink)}
+  .livepill{display:inline-flex;align-items:center;gap:6px;font:500 10px var(--mono);letter-spacing:0.12em;color:var(--ink-dim);padding:6px 10px;border:1px solid var(--line);border-radius:999px;background:var(--panel);backdrop-filter:blur(8px)}
+  .livepill .d{width:6px;height:6px;border-radius:50%;background:var(--live);box-shadow:0 0 8px var(--live);animation:pulse 1.6s infinite}
+  @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.55;transform:scale(.7)}}
+  .livepill b{color:var(--ink);font-weight:500}
+
+  /* ── Banner (the variable) ── */
+  .banner{position:absolute;left:14px;right:14px;top:160px;z-index:8;display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:10px;border:1px solid var(--line-2);background:var(--panel);backdrop-filter:blur(12px)}
+  .banner .icon{flex:none;width:18px;height:18px;display:grid;place-items:center}
+  .banner .text{flex:1;font:500 12.5px var(--sans);color:var(--ink-dim);letter-spacing:-0.005em}
+  .banner .close{flex:none;background:transparent;border:0;color:var(--ink-faint);font:500 14px var(--sans);cursor:pointer;padding:0 4px}
+
+  /* spinner */
+  .spinner{width:14px;height:14px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--ink);animation:spin 0.8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* Resumed treatment (accent border + tint + tap affordance) */
+  .banner.resumed{border-color:var(--accent);background:rgba(62,167,255,0.10);box-shadow:0 0 24px rgba(62,167,255,0.12);cursor:pointer}
+  .banner.resumed .text{color:var(--accent)}
+  .banner.resumed .chev{flex:none;color:var(--accent)}
+
+  /* ── Sub-option visibility ── */
+  [data-c6="a"] .banner .a{display:inline-flex}
+  [data-c6="a"] .banner .b, [data-c6="a"] .banner .c, [data-c6="a"] .banner .chev{display:none}
+  [data-c6="a"] .banner{border-color:var(--line-2)}
+
+  [data-c6="b"] .banner .b{display:inline-flex}
+  [data-c6="b"] .banner .a, [data-c6="b"] .banner .c, [data-c6="b"] .banner .chev{display:none}
+  [data-c6="b"] .banner{border-color:var(--line-2)}
+
+  [data-c6="c"] .banner .c{display:inline-flex}
+  [data-c6="c"] .banner .a, [data-c6="c"] .banner .b{display:none}
+  [data-c6="c"] .banner{border-color:var(--accent);background:rgba(62,167,255,0.10);box-shadow:0 0 24px rgba(62,167,255,0.12);cursor:pointer}
+  [data-c6="c"] .banner .text{color:var(--accent)}
+  [data-c6="c"] .banner .close{color:rgba(62,167,255,0.6)}
+
+  .label{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,0.5);font:500 11px var(--mono);letter-spacing:0.14em;pointer-events:none;text-align:center}
+  .label b{color:rgba(255,255,255,0.75);font-weight:500}
+</style>
+</head>
+<body>
+
+<div class="device" id="root" data-c6="a">
+  <div class="notch"></div>
+  <div class="status"><span class="t">9:41</span><span class="r">● ● ●</span></div>
+
+  <div class="phone-root">
+    <div class="canvas-bg"></div>
+    <div class="globe"></div>
+    <span class="dot"     style="top:340px;left:140px"></span>
+    <span class="dot acc" style="top:300px;left:260px"></span>
+    <span class="dot acc" style="top:420px;left:200px"></span>
+    <span class="dot"     style="top:240px;left:230px"></span>
+    <span class="dot acc" style="top:480px;left:300px"></span>
+    <span class="dot acc" style="top:380px;left:110px"></span>
+    <span class="dot"     style="top:520px;left:160px"></span>
+    <span class="dot acc" style="top:560px;left:250px"></span>
+
+    <div class="header">
+      <div class="brand">
+        <span class="mark"></span>
+        <span class="wordmark">WRLD</span>
+      </div>
+      <span class="livepill"><span class="d"></span><b>147</b> LIVE</span>
+    </div>
+
+    <!-- Banner — one of three variants -->
+    <div class="banner">
+      <span class="icon">
+        <span class="a" style="display:inline-flex"><span class="spinner"></span></span>
+        <span class="b" style="display:none">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color:var(--ink-dim)"><circle cx="12" cy="12" r="9"/><path d="M9 12l2 2 4-4"/></svg>
+        </span>
+        <span class="c" style="display:none">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color:var(--accent)"><path d="M3 12a9 9 0 0 1 15-6.7M21 12a9 9 0 0 1-15 6.7"/><path d="M21 3v6h-6M3 21v-6h6"/></svg>
+        </span>
+      </span>
+      <span class="text">
+        <span class="a">Stream disconnected — waiting to reconnect</span>
+        <span class="b">The stream has ended</span>
+        <span class="c">Stream resumed — tap to rejoin</span>
+      </span>
+      <span class="chev"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></span>
+      <button class="close" aria-label="Dismiss">✕</button>
+    </div>
+
+    <div class="swap" role="tablist" aria-label="Variant">
+      <button data-c="a" class="on">A · DISCONNECTED</button>
+      <button data-c="b">B · ENDED</button>
+      <button data-c="c">C · RESUMED</button>
+    </div>
+  </div>
+
+  <div class="home"></div>
+</div>
+
+<div class="label">C6 — STREAM STATE BANNER (3 variants of one feature)<br><b>A:</b> disconnected (polls + waits) · <b>B:</b> ended (auto-dismiss 8s) · <b>C:</b> resumed (tap to rejoin)</div>
+
+<script>
+  const root = document.getElementById('root')
+  document.querySelectorAll('.swap button').forEach(b => {
+    b.onclick = () => {
+      document.querySelectorAll('.swap button').forEach(x => x.classList.toggle('on', x === b))
+      root.dataset.c6 = b.dataset.c
+    }
+  })
+</script>
+</body>
+</html>

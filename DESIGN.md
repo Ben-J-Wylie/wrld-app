@@ -531,7 +531,7 @@ to be redesigned in 12.4): `Button.tsx`, `Input.tsx`.
 **Build order** (later compose earlier — do not reorder without surfacing
 it): Text → Icon → Pressable → Button + IconButton → Card → Input +
 Textarea → HelpText → Pill + Chip → Avatar → Toggle → ProgressBar →
-Spinner → BottomSheet → Slider → SegmentedToggle → Divider.
+Spinner → BottomSheet → Slider → SegmentedToggle → Divider → BrandMark.
 
 ---
 
@@ -1020,6 +1020,35 @@ inline because the abstraction value is too low.
 
 ---
 
+#### `BrandMark`
+
+- **Tier:** primitive
+- **Location:** `src/components/primitives/BrandMark.tsx`
+- **Variants:** `currentColor` (inherits parent text color)
+- **Sizes:** sm (18px), md (22px), lg (26px), hero (32px)
+- **States:** default
+- **Used in:** populated in 12.6
+- **Tweak impact:** GlobeScreen header, splash screen, share thumbnails, future logo composition
+- **Last reviewed:** 2026-05-29
+
+**Mock says:** Hollow outer circle + two crossing inner ellipses (one
+scaled to ~0.35 on X, one on Y). Reads as meridian + parallel through a
+globe — a literal-but-fitting brand mark for a planet-of-streams product.
+Border-width scales with size (1.5px at sm, 2px at lg+).
+
+**Code does:** None. GlobeScreen header today is wordmark-only ("WRLD"
+Text display, no mark).
+
+**Gap / proposal:** Drawn-with-Views primitive — three nested `View`s
+with `borderRadius: 50%` and `scaleX` / `scaleY` transforms. No SVG
+dependency. Color inherits via parent text token; consumers can override
+by wrapping in a `<Text>` with a custom color. A `Logo` composition
+(BrandMark + wordmark Text) isn't extracted as a feature until a second
+header demands the same pairing — for now, inline in the GlobeScreen
+header.
+
+---
+
 ### Features (`src/components/features/`)
 
 Populated from the 12.2 inventory pass. Features represent one domain
@@ -1038,7 +1067,7 @@ collapses into the new `StreamCard`; `ChatOverlay` splits into
 `FloatingHearts`; `TipSheet` becomes a BottomSheet caller composing
 `AmountInput` and `PursesCard`.
 
-The 35 entries below are grouped by domain. Build order isn't strictly
+The 38 entries below are grouped by domain. Build order isn't strictly
 serial — features build after their primitives ship but otherwise can
 land in any order. Each entry includes the three-way audit.
 
@@ -1207,6 +1236,91 @@ stream view. Refactor merges into one feature.
 **Gap / proposal:** New combined feature replacing ReactionLayer +
 inline buttons. Composes the icon column + the floating animation overlay
 as one cohesive surface.
+
+---
+
+##### `DiscoveryHandoffCard`
+
+- **Tier:** feature (composes Avatar + Text + Button + StreamTile)
+- **Location:** `src/components/features/stream/DiscoveryHandoffCard.tsx`
+- **Variants:** `single` (one pin tap — Avatar + title + handle + meta + Join, with optional 5-chip streams strip as second row per C2), `cluster` (multi-pin tap — small header + scrollable rows, each Avatar + title + meta + Join chip)
+- **Sizes:** controlled by variant
+- **States:** default, dismissing
+- **Used in:** populated in 12.6
+- **Tweak impact:** discovery→watching seam (the canonical Section 0.7 example) — every globe tap-to-preview surface
+
+**Mock says (C1=C):** Inline floating card at the bottom of the
+GlobeScreen — `single` is a Card with Avatar + title + handle + viewer
+count + Join button; `cluster` is a Card with a small header ("N live
+streams here · LOCATION") and N rows of compact stream-row items.
+**Not** a bottom-sheet pattern in v0.2 — the rich Viewer Sheet mock is
+deferred (see C1 in the 2026-05-29 12.2 decision-log entry). The single
+variant gains a second-row `StreamStrip` of 5 chips per C2=A.
+
+**Code does:** Inline `<View>` blocks in `GlobeScreen.tsx` for both
+single (`selectedStream`) and cluster (`selectedClusterStreams`) cases.
+
+**Gap / proposal:** Extract as feature accepting either `{ stream }` or
+`{ streams }` (variant inferred from prop shape). Composes `Avatar`,
+`Text`, `Button` primitives + the `StreamStrip` section for the single
+variant's sensor row.
+
+---
+
+##### `SearchBar`
+
+- **Tier:** feature (composes Input + Icon)
+- **Location:** `src/components/features/discovery/SearchBar.tsx`
+- **Variants:** `default` (globe overlay — glass pill with mag-glass icon + Input)
+- **Sizes:** md
+- **States:** default, focused
+- **Used in:** populated in 12.6
+- **Tweak impact:** Globe overlay search slot; any future search surface
+
+**Mock says (C3=A):** Glass pill (radius:full, panel bg, line border,
+backdrop-blur) with leading mag-glass Icon + Input. Placeholder
+"Search handle, title, or city". Sits below the WRLD + LIVE header,
+above the CategoryChipRow.
+
+**Code does:** None on globe; `SearchScreen.tsx` has a standalone Input
+hitting the existing handle/title search endpoint.
+
+**Gap / proposal:** Lifts the existing search endpoint onto the globe
+overlay. Reuses the `Input` primitive inside a glass-pill container.
+SearchScreen may eventually merge into Globe per Section 4 TBD —
+this feature is the lift target either way.
+
+---
+
+##### `StreamStateBanner`
+
+- **Tier:** feature (composes Card + Icon + Spinner + Text + dismiss)
+- **Location:** `src/components/features/stream/StreamStateBanner.tsx`
+- **Variants:** `disconnected` (spinner + waiting-to-reconnect message; polls), `ended` (auto-dismisses after 8s), `resumed` (accent-tinted, tappable to rejoin)
+- **Sizes:** md
+- **States:** entering, visible, dismissing
+- **Used in:** populated in 12.6
+- **Tweak impact:** GlobeScreen post-stream-exit notifications
+
+**Mock says (C6 = extract):** Top-of-globe banner that surfaces
+stream-lifecycle state to viewers after they exit a stream. Three
+variants cover the lifecycle: broadcaster reconnecting, broadcaster
+gone, broadcaster back online.
+
+**Code does:** Inline composition in `GlobeScreen.tsx` (Phase 9) with
+local state for the banner, polling timer for reconnection, and
+auto-dismiss timer for ended. Real implementation — extraction is a
+straight lift.
+
+**Gap / proposal:** Extract as a feature managing the small state
+machine internally. Globe consumes via `<StreamStateBanner signal={...} />`
+that derives the variant from the `StreamSignal` from
+`src/lib/streamSignals.ts`. The 10s polling for the `resumed` transition
+lives inside the feature (still uses `streamsApi.near`).
+**Complexity-bounding exception to Section 0.5:** one caller today
+(`GlobeScreen`), but the banner is a small state machine whose tracking,
+polling, transition, and dismiss logic earns its own feature file even
+before a second caller arrives.
 
 ---
 
@@ -2097,6 +2211,13 @@ Footer accepts primary CTA + optional `onSkip`. Used by all 4+ wizards.
 semantics — only one active at a time. Optional first chip is the
 "All" reset.
 
+**v0.2 trim (C3, 2026-05-29):** the Globe Mobile mock's 6 chips
+(All / Cities / Weather / Nature / Events / Landmarks) reduce to **2 for
+now: All (default, null) + Cities.** Backend `Stream.category` enum
+ships with a single value (`cities`); categories grow as v0.3+ adds
+value lines. Section keeps its full shape; only the data passed in is
+trimmed.
+
 **Code does:** None.
 
 **Gap / proposal:** Generic section accepting `categories: { id, label }[]`
@@ -2387,16 +2508,22 @@ See Section 4.
 
 ### Pre-captured findings (carry-over)
 
-These were noted before Section 0 existed; they remain valid and are
-re-anchored to the locked vocabulary:
+These were noted before Section 0 existed; both are now resolved.
+Kept here for traceability:
 
-1. **Globe pin two-color conflict** — see `Pin.ts` entry above.
+1. **Globe pin two-color conflict** — resolved by the 12.3 single-accent
+   locking (see `Pin.ts` entry above and the 2026-05-29 light-first-pivot
+   decision-log entry). Differentiation between cluster and singleton is
+   now size + count text only.
 
-2. **The discovery→watching transition surface** (the tap-to-preview card
+2. **Discovery→watching transition surface** (the tap-to-preview card
    over the globe). This is the canonical example of the **seam** (0.3).
-   Realized today as `DiscoveryHandoffCard.tsx` in features (0.7). It is
-   **not** a violation of Principle 1's mode handoff — it _is_ the handoff,
-   and the principle's mode note (Section 1) explicitly accommodates this.
+   Realized today as `DiscoveryHandoffCard.tsx` in features (0.7) — see
+   the new Section 3 entry above. **C1 (12.2) locked the inline-card
+   pattern** for both single-pin and cluster taps; the rich bottom-sheet
+   pattern from the Viewer Sheet mock is deferred. It is **not** a
+   violation of Principle 1's mode handoff — it _is_ the handoff, and
+   the principle's mode note (Section 1) explicitly accommodates it.
 
 ---
 
@@ -2486,6 +2613,134 @@ handled by the same patterns; the seam is not a separate motion category.
 
 Append-only. Most recent first. Each entry: date, decision, rationale,
 constraint it imposes downstream.
+
+### 2026-05-29 — Sub-phase 12.2 resolved: 7 conflict decisions for Globe + Viewer Sheet
+
+The inventory pass on `Globe Mobile.html` + `Viewer Sheet.html` surfaced
+seven conflicts requiring resolution before the `design` branch could
+merge into `main`. Outcomes below; "for now" qualifiers preserve a
+future revisit window without re-opening the gate.
+
+- **C1 = inline card for both pin and cluster.** The rich Viewer Sheet
+  bottom-sheet pattern is deferred. Sheet-internal features
+  (`VideoPreviewTile`, `CoordHUD.viewer-sheet` variant, full
+  `BroadcasterRow` with Follow + follower count, 3-button action bar)
+  stay in Section 3 for their other surfaces (broadcast HUD, clip
+  editor, profile) but don't compose against the discovery→watching
+  seam in v0.2. `DiscoveryHandoffCard` ships with two variants:
+  `single` and `cluster`, both inline floating cards. Matches what's
+  in `GlobeScreen.tsx` today; the v0.2 work is feature-extraction
+  rather than redesign.
+
+- **C2 = 5-chip streams strip lives as second row of the single inline
+  card; v0.3 sensors render OFF (for now).** `StreamTile` returns to
+  the v0.2 critical path. Caveat recorded: the OFF state advertises
+  v0.3+ scope (LOC / GYRO / CMP) to v0.2 testers — switching to
+  "only what's armed" is a one-line CSS change + dropping data rows,
+  so the cost of reversal is near-zero.
+
+- **C3 = search + chips on the globe overlay.** Backend gains a
+  `Stream.category` column. **Category enum trimmed from the mock's
+  6 to 2 for now: `All` (default, null) + `Cities`.** Single real
+  enum value; Go Live flow gains a "city stream?" toggle. Search
+  reuses the existing handle/title endpoint. Pattern ships; the enum
+  grows as v0.3+ adds value lines.
+
+- **C4 = no HUD on the globe.** `CoordHUD.globe` variant drops from
+  v0.2. The variant entry stays in Section 3 for `broadcast-live`
+  use; the globe's geographic self-orientation reads on its own.
+
+- **C5 = WRLD hero + brand mark (hybrid).** New `BrandMark` primitive
+  added (drawn-with-Views: concentric outer circle + scaleX + scaleY
+  inner ellipses — globe as meridian + parallel). All-caps wordmark
+  stays everywhere (header, splash, share thumbnails, app icon).
+  GlobeScreen header composes inline: `<BrandMark size="hero" />` +
+  `<Text variant="display">WRLD</Text>` + `<LivePill />`. A `Logo`
+  composition feature isn't extracted until a second header needs it.
+
+- **C6 = extract `StreamStateBanner` as a feature** with three
+  variants (`disconnected`, `ended`, `resumed`). Complexity-bounding
+  exception to the Section 0.5 reuse rule: one caller today
+  (`GlobeScreen`), but the banner is a small state machine whose
+  tracking, polling, transition, and dismiss logic earns its own
+  feature file even before a second caller arrives.
+
+- **C7 = empty state stays inline.** Section 0.5 reuse rule held:
+  "No streams nearby" UI lives inside `GlobeScreen` until a second
+  screen (Search empty result, Profile new-user, Wallet empty, Clip
+  grid empty) proves the case. Promotion to an `EmptyState` primitive
+  happens at that point.
+
+**Imposes:**
+
+- **New Section 3 rows landed in 12.2:** `BrandMark` (primitive);
+  `DiscoveryHandoffCard`, `SearchBar`, `StreamStateBanner` (features).
+  `CategoryChipRow` entry updated to record the v0.2 enum trim.
+  Pre-captured findings (carry-over) marked resolved.
+- **Backend (wrld-backend):** `Stream.category` enum column +
+  migration + optional filter on `GET /streams/near`. Drives the C3
+  cascade. Aaron's lane.
+- **Go Live flow** ([DashboardScreen.tsx](src/components/screens/DashboardScreen.tsx))
+  needs a Cities yes/no toggle.
+- Sheet-internal features stay in Section 3 but aren't 12.5 priorities
+  unless their other surfaces (broadcast HUD, profile, clip editor)
+  also land.
+- "For now" qualifiers on C2 (chip count) and C3 (category list) are
+  binding for v0.2 ship but explicitly easy-to-reverse — flag a
+  revisit if either chafes during testing.
+
+This entry closes 12.2. The `design` branch merges into `main` once
+this lands, after which 12.4 (build primitives bottom-up) resumes on
+direct-to-main per [CLAUDE.md](CLAUDE.md) working style. The
+"Sub-phase 12.2 runs on a `design` branch" entry below codifies the
+branch convention; the merge undoes it.
+
+### 2026-05-29 — Light-first pivot: v0.2 ships light mode only
+
+The reference material in `docs/design/references/` (12 architectural
+drawings + 7 brutalist UI compositions) is **inherently light** —
+warm cream paper backgrounds, dark ink line work, photo-composited
+architectural elements, warm crimson accents. The first 12.3 pass
+derived a dark theme from these references by mentally inverting the
+palette. Ben flagged this as drift: building dark from inverted light
+is a guess at where the inversion needs care. **Building light first
+is faithful — the references are directly inhabitable as UI surfaces.**
+
+**v0.2 scope shift:**
+
+- **`theme.ts` ships light mode only.** Single export, no `lightTheme` /
+  `darkTheme` pair in v0.2. Adding a dark theme on the same semantic
+  keys is a v0.3 follow-on (Section 8 updated).
+- **EarthScene gets a light variant.** Clear color = cream paper
+  (`#ece6d6`). Pin sprites render in warm crimson `#d92e3a` with cream
+  borders that match the background — pins "punch through" the paper.
+  Cluster glyph text in cream. Earth fallback color shifts from dark
+  blue to warm sepia. Single-accent rule absorbed: no cluster-vs-single
+  color split — differentiation by size + count only, per the
+  carry-over Pin resolution from Section 3.
+- **Section 8 (Out of scope) updated.** Old "Light mode is v0.3" line
+  removed; replaced with "Dark mode is v0.3."
+
+**Imposes:**
+
+- Existing screens render in light mode as soon as they next mount.
+  The visual shift from the previous (cool-blue, glass, dark) state is
+  dramatic — that's the intent landing as a single step.
+- `EarthScene` cream background means cards over the globe need either
+  flat-surface treatment that reads on cream, or the opt-in `colors.bg.glass`
+  blur. Existing globe overlay cards (banner, tap-to-preview) work as-is
+  visually because they consume tokens; the radii / colors / contrast
+  flip with the theme.
+- **Dark-mode follow-on in v0.3:** same semantic keys, inverted palette
+  values (cream → sepia near-black, dark ink → warm cream, accent
+  unchanged). EarthScene also needs a dark variant. Both should be
+  designed against the same reference set + Section 1 principles, not
+  by mechanical inversion of light tokens (light was inverted from a
+  light-reference set; dark should be re-derived).
+
+**Methodological note carried forward:** every aesthetic decision
+traces back to references + Section 1 principles. The mocks
+(`docs/design/mocks/`) are inventory inputs only.
 
 ### 2026-05-29 — Sub-phase 12.3 shipped: `src/tokens/theme.ts` populated
 
@@ -3018,10 +3273,11 @@ it. `DESIGN.md` is Ben's exclusive on the `design` branch.
 Explicit deferrals. Cross-reference with [CLAUDE.md](CLAUDE.md) "v0.2
 beta milestone" section.
 
-- **Light mode.** Build tokens so a `lightTheme` could be added later (same
-  semantic keys, different palette values), but do not wire a toggle in v0.2.
-- **Broadcaster sensor sources beyond audio/video.** Compass, gyro,
-  accelerometer, torch — all v0.3.
+- **Dark mode.** v0.2 ships **light mode only** (cream paper aesthetic
+  derived from references). Dark mode follows in v0.3 — same semantic
+  keys, inverted palette values, with EarthScene also getting a dark
+  variant. No theme toggle in v0.2. See DESIGN.md Section 6 decision-log
+  entry 2026-05-29 "Light-first pivot" for rationale.
 - **Localization / RTL.** v0.2 is English-only and LTR-only.
 - **Theming per-stream / per-user.** No user-controlled theme overrides in
   v0.2.

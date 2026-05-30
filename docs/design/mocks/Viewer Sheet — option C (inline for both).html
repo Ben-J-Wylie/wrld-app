@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Wrld — Viewer Sheet · Option C (inline for both)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* NOTE: aesthetic intentionally matches the original Viewer Sheet mock so the
+     structural comparison across options A / B / C is honest. The light/crimson
+     locked tokens (per DESIGN.md 2026-05-29 light-first pivot) get applied later
+     during sub-phase 12.5. Don't litigate palette here — only structure.
+
+     This option mirrors what the current code does in GlobeScreen.tsx today: a
+     compact floating card at the bottom of the screen. Picking C is the "defer
+     the rich sheet" choice — the inline card stays as the 12.2 baseline and the
+     Viewer Sheet pattern gets re-evaluated in a later v0.2 phase or in v0.3. */
+
+  :root{
+    --bg:#070809; --bg-2:#0c0e11;
+    --panel:rgba(20,22,26,0.72); --panel-solid:#14171c; --panel-hi:#1a1e24;
+    --line:rgba(255,255,255,0.08); --line-2:rgba(255,255,255,0.14);
+    --ink:#ece9e2; --ink-dim:rgba(236,233,226,0.58); --ink-faint:rgba(236,233,226,0.34);
+    --accent:#3ea7ff; --accent-glow:rgba(62,167,255,0.45);
+    --live:#ff4d4d; --live-glow:rgba(255,77,77,0.45);
+    --sans:"Inter Tight", ui-sans-serif, system-ui, sans-serif;
+    --mono:"JetBrains Mono", ui-monospace, monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:#0a0a0b;font-family:var(--sans);color:var(--ink);-webkit-font-smoothing:antialiased}
+  body{display:grid;place-items:center;overflow:hidden}
+
+  .device{width:402px;height:874px;border-radius:48px;overflow:hidden;position:relative;background:#000;box-shadow:0 40px 80px rgba(0,0,0,0.35), 0 0 0 1px rgba(0,0,0,0.5)}
+  .notch{position:absolute;top:11px;left:50%;transform:translateX(-50%);width:126px;height:37px;border-radius:24px;background:#000;z-index:50}
+  .home{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);width:139px;height:5px;border-radius:100px;background:rgba(255,255,255,0.7);z-index:60}
+  .status{position:absolute;top:0;left:0;right:0;height:55px;z-index:10;display:flex;align-items:center;justify-content:space-between;padding:21px 34px 19px;color:#fff;font-family:-apple-system,system-ui,sans-serif}
+  .status .t{font-weight:600;font-size:17px}
+  .status .r{font:600 13px monospace;opacity:0.85}
+
+  .phone-root{position:absolute;inset:0;overflow:hidden}
+
+  .canvas-bg{position:absolute;inset:0;z-index:0;background:radial-gradient(900px 700px at 50% 35%, #1a2030 0%, #0b0d11 60%, #050608 100%)}
+  .globe{position:absolute;left:50%;top:280px;transform:translateX(-50%);width:560px;height:560px;border-radius:50%;
+    background:radial-gradient(40% 50% at 30% 30%, rgba(62,167,255,0.35), transparent 60%),
+               radial-gradient(60% 70% at 70% 70%, rgba(20,30,55,0.9), transparent 60%),
+               radial-gradient(circle at 50% 50%, #1a2230 0%, #0a0e16 70%);
+    box-shadow:0 0 120px rgba(62,167,255,0.18), inset -40px -50px 120px rgba(0,0,0,0.6);
+    opacity:0.55}
+  .dot{position:absolute;width:8px;height:8px;border-radius:50%;background:var(--live);box-shadow:0 0 12px var(--live-glow)}
+  .dot.acc{background:var(--accent);box-shadow:0 0 12px var(--accent-glow)}
+
+  .swap{position:absolute;top:62px;left:50%;transform:translateX(-50%);z-index:90;display:flex;gap:4px;padding:4px;border-radius:999px;background:rgba(0,0,0,0.6);backdrop-filter:blur(10px);border:1px solid var(--line-2)}
+  .swap button{background:transparent;border:0;color:var(--ink-dim);font:500 10px var(--mono);letter-spacing:0.12em;padding:6px 10px;border-radius:999px;cursor:pointer}
+  .swap button.on{background:var(--ink);color:#000}
+
+  .topstrip{position:absolute;top:100px;left:14px;right:14px;z-index:5;height:32px;padding:0 12px;display:flex;align-items:center;gap:10px;border-radius:10px;background:var(--panel);border:1px solid var(--line);backdrop-filter:blur(12px);font:500 10.5px var(--mono);color:var(--ink-dim);letter-spacing:0.12em}
+  .live-dot{width:7px;height:7px;border-radius:50%;background:var(--live);box-shadow:0 0 10px var(--live-glow);animation:pulse 1.6s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.45}}
+  .topstrip b{color:var(--ink);font-weight:500}
+
+  /* ── Inline card (shared shell) ── */
+  .icard{position:absolute;left:14px;right:14px;bottom:34px;z-index:20;background:var(--panel-solid);border:1px solid var(--line-2);border-radius:18px;padding:14px 14px 12px;box-shadow:0 -12px 40px rgba(0,0,0,0.45)}
+
+  /* ── Single-pin inline card ── */
+  .single-card{display:flex;align-items:center;gap:12px}
+  .av{width:44px;height:44px;border-radius:50%;background:radial-gradient(circle at 35% 30%, #ffd6a3 0%, #d68957 40%, #6b3a1d 100%);display:grid;place-items:center;font:600 16px var(--sans);color:#2b1a0a;border:1px solid var(--line-2);flex:none}
+  .av.b{background:radial-gradient(circle at 35% 30%, #c4ffd6 0%, #46a463 40%, #1e4327 100%);color:#0a2010}
+  .av.c{background:radial-gradient(circle at 35% 30%, #d6c4ff 0%, #7c64c8 40%, #2e1e5a 100%);color:#1a0e3b}
+  .av.s{width:38px;height:38px;font-size:14px}
+  .single-card .col{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+  .single-card .title{font:600 14px var(--sans);color:var(--ink);letter-spacing:-0.005em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .single-card .handle{font:500 11px var(--mono);color:var(--accent);letter-spacing:0.06em}
+  .single-card .meta{font:500 10.5px var(--mono);color:var(--ink-dim);letter-spacing:0.06em}
+  .join-btn{flex:none;height:36px;padding:0 18px;border-radius:999px;background:var(--accent);color:#0a0c10;border:0;font:600 13px var(--sans);cursor:pointer}
+
+  /* ── Cluster inline card ── */
+  .cluster-card .ihead{display:flex;align-items:baseline;justify-content:space-between;padding-bottom:10px;margin-bottom:4px;border-bottom:1px solid var(--line)}
+  .cluster-card .ihead .t{font:600 13px var(--sans);color:var(--ink);letter-spacing:-0.005em}
+  .cluster-card .ihead .t b{color:var(--accent);font-weight:600}
+  .cluster-card .ihead .x{background:transparent;border:0;color:var(--ink-dim);font:500 14px var(--sans);cursor:pointer;padding:0 4px}
+
+  .irow{display:flex;align-items:center;gap:10px;padding:8px 0}
+  .irow + .irow{border-top:1px solid var(--line)}
+  .irow .col{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+  .irow .title{font:600 13px var(--sans);color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .irow .meta{font:500 10px var(--mono);color:var(--ink-dim);letter-spacing:0.06em;display:flex;align-items:center;gap:6px}
+  .irow .meta .live-dot{width:6px;height:6px;animation:none}
+  .irow .meta b{color:var(--ink);font-weight:500}
+  .join-chip{flex:none;height:28px;padding:0 12px;border-radius:999px;background:var(--accent);color:#0a0c10;border:0;font:600 11.5px var(--sans);cursor:pointer}
+
+  /* ── Hide/show scenarios ── */
+  [data-scenario="single"] .cluster-card{display:none}
+  [data-scenario="cluster"] .single-card{display:none}
+
+  .label{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,0.5);font:500 11px var(--mono);letter-spacing:0.14em;pointer-events:none}
+</style>
+</head>
+<body>
+
+<div class="device" id="root" data-scenario="single">
+  <div class="notch"></div>
+  <div class="status"><span class="t">9:41</span><span class="r">● ● ●</span></div>
+
+  <div class="phone-root">
+    <div class="canvas-bg"></div>
+    <div class="globe"></div>
+    <span class="dot"     style="top:340px;left:140px"></span>
+    <span class="dot acc" style="top:300px;left:260px"></span>
+    <span class="dot acc" style="top:420px;left:200px"></span>
+    <span class="dot"     style="top:240px;left:230px"></span>
+    <span class="dot acc" style="top:480px;left:300px"></span>
+
+    <div class="topstrip">
+      <span class="live-dot"></span>
+      <span><b>147</b> LIVE NOW</span>
+      <span style="margin-left:auto;color:var(--ink-faint)">BROOKLYN</span>
+    </div>
+
+    <!-- ── SINGLE-PIN INLINE CARD ── -->
+    <div class="icard single-card">
+      <div class="av">K</div>
+      <div class="col">
+        <div class="title">Atlantic Ave · street fest, drumline forming up</div>
+        <div class="handle">@kai.dc</div>
+        <div class="meta">1.4K watching · 0.4 mi</div>
+      </div>
+      <button class="join-btn">Join</button>
+    </div>
+
+    <!-- ── CLUSTER INLINE CARD ── -->
+    <div class="icard cluster-card">
+      <div class="ihead">
+        <div class="t"><b>3</b> live streams here · BROOKLYN</div>
+        <button class="x" aria-label="Close">✕</button>
+      </div>
+
+      <div class="irow">
+        <div class="av s">K</div>
+        <div class="col">
+          <div class="title">Drumline forming up at the corner</div>
+          <div class="meta"><span class="live-dot"></span><b>@kai.dc</b><span>·</span><b>1.4K</b><span>watching</span></div>
+        </div>
+        <button class="join-chip">Join</button>
+      </div>
+
+      <div class="irow">
+        <div class="av s b">M</div>
+        <div class="col">
+          <div class="title">Across the street, food truck row</div>
+          <div class="meta"><span class="live-dot"></span><b>@mira.b</b><span>·</span><b>620</b><span>watching</span></div>
+        </div>
+        <button class="join-chip">Join</button>
+      </div>
+
+      <div class="irow">
+        <div class="av s c">J</div>
+        <div class="col">
+          <div class="title">Rooftop view — whole block in frame</div>
+          <div class="meta"><span class="live-dot"></span><b>@jules</b><span>·</span><b>2.1K</b><span>watching</span></div>
+        </div>
+        <button class="join-chip">Join</button>
+      </div>
+    </div>
+
+    <div class="swap" role="tablist" aria-label="Scenario">
+      <button data-s="single" class="on">SINGLE PIN</button>
+      <button data-s="cluster">CLUSTER · 3</button>
+    </div>
+  </div>
+
+  <div class="home"></div>
+</div>
+
+<div class="label">OPTION C — inline card for both (matches current code)</div>
+
+<script>
+  const root = document.getElementById('root')
+  document.querySelectorAll('.swap button').forEach(b => {
+    b.onclick = () => {
+      document.querySelectorAll('.swap button').forEach(x => x.classList.toggle('on', x === b))
+      root.dataset.scenario = b.dataset.s
+    }
+  })
+</script>
+</body>
+</html>
