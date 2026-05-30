@@ -850,24 +850,33 @@ tone="err">…</HelpText></View>`). Not built into Input itself.
 
 - **Tier:** primitive
 - **Location:** `src/components/primitives/Pill.tsx`
-- **Variants:** `default` (line border, transparent), `live` (live fill), `accent` (accent fill), `jurisdiction` (accent-tinted bg + accent text), `count-badge` (small numeric overlay)
-- **Sizes:** sm (h:22), md (h:28), lg (h:32)
-- **States:** default
+- **Variants:** `default` (transparent + line border), `live` (accent fill), `accent` (accent fill), `jurisdiction` (accent.surface + accent.border + accent.default label), `countBadge` (small numeric badge — ignores `size` prop)
+- **Sizes:** sm (h:22), md (h:28), lg (h:32). `countBadge` is its own 18px size.
+- **States:** default (never interactive — use `Chip` for pressable surfaces)
 - **Used in:** populated in 12.6
 - **Tweak impact:** LIVE indicators, channel chips (CH 12), AcctID badge, follower-count badge, viewers chip, jurisdiction badges (EU · GDPR), recommended pill, anon pill, draft pill, peak count
+- **Shipped:** 2026-05-30 (sub-phase 12.4 — tenth primitive)
+- **Last reviewed:** 2026-05-30
 
 **Mock says:** Display-only marker — never interactive. Compact rounded
-shape (`r:5–8` mini, `r:999` pill). Wide use across mocks for status,
-identity, metadata. The Live variant has an animated pulsing dot inside.
-Some variants include a leading icon, some are pure text.
+shape. Wide use across mocks for status, identity, metadata. The Live
+variant has an animated pulsing dot inside (added by the `LivePill`
+feature, which composes Pill.live + the dot). Some variants include a
+leading icon.
 
-**Code does:** Inline `<View>` with various pill styles scattered across
-screens — no primitive.
+**Code does (shipped):** Composes `Text variant="monoLabel"` + optional
+`Icon size="sm"`. Border-radius `radius.full`. Single-accent rule:
+`live` and `accent` are visually identical — both render with
+`accent.default` fill + cream label. The semantic split is preserved
+so `LivePill` (feature) can reference `variant="live"` even though
+under the locked tokens it equals `accent`. `countBadge` is its own
+mode: 18×18 minimum (grows for multi-digit), ignores `size`, accent
+fill, used for notification dots and unread counts. `jurisdiction`
+uses `accent.surface` + `accent.border` + `accent.default` label —
+the only variant that doesn't invert the label to cream.
 
-**Gap / proposal:** Pill is the canonical display-only marker. Optional
-`leadingIcon` (defaults to no icon; LiveVariant supplies its own pulse).
-Distinct from Chip (next entry) because Pill is never pressable. Token-
-driven tones.
+**Gap / proposal:** None — shipped. The animated pulsing dot is the
+`LivePill` feature's job, not Pill's.
 
 ---
 
@@ -875,24 +884,31 @@ driven tones.
 
 - **Tier:** primitive (composes Pressable + Text + optional Icon)
 - **Location:** `src/components/primitives/Chip.tsx`
-- **Variants:** `default` (filter), `accent-tinted` (pressed accent), `suggestion` (accent-tinted with suggestions semantic)
-- **Sizes:** sm (h:28), md (h:30) — default, lg (h:36)
-- **States:** default, pressed (selected), disabled
+- **Variants:** `default` (neutral filter), `suggestion` (subtle accent tint by default)
+- **Sizes:** sm (h:28), md (h:30 — default), lg (h:36)
+- **States:** default, selected, disabled (pressed scale comes from Pressable)
 - **Used in:** populated in 12.6
 - **Tweak impact:** every filter chip — Globe category chips, My Profile filter chips, Cash Out preset chips, handle suggestions, tag chips
+- **Shipped:** 2026-05-30 (sub-phase 12.4 — eleventh primitive)
+- **Last reviewed:** 2026-05-30
 
-**Mock says:** Pressable filter button. Pressed state = accent-tinted bg
-+ accent border. Universal use for single-select filter rows (Globe
-categories, date filters), multi-select toggles (My Profile layer
+**Mock says:** Pressable filter button. Selected state = accent-tinted
+bg + accent border + accent label. Universal use for single-select
+filter rows (Globe categories), multi-select toggles (sensor layer
 filters), and tag-style suggestions (handle picker).
 
-**Code does:** None as a primitive.
+**Code does (shipped):** Composes `Pressable variant="default"` (scale
+0.96) + `Text variant="bodyEmphasized"` + optional `Icon size="sm"`.
+The `selected` prop overrides the variant's resting surface with
+`accent.surface` + `accent.border` + `accent.default` label. The
+`accessibilityState.selected` flag is set so screen readers announce
+the selection. Single-select vs multi-select is the consumer's job —
+Chip itself doesn't track group state.
 
-**Gap / proposal:** Distinct from Pill because Chip is pressable and has
-a pressed state with explicit visual feedback (border + bg change).
-Composes Pressable + Text + optional leading-icon. Single-select vs
-multi-select behavior is the consumer's responsibility (Chip itself
-doesn't track group state).
+**Gap / proposal:** None — shipped. The spec's third variant
+(`accent-tinted`) collapsed into the `selected` state: it's the same
+visual treatment, and decoupling state from variant matches how the
+filter rows actually work in the mocks.
 
 ---
 

@@ -21,6 +21,8 @@ import { Card } from '@/components/primitives/Card'
 import { Input } from '@/components/primitives/Input'
 import { Textarea } from '@/components/primitives/Textarea'
 import { HelpText } from '@/components/primitives/HelpText'
+import { Pill } from '@/components/primitives/Pill'
+import { Chip } from '@/components/primitives/Chip'
 import { theme } from '@/tokens/theme'
 
 export function ComponentGallery() {
@@ -31,6 +33,16 @@ export function ComponentGallery() {
   const [inputValid, setInputValid] = useState('ben@wrld.cam')
   const [inputError, setInputError] = useState('taken')
   const [textareaValue, setTextareaValue] = useState('')
+  const [chipCategory, setChipCategory] = useState<'all' | 'cities'>('all')
+  const [chipMulti, setChipMulti] = useState<Set<string>>(new Set(['cam']))
+  const toggleMulti = (k: string) => {
+    setChipMulti((prev) => {
+      const next = new Set(prev)
+      if (next.has(k)) next.delete(k)
+      else next.add(k)
+      return next
+    })
+  }
   const bump = (k: 'default' | 'subtle' | 'none') =>
     setPressCounts((c) => ({ ...c, [k]: c[k] + 1 }))
 
@@ -287,6 +299,87 @@ export function ComponentGallery() {
           </Row>
         </Section>
 
+        <Section title="Pill">
+          <Row label="default">
+            <View style={styles.pillRow}>
+              <Pill label="CH 12" />
+              <Pill label="STREET" />
+              <Pill label="DRAFT" />
+            </View>
+          </Row>
+          <Row label="live">
+            <View style={styles.pillRow}>
+              <Pill label="LIVE" variant="live" />
+              <Pill label="LIVE" variant="live" leadingIcon="radio" />
+            </View>
+          </Row>
+          <Row label="accent">
+            <View style={styles.pillRow}>
+              <Pill label="RECOMMENDED" variant="accent" />
+              <Pill label="NEW" variant="accent" size="sm" />
+            </View>
+          </Row>
+          <Row label="jurisdiction">
+            <View style={styles.pillRow}>
+              <Pill label="EU · GDPR" variant="jurisdiction" />
+              <Pill label="US · CCPA" variant="jurisdiction" />
+            </View>
+          </Row>
+          <Row label="countBadge">
+            <View style={styles.pillRow}>
+              <Pill label="3" variant="countBadge" />
+              <Pill label="12" variant="countBadge" />
+              <Pill label="99+" variant="countBadge" />
+            </View>
+          </Row>
+          <Row label="sizes sm/md/lg">
+            <View style={styles.pillRow}>
+              <Pill label="SM" size="sm" />
+              <Pill label="MD" size="md" />
+              <Pill label="LG" size="lg" />
+            </View>
+          </Row>
+        </Section>
+
+        <Section title="Chip">
+          <Row label="single-select">
+            <View style={styles.pillRow}>
+              <Chip label="All" selected={chipCategory === 'all'} onPress={() => setChipCategory('all')} />
+              <Chip label="Cities" selected={chipCategory === 'cities'} onPress={() => setChipCategory('cities')} />
+            </View>
+          </Row>
+          <Row label="multi-select">
+            <View style={styles.pillRow}>
+              <Chip label="Cam" selected={chipMulti.has('cam')} onPress={() => toggleMulti('cam')} />
+              <Chip label="Audio" selected={chipMulti.has('audio')} onPress={() => toggleMulti('audio')} />
+              <Chip label="Location" selected={chipMulti.has('loc')} onPress={() => toggleMulti('loc')} />
+            </View>
+          </Row>
+          <Row label="with icon">
+            <View style={styles.pillRow}>
+              <Chip label="Nearby" leadingIcon="map-pin" onPress={() => {}} />
+              <Chip label="Live now" leadingIcon="radio" onPress={() => {}} selected />
+            </View>
+          </Row>
+          <Row label="suggestion">
+            <View style={styles.pillRow}>
+              <Chip label="benwy" variant="suggestion" onPress={() => {}} />
+              <Chip label="ben.wylie" variant="suggestion" onPress={() => {}} />
+              <Chip label="bjw" variant="suggestion" onPress={() => {}} />
+            </View>
+          </Row>
+          <Row label="sizes sm/md/lg">
+            <View style={styles.pillRow}>
+              <Chip label="Small" size="sm" onPress={() => {}} />
+              <Chip label="Medium" size="md" onPress={() => {}} />
+              <Chip label="Large" size="lg" onPress={() => {}} />
+            </View>
+          </Row>
+          <Row label="disabled">
+            <Chip label="Coming soon" disabled onPress={() => {}} />
+          </Row>
+        </Section>
+
         <Section title="HelpText">
           <Row label="dim (default)">
             <HelpText>3–20 CHARACTERS</HelpText>
@@ -377,5 +470,11 @@ const styles = StyleSheet.create({
   },
   helpPair: {
     gap: theme.spacing.xs,
+  },
+  pillRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    flexWrap: 'wrap',
   },
 })

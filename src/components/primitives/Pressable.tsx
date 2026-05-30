@@ -47,6 +47,7 @@ type Props = {
   accessibilityLabel?: string
   accessibilityHint?: string
   accessibilityRole?: 'button' | 'link' | 'none' | 'switch' | 'tab'
+  accessibilityState?: { selected?: boolean; disabled?: boolean; checked?: boolean }
   testID?: string
 }
 
