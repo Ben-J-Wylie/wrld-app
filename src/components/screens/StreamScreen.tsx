@@ -79,18 +79,19 @@ export function StreamScreen() {
     : []
 
   const {
-    status, setStatus, roomId, viewerCount, streamEnded,
+    status, setStatus, roomId, viewerCount, streamEnded, adminEnded, setAdminEnded,
+    adminWarning, setAdminWarning,
     error: signalingError, setError,
     chatMessages, reactions, broadcasterPaused,
     tipEvents, confirmedBalance,
     connect, createRoom, joinRoom, disconnect,
     sendChatMessage, sendReaction, dismissReaction,
     sendTip, dismissTip,
-    sendBroadcasterPaused, sendBroadcasterResumed,
+    sendBroadcasterPaused, sendBroadcasterResumed, sendBroadcasterOrientation,
   } = useSignaling()
   const invalidateCurrentUser = useInvalidateCurrentUser()
   const invalidateWallet = useInvalidateWallet()
-  const { localStream, remoteStream, error: mediaError, facingMode, startBroadcasting, startViewing, switchCamera, cleanup } = useMediasoup()
+  const { localStream, remoteStream, error: mediaError, facingMode, videoIsLandscape, startBroadcasting, startViewing, switchCamera, cleanup } = useMediasoup()
   const { isSignedIn } = useAuth()
   const { coords, loading: locationLoading, error: locationError } = useLocation()
   const wrldUser = useAuthStore((s: ReturnType<typeof useAuthStore.getState>) => s.wrldUser)
@@ -149,6 +150,15 @@ export function StreamScreen() {
     }
     router.navigate('/(app)/globe')
   }
+
+  // Admin force-ended: clean up media and let the UI show the explanation screen.
+  useEffect(() => {
+    if (!adminEnded || !isNew) return
+    activeBroadcast.clear()
+    cleanup()
+    disconnect()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adminEnded])
 
   // Fast path 1: server sent broadcasterLeft
   useEffect(() => {
@@ -224,13 +234,27 @@ export function StreamScreen() {
   // are also caught without a separate useEffect.
   useFocusEffect(
     useCallback(() => {
-      if (isNew) return
+      if (isNew) {
+        // Clear any leftover admin-end state so the broadcaster can start fresh.
+        setAdminEnded(false)
+        return
+      }
       navigatingRef.current = false
       cleanup()
       handleJoin()
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [id]),
   )
+
+  // Broadcaster: signal orientation to admin viewers whenever the detected
+  // video orientation is known (fires once after camera starts).
+  useEffect(() => {
+    if (!isNew || status !== 'in-room' || !localStream) return
+    // track.getSettings() on react-native-webrtc reports sensor-native dims:
+    // width > height = sensor native = phone held portrait. Inverted from intuition.
+    sendBroadcasterOrientation(videoIsLandscape ? 'portrait' : 'landscape')
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isNew, status, localStream, videoIsLandscape])
 
   // Broadcaster: close the WS when the app goes to background so the server
   // immediately fires broadcasterLeft to all viewers. Without this, iOS/Android
@@ -250,6 +274,7 @@ export function StreamScreen() {
     return () => sub.remove()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isNew, status])
+
 
   async function handleGoLive() {
     const title = (paramTitle ?? '').trim()
@@ -370,6 +395,33 @@ export function StreamScreen() {
           mirror={false}
           zOrder={0}
         />
+      )}
+
+      {/* Admin warning banner (broadcaster only, dismissible) */}
+      {isNew && !!adminWarning && (
+        <View style={styles.adminWarningBanner}>
+          <Text style={styles.adminWarningText}>{adminWarning}</Text>
+          <Pressable onPress={() => setAdminWarning(null)} hitSlop={10}>
+            <Text style={styles.adminWarningDismiss}>✕</Text>
+          </Pressable>
+        </View>
+      )}
+
+      {/* Admin force-ended screen (broadcaster only) */}
+      {adminEnded && isNew && (
+        <View style={[StyleSheet.absoluteFill, styles.adminEndedContainer]}>
+          <View style={styles.adminEndedContent}>
+            <Text style={styles.adminEndedTitle}>Stream Closed</Text>
+            <Text style={styles.adminEndedBody}>
+              An administrator has ended your stream.
+            </Text>
+            <Button
+              label="Back to globe"
+              onPress={() => router.navigate('/(app)/globe')}
+              style={styles.wide}
+            />
+          </View>
+        </View>
       )}
 
       {/* Flip camera button (broadcaster only) */}
@@ -819,5 +871,53 @@ const styles = StyleSheet.create({
     ...theme.typography.caption,
     color: '#fff',
     fontWeight: '700',
+  },
+  adminWarningBanner: {
+    position: 'absolute',
+    top: 60,
+    left: theme.spacing.lg,
+    right: theme.spacing.lg,
+    backgroundColor: '#7C4A00',
+    borderRadius: 12,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    zIndex: 40,
+  },
+  adminWarningText: {
+    ...theme.typography.caption,
+    color: '#FFD580',
+    flex: 1,
+    lineHeight: 18,
+  },
+  adminWarningDismiss: {
+    ...theme.typography.caption,
+    color: '#FFD580',
+    fontWeight: '700',
+  },
+  adminEndedContainer: {
+    backgroundColor: theme.colors.bg.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 50,
+  },
+  adminEndedContent: {
+    padding: theme.spacing.xl,
+    alignItems: 'center',
+    gap: theme.spacing.md,
+    maxWidth: 320,
+  },
+  adminEndedTitle: {
+    ...theme.typography.heading,
+    color: theme.colors.text.primary,
+    textAlign: 'center',
+  },
+  adminEndedBody: {
+    ...theme.typography.body,
+    color: theme.colors.text.muted,
+    textAlign: 'center',
+    lineHeight: 24,
   },
 })

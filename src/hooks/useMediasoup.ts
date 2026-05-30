@@ -13,6 +13,7 @@ export function useMediasoup() {
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment')
+  const [videoIsLandscape, setVideoIsLandscape] = useState(false)
 
   const sendTransport = useRef<Transport | null>(null)
   const recvTransport = useRef<Transport | null>(null)
@@ -25,16 +26,22 @@ export function useMediasoup() {
     return device
   }
 
+  const switchingCamera = useRef(false)
+
   const switchCamera = useCallback(() => {
+    if (switchingCamera.current) return
     const stream = localStreamRef.current
     if (!stream) return
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const videoTrack = (stream as any).getVideoTracks()[0]
     if (!videoTrack) return
+    switchingCamera.current = true
     // react-native-webrtc exposes _switchCamera() to flip between front/back
     // without creating a new stream — the existing producer track continues uninterrupted
     videoTrack._switchCamera()
     setFacingMode(prev => prev === 'environment' ? 'user' : 'environment')
+    // Android takes ~800ms to complete the switch; block re-entry until it's done
+    setTimeout(() => { switchingCamera.current = false }, 1_000)
   }, [])
 
   const startBroadcasting = useCallback(async (sources: SourceType[]) => {
@@ -49,6 +56,13 @@ export function useMediasoup() {
       })) as unknown as MediaStream
       localStreamRef.current = stream
       setLocalStream(stream)
+
+      if (sources.includes('camera')) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const vt = (stream as any).getVideoTracks()[0]
+        const s = vt?.getSettings?.() ?? {}
+        setVideoIsLandscape(typeof s.width === 'number' && typeof s.height === 'number' && s.width > s.height)
+      }
 
       const params = await signalingClient.createTransport('send')
       const transport = device.createSendTransport(params as never)
@@ -111,7 +125,8 @@ export function useMediasoup() {
     setRemoteStream(null)
     setError(null)
     setFacingMode('environment')
+    setVideoIsLandscape(false)
   }, [])
 
-  return { localStream, remoteStream, error, facingMode, startBroadcasting, startViewing, switchCamera, cleanup }
+  return { localStream, remoteStream, error, facingMode, videoIsLandscape, startBroadcasting, startViewing, switchCamera, cleanup }
 }

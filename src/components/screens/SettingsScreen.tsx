@@ -66,6 +66,19 @@ export function SettingsScreen() {
       </View>
 
       <View style={styles.section}>
+        <Text style={styles.sectionTitle}>ACCOUNT</Text>
+        <Pressable style={styles.row} onPress={() => router.push('/(app)/subscription')}>
+          <View style={styles.rowText}>
+            <Text style={styles.rowLabel}>Plan</Text>
+            <Text style={styles.rowSub}>
+              {wrldUser?.tier === 'plus' ? 'Plus' : wrldUser?.tier === 'pro' ? 'Pro' : 'Free'} · View all plans
+            </Text>
+          </View>
+          <Text style={styles.rowArrow}>›</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.section}>
         <Text style={styles.sectionTitle}>NOTIFICATIONS</Text>
 
         <View style={styles.row}>
@@ -160,6 +173,7 @@ const styles = StyleSheet.create({
   rowText: { flex: 1 },
   rowLabel: { ...theme.typography.body, color: theme.colors.text.primary, fontWeight: '500' },
   rowSub: { ...theme.typography.caption, color: theme.colors.text.muted, marginTop: 2 },
+  rowArrow: { fontSize: 20, color: theme.colors.text.muted, marginLeft: 4 },
   divider: { height: 1, backgroundColor: theme.colors.border.subtle, marginLeft: theme.spacing.lg },
   bottom: {
     padding: theme.spacing.lg,

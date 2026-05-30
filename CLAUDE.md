@@ -904,3 +904,33 @@ trigger one:
 npx eas build --platform android --profile development
 npx eas build --platform ios --profile development
 ```
+
+---
+
+## Updates — May 2026 (Phase 3 admin: subscription tier screen)
+
+### Subscription tier screen (`src/components/screens/SubscriptionScreen.tsx`)
+
+New screen matching the Claude Design spec. Accessible from Settings → ACCOUNT →
+Plan row. Route: `app/(app)/subscription.tsx`.
+
+**UI elements:**
+- Monthly / Annual billing toggle (annual = ~20% off, "two months free" note)
+- Three tier cards: Free (always free), Plus ($5/mo or $48/yr), Pro ($20/mo or $192/yr)
+- Current tier highlighted with a stronger blue border (`wrldUser.tier` from auth store)
+- Feature comparison matrix (expandable, matches the Claude Design)
+- Plus/Pro CTAs show an Alert ("coming soon") — no payment flow wired yet.
+  Free CTA shows "Your current plan" when already on Free.
+
+**No EAS rebuild needed** — pure JS. Metro hot-reload picks it up immediately.
+
+### Settings screen (`src/components/screens/SettingsScreen.tsx`)
+
+New ACCOUNT section above NOTIFICATIONS. Contains a single "Plan" row that shows
+the current tier name + "View all plans" and navigates to `/(app)/subscription`.
+
+### `User` type (`src/types/index.ts`)
+
+`tier: 'free' | 'plus' | 'pro'` added. Populated by `GET /auth/me` — the backend
+now includes `tier` on every user response since it's a column on the `User` model.
+The auth store (`wrldUser`) carries it without any additional fetch.

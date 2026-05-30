@@ -12,6 +12,7 @@ export type User = {
   notifyOnNearbyLive: boolean
   spaceBucks: number
   stardust: number
+  tier: 'free' | 'plus' | 'pro'
   dateOfBirth?: string
   locationPrecision?: 'exact' | 'city' | 'country' | 'off'
   creatorReady: boolean

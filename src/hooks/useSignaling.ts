@@ -24,6 +24,8 @@ export function useSignaling() {
   const [producers, setProducers] = useState<Producer[]>([])
   const [viewerCount, setViewerCount] = useState(0)
   const [streamEnded, setStreamEnded] = useState(false)
+  const [adminEnded, setAdminEnded] = useState(false)
+  const [adminWarning, setAdminWarning] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [reactions, setReactions] = useState<Reaction[]>([])
@@ -39,6 +41,8 @@ export function useSignaling() {
     const unsub = signalingClient.onMessage((msg) => {
       if (msg.type === 'viewerCountUpdated') setViewerCount(msg.viewerCount)
       if (msg.type === 'broadcasterLeft') setStreamEnded(true)
+      if (msg.type === 'adminEnded') setAdminEnded(true)
+      if (msg.type === 'adminWarning') setAdminWarning(msg.message)
       if (msg.type === 'broadcasterPaused') setBroadcasterPaused(true)
       if (msg.type === 'broadcasterResumed') setBroadcasterPaused(false)
       if (msg.type === 'chatMessage') {
@@ -81,6 +85,7 @@ export function useSignaling() {
     setStatus('connecting')
     setError(null)
     setStreamEnded(false)
+    setAdminEnded(false)
     try {
       await signalingClient.connect(env.mediasoupWssUrl)
       setStatus('connected')
@@ -111,7 +116,7 @@ export function useSignaling() {
 
   const joinRoom = useCallback(async (id: string) => {
     try {
-      const prods = await signalingClient.joinRoom(id)
+      const { producers: prods } = await signalingClient.joinRoom(id)
       setRoomId(id)
       setProducers(prods)
       setStatus('in-room')
@@ -150,6 +155,7 @@ export function useSignaling() {
 
   const sendBroadcasterPaused = useCallback(() => signalingClient.sendBroadcasterPaused(), [])
   const sendBroadcasterResumed = useCallback(() => signalingClient.sendBroadcasterResumed(), [])
+  const sendBroadcasterOrientation = useCallback((orientation: 'portrait' | 'landscape') => signalingClient.sendBroadcasterOrientation(orientation), [])
   const sendTip = useCallback((amount: number) => signalingClient.sendTip(amount), [])
 
   const dismissReaction = useCallback((id: number) => {
@@ -166,6 +172,8 @@ export function useSignaling() {
     producers,
     viewerCount,
     streamEnded,
+    adminEnded, setAdminEnded,
+    adminWarning, setAdminWarning,
     error, setError,
     chatMessages,
     reactions,
@@ -174,6 +182,7 @@ export function useSignaling() {
     confirmedBalance,
     sendBroadcasterPaused,
     sendBroadcasterResumed,
+    sendBroadcasterOrientation,
     sendTip,
     connect,
     createRoom,
