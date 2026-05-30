@@ -9,7 +9,7 @@
 // is registered with `href: null` so it does not appear in the tab bar.
 
 import { useState } from 'react'
-import { KeyboardAvoidingView, Platform, ScrollView, View, StyleSheet } from 'react-native'
+import { ScrollView, View, StyleSheet } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Text } from '@/components/primitives/Text'
 import { Icon } from '@/components/primitives/Icon'
@@ -34,12 +34,9 @@ export function ComponentGallery() {
 
   return (
     <SafeAreaView style={styles.root}>
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
       <ScrollView
         contentContainerStyle={styles.scroll}
+        automaticallyAdjustKeyboardInsets
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="interactive"
       >
@@ -288,7 +285,6 @@ export function ComponentGallery() {
           </Row>
         </Section>
       </ScrollView>
-      </KeyboardAvoidingView>
     </SafeAreaView>
   )
 }
@@ -313,7 +309,6 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: theme.colors.bg.primary },
-  flex: { flex: 1 },
   scroll: { padding: theme.spacing.lg, gap: theme.spacing.md, paddingBottom: theme.spacing.xxxl },
   section: { gap: theme.spacing.sm, marginTop: theme.spacing.xl },
   row: {

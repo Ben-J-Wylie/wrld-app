@@ -2228,7 +2228,7 @@ single home screen — flagged at the end.
 
 ##### `ScreenScroll`
 
-- **Tier:** section (composes SafeAreaView + KeyboardAvoidingView + ScrollView)
+- **Tier:** section (composes SafeAreaView + ScrollView)
 - **Location:** `src/components/sections/ScreenScroll.tsx`
 - **Variants:** `default`
 - **Sizes:** N/A (full-screen wrapper)
@@ -2237,27 +2237,42 @@ single home screen — flagged at the end.
 - **Tweak impact:** every scrollable screen with focusable inputs — Gallery, Onboarding, Dashboard, Settings, Wallet, Profile editing, Report, Change Handle, AuthModal contents, etc.
 
 **Mock says:** Implicit — every form-bearing screen needs the keyboard
-to lift over content rather than crop the focused input, plus tap-on-
-adjacent-input behavior that doesn't dismiss the keyboard first. Not a
-visual concern; a behavior concern.
+to lift over content rather than crop the focused input, **without
+repositioning the rest of the screen**, plus tap-on-adjacent-input
+behavior that doesn't dismiss the keyboard first. Not a visual concern;
+a behavior concern.
 
-**Code does:** ComponentGallery wires it inline (KeyboardAvoidingView
-with `behavior='padding'` on iOS + `keyboardShouldPersistTaps='handled'`
-+ `keyboardDismissMode='interactive'` + paddingBottom for scroll
-breathing room — see commit `4c391a4`). Real screens with inputs (Login,
-Signup, Dashboard, Onboarding, Me, Search, AuthModal) currently do
-this inline-or-not-at-all per screen.
+**Code does (in the gallery, post-debug commit `9XXXXXX`):**
+
+```tsx
+<ScrollView
+  contentContainerStyle={{ paddingBottom: spacing.xxxl, ... }}
+  automaticallyAdjustKeyboardInsets
+  keyboardShouldPersistTaps="handled"
+  keyboardDismissMode="interactive"
+>
+  {children}
+</ScrollView>
+```
+
+**No `KeyboardAvoidingView`.** The KAV + ScrollView pairing is the
+documented source of "screen jumps to top when keyboard opens" — KAV
+adds `paddingBottom` on keyboard show, which reflows the content
+layout, which on some RN versions invalidates the saved scroll position.
+`automaticallyAdjustKeyboardInsets` (iOS, RN 0.71+) adjusts the
+ScrollView's *content inset* — a virtual offset — instead of reflowing
+layout. Focused input scrolls into view; nothing else moves. Android's
+default `windowSoftInputMode=adjustResize` handles itself.
 
 **Gap / proposal:** Extract as a section so every form-bearing screen
 wraps in `<ScreenScroll>{children}</ScreenScroll>` and inherits the
-keyboard behavior + safe-area handling + scroll padding for free.
-Props: `contentContainerStyle`, `keyboardOffset`, `scrollRef`. The
-ComponentGallery becomes the first migrant; the existing 7 Input-using
+proven config. Props: `contentContainerStyle`, `scrollRef`,
+`onScroll`. The Gallery becomes the first migrant; the 7 Input-using
 screens migrate during 12.6.
 
 **Reuse-rule note:** Section 0.5 normally says wait for the second
 proven case. Here the second case is on the immediate horizon (real
-screens during 12.6 will need it), and Ben flagged the inline pattern
+screens during 12.6 will need it) and Ben flagged the inline pattern
 as work he'd rather not have to do per-screen. So this section is
 **ahead-of-12.6 work in 12.5** — see the 2026-05-30 decision-log entry.
 
@@ -2709,16 +2724,30 @@ constraint it imposes downstream.
 
 Surfaced during 12.4 Input + Textarea review: tapping the Textarea in
 the deep-scroll ComponentGallery caused the screen to reposition to the
-top, hiding the focused field. The inline fix lands in commit `4c391a4`
-(KeyboardAvoidingView + `keyboardShouldPersistTaps='handled'` +
-`keyboardDismissMode='interactive'` + scroll paddingBottom). Ben
-flagged that this pattern will recur on every form-bearing screen and
-explicitly asked for it to land as a shared abstraction rather than
-inline-per-screen.
+top, hiding the focused field. Two debug rounds:
+
+- **Round 1 (commit `4c391a4`):** added `KeyboardAvoidingView` with
+  `behavior='padding'` + `keyboardShouldPersistTaps='handled'` +
+  `keyboardDismissMode='interactive'` + scroll paddingBottom. Fixed
+  Textarea (which sits at the visible bottom), but Input rows in the
+  middle of the scroll still snapped to top on focus.
+- **Round 2 (this entry):** removed `KeyboardAvoidingView` entirely;
+  switched to `automaticallyAdjustKeyboardInsets` on the ScrollView
+  (iOS, RN 0.71+). This adjusts the ScrollView's content **inset** —
+  a virtual offset — instead of reflowing layout via padding. Focused
+  input scrolls into view; nothing else moves. Android's default
+  `windowSoftInputMode=adjustResize` handles itself. Both Inputs and
+  Textareas now behave correctly without screen reposition.
+
+**Root cause locked in for posterity:** KAV-with-`padding` around a
+ScrollView is the documented source of "screen jumps to top when
+keyboard opens." KAV's added bottom padding reflows the content layout,
+which on some RN versions invalidates the saved scroll position.
+`automaticallyAdjustKeyboardInsets` avoids the reflow entirely.
 
 **Decision:** `ScreenScroll` is added as a planned section (see
-Section 3) and ships in 12.5 ahead of 12.6 migration. The Gallery
-becomes the first migrant once the section is built; the 7 existing
+Section 3) using the Round 2 config and ships in 12.5 ahead of 12.6
+migration. The Gallery becomes the first migrant; the 7 existing
 Input-using screens (Login, Signup, Onboarding, Dashboard, Me, Search,
 AuthModal) consume it during 12.6 instead of each rolling its own.
 
@@ -2735,8 +2764,11 @@ was violated by accident.
   WizardShell, CategoryChipRow, and the rest.
 - During 12.6, every form-bearing screen wraps in `<ScreenScroll>` and
   drops its bespoke keyboard handling.
-- The Gallery's inline KAV (commit `4c391a4`) gets refactored to use
-  the section once it ships — first-migrant test.
+- The Gallery's `automaticallyAdjustKeyboardInsets` ScrollView gets
+  refactored to use the section once it ships — first-migrant test.
+- **Anti-pattern flag:** future Claude / collaborator code-review should
+  treat `<KeyboardAvoidingView>` wrapping a `<ScrollView>` as a
+  smell — that combination IS the bug. Use ScreenScroll instead.
 
 ### 2026-05-29 — Sub-phase 12.2 resolved: 7 conflict decisions for Globe + Viewer Sheet
 
