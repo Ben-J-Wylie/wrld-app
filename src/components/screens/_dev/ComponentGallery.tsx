@@ -9,7 +9,7 @@
 // is registered with `href: null` so it does not appear in the tab bar.
 
 import { useState } from 'react'
-import { ScrollView, View, StyleSheet } from 'react-native'
+import { KeyboardAvoidingView, Platform, ScrollView, View, StyleSheet } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Text } from '@/components/primitives/Text'
 import { Icon } from '@/components/primitives/Icon'
@@ -34,7 +34,15 @@ export function ComponentGallery() {
 
   return (
     <SafeAreaView style={styles.root}>
-      <ScrollView contentContainerStyle={styles.scroll}>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
+      >
         <Text variant="display">Component gallery</Text>
         <Text variant="caption" color={theme.colors.text.muted}>
           Sub-phase 12.4 build progress. Each primitive ships with its variants exercised here.
@@ -280,6 +288,7 @@ export function ComponentGallery() {
           </Row>
         </Section>
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   )
 }
@@ -304,7 +313,8 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: theme.colors.bg.primary },
-  scroll: { padding: theme.spacing.lg, gap: theme.spacing.md },
+  flex: { flex: 1 },
+  scroll: { padding: theme.spacing.lg, gap: theme.spacing.md, paddingBottom: theme.spacing.xxxl },
   section: { gap: theme.spacing.sm, marginTop: theme.spacing.xl },
   row: {
     flexDirection: 'row',
