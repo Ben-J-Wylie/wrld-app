@@ -539,28 +539,30 @@ Spinner → BottomSheet → Slider → SegmentedToggle → Divider → BrandMark
 
 - **Tier:** primitive
 - **Location:** `src/components/primitives/Text.tsx`
-- **Variants:** `display`, `heading`, `body`, `caption`, `mono-caption`, `mono-label`
+- **Variants:** `display`, `heading`, `body`, `bodyEmphasized`, `caption`, `monoLabel`, `monoCaption`, `monoValue`
 - **Sizes:** baked into variants (no separate `size` prop)
 - **States:** default
 - **Used in:** populated in 12.6
 - **Tweak impact:** all text in the app — highest blast radius
+- **Shipped:** 2026-05-29 (sub-phase 12.4 — first primitive)
 - **Last reviewed:** 2026-05-29
 
 **Mock says:** Two type families pair universally. **Inter Tight (sans)**
-for content text in 4 weights × 4 size roles: large display (26–32px / 600),
-heading (16–22px / 600), body (13–15px / 500), small caption (11–12px / 500).
-**JetBrains Mono** for tracked-out caps labels (10–11px / 500 / letter-spacing
-0.12–0.16em / UPPERCASE), value readouts, and timestamps. Tabular-numeric
-variant for numeric values that need vertical alignment.
+for content text across display (28/32 · 600), heading (20/24 · 600),
+body (14/20 · 500), bodyEmphasized (14/20 · 600), caption (11/16 · 500).
+**IBM Plex Mono** for monoLabel (10/14 · 500 · letter-spacing 1.6 ·
+UPPERCASE), monoCaption (11/16 · 500 · letter-spacing 0.4), and monoValue
+(11/16 · 500 · letter-spacing 0.4 · `fontVariant: ['tabular-nums']`)
+for numeric values that need vertical alignment.
 
-**Code does:** No `Text` primitive. RN `<Text>` with inline
-`theme.typography.X` spread.
+**Code does (shipped):** `variant` prop indexes `theme.typography.*` keys
+1:1; raw pixel values never appear in consumer code. Default color =
+`theme.colors.text.primary`; override via the `color` prop or
+`style.color`. All other RN `<Text>` props (`numberOfLines`, `onPress`,
+accessibility, etc.) pass through. Inline `theme.typography.X` spreads
+in pre-12.4 screens stay as-is until those screens migrate in 12.6.
 
-**Gap / proposal:** Extract `Text` primitive whose variant prop encodes the
-type role; each variant pulls from semantic typography tokens (12.3). Raw
-pixel values never appear in consumer code. The sans/mono pair is
-system-wide; mono variants pre-set `letterSpacing` + `textTransform: 'uppercase'`
-where appropriate.
+**Gap / proposal:** None — shipped.
 
 ---
 
