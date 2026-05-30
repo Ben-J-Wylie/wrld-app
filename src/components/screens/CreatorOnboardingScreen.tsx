@@ -18,7 +18,7 @@ import { theme } from '@/tokens/theme'
 import { useCurrentUser, useInvalidateCurrentUser, useSetCurrentUser } from '@/hooks/useCurrentUser'
 import { useAuthStore } from '@/stores/authStore'
 import { usersApi } from '@/api/users'
-import { Avatar } from '@/components/features/user/Avatar'
+import { Avatar } from '@/components/primitives/Avatar'
 
 type LocationPrecision = 'exact' | 'city' | 'country' | 'off'
 type PermStatus = 'idle' | 'granted' | 'denied'

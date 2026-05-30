@@ -916,26 +916,42 @@ filter rows actually work in the mocks.
 
 - **Tier:** primitive
 - **Location:** `src/components/primitives/Avatar.tsx`
-- **Variants:** `initials`, `image`, `live` (with live-ring indicator)
-- **Sizes:** xs (24), sm (32), md (42), lg (72), xl (88)
+- **Variants:** inferred from props — `image` (when `avatarUrl` set), `initials` (fallback), plus `live` boolean adds an accent ring + glow around either
+- **Sizes:** xs (24), sm (32), md (42 — default), lg (72), xl (88); raw number accepted for one-off cases
 - **States:** default
-- **Used in:** populated in 12.6
+- **Used in:** Phase 8 callers (MeScreen, OnboardingScreen, SearchScreen, ProfileScreen, StreamScreen, CreatorOnboardingScreen, GlobeScreen) — imports migrated in this commit
 - **Tweak impact:** every user avatar — chat, profile header, broadcaster row, suggestion rows
+- **Shipped:** 2026-05-30 (sub-phase 12.4 — twelfth primitive; promoted from `features/user/`)
+- **Last reviewed:** 2026-05-30
 
 **Mock says:** Circle with either user-uploaded image or initials on a
-generated gradient (orange/brown for default). Larger sizes have a 2px
-inner border (`bg`) + 1px outer border (`line-2`) to set off against
-backdrops. Some surfaces use a "live ring" variant — accent-tinted outer
-ring with glow — to indicate the user is currently broadcasting.
+generated gradient (orange/brown for default). Larger sizes have a thin
+border ring to set off against backdrops. Some surfaces use a "live
+ring" variant — accent-tinted outer ring with glow — to indicate the
+user is currently broadcasting.
 
-**Code does:** `Avatar.tsx` exists in `src/components/features/user/`
-(initials + image fallback already implemented). Needs promotion to
-primitives tier — it's domain-blind (just "circular user representation").
+**Code does (shipped):** Composes `Image` for the image variant and
+`View` + `Text` for the initials fallback. Initials derived from the
+first letters of up to two displayName words (`'Ben Wylie'` → `'BW'`,
+empty/whitespace → `'?'`). `px >= 42` adds a hairline border for
+larger surfaces. The `live` prop wraps either variant in an outer
+`View` with `accent.default` border + `elevation.glow.accent`,
+preserving the inner avatar's intrinsic size.
 
-**Gap / proposal:** Move from features → primitives. Add `live` variant
-(token-driven ring). Generalize the gradient generation to be deterministic
-from a seed (e.g. handle hash) so the same user gets the same fallback
-gradient every time.
+**Gradient deferred:** the mock's "generated gradient (orange/brown)"
+was specced before the 2026-05-29 light-pivot locked the single warm-
+crimson accent. Multi-color gradients per user would violate the
+single-accent rule. Initials use a solid `text.primary` warm-ink
+background with cream initials; per-user differentiation is the
+*initials themselves*. Revisits in v0.3 if the friends-and-family group
+actively misses it.
+
+The seven Phase 8 callers migrated from
+`@/components/features/user/Avatar` → `@/components/primitives/Avatar`
+in this commit. Existing numeric size calls (38, 44, 88) keep working
+via the `size: Size | number` API. The old feature file was deleted.
+
+**Gap / proposal:** None — shipped.
 
 ---
 

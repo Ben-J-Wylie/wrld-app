@@ -20,7 +20,7 @@ import { streamsApi } from '@/api/streams'
 import { theme } from '@/tokens/theme'
 import { useLocation } from '@/hooks/useLocation'
 import { useStreamsNear } from '@/hooks/useStreamsNear'
-import { Avatar } from '@/components/features/user/Avatar'
+import { Avatar } from '@/components/primitives/Avatar'
 import { EarthScene } from '@/canvas/scenes/earth'
 import type { Stream } from '@/types'
 

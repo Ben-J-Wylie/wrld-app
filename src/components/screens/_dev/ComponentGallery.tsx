@@ -23,6 +23,7 @@ import { Textarea } from '@/components/primitives/Textarea'
 import { HelpText } from '@/components/primitives/HelpText'
 import { Pill } from '@/components/primitives/Pill'
 import { Chip } from '@/components/primitives/Chip'
+import { Avatar } from '@/components/primitives/Avatar'
 import { theme } from '@/tokens/theme'
 
 export function ComponentGallery() {
@@ -380,6 +381,47 @@ export function ComponentGallery() {
           </Row>
         </Section>
 
+        <Section title="Avatar">
+          <Row label="sizes (initials)">
+            <View style={styles.avatarRow}>
+              <Avatar displayName="Ben Wylie" size="xs" />
+              <Avatar displayName="Ben Wylie" size="sm" />
+              <Avatar displayName="Ben Wylie" size="md" />
+              <Avatar displayName="Ben Wylie" size="lg" />
+              <Avatar displayName="Ben Wylie" size="xl" />
+            </View>
+          </Row>
+          <Row label="image variant">
+            <View style={styles.avatarRow}>
+              <Avatar displayName="Sample" avatarUrl="https://i.pravatar.cc/100?u=ben" size="sm" />
+              <Avatar displayName="Sample" avatarUrl="https://i.pravatar.cc/100?u=aaron" size="md" />
+              <Avatar displayName="Sample" avatarUrl="https://i.pravatar.cc/100?u=kai" size="lg" />
+            </View>
+          </Row>
+          <Row label="live ring">
+            <View style={styles.avatarRow}>
+              <Avatar displayName="Ben Wylie" size="md" live />
+              <Avatar displayName="Sample" avatarUrl="https://i.pravatar.cc/100?u=kai" size="lg" live />
+            </View>
+          </Row>
+          <Row label="initials fallback">
+            <View style={styles.avatarRow}>
+              <Avatar displayName="Aaron" size="md" />
+              <Avatar displayName="Kai DC" size="md" />
+              <Avatar displayName="Mira B" size="md" />
+              <Avatar displayName="Jules" size="md" />
+              <Avatar displayName="" size="md" />
+            </View>
+          </Row>
+          <Row label="raw number size">
+            <View style={styles.avatarRow}>
+              <Avatar displayName="Ben Wylie" size={38} />
+              <Avatar displayName="Ben Wylie" size={44} />
+              <Avatar displayName="Ben Wylie" size={56} />
+            </View>
+          </Row>
+        </Section>
+
         <Section title="HelpText">
           <Row label="dim (default)">
             <HelpText>3–20 CHARACTERS</HelpText>
@@ -475,6 +517,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.sm,
+    flexWrap: 'wrap',
+  },
+  avatarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.md,
     flexWrap: 'wrap',
   },
 })

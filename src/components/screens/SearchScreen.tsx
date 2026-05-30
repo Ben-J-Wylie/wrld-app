@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
 import { theme } from '@/tokens/theme'
 import { Input } from '@/components/primitives/Input'
-import { Avatar } from '@/components/features/user/Avatar'
+import { Avatar } from '@/components/primitives/Avatar'
 import { useUserSearch } from '@/hooks/useUserSearch'
 import type { PublicUser } from '@/types'
 
