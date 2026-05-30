@@ -139,11 +139,11 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
+    alignSelf: 'stretch',
     color: theme.colors.text.primary,
     fontSize: 16,
     fontFamily: theme.typography.body.fontFamily,
     paddingVertical: 0,
-    height: '100%',
   },
   affordance: {
     minWidth: 20,
