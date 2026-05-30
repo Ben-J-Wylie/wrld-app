@@ -5,73 +5,69 @@
 // components consume ONLY the semantic `theme.*` exports below;
 // the palette is internal to this file.
 //
-// Populated in sub-phase 12.3 (2026-05-29). Aesthetic values derived
-// from the `docs/design/references/` material (architectural drawings +
-// brutalist UI compositions) plus the Section 1 design principles —
-// NOT from the mocks in `docs/design/mocks/`. Mocks inform layout,
-// functionality, and the component inventory; aesthetic comes from
-// references + principles.
+// **v0.2 ships light mode only.** Per DESIGN.md decision log
+// 2026-05-29 (light-first pivot), the references — architectural
+// drawings + brutalist UI compositions in `docs/design/references/` —
+// are inherently light: cream/paper backgrounds with dark ink content
+// and warm accents. Deriving light directly is more faithful than
+// mentally inverting to dark first. Dark mode becomes a v0.3 follow-on
+// (semantic keys stay; palette values invert).
 //
-// Locked rulings (see DESIGN.md Section 6 decision-log entries 2026-05-29):
+// Aesthetic values come from references + Section 1 principles.
+// Mocks inform layout, functionality, and the component inventory.
 //
-// - **No #000 or #fff.** Inverted-newspaper rule. Background is warm
-//   near-black (sepia undertone, not cool grey); text is warm cream.
-// - **Single neon accent.** `colors.accent` (warm crimson red `#d92e3a`)
+// Locked rulings (DESIGN.md Section 6 decision-log entries 2026-05-29):
+//
+// - **No #000 or #fff.** Inverted-newspaper rule (here in its natural
+//   newspaper form): warm cream paper background, warm dark ink text.
+// - **Single neon accent.** `colors.accent` (warm crimson `#d92e3a`)
 //   serves every "look here" role: LIVE indicator, primary CTA, focus,
 //   danger / destructive, accent badges. No separate `live` token.
-//   References (brutalist set especially) consistently use ONE warm red
-//   as the single saturated color; the mocks' two-color treatment
-//   (blue accent + red live) was incorrect aesthetic input.
-// - **Warm undertone.** Cream-tinted lines / borders / surface tints,
-//   not cool-white. References' material vibe is paper + wood + cream +
-//   ink, inverted to dark mode preserving the warmth.
+// - **Warm undertone.** Background, text, borders all carry sepia /
+//   cream warmth. Light mode = warm cream paper, not cool grey.
 // - **Flat surfaces with hairline borders.** Glass `backdrop-filter:blur`
-//   is NOT the default panel treatment. References show flat surfaces
-//   with thin warm-tinted borders. `colors.bg.glass` exists as an
-//   opt-in for surfaces overlaying the globe (where dynamic backgrounds
-//   genuinely need legibility help).
-// - **Strict r:4** for all chrome (`radius.md = 4`); `radius.full` for
-//   pills + circular buttons. Mocks render r:14–22 — tokens win.
-// - **Glow opt-in.** `elevation.glow.accent` exists for consumers to
-//   wire on hero CTAs (Go Live, primary onboarding). `Button` primary
+//   is NOT the default panel treatment. `colors.bg.glass` exists as an
+//   opt-in for over-globe overlays where dynamic backgrounds need
+//   legibility help.
+// - **Strict r:4** for chrome (`radius.md`); `radius.full` for pills +
+//   circular buttons.
+// - **Glow opt-in.** `elevation.glow.accent` exists; `Button` primary
 //   does NOT default-glow.
-// - **Warn** kept as dedicated `colors.warn` (amber). Used by
-//   PasswordStrengthMeter mid-tier + CCPA jurisdiction badge.
+// - **Warn** dedicated (amber `#e6a23d`). Used by PasswordStrengthMeter
+//   mid-tier + CCPA jurisdiction badge.
 // - **Typography:** Inter Tight (sans) + IBM Plex Mono (mono).
-//   IBM Plex Mono reads as engineering document / architectural drawing
-//   rather than code editor — matches references.
 
 // ─── Palette (raw values — NOT imported by components) ─────────────────────
 
 const palette = {
-  // Backgrounds — warm near-blacks (sepia undertone). No #000.
-  bg900: '#0d0b08',
-  bg800: '#15120e',
-  bg700: '#1c1813',
-  bg600: '#241f18',
+  // Backgrounds — warm cream paper tones. No #fff.
+  paper100: '#ece6d6', // primary canvas
+  paper90: '#e5dcc8',  // elevated
+  paper80: '#dbcfb6',  // panel
+  paper70: '#d3c4a8',  // panel-hi
 
-  // Ink (text) — warm near-creams. No #fff.
-  ink100: '#ece6d6',
-  ink60: 'rgba(236,230,214,0.58)',
-  ink34: 'rgba(236,230,214,0.34)',
+  // Ink (text) — warm dark inks. No #000.
+  ink900: '#1a1612',
+  ink60: 'rgba(26,22,18,0.62)',
+  ink38: 'rgba(26,22,18,0.38)',
+  ink08: 'rgba(26,22,18,0.08)',
 
-  // Borders — warm-tinted cream (not cool white)
-  line08: 'rgba(236,230,214,0.08)',
-  line14: 'rgba(236,230,214,0.14)',
+  // Borders — warm dark rgba on cream paper
+  line08: 'rgba(26,22,18,0.10)',
+  line14: 'rgba(26,22,18,0.20)',
 
-  // Accent — sole saturated color. Warm crimson red. Used for every
-  // "look here" role: LIVE indicator, primary CTA, focus, danger, accent.
+  // Accent — sole saturated color. Warm crimson red. Same in light + dark.
   red500: '#d92e3a',
   red300: '#ff5060',
-  red500a45: 'rgba(217,46,58,0.35)',
+  red500a35: 'rgba(217,46,58,0.35)',
   red500a32: 'rgba(217,46,58,0.32)',
   red500a08: 'rgba(217,46,58,0.08)',
 
-  // Warn (rare moderate-stakes — password mid-tier, CCPA badge)
-  amber400: '#e6a23d',
+  // Warn (rare moderate-stakes — pw meter mid-tier, CCPA badge)
+  amber400: '#c8861e', // warmer + slightly darker for light-mode contrast
 
-  // Dark ink for accent fills (button labels on accent bg)
-  ink900: '#0d0b08',
+  // Cream for accent-fill text inverse
+  paperLight: '#ece6d6',
 } as const
 
 // ─── Semantic layer (components import only from `theme`) ──────────────────
@@ -79,21 +75,22 @@ const palette = {
 export const theme = {
   colors: {
     bg: {
-      primary: palette.bg900,
-      elevated: palette.bg800,
-      panel: palette.bg700,
-      panelHi: palette.bg600,
-      // Glass overlay: opt-in for surfaces over the globe (dynamic content).
-      // Not the default panel treatment.
-      glass: 'rgba(28,24,19,0.72)',
-      // Modal scrim
-      overlay: 'rgba(0,0,0,0.55)',
+      primary: palette.paper100,
+      elevated: palette.paper90,
+      panel: palette.paper80,
+      panelHi: palette.paper70,
+      // Glass overlay: opt-in for surfaces over the globe (dynamic
+      // GL scene). Not the default panel treatment.
+      glass: 'rgba(236,230,214,0.82)',
+      // Modal scrim — warm-tinted dark
+      overlay: 'rgba(26,22,18,0.45)',
     },
     text: {
-      primary: palette.ink100,
+      primary: palette.ink900,
       muted: palette.ink60,
-      subtle: palette.ink34,
-      inverse: palette.ink900,
+      subtle: palette.ink38,
+      // Inverse: cream for text on accent-filled buttons
+      inverse: palette.paperLight,
     },
     border: {
       subtle: palette.line08,
@@ -102,7 +99,7 @@ export const theme = {
     accent: {
       default: palette.red500,
       bright: palette.red300,
-      glow: palette.red500a45,
+      glow: palette.red500a35,
       surface: palette.red500a08,
       border: palette.red500a32,
     },
@@ -151,7 +148,6 @@ export const theme = {
       fontSize: 11,
       lineHeight: 16,
     },
-    // Mono = IBM Plex Mono per references' technical-drawing aesthetic
     monoLabel: {
       fontFamily: 'IBMPlexMono_500Medium',
       fontSize: 10,
@@ -210,18 +206,18 @@ export const theme = {
     },
     sheet: {
       shadowColor: '#000',
-      shadowOpacity: 0.6,
-      shadowRadius: 20,
-      shadowOffset: { width: 0, height: -20 },
+      shadowOpacity: 0.15,
+      shadowRadius: 24,
+      shadowOffset: { width: 0, height: -8 },
     },
     // Glow — opt-in. Consumers wire on specific surfaces (Go Live
-    // primary CTA, hero onboarding CTAs). NOT default on generic
-    // `Button` primary. Single-accent rule: only one glow color exists.
+    // primary CTA, hero onboarding CTAs). Single-accent rule:
+    // only one glow color (the warm red).
     glow: {
       accent: {
         shadowColor: palette.red500,
-        shadowOpacity: 0.25,
-        shadowRadius: 30,
+        shadowOpacity: 0.28,
+        shadowRadius: 24,
         shadowOffset: { width: 0, height: 0 },
       },
     },

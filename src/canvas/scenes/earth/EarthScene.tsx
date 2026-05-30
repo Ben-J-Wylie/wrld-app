@@ -68,6 +68,15 @@ const GLYPH: Record<string, number[]> = {
 // DESIGN.md Section 3 → Pin.ts entry; resolution lands in sub-phase 12.2
 // once Ben signs off on the principle direction. For now: unchanged
 // behavior — same colors as before extraction.
+// Light-mode pin treatment per 12.3 references-derived theme:
+// - Both cluster + single pins use the single accent (warm crimson red).
+//   Cluster vs single differentiated by SIZE + COUNT, never color.
+// - Border is cream (matches paper background) — pin "punches through".
+// - Glow halo uses the accent at low alpha.
+// Pin code lives inline in EarthScene per the within-scene reuse-rule
+// (see DESIGN.md Section 3 "Pin" entry); colors will route through
+// `src/canvas/stage/tokens.ts` when the canvas-stage bridge wires up
+// in 12.5.
 function makePinTexture(count: number): THREE.DataTexture {
   const S = 96
   const cx = S / 2, cy = S / 2
@@ -75,7 +84,11 @@ function makePinTexture(count: number): THREE.DataTexture {
   const circleR = isCluster ? 26 : 18
   const borderR = circleR + 2
   const glowR   = borderR + 14
-  const [fr, fg, fb] = isCluster ? [0x5b, 0x8c, 0xff] : [0xff, 0x3b, 0x5c]
+  // Single accent — warm crimson red #d92e3a (theme.colors.accent.default)
+  const fr = 0xd9, fg = 0x2e, fb = 0x3a
+  // Cream border (matches paper background) — pin "punches through"
+  // text.inverse / bg.primary = #ece6d6
+  const br = 0xec, bg = 0xe6, bb = 0xd6
   const data = new Uint8Array(S * S * 4)
 
   for (let y = 0; y < S; y++) {
@@ -86,7 +99,7 @@ function makePinTexture(count: number): THREE.DataTexture {
       if (d <= circleR) {
         data[i] = fr; data[i+1] = fg; data[i+2] = fb; data[i+3] = 255
       } else if (d <= borderR) {
-        data[i] = 255; data[i+1] = 255; data[i+2] = 255; data[i+3] = 255
+        data[i] = br; data[i+1] = bg; data[i+2] = bb; data[i+3] = 255
       } else if (d < glowR) {
         const t = (glowR - d) / (glowR - borderR)
         const a = Math.round(t * t * 120)
@@ -113,7 +126,8 @@ function makePinTexture(count: number): THREE.DataTexture {
               const py = oy + (GH - 1 - row) * SC + sy
               if (px < 0 || px >= S || py < 0 || py >= S) continue
               const i = (py * S + px) * 4
-              data[i] = 255; data[i+1] = 255; data[i+2] = 255; data[i+3] = 255
+              // Cream glyph (matches paper background; reads on red fill)
+              data[i] = 0xec; data[i+1] = 0xe6; data[i+2] = 0xd6; data[i+3] = 255
             }
           }
         }
@@ -313,7 +327,9 @@ export function EarthScene({
       return
     }
     renderer.setSize(w, h)
-    renderer.setClearColor(0x0a0a0f)
+    // Cream paper background — matches theme.colors.bg.primary (#ece6d6).
+    // The scene reads as a printed atlas / cartographic plate.
+    renderer.setClearColor(0xece6d6)
 
     const scene = new THREE.Scene()
     const camera = new THREE.PerspectiveCamera(45, w / h, 0.01, 100)
@@ -350,7 +366,9 @@ export function EarthScene({
       }
       earthMat = new THREE.MeshBasicMaterial({ map: earthTexture })
     } catch {
-      earthMat = new THREE.MeshBasicMaterial({ color: 0x1a5588 })
+      // Fallback color when texture fails to load — warm sepia
+      // (cohesive with the cream paper background)
+      earthMat = new THREE.MeshBasicMaterial({ color: 0x8c6a3d })
     }
 
     if (setupGenRef.current !== gen) return
