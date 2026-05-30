@@ -605,22 +605,31 @@ primitive (drawn-with-Views) and is NOT routed through `Icon`.
 
 - **Tier:** primitive
 - **Location:** `src/components/primitives/Pressable.tsx`
-- **Variants:** `default`, `subtle` (smaller scale), `none` (no press feedback)
+- **Variants:** `default` (scale 0.96 — buttons, chips), `subtle` (scale 0.98 — cards, rows, larger surfaces), `none` (no scale feedback — for surfaces with their own press response)
 - **Sizes:** N/A (sizing is the consumer's responsibility)
-- **States:** default, pressed
+- **States:** default, pressed, disabled (opacity 0.5)
 - **Used in:** populated in 12.6
 - **Tweak impact:** every pressable surface in the app
+- **Shipped:** 2026-05-30 (sub-phase 12.4 — third primitive)
+- **Last reviewed:** 2026-05-30
 
 **Mock says:** Universal press affordance is `transform: scale(0.94–0.98)`
 on `:active`, with 180ms ease-out transition out. Larger surfaces use
 0.98–0.99; smaller buttons use 0.94–0.96.
 
-**Code does:** RN `Pressable` used directly with inline opacity changes.
+**Code does (shipped):** Wraps RN `Pressable`. Press feedback is an
+`Animated.timing` on a scale transform — duration =
+`motion.timing.fast` (180ms), easing = `Easing.out(Easing.quad)`. Scale
+magnitude comes from `motion.press.scaleMid` / `scaleLarge` per variant.
+`none` variant skips the animation entirely. `disabled` halves opacity
+on the animated view and forwards to the underlying Pressable so taps
+don't fire. API accepts `onPress`, `onPressIn`, `onPressOut`,
+`onLongPress`, `hitSlop`, `accessibility*`, `testID`, `style`,
+`children`. Higher-tier primitives (Button, IconButton, Chip, Card-as-
+pressable) **must** compose this — never reach for RN's raw `Pressable`
+once they migrate in 12.6.
 
-**Gap / proposal:** Wrap RN `Pressable` with a consistent press-scale
-animation driven by motion tokens (12.3). All higher-tier interactive
-primitives (Button, IconButton, Chip, Card-as-pressable, etc.) compose
-this one — never go through RN's raw Pressable.
+**Gap / proposal:** None — shipped.
 
 ---
 

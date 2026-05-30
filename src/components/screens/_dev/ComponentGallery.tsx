@@ -8,13 +8,19 @@
 // Reachable in dev via expo-router push to `/(app)/gallery`. The route
 // is registered with `href: null` so it does not appear in the tab bar.
 
+import { useState } from 'react'
 import { ScrollView, View, StyleSheet } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Text } from '@/components/primitives/Text'
 import { Icon } from '@/components/primitives/Icon'
+import { Pressable } from '@/components/primitives/Pressable'
 import { theme } from '@/tokens/theme'
 
 export function ComponentGallery() {
+  const [pressCounts, setPressCounts] = useState({ default: 0, subtle: 0, none: 0 })
+  const bump = (k: 'default' | 'subtle' | 'none') =>
+    setPressCounts((c) => ({ ...c, [k]: c[k] + 1 }))
+
   return (
     <SafeAreaView style={styles.root}>
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -88,6 +94,33 @@ export function ComponentGallery() {
             </View>
           </Row>
         </Section>
+
+        <Section title="Pressable">
+          <Row label="default (0.96)">
+            <Pressable style={styles.pressTile} onPress={() => bump('default')}>
+              <Text variant="bodyEmphasized">Tap me</Text>
+              <Text variant="monoCaption" color={theme.colors.text.muted}>{pressCounts.default} taps</Text>
+            </Pressable>
+          </Row>
+          <Row label="subtle (0.98)">
+            <Pressable variant="subtle" style={styles.pressTileWide} onPress={() => bump('subtle')}>
+              <Text variant="bodyEmphasized">Larger surface — softer press</Text>
+              <Text variant="monoCaption" color={theme.colors.text.muted}>{pressCounts.subtle} taps</Text>
+            </Pressable>
+          </Row>
+          <Row label="none">
+            <Pressable variant="none" style={styles.pressTile} onPress={() => bump('none')}>
+              <Text variant="bodyEmphasized">No scale feedback</Text>
+              <Text variant="monoCaption" color={theme.colors.text.muted}>{pressCounts.none} taps</Text>
+            </Pressable>
+          </Row>
+          <Row label="disabled">
+            <Pressable style={styles.pressTile} disabled onPress={() => bump('default')}>
+              <Text variant="bodyEmphasized">Can't tap</Text>
+              <Text variant="monoCaption" color={theme.colors.text.muted}>opacity 0.5</Text>
+            </Pressable>
+          </Row>
+        </Section>
       </ScrollView>
     </SafeAreaView>
   )
@@ -130,5 +163,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.md,
     flexWrap: 'wrap',
+  },
+  pressTile: {
+    alignSelf: 'flex-start',
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.lg,
+    backgroundColor: theme.colors.bg.elevated,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border.subtle,
+    gap: 2,
+  },
+  pressTileWide: {
+    paddingVertical: theme.spacing.md,
+    paddingHorizontal: theme.spacing.lg,
+    backgroundColor: theme.colors.bg.elevated,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border.subtle,
+    gap: 2,
   },
 })
