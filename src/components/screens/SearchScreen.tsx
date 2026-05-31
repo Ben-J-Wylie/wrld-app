@@ -1,10 +1,26 @@
+// src/components/screens/SearchScreen.tsx
+//
+// 12.6 migration target. Replaces the bespoke search input + user row
+// with the design-system equivalents:
+//
+//   • SearchBar (feature) replaces the bespoke Input + ActivityIndicator
+//     row at the top. clear-X appears automatically once there is a
+//     query.
+//   • BroadcasterRow (default) replaces the bespoke UserRow. Renders
+//     Avatar + displayName + @handle · NK followers; tap routes into
+//     the profile screen. Follow button stays hidden — matches the
+//     existing behavior of "tap row to open profile, follow there".
+//   • Icon + Text replace the emoji + plain text empty states.
+
 import { useState } from 'react'
-import { View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator } from 'react-native'
+import { FlatList, StyleSheet, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
 import { theme } from '@/tokens/theme'
-import { Input } from '@/components/primitives/Input'
-import { Avatar } from '@/components/primitives/Avatar'
+import { Text } from '@/components/primitives/Text'
+import { Icon } from '@/components/primitives/Icon'
+import { SearchBar } from '@/components/features/discovery/SearchBar'
+import { BroadcasterRow } from '@/components/features/user/BroadcasterRow'
 import { useUserSearch } from '@/hooks/useUserSearch'
 import type { PublicUser } from '@/types'
 
@@ -21,36 +37,50 @@ export function SearchScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.searchBar}>
-        <Input
-          placeholder="Search by handle or name…"
+      <View style={styles.searchBarWrap}>
+        <SearchBar
           value={q}
           onChangeText={setQ}
+          onClear={() => setQ('')}
+          placeholder="Search by handle or name…"
           autoCapitalize="none"
           autoCorrect={false}
-          style={styles.input}
         />
-        {isFetching && <ActivityIndicator color={theme.colors.accent.default} style={styles.spinner} />}
       </View>
 
       {!q.trim() && (
         <View style={styles.empty}>
-          <Text style={styles.emptyEmoji}>🔍</Text>
-          <Text style={styles.emptyText}>Search for people on WRLD</Text>
+          <Icon name="search" size="lg" color={theme.colors.text.subtle} />
+          <Text variant="body" color={theme.colors.text.muted}>
+            Search for people on WRLD
+          </Text>
         </View>
       )}
 
       {q.trim().length > 0 && !isFetching && users?.length === 0 && (
         <View style={styles.empty}>
-          <Text style={styles.emptyEmoji}>👤</Text>
-          <Text style={styles.emptyText}>No users found for "{q}"</Text>
+          <Icon name="user-x" size="lg" color={theme.colors.text.subtle} />
+          <Text variant="body" color={theme.colors.text.muted}>
+            No users found for "{q}"
+          </Text>
         </View>
       )}
 
       <FlatList
         data={users}
-        keyExtractor={(u) => u.id}
-        renderItem={({ item }) => <UserRow user={item} onPress={() => goToProfile(item.handle)} />}
+        keyExtractor={(u: PublicUser) => u.id}
+        renderItem={({ item }) => (
+          <BroadcasterRow
+            avatarUrl={item.avatarUrl}
+            displayName={item.displayName}
+            handle={item.handle}
+            followerCount={item.followerCount}
+            showFollowButton={false}
+            onPress={() => goToProfile(item.handle)}
+            style={styles.row}
+          />
+        )}
+        ItemSeparatorComponent={() => <View style={styles.separator} />}
         contentContainerStyle={styles.list}
         keyboardShouldPersistTaps="handled"
       />
@@ -58,49 +88,25 @@ export function SearchScreen() {
   )
 }
 
-function UserRow({ user, onPress }: { user: PublicUser; onPress: () => void }) {
-  return (
-    <Pressable style={styles.row} onPress={onPress}>
-      <Avatar avatarUrl={user.avatarUrl} displayName={user.displayName} size={44} />
-      <View style={styles.rowText}>
-        <Text style={styles.displayName}>{user.displayName}</Text>
-        <Text style={styles.handle}>@{user.handle}</Text>
-      </View>
-      <View style={styles.counts}>
-        <Text style={styles.countText}>{user.followerCount} followers</Text>
-      </View>
-    </Pressable>
-  )
-}
-
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.bg.primary },
-  searchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  searchBarWrap: {
     paddingHorizontal: theme.spacing.lg,
     paddingVertical: theme.spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border.subtle,
-    gap: theme.spacing.sm,
   },
-  input: { flex: 1 },
-  spinner: { width: 20 },
-  list: { paddingHorizontal: theme.spacing.lg },
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: theme.spacing.sm },
-  emptyEmoji: { fontSize: 36 },
-  emptyText: { ...theme.typography.body, color: theme.colors.text.muted },
-  row: {
-    flexDirection: 'row',
+  empty: {
+    flex: 1,
     alignItems: 'center',
-    paddingVertical: theme.spacing.md,
-    gap: theme.spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border.subtle,
+    justifyContent: 'center',
+    gap: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.lg,
   },
-  rowText: { flex: 1, gap: 2 },
-  displayName: { ...theme.typography.body, color: theme.colors.text.primary, fontWeight: '600' },
-  handle: { ...theme.typography.caption, color: theme.colors.text.muted },
-  counts: {},
-  countText: { ...theme.typography.caption, color: theme.colors.text.muted },
+  list: { paddingHorizontal: theme.spacing.lg },
+  row: {
+    paddingVertical: theme.spacing.sm,
+  },
+  separator: {
+    height: 1,
+    backgroundColor: theme.colors.border.subtle,
+  },
 })
