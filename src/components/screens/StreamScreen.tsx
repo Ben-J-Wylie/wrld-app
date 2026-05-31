@@ -362,9 +362,9 @@ export function StreamScreen() {
   async function handleReportPress() {
     if (!isSignedIn) { setAuthModalVisible(true); return }
     try {
-      const uri = await captureScreen({ format: 'jpg', quality: 0.9 })
-      console.log('[report] captureScreen ok, uri:', uri)
-      pendingSnapshotUri.current = uri
+      const b64 = await captureScreen({ format: 'jpg', quality: 0.9, result: 'base64' })
+      console.log('[report] captureScreen ok, b64 length:', b64?.length)
+      pendingSnapshotUri.current = b64
     } catch (e) {
       console.warn('[report] captureScreen failed:', e)
       pendingSnapshotUri.current = null
@@ -381,7 +381,7 @@ export function StreamScreen() {
       if (pendingSnapshotUri.current) {
         const uri = pendingSnapshotUri.current
         pendingSnapshotUri.current = null
-        streamsApi.uploadSnapshot(reportId, uri).catch((e) => console.warn('[report] upload failed:', e))
+        streamsApi.uploadSnapshot(reportId, uri).catch((e) => console.warn('[report] upload failed:', e?.message, e?.response?.status, e?.response?.data))
       }
       Alert.alert('Reported', 'Thanks for letting us know. We\'ll review this stream.')
     } catch (e) {
