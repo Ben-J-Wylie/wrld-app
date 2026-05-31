@@ -1448,13 +1448,15 @@ from coordinates / uptime / heading.
 - **States:** default, pressed (via Pressable variant=subtle when onPress provided)
 - **Used in:** `StreamCard.preview` (composed, not duplicated); Clip Edit hero + future replay thumbnails next
 - **Tweak impact:** Viewer Sheet preview, Clip Edit preview hero, future replay thumbnails
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
+- **Last reviewed:** 2026-05-31
 
 **Mock says:** Aspect-ratio container with simulated camera/scene
 content. Grain texture overlay. Overlay metadata pills (LIVE top-left,
 viewer-count top-right, channel-label bottom-left). Optional center play
 button (semi-transparent circle + play icon).
 
-**Code does:** Shipped in 12.5. Consumer-flat props (`thumbnailUrl`,
+**Code does (shipped):** Consumer-flat props (`thumbnailUrl`,
 `viewerCount`, `channel`, `aspectRatio`, `onPress`, `accessibilityLabel`)
 keep the feature domain-blind. Placeholder fallback when no
 `thumbnailUrl`: `bg.panel` background + `video` icon. `StreamCard.preview`
