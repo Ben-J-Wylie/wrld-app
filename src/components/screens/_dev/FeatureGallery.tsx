@@ -20,6 +20,7 @@ import { StreamStateBanner } from '@/components/features/stream/StreamStateBanne
 import { ReactionRail } from '@/components/features/stream/ReactionRail'
 import { SettingsRow } from '@/components/features/settings/SettingsRow'
 import { ToastBanner } from '@/components/features/feedback/ToastBanner'
+import { SearchBar } from '@/components/features/discovery/SearchBar'
 import { Toggle } from '@/components/primitives/Toggle'
 import { Button } from '@/components/primitives/Button'
 import { BroadcasterRow } from '@/components/features/user/BroadcasterRow'
@@ -428,6 +429,18 @@ export function FeatureGallery() {
         </Row>
       </Section>
 
+      <Section title="SearchBar">
+        <Row label="default (empty)">
+          <SearchBarDemo />
+        </Row>
+        <Row label="with seeded value (clear-X)">
+          <SearchBarDemo initial="atlantic ave" />
+        </Row>
+        <Row label="no clear callback (no X)">
+          <SearchBarDemo initial="kai" omitClear />
+        </Row>
+      </Section>
+
       <Section title="BroadcasterRow">
         <Row label="default">
           <BroadcasterRow
@@ -495,6 +508,23 @@ function GalleryRow({ label, children }: { label: string; children: React.ReactN
 
 // Local alias so the markup reads `<Row>` like the primitive gallery does
 const Row = GalleryRow
+
+function SearchBarDemo({
+  initial = '',
+  omitClear,
+}: {
+  initial?: string
+  omitClear?: boolean
+}) {
+  const [value, setValue] = useState(initial)
+  return (
+    <SearchBar
+      value={value}
+      onChangeText={setValue}
+      onClear={omitClear ? undefined : () => setValue('')}
+    />
+  )
+}
 
 function ToastBannerDemo() {
   const [toast, setToast] = useState<

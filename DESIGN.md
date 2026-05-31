@@ -1529,20 +1529,41 @@ variant's sensor row.
 
 ##### `SearchBar`
 
-- **Tier:** feature (composes Input + Icon)
+- **Tier:** feature (composes Icon + TextInput + Pressable)
 - **Location:** `src/components/features/discovery/SearchBar.tsx`
-- **Variants:** `default` (globe overlay — glass pill with mag-glass icon + Input)
-- **Sizes:** md
-- **States:** default, focused
-- **Used in:** populated in 12.6
+- **Variants:** `default` (pill on `bg.panel`, subtle border; focus swaps to `accent.default`)
+- **Sizes:** md (40-tall pill)
+- **States:** default, focused, with-clear (when `onClear` is set and value is non-empty)
+- **Used in:** populated in 12.6 (globe overlay + SearchScreen migration)
 - **Tweak impact:** Globe overlay search slot; any future search surface
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
+- **Last reviewed:** 2026-05-31
 
 **Mock says (C3=A):** Glass pill (radius:full, panel bg, line border,
 backdrop-blur) with leading mag-glass Icon + Input. Placeholder
 "Search handle, title, or city". Sits below the WRLD + LIVE header,
 above the CategoryChipRow.
 
-**Code does:** None on globe; `SearchScreen.tsx` has a standalone Input
+**Code does (shipped):** 40-tall pill — leading `search` icon, bare
+`TextInput`, optional clear-X (shown when value is non-empty AND
+`onClear` is provided). Focus is tracked locally; the border swaps
+from `border.subtle` to `accent.default` on focus. **No focus-driven
+shadow** per the 2026-05-30 CALayer fix on Input.
+
+**Composition note.** Built with a bare `TextInput` rather than
+wrapping the Input primitive — Input has no leading-icon slot, and
+the pill geometry (radius `full`, 40 tall) doesn't match Input's
+default rectangle. Keeping Input untouched + building a small custom
+pill is the cheaper composition. Backdrop-blur from the spec is
+deferred — the panel-tinted background is good enough on the cream
+canvas, and `BlurView` introduces ios-only behavior we'd rather adopt
+behind a primitive when a second blur surface needs it.
+
+**API:** spreads `TextInputProps` minus `style`; required `value`,
+`onChangeText`; optional `onSubmit`, `onClear`, `placeholder` (default
+"Search handle, title, or city").
+
+**Code does (legacy):** None on globe; `SearchScreen.tsx` has a standalone Input
 hitting the existing handle/title search endpoint.
 
 **Gap / proposal:** Lifts the existing search endpoint onto the globe
