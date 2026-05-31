@@ -1,0 +1,225 @@
+// src/components/features/stream/DiscoveryHandoffCard.tsx
+//
+// The discovery → watching seam (Section 0.7 canonical example).
+// Replaces the inline `<View>` blocks in GlobeScreen.tsx for both the
+// single-pin tap and the multi-pin cluster tap.
+//
+// Variants (inferred from prop shape):
+//   single  — `{ stream }` — Avatar + title + handle + viewer count +
+//             Join button, with an optional `layers` row that renders
+//             the StreamStrip section as a second row per C2=A.
+//   cluster — `{ streams }` — small header ("N live streams here ·
+//             LOCATION") + compact rows (Avatar + title + meta +
+//             Join chip).
+//
+// Floats at the bottom of the GlobeScreen — not a bottom-sheet
+// (deferred to v0.3 per the 2026-05-29 decision-log entry).
+
+import type { ComponentProps } from 'react'
+import { ScrollView, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
+import { Avatar } from '@/components/primitives/Avatar'
+import { Pressable } from '@/components/primitives/Pressable'
+import { Text } from '@/components/primitives/Text'
+import { Icon } from '@/components/primitives/Icon'
+import { Button } from '@/components/primitives/Button'
+import { StreamStrip, type StreamStripLayer } from '@/components/sections/StreamStrip'
+import { LivePill } from './LivePill'
+import { theme } from '@/tokens/theme'
+
+type IconName = ComponentProps<typeof Icon>['name']
+
+export type DiscoveryStream = {
+  id: string
+  title: string
+  handle: string
+  displayName?: string
+  avatarUrl?: string | null
+  viewerCount: number
+  isLive?: boolean
+  city?: string
+  distance?: string
+  layers?: StreamStripLayer[]
+  onJoin: () => void
+}
+
+type SingleProps = {
+  stream: DiscoveryStream
+  onDismiss?: () => void
+  style?: StyleProp<ViewStyle>
+}
+
+type ClusterProps = {
+  streams: DiscoveryStream[]
+  locationLabel?: string
+  onDismiss?: () => void
+  style?: StyleProp<ViewStyle>
+}
+
+type Props = SingleProps | ClusterProps
+
+function isCluster(p: Props): p is ClusterProps {
+  return (p as ClusterProps).streams !== undefined
+}
+
+export function DiscoveryHandoffCard(props: Props) {
+  if (isCluster(props)) {
+    return <ClusterCard {...props} />
+  }
+  return <SingleCard {...props} />
+}
+
+// ─── Single ──────────────────────────────────────────────────────────────────
+
+function SingleCard({ stream, onDismiss, style }: SingleProps) {
+  return (
+    <View style={[styles.card, style]}>
+      <View style={styles.row}>
+        <Avatar
+          avatarUrl={stream.avatarUrl}
+          displayName={stream.displayName ?? stream.handle}
+          size="md"
+        />
+        <View style={styles.col}>
+          <Text variant="bodyEmphasized" numberOfLines={1}>
+            {stream.title}
+          </Text>
+          <Text variant="monoCaption" color={theme.colors.text.muted} numberOfLines={1}>
+            @{stream.handle} · {formatViewers(stream.viewerCount)} watching
+          </Text>
+        </View>
+        {stream.isLive !== false && <LivePill size="sm" />}
+        {onDismiss && (
+          <Pressable
+            variant="default"
+            onPress={onDismiss}
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss"
+            hitSlop={8}
+            style={styles.close}
+          >
+            <Icon name="x" size="md" color={theme.colors.text.muted} />
+          </Pressable>
+        )}
+      </View>
+      {stream.layers && stream.layers.length > 0 && (
+        <StreamStrip layers={stream.layers} />
+      )}
+      <Button variant="primary" label="Join" onPress={stream.onJoin} />
+    </View>
+  )
+}
+
+// ─── Cluster ─────────────────────────────────────────────────────────────────
+
+function ClusterCard({ streams, locationLabel, onDismiss, style }: ClusterProps) {
+  return (
+    <View style={[styles.card, style]}>
+      <View style={styles.header}>
+        <Text variant="bodyEmphasized">
+          {streams.length} live stream{streams.length === 1 ? '' : 's'} here
+          {locationLabel ? ` · ${locationLabel}` : ''}
+        </Text>
+        {onDismiss && (
+          <Pressable
+            variant="default"
+            onPress={onDismiss}
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss"
+            hitSlop={8}
+            style={styles.close}
+          >
+            <Icon name="x" size="md" color={theme.colors.text.muted} />
+          </Pressable>
+        )}
+      </View>
+      <ScrollView style={styles.clusterScroll}>
+        {streams.map((s) => (
+          <View key={s.id} style={styles.clusterRow}>
+            <Avatar
+              avatarUrl={s.avatarUrl}
+              displayName={s.displayName ?? s.handle}
+              size="sm"
+            />
+            <View style={styles.col}>
+              <Text variant="bodyEmphasized" numberOfLines={1}>
+                {s.title}
+              </Text>
+              <Text variant="monoCaption" color={theme.colors.text.muted} numberOfLines={1}>
+                @{s.handle} · {formatViewers(s.viewerCount)}
+                {s.distance ? ` · ${s.distance}` : ''}
+              </Text>
+            </View>
+            <Pressable
+              variant="default"
+              onPress={s.onJoin}
+              accessibilityRole="button"
+              accessibilityLabel={`Join ${s.handle}`}
+              style={styles.joinChip}
+            >
+              <Text variant="monoLabel" color={theme.colors.accent.default}>
+                JOIN
+              </Text>
+            </Pressable>
+          </View>
+        ))}
+      </ScrollView>
+    </View>
+  )
+}
+
+// ─── Shared ──────────────────────────────────────────────────────────────────
+
+function formatViewers(n: number): string {
+  if (n >= 10_000) return `${Math.floor(n / 1000)}k`
+  if (n >= 1_000) return `${(n / 1000).toFixed(1)}k`
+  return String(n)
+}
+
+const styles = StyleSheet.create({
+  card: {
+    padding: theme.spacing.lg,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border.subtle,
+    backgroundColor: theme.colors.bg.elevated,
+    gap: theme.spacing.md,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.md,
+  },
+  col: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0,
+  },
+  close: {
+    padding: 2,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+  },
+  clusterScroll: {
+    maxHeight: 220,
+  },
+  clusterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+  },
+  joinChip: {
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.radius.full,
+    borderWidth: 1,
+    borderColor: theme.colors.accent.default,
+    backgroundColor: theme.colors.accent.surface,
+  },
+})
+
+// keep IconName referenced for users who want to extend layers programmatically
+export type DiscoveryIconName = IconName

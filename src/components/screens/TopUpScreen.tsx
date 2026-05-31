@@ -1,52 +1,62 @@
-import { useState, useCallback } from 'react'
-import {
-  View,
-  Text,
-  StyleSheet,
-  Pressable,
-  ScrollView,
-  ActivityIndicator,
-  Alert,
-} from 'react-native'
+// src/components/screens/TopUpScreen.tsx
+//
+// 12.6 migration target. The bespoke top-up bundle picker composes
+// from the v0.2 wallet features that already model this exact UX:
+//
+//   • PursesCard (variant=single-sb) renders the current Space Bucks
+//     balance hero.
+//   • BundleCard per bundle — radio bullet + qty + price + optional
+//     corner badge. Badge tokens map: MOST POPULAR → 'most-popular',
+//     BEST VALUE → 'best-value', VIP → 'vip'. The GREEN/GOLD bespoke
+//     badge colors retire in favor of the design-system tones
+//     (single-accent rule applies).
+//   • IconButton (arrow-left) for back navigation.
+//   • Button (primary) docked at the bottom for the Buy action.
+//   • Success screen composes Icon frame + Text + Button.
+//
+// HelpText carries the "Test mode · no payment required" line. The
+// underlying purchase logic (usersApi.topUpSpaceBucks + cache
+// invalidations) is unchanged — only rendering migrates.
+
+import { useCallback, useState } from 'react'
+import { Alert, StyleSheet, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { router, useFocusEffect } from 'expo-router'
 import { theme } from '@/tokens/theme'
 import { useWallet, useInvalidateWallet } from '@/hooks/useWallet'
 import { useInvalidateCurrentUser } from '@/hooks/useCurrentUser'
 import { usersApi } from '@/api/users'
-
-const SPACE_BUCKS_PER_DOLLAR = 100
-const ACCENT = theme.colors.accent.default
-const GREEN = '#10B981'
-const GOLD = '#F59E0B'
+import { ScreenScroll } from '@/components/sections/ScreenScroll'
+import { Text } from '@/components/primitives/Text'
+import { HelpText } from '@/components/primitives/HelpText'
+import { Button } from '@/components/primitives/Button'
+import { Icon } from '@/components/primitives/Icon'
+import { IconButton } from '@/components/primitives/IconButton'
+import { PursesCard } from '@/components/features/wallet/PursesCard'
+import { BundleCard, type BundleBadge } from '@/components/features/wallet/BundleCard'
 
 type Bundle = {
   amount: number
   priceCents: number
-  badge: string | null
-  badgeColor: string | null
-  highlight: boolean
+  badge: BundleBadge | null
 }
 
 const BUNDLES: Bundle[] = [
-  { amount: 500,  priceCents: 499,  badge: null,           badgeColor: null,   highlight: false },
-  { amount: 1200, priceCents: 999,  badge: 'MOST POPULAR', badgeColor: ACCENT, highlight: true  },
-  { amount: 2500, priceCents: 1999, badge: 'BEST VALUE',   badgeColor: GREEN,  highlight: false },
-  { amount: 6000, priceCents: 3999, badge: 'VIP',          badgeColor: GOLD,   highlight: false },
+  { amount: 500, priceCents: 499, badge: null },
+  { amount: 1200, priceCents: 999, badge: 'most-popular' },
+  { amount: 2500, priceCents: 1999, badge: 'best-value' },
+  { amount: 6000, priceCents: 3999, badge: 'vip' },
 ]
 
 const BASE_RATE = 0.01 // $0.01 per Space Buck
 
-function savings(b: Bundle) {
+function savingsPct(b: Bundle): number {
   const rate = b.priceCents / 100 / b.amount
-  return Math.round((1 - rate / BASE_RATE) * 100)
+  const pct = Math.round((1 - rate / BASE_RATE) * 100)
+  return Math.max(0, pct)
 }
 
-function fmtRate(b: Bundle) {
-  return `$${(b.priceCents / 100 / b.amount).toFixed(4)} / 🚀`
-}
-
-function fmtPrice(cents: number) {
+function fmtPrice(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`
 }
 
@@ -58,10 +68,12 @@ export function TopUpScreen() {
   const [buying, setBuying] = useState(false)
   const [done, setDone] = useState(false)
 
-  useFocusEffect(useCallback(() => {
-    setDone(false)
-    setSelectedIndex(1)
-  }, []))
+  useFocusEffect(
+    useCallback(() => {
+      setDone(false)
+      setSelectedIndex(1)
+    }, []),
+  )
 
   const selected = BUNDLES[selectedIndex]!
 
@@ -81,267 +93,132 @@ export function TopUpScreen() {
   if (done) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <Pressable onPress={() => router.navigate('/(app)/wallet')} hitSlop={12}>
-            <Text style={styles.back}>←</Text>
-          </Pressable>
-          <Text style={styles.title}>Top up</Text>
-          <View style={{ width: 32 }} />
-        </View>
-        <View style={styles.center}>
-          <Text style={styles.successEmoji}>🚀</Text>
-          <Text style={styles.successHeading}>Space Bucks added</Text>
-          <Text style={styles.successBody}>
+        <Header onBack={() => router.navigate('/(app)/wallet')} />
+        <ScreenScroll contentContainerStyle={styles.successScroll}>
+          <View style={styles.successIconFrame}>
+            <Icon name="check" size="lg" color={theme.colors.accent.default} />
+          </View>
+          <Text variant="display" style={styles.center}>
+            Space Bucks added
+          </Text>
+          <Text
+            variant="body"
+            color={theme.colors.text.muted}
+            style={styles.center}
+          >
             {selected.amount.toLocaleString()} Space Bucks have been added to your wallet.
           </Text>
-          <Pressable style={styles.doneBtn} onPress={() => router.navigate('/(app)/wallet')}>
-            <Text style={styles.doneBtnText}>Done</Text>
-          </Pressable>
-        </View>
+          <Button label="Done" onPress={() => router.navigate('/(app)/wallet')} />
+        </ScreenScroll>
       </SafeAreaView>
     )
   }
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.navigate('/(app)/wallet')} hitSlop={12}>
-          <Text style={styles.back}>←</Text>
-        </Pressable>
-        <Text style={styles.title}>Top up</Text>
-        <View style={{ width: 32 }} />
-      </View>
+      <Header onBack={() => router.navigate('/(app)/wallet')} />
 
-      <ScrollView contentContainerStyle={styles.content}>
-        {/* Current balance */}
-        {data != null && (
-          <View style={styles.balanceCard}>
-            <Text style={styles.balanceLabel}>CURRENT BALANCE</Text>
-            <Text style={styles.balanceAmount}>{data.spaceBucks.toLocaleString()} 🚀</Text>
-            <Text style={styles.balanceSub}>${(data.spaceBucks / SPACE_BUCKS_PER_DOLLAR).toFixed(2)} USD</Text>
-          </View>
-        )}
+      <ScreenScroll contentContainerStyle={styles.scroll}>
+        <Text variant="display">Top up</Text>
 
-        {/* Bundle list */}
-        <Text style={styles.sectionLabel}>CHOOSE BUNDLE</Text>
+        {data != null && <PursesCard variant="single-sb" spaceBucks={data.spaceBucks} />}
 
-        <View style={styles.bundleList}>
-          {BUNDLES.map((bundle, i) => {
-            const isSelected = i === selectedIndex
-            const pct = savings(bundle)
-            return (
-              <Pressable
-                key={bundle.amount}
-                style={[
-                  styles.bundleRow,
-                  isSelected && styles.bundleRowSelected,
-                  bundle.highlight && !isSelected && styles.bundleRowHighlight,
-                ]}
-                onPress={() => setSelectedIndex(i)}
-              >
-                {/* Radio */}
-                <View style={[styles.radio, isSelected && styles.radioSelected]}>
-                  {isSelected && <View style={styles.radioDot} />}
-                </View>
+        <HelpText>CHOOSE BUNDLE</HelpText>
 
-                {/* Info */}
-                <View style={styles.bundleInfo}>
-                  <View style={styles.bundleTopRow}>
-                    <Text style={styles.bundleAmount}>
-                      +{bundle.amount.toLocaleString()} <Text style={styles.bundleEmoji}>🚀</Text>
-                    </Text>
-                    {bundle.badge && (
-                      <View style={[styles.badge, { backgroundColor: bundle.badgeColor! }]}>
-                        <Text style={styles.badgeText}>{bundle.badge}</Text>
-                      </View>
-                    )}
-                  </View>
-                  <Text style={styles.bundleRate}>
-                    {fmtRate(bundle)}{pct > 0 ? `  ·  SAVE ${pct}%` : ''}
-                  </Text>
-                </View>
-
-                {/* Price */}
-                <Text style={[styles.bundlePrice, isSelected && styles.bundlePriceSelected]}>
-                  {fmtPrice(bundle.priceCents)}
-                </Text>
-              </Pressable>
-            )
-          })}
+        <View style={styles.bundles}>
+          {BUNDLES.map((bundle, i) => (
+            <BundleCard
+              key={bundle.amount}
+              qty={bundle.amount}
+              priceUsd={bundle.priceCents / 100}
+              perUnitSavingsPct={savingsPct(bundle)}
+              badge={bundle.badge ?? undefined}
+              selected={i === selectedIndex}
+              onPress={() => setSelectedIndex(i)}
+            />
+          ))}
         </View>
 
-        <Text style={styles.testNote}>Test mode · no payment required</Text>
-      </ScrollView>
+        <HelpText style={styles.testNote}>TEST MODE · NO PAYMENT REQUIRED</HelpText>
+      </ScreenScroll>
 
-      {/* Buy button */}
       <View style={styles.footer}>
-        <Pressable
-          style={[styles.buyBtn, buying && styles.buyBtnDisabled]}
+        <Button
+          label={`Add ${selected.amount.toLocaleString()} 🚀  ·  ${fmtPrice(selected.priceCents)}`}
           onPress={handleBuy}
-          disabled={buying}
-        >
-          {buying ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.buyBtnText}>
-              Add {selected.amount.toLocaleString()} 🚀  ·  {fmtPrice(selected.priceCents)}
-            </Text>
-          )}
-        </Pressable>
+          loading={buying}
+        />
       </View>
     </SafeAreaView>
   )
 }
 
+function Header({ onBack }: { onBack: () => void }) {
+  return (
+    <View style={styles.header}>
+      <IconButton
+        name="arrow-left"
+        variant="ghost"
+        onPress={onBack}
+        accessibilityLabel="Back"
+      />
+      <Text variant="heading">Top up</Text>
+      <View style={styles.headerSpacer} />
+    </View>
+  )
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.bg.primary },
-  center: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: theme.spacing.lg,
-    padding: theme.spacing.lg,
-  },
-
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
+    paddingTop: theme.spacing.sm,
+    paddingBottom: theme.spacing.sm,
   },
-  back: { ...theme.typography.heading, color: theme.colors.text.primary, width: 32 },
-  title: { ...theme.typography.heading, color: theme.colors.text.primary },
-
-  content: { padding: theme.spacing.lg, gap: theme.spacing.lg, paddingBottom: theme.spacing.xl },
-
-  // Balance card
-  balanceCard: {
-    backgroundColor: theme.colors.bg.elevated,
-    borderRadius: theme.radius.md,
-    borderWidth: 1,
-    borderColor: `${ACCENT}44`,
-    padding: theme.spacing.md,
-    gap: 2,
+  headerSpacer: {
+    width: 36,
+    height: 36,
   },
-  balanceLabel: {
-    ...theme.typography.caption,
-    color: theme.colors.text.muted,
-    fontWeight: '700',
-    letterSpacing: 1,
+  scroll: {
+    padding: theme.spacing.lg,
+    gap: theme.spacing.lg,
+    paddingBottom: theme.spacing.xxxl,
   },
-  balanceAmount: { ...theme.typography.heading, color: theme.colors.text.primary, marginTop: 4 },
-  balanceSub: { ...theme.typography.caption, color: theme.colors.text.muted },
-
-  sectionLabel: {
-    ...theme.typography.caption,
-    color: theme.colors.text.muted,
-    fontWeight: '700',
-    letterSpacing: 1,
+  bundles: {
+    gap: theme.spacing.sm,
   },
-
-  // Bundle list
-  bundleList: { gap: theme.spacing.sm },
-  bundleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.md,
-    backgroundColor: theme.colors.bg.elevated,
-    borderRadius: theme.radius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border.subtle,
-    padding: theme.spacing.md,
-  },
-  bundleRowSelected: {
-    borderColor: ACCENT,
-    backgroundColor: `${ACCENT}11`,
-  },
-  bundleRowHighlight: {
-    borderColor: `${ACCENT}44`,
-  },
-
-  // Radio button
-  radio: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: theme.colors.border.subtle,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  radioSelected: { borderColor: ACCENT },
-  radioDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: ACCENT,
-  },
-
-  // Bundle info
-  bundleInfo: { flex: 1, gap: 2 },
-  bundleTopRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
-  bundleAmount: { ...theme.typography.body, color: theme.colors.text.primary, fontWeight: '700' },
-  bundleEmoji: { fontSize: 14 },
-  bundleRate: { ...theme.typography.caption, color: theme.colors.text.muted },
-
-  badge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: theme.radius.md,
-  },
-  badgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#fff',
-    letterSpacing: 0.5,
-  },
-
-  bundlePrice: {
-    ...theme.typography.body,
-    color: theme.colors.text.muted,
-    fontWeight: '600',
-  },
-  bundlePriceSelected: { color: ACCENT, fontWeight: '700' },
-
   testNote: {
-    ...theme.typography.caption,
-    color: theme.colors.text.muted,
     textAlign: 'center',
   },
-
-  // Footer
   footer: {
     padding: theme.spacing.lg,
     paddingTop: theme.spacing.md,
     borderTopWidth: 1,
     borderTopColor: theme.colors.border.subtle,
   },
-  buyBtn: {
-    backgroundColor: ACCENT,
-    borderRadius: theme.radius.md,
-    paddingVertical: theme.spacing.md,
-    alignItems: 'center',
-  },
-  buyBtnDisabled: { opacity: 0.5 },
-  buyBtnText: { ...theme.typography.body, color: '#fff', fontWeight: '700' },
-
-  // Success
-  successEmoji: { fontSize: 56 },
-  successHeading: { ...theme.typography.heading, color: theme.colors.text.primary, textAlign: 'center' },
-  successBody: {
-    ...theme.typography.body,
-    color: theme.colors.text.muted,
+  center: {
     textAlign: 'center',
-    lineHeight: 22,
   },
-  doneBtn: {
-    marginTop: theme.spacing.sm,
-    backgroundColor: ACCENT,
-    borderRadius: theme.radius.md,
-    paddingVertical: theme.spacing.md,
-    paddingHorizontal: theme.spacing.xl,
+  successScroll: {
+    flexGrow: 1,
+    padding: theme.spacing.lg,
+    paddingBottom: theme.spacing.xxxl,
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: theme.spacing.md,
   },
-  doneBtnText: { ...theme.typography.body, color: '#fff', fontWeight: '700' },
+  successIconFrame: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: theme.colors.accent.surface,
+    borderWidth: 2,
+    borderColor: theme.colors.accent.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: theme.spacing.md,
+  },
 })

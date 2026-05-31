@@ -1,14 +1,28 @@
-import { View, Text, StyleSheet, Alert, Pressable } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+// src/components/screens/SettingsScreen.tsx
+//
+// 12.6 migration target: this screen now composes from the design
+// system. ScreenScroll wraps; SettingsGroup hosts each section;
+// SettingsRow renders every row including the notifications Toggles
+// (the row's `right` slot carries the Toggle). Identity row carries
+// an AccountIDPill in its `right` slot so the user's permanent ID
+// surfaces alongside the changeable handle.
+
+import { Alert, StyleSheet, View } from 'react-native'
 import { router } from 'expo-router'
 import { useClerk } from '@clerk/clerk-expo'
-import { theme } from '@/tokens/theme'
+import { useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
+import { ScreenScroll } from '@/components/sections/ScreenScroll'
+import { SettingsGroup } from '@/components/sections/SettingsGroup'
+import { SettingsRow } from '@/components/features/settings/SettingsRow'
+import { AccountIDPill } from '@/components/features/user/AccountIDPill'
 import { Button } from '@/components/primitives/Button'
 import { Toggle } from '@/components/primitives/Toggle'
+import { Text } from '@/components/primitives/Text'
+import { IconButton } from '@/components/primitives/IconButton'
 import { useAuthStore } from '@/stores/authStore'
-import { useQueryClient } from '@tanstack/react-query'
 import { usersApi } from '@/api/users'
-import { useState } from 'react'
+import { theme } from '@/tokens/theme'
 import * as Notifications from 'expo-notifications'
 
 export function SettingsScreen() {
@@ -69,138 +83,131 @@ export function SettingsScreen() {
     }
   }
 
+  const tierLabel =
+    wrldUser?.tier === 'plus' ? 'Plus' : wrldUser?.tier === 'pro' ? 'Pro' : 'Free'
+
   return (
-    <SafeAreaView style={styles.container}>
+    <ScreenScroll contentContainerStyle={styles.scroll}>
       <View style={styles.header}>
-        <Button label="← Back" onPress={() => router.back()} variant="secondary" />
-        <Text style={styles.title}>Settings</Text>
+        <IconButton
+          name="arrow-left"
+          variant="ghost"
+          onPress={() => router.back()}
+          accessibilityLabel="Back"
+        />
+        <Text variant="heading">Settings</Text>
       </View>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>ACCOUNT</Text>
-        <Pressable style={styles.row} onPress={() => router.push('/(app)/subscription')}>
-          <View style={styles.rowText}>
-            <Text style={styles.rowLabel}>Plan</Text>
-            <Text style={styles.rowSub}>
-              {wrldUser?.tier === 'plus' ? 'Plus' : wrldUser?.tier === 'pro' ? 'Pro' : 'Free'} · View all plans
-            </Text>
-          </View>
-          <Text style={styles.rowArrow}>›</Text>
-        </Pressable>
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>NOTIFICATIONS</Text>
-
-        <View style={styles.row}>
-          <View style={styles.rowText}>
-            <Text style={styles.rowLabel}>Someone I follow goes live</Text>
-            <Text style={styles.rowSub}>Get notified when a streamer you follow starts streaming</Text>
-          </View>
-          <Toggle
-            value={followedLive}
-            onValueChange={toggleFollowedLive}
-            accessibilityLabel="Notify when someone I follow goes live"
+      {wrldUser && (
+        <SettingsGroup title="IDENTITY">
+          <SettingsRow
+            variant="highlight"
+            iconName="at-sign"
+            title={`@${wrldUser.handle}`}
+            value={wrldUser.displayName}
+            right={<AccountIDPill accountId={wrldUser.id} />}
+            showBorderTop={false}
+            onPress={() => router.push('/(app)/me')}
+            accessibilityLabel={`Open profile for ${wrldUser.handle}`}
           />
-        </View>
+        </SettingsGroup>
+      )}
 
-        <View style={styles.divider} />
+      <SettingsGroup title="ACCOUNT">
+        <SettingsRow
+          iconName="credit-card"
+          title="Plan"
+          value={`${tierLabel} · View all plans`}
+          arrow
+          showBorderTop={false}
+          onPress={() => router.push('/(app)/subscription')}
+        />
+      </SettingsGroup>
 
-        <View style={styles.row}>
-          <View style={styles.rowText}>
-            <Text style={styles.rowLabel}>Live stream nearby</Text>
-            <Text style={styles.rowSub}>Get notified when someone is streaming near your last location</Text>
-          </View>
-          <Toggle
-            value={nearbyLive}
-            onValueChange={toggleNearbyLive}
-            accessibilityLabel="Notify when a live stream is nearby"
-          />
-        </View>
-      </View>
+      <SettingsGroup title="NOTIFICATIONS">
+        <SettingsRow
+          iconName="bell"
+          title="Someone I follow goes live"
+          value="Get notified when a streamer you follow starts streaming"
+          right={
+            <Toggle
+              value={followedLive}
+              onValueChange={toggleFollowedLive}
+              accessibilityLabel="Notify when someone I follow goes live"
+            />
+          }
+          showBorderTop={false}
+        />
+        <SettingsRow
+          iconName="map-pin"
+          title="Live stream nearby"
+          value="Get notified when someone is streaming near your last location"
+          right={
+            <Toggle
+              value={nearbyLive}
+              onValueChange={toggleNearbyLive}
+              accessibilityLabel="Notify when a live stream is nearby"
+            />
+          }
+        />
+      </SettingsGroup>
 
       {__DEV__ && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>DEVELOPMENT</Text>
-          <Pressable style={styles.row} onPress={() => router.push('/(app)/gallery')}>
-            <View style={styles.rowText}>
-              <Text style={styles.rowLabel}>Component gallery</Text>
-              <Text style={styles.rowSub}>Primitives + features for sub-phase 12.4 review</Text>
-            </View>
-            <Text style={styles.chevron}>›</Text>
-          </Pressable>
-        </View>
+        <SettingsGroup title="DEVELOPMENT">
+          <SettingsRow
+            iconName="layers"
+            title="Primitive gallery"
+            value="20 primitives — Text, Icon, Pressable, Button, Card, Input, …"
+            arrow
+            showBorderTop={false}
+            onPress={() => router.push('/(app)/primitive-gallery')}
+          />
+          <SettingsRow
+            iconName="grid"
+            title="Feature gallery"
+            value="Domain features composed from primitives"
+            arrow
+            onPress={() => router.push('/(app)/feature-gallery')}
+          />
+          <SettingsRow
+            iconName="layout"
+            title="Section gallery"
+            value="Screen-region patterns (ScreenScroll, TrendingRail, …)"
+            arrow
+            onPress={() => router.push('/(app)/section-gallery')}
+          />
+        </SettingsGroup>
       )}
 
       <View style={styles.bottom}>
-        <Button
-          label="Sign out"
-          onPress={confirmSignOut}
-          variant="primary"
-          style={styles.wide}
-        />
-        <Text style={styles.note}>
-          To delete your account, contact us at support@wrld.cam. Your data will be removed within 30 days.
+        <Button label="Sign out" onPress={confirmSignOut} variant="primary" />
+        <Text variant="caption" color={theme.colors.text.muted} style={styles.note}>
+          To delete your account, contact us at support@wrld.cam. Your data will be removed
+          within 30 days.
         </Text>
       </View>
-    </SafeAreaView>
+    </ScreenScroll>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.colors.bg.primary },
+  scroll: {
+    padding: theme.spacing.lg,
+    gap: theme.spacing.lg,
+    paddingBottom: theme.spacing.xxxl,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.md,
-    paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.sm,
-    paddingBottom: theme.spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border.subtle,
+    paddingBottom: theme.spacing.sm,
   },
-  title: { ...theme.typography.heading, color: theme.colors.text.primary },
-  section: {
-    marginTop: theme.spacing.lg,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: theme.colors.border.subtle,
-  },
-  sectionTitle: {
-    ...theme.typography.caption,
-    color: theme.colors.text.muted,
-    fontWeight: '700',
-    letterSpacing: 1.2,
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.sm,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-    gap: theme.spacing.md,
-  },
-  rowText: { flex: 1 },
-  rowLabel: { ...theme.typography.body, color: theme.colors.text.primary, fontWeight: '500' },
-  rowSub: { ...theme.typography.caption, color: theme.colors.text.muted, marginTop: 2 },
-  rowArrow: { fontSize: 20, color: theme.colors.text.muted, marginLeft: 4 },
-  divider: { height: 1, backgroundColor: theme.colors.border.subtle, marginLeft: theme.spacing.lg },
   bottom: {
-    padding: theme.spacing.lg,
+    marginTop: theme.spacing.lg,
     gap: theme.spacing.md,
-    alignItems: 'center',
-    marginTop: 'auto',
   },
-  wide: { width: '100%' },
   note: {
-    ...theme.typography.caption,
-    color: theme.colors.text.muted,
     textAlign: 'center',
     lineHeight: 18,
-  },
-  chevron: {
-    ...theme.typography.heading,
-    color: theme.colors.text.subtle,
   },
 })

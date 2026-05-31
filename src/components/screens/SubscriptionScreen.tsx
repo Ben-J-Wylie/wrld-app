@@ -1,18 +1,44 @@
-import {
-  View, Text, StyleSheet, ScrollView, Pressable, TouchableOpacity, Alert,
-} from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
-import { router } from 'expo-router'
+// src/components/screens/SubscriptionScreen.tsx
+//
+// 12.6 migration target. The pre-migration screen used a cool/dark
+// palette with a blue accent (#3ea7ff) hardcoded throughout — flagged
+// in CLAUDE.md as the canonical token-shape migration target.
+//
+// Composes:
+//   • ScreenScroll for the scroll viewport (replaces SafeAreaView +
+//     ScrollView).
+//   • SegmentedToggle for Monthly / Annual billing (replaces the
+//     bespoke animated pill).
+//   • Card primitive for the three tier cards; `accent` variant covers
+//     the Plus highlight + the current-tier highlight.
+//   • Pill for the MOST POPULAR badge.
+//   • Button for the CTAs (with the existing "coming soon" alert).
+//   • Text / HelpText / Icon for every other label.
+//
+// All colors flow through the warm crimson accent + cream palette
+// tokens; no hex literals.
+
 import { useState } from 'react'
+import { Alert, StyleSheet, View } from 'react-native'
+import { router } from 'expo-router'
 import { theme } from '@/tokens/theme'
+import { ScreenScroll } from '@/components/sections/ScreenScroll'
+import { Card } from '@/components/primitives/Card'
+import { Button } from '@/components/primitives/Button'
+import { Pill } from '@/components/primitives/Pill'
+import { Text } from '@/components/primitives/Text'
+import { HelpText } from '@/components/primitives/HelpText'
+import { Icon } from '@/components/primitives/Icon'
+import { IconButton } from '@/components/primitives/IconButton'
+import { SegmentedToggle } from '@/components/primitives/SegmentedToggle'
 import { useAuthStore } from '@/stores/authStore'
 
 type BillingCycle = 'monthly' | 'annual'
 type Tier = 'free' | 'plus' | 'pro'
 
 const PRICING = {
-  plus: { mo: 5,  yr: 48 },
-  pro:  { mo: 20, yr: 192 },
+  plus: { mo: 5, yr: 48 },
+  pro: { mo: 20, yr: 192 },
 }
 
 const PERKS: Record<Tier, string[]> = {
@@ -35,56 +61,48 @@ const PERKS: Record<Tier, string[]> = {
   ],
 }
 
-const MATRIX = [
-  { f: 'Ad-free experience',      free: false,      plus: true,        pro: true },
-  { f: 'Go live',                 free: true,        plus: true,        pro: true },
-  { f: 'Tips',                    free: true,        plus: true,        pro: true },
-  { f: 'Saved streams',           free: 'Small',     plus: 'More',      pro: 'Huge' },
-  { f: 'Analytics',               free: 'Basic',     plus: 'Better',    pro: 'Pro' },
-  { f: 'Pay-per-view (PPV)',       free: false,       plus: false,       pro: true },
-  { f: 'Channel subscriptions',   free: false,       plus: false,       pro: true },
-  { f: 'Multi-camera',            free: false,       plus: 'Limited',   pro: true },
-  { f: 'Discovery tools',         free: 'Basic',     plus: 'Better',    pro: 'Best' },
-  { f: 'Moderation tools',        free: 'Basic',     plus: 'Better',    pro: 'AI' },
+const TAGLINE: Record<Tier, string> = {
+  free: 'START HERE',
+  plus: 'FOR REGULARS',
+  pro: 'FOR CREATORS',
+}
+
+const TIER_LABEL: Record<Tier, string> = {
+  free: 'Free',
+  plus: 'Plus',
+  pro: 'Pro',
+}
+
+type MatrixValue = boolean | string
+
+const MATRIX: { f: string; free: MatrixValue; plus: MatrixValue; pro: MatrixValue }[] = [
+  { f: 'Ad-free', free: false, plus: true, pro: true },
+  { f: 'Go Live', free: true, plus: true, pro: true },
+  { f: 'Receive Tips', free: true, plus: true, pro: true },
+  { f: 'Send Tips', free: true, plus: true, pro: true },
+  { f: 'Saved Streams', free: '1 GB', plus: '50 GB', pro: '500 GB' },
+  { f: 'Archive Retention', free: '30 Days', plus: 'Permanent', pro: 'Permanent' },
+  { f: 'Analytics', free: 'Basic', plus: 'Enhanced', pro: 'Advanced' },
+  { f: 'Stream Scheduling', free: false, plus: true, pro: true },
+  { f: 'Custom Profile URL', free: false, plus: true, pro: true },
+  { f: 'Multi-Camera Streaming', free: false, plus: 'Limited (2 cameras)', pro: 'Full' },
+  { f: 'Discovery Tools', free: 'Basic', plus: 'Enhanced', pro: 'Priority' },
+  { f: 'Moderation Tools', free: 'Basic', plus: 'Advanced', pro: 'AI-Assisted' },
+  { f: 'Add Moderators', free: false, plus: true, pro: true },
+  { f: 'Slow Mode / Chat Controls', free: false, plus: true, pro: true },
+  { f: 'Creator Badges', free: false, plus: true, pro: 'Premium' },
+  { f: 'Lower Platform Fee on Tips', free: false, plus: true, pro: 'Best Rate' },
+  { f: 'Channel Subscriptions', free: false, plus: false, pro: true },
+  { f: 'PPV Events', free: false, plus: false, pro: true },
+  { f: 'Subscriber-Only Streams', free: false, plus: false, pro: true },
+  { f: 'Subscriber-Only Chat', free: false, plus: false, pro: true },
+  { f: 'Audience Demographics', free: false, plus: false, pro: true },
+  { f: 'Revenue Analytics', free: false, plus: false, pro: true },
+  { f: 'Priority Creator Support', free: false, plus: false, pro: true },
 ]
 
-function CheckIcon() {
-  return (
-    <View style={styles.checkCircle}>
-      <Text style={styles.checkMark}>✓</Text>
-    </View>
-  )
-}
-
-function PerkRow({ text }: { text: string }) {
-  return (
-    <View style={styles.perkRow}>
-      <CheckIcon />
-      <Text style={styles.perkText}>{text}</Text>
-    </View>
-  )
-}
-
-function MatrixCell({ v, isPlus }: { v: boolean | string; isPlus?: boolean }) {
-  if (v === true) return (
-    <View style={[styles.cell, styles.cellCheck]}>
-      <View style={styles.matrixCheck}><Text style={styles.matrixCheckMark}>✓</Text></View>
-    </View>
-  )
-  if (v === false) return (
-    <View style={styles.cell}>
-      <Text style={styles.cellNo}>—</Text>
-    </View>
-  )
-  return (
-    <View style={styles.cell}>
-      <Text style={[styles.cellText, isPlus && styles.cellTextBest]}>{v as string}</Text>
-    </View>
-  )
-}
-
 export function SubscriptionScreen() {
-  const wrldUser = useAuthStore(s => s.wrldUser)
+  const wrldUser = useAuthStore((s) => s.wrldUser)
   const currentTier: Tier = (wrldUser?.tier as Tier) ?? 'free'
   const [billing, setBilling] = useState<BillingCycle>('monthly')
   const [compareOpen, setCompareOpen] = useState(false)
@@ -92,14 +110,19 @@ export function SubscriptionScreen() {
 
   function price(tier: 'plus' | 'pro') {
     const p = PRICING[tier]
-    if (annual) return { amt: `$${p.yr}`, per: '/year', eq: `$${(p.yr / 12).toFixed(0)}/mo billed yearly` }
+    if (annual)
+      return {
+        amt: `$${p.yr}`,
+        per: '/year',
+        eq: `$${(p.yr / 12).toFixed(0)}/mo billed yearly`,
+      }
     return { amt: `$${p.mo}`, per: '/month', eq: '' }
   }
 
   function handlePaidTierPress(tier: 'plus' | 'pro') {
     if (currentTier === tier) return
     Alert.alert(
-      `${tier === 'plus' ? 'Plus' : 'Pro'} coming soon`,
+      `${TIER_LABEL[tier]} coming soon`,
       'Paid plans will be available shortly. Your account will be upgraded automatically when billing launches.',
       [{ text: 'Got it' }],
     )
@@ -109,231 +132,337 @@ export function SubscriptionScreen() {
   const pro = price('pro')
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
-        {/* Header */}
-        <View style={styles.headerRow}>
-          <View>
-            <Text style={styles.eyebrow}>WELCOME TO WRLD</Text>
-            <Text style={styles.heading}>Choose your WRLD</Text>
-          </View>
-          <Pressable onPress={() => router.back()} hitSlop={12}>
-            <Text style={styles.skip}>← Back</Text>
-          </Pressable>
+    <ScreenScroll contentContainerStyle={styles.scroll}>
+      <View style={styles.headerRow}>
+        <View style={styles.headerCol}>
+          <HelpText tone="ok">WELCOME TO WRLD</HelpText>
+          <Text variant="display">Choose your WRLD</Text>
         </View>
-        <Text style={styles.sub}>
-          Start free and upgrade whenever you want more reach, more cameras, and more ways to earn.
-        </Text>
+        <IconButton
+          name="arrow-left"
+          variant="ghost"
+          onPress={() => router.back()}
+          accessibilityLabel="Back"
+        />
+      </View>
+      <Text variant="body" color={theme.colors.text.muted}>
+        Start free and upgrade whenever you want more reach, more cameras, and more ways to earn.
+      </Text>
 
-        {/* Billing toggle */}
-        <View style={styles.segContainer}>
-          <View style={styles.seg}>
-            <View style={[styles.pill, annual && styles.pillRight]} />
-            <TouchableOpacity style={styles.segBtn} onPress={() => setBilling('monthly')} activeOpacity={0.8}>
-              <Text style={[styles.segLabel, !annual && styles.segLabelActive]}>Monthly</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.segBtn} onPress={() => setBilling('annual')} activeOpacity={0.8}>
-              <Text style={[styles.segLabel, annual && styles.segLabelActive]}>
-                Annual{'  '}
-                <Text style={[styles.saveBadge, !annual && styles.saveBadgeInactive]}>SAVE ~20%</Text>
-              </Text>
-            </TouchableOpacity>
-          </View>
-          {annual && (
-            <Text style={styles.billingNote}>
-              <Text style={styles.billingNoteAccent}>Two months free</Text> when you pay yearly
-            </Text>
-          )}
-        </View>
-
-        {/* FREE card */}
-        <View style={[styles.card, currentTier === 'free' && styles.cardCurrent]}>
-          <View style={styles.cardTop}>
-            <View>
-              <Text style={styles.tierName}>Free</Text>
-              <Text style={styles.tagline}>START HERE</Text>
-            </View>
-            <View style={styles.priceBlock}>
-              <Text style={styles.priceFree}>Free</Text>
-              <Text style={styles.pricePer}>forever</Text>
-            </View>
-          </View>
-          {PERKS.free.map((p, i) => <PerkRow key={i} text={p} />)}
-          <View style={[styles.cta, styles.ctaSubtle, currentTier === 'free' && styles.ctaDisabled]}>
-            <Text style={styles.ctaSubtleText}>
-              {currentTier === 'free' ? 'Your current plan' : 'Continue with Free'}
-            </Text>
-          </View>
-        </View>
-
-        {/* PLUS card */}
-        <View style={[styles.card, styles.cardPlus, currentTier === 'plus' && styles.cardCurrent]}>
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>★ MOST POPULAR</Text>
-          </View>
-          <View style={styles.cardTop}>
-            <View>
-              <Text style={styles.tierName}>Plus</Text>
-              <Text style={styles.tagline}>FOR REGULARS</Text>
-            </View>
-            <View style={styles.priceBlock}>
-              <Text style={styles.priceAmt}>{plus.amt}</Text>
-              <Text style={styles.pricePer}>{plus.per}</Text>
-              {!!plus.eq && <Text style={styles.priceEq}>{plus.eq}</Text>}
-            </View>
-          </View>
-          {PERKS.plus.map((p, i) => <PerkRow key={i} text={p} />)}
-          <TouchableOpacity
-            style={[styles.cta, styles.ctaFilled]}
-            onPress={() => handlePaidTierPress('plus')}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.ctaFilledText}>
-              {currentTier === 'plus' ? 'Your current plan' : 'Choose Plus'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* PRO card */}
-        <View style={[styles.card, currentTier === 'pro' && styles.cardCurrent]}>
-          <View style={styles.cardTop}>
-            <View>
-              <Text style={styles.tierName}>Pro</Text>
-              <Text style={styles.tagline}>FOR CREATORS</Text>
-            </View>
-            <View style={styles.priceBlock}>
-              <Text style={styles.priceAmt}>{pro.amt}</Text>
-              <Text style={styles.pricePer}>{pro.per}</Text>
-              {!!pro.eq && <Text style={styles.priceEq}>{pro.eq}</Text>}
-            </View>
-          </View>
-          {PERKS.pro.map((p, i) => <PerkRow key={i} text={p} />)}
-          <TouchableOpacity
-            style={[styles.cta, styles.ctaFilledPro]}
-            onPress={() => handlePaidTierPress('pro')}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.ctaFilledText}>
-              {currentTier === 'pro' ? 'Your current plan' : 'Choose Pro'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Compare toggle */}
-        <TouchableOpacity
-          style={styles.compareToggle}
-          onPress={() => setCompareOpen(o => !o)}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.compareToggleText}>
-            {compareOpen ? 'Hide comparison' : 'Compare all features'} {compareOpen ? '▲' : '▼'}
-          </Text>
-        </TouchableOpacity>
-
-        {compareOpen && (
-          <View style={styles.matrix}>
-            {/* Header */}
-            <View style={[styles.mrow, styles.mhead]}>
-              <Text style={[styles.mfeat, styles.mheadLabel]}>FEATURE</Text>
-              <Text style={styles.mcol}>Free</Text>
-              <Text style={[styles.mcol, styles.mcolPlus]}>Plus{'\n'}{plus.amt}</Text>
-              <Text style={styles.mcol}>Pro{'\n'}{pro.amt}</Text>
-            </View>
-            {MATRIX.map((row, i) => (
-              <View key={i} style={[styles.mrow, i > 0 && styles.mrowBorder]}>
-                <Text style={styles.mfeat}>{row.f}</Text>
-                <MatrixCell v={row.free} />
-                <MatrixCell v={row.plus} isPlus />
-                <MatrixCell v={row.pro} />
-              </View>
-            ))}
-          </View>
+      <View style={styles.billingBlock}>
+        <SegmentedToggle<BillingCycle>
+          options={[
+            { value: 'monthly', label: 'Monthly' },
+            { value: 'annual', label: 'Annual · SAVE 20%' },
+          ]}
+          value={billing}
+          onChange={setBilling}
+        />
+        {annual && (
+          <HelpText tone="ok" style={styles.billingNote}>
+            TWO MONTHS FREE WHEN YOU PAY YEARLY
+          </HelpText>
         )}
+      </View>
 
-        {/* Footer */}
-        <View style={styles.foot}>
-          <Text style={styles.legal}>
-            Plans renew automatically until cancelled. Cancel anytime in your store account.
-          </Text>
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+      <TierCard
+        tier="free"
+        amount="Free"
+        per="forever"
+        equivalence={null}
+        currentTier={currentTier}
+        onPress={undefined}
+      />
+
+      <View style={styles.plusWrap}>
+        <Pill size="sm" variant="accent" label="★ MOST POPULAR" />
+        <TierCard
+          tier="plus"
+          amount={plus.amt}
+          per={plus.per}
+          equivalence={plus.eq || null}
+          currentTier={currentTier}
+          onPress={() => handlePaidTierPress('plus')}
+          accent
+        />
+      </View>
+
+      <TierCard
+        tier="pro"
+        amount={pro.amt}
+        per={pro.per}
+        equivalence={pro.eq || null}
+        currentTier={currentTier}
+        onPress={() => handlePaidTierPress('pro')}
+      />
+
+      <Button
+        variant="secondary"
+        label={compareOpen ? 'Hide comparison' : 'Compare all features'}
+        icon={compareOpen ? 'chevron-up' : 'chevron-down'}
+        onPress={() => setCompareOpen((o) => !o)}
+      />
+
+      {compareOpen && <ComparisonMatrix plusPrice={plus.amt} proPrice={pro.amt} />}
+
+      <HelpText style={styles.legal}>
+        PLANS RENEW AUTOMATICALLY UNTIL CANCELLED · CANCEL ANYTIME IN YOUR STORE ACCOUNT
+      </HelpText>
+    </ScreenScroll>
   )
 }
 
-const ACC = '#3ea7ff'
-const BG2 = '#0c0e11'
+// ─── Tier card ───────────────────────────────────────────────────────────────
+
+function TierCard({
+  tier,
+  amount,
+  per,
+  equivalence,
+  currentTier,
+  onPress,
+  accent,
+}: {
+  tier: Tier
+  amount: string
+  per: string
+  equivalence: string | null
+  currentTier: Tier
+  onPress: (() => void) | undefined
+  accent?: boolean
+}) {
+  const isCurrent = currentTier === tier
+  const isFree = tier === 'free'
+  const ctaLabel = isCurrent
+    ? 'Your current plan'
+    : isFree
+      ? 'Continue with Free'
+      : `Choose ${TIER_LABEL[tier]}`
+
+  return (
+    <Card variant={accent || isCurrent ? 'accent' : 'panel'} style={cardStyles.card}>
+      <View style={cardStyles.top}>
+        <View style={cardStyles.col}>
+          <Text variant="heading">{TIER_LABEL[tier]}</Text>
+          <HelpText>{TAGLINE[tier]}</HelpText>
+        </View>
+        <View style={cardStyles.priceBlock}>
+          <Text variant="heading">{amount}</Text>
+          <HelpText>{per.toUpperCase()}</HelpText>
+          {equivalence && (
+            <HelpText style={cardStyles.equivalence}>{equivalence.toUpperCase()}</HelpText>
+          )}
+        </View>
+      </View>
+      <View style={cardStyles.perks}>
+        {PERKS[tier].map((p, i) => (
+          <View key={i} style={cardStyles.perkRow}>
+            <View style={cardStyles.checkCircle}>
+              <Icon name="check" size={10} color={theme.colors.accent.default} />
+            </View>
+            <Text variant="body" color={theme.colors.text.primary} style={cardStyles.perkText}>
+              {p}
+            </Text>
+          </View>
+        ))}
+      </View>
+      {onPress ? (
+        <Button
+          variant={isCurrent ? 'secondary' : 'primary'}
+          label={ctaLabel}
+          onPress={onPress}
+          disabled={isCurrent}
+        />
+      ) : (
+        <Button
+          variant="secondary"
+          label={ctaLabel}
+          onPress={() => {}}
+          disabled
+        />
+      )}
+    </Card>
+  )
+}
+
+// ─── Comparison matrix ───────────────────────────────────────────────────────
+
+function ComparisonMatrix({ plusPrice, proPrice }: { plusPrice: string; proPrice: string }) {
+  return (
+    <Card variant="solid" style={matrixStyles.matrix}>
+      <View style={[matrixStyles.row, matrixStyles.headerRow]}>
+        <View style={matrixStyles.featCell}>
+          <HelpText>FEATURE</HelpText>
+        </View>
+        <View style={matrixStyles.cell}>
+          <Text variant="bodyEmphasized">Free</Text>
+        </View>
+        <View style={matrixStyles.cell}>
+          <Text variant="bodyEmphasized" color={theme.colors.accent.default}>
+            Plus
+          </Text>
+          <HelpText>{plusPrice}</HelpText>
+        </View>
+        <View style={matrixStyles.cell}>
+          <Text variant="bodyEmphasized">Pro</Text>
+          <HelpText>{proPrice}</HelpText>
+        </View>
+      </View>
+      {MATRIX.map((row, i) => (
+        <View key={i} style={[matrixStyles.row, matrixStyles.borderTop]}>
+          <View style={matrixStyles.featCell}>
+            <Text variant="body" color={theme.colors.text.primary}>
+              {row.f}
+            </Text>
+          </View>
+          <MatrixCell v={row.free} />
+          <MatrixCell v={row.plus} isPlus />
+          <MatrixCell v={row.pro} />
+        </View>
+      ))}
+    </Card>
+  )
+}
+
+function MatrixCell({ v, isPlus }: { v: MatrixValue; isPlus?: boolean }) {
+  if (v === true)
+    return (
+      <View style={matrixStyles.cell}>
+        <View style={matrixStyles.check}>
+          <Icon name="check" size="sm" color={theme.colors.accent.default} />
+        </View>
+      </View>
+    )
+  if (v === false)
+    return (
+      <View style={matrixStyles.cell}>
+        <Text variant="body" color={theme.colors.text.subtle}>
+          —
+        </Text>
+      </View>
+    )
+  return (
+    <View style={matrixStyles.cell}>
+      <Text
+        variant="monoCaption"
+        color={isPlus ? theme.colors.accent.default : theme.colors.text.muted}
+      >
+        {v}
+      </Text>
+    </View>
+  )
+}
+
+// ─── Styles ──────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#070809' },
-  scroll: { paddingBottom: 40 },
+  scroll: {
+    padding: theme.spacing.lg,
+    gap: theme.spacing.lg,
+    paddingBottom: theme.spacing.xxxl,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: theme.spacing.md,
+  },
+  headerCol: {
+    flex: 1,
+    gap: theme.spacing.xs,
+  },
+  billingBlock: {
+    gap: theme.spacing.sm,
+  },
+  billingNote: {
+    textAlign: 'center',
+  },
+  plusWrap: {
+    gap: theme.spacing.xs,
+  },
+  legal: {
+    textAlign: 'center',
+    marginTop: theme.spacing.md,
+  },
+})
 
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingHorizontal: 22, paddingTop: 16 },
-  eyebrow: { fontSize: 10, fontFamily: 'monospace', letterSpacing: 2.4, color: ACC, marginBottom: 8, fontWeight: '500' },
-  heading: { fontSize: 28, fontWeight: '600', color: '#ece9e2', letterSpacing: -0.7 },
-  skip: { color: 'rgba(236,233,226,0.4)', fontSize: 13, fontWeight: '500', marginTop: 4 },
-  sub: { fontSize: 13, lineHeight: 20, color: 'rgba(236,233,226,0.58)', paddingHorizontal: 22, marginTop: 10, marginBottom: 4 },
+const cardStyles = StyleSheet.create({
+  card: {
+    gap: theme.spacing.md,
+  },
+  top: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: theme.spacing.md,
+  },
+  col: {
+    flex: 1,
+    gap: 2,
+  },
+  priceBlock: {
+    alignItems: 'flex-end',
+    gap: 2,
+  },
+  equivalence: {
+    marginTop: 2,
+  },
+  perks: {
+    gap: theme.spacing.sm,
+  },
+  perkRow: {
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    alignItems: 'flex-start',
+  },
+  checkCircle: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: theme.colors.accent.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  perkText: {
+    flex: 1,
+  },
+})
 
-  segContainer: { paddingHorizontal: 22, paddingTop: 18, paddingBottom: 4 },
-  seg: { flexDirection: 'row', padding: 4, borderRadius: 999, backgroundColor: BG2, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', position: 'relative', height: 50 },
-  pill: { position: 'absolute', top: 4, bottom: 4, left: 4, width: '50%', borderRadius: 999, backgroundColor: ACC },
-  pillRight: { left: 'auto', right: 4 },
-  segBtn: { flex: 1, alignItems: 'center', justifyContent: 'center', zIndex: 2 },
-  segLabel: { fontSize: 13.5, fontWeight: '600', color: 'rgba(236,233,226,0.58)' },
-  segLabelActive: { color: '#0a0c10' },
-  saveBadge: { fontSize: 9, fontFamily: 'monospace', letterSpacing: 1.2, backgroundColor: 'rgba(255,255,255,0.18)', color: '#0a0c10', paddingHorizontal: 4, paddingVertical: 2, borderRadius: 999 },
-  saveBadgeInactive: { backgroundColor: 'rgba(62,167,255,0.16)', color: '#7fd0ff' },
-  billingNote: { textAlign: 'center', marginTop: 10, fontSize: 11, fontFamily: 'monospace', letterSpacing: 0.8, color: 'rgba(236,233,226,0.34)' },
-  billingNoteAccent: { color: '#7fd0ff', fontWeight: '500' },
-
-  card: { marginHorizontal: 18, marginTop: 12, borderRadius: 20, backgroundColor: BG2, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', padding: 18 },
-  cardPlus: { borderColor: 'rgba(62,167,255,0.5)', backgroundColor: 'rgba(62,167,255,0.05)' },
-  cardCurrent: { borderColor: 'rgba(62,167,255,0.8)' },
-
-  badge: { position: 'absolute', top: -10, left: 18, backgroundColor: ACC, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4, flexDirection: 'row', alignItems: 'center' },
-  badgeText: { fontSize: 9, fontFamily: 'monospace', letterSpacing: 2, color: '#0a0c10', fontWeight: '600' },
-
-  cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 },
-  tierName: { fontSize: 18, fontWeight: '600', color: '#ece9e2', letterSpacing: -0.18 },
-  tagline: { fontSize: 11, fontFamily: 'monospace', letterSpacing: 0.8, color: 'rgba(236,233,226,0.34)', marginTop: 3 },
-  priceBlock: { alignItems: 'flex-end' },
-  priceFree: { fontSize: 22, fontWeight: '600', color: '#ece9e2', letterSpacing: -0.22 },
-  priceAmt: { fontSize: 26, fontWeight: '600', color: '#ece9e2', letterSpacing: -0.52 },
-  pricePer: { fontSize: 10.5, fontFamily: 'monospace', letterSpacing: 0.8, color: 'rgba(236,233,226,0.58)', marginTop: 3 },
-  priceEq: { fontSize: 9.5, fontFamily: 'monospace', letterSpacing: 0.6, color: 'rgba(236,233,226,0.34)', marginTop: 3 },
-
-  perkRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 9, marginTop: 10 },
-  checkCircle: { width: 16, height: 16, borderRadius: 8, backgroundColor: 'rgba(62,167,255,0.14)', alignItems: 'center', justifyContent: 'center', marginTop: 1 },
-  checkMark: { color: ACC, fontSize: 9, fontWeight: '700' },
-  perkText: { flex: 1, fontSize: 13, lineHeight: 18, color: 'rgba(236,233,226,0.58)', fontWeight: '500' },
-
-  cta: { marginTop: 16, height: 50, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
-  ctaFilled: { backgroundColor: ACC },
-  ctaFilledPro: { backgroundColor: '#ece9e2' },
-  ctaSubtle: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.14)' },
-  ctaDisabled: { opacity: 0.5 },
-  ctaFilledText: { fontSize: 14.5, fontWeight: '600', color: '#0a0c10', letterSpacing: -0.08 },
-  ctaSubtleText: { fontSize: 14.5, fontWeight: '600', color: '#ece9e2', letterSpacing: -0.08 },
-
-  compareToggle: { marginHorizontal: 18, marginTop: 18, height: 52, borderRadius: 15, backgroundColor: BG2, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', alignItems: 'center', justifyContent: 'center' },
-  compareToggleText: { fontSize: 13.5, fontWeight: '600', color: '#ece9e2', letterSpacing: -0.07 },
-
-  matrix: { marginHorizontal: 18, marginTop: 12, borderRadius: 16, overflow: 'hidden', backgroundColor: BG2, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
-  mrow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 11 },
-  mhead: { borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)', paddingVertical: 14 },
-  mrowBorder: { borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)' },
-  mheadLabel: { fontSize: 9, fontFamily: 'monospace', letterSpacing: 2, color: 'rgba(236,233,226,0.34)', fontWeight: '500' },
-  mfeat: { flex: 1.4, fontSize: 12, lineHeight: 16, color: '#ece9e2', fontWeight: '500' },
-  mcol: { flex: 0.85, textAlign: 'center', fontSize: 12, fontWeight: '600', color: '#ece9e2', letterSpacing: -0.07 },
-  mcolPlus: { color: '#7fd0ff' },
-  cell: { flex: 0.85, alignItems: 'center', justifyContent: 'center' },
-  cellCheck: {},
-  matrixCheck: { width: 18, height: 18, borderRadius: 9, backgroundColor: 'rgba(62,167,255,0.16)', alignItems: 'center', justifyContent: 'center' },
-  matrixCheckMark: { color: ACC, fontSize: 10, fontWeight: '700' },
-  cellNo: { color: 'rgba(236,233,226,0.25)', fontSize: 13 },
-  cellText: { fontSize: 11, fontFamily: 'monospace', letterSpacing: 0.6, color: 'rgba(236,233,226,0.58)', textAlign: 'center' },
-  cellTextBest: { color: '#7fd0ff' },
-
-  foot: { paddingHorizontal: 22, paddingTop: 22, alignItems: 'center' },
-  legal: { fontSize: 10, lineHeight: 16, fontFamily: 'monospace', letterSpacing: 0.4, color: 'rgba(236,233,226,0.34)', textAlign: 'center', maxWidth: 320 },
+const matrixStyles = StyleSheet.create({
+  matrix: {
+    padding: 0,
+    overflow: 'hidden',
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    gap: theme.spacing.xs,
+  },
+  headerRow: {
+    paddingVertical: theme.spacing.md,
+  },
+  borderTop: {
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border.subtle,
+  },
+  featCell: {
+    flex: 1.4,
+  },
+  cell: {
+    flex: 0.85,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+  },
+  check: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: theme.colors.accent.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 })

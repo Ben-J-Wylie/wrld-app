@@ -1,19 +1,27 @@
-import {
-  View,
-  Text,
-  StyleSheet,
-  Modal,
-  Pressable,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  ActivityIndicator,
-} from 'react-native'
+// src/components/features/stream/AuthModal.tsx
+//
+// 12.6 token cleanup pass. The bespoke Modal + KeyboardAvoidingView
+// scaffold stays (they work + handle keyboard avoidance correctly);
+// the inner rendering swaps to design-system primitives. This
+// component is on the retirement runway anyway — when AuthChoiceList
+// + the social auth backend land, the whole modal gets rewritten as
+// a BottomSheet wrapping AuthChoiceList. Until then, token-clean it.
+
 import { useState } from 'react'
+import {
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  StyleSheet,
+  View,
+} from 'react-native'
 import { useSignIn, useSignUp } from '@clerk/clerk-expo'
+import { theme } from '@/tokens/theme'
+import { Text } from '@/components/primitives/Text'
+import { HelpText } from '@/components/primitives/HelpText'
 import { Input } from '@/components/primitives/Input'
 import { Button } from '@/components/primitives/Button'
-import { theme } from '@/tokens/theme'
+import { Pressable } from '@/components/primitives/Pressable'
 import { clerkError } from '@/lib/clerkError'
 
 type Tab = 'signin' | 'signup'
@@ -112,8 +120,13 @@ export function AuthModal({ visible, onClose, onSuccess }: Props) {
   }
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
-      <Pressable style={styles.backdrop} onPress={handleClose} />
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={handleClose}
+    >
+      <Pressable variant="none" style={styles.backdrop} onPress={handleClose} />
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.sheetWrapper}
@@ -123,65 +136,90 @@ export function AuthModal({ visible, onClose, onSuccess }: Props) {
 
           {tab === 'signin' ? (
             <>
-              <Text style={styles.heading}>Sign in to join the chat</Text>
+              <Text variant="heading" style={styles.center}>
+                Sign in to join the chat
+              </Text>
               <Input
                 placeholder="Email"
                 value={email}
                 onChangeText={setEmail}
                 autoCapitalize="none"
                 keyboardType="email-address"
-                style={styles.input}
               />
               <Input
                 placeholder="Password"
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry
-                style={styles.input}
               />
-              {error && <Text style={styles.error}>{error}</Text>}
-              <Button label="Sign in" onPress={handleSignIn} loading={loading} style={styles.btn} />
-              <Pressable onPress={() => switchTab('signup')} style={styles.switchRow}>
-                <Text style={styles.switchText}>No account? <Text style={styles.switchLink}>Sign up</Text></Text>
+              {error && <HelpText tone="err">{error}</HelpText>}
+              <Button label="Sign in" onPress={handleSignIn} loading={loading} />
+              <Pressable
+                variant="default"
+                onPress={() => switchTab('signup')}
+                accessibilityRole="link"
+                accessibilityLabel="Sign up"
+                style={styles.switchRow}
+              >
+                <Text variant="body" color={theme.colors.text.muted}>
+                  No account?{' '}
+                  <Text variant="bodyEmphasized" color={theme.colors.accent.default}>
+                    Sign up
+                  </Text>
+                </Text>
               </Pressable>
             </>
           ) : signUpStep === 'form' ? (
             <>
-              <Text style={styles.heading}>Create an account</Text>
+              <Text variant="heading" style={styles.center}>
+                Create an account
+              </Text>
               <Input
                 placeholder="Email"
                 value={email}
                 onChangeText={setEmail}
                 autoCapitalize="none"
                 keyboardType="email-address"
-                style={styles.input}
               />
               <Input
                 placeholder="Password"
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry
-                style={styles.input}
               />
-              {error && <Text style={styles.error}>{error}</Text>}
-              <Button label="Sign up" onPress={handleSignUp} loading={loading} style={styles.btn} />
-              <Pressable onPress={() => switchTab('signin')} style={styles.switchRow}>
-                <Text style={styles.switchText}>Have an account? <Text style={styles.switchLink}>Sign in</Text></Text>
+              {error && <HelpText tone="err">{error}</HelpText>}
+              <Button label="Sign up" onPress={handleSignUp} loading={loading} />
+              <Pressable
+                variant="default"
+                onPress={() => switchTab('signin')}
+                accessibilityRole="link"
+                accessibilityLabel="Sign in"
+                style={styles.switchRow}
+              >
+                <Text variant="body" color={theme.colors.text.muted}>
+                  Have an account?{' '}
+                  <Text variant="bodyEmphasized" color={theme.colors.accent.default}>
+                    Sign in
+                  </Text>
+                </Text>
               </Pressable>
             </>
           ) : (
             <>
-              <Text style={styles.heading}>Check your email</Text>
-              <Text style={styles.sub}>We sent a code to {email}</Text>
+              <Text variant="heading" style={styles.center}>
+                Check your email
+              </Text>
+              <Text variant="body" color={theme.colors.text.muted} style={styles.center}>
+                We sent a code to {email}
+              </Text>
               <Input
                 placeholder="Verification code"
                 value={code}
                 onChangeText={setCode}
                 keyboardType="number-pad"
-                style={styles.input}
               />
-              {error && <Text style={styles.error}>{error}</Text>}
-              <Button label="Verify" onPress={handleVerify} loading={loading} style={styles.btn} />
+              {error && <HelpText tone="err">{error}</HelpText>}
+              <Button label="Verify" onPress={handleVerify} loading={loading} />
             </>
           )}
         </View>
@@ -193,7 +231,7 @@ export function AuthModal({ visible, onClose, onSuccess }: Props) {
 const styles = StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: theme.colors.bg.overlay,
   },
   sheetWrapper: {
     position: 'absolute',
@@ -218,33 +256,11 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     marginBottom: theme.spacing.sm,
   },
-  heading: {
-    ...theme.typography.heading,
-    color: theme.colors.text.primary,
+  center: {
     textAlign: 'center',
   },
-  sub: {
-    ...theme.typography.body,
-    color: theme.colors.text.muted,
-    textAlign: 'center',
+  switchRow: {
+    alignItems: 'center',
+    paddingVertical: theme.spacing.xs,
   },
-  input: {
-    backgroundColor: theme.colors.bg.primary,
-    borderWidth: 1,
-    borderColor: theme.colors.border.subtle,
-    borderRadius: theme.radius.md,
-    paddingHorizontal: theme.spacing.md,
-    height: 48,
-    color: theme.colors.text.primary,
-    fontSize: 16,
-  },
-  error: {
-    ...theme.typography.caption,
-    color: theme.colors.accent.default,
-    textAlign: 'center',
-  },
-  btn: { width: '100%' },
-  switchRow: { alignItems: 'center', paddingVertical: theme.spacing.xs },
-  switchText: { ...theme.typography.body, color: theme.colors.text.muted },
-  switchLink: { color: theme.colors.accent.default, fontWeight: '600' },
 })

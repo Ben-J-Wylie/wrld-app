@@ -1,12 +1,41 @@
-import { useState, useEffect } from 'react'
-import { Text, StyleSheet, Alert } from 'react-native'
+// src/components/screens/SignupScreen.tsx
+//
+// 12.6 migration target. Two-step flow (create account → verify
+// email) running through design-system primitives. Adds a live
+// PasswordStrengthMeter under the password field — small UX value-add
+// unlocked by the design-system feature being available.
+//
+// AuthChoiceList is intentionally not wired in here yet — social auth
+// backends aren't wired (see DESIGN.md note on AuthChoiceList). It can
+// land as a follow-up once Apple / Google providers are configured.
+
+import { useEffect, useState } from 'react'
+import { Alert, Pressable, StyleSheet } from 'react-native'
 import { Link, router } from 'expo-router'
 import { useSignUp, useAuth } from '@clerk/clerk-expo'
 import { Button } from '@/components/primitives/Button'
 import { Input } from '@/components/primitives/Input'
+import { Text } from '@/components/primitives/Text'
+import { BrandMark } from '@/components/primitives/BrandMark'
 import { ScreenScroll } from '@/components/sections/ScreenScroll'
+import {
+  PasswordStrengthMeter,
+  type StrengthScore,
+} from '@/components/features/auth/PasswordStrengthMeter'
 import { theme } from '@/tokens/theme'
 import { clerkError } from '@/lib/clerkError'
+
+function scorePassword(p: string): StrengthScore {
+  if (p.length === 0) return 0
+  const hasLower = /[a-z]/.test(p)
+  const hasUpper = /[A-Z]/.test(p)
+  const hasNumber = /\d/.test(p)
+  const hasSymbol = /[^a-zA-Z0-9]/.test(p)
+  const classes = [hasLower, hasUpper, hasNumber, hasSymbol].filter(Boolean).length
+  if (p.length < 8 || classes <= 1) return 1
+  if (p.length >= 12 && classes >= 3) return 3
+  return 2
+}
 
 export function SignupScreen() {
   const { signUp, setActive, isLoaded } = useSignUp()
@@ -56,8 +85,13 @@ export function SignupScreen() {
   if (pendingVerification) {
     return (
       <ScreenScroll contentContainerStyle={styles.content}>
-        <Text style={styles.title}>Check your email</Text>
-        <Text style={styles.subtitle}>Enter the code we sent to {email}</Text>
+        <BrandMark size={64} />
+        <Text variant="display" style={styles.center}>
+          Check your email
+        </Text>
+        <Text variant="body" color={theme.colors.text.muted} style={styles.center}>
+          Enter the code we sent to {email}
+        </Text>
         <Input
           placeholder="Verification code"
           value={code}
@@ -65,17 +99,19 @@ export function SignupScreen() {
           keyboardType="number-pad"
           autoComplete="one-time-code"
         />
-        <Button
-          label={loading ? 'Verifying...' : 'Verify email'}
-          onPress={handleVerify}
-        />
+        <Button label="Verify email" onPress={handleVerify} loading={loading} />
       </ScreenScroll>
     )
   }
 
+  const score = scorePassword(password)
+
   return (
     <ScreenScroll contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Create account</Text>
+      <BrandMark size={64} />
+      <Text variant="display" style={styles.center}>
+        Create account
+      </Text>
       <Input
         placeholder="Email"
         value={email}
@@ -89,28 +125,31 @@ export function SignupScreen() {
         onChangeText={setPassword}
         secureTextEntry
       />
-      <Button label={loading ? 'Creating account...' : 'Sign up'} onPress={handleSignup} />
-      <Link href="/(auth)/login" style={styles.link}>
-        Already have an account? Sign in
+      {password.length > 0 && <PasswordStrengthMeter score={score} />}
+      <Button label="Sign up" onPress={handleSignup} loading={loading} />
+      <Link href="/(auth)/login" asChild>
+        <Pressable accessibilityRole="link" accessibilityLabel="Sign in">
+          <Text variant="caption" color={theme.colors.accent.default} style={styles.link}>
+            Already have an account? Sign in
+          </Text>
+        </Pressable>
       </Link>
     </ScreenScroll>
   )
 }
 
 const styles = StyleSheet.create({
-  content: { flexGrow: 1, padding: 24, justifyContent: 'center', gap: 16 },
-  title: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: theme.colors.text.primary,
-    textAlign: 'center',
-    marginBottom: 24,
+  content: {
+    flexGrow: 1,
+    padding: theme.spacing.lg,
+    justifyContent: 'center',
+    gap: theme.spacing.md,
   },
-  subtitle: {
-    fontSize: 16,
-    color: theme.colors.text.muted,
+  center: {
     textAlign: 'center',
-    marginBottom: 16,
   },
-  link: { color: theme.colors.accent.default, textAlign: 'center', marginTop: 16 },
+  link: {
+    textAlign: 'center',
+    marginTop: theme.spacing.sm,
+  },
 })

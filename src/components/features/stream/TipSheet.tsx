@@ -1,20 +1,35 @@
+// src/components/features/stream/TipSheet.tsx
+//
+// 12.6 token cleanup pass. The bespoke Modal + KeyboardAvoidingView
+// scaffold stays (they work and handle keyboard avoidance correctly);
+// only the inner rendering swaps to design-system primitives:
+//   • Text variants + HelpText replace bespoke style.* + raw color
+//   • Button (variant=primary, disabled state) replaces the bespoke
+//     confirm button — removes the '#fff' hex literal
+//   • Pressable primitive for the preset chips so they pick up the
+//     standard subtle press feedback. Visual layout (3-up grid with
+//     amount + USD sub) stays inline because the existing dual-line
+//     chip shape doesn't match PresetGrid's single-label chips today.
+
 import { useState } from 'react'
 import {
-  View,
-  Text,
-  TextInput,
-  StyleSheet,
-  Modal,
-  Pressable,
   KeyboardAvoidingView,
+  Modal,
   Platform,
+  StyleSheet,
+  TextInput,
+  View,
 } from 'react-native'
 import { theme } from '@/tokens/theme'
+import { Text } from '@/components/primitives/Text'
+import { HelpText } from '@/components/primitives/HelpText'
+import { Button } from '@/components/primitives/Button'
+import { Pressable } from '@/components/primitives/Pressable'
 
 const SPACE_BUCKS_PER_DOLLAR = 100
 
 const PRESETS = [
-  { amount: 50,  label: '50 🚀',  sub: '$0.50' },
+  { amount: 50, label: '50 🚀', sub: '$0.50' },
   { amount: 100, label: '100 🚀', sub: '$1.00' },
   { amount: 500, label: '500 🚀', sub: '$5.00' },
 ]
@@ -31,7 +46,9 @@ export function TipSheet({ visible, balance, onClose, onTip }: Props) {
   const [custom, setCustom] = useState('')
 
   const customAmount = parseInt(custom, 10)
-  const amount = selected ?? (custom ? (Number.isFinite(customAmount) && customAmount > 0 ? customAmount : 0) : 0)
+  const amount =
+    selected ??
+    (custom ? (Number.isFinite(customAmount) && customAmount > 0 ? customAmount : 0) : 0)
   const insufficient = amount > 0 && amount > balance
   const canTip = amount >= 10 && !insufficient
 
@@ -49,33 +66,64 @@ export function TipSheet({ visible, balance, onClose, onTip }: Props) {
     setCustom('')
   }
 
-  const dollarEquiv = amount > 0 ? `$${(amount / SPACE_BUCKS_PER_DOLLAR).toFixed(2)}` : null
+  const dollarEquiv =
+    amount > 0 ? `$${(amount / SPACE_BUCKS_PER_DOLLAR).toFixed(2)}` : null
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
-      <Pressable style={styles.backdrop} onPress={handleClose} />
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'position' : undefined}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={handleClose}
+    >
+      <Pressable variant="none" style={styles.backdrop} onPress={handleClose} />
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'position' : undefined}
+      >
         <View style={styles.sheet}>
           <View style={styles.handle} />
 
-          <Text style={styles.heading}>Send a tip</Text>
-          <Text style={styles.balance}>Balance: {balance} 🚀</Text>
+          <Text variant="heading" style={styles.center}>
+            Send a tip
+          </Text>
+          <Text variant="body" color={theme.colors.text.muted} style={styles.center}>
+            Balance: {balance} 🚀
+          </Text>
 
           <View style={styles.presetRow}>
-            {PRESETS.map((p) => (
-              <Pressable
-                key={p.amount}
-                style={[styles.preset, selected === p.amount && styles.presetActive]}
-                onPress={() => { setSelected(p.amount); setCustom('') }}
-              >
-                <Text style={[styles.presetLabel, selected === p.amount && styles.presetLabelActive]}>
-                  {p.label}
-                </Text>
-                <Text style={[styles.presetSub, selected === p.amount && styles.presetSubActive]}>
-                  {p.sub}
-                </Text>
-              </Pressable>
-            ))}
+            {PRESETS.map((p) => {
+              const isSelected = selected === p.amount
+              return (
+                <Pressable
+                  key={p.amount}
+                  variant="subtle"
+                  onPress={() => {
+                    setSelected(p.amount)
+                    setCustom('')
+                  }}
+                  style={[styles.preset, isSelected && styles.presetActive]}
+                >
+                  <Text
+                    variant="bodyEmphasized"
+                    color={
+                      isSelected
+                        ? theme.colors.accent.default
+                        : theme.colors.text.primary
+                    }
+                  >
+                    {p.label}
+                  </Text>
+                  <Text
+                    variant="caption"
+                    color={
+                      isSelected ? theme.colors.accent.default : theme.colors.text.muted
+                    }
+                  >
+                    {p.sub}
+                  </Text>
+                </Pressable>
+              )
+            })}
           </View>
 
           <TextInput
@@ -84,22 +132,19 @@ export function TipSheet({ visible, balance, onClose, onTip }: Props) {
             placeholderTextColor={theme.colors.text.muted}
             keyboardType="number-pad"
             value={custom}
-            onChangeText={(t) => { setCustom(t); setSelected(null) }}
+            onChangeText={(t) => {
+              setCustom(t)
+              setSelected(null)
+            }}
           />
 
-          {insufficient && (
-            <Text style={styles.errorText}>Insufficient balance</Text>
-          )}
+          {insufficient && <HelpText tone="err">Insufficient balance</HelpText>}
 
-          <Pressable
-            style={[styles.confirmBtn, !canTip && styles.confirmBtnDisabled]}
+          <Button
+            label={canTip && dollarEquiv ? `Send ${amount} 🚀 · ${dollarEquiv}` : 'Send tip'}
             onPress={handleTip}
             disabled={!canTip}
-          >
-            <Text style={styles.confirmText}>
-              {canTip && dollarEquiv ? `Send ${amount} 🚀 · ${dollarEquiv}` : 'Send tip'}
-            </Text>
-          </Pressable>
+          />
         </View>
       </KeyboardAvoidingView>
     </Modal>
@@ -109,7 +154,7 @@ export function TipSheet({ visible, balance, onClose, onTip }: Props) {
 const styles = StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: theme.colors.bg.overlay,
   },
   sheet: {
     backgroundColor: theme.colors.bg.elevated,
@@ -127,14 +172,7 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     marginBottom: theme.spacing.sm,
   },
-  heading: {
-    ...theme.typography.heading,
-    color: theme.colors.text.primary,
-    textAlign: 'center',
-  },
-  balance: {
-    ...theme.typography.body,
-    color: theme.colors.text.muted,
+  center: {
     textAlign: 'center',
   },
   presetRow: {
@@ -154,21 +192,9 @@ const styles = StyleSheet.create({
   },
   presetActive: {
     borderColor: theme.colors.accent.default,
-    backgroundColor: `${theme.colors.accent.default}22`,
+    backgroundColor: theme.colors.accent.surface,
   },
-  presetLabel: {
-    ...theme.typography.body,
-    color: theme.colors.text.primary,
-    fontWeight: '600',
-  },
-  presetLabelActive: { color: theme.colors.accent.default },
-  presetSub: {
-    ...theme.typography.caption,
-    color: theme.colors.text.muted,
-  },
-  presetSubActive: { color: theme.colors.accent.default },
   customInput: {
-    ...theme.typography.body,
     color: theme.colors.text.primary,
     backgroundColor: theme.colors.bg.primary,
     borderWidth: 1,
@@ -176,24 +202,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.md,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
-  },
-  errorText: {
-    ...theme.typography.caption,
-    color: theme.colors.accent.default,
-    textAlign: 'center',
-  },
-  confirmBtn: {
-    backgroundColor: theme.colors.accent.default,
-    borderRadius: theme.radius.md,
-    paddingVertical: theme.spacing.md,
-    alignItems: 'center',
-  },
-  confirmBtnDisabled: {
-    opacity: 0.4,
-  },
-  confirmText: {
-    ...theme.typography.body,
-    color: '#fff',
-    fontWeight: '700',
+    fontFamily: theme.typography.body.fontFamily,
+    fontSize: theme.typography.body.fontSize,
   },
 })

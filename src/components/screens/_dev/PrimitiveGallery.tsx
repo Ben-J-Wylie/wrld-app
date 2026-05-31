@@ -1,12 +1,18 @@
-// src/components/screens/_dev/ComponentGallery.tsx
+// src/components/screens/_dev/PrimitiveGallery.tsx
 //
-// Dev-only gallery exercising every primitive variant. Mechanical
+// Dev-only gallery exercising every PRIMITIVE variant. Mechanical
 // criterion #4 (DESIGN.md): "renders without errors and covers every
 // primitive variant (default, pressed, disabled, loading where
-// applicable)." Each primitive shipped in 12.4 adds a section below.
+// applicable)."
 //
-// Reachable in dev via expo-router push to `/(app)/gallery`. The route
-// is registered with `href: null` so it does not appear in the tab bar.
+// Companion galleries: `FeatureGallery` (features tier) and
+// `SectionGallery` (sections tier). Split into separate pages
+// 2026-05-30 as the tier count grew past comfortable single-page
+// scroll.
+//
+// Reachable in dev via expo-router push to `/(app)/primitive-gallery`.
+// The route is registered with `href: null` so it does not appear in
+// the tab bar.
 
 import { useState } from 'react'
 import { View, StyleSheet } from 'react-native'
@@ -33,7 +39,7 @@ import { Divider } from '@/components/primitives/Divider'
 import { BrandMark } from '@/components/primitives/BrandMark'
 import { theme } from '@/tokens/theme'
 
-export function ComponentGallery() {
+export function PrimitiveGallery() {
   const [pressCounts, setPressCounts] = useState({ default: 0, subtle: 0, none: 0 })
   const [cardTaps, setCardTaps] = useState(0)
   const [inputDefault, setInputDefault] = useState('')
@@ -622,6 +628,7 @@ export function ComponentGallery() {
             </View>
           </Row>
         </Section>
+
       </ScreenScroll>
 
       {sheetVariant !== null && (

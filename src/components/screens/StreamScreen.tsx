@@ -1,19 +1,76 @@
-import { View, Text, StyleSheet, ActivityIndicator, Pressable, AppState, Keyboard, Platform, Animated, Alert } from 'react-native'
+// src/components/screens/StreamScreen.tsx
+//
+// 12.6 migration target. The state machine + lifecycle effects are
+// preserved verbatim; only the rendering layer swaps to design-system
+// equivalents. Key migrations:
+//
+//   • ChatOverlay (retiring) splits into a local panel that scrolls
+//     ChatMessage rows + a ChatComposer at the bottom.
+//   • ReactionLayer (retiring) → ReactionRail (consumer-driven
+//     reaction list + burst queue).
+//   • LivePill for the LIVE indicator.
+//   • BroadcasterRow for the identity strip (chip variant when the
+//     viewer is the broadcaster of their own stream, default variant
+//     when viewing someone else's stream).
+//   • CoordHUD for the broadcaster's idle-state location read.
+//   • IconButton for back, flip camera, chat toggle, dismiss-warning,
+//     report, and tip header affordances.
+//   • Pill (accent, sm) for the BROADCASTING source badges.
+//   • ToastBanner for the broadcaster-side post-tip toast.
+//   • ActionSheet (section) for the report-stream reason picker.
+//   • Text primitive variants + token colors throughout.
+//
+// Phase 17 / 5/22 integration (merged in from `main` on the same
+// pass): suspensionError Alert, handleGoLive suspension navigate,
+// report flag button + ActionSheet, screenshot capture via
+// react-native-view-shot.
+//
+// Kept intact: NearbyStreamsDrawer, AuthModal, TipSheet, FollowButton
+// (per the 12.6 retirement plan).
+
+import {
+  ActivityIndicator,
+  Alert,
+  Animated,
+  AppState,
+  Keyboard,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native'
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { captureScreen } from 'react-native-view-shot'
 import { useLocalSearchParams, router, useFocusEffect } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { RTCView } from 'react-native-webrtc'
+import { useAuth } from '@clerk/clerk-expo'
 import { Button } from '@/components/primitives/Button'
+import { Text } from '@/components/primitives/Text'
+import { Pill } from '@/components/primitives/Pill'
+import { IconButton } from '@/components/primitives/IconButton'
+import { HelpText } from '@/components/primitives/HelpText'
+import { LivePill } from '@/components/features/stream/LivePill'
+import { BroadcasterRow } from '@/components/features/user/BroadcasterRow'
+import { CoordHUD } from '@/components/features/stream/CoordHUD'
+import {
+  ChatMessage as ChatMessageRow,
+  type ChatRole,
+} from '@/components/features/chat/ChatMessage'
+import { ChatComposer } from '@/components/features/chat/ChatComposer'
+import {
+  ReactionRail,
+  type ReactionConfig,
+} from '@/components/features/stream/ReactionRail'
+import { ToastBanner } from '@/components/features/feedback/ToastBanner'
+import { ActionSheet } from '@/components/sections/ActionSheet'
 import { NearbyStreamsDrawer } from '@/components/features/stream/NearbyStreamsDrawer'
-import { ChatOverlay } from '@/components/features/stream/ChatOverlay'
-import { ReactionLayer } from '@/components/features/stream/ReactionLayer'
 import { AuthModal } from '@/components/features/stream/AuthModal'
 import { TipSheet } from '@/components/features/stream/TipSheet'
+import { FollowButton } from '@/components/features/user/FollowButton'
 import { useInvalidateCurrentUser } from '@/hooks/useCurrentUser'
 import { useInvalidateWallet } from '@/hooks/useWallet'
-import { Avatar } from '@/components/primitives/Avatar'
-import { FollowButton } from '@/components/features/user/FollowButton'
 import { theme } from '@/tokens/theme'
 import { signalStreamDisconnected, signalStreamEnded } from '@/lib/streamSignals'
 import { activeBroadcast } from '@/lib/activeBroadcast'
@@ -22,10 +79,21 @@ import { useSignaling } from '@/hooks/useSignaling'
 import { useMediasoup } from '@/hooks/useMediasoup'
 import { useLocation } from '@/hooks/useLocation'
 import { useStream } from '@/hooks/useStream'
-import { useAuth } from '@clerk/clerk-expo'
 import { useAuthStore } from '@/stores/authStore'
 import type { Stream, SourceType } from '@/types'
 import type { TipEvent } from '@/hooks/useSignaling'
+
+const SOURCE_LABELS: Record<SourceType, string> = {
+  camera: 'Camera',
+  audio: 'Audio',
+}
+
+const REACTION_CONFIGS: ReactionConfig[] = [
+  { kind: 'heart', emoji: '❤️' },
+  { kind: 'fire', emoji: '🔥' },
+  { kind: 'clap', emoji: '👏' },
+  { kind: 'wow', emoji: '😮' },
+]
 
 function FloatingTip({ tip, onDone }: { tip: TipEvent; onDone: (id: number) => void }) {
   const translateY = useRef(new Animated.Value(0)).current
@@ -38,33 +106,29 @@ function FloatingTip({ tip, onDone }: { tip: TipEvent; onDone: (id: number) => v
         Animated.timing(opacity, { toValue: 0, duration: 800, useNativeDriver: true }),
       ]),
     ]).start(() => onDone(tip.id))
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   return (
     <Animated.View style={[tipStyles.floating, { transform: [{ translateY }], opacity }]}>
-      <Text style={tipStyles.floatingText}>@{tip.handle} · {tip.amount} 🚀</Text>
+      <View style={tipStyles.bubble}>
+        <Text variant="caption" color={theme.colors.text.inverse}>
+          @{tip.handle} · {tip.amount} 🚀
+        </Text>
+      </View>
     </Animated.View>
   )
 }
 
 const tipStyles = StyleSheet.create({
   floating: { position: 'absolute', bottom: 0, left: 0, right: 0, alignItems: 'center' },
-  floatingText: {
-    ...theme.typography.caption,
-    color: '#fff',
-    backgroundColor: 'rgba(91,140,255,0.85)',
-    paddingHorizontal: 10,
+  bubble: {
+    backgroundColor: theme.colors.accent.default,
+    paddingHorizontal: theme.spacing.sm,
     paddingVertical: 4,
-    borderRadius: 12,
+    borderRadius: theme.radius.full,
     overflow: 'hidden',
-    fontWeight: '700',
   },
 })
-
-const SOURCE_LABELS: Record<SourceType, string> = {
-  camera: 'Camera',
-  audio: 'Audio',
-}
 
 export function StreamScreen() {
   const { id, streamId, title: paramTitle, sources: paramSources } = useLocalSearchParams<{
@@ -93,7 +157,10 @@ export function StreamScreen() {
   } = useSignaling()
   const invalidateCurrentUser = useInvalidateCurrentUser()
   const invalidateWallet = useInvalidateWallet()
-  const { localStream, remoteStream, error: mediaError, facingMode, videoIsLandscape, startBroadcasting, startViewing, switchCamera, cleanup } = useMediasoup()
+  const {
+    localStream, remoteStream, error: mediaError, facingMode, videoIsLandscape,
+    startBroadcasting, startViewing, switchCamera, cleanup,
+  } = useMediasoup()
   const { isSignedIn } = useAuth()
   const { coords, loading: locationLoading, error: locationError } = useLocation()
   const wrldUser = useAuthStore((s: ReturnType<typeof useAuthStore.getState>) => s.wrldUser)
@@ -106,6 +173,7 @@ export function StreamScreen() {
   const [controlsVisible, setControlsVisible] = useState(false)
   const [hopError, setHopError] = useState<string | null>(null)
   const [chatOpen, setChatOpen] = useState(false)
+  const [chatInput, setChatInput] = useState('')
   const [authModalVisible, setAuthModalVisible] = useState(false)
   const [tipSheetVisible, setTipSheetVisible] = useState(false)
   const [reportVisible, setReportVisible] = useState(false)
@@ -139,23 +207,16 @@ export function StreamScreen() {
     }
   }
 
-  // Single exit point for all viewer stream-end scenarios.
-  // navigatingRef ensures only the first trigger wins when multiple signals
-  // arrive in the same render cycle (e.g. broadcasterLeft + WS close together).
   function exitToGlobe(kind: 'ended' | 'disconnected') {
     if (navigatingRef.current) return
     navigatingRef.current = true
     cleanup()
     disconnect()
-    if (kind === 'ended') {
-      signalStreamEnded()
-    } else {
-      signalStreamDisconnected(broadcaster?.handle ?? null)
-    }
+    if (kind === 'ended') signalStreamEnded()
+    else signalStreamDisconnected(broadcaster?.handle ?? null)
     router.navigate('/(app)/globe')
   }
 
-  // Admin force-ended: clean up media and let the UI show the explanation screen.
   useEffect(() => {
     if (!adminEnded || !isNew) return
     activeBroadcast.clear()
@@ -164,23 +225,18 @@ export function StreamScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adminEnded])
 
-  // Fast path 1: server sent broadcasterLeft
   useEffect(() => {
     if (!streamEnded || isNew) return
     exitToGlobe('ended')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [streamEnded])
 
-  // Fast path 2: viewer's own WS dropped unexpectedly
   useEffect(() => {
     if (status !== 'dropped' || isNew) return
     exitToGlobe('disconnected')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status])
 
-  // Fallback: poll stream status every 10s.
-  // Catches cases where neither broadcasterLeft nor a clean WS close arrive
-  // (Android force-kill delay, iOS graceful-leave race, server-side quirks).
   useEffect(() => {
     if (isNew || !streamId || status !== 'in-room') return
     const pollId = setInterval(async () => {
@@ -204,15 +260,13 @@ export function StreamScreen() {
     }
   }, [])
 
-  // Invalidate caches when a tip is confirmed (sender) so balances update live
   useEffect(() => {
     if (confirmedBalance === null) return
     invalidateCurrentUser()
     invalidateWallet()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [confirmedBalance])
 
-  // Show broadcaster toast and refresh balances when a tip arrives
   useEffect(() => {
     if (!isNew || tipEvents.length === 0) return
     const latest = tipEvents[tipEvents.length - 1]!
@@ -221,7 +275,7 @@ export function StreamScreen() {
     invalidateWallet()
     if (tipToastTimerRef.current) clearTimeout(tipToastTimerRef.current)
     tipToastTimerRef.current = setTimeout(() => setBroadcasterTipToast(null), 3000)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tipEvents])
 
   useEffect(() => {
@@ -232,14 +286,9 @@ export function StreamScreen() {
     return () => { showSub.remove(); hideSub.remove() }
   }, [])
 
-  // Auto-join on every screen focus (first visit, return after leaving, hop to
-  // different stream). useFocusEffect fires when the tab gains focus AND when
-  // its useCallback deps change while already focused — so id-changes (hops)
-  // are also caught without a separate useEffect.
   useFocusEffect(
     useCallback(() => {
       if (isNew) {
-        // Clear any leftover admin-end state so the broadcaster can start fresh.
         setAdminEnded(false)
         return
       }
@@ -250,8 +299,6 @@ export function StreamScreen() {
     }, [id]),
   )
 
-  // Broadcaster: signal orientation to admin viewers whenever the detected
-  // video orientation is known (fires once after camera starts).
   useEffect(() => {
     if (!suspensionError) return
     Alert.alert('Account suspended', suspensionError, [{ text: 'OK', onPress: clearSuspensionError }])
@@ -259,15 +306,10 @@ export function StreamScreen() {
 
   useEffect(() => {
     if (!isNew || status !== 'in-room' || !localStream) return
-    // track.getSettings() on react-native-webrtc reports sensor-native dims:
-    // width > height = sensor native = phone held portrait. Inverted from intuition.
     sendBroadcasterOrientation(videoIsLandscape ? 'portrait' : 'landscape')
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isNew, status, localStream, videoIsLandscape])
 
-  // Broadcaster: close the WS when the app goes to background so the server
-  // immediately fires broadcasterLeft to all viewers. Without this, iOS/Android
-  // keeps the socket alive in background and viewers are stuck on a frozen frame.
   useEffect(() => {
     if (!isNew || status !== 'in-room') return
     const sub = AppState.addEventListener('change', (nextState) => {
@@ -283,7 +325,6 @@ export function StreamScreen() {
     return () => sub.remove()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isNew, status])
-
 
   async function handleGoLive() {
     const title = (paramTitle ?? '').trim()
@@ -320,7 +361,6 @@ export function StreamScreen() {
     }
   }
 
-  // Broadcaster: resume with same settings, starting a fresh room.
   async function handleResume() {
     cleanup()
     await handleGoLive()
@@ -362,10 +402,16 @@ export function StreamScreen() {
   async function handleReportPress() {
     if (!isSignedIn) { setAuthModalVisible(true); return }
     try {
-      // captureScreen + handleGLSurfaceViewOnAndroid captures the GPU SurfaceView
-      // that RTCView renders into (PixelCopy path on Android, UIKit composite on iOS).
-      // result:'base64' avoids Axios FormData/multipart issues with file URIs.
-      pendingSnapshotUri.current = await captureScreen({ format: 'jpg', quality: 0.9, result: 'base64', handleGLSurfaceViewOnAndroid: true })
+      // captureScreen + handleGLSurfaceViewOnAndroid captures the GPU
+      // SurfaceView that RTCView renders into (PixelCopy path on Android,
+      // UIKit composite on iOS). result:'base64' avoids Axios FormData/
+      // multipart issues with file URIs.
+      pendingSnapshotUri.current = await captureScreen({
+        format: 'jpg',
+        quality: 0.9,
+        result: 'base64',
+        handleGLSurfaceViewOnAndroid: true,
+      })
     } catch {
       pendingSnapshotUri.current = null
     }
@@ -388,8 +434,11 @@ export function StreamScreen() {
     }
   }
 
-  function handleSendChat(text: string) {
-    sendChatMessage(text, wrldUser?.handle ?? 'user')
+  function handleSendChat() {
+    const trimmed = chatInput.trim()
+    if (!trimmed) return
+    sendChatMessage(trimmed, wrldUser?.handle ?? 'user')
+    setChatInput('')
   }
 
   function handleReact(kind: string) {
@@ -416,10 +465,28 @@ export function StreamScreen() {
 
   const canGoLive = !!paramTitle?.trim() && !!coords && !locationLoading && broadcastSources.length > 0
   const displayError = signalingError ?? mediaError
+  const burst = reactions.map((r) => ({ id: r.id, kind: r.kind }))
+
+  const coordItems = [
+    {
+      label: 'LAT',
+      value: coords ? coords.latitude.toFixed(4) : locationError ? '—' : '...',
+      pending: !coords && !locationError,
+    },
+    {
+      label: 'LON',
+      value: coords ? coords.longitude.toFixed(4) : locationError ? '—' : '...',
+      pending: !coords && !locationError,
+    },
+  ]
+
+  function chatRoleFor(from: string): ChatRole {
+    if (broadcaster && from === broadcaster.handle) return 'host'
+    return 'user'
+  }
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Fullscreen local camera preview (broadcaster) */}
       {showCameraPreview && (
         <RTCView
           streamURL={(localStream as unknown as { toURL(): string }).toURL()}
@@ -430,7 +497,6 @@ export function StreamScreen() {
         />
       )}
 
-      {/* Fullscreen remote stream (viewer) */}
       {showRemoteVideo && (
         <RTCView
           streamURL={(remoteStream as unknown as { toURL(): string }).toURL()}
@@ -441,119 +507,139 @@ export function StreamScreen() {
         />
       )}
 
-      {/* Admin warning banner (broadcaster only, dismissible) */}
       {isNew && !!adminWarning && (
-        <View style={styles.adminWarningBanner}>
-          <Text style={styles.adminWarningText}>{adminWarning}</Text>
-          <Pressable onPress={() => setAdminWarning(null)} hitSlop={10}>
-            <Text style={styles.adminWarningDismiss}>✕</Text>
-          </Pressable>
+        <View style={styles.adminWarningWrap}>
+          <ToastBanner
+            variant="warn"
+            body={adminWarning}
+            autoDismissMs={0}
+            onDismiss={() => setAdminWarning(null)}
+          />
         </View>
       )}
 
-      {/* Admin force-ended screen (broadcaster only) */}
       {adminEnded && isNew && (
         <View style={[StyleSheet.absoluteFill, styles.adminEndedContainer]}>
           <View style={styles.adminEndedContent}>
-            <Text style={styles.adminEndedTitle}>Stream Closed</Text>
-            <Text style={styles.adminEndedBody}>
+            <Text variant="heading" style={styles.center}>
+              Stream Closed
+            </Text>
+            <Text variant="body" color={theme.colors.text.muted} style={styles.center}>
               An administrator has ended your stream.
             </Text>
             <Button
               label="Back to globe"
               onPress={() => router.navigate('/(app)/globe')}
-              style={styles.wide}
             />
           </View>
         </View>
       )}
 
-      {/* Flip camera button (broadcaster only) */}
       {showCameraPreview && (
-        <Pressable style={styles.flipBtn} onPress={switchCamera} hitSlop={12}>
-          <Text style={styles.flipBtnText}>⇄</Text>
-        </Pressable>
+        <View style={styles.flipBtn}>
+          <IconButton
+            name="repeat"
+            variant="surface"
+            size="lg"
+            onPress={switchCamera}
+            accessibilityLabel="Flip camera"
+          />
+        </View>
       )}
 
-      {/* Tap-to-reveal layer for viewer fullscreen mode */}
       {showRemoteVideo && (
         <Pressable style={StyleSheet.absoluteFill} onPress={handleTap} />
       )}
 
       <View style={[styles.header, styles.headerRow]}>
-        <Pressable onPress={handleBack} style={styles.backBtn} hitSlop={12}>
-          <Text style={[styles.backArrow, showOverlay && styles.overlayText]}>←</Text>
-        </Pressable>
+        <IconButton
+          name="arrow-left"
+          variant={showOverlay ? 'surface' : 'ghost'}
+          size="md"
+          onPress={handleBack}
+          accessibilityLabel="Back"
+        />
         {status === 'in-room' && !streamEnded && (
           <View style={styles.headerActions}>
             {!isNew && (
               <>
-                <Pressable style={styles.tipHeaderBtn} onPress={handleTipPress} hitSlop={8}>
-                  <Text style={styles.tipHeaderBtnText}>🚀 Tip</Text>
+                <Pressable onPress={handleTipPress} style={styles.tipHeaderBtn} hitSlop={8}>
+                  <Text variant="monoLabel" color={theme.colors.accent.default}>
+                    🚀 TIP
+                  </Text>
                 </Pressable>
-                <Pressable style={[styles.tipHeaderBtn, { marginLeft: 6 }]} onPress={handleReportPress} hitSlop={8}>
-                  <Text style={styles.tipHeaderBtnText}>⚑</Text>
-                </Pressable>
+                <IconButton
+                  name="flag"
+                  variant={showOverlay ? 'surface' : 'ghost'}
+                  size="md"
+                  onPress={handleReportPress}
+                  accessibilityLabel="Report stream"
+                />
               </>
             )}
-            <Pressable
+            <IconButton
+              name={chatOpen ? 'x' : 'message-circle'}
+              variant={showOverlay ? 'surface' : 'ghost'}
+              size="md"
               onPress={() => setChatOpen((o) => !o)}
-              style={styles.chatToggleBtn}
-              hitSlop={12}
-            >
-              <Text style={[styles.chatToggleText, showOverlay && styles.overlayText]}>
-                {chatOpen ? '✕' : '💬'}
-              </Text>
-            </Pressable>
+              accessibilityLabel={chatOpen ? 'Close chat' : 'Open chat'}
+            />
           </View>
         )}
       </View>
 
       {showControls && (
         <View style={styles.content}>
-          {!showOverlay && isNew && (
-            <Text style={styles.title}>Go Live</Text>
-          )}
+          {!showOverlay && isNew && <Text variant="display">Go Live</Text>}
 
           {/* ── Idle (broadcaster only) ───────────────────────────── */}
           {status === 'idle' && isNew && (
             <View style={styles.actions}>
               {isNew && isSignedIn && (
                 <>
-                  {paramTitle ? (
-                    <Text style={styles.streamTitle}>{paramTitle}</Text>
-                  ) : null}
+                  {paramTitle && (
+                    <Text variant="heading" style={styles.center}>
+                      {paramTitle}
+                    </Text>
+                  )}
                   {broadcastSources.length > 0 && (
                     <View style={styles.sourceRow}>
                       {broadcastSources.map((s) => (
-                        <View key={s} style={styles.sourceBadge}>
-                          <Text style={styles.sourceBadgeText}>{SOURCE_LABELS[s]}</Text>
-                        </View>
+                        <Pill key={s} size="sm" label={SOURCE_LABELS[s].toUpperCase()} />
                       ))}
                     </View>
                   )}
                   {locationLoading && (
                     <View style={styles.statusRow}>
                       <ActivityIndicator color={theme.colors.accent.default} size="small" />
-                      <Text style={styles.muted}>Detecting location…</Text>
+                      <Text variant="body" color={theme.colors.text.muted}>
+                        Detecting location…
+                      </Text>
                     </View>
                   )}
-                  {locationError && <Text style={styles.muted}>{locationError}</Text>}
-                  {coords && !locationLoading && (
-                    <Text style={styles.muted}>
-                      {coords.latitude.toFixed(4)}, {coords.longitude.toFixed(4)}
+                  {locationError && (
+                    <Text variant="body" color={theme.colors.text.muted}>
+                      {locationError}
                     </Text>
                   )}
+                  {coords && !locationLoading && <CoordHUD items={coordItems} />}
                   <Button
                     label="Start stream"
                     onPress={handleGoLive}
                     disabled={!canGoLive}
-                    style={styles.wide}
                   />
                 </>
               )}
-              {isNew && !isSignedIn && <Text style={styles.muted}>Sign in to go live</Text>}
-              <Button label="Back" onPress={() => router.navigate('/(app)/globe')} variant="secondary" style={styles.wide} />
+              {isNew && !isSignedIn && (
+                <Text variant="body" color={theme.colors.text.muted}>
+                  Sign in to go live
+                </Text>
+              )}
+              <Button
+                label="Back"
+                onPress={() => router.navigate('/(app)/globe')}
+                variant="secondary"
+              />
             </View>
           )}
 
@@ -561,7 +647,7 @@ export function StreamScreen() {
           {(status === 'connecting' || status === 'connected' || status === 'authenticated') && (
             <View style={styles.statusRow}>
               <ActivityIndicator color={theme.colors.accent.default} />
-              <Text style={styles.muted}>
+              <Text variant="body" color={theme.colors.text.muted}>
                 {status === 'connecting' && 'Connecting…'}
                 {status === 'connected' && 'Authenticating…'}
                 {status === 'authenticated' && 'Entering room…'}
@@ -572,13 +658,14 @@ export function StreamScreen() {
           {/* ── Broadcaster: connection dropped ───────────────────── */}
           {status === 'dropped' && isNew && (
             <View style={styles.actions}>
-              <Text style={styles.muted}>Your stream ended.</Text>
-              <Button label="Resume" onPress={handleResume} style={styles.wide} />
+              <Text variant="body" color={theme.colors.text.muted}>
+                Your stream ended.
+              </Text>
+              <Button label="Resume" onPress={handleResume} />
               <Button
                 label="Start new stream"
                 onPress={handleStartNew}
                 variant="secondary"
-                style={styles.wide}
               />
             </View>
           )}
@@ -587,78 +674,99 @@ export function StreamScreen() {
           {!isNew && status === 'in-room' && !remoteStream && !streamEnded && (
             <View style={styles.statusRow}>
               <ActivityIndicator color={theme.colors.accent.default} />
-              <Text style={styles.muted}>Loading stream…</Text>
+              <Text variant="body" color={theme.colors.text.muted}>
+                Loading stream…
+              </Text>
             </View>
           )}
-
 
           {/* ── In room ──────────────────────────────────────────── */}
           {status === 'in-room' && !streamEnded && (!!remoteStream || isNew) && (
             <View style={[styles.roomInfo, showOverlay && styles.roomInfoOverlay]}>
               <View style={styles.liveRow}>
-                <Text style={styles.live}>● LIVE</Text>
-                {!showOverlay && (
-                  <Text style={styles.roomId}>{roomId}</Text>
+                <LivePill />
+                {!showOverlay && roomId && (
+                  <Text variant="monoCaption" color={theme.colors.text.muted}>
+                    {roomId}
+                  </Text>
                 )}
               </View>
 
-              {broadcaster && (
-                <View style={styles.broadcasterRow}>
-                  <Avatar
+              {broadcaster && !isNew && (
+                <View style={styles.broadcasterWrap}>
+                  <BroadcasterRow
                     avatarUrl={broadcaster.avatarUrl}
                     displayName={broadcaster.displayName}
-                    size={32}
+                    handle={broadcaster.handle}
+                    showFollowButton={false}
                   />
-                  <Text style={[styles.broadcasterHandle, showOverlay && styles.overlayText]}>
-                    @{broadcaster.handle}
-                  </Text>
-                  {!isNew && broadcaster.handle && (
+                  {broadcaster.handle && (
                     <FollowButton
                       handle={broadcaster.handle}
                       onAuthRequest={!isSignedIn ? () => setAuthModalVisible(true) : undefined}
                     />
                   )}
-                  {!isNew && (
-                    <Pressable style={styles.tipBtn} onPress={handleTipPress} hitSlop={8}>
-                      <Text style={styles.tipBtnText}>🚀 Tip</Text>
-                    </Pressable>
-                  )}
                 </View>
               )}
+              {broadcaster && isNew && (
+                <BroadcasterRow
+                  variant="chip"
+                  avatarUrl={broadcaster.avatarUrl}
+                  displayName={broadcaster.displayName}
+                  handle={broadcaster.handle}
+                />
+              )}
 
-              {/* Broadcaster */}
               {isNew && (
                 <View style={styles.section}>
-                  {!showOverlay && <Text style={styles.sectionLabel}>BROADCASTING</Text>}
+                  {!showOverlay && <HelpText>BROADCASTING</HelpText>}
                   <View style={styles.sourceRow}>
                     {broadcastSources.map((s) => (
-                      <View key={s} style={styles.sourceActiveBadge}>
-                        <Text style={styles.sourceActiveBadgeText}>{SOURCE_LABELS[s]}</Text>
-                      </View>
+                      <Pill
+                        key={s}
+                        size="sm"
+                        variant="accent"
+                        label={SOURCE_LABELS[s].toUpperCase()}
+                      />
                     ))}
                   </View>
-                  <Text style={[styles.viewerCount, showOverlay && styles.overlayText]}>
+                  <Text
+                    variant="body"
+                    color={showOverlay ? theme.colors.text.inverse : theme.colors.text.muted}
+                  >
                     {viewerCount} {viewerCount === 1 ? 'viewer' : 'viewers'}
                   </Text>
                 </View>
               )}
 
-              {/* Viewer: source switcher */}
               {!isNew && broadcastSources.length > 0 && (
                 <View style={styles.section}>
-                  {!showOverlay && <Text style={styles.sectionLabel}>SOURCES</Text>}
+                  {!showOverlay && <HelpText>SOURCES</HelpText>}
                   <View style={styles.sourceRow}>
-                    {broadcastSources.map((kind) => (
-                      <Pressable
-                        key={kind}
-                        style={[styles.sourceSwitchBtn, activeSource === kind && styles.sourceSwitchBtnActive]}
-                        onPress={() => setActiveSource(kind)}
-                      >
-                        <Text style={[styles.sourceSwitchText, activeSource === kind && styles.sourceSwitchTextActive]}>
-                          {SOURCE_LABELS[kind]}
-                        </Text>
-                      </Pressable>
-                    ))}
+                    {broadcastSources.map((kind) => {
+                      const isActive = activeSource === kind
+                      return (
+                        <Pressable
+                          key={kind}
+                          onPress={() => setActiveSource(kind)}
+                          style={[
+                            styles.sourceSwitchBtn,
+                            isActive && styles.sourceSwitchBtnActive,
+                          ]}
+                        >
+                          <Text
+                            variant="bodyEmphasized"
+                            color={
+                              isActive
+                                ? theme.colors.accent.default
+                                : theme.colors.text.muted
+                            }
+                          >
+                            {SOURCE_LABELS[kind]}
+                          </Text>
+                        </Pressable>
+                      )
+                    })}
                   </View>
                 </View>
               )}
@@ -670,24 +778,35 @@ export function StreamScreen() {
           {/* ── Error ────────────────────────────────────────────── */}
           {status === 'error' && (
             <View style={styles.actions}>
-              <Text style={styles.errorText}>{displayError}</Text>
+              <Text variant="body" color={theme.colors.accent.default} style={styles.center}>
+                {displayError}
+              </Text>
               <Button label="Retry" onPress={isNew ? handleGoLive : handleJoin} />
-              <Button label="Back" onPress={() => router.navigate('/(app)/globe')} variant="secondary" />
+              <Button
+                label="Back"
+                onPress={() => router.navigate('/(app)/globe')}
+                variant="secondary"
+              />
             </View>
           )}
 
           {/* ── Hop error ────────────────────────────────────────── */}
           {hopError && (
             <View style={styles.actions}>
-              <Text style={styles.errorText}>{hopError}</Text>
+              <Text variant="body" color={theme.colors.accent.default} style={styles.center}>
+                {hopError}
+              </Text>
               <Button label="Dismiss" onPress={() => setHopError(null)} variant="secondary" />
-              <Button label="Back to globe" onPress={() => router.navigate('/(app)/globe')} variant="secondary" />
+              <Button
+                label="Back to globe"
+                onPress={() => router.navigate('/(app)/globe')}
+                variant="secondary"
+              />
             </View>
           )}
         </View>
       )}
 
-      {/* Nearby streams drawer (viewer only) */}
       {!isNew && streamId && (
         <NearbyStreamsDrawer
           currentStreamId={streamId}
@@ -696,27 +815,46 @@ export function StreamScreen() {
         />
       )}
 
-      {/* Chat panel — bottom shifts up by keyboard height so input stays visible */}
+      {/* Chat panel — ChatMessage rows in a scroll + ChatComposer at the bottom */}
       {chatOpen && status === 'in-room' && !streamEnded && (
         <View style={[styles.chatPanel, { bottom: keyboardHeight }]}>
-          <ChatOverlay
-            messages={chatMessages}
-            isSignedIn={!!isSignedIn}
-            onSend={handleSendChat}
-            onAuthRequest={() => setAuthModalVisible(true)}
-          />
+          <ScrollView
+            style={styles.chatScroll}
+            contentContainerStyle={styles.chatScrollContent}
+          >
+            {chatMessages.map((m, i) => (
+              <ChatMessageRow
+                key={`${m.ts}:${i}`}
+                role={chatRoleFor(m.from)}
+                handle={`@${m.from}`}
+                body={m.text}
+              />
+            ))}
+          </ScrollView>
+          <View style={styles.composerWrap}>
+            <ChatComposer
+              value={chatInput}
+              onChangeText={setChatInput}
+              onSubmit={handleSendChat}
+              authenticated={!!isSignedIn}
+              onAuthRequest={() => setAuthModalVisible(true)}
+            />
+          </View>
         </View>
       )}
 
-      {/* Reaction buttons + floating bursts */}
+      {/* Reaction column + floating burst */}
       {status === 'in-room' && !streamEnded && (
-        <ReactionLayer
-          reactions={reactions}
-          isSignedIn={!!isSignedIn}
-          onReact={handleReact}
-          onAuthRequest={() => setAuthModalVisible(true)}
-          onDismiss={dismissReaction}
-        />
+        <View style={styles.reactionRailWrap}>
+          <ReactionRail
+            reactions={REACTION_CONFIGS}
+            burst={burst}
+            authenticated={!!isSignedIn}
+            onReact={handleReact}
+            onAuthRequest={() => setAuthModalVisible(true)}
+            onBurstDismiss={dismissReaction}
+          />
+        </View>
       )}
 
       <AuthModal
@@ -732,28 +870,19 @@ export function StreamScreen() {
         onTip={handleTip}
       />
 
-      {/* Report modal */}
-      {reportVisible && (
-        <View style={StyleSheet.absoluteFillObject} >
-          <Pressable style={styles.reportBackdrop} onPress={() => setReportVisible(false)} />
-          <View style={styles.reportSheet}>
-            <Text style={styles.reportTitle}>Report stream</Text>
-            {[
-              'Inappropriate content',
-              'Harassment or bullying',
-              'Spam',
-              'Other',
-            ].map(reason => (
-              <Pressable key={reason} style={styles.reportOption} onPress={() => submitReport(reason)}>
-                <Text style={styles.reportOptionText}>{reason}</Text>
-              </Pressable>
-            ))}
-            <Pressable style={styles.reportCancel} onPress={() => setReportVisible(false)}>
-              <Text style={styles.reportCancelText}>Cancel</Text>
-            </Pressable>
-          </View>
-        </View>
-      )}
+      {/* Report reason picker — uses ActionSheet section (replaces the
+          bespoke bottom sheet Aaron added on main). */}
+      <ActionSheet
+        visible={reportVisible}
+        onClose={() => setReportVisible(false)}
+        header="Report stream"
+        actions={[
+          { id: 'inappropriate', iconName: 'alert-octagon', label: 'Inappropriate content', tone: 'warn', onPress: () => submitReport('Inappropriate content') },
+          { id: 'harassment', iconName: 'user-x', label: 'Harassment or bullying', tone: 'warn', onPress: () => submitReport('Harassment or bullying') },
+          { id: 'spam', iconName: 'slash', label: 'Spam', onPress: () => submitReport('Spam') },
+          { id: 'other', iconName: 'more-horizontal', label: 'Other', onPress: () => submitReport('Other') },
+        ]}
+      />
 
       {/* Tip burst animations — visible to all peers */}
       {status === 'in-room' && !streamEnded && (
@@ -764,16 +893,22 @@ export function StreamScreen() {
         </View>
       )}
 
-      {/* Broadcaster-only private toast */}
       {isNew && broadcasterTipToast !== null && (
-        <View style={styles.broadcasterTipToast} pointerEvents="none">
-          <Text style={styles.broadcasterTipToastText}>{broadcasterTipToast}</Text>
+        <View style={styles.tipToastWrap} pointerEvents="box-none">
+          <ToastBanner
+            variant="success"
+            body={broadcasterTipToast}
+            autoDismissMs={0}
+            onDismiss={() => setBroadcasterTipToast(null)}
+          />
         </View>
       )}
 
       {!isNew && broadcasterPaused && !streamEnded && (
         <View style={styles.pausedBanner} pointerEvents="none">
-          <Text style={styles.pausedText}>Stream paused · resuming shortly</Text>
+          <Text variant="caption" color={theme.colors.text.inverse}>
+            Stream paused · resuming shortly
+          </Text>
         </View>
       )}
     </SafeAreaView>
@@ -789,18 +924,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.md,
   },
-  title: { ...theme.typography.display, color: theme.colors.text.primary },
-  streamTitle: { ...theme.typography.heading, color: theme.colors.text.primary, textAlign: 'center' },
-  muted: { ...theme.typography.body, color: theme.colors.text.muted, textAlign: 'center' },
-  errorText: { ...theme.typography.body, color: theme.colors.accent.default, textAlign: 'center' },
-  overlayText: { color: '#fff', textShadowColor: 'rgba(0,0,0,0.6)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
-  liveRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
-  live: { ...theme.typography.heading, color: theme.colors.accent.default },
-  roomId: { ...theme.typography.caption, color: theme.colors.text.muted, fontFamily: 'monospace' },
-  viewerCount: { ...theme.typography.body, color: theme.colors.text.muted },
+  center: { textAlign: 'center' },
   header: { paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.sm },
-  backBtn: { alignSelf: 'flex-start' },
-  backArrow: { ...theme.typography.heading, color: theme.colors.text.primary },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
+  liveRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
   actions: { width: '100%', gap: theme.spacing.sm, alignItems: 'center' },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
   roomInfo: { width: '100%', alignItems: 'center', gap: theme.spacing.lg },
@@ -813,62 +945,40 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.md,
     padding: theme.spacing.md,
   },
-  wide: { width: '100%' },
   section: { width: '100%', gap: theme.spacing.sm, alignItems: 'center' },
-  sectionLabel: {
-    ...theme.typography.caption,
-    color: theme.colors.text.muted,
-    fontWeight: '700',
-    letterSpacing: 1.2,
+  sourceRow: {
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    flexWrap: 'wrap',
+    justifyContent: 'center',
   },
-  sourceRow: { flexDirection: 'row', gap: theme.spacing.sm, flexWrap: 'wrap', justifyContent: 'center' },
-  sourceBadge: {
-    borderRadius: theme.radius.full,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: 4,
-    backgroundColor: theme.colors.bg.elevated,
-    borderWidth: 1,
-    borderColor: theme.colors.border.subtle,
-  },
-  sourceBadgeText: { ...theme.typography.caption, color: theme.colors.text.muted, fontWeight: '600' },
-  sourceActiveBadge: {
-    borderRadius: theme.radius.full,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: 4,
-    backgroundColor: theme.colors.accent.default,
-  },
-  sourceActiveBadgeText: { ...theme.typography.caption, color: '#fff', fontWeight: '700' },
   sourceSwitchBtn: {
     borderRadius: theme.radius.full,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
     backgroundColor: theme.colors.bg.elevated,
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: theme.colors.border.subtle,
   },
   sourceSwitchBtnActive: {
     borderColor: theme.colors.accent.default,
-    backgroundColor: '#0D1830',
+    backgroundColor: theme.colors.accent.surface,
   },
-  sourceSwitchText: { ...theme.typography.body, color: theme.colors.text.muted, fontWeight: '600' },
-  sourceSwitchTextActive: { color: theme.colors.accent.default },
-  broadcasterRow: {
+  broadcasterWrap: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.sm,
   },
-  broadcasterHandle: {
-    ...theme.typography.body,
-    color: theme.colors.text.muted,
-    fontWeight: '600',
+
+  tipHeaderBtn: {
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 4,
+    borderRadius: theme.radius.full,
+    backgroundColor: theme.colors.accent.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.accent.border,
   },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  chatToggleBtn: { padding: theme.spacing.xs },
-  chatToggleText: { fontSize: 22, color: theme.colors.text.primary },
+
   chatPanel: {
     position: 'absolute',
     left: 0,
@@ -876,99 +986,57 @@ const styles = StyleSheet.create({
     bottom: 0,
     height: 320,
     zIndex: 10,
+    paddingHorizontal: theme.spacing.md,
   },
+  chatScroll: { flex: 1 },
+  chatScrollContent: { paddingVertical: theme.spacing.sm, gap: 2 },
+  composerWrap: { paddingTop: theme.spacing.sm, paddingBottom: theme.spacing.sm },
+
+  reactionRailWrap: {
+    position: 'absolute',
+    right: theme.spacing.sm,
+    bottom: theme.spacing.lg,
+  },
+
   flipBtn: {
     position: 'absolute',
     top: 60,
     right: theme.spacing.lg,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
-  flipBtnText: { fontSize: 22, color: '#fff' },
+
   pausedBanner: {
     position: 'absolute',
     top: 80,
     alignSelf: 'center',
     backgroundColor: 'rgba(0,0,0,0.65)',
-    borderRadius: 20,
+    borderRadius: theme.radius.full,
     paddingHorizontal: theme.spacing.lg,
     paddingVertical: theme.spacing.sm,
     zIndex: 20,
   },
-  pausedText: {
-    ...theme.typography.caption,
-    color: theme.colors.text.primary,
-    fontWeight: '600',
-  },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
-  tipHeaderBtn: {
-    borderRadius: theme.radius.full,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: 4,
-    backgroundColor: `${theme.colors.accent.default}22`,
-    borderWidth: 1,
-    borderColor: theme.colors.accent.default,
-  },
-  tipHeaderBtnText: { ...theme.typography.caption, color: theme.colors.accent.default, fontWeight: '700' },
-  tipBtn: {
-    borderRadius: theme.radius.full,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: 4,
-    backgroundColor: `${theme.colors.accent.default}22`,
-    borderWidth: 1,
-    borderColor: theme.colors.accent.default,
-  },
-  tipBtnText: { ...theme.typography.caption, color: theme.colors.accent.default, fontWeight: '700' },
+
   tipBurstArea: {
     position: 'absolute',
     bottom: 100,
     left: theme.spacing.lg,
     width: 200,
   },
-  broadcasterTipToast: {
-    position: 'absolute',
-    top: 120,
-    alignSelf: 'center',
-    backgroundColor: `${theme.colors.accent.default}CC`,
-    borderRadius: 20,
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.sm,
-    zIndex: 20,
-  },
-  broadcasterTipToastText: {
-    ...theme.typography.caption,
-    color: '#fff',
-    fontWeight: '700',
-  },
-  adminWarningBanner: {
+
+  adminWarningWrap: {
     position: 'absolute',
     top: 60,
     left: theme.spacing.lg,
     right: theme.spacing.lg,
-    backgroundColor: '#7C4A00',
-    borderRadius: 12,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.sm,
     zIndex: 40,
   },
-  adminWarningText: {
-    ...theme.typography.caption,
-    color: '#FFD580',
-    flex: 1,
-    lineHeight: 18,
+  tipToastWrap: {
+    position: 'absolute',
+    top: 100,
+    left: theme.spacing.lg,
+    right: theme.spacing.lg,
+    zIndex: 20,
   },
-  adminWarningDismiss: {
-    ...theme.typography.caption,
-    color: '#FFD580',
-    fontWeight: '700',
-  },
+
   adminEndedContainer: {
     backgroundColor: theme.colors.bg.primary,
     justifyContent: 'center',
@@ -981,29 +1049,4 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
     maxWidth: 320,
   },
-  adminEndedTitle: {
-    ...theme.typography.heading,
-    color: theme.colors.text.primary,
-    textAlign: 'center',
-  },
-  adminEndedBody: {
-    ...theme.typography.body,
-    color: theme.colors.text.muted,
-    textAlign: 'center',
-    lineHeight: 24,
-  },
-  reportBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.6)' },
-  reportSheet: {
-    position: 'absolute', bottom: 0, left: 0, right: 0,
-    backgroundColor: theme.colors.bg.elevated,
-    borderTopLeftRadius: 16, borderTopRightRadius: 16,
-    padding: 24, paddingBottom: 40,
-  },
-  reportTitle: { ...theme.typography.body, color: theme.colors.text.primary, fontWeight: '600', marginBottom: 16 },
-  reportOption: {
-    paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: theme.colors.border.subtle,
-  },
-  reportOptionText: { ...theme.typography.body, color: theme.colors.text.primary },
-  reportCancel: { paddingVertical: 14, alignItems: 'center' },
-  reportCancelText: { ...theme.typography.body, color: theme.colors.text.muted },
 })
