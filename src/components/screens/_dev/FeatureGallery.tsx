@@ -47,6 +47,8 @@ import { ClipCard } from '@/components/features/clip/ClipCard'
 import { ClipPreview } from '@/components/features/clip/ClipPreview'
 import { LayerEditorRow } from '@/components/features/clip/LayerEditorRow'
 import { Timeline } from '@/components/features/clip/Timeline'
+import { DiscoveryHandoffCard } from '@/components/features/stream/DiscoveryHandoffCard'
+import { LegalAcceptanceCard } from '@/components/features/onboarding/LegalAcceptanceCard'
 import { ContextStrip } from '@/components/features/report/ContextStrip'
 import { ReasonRow } from '@/components/features/report/ReasonRow'
 import { PermissionPrePromptCard } from '@/components/features/permissions/PermissionPrePromptCard'
@@ -1052,6 +1054,92 @@ export function FeatureGallery() {
         </Row>
       </Section>
 
+      <Section title="DiscoveryHandoffCard">
+        <Row label="single">
+          <DiscoveryHandoffCard
+            stream={{
+              id: 'a',
+              title: 'Atlantic Ave · street fest',
+              handle: 'kai.dc',
+              displayName: 'Kai DC',
+              avatarUrl: 'https://i.pravatar.cc/100?u=kai',
+              viewerCount: 1400,
+              isLive: true,
+              onJoin: () => {},
+            }}
+            onDismiss={() => {}}
+          />
+        </Row>
+        <Row label="single + layers (StreamStrip)">
+          <DiscoveryHandoffCard
+            stream={{
+              id: 'b',
+              title: 'Golden Gate overlook',
+              handle: 'sf.angle',
+              avatarUrl: 'https://i.pravatar.cc/100?u=sf',
+              viewerCount: 9120,
+              isLive: true,
+              layers: [
+                { id: 'cam', iconName: 'video', label: 'CAM', value: '1080P' },
+                { id: 'aud', iconName: 'mic', label: 'AUD', value: '48 kHz' },
+                { id: 'loc', iconName: 'map-pin', label: 'LOC', value: 'GPS' },
+                { id: 'gyr', iconName: 'navigation', label: 'GYR', value: '120Hz' },
+                { id: 'scrn', iconName: 'monitor', label: 'SCRN', value: 'OFF', active: false },
+              ],
+              onJoin: () => {},
+            }}
+            onDismiss={() => {}}
+          />
+        </Row>
+        <Row label="cluster">
+          <DiscoveryHandoffCard
+            locationLabel="ATLANTIC AVE"
+            streams={[
+              {
+                id: 'c1',
+                title: 'Drumline forming up',
+                handle: 'kai.dc',
+                avatarUrl: 'https://i.pravatar.cc/100?u=kai',
+                viewerCount: 1400,
+                distance: '12m away',
+                onJoin: () => {},
+              },
+              {
+                id: 'c2',
+                title: 'Food truck row across the street',
+                handle: 'mira.b',
+                avatarUrl: 'https://i.pravatar.cc/100?u=mira',
+                viewerCount: 620,
+                distance: '45m away',
+                onJoin: () => {},
+              },
+              {
+                id: 'c3',
+                title: 'Rooftop view of the parade',
+                handle: 'benwy',
+                avatarUrl: 'https://i.pravatar.cc/100?u=benwy',
+                viewerCount: 2100,
+                distance: '80m away',
+                onJoin: () => {},
+              },
+            ]}
+            onDismiss={() => {}}
+          />
+        </Row>
+      </Section>
+
+      <Section title="LegalAcceptanceCard">
+        <Row label="default (US/ROW)">
+          <LegalAcceptanceCardDemo variant="default" />
+        </Row>
+        <Row label="EU GDPR">
+          <LegalAcceptanceCardDemo variant="eu-gdpr" />
+        </Row>
+        <Row label="CA CCPA">
+          <LegalAcceptanceCardDemo variant="ca-ccpa" />
+        </Row>
+      </Section>
+
       <Section title="BroadcasterRow">
         <Row label="default">
           <BroadcasterRow
@@ -1161,6 +1249,32 @@ function ToastBannerDemo() {
         />
       )}
     </View>
+  )
+}
+
+function LegalAcceptanceCardDemo({
+  variant,
+}: {
+  variant: 'default' | 'eu-gdpr' | 'ca-ccpa'
+}) {
+  const [c, setC] = useState<{
+    essential: true
+    analytics?: boolean
+    personalization?: boolean
+    doNotSell?: boolean
+  }>({ essential: true })
+  return (
+    <LegalAcceptanceCard
+      variant={variant}
+      docs={[
+        { id: 'tos', label: 'Terms of service', onPress: () => {} },
+        { id: 'rules', label: 'Community rules', onPress: () => {} },
+        { id: 'privacy', label: 'Privacy policy', onPress: () => {} },
+      ]}
+      consents={c}
+      onConsentsChange={setC}
+      onAgree={() => {}}
+    />
   )
 }
 

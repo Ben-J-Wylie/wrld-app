@@ -1508,13 +1508,14 @@ to IconButton without API changes.
 
 ##### `DiscoveryHandoffCard`
 
-- **Tier:** feature (composes Avatar + Text + Button + StreamTile)
+- **Tier:** feature (composes Avatar + Text + Button + Pressable + Icon + LivePill + StreamStrip section)
 - **Location:** `src/components/features/stream/DiscoveryHandoffCard.tsx`
-- **Variants:** `single` (one pin tap — Avatar + title + handle + meta + Join, with optional 5-chip streams strip as second row per C2), `cluster` (multi-pin tap — small header + scrollable rows, each Avatar + title + meta + Join chip)
+- **Variants:** `single` (one pin tap), `cluster` (multi-pin tap) — inferred from prop shape (`{ stream }` vs `{ streams }`)
 - **Sizes:** controlled by variant
-- **States:** default, dismissing
-- **Used in:** populated in 12.6
-- **Tweak impact:** discovery→watching seam (the canonical Section 0.7 example) — every globe tap-to-preview surface
+- **States:** default; optional `onDismiss` shows a close X
+- **Used in:** populated in 12.6 (GlobeScreen replaces inline `<View>` blocks)
+- **Tweak impact:** discovery→watching seam (canonical Section 0.7 example) — every globe tap-to-preview surface
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
 
 **Mock says (C1=C):** Inline floating card at the bottom of the
 GlobeScreen — `single` is a Card with Avatar + title + handle + viewer
@@ -1524,13 +1525,17 @@ streams here · LOCATION") and N rows of compact stream-row items.
 deferred (see C1 in the 2026-05-29 12.2 decision-log entry). The single
 variant gains a second-row `StreamStrip` of 5 chips per C2=A.
 
-**Code does:** Inline `<View>` blocks in `GlobeScreen.tsx` for both
-single (`selectedStream`) and cluster (`selectedClusterStreams`) cases.
+**Code does (shipped):** Variant inferred from prop shape — `isCluster`
+narrowing checks for a `streams` array. Single renders Avatar md +
+title/handle/viewer count column + LivePill + optional StreamStrip
++ primary Join Button. Cluster renders a header ("N live streams here
+· LOCATION") + a max-220-tall scroll of compact rows (Avatar sm +
+title/handle/viewers/distance + accent "JOIN" chip). Both variants
+support an optional dismiss X in the top-right.
 
-**Gap / proposal:** Extract as feature accepting either `{ stream }` or
-`{ streams }` (variant inferred from prop shape). Composes `Avatar`,
-`Text`, `Button` primitives + the `StreamStrip` section for the single
-variant's sensor row.
+**Section seam.** This is the canonical place where a feature composes
+a section — single variant passes `stream.layers` directly into
+`StreamStrip` per the C2=A spec.
 
 ---
 
@@ -2016,24 +2021,30 @@ reads as the "permission illustration" without motion in v1.
 
 ##### `LegalAcceptanceCard`
 
-- **Tier:** feature (composes Card + Text + LegalLinkRow + ConsentRow)
+- **Tier:** feature (composes Text + Button + ConsentRow + LegalLinkList section)
 - **Location:** `src/components/features/onboarding/LegalAcceptanceCard.tsx`
-- **Variants:** `default` (US / ROW), `eu-gdpr` (with Essential/Analytics/Personalization toggles), `ca-ccpa` (with Do Not Sell toggle)
+- **Variants:** `default` (US / ROW — no consent toggles), `eu-gdpr` (Essential locked-on + Analytics + Personalization), `ca-ccpa` (Essential locked-on + Do Not Sell)
 - **Sizes:** N/A
-- **States:** default
+- **States:** default, loading (button.loading)
 - **Used in:** populated in 12.6
 - **Tweak impact:** Onboarding Viewer step 7, Onboarding Creator final, future legal-acceptance surfaces
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
 
 **Mock says:** Card containing 3 link-rows (Terms of service / Community
 rules / Privacy policy), jurisdiction-detection badge, then jurisdiction-
 specific consent toggles, then "Agree & Continue" button. Three full
 variants for the three legal contexts.
 
-**Code does:** None.
+**Code does (shipped):** Bordered card hosting an accent jurisdiction
+pill ("US / REST OF WORLD" / "EU · GDPR" / "CA · CCPA"), `LegalLinkList`
+section with the docs array, variant-specific ConsentRow stack
+(Essential is locked-on across the two non-default variants), and an
+"Agree & Continue" primary Button.
 
-**Gap / proposal:** New feature. Detects jurisdiction via locale + IP
-heuristic at runtime (delegated to a helper). Renders the right variant.
-Emits resolved consent settings on submit.
+**Jurisdiction detection** is the consumer's job — locale + IP
+heuristic lives outside this feature. Resolved consent settings are
+emitted on each toggle change via `onConsentsChange(LegalConsents)`;
+on submit, the consumer calls `onAgree()`.
 
 ---
 
