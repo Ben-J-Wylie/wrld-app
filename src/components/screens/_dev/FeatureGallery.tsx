@@ -292,7 +292,7 @@ export function FeatureGallery() {
 
       <Section title="ReactionRail">
         <Row label="default (over video)">
-          <View style={styles.videoBg}>
+          <View style={styles.reactionBg}>
             <ReactionRail
               reactions={[
                 { kind: 'heart', emoji: '❤️', count: 42 },
@@ -307,7 +307,7 @@ export function FeatureGallery() {
           </View>
         </Row>
         <Row label="unauthenticated">
-          <View style={styles.videoBg}>
+          <View style={styles.reactionBg}>
             <ReactionRail
               reactions={[
                 { kind: 'heart', emoji: '❤️' },
@@ -491,7 +491,7 @@ function ReactionRailBurstDemo() {
     setBurst((b) => b.filter((e) => e.id !== id))
   }
   return (
-    <View style={styles.videoBg}>
+    <View style={styles.reactionBg}>
       <ReactionRail
         reactions={[
           { kind: 'heart', emoji: '❤️', count: burst.filter((b) => b.kind === 'heart').length },
@@ -573,5 +573,12 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: theme.colors.border.subtle,
+  },
+  reactionBg: {
+    minHeight: 240,
+    backgroundColor: '#1d1410',
+    borderRadius: theme.radius.md,
+    padding: theme.spacing.md,
+    justifyContent: 'flex-end',
   },
 })

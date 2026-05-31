@@ -14,6 +14,14 @@
 // reaction-set without code changes here. The `burst` queue is owned
 // by the screen; this feature renders + dismisses entries via
 // `onBurstDismiss`.
+//
+// **Layout requirement.** The rail's natural height is
+// `reactions.length * 44 + (reactions.length - 1) * 8` (= 200px for
+// the typical 4-reaction set). In real usage the rail is positioned
+// absolutely against the stream view (`position: 'absolute', right,
+// bottom`) so it takes its intrinsic height. The column carries
+// `flexShrink: 0` so any consumer that places the rail in a normal-
+// flow flex parent can't crush it either — buttons never crowd.
 
 import { useEffect, useRef } from 'react'
 import {
@@ -190,6 +198,7 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     gap: theme.spacing.sm,
     alignItems: 'center',
+    flexShrink: 0,
   },
 })
 
