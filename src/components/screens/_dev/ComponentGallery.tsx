@@ -624,22 +624,24 @@ export function ComponentGallery() {
         </Section>
       </ScreenScroll>
 
-      <BottomSheet
-        visible={sheetVariant !== null}
-        onClose={() => setSheetVariant(null)}
-        variant={sheetVariant ?? 'peek'}
-      >
-        <View style={styles.sheetBody}>
-          <Text variant="heading">BottomSheet · {sheetVariant ?? '—'}</Text>
-          <Text variant="body" color={theme.colors.text.muted}>
-            Drag the grabber down or tap the scrim to dismiss. Spring slide-up on
-            enter; tap-to-close on the scrim; swipe-down on the grabber. Content
-            here is consumer-rendered — the primitive only owns the container,
-            grabber, scrim, and animation.
-          </Text>
-          <Button label="Close" onPress={() => setSheetVariant(null)} variant="primary" />
-        </View>
-      </BottomSheet>
+      {sheetVariant !== null && (
+        <BottomSheet
+          visible
+          onClose={() => setSheetVariant(null)}
+          variant={sheetVariant}
+        >
+          <View style={styles.sheetBody}>
+            <Text variant="heading">BottomSheet · {sheetVariant}</Text>
+            <Text variant="body" color={theme.colors.text.muted}>
+              Drag the grabber down or tap the scrim to dismiss. Spring slide-up on
+              enter; tap-to-close on the scrim; swipe-down on the grabber. Content
+              here is consumer-rendered — the primitive only owns the container,
+              grabber, scrim, and animation.
+            </Text>
+            <Button label="Close" onPress={() => setSheetVariant(null)} variant="primary" />
+          </View>
+        </BottomSheet>
+      )}
     </>
   )
 }
