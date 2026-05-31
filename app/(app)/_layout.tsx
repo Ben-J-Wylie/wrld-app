@@ -1,9 +1,41 @@
+import { View, Text } from 'react-native'
 import { Tabs } from 'expo-router'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { theme } from '@/tokens/theme'
+import { useAuthStore } from '@/stores/authStore'
+
+function SuspensionBanner() {
+  const wrldUser = useAuthStore(s => s.wrldUser)
+  const insets = useSafeAreaInsets()
+
+  if (!wrldUser?.suspendedUntil) return null
+  const until = new Date(wrldUser.suspendedUntil)
+  if (until <= new Date()) return null
+
+  const permanent = until.getFullYear() >= 2090
+  const message = permanent
+    ? 'Your account has been permanently suspended.'
+    : `Your account is suspended until ${until.toLocaleDateString()}.`
+
+  return (
+    <View style={{
+      backgroundColor: '#7c2d12',
+      paddingTop: insets.top + 6,
+      paddingBottom: 8,
+      paddingHorizontal: 16,
+    }}>
+      <Text style={{ color: '#fed7aa', fontSize: 12, textAlign: 'center' }}>
+        {message}
+      </Text>
+    </View>
+  )
+}
 
 export default function AppLayout() {
   return (
-    <Tabs
+    <View style={{ flex: 1 }}>
+      <SuspensionBanner />
+      <Tabs
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
@@ -28,5 +60,6 @@ export default function AppLayout() {
       <Tabs.Screen name="settings" options={{ href: null }} />
       <Tabs.Screen name="gallery" options={{ href: null }} />
     </Tabs>
+    </View>
   )
 }
