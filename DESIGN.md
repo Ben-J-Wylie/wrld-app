@@ -7,17 +7,27 @@ and any Claude instance working on visual / component code.
 The four mechanical criteria for "Phase 12 done":
 
 1. All screens use only colors from `theme.colors` (no hex literals in
-   `src/components/screens/`).
-2. No `StyleSheet` in screens contains hardcoded font sizes or spacing values.
-3. Every primitive has a corresponding entry in Section 3 with current "Used in" sites.
+   `src/components/screens/`). ✅ as of 2026-05-31 with **three documented
+   exceptions** — `'rgba(0,0,0,...)'` for the GlobeScreen empty-card backdrop
+   and the StreamScreen room-info overlay + paused banner. These are
+   dark-glass surfaces that sit over the GL globe / live video where the
+   cream palette doesn't apply; the gap closes when a `bg.darkGlass` token
+   (or equivalent over-content tone) lands. Each call site flags the
+   exception in a comment.
+2. No `StyleSheet` in screens contains hardcoded font sizes or spacing values. ✅
+3. Every primitive has a corresponding entry in Section 3 with current "Used in" sites. ✅
 4. Dev galleries (`src/components/screens/_dev/PrimitiveGallery.tsx`,
    `FeatureGallery.tsx`, `SectionGallery.tsx` — split into three pages
    2026-05-30 as tier counts grew past comfortable single-page scroll)
    render without errors and cover every primitive / feature / section
-   variant (default, pressed, disabled, loading where applicable).
+   variant (default, pressed, disabled, loading where applicable). ✅
 
 The "feels like the same product" judgment is the _outcome_ of hitting those
 four — not a separate criterion.
+
+**Phase 12 status (2026-05-31):** sub-phases 12.0–12.6 ✅ done on the
+`design` branch and pending merge to `main`. Only 12.7 (motion pass)
+remains.
 
 ---
 
@@ -3130,39 +3140,31 @@ primitives/features/sections in sub-phase 12.6.
 | Route (shim)                          | Implementation                       | Purpose                                                                        | Migrated |
 | ------------------------------------- | ------------------------------------ | ------------------------------------------------------------------------------ | -------- |
 | `app/index.tsx`                       | (auth-aware redirect, no impl)       | Auth-aware redirect                                                            | n/a      |
-| `app/onboarding.tsx`                  | `OnboardingScreen.tsx`               | Handle picker, avatar (Phase 8) — refactor to compose WizardShell + steps      | no       |
-| `app/(auth)/login.tsx`                | `LoginScreen.tsx`                    | Clerk sign-in                                                                  | no       |
-| `app/(auth)/signup.tsx`                | `SignupScreen.tsx`                    | Clerk sign-up + verify                                                          | no       |
-| `app/(app)/globe.tsx`                  | `GlobeScreen.tsx`                     | Globe (mounts `EarthScene`) + banners + categories (new) + search bar (new)    | no       |
-| `app/(app)/dashboard.tsx`              | `DashboardScreen.tsx`                 | Source arming + Go Live — refactor to 7-layer (per re-baseline) + GoBar        | no       |
-| `app/(app)/stream/[id].tsx`            | `StreamScreen.tsx`                    | Broadcaster (id=new) / viewer (id=room) — broadcaster HUD overhauled           | no       |
-| `app/(app)/me.tsx`                     | `MeScreen.tsx`                        | Own profile / account settings + clip grid (new) + filters (new)               | no       |
-| `app/(app)/profile/[handle].tsx`       | `ProfileScreen.tsx`                   | Public profile + follow + clip grid (new)                                      | no       |
-| `app/(app)/search.tsx`                 | `SearchScreen.tsx`                    | User search (may merge into Globe search bar — TBD in 12.6)                    | no       |
-| `app/(app)/settings.tsx`               | `SettingsScreen.tsx`                  | Account + notifications — refactor to SettingsGroup pattern                     | no       |
-| `app/(app)/wallet.tsx`                 | `WalletScreen.tsx`                    | Wallet v2 — Space Bucks + Star Dust hero + transactions (Phase 13 → updated)   | no       |
-| `app/(app)/topup.tsx`                  | `TopUpScreen.tsx`                     | Top Up bundle picker (Phase 13 placeholder; IAP wiring v0.3)                    | no       |
-| `app/(app)/cashout.tsx`                | `CashoutScreen.tsx`                   | Cash Out amount + bank + KYC steps (Phase 13 placeholder; payout wiring v0.3) | no       |
-| `app/(app)/creator-onboarding.tsx`     | `CreatorOnboardingScreen.tsx`         | Creator wizard (Phase 13) — refactor to 10-step WizardShell + LocationGranularityPicker | no       |
-| `app/(app)/broadcaster-onboarding.tsx` | `BroadcasterOnboardingScreen.tsx`     | Redirect shim (legacy) — keep as-is                                            | n/a      |
+| `app/onboarding.tsx`                  | `OnboardingScreen.tsx`               | Handle picker, avatar (Phase 8) — composes WizardShell + RulesChecklist + AvatarPicker | 2026-05-31 |
+| `app/(auth)/login.tsx`                | `LoginScreen.tsx`                    | Clerk sign-in — BrandMark + Text variants + Button                              | 2026-05-31 |
+| `app/(auth)/signup.tsx`                | `SignupScreen.tsx`                    | Clerk sign-up + verify — adds PasswordStrengthMeter                             | 2026-05-31 |
+| `app/(app)/globe.tsx`                  | `GlobeScreen.tsx`                     | Globe (mounts `EarthScene`) — overlay layer composes StreamStateBanner + DiscoveryHandoffCard + Pill (LIVE count) | 2026-05-31 |
+| `app/(app)/dashboard.tsx`              | `DashboardScreen.tsx`                 | Source arming + Go Live — 7-layer FeedRow stack + CoordHUD + GoBar; cam + audio armable, other 5 ship in `disabled` state | 2026-05-31 |
+| `app/(app)/stream/[id].tsx`            | `StreamScreen.tsx`                    | Broadcaster (id=new) / viewer (id=room) — ChatOverlay + ReactionLayer retire in favor of ChatMessage/Composer + ReactionRail | 2026-05-31 |
+| `app/(app)/me.tsx`                     | `MeScreen.tsx`                        | Own profile / account settings — AvatarPicker + PursesCard dual + Input prefix '@' | 2026-05-31 |
+| `app/(app)/profile/[handle].tsx`       | `ProfileScreen.tsx`                   | Public profile + follow — Avatar xl + MetaStrip 'Joined ...' + Text-variant stats; PassportCard deferred until PublicUser shape grows | 2026-05-31 |
+| `app/(app)/search.tsx`                 | `SearchScreen.tsx`                    | User search — SearchBar + BroadcasterRow rows                                  | 2026-05-31 |
+| `app/(app)/settings.tsx`               | `SettingsScreen.tsx`                  | Account + notifications — SettingsGroup + SettingsRow + AccountIDPill highlight identity row | 2026-05-31 |
+| `app/(app)/subscription.tsx`           | `SubscriptionScreen.tsx`              | Tier picker — Card + Pill + Button + Icon for the comparison matrix; hex literals retire | 2026-05-31 |
+| `app/(app)/wallet.tsx`                 | `WalletScreen.tsx`                    | Wallet v2 — PursesCard dual + ActionTilesRow cols=2 + CategoryChipRow filter + TransactionRow rows | 2026-05-31 |
+| `app/(app)/topup.tsx`                  | `TopUpScreen.tsx`                     | Top Up bundle picker — PursesCard single-sb + BundleCard per bundle; gold treatment retires | 2026-05-31 |
+| `app/(app)/cashout.tsx`                | `CashoutScreen.tsx`                   | Cash Out flow — AmountInput cashout variant + PresetGrid + status cards; gold treatment retires | 2026-05-31 |
+| `app/(app)/creator-onboarding.tsx`     | `CreatorOnboardingScreen.tsx`         | Creator wizard (Phase 13) — 10-step WizardShell composing DOBWheel + LocationGranularityPicker + PermissionPrePromptCard + ConsentRow + LegalLinkList | 2026-05-31 |
+| `app/(app)/broadcaster-onboarding.tsx` | `BroadcasterOnboardingScreen.tsx`     | Redirect shim (legacy) — kept as 9-line useEffect redirect to creator-onboarding | n/a      |
 | `app/(app)/change-handle.tsx`          | `ChangeHandleScreen.tsx`              | **New** — settings flow for handle changes (4 frames; mock + Section 3 features) | no       |
 | `app/(app)/onboarding-viewer.tsx`      | `OnboardingViewerScreen.tsx`          | **New** — viewer-path wizard (anon → registered viewer, 8 steps)               | no       |
 | `app/(app)/clip-edit.tsx`              | `ClipEditScreen.tsx`                  | **New** — post-stream clip editor (per re-baseline 2026-05-29)                 | no       |
 | `app/(app)/report.tsx`                 | `ReportScreen.tsx`                    | **New** — user/stream reporting modal (multi-step)                             | no       |
 
-Existing screens above are migrated in 12.6 (refactored to compose the new
-primitives / features / sections). **New** screens are built in 12.6 as
-well — they have no existing implementations to refactor.
-
-Migration order recommendation:
-1. Start with the most visually opinionated existing screens (GlobeScreen,
-   StreamScreen) since they expose the most token coverage.
-2. Then settings + identity surfaces (SettingsScreen, MeScreen,
-   ProfileScreen, OnboardingScreen).
-3. Then monetization (WalletScreen, TopUpScreen, CashoutScreen).
-4. New screens (ChangeHandle, OnboardingViewer, ClipEdit, Report) build
-   in dependency order — they need primitives + features + sections from
-   12.4 / 12.5 in place first.
+All existing screens migrated in 12.6 (2026-05-31 close). **New** screens
+(ChangeHandle, OnboardingViewer, ClipEdit, Report) build in 12.7 / v0.3
+when their parent features become user-reachable; they have no existing
+implementations to refactor.
 
 ---
 
@@ -3189,6 +3191,77 @@ handled by the same patterns; the seam is not a separate motion category.
 
 Append-only. Most recent first. Each entry: date, decision, rationale,
 constraint it imposes downstream.
+
+### 2026-05-31 — Sub-phases 12.5 + 12.6 shipped on `design`
+
+Single intensive working session. Tally on close:
+
+- **47 features** shipped under `src/components/features/`, each with
+  a Section 3 register entry carrying a **Shipped:** metadata line.
+  Built in roughly thematic clusters (identity, onboarding info-cards,
+  auth, wallet, broadcasting, clip editor, trust/safety, permissions +
+  age gate). Complex features (DOBWheel, LocationGranularityPicker,
+  Timeline, DiscoveryHandoffCard, LegalAcceptanceCard) each shipped
+  as their own commit.
+- **13 sections** under `src/components/sections/` (ScreenScroll +
+  12 new). Batch 1: small composers — TrendingRail, CategoryChipRow,
+  StreamStrip, DayGroup, ActionTilesRow, PresetGrid, SettingsGroup,
+  InfoList, LegalLinkList. Batch 2: heavier — ActionSheet (BottomSheet-
+  based), FilterCard (3 row kinds), WizardShell (canonical wizard
+  scaffold). ActionTilesRow later grew a `cols=2` option mid-12.6 when
+  Wallet's two-action row needed it.
+- **15 screens** migrated. Settings, Me, Subscription, Dashboard,
+  Onboarding, Login, Signup, Globe, Stream, Search, Profile,
+  CreatorOnboarding, Wallet, TopUp, Cashout. Plus a header-comment
+  pass on FollowButton + BroadcasterOnboardingScreen (already clean,
+  just needed the explanatory header for consistency).
+- **4 legacy features retired** (deleted from disk): ChatOverlay,
+  ReactionLayer, NearbyStreamRow, NearbyStreamThumbnail. Each replaced
+  by a design-system equivalent in the screens that consumed them.
+- **3 surviving legacy features kept with token cleanup:** AuthModal
+  (retirement runway: when AuthChoiceList + social-auth backends land,
+  the whole modal gets rewritten as a BottomSheet wrapping
+  AuthChoiceList), TipSheet (Aaron's Phase 13 domain — may evolve),
+  FollowButton (already clean — composes Button primitive, no hex,
+  no fontSize/fontWeight; got a header comment only).
+- **1 surviving feature refactored internally:** NearbyStreamsDrawer
+  (Phase 7 multi-angle hop UX shell stays; internals now compose
+  StreamCard.compact + StreamCard.trending; distance lives in the
+  city slot since StreamCard's consumer-flat API doesn't surface
+  stream.distanceMeters directly).
+
+Per the sub-phase 7 entry below, the mechanical 12.5/12.6 gates are
+passed. Only 12.7 (motion pass) remains in Phase 12.
+
+**Per-screen LOC deltas** for the substantial migrations:
+- CreatorOnboardingScreen: 1046 → 517 net (−529) — every step had a
+  feature match
+- CashoutScreen: 511 → 286 (−225) — AmountInput + PresetGrid did the
+  heavy lifting
+- StreamScreen: 923 → 342 (−581) — ChatOverlay + ReactionLayer
+  retirements + token consistency
+- Total wallet trio: 1202 → 752 (−450)
+
+**Imposes:**
+
+- The next merge `design` → `main` will be the largest of the Phase 12
+  era. Aaron has been on unrelated work during this stretch
+  (confirmed by Ben at session close), so merge conflicts are expected
+  to be minimal but the diff will be large by volume. The merge
+  protocol (pull main HEAD into design first, theme-codemod for
+  pre-12.3 token shape, explicit Ben sign-off) still applies.
+- AuthModal + TipSheet stay on retirement runways. AuthModal retires
+  when AuthChoiceList lands with social-auth backend wiring (no work
+  scheduled — depends on Apple / Google credentials and either
+  Aaron's or a future contributor's backend pass). TipSheet evolves
+  with Aaron's Phase 13 monetization iterations; the token-clean
+  baseline lets him compose AmountInput + PresetGrid in place when
+  he revisits it.
+- The 12.6 commit-message convention from the original sub-phase
+  spec (`Phase 12: migrate <screen-name> to ui primitives`) was
+  superseded mid-flight by the simpler `12.6: migrate <screen-name>
+  to the design system` form. Both produce the same intent in
+  `git log`; no need to rewrite history.
 
 ### 2026-05-30 — `design` branch revived for 12.5+
 
@@ -4067,28 +4140,70 @@ ships first in 12.5 as the canonical screen-level wrapper.
 **Gate to 12.5:** ✅ passed. All 20 primitives shipped, Section 3
 populated, gallery renders cleanly, Ben signed off on device.
 
-### 12.5 — Build features and sections
+### 12.5 — Build features and sections ✅ shipped 2026-05-31
 
-Compose primitives. Same gallery + Section 3 discipline. Features
-represent domain things; sections represent screen regions. Sections are
-only built if the 12.2 inventory pass surfaced genuine regional repetition.
+47 features + 13 sections shipped on the `design` branch, in roughly
+clustered batches. Every Section 3 entry carries a **Shipped:**
+metadata line. Gallery split into three pages per the tier model
+(`PrimitiveGallery` / `FeatureGallery` / `SectionGallery`), each
+linked from Settings → DEVELOPMENT.
 
-**First item:** `ScreenScroll` section (Section 3) — the canonical
-form-bearing-screen wrapper that composes `SafeAreaView` +
-`KeyboardAwareScrollView` from `react-native-keyboard-controller`.
-Lands ahead of WizardShell, CategoryChipRow, and the rest per the
-2026-05-30 ahead-of-schedule decision-log entry.
+Major mid-phase decisions captured in decision-log entries on the
+same day: file-header CALayer rule generalisation, single-accent rule
+applied to monetization (Stardust loses bespoke gold), composition-
+note pattern for features that deviated from their initial DESIGN.md
+draft (e.g. StreamStateBanner kept polling state at the screen level,
+DOBWheel swapped FlatList for ScrollView to silence the nested-
+virtualization warning).
 
-**Gate to 12.6:** Features and sections shipped with Section 3 entries.
+**Gate to 12.6:** ✅ passed. All features + sections shipped, Section 3
+populated, three galleries render cleanly, Ben signed off on device.
 
-### 12.6 — Migrate screens, one per commit
+### 12.6 — Migrate screens, one per commit ✅ shipped 2026-05-31
 
-Each existing screen rewritten to compose from new primitives/features/sections.
-Commit message: `Phase 12: migrate <screen-name> to ui primitives`. Visual
-diff against Figma frame. Update Section 4's "Migrated" column with each
-migration. Recommend starting with globe and stream view (highest token
-coverage).
-**Gate to 12.7:** All screens migrated; mechanical criteria 1–3 met.
+15 screens migrated:
+- **Settings** (highlight IDENTITY group added free via SettingsRow +
+  AccountIDPill)
+- **Me** (AvatarPicker + PursesCard dual)
+- **Subscription** (3 tier cards via Card primitive, comparison
+  matrix expansion, full 23-row feature spec applied via Ben's
+  2026-05-31 spec drop)
+- **Dashboard** (FeedRow × 7 layers; cam + audio armable today, other
+  5 ship as `disabled` per the re-baselined 7-layer model)
+- **Onboarding** (WizardShell + RulesChecklist + AvatarPicker + skip
+  CTA fork on the choice step)
+- **Login + Signup** (BrandMark + PasswordStrengthMeter; AuthChoiceList
+  intentionally deferred until social-auth backends land)
+- **Globe** (StreamStateBanner + DiscoveryHandoffCard for single + cluster
+  taps; BrandMark + Pill header; EarthScene + Mapbox untouched)
+- **Stream** (BroadcasterRow + ChatMessage/Composer + ReactionRail +
+  CoordHUD + LivePill; ChatOverlay + ReactionLayer retire)
+- **Search** (SearchBar + BroadcasterRow row)
+- **Profile** (Avatar xl + MetaStrip "Joined ..." + Text-variant stats)
+- **CreatorOnboarding** (10-step WizardShell composing DOBWheel +
+  LocationGranularityPicker + PermissionPrePromptCard + ConsentRow +
+  LegalLinkList — every feature found a use)
+- **Wallet + TopUp + Cashout** (PursesCard + ActionTilesRow +
+  BundleCard + AmountInput + TransactionRow + CategoryChipRow +
+  PresetGrid; gold treatment for Stardust retires per single-accent
+  rule)
+
+Plus cleanup:
+- ChatOverlay, ReactionLayer, NearbyStreamRow, NearbyStreamThumbnail
+  deleted (replaced by design-system equivalents)
+- NearbyStreamsDrawer survives — internals refactored to compose
+  StreamCard.compact / .trending
+- AuthModal + TipSheet kept (on retirement runways) with token
+  cleanup pass
+- FollowButton confirmed already clean (composes Button primitive)
+- BroadcasterOnboardingScreen confirmed as 9-line redirect shim
+
+The work also extended one section: ActionTilesRow grew a `cols=2`
+option (Wallet's two-action row needed it).
+
+**Gate to 12.7:** ✅ passed. All screens migrated; mechanical criteria
+1–3 met. Design branch ready to merge to main after Ben's full-sweep
+device review.
 
 ### 12.7 — Motion pass
 
