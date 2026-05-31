@@ -73,7 +73,7 @@ function RootNavigator() {
         .then((res) => setWrldUser(res.data.user))
         .catch(() => {})
     }
-    const interval = setInterval(refresh, 10_000)
+    const interval = setInterval(refresh, 30_000)
     return () => clearInterval(interval)
   }, [isSignedIn])
 
