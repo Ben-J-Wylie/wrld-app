@@ -1,9 +1,25 @@
+// src/components/features/stream/NearbyStreamsDrawer.tsx
+//
+// Phase 7 multi-angle hop UX — survives 12.6 as the container, but its
+// internals migrated: NearbyStreamRow + NearbyStreamThumbnail retired,
+// replaced by StreamCard (compact + trending variants). Distance lives
+// in the `city` slot since StreamCard's consumer-flat API doesn't
+// surface stream.distanceMeters directly.
+
 import { useEffect, useRef, useState } from 'react'
-import { View, Text, FlatList, StyleSheet, Animated, Pressable, Dimensions } from 'react-native'
+import {
+  Animated,
+  Dimensions,
+  FlatList,
+  StyleSheet,
+  View,
+} from 'react-native'
 import { theme } from '@/tokens/theme'
 import { useStreamsNearStream } from '@/hooks/useStreamsNearStream'
-import { NearbyStreamThumbnail } from './NearbyStreamThumbnail'
-import { NearbyStreamRow } from './NearbyStreamRow'
+import { StreamCard } from './StreamCard'
+import { Text } from '@/components/primitives/Text'
+import { IconButton } from '@/components/primitives/IconButton'
+import { Pressable } from '@/components/primitives/Pressable'
 import type { Stream } from '@/types'
 
 const SHEET_HEIGHT = Dimensions.get('window').height * 0.82
@@ -14,13 +30,17 @@ type Props = {
   onHop: (stream: Stream) => void
 }
 
+function distanceLabel(stream: Stream): string | undefined {
+  if (stream.distanceMeters === undefined) return undefined
+  return `${stream.distanceMeters}m`
+}
+
 export function NearbyStreamsDrawer({ currentStreamId, visible, onHop }: Props) {
   const { data: streams = [] } = useStreamsNearStream(currentStreamId, visible)
   const [expanded, setExpanded] = useState(false)
   const slideAnim = useRef(new Animated.Value(0)).current
   const expandAnim = useRef(new Animated.Value(0)).current
 
-  // Collapse expanded state when drawer hides
   useEffect(() => {
     if (!visible) setExpanded(false)
   }, [visible])
@@ -43,18 +63,20 @@ export function NearbyStreamsDrawer({ currentStreamId, visible, onHop }: Props) 
 
   return (
     <>
-      {/* Mini drawer */}
+      {/* Mini drawer — horizontal scroll of StreamCard.trending */}
       <Animated.View
         style={[
           styles.drawer,
           {
             opacity: slideAnim,
-            transform: [{
-              translateY: slideAnim.interpolate({
-                inputRange: [0, 1],
-                outputRange: [120, 0],
-              }),
-            }],
+            transform: [
+              {
+                translateY: slideAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [120, 0],
+                }),
+              },
+            ],
           },
         ]}
         pointerEvents={visible && !expanded ? 'box-none' : 'none'}
@@ -62,8 +84,17 @@ export function NearbyStreamsDrawer({ currentStreamId, visible, onHop }: Props) 
         <View style={styles.drawerHeader}>
           <View style={styles.handle} />
           {streams.length > 0 && (
-            <Pressable style={styles.seeAllBtn} onPress={() => setExpanded(true)} hitSlop={8}>
-              <Text style={styles.seeAllText}>See all</Text>
+            <Pressable
+              variant="default"
+              onPress={() => setExpanded(true)}
+              accessibilityRole="button"
+              accessibilityLabel="See all nearby streams"
+              hitSlop={8}
+              style={styles.seeAllBtn}
+            >
+              <Text variant="bodyEmphasized" color={theme.colors.accent.default}>
+                See all
+              </Text>
             </Pressable>
           )}
         </View>
@@ -74,39 +105,64 @@ export function NearbyStreamsDrawer({ currentStreamId, visible, onHop }: Props) 
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.list}
           renderItem={({ item }) => (
-            <NearbyStreamThumbnail stream={item} onPress={() => onHop(item)} />
+            <StreamCard
+              variant="trending"
+              thumbnailUrl={item.thumbnailUrl}
+              title={item.title}
+              viewerCount={item.viewerCount}
+              city={distanceLabel(item)}
+              isLive={item.isLive}
+              onPress={() => onHop(item)}
+            />
           )}
         />
       </Animated.View>
 
-      {/* Full-screen sheet */}
+      {/* Full-screen sheet — vertical list of StreamCard.compact */}
       <Animated.View
         style={[
           styles.sheet,
           {
             opacity: expandAnim,
-            transform: [{
-              translateY: expandAnim.interpolate({
-                inputRange: [0, 1],
-                outputRange: [SHEET_HEIGHT, 0],
-              }),
-            }],
+            transform: [
+              {
+                translateY: expandAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [SHEET_HEIGHT, 0],
+                }),
+              },
+            ],
           },
         ]}
         pointerEvents={expanded ? 'box-none' : 'none'}
       >
         <View style={styles.sheetHeader}>
-          <Text style={styles.sheetTitle}>Nearby streams</Text>
-          <Pressable onPress={() => setExpanded(false)} hitSlop={12}>
-            <Text style={styles.closeBtn}>✕</Text>
-          </Pressable>
+          <Text variant="heading">Nearby streams</Text>
+          <IconButton
+            name="x"
+            variant="ghost"
+            size="md"
+            onPress={() => setExpanded(false)}
+            accessibilityLabel="Close nearby streams"
+          />
         </View>
         <FlatList
           data={streams}
           keyExtractor={(s) => s.id}
           contentContainerStyle={styles.sheetList}
           renderItem={({ item }) => (
-            <NearbyStreamRow stream={item} onPress={() => { setExpanded(false); onHop(item) }} />
+            <StreamCard
+              variant="compact"
+              thumbnailUrl={item.thumbnailUrl}
+              title={item.title}
+              viewerCount={item.viewerCount}
+              city={distanceLabel(item)}
+              isLive={item.isLive}
+              onPress={() => {
+                setExpanded(false)
+                onHop(item)
+              }}
+            />
           )}
         />
       </Animated.View>
@@ -115,6 +171,9 @@ export function NearbyStreamsDrawer({ currentStreamId, visible, onHop }: Props) 
 }
 
 const styles = StyleSheet.create({
+  // Mini drawer floats over the video; dark backdrop is intentional
+  // (no dark-glass surface token yet — same situation as the empty
+  // card on GlobeScreen).
   drawer: {
     position: 'absolute',
     bottom: 0,
@@ -143,11 +202,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: theme.spacing.md,
   },
-  seeAllText: {
-    ...theme.typography.caption,
-    color: theme.colors.accent.default,
-    fontWeight: '600',
-  },
   list: {
     paddingHorizontal: theme.spacing.md,
     gap: theme.spacing.sm,
@@ -173,14 +227,6 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border.subtle,
-  },
-  sheetTitle: {
-    ...theme.typography.heading,
-    color: theme.colors.text.primary,
-  },
-  closeBtn: {
-    ...theme.typography.body,
-    color: theme.colors.text.muted,
   },
   sheetList: {
     padding: theme.spacing.md,
