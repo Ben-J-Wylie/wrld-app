@@ -2715,13 +2715,14 @@ Add as the first 12.6 migrant or future consumer needs them.
 
 ##### `WizardShell`
 
-- **Tier:** section (composes IconButton + ProgressBar + ContextBanner + Text + ctas footer)
+- **Tier:** section (composes ScreenScroll + IconButton + ProgressBar + ContextBanner + Text + Button)
 - **Location:** `src/components/sections/WizardShell.tsx`
 - **Variants:** `default`
 - **Sizes:** N/A (full-screen)
 - **States:** default
 - **Used in:** populated in 12.6
 - **Tweak impact:** Onboarding Viewer (8 steps), Onboarding Creator (10 steps), Onboarding Handle (existing), Change Handle (2-step), future wizards
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
 
 **Mock says:** Universal wizard chrome. **Top nav** = IconButton (back) +
 ProgressBar (centered) + IconButton (close, ghost). Optional
@@ -2730,11 +2731,12 @@ slotted children. **Footer / ctas** = primary CTA + optional skip.
 Skip lives directly under the primary CTA — never above it, never in
 the header.
 
-**Code does:** OnboardingScreen has bespoke wizard chrome inline.
-
-**Gap / proposal:** Extract as the canonical wizard section. Children
-slot is the per-step content. ProgressBar driven by `{ total, current }`.
-Footer accepts primary CTA + optional `onSkip`. Used by all 4+ wizards.
+**Code does (shipped):** ScreenScroll-wrapped scaffold with the four
+slots from the mock — top nav row, optional ContextBanner, heading
+row, slotted children body, footer with primary CTA + optional skip.
+Back / close IconButtons render only when their handlers are passed
+(missing handler renders a 36-square spacer to keep the progress bar
+centered).
 
 ---
 
@@ -2814,13 +2816,14 @@ value, optional active flag (default true), optional onPress.
 
 ##### `FilterCard`
 
-- **Tier:** section (composes Card + SegmentedToggle + Chip rows + clear control)
+- **Tier:** section (composes SegmentedToggle + Chip + Pressable + Text)
 - **Location:** `src/components/sections/FilterCard.tsx`
-- **Variants:** `default`, `wallet` (with currency dimension), `profile` (with VIS / LAYERS / DATE rows)
+- **Variants:** generic — the consumer assembles the row mix; the spec's `wallet` / `profile` "variants" become preset row arrays at the call site
 - **Sizes:** md
-- **States:** default, has-filters-applied
+- **States:** default, with-results-summary, with-clear (shown when `onClear` is set)
 - **Used in:** populated in 12.6
 - **Tweak impact:** Wallet v2 transaction filters, My Profile clip filters, future complex-filter surfaces
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
 
 **Mock says:** Card containing multiple filter rows. **My Profile**
 variant: VIS (segmented ALL/PUBLIC/ANON) + LAYERS (multi-select chip
@@ -2828,11 +2831,17 @@ row) + DATE (single-select chip row) + clear-filters action. **Wallet**
 variant: currency + kind + date row. Applied-state shows "X OF Y
 results" + Clear link.
 
-**Code does:** None.
+**Code does (shipped):** Bordered card hosting an optional header
+(title + results summary + Clear link) and a stack of `FilterRow`
+items. Three row kinds are built in:
+- `segmented` — composes `SegmentedToggle` (single-select)
+- `chip-single` — horizontal Chip scroll, tap toggles to selected /
+  back to null
+- `chip-multi` — horizontal Chip scroll, tap toggles in/out of an
+  id array
 
-**Gap / proposal:** Generic FilterCard accepting filter-row definitions.
-Each row type (segmented / chip-multi / chip-single) is a primitive
-composition. Variant determines pre-set row structure.
+The "wallet" / "profile" variants from the spec are just preset row
+arrays at the call site; the section itself stays generic.
 
 ---
 
@@ -2903,23 +2912,25 @@ the parent.
 
 ##### `ActionSheet`
 
-- **Tier:** section (composes BottomSheet + action rows + Cancel)
+- **Tier:** section (composes BottomSheet + Pressable + Icon + Text)
 - **Location:** `src/components/sections/ActionSheet.tsx`
 - **Variants:** `default`
 - **Sizes:** md
 - **States:** open, closed
 - **Used in:** populated in 12.6
 - **Tweak impact:** Profile kebab actions, Wallet v2 menus (potential), Clip Edit row-menus, future contextual-menu surfaces
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
 
 **Mock says:** Bottom sheet containing a header row (e.g. "@KAI.DC") +
 list of action rows (icon + label, optional warn-tone for destructive
 actions) + Cancel row at the bottom. Tap outside closes.
 
-**Code does:** Profile has bespoke kebab sheet inline.
-
-**Gap / proposal:** Section composing BottomSheet primitive + a list of
-ActionSheetRow features (defined as part of the section's API). Actions
-are passed as an array of `{ icon, label, onPress, tone }`.
+**Code does (shipped):** BottomSheet hosting a header row, a hairline-
+divided list of action rows, and a separate Cancel row pinned below.
+Actions are `{ id, label, iconName?, tone?, onPress }`. Tapping an
+action closes the sheet first, then fires the action's `onPress`.
+`tone='warn'` (single-accent rule: destructive = accent) paints the
+row in accent ink + icon.
 
 ---
 

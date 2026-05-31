@@ -24,6 +24,9 @@ import { PresetGrid } from '@/components/sections/PresetGrid'
 import { SettingsGroup } from '@/components/sections/SettingsGroup'
 import { InfoList } from '@/components/sections/InfoList'
 import { LegalLinkList } from '@/components/sections/LegalLinkList'
+import { ActionSheet } from '@/components/sections/ActionSheet'
+import { FilterCard } from '@/components/sections/FilterCard'
+import { Button } from '@/components/primitives/Button'
 import { SettingsRow } from '@/components/features/settings/SettingsRow'
 import { TransactionRow } from '@/components/features/wallet/TransactionRow'
 import { Text } from '@/components/primitives/Text'
@@ -138,6 +141,22 @@ export function SectionGallery() {
         />
       </Section>
 
+      <Section title="ActionSheet">
+        <ActionSheetDemo />
+      </Section>
+
+      <Section title="FilterCard">
+        <FilterCardDemo />
+      </Section>
+
+      <Section title="WizardShell">
+        <Text variant="body" color={theme.colors.text.muted}>
+          Full-screen scaffold — same reason ScreenScroll has no inline preview. Used by
+          all v0.2 wizards (Viewer + Creator Onboarding, Handle, Change Handle) once 12.6
+          migrates them.
+        </Text>
+      </Section>
+
       <Section title="LegalLinkList">
         <LegalLinkList
           docs={[
@@ -148,6 +167,88 @@ export function SectionGallery() {
         />
       </Section>
     </ScreenScroll>
+  )
+}
+
+function ActionSheetDemo() {
+  const [open, setOpen] = useState(false)
+  return (
+    <View>
+      <Button label="Open kebab" onPress={() => setOpen(true)} />
+      <ActionSheet
+        visible={open}
+        onClose={() => setOpen(false)}
+        header="@KAI.DC"
+        actions={[
+          { id: 'view', iconName: 'user', label: 'View profile', onPress: () => {} },
+          { id: 'follow', iconName: 'user-plus', label: 'Follow', onPress: () => {} },
+          { id: 'share', iconName: 'share', label: 'Share stream', onPress: () => {} },
+          { id: 'report', iconName: 'flag', label: 'Report', tone: 'warn', onPress: () => {} },
+        ]}
+      />
+    </View>
+  )
+}
+
+function FilterCardDemo() {
+  const [vis, setVis] = useState('all')
+  const [layers, setLayers] = useState<string[]>(['cam'])
+  const [date, setDate] = useState<string | null>('30d')
+  const hasFilters = vis !== 'all' || layers.length !== 0 || date !== null
+  return (
+    <FilterCard
+      title="Filters"
+      resultsSummary={hasFilters ? '12 OF 47 results' : undefined}
+      onClear={
+        hasFilters
+          ? () => {
+              setVis('all')
+              setLayers([])
+              setDate(null)
+            }
+          : undefined
+      }
+      rows={[
+        {
+          kind: 'segmented',
+          id: 'vis',
+          label: 'VISIBILITY',
+          value: vis,
+          onChange: setVis,
+          options: [
+            { id: 'all', label: 'All' },
+            { id: 'public', label: 'Public' },
+            { id: 'anon', label: 'Anon' },
+          ],
+        },
+        {
+          kind: 'chip-multi',
+          id: 'layers',
+          label: 'LAYERS',
+          value: layers,
+          onChange: setLayers,
+          options: [
+            { id: 'cam', label: 'Cam' },
+            { id: 'aud', label: 'Audio' },
+            { id: 'loc', label: 'Location' },
+            { id: 'gyr', label: 'Gyro' },
+          ],
+        },
+        {
+          kind: 'chip-single',
+          id: 'date',
+          label: 'DATE',
+          value: date,
+          onChange: setDate,
+          options: [
+            { id: '7d', label: '7d' },
+            { id: '30d', label: '30d' },
+            { id: '90d', label: '90d' },
+            { id: 'all', label: 'All time' },
+          ],
+        },
+      ]}
+    />
   )
 }
 
