@@ -2744,9 +2744,10 @@ Footer accepts primary CTA + optional `onSkip`. Used by all 4+ wizards.
 - **Location:** `src/components/sections/CategoryChipRow.tsx`
 - **Variants:** `default`
 - **Sizes:** md
-- **States:** default
+- **States:** default, with-selection
 - **Used in:** populated in 12.6
 - **Tweak impact:** Globe top, search results (future), any horizontally-scrollable single-select filter
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
 
 **Mock says:** Horizontally-scrollable row of Chip items. Single-select
 semantics — only one active at a time. Optional first chip is the
@@ -2759,54 +2760,55 @@ ships with a single value (`cities`); categories grow as v0.3+ adds
 value lines. Section keeps its full shape; only the data passed in is
 trimmed.
 
-**Code does:** None.
-
-**Gap / proposal:** Generic section accepting `categories: { id, label }[]`
-+ `value` + `onChange`. Used by Globe Mobile's category filter; same
-shape works for future search-result filter chips.
+**Code does (shipped):** Horizontal ScrollView of `Chip` items. Each
+chip's selected state is computed from the controlled `value` prop;
+tapping the "all" id chip sets value to `null`, any other chip sets
+value to its id. Consumer-flat — `categories: { id, label }[]`.
 
 ---
 
 ##### `TrendingRail`
 
-- **Tier:** section (composes StreamCard in a horizontal scroll + section header)
+- **Tier:** section (composes Text + Pressable + StreamCard.trending in a horizontal scroll)
 - **Location:** `src/components/sections/TrendingRail.tsx`
 - **Variants:** `default`
 - **Sizes:** md
-- **States:** default, loading, empty
+- **States:** default, empty (renders `emptyLabel` instead of the scroll)
 - **Used in:** populated in 12.6
 - **Tweak impact:** Globe Mobile bottom sheet, future discovery / "for you" surfaces
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
 
 **Mock says:** Section header ("Trending now" + "See all") + horizontal
 scroll of StreamCard items (158×~140). Tapping a card opens its stream.
 Empty state = "No streams nearby" message.
 
-**Code does:** None.
-
-**Gap / proposal:** Section accepting `streams: Stream[]` + `title` +
-`onTapAll`. Cards rendered via StreamCard (trending variant).
+**Code does (shipped):** Header row (title heading + optional "See all"
+accent link) + horizontal ScrollView of `StreamCard` trending-variant
+items keyed by id. Empty state replaces the scroll with a muted caption.
+Loading state is not yet a render mode — the consumer can swap the
+section out for a Spinner during fetch.
 
 ---
 
 ##### `StreamStrip`
 
-- **Tier:** section (composes StreamTile in a horizontal scroll + small header)
+- **Tier:** section (composes Text + StreamTile in a horizontal scroll)
 - **Location:** `src/components/sections/StreamStrip.tsx`
 - **Variants:** `default`
 - **Sizes:** md
 - **States:** default
 - **Used in:** populated in 12.6
 - **Tweak impact:** Viewer Sheet sensor strip, future per-broadcast layer surfaces
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
 
 **Mock says:** Header ("STREAMS" + "X OF Y" count) + horizontal scroll
 of StreamTile items showing per-layer status (CAM 1080p, AUDIO 48 kHz,
 LOC GPS, etc.). Used to display which layers a broadcast is delivering.
 
-**Code does:** None.
-
-**Gap / proposal:** Section accepting `layers: Layer[]` (where `Layer
-= { kind, label, value, active }`). Renders header + horizontal
-StreamTile row.
+**Code does (shipped):** Header row (mono-caps title + "N OF M" active
+count, both in dim tones) + horizontal ScrollView of StreamTile items.
+Each `StreamStripLayer` carries id, iconName (Feather glyph), label,
+value, optional active flag (default true), optional onPress.
 
 ---
 
@@ -2836,45 +2838,44 @@ composition. Variant determines pre-set row structure.
 
 ##### `DayGroup`
 
-- **Tier:** section (composes Divider + Text + slotted children)
+- **Tier:** section (composes Text + slotted children)
 - **Location:** `src/components/sections/DayGroup.tsx`
 - **Variants:** `default`
 - **Sizes:** md
 - **States:** default
 - **Used in:** populated in 12.6
 - **Tweak impact:** Wallet v2 transaction grouping, future timeline grouping surfaces
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
 
 **Mock says:** Day header (TODAY / YESTERDAY / APR 22) + summary on
 right (e.g. "+ 12.4K SB · - 4.2K SB") + slotted child rows (typically
 TransactionRow). Border-top separates from previous day's group.
 
-**Code does:** None.
-
-**Gap / proposal:** Generic section accepting `{ label, summary,
-children }`. Used by Wallet v2; same shape would work for chat-by-day,
-notifications-by-day, etc.
+**Code does (shipped):** Header row (mono-caps `label` left, optional
+`summary` right) + slotted children. Border-top hairline by default
+(opt-out with `showBorderTop={false}` on the first group of a list).
 
 ---
 
 ##### `ActionTilesRow`
 
-- **Tier:** section
+- **Tier:** section (composes Pressable + Icon + Text)
 - **Location:** `src/components/sections/ActionTilesRow.tsx`
-- **Variants:** `default` (3-up grid), `4-up`
+- **Variants:** `default` (3-up), `4-up` via the `cols` prop
 - **Sizes:** md
-- **States:** default
+- **States:** default; per-tile `primary` adds accent border + accent.surface bg + accent icon
 - **Used in:** populated in 12.6
 - **Tweak impact:** Wallet v2 quick actions (Top up / Cash out / Send), future shortcut surfaces
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
 
 **Mock says:** Equal-width grid of action tiles. Each tile = Card +
 icon + title + small descriptor. One tile in the grid may be marked
 `primary` (accent glow + tinted bg).
 
-**Code does:** None.
-
-**Gap / proposal:** Section accepting `tiles: ActionTile[]`. Tile shape
-= `{ icon, title, descriptor, onPress, primary }`. Generic enough to
-serve Wallet, Settings shortcuts, or any compact action shelf.
+**Code does (shipped):** flex-wrap row with `flexBasis: 100/cols%`
+per tile so 3-up and 4-up share one layout path. Tile = Pressable
+wrapping Icon (md) + title (bodyEmphasized) + optional descriptor
+(monoCaption). `primary` flag swaps to the accent treatment.
 
 ---
 
@@ -2884,18 +2885,19 @@ serve Wallet, Settings shortcuts, or any compact action shelf.
 - **Location:** `src/components/sections/PresetGrid.tsx`
 - **Variants:** `default`
 - **Sizes:** md (4-up gridded chips)
-- **States:** default
+- **States:** default, with-selection
 - **Used in:** populated in 12.6
 - **Tweak impact:** Cash Out preset amounts, TipSheet preset amounts, Top Up bundle quick-picks (potentially), future quantity-preset surfaces
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
 
 **Mock says:** 4-up grid of Chip items showing preset values. Selected
 state = accent-tinted (or tone-tinted) chip. Tapping = sets a parent
 value (typically the AmountInput sibling).
 
-**Code does:** TipSheet has inline preset chips (Phase 13).
-
-**Gap / proposal:** Extract as generic preset picker. `presets: number[]`
-+ `value` + `onChange`. Often paired with an AmountInput feature.
+**Code does (shipped):** Generic `PresetGrid<T extends string | number>`
+— flex-wrap row of Chip items at 24% width. Optional `format(v)` to
+turn raw values into chip labels (e.g. `${n} 🚀`). Selection lives in
+the parent.
 
 ---
 
@@ -2923,66 +2925,68 @@ are passed as an array of `{ icon, label, onPress, tone }`.
 
 ##### `SettingsGroup`
 
-- **Tier:** section (composes Card + SettingsRow rows + section header)
+- **Tier:** section (composes Text + slotted SettingsRow children)
 - **Location:** `src/components/sections/SettingsGroup.tsx`
 - **Variants:** `default`
 - **Sizes:** md
 - **States:** default
 - **Used in:** populated in 12.6
 - **Tweak impact:** Settings screen, Change Handle entry point, future settings-like surfaces
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
 
 **Mock says:** Section header (mono caps, dim — e.g. "IDENTITY",
 "VERIFICATION") + Card containing SettingsRow children with borders
 between them. Multiple groups stacked on a screen.
 
-**Code does:** Settings screen has inline group rendering.
-
-**Gap / proposal:** Section accepting `{ title, rows }`. Rows are an
-array of SettingsRow descriptors.
+**Code does (shipped):** Optional title above a bordered, hidden-
+overflow card container that hosts SettingsRow children. The rows
+themselves own their border-top hairlines (per the SettingsRow
+contract — first child opts out via `showBorderTop={false}`).
 
 ---
 
 ##### `InfoList`
 
-- **Tier:** section (composes Card + tonal info rows)
+- **Tier:** section (composes Icon + Text)
 - **Location:** `src/components/sections/InfoList.tsx`
 - **Variants:** `default`
 - **Sizes:** md
-- **States:** default
+- **States:** per-row tone — `keep` (accent badge + accent ink), `change` (warn badge + warn ink), `hold` (neutral badge + muted ink)
 - **Used in:** populated in 12.6
 - **Tweak impact:** Change Handle "what changes" panel, future consequence-disclosure surfaces
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
 
 **Mock says:** List of tonal info rows (keep / change / hold tones,
 each with a tone-colored badge + title + description). Used to disclose
 consequences of an action ("What stays with you / What's different /
 What's held").
 
-**Code does:** None.
-
-**Gap / proposal:** Section accepting `rows: { tone, icon, title, body }[]`.
-Each row tone uses a token-driven color (accent for "keep", warn for
-"change", neutral for "hold").
+**Code does (shipped):** Stack of rows — 32-circle tone badge with
+glyph (`check` / `edit-3` / `pause` by default; consumer can override)
++ title + optional body. Tones map directly to existing tokens
+(`accent.default` / `accent.surface` for keep; `warn` + inline amber
+tint for change; muted ink + `bg.panel` for hold).
 
 ---
 
 ##### `LegalLinkList`
 
-- **Tier:** section (composes link rows)
+- **Tier:** section (composes Pressable + Text + Icon)
 - **Location:** `src/components/sections/LegalLinkList.tsx`
 - **Variants:** `default`
 - **Sizes:** md
-- **States:** default
-- **Used in:** populated in 12.6
+- **States:** default, pressed (Pressable variant subtle)
+- **Used in:** populated in 12.6 (LegalAcceptanceCard composes one)
 - **Tweak impact:** All 3 LegalAcceptanceCard variants (US/ROW, EU, CA), future legal-disclosure surfaces
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
 
 **Mock says:** Vertical list of legal-document link rows: "Terms of
 service" / "Community rules" / "Privacy policy" — each as a tappable
 row with right chevron. Opens the document in a reader.
 
-**Code does:** None.
-
-**Gap / proposal:** Section accepting `docs: { label, onPress }[]`.
-Used by LegalAcceptanceCard variants and any future legal-link surfaces.
+**Code does (shipped):** Bordered card hosting Pressable rows
+(label + chevron). Border-top hairline between rows after the first.
+Consumer passes `docs: { id, label, onPress }[]`.
 
 ---
 
