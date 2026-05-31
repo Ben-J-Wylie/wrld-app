@@ -46,6 +46,8 @@ import { GoBar } from '@/components/features/broadcast/GoBar'
 import { ClipCard } from '@/components/features/clip/ClipCard'
 import { ClipPreview } from '@/components/features/clip/ClipPreview'
 import { LayerEditorRow } from '@/components/features/clip/LayerEditorRow'
+import { ContextStrip } from '@/components/features/report/ContextStrip'
+import { ReasonRow } from '@/components/features/report/ReasonRow'
 import { Toggle } from '@/components/primitives/Toggle'
 import { Button } from '@/components/primitives/Button'
 import { BroadcasterRow } from '@/components/features/user/BroadcasterRow'
@@ -962,6 +964,44 @@ export function FeatureGallery() {
         </Row>
       </Section>
 
+      <Section title="ContextStrip">
+        <Row label="broadcast (live)">
+          <ContextStrip
+            kind="broadcast"
+            thumbnailUrl="https://picsum.photos/seed/wrldrep1/200/200"
+            title="Atlantic Ave · street fest"
+            sub="@kai.dc · Brooklyn"
+            isLive
+          />
+        </Row>
+        <Row label="clip">
+          <ContextStrip
+            kind="clip"
+            thumbnailUrl="https://picsum.photos/seed/wrldrep2/200/200"
+            title="Drumline forming up"
+            sub="@kai.dc · 47s · 1.4k peak"
+          />
+        </Row>
+        <Row label="user (avatar)">
+          <ContextStrip
+            kind="user"
+            thumbnailUrl="https://i.pravatar.cc/100?u=mira"
+            displayName="Mira B"
+            title="Mira B"
+            sub="@mira.b · 1.2k followers"
+          />
+        </Row>
+        <Row label="no thumbnail">
+          <ContextStrip kind="broadcast" title="Audio-only · pirate radio" sub="@radio.weird" />
+        </Row>
+      </Section>
+
+      <Section title="ReasonRow">
+        <Row label="group with selection">
+          <ReasonRowGroupDemo />
+        </Row>
+      </Section>
+
       <Section title="BroadcasterRow">
         <Row label="default">
           <BroadcasterRow
@@ -1070,6 +1110,29 @@ function ToastBannerDemo() {
           onDismiss={() => setToast(null)}
         />
       )}
+    </View>
+  )
+}
+
+function ReasonRowGroupDemo() {
+  const [selected, setSelected] = useState<string | null>(null)
+  const reasons = [
+    { id: 'spam', title: 'Spam or scam', description: 'Repetitive, deceptive, or misleading' },
+    { id: 'hate', title: 'Hate or harassment', description: 'Targeted abuse or slurs' },
+    { id: 'safety', title: 'Imminent harm', description: 'Threats, self-harm, or dangerous acts' },
+    { id: 'other', title: 'Something else', description: "Doesn't fit above" },
+  ]
+  return (
+    <View style={styles.stack}>
+      {reasons.map((r) => (
+        <ReasonRow
+          key={r.id}
+          title={r.title}
+          description={r.description}
+          selected={selected === r.id}
+          onPress={() => setSelected(r.id)}
+        />
+      ))}
     </View>
   )
 }

@@ -2560,42 +2560,44 @@ the variant can hook a deeper UI in.
 
 ##### `ContextStrip`
 
-- **Tier:** feature (composes Card + Avatar + Text + LivePill)
+- **Tier:** feature (composes Image + Avatar + Text + Icon + LivePill)
 - **Location:** `src/components/features/report/ContextStrip.tsx`
-- **Variants:** `default`
-- **Sizes:** md
-- **States:** default
+- **Variants:** `default`; the `kind` prop picks the thumb behavior — `broadcast` (Image or `video` placeholder), `clip` (Image or `film` placeholder), `user` (Avatar)
+- **Sizes:** md (48-square thumb)
+- **States:** default; `isLive` adds a LivePill on the right
 - **Used in:** populated in 12.6
 - **Tweak impact:** Report flow context header, future "what you're reporting" surfaces
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
 
 **Mock says:** Card surfacing what's being reported: thumb (48×48 of the
 broadcast/clip) + meta column (title + sub) + LivePill on the right.
 
-**Code does:** None.
-
-**Gap / proposal:** New feature. Accepts a `ReportTarget` (broadcast |
-clip | user). Renders summary.
+**Code does (shipped):** 48-square thumb (Image / Avatar / placeholder
+depending on `kind`) + title + optional sub + LivePill when `isLive`.
+Consumer-flat shape — `kind`, `title`, `sub?`, `thumbnailUrl?`,
+`displayName?`, `isLive?`.
 
 ---
 
 ##### `ReasonRow`
 
-- **Tier:** feature
+- **Tier:** feature (composes Pressable + Text + Icon)
 - **Location:** `src/components/features/report/ReasonRow.tsx`
 - **Variants:** `default`
 - **Sizes:** md
-- **States:** default, selected, pressed
+- **States:** default, selected (accent border + accent.surface bg + accent chevron), pressed
 - **Used in:** populated in 12.6
 - **Tweak impact:** Report flow step 1 (reason picker), future reason-picker surfaces
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
 
 **Mock says:** Selectable row: title (sans, bold) + description (mono
 caps, dim) + chevron. Selected = accent-tinted background + accent border
 + accent chevron.
 
-**Code does:** None.
-
-**Gap / proposal:** New feature. Used inside Report's reason list
-section.
+**Code does (shipped):** Row layout — title + optional description
+column + `chevron-right` icon. Selected swaps the border + bg to
+accent + tints the chevron. Selection state is parent-owned via
+`selected` + `onPress`.
 
 ### Sections (`src/components/sections/`)
 
