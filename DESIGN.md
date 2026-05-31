@@ -758,12 +758,23 @@ color). **Loading** right-affordance spinner — for async validation
 (value, onChangeText, keyboardType, autoCapitalize, secureTextEntry,
 autoComplete, …) keeps working unchanged for existing callers. `state`
 prop drives the border color + right-affordance slot. Focus state is
-tracked internally via the native focus/blur events. Accent glow applies
-to any non-default state (focus, valid, error, loading). `prefix` prop
+tracked internally via the native focus/blur events. `prefix` prop
 + `variant='prefix'` renders an inline leading token (e.g. `@`).
 `rightAffordance` prop overrides the state-derived affordance. `style`
 applies to the outer wrapper (layout/positioning); the inner TextInput
 draws from theme typography directly.
+
+**Focus-driven shadow removed 2026-05-30** (see decision-log entry
+"CALayer reconfiguration on focus-driven shadows"). The original spec
+called for `theme.elevation.glow.accent` to appear on focus (and on
+`valid`/`error`/`loading` states). Adding shadow properties to a
+`UIView` on iOS triggers a CALayer reconfiguration whose bounds
+recalculation is interpreted by UIKit as a "focused field moved" signal
+mid-keyboard-animation — iOS cancels keyboard appearance partway and
+the field blurs. Visual indication on focus is now the accent
+**border color** alone (cheap property update, no layer recalc).
+**Future Claude / collaborator must NOT re-add a state-conditional
+shadow to this primitive's wrapper style array.**
 
 Phase 1 callers continue to work: they pass plain TextInputProps and
 get the new visual treatment. Caller-side custom border / bg styling
@@ -793,10 +804,13 @@ don't make sense inline with multi-line content).
 **Code does (shipped):** Separate primitive (not an Input variant)
 because the multi-line interaction model is distinct: no right
 affordance slot, no loading state, no prefix. Min-height 96. Focus
-state is auto-tracked; accent border + accent glow on focus matches
-Input. Shares visual treatment via the same token consumption.
-Vertical resize is delegated to the consumer (pass `style={{ height
-}}` or similar).
+state is auto-tracked; accent border on focus matches Input. Shares
+visual treatment via the same token consumption. Vertical resize is
+delegated to the consumer (pass `style={{ height }}` or similar).
+
+**Focus-driven shadow removed 2026-05-30 — same fix as `Input`**
+(see decision-log entry "CALayer reconfiguration on focus-driven
+shadows" and the `Input` Section 3 entry for the full rationale).
 
 **Gap / proposal:** None — shipped.
 
@@ -2856,6 +2870,70 @@ handled by the same patterns; the seam is not a separate motion category.
 
 Append-only. Most recent first. Each entry: date, decision, rationale,
 constraint it imposes downstream.
+
+### 2026-05-30 — CALayer reconfiguration on focus-driven shadows
+
+Symptom: tapping any `Input` or `Textarea` in the app caused the
+keyboard to start sliding up, retreat ~30ms later, and the field to
+blur. Looked like an animation stutter; was actually a focus/blur
+race.
+
+Diagnostic path that found it:
+
+1. Read `react-native-keyboard-controller`'s source
+   (`KeyboardAwareScrollView`, `useSmoothKeyboardHandler`,
+   `KeyboardProvider`). Nothing in the library calls `.blur()` or
+   `Keyboard.dismiss()`; it only tracks keyboard events via worklets
+   and adjusts scroll position.
+2. Grep'd app + node_modules for `.blur()` and `Keyboard.dismiss()`
+   calls. Nothing in app code.
+3. Examined `Input.tsx`'s wrapper style array. Found that on focus,
+   `glowStyle` flips between `null` and `theme.elevation.glow.accent`
+   (a shadow object: `shadowColor`, `shadowOpacity`, `shadowRadius`,
+   `shadowOffset`).
+
+The root cause: on iOS, adding shadow properties to a `UIView` triggers
+CALayer reconfiguration. The layer's bounds recalculation includes the
+shadow's rendering area, which expands the view's effective visual
+rect. UIKit reads the focused-input frame to size keyboard adjustments;
+when the frame appears to change mid-keyboard-animation, UIKit
+interprets it as a "focused field moved" event and cancels the
+keyboard appearance. The TextInput inside the wrapper loses
+first-responder status as a side effect.
+
+**Decision:** Focus-driven shadows on focusable wrappers are forbidden.
+The visual indication for focus is the **border color change** alone
+(cheap property update on the layer, no recalc). Both `Input` and
+`Textarea`'s focus-state-derived glow was removed in commits `7294983`
+and `4c0b45a`.
+
+Audited the other primitives that consume `theme.elevation.glow.accent`:
+`Slider` (thumb, always-present), `Avatar` (live ring, prop-driven not
+focus-driven), `Button` (`glow` prop, consumer-set). All stable
+per-render — none have the CALayer issue. Decision applies only to
+focusable wrappers (i.e. Input + Textarea today).
+
+**Imposes:**
+
+- Future Claude / collaborator MUST NOT re-add a state-conditional
+  shadow to `Input` or `Textarea`'s wrapper style array. Section 3
+  entries for both primitives carry the warning.
+- New focusable primitives (none planned today, but if a future
+  primitive composes a `TextInput` inside a wrapper) follow the same
+  rule: state changes don't toggle shadows on the wrapper.
+- The principle generalizes: any state-conditional style on a focusable
+  wrapper should be inspected for whether it touches CALayer-affecting
+  properties (shadows, masks, transform layers). Bounds-affecting style
+  changes mid-keyboard-animation cancel the keyboard. Color-only
+  changes are safe.
+- If we ever want a focus glow back: render the shadow always (stable
+  CALayer) and animate `shadowOpacity` from 0 → non-zero on focus.
+  Don't add/remove the shadow style entry.
+
+This entry is paired with the same-day "12.5 / ScreenScroll
+form-screen migrations" work. The migrations exposed inputs in real
+form contexts where the bug was visible; ScreenScroll itself wasn't
+the cause.
 
 ### 2026-05-30 — Sub-phase 12.4 shipped + `design` branch merged back to `main`
 
