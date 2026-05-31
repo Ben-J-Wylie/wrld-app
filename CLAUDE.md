@@ -721,6 +721,47 @@ Three exit paths, all funnelling through a single `exitToGlobe(kind)` function:
 
 ---
 
+## Known issue: push token not unregistered on sign-out
+
+**Filed May 2026. Not yet fixed.**
+
+`handleSignOut` in `SettingsScreen.tsx` calls `clearWrldUser()`, clears the React Query cache, then calls Clerk `signOut()`. It does NOT call `usersApi.unregisterPushToken()` first. This means the `PushSubscription` row on the backend stays associated with the device even after sign-out.
+
+**Consequence:** if a user signs out of account A and signs in as account B on the same device, account A's `PushSubscription` row still points to this device's token. Account A will continue receiving push notifications on a device that is now logged in as account B. The token is only cleaned up when account B calls `registerPushToken`, which upserts by token and reassigns the row to account B's userId. Until that upsert fires, there is a window where account A leaks to the device.
+
+**Multi-account scenario (worse):** if a device is used to test multiple accounts (common for Ben and Aaron during development), old accounts accumulate stale push subscriptions that never expire.
+
+**Fix (not yet applied):**
+
+In `handleSignOut` (`SettingsScreen.tsx`), before calling `signOut()`:
+1. Call `Notifications.getExpoPushTokenAsync({ projectId: '...' })` to retrieve the current token (the token is not persisted in the Zustand store or AsyncStorage — the easiest fix is to re-fetch it at sign-out time).
+2. Call `usersApi.unregisterPushToken(tokenData.data)`.
+3. Wrap in try/catch so a failed unregister doesn't block sign-out.
+
+```ts
+async function handleSignOut() {
+  // Unregister push token before clearing session
+  try {
+    const tokenData = await Notifications.getExpoPushTokenAsync({
+      projectId: '35ab0828-46ac-477f-8ace-453105f6601e',
+    })
+    await usersApi.unregisterPushToken(tokenData.data)
+  } catch {
+    // Don't block sign-out if this fails
+  }
+  clearWrldUser()
+  qc.clear()
+  router.navigate('/(app)/globe')
+  try {
+    await signOut()
+  } catch {}
+}
+```
+
+Alternatively, store the token in the Zustand auth store when `useRegisterPushToken` fetches it, so sign-out doesn't need to re-fetch.
+
+---
+
 ## Updates — May 2026 (Phase 11: push notifications)
 
 ### Push delivery: Expo Push
