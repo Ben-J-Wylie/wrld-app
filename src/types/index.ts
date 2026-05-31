@@ -13,6 +13,8 @@ export type User = {
   spaceBucks: number
   stardust: number
   tier: 'free' | 'plus' | 'pro'
+  suspendedUntil: string | null
+  suspendedReason: string | null
   dateOfBirth?: string
   locationPrecision?: 'exact' | 'city' | 'country' | 'off'
   creatorReady: boolean

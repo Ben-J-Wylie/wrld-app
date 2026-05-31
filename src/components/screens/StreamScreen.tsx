@@ -14,16 +14,23 @@
 //     when viewing someone else's stream).
 //   • CoordHUD for the broadcaster's idle-state location read.
 //   • IconButton for back, flip camera, chat toggle, dismiss-warning,
-//     and tip header affordances.
+//     report, and tip header affordances.
 //   • Pill (accent, sm) for the BROADCASTING source badges.
 //   • ToastBanner for the broadcaster-side post-tip toast.
+//   • ActionSheet (section) for the report-stream reason picker.
 //   • Text primitive variants + token colors throughout.
+//
+// Phase 17 / 5/22 integration (merged in from `main` on the same
+// pass): suspensionError Alert, handleGoLive suspension navigate,
+// report flag button + ActionSheet, screenshot capture via
+// react-native-view-shot.
 //
 // Kept intact: NearbyStreamsDrawer, AuthModal, TipSheet, FollowButton
 // (per the 12.6 retirement plan).
 
 import {
   ActivityIndicator,
+  Alert,
   Animated,
   AppState,
   Keyboard,
@@ -34,6 +41,7 @@ import {
   View,
 } from 'react-native'
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { captureScreen } from 'react-native-view-shot'
 import { useLocalSearchParams, router, useFocusEffect } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { RTCView } from 'react-native-webrtc'
@@ -56,6 +64,7 @@ import {
   type ReactionConfig,
 } from '@/components/features/stream/ReactionRail'
 import { ToastBanner } from '@/components/features/feedback/ToastBanner'
+import { ActionSheet } from '@/components/sections/ActionSheet'
 import { NearbyStreamsDrawer } from '@/components/features/stream/NearbyStreamsDrawer'
 import { AuthModal } from '@/components/features/stream/AuthModal'
 import { TipSheet } from '@/components/features/stream/TipSheet'
@@ -138,6 +147,7 @@ export function StreamScreen() {
     status, setStatus, roomId, viewerCount, streamEnded, adminEnded, setAdminEnded,
     adminWarning, setAdminWarning,
     error: signalingError, setError,
+    suspensionError, clearSuspensionError,
     chatMessages, reactions, broadcasterPaused,
     tipEvents, confirmedBalance,
     connect, createRoom, joinRoom, disconnect,
@@ -166,6 +176,7 @@ export function StreamScreen() {
   const [chatInput, setChatInput] = useState('')
   const [authModalVisible, setAuthModalVisible] = useState(false)
   const [tipSheetVisible, setTipSheetVisible] = useState(false)
+  const [reportVisible, setReportVisible] = useState(false)
   const [broadcasterTipToast, setBroadcasterTipToast] = useState<string | null>(null)
   const [keyboardHeight, setKeyboardHeight] = useState(0)
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -173,6 +184,7 @@ export function StreamScreen() {
   // Guards against double-navigation when multiple end signals arrive simultaneously
   // (e.g. broadcasterLeft WS message + viewer WS close in the same render cycle).
   const navigatingRef = useRef(false)
+  const pendingSnapshotUri = useRef<string | null>(null)
 
   const isCameraArmed = broadcastSources.includes('camera')
   const showCameraPreview = isNew && status === 'in-room' && !!localStream && isCameraArmed
@@ -288,6 +300,11 @@ export function StreamScreen() {
   )
 
   useEffect(() => {
+    if (!suspensionError) return
+    Alert.alert('Account suspended', suspensionError, [{ text: 'OK', onPress: clearSuspensionError }])
+  }, [suspensionError])
+
+  useEffect(() => {
     if (!isNew || status !== 'in-room' || !localStream) return
     sendBroadcasterOrientation(videoIsLandscape ? 'portrait' : 'landscape')
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -322,8 +339,14 @@ export function StreamScreen() {
       })
       await startBroadcasting(broadcastSources)
     } catch (err) {
-      setStatus('error')
-      setError(err instanceof Error ? err.message : 'Failed to go live')
+      const msg = err instanceof Error ? err.message : 'Failed to go live'
+      if (msg.toLowerCase().includes('suspended')) {
+        // suspensionError useEffect will show the Alert; navigate back cleanly
+        router.navigate('/(app)/dashboard')
+      } else {
+        setStatus('error')
+        setError(msg)
+      }
     }
   }
 
@@ -374,6 +397,41 @@ export function StreamScreen() {
   function handleTipPress() {
     if (!isSignedIn) { setAuthModalVisible(true); return }
     setTipSheetVisible(true)
+  }
+
+  async function handleReportPress() {
+    if (!isSignedIn) { setAuthModalVisible(true); return }
+    try {
+      // captureScreen + handleGLSurfaceViewOnAndroid captures the GPU
+      // SurfaceView that RTCView renders into (PixelCopy path on Android,
+      // UIKit composite on iOS). result:'base64' avoids Axios FormData/
+      // multipart issues with file URIs.
+      pendingSnapshotUri.current = await captureScreen({
+        format: 'jpg',
+        quality: 0.9,
+        result: 'base64',
+        handleGLSurfaceViewOnAndroid: true,
+      })
+    } catch {
+      pendingSnapshotUri.current = null
+    }
+    setReportVisible(true)
+  }
+
+  async function submitReport(reason: string) {
+    if (!streamId) return
+    try {
+      const reportId = await streamsApi.report(streamId, reason)
+      setReportVisible(false)
+      if (pendingSnapshotUri.current) {
+        const b64 = pendingSnapshotUri.current
+        pendingSnapshotUri.current = null
+        streamsApi.uploadSnapshot(reportId, b64).catch(() => {})
+      }
+      Alert.alert('Reported', 'Thanks for letting us know. We\'ll review this stream.')
+    } catch {
+      Alert.alert('Error', 'Could not submit report. Please try again.')
+    }
   }
 
   function handleSendChat() {
@@ -504,11 +562,20 @@ export function StreamScreen() {
         {status === 'in-room' && !streamEnded && (
           <View style={styles.headerActions}>
             {!isNew && (
-              <Pressable onPress={handleTipPress} style={styles.tipHeaderBtn} hitSlop={8}>
-                <Text variant="monoLabel" color={theme.colors.accent.default}>
-                  🚀 TIP
-                </Text>
-              </Pressable>
+              <>
+                <Pressable onPress={handleTipPress} style={styles.tipHeaderBtn} hitSlop={8}>
+                  <Text variant="monoLabel" color={theme.colors.accent.default}>
+                    🚀 TIP
+                  </Text>
+                </Pressable>
+                <IconButton
+                  name="flag"
+                  variant={showOverlay ? 'surface' : 'ghost'}
+                  size="md"
+                  onPress={handleReportPress}
+                  accessibilityLabel="Report stream"
+                />
+              </>
             )}
             <IconButton
               name={chatOpen ? 'x' : 'message-circle'}
@@ -803,6 +870,21 @@ export function StreamScreen() {
         onTip={handleTip}
       />
 
+      {/* Report reason picker — uses ActionSheet section (replaces the
+          bespoke bottom sheet Aaron added on main). */}
+      <ActionSheet
+        visible={reportVisible}
+        onClose={() => setReportVisible(false)}
+        header="Report stream"
+        actions={[
+          { id: 'inappropriate', iconName: 'alert-octagon', label: 'Inappropriate content', tone: 'warn', onPress: () => submitReport('Inappropriate content') },
+          { id: 'harassment', iconName: 'user-x', label: 'Harassment or bullying', tone: 'warn', onPress: () => submitReport('Harassment or bullying') },
+          { id: 'spam', iconName: 'slash', label: 'Spam', onPress: () => submitReport('Spam') },
+          { id: 'other', iconName: 'more-horizontal', label: 'Other', onPress: () => submitReport('Other') },
+        ]}
+      />
+
+      {/* Tip burst animations — visible to all peers */}
       {status === 'in-room' && !streamEnded && (
         <View style={styles.tipBurstArea} pointerEvents="none">
           {tipEvents.map((t) => (

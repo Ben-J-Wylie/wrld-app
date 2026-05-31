@@ -46,4 +46,13 @@ export const streamsApi = {
   end: async (id: string): Promise<void> => {
     await apiClient.delete(`/streams/${id}`)
   },
+
+  report: async (id: string, reason: string): Promise<string> => {
+    const res = await apiClient.post<{ ok: boolean; reportId: string }>(`/streams/${id}/report`, { reason })
+    return res.data.reportId
+  },
+
+  uploadSnapshot: async (reportId: string, b64: string): Promise<void> => {
+    await apiClient.post(`/reports/${reportId}/snapshot`, { snapshot: b64 })
+  },
 }

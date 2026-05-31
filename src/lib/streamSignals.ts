@@ -1,6 +1,7 @@
 export type StreamSignal =
   | { kind: 'disconnected'; broadcasterHandle: string | null }
   | { kind: 'ended' }
+  | { kind: 'kicked' }
 
 let _signal: StreamSignal | null = null
 
@@ -10,6 +11,10 @@ export function signalStreamDisconnected(broadcasterHandle: string | null) {
 
 export function signalStreamEnded() {
   _signal = { kind: 'ended' }
+}
+
+export function signalKicked() {
+  _signal = { kind: 'kicked' }
 }
 
 export function consumeStreamSignal(): StreamSignal | null {

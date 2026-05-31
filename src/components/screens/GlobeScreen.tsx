@@ -53,6 +53,7 @@ Mapbox.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '')
 type BannerData =
   | { kind: 'disconnected'; broadcasterHandle: string | null }
   | { kind: 'ended' }
+  | { kind: 'kicked' }
   | { kind: 'resumed'; stream: Stream; broadcasterHandle: string | null }
 
 export function GlobeScreen() {
@@ -82,14 +83,16 @@ export function GlobeScreen() {
       setBanner(
         signal.kind === 'ended'
           ? { kind: 'ended' }
-          : { kind: 'disconnected', broadcasterHandle: signal.broadcasterHandle },
+          : signal.kind === 'kicked'
+            ? { kind: 'kicked' }
+            : { kind: 'disconnected', broadcasterHandle: signal.broadcasterHandle },
       )
     }, []),
   )
 
   // Disconnected → resumed polling. The screen owns the signal → variant
   // transition; the feature owns the per-variant visual + the safety-net
-  // auto-dismiss timer (5min on disconnected, 8s on ended).
+  // auto-dismiss timer (5min on disconnected, 8s on ended, 8s on kicked).
   useEffect(() => {
     if (!banner || banner.kind !== 'disconnected') return
     const { broadcasterHandle } = banner

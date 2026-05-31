@@ -9,6 +9,9 @@
 //   ended        — muted card, "stream has ended". Auto-dismisses
 //                  after `autoDismissMs` (default 8000) unless 0.
 //   resumed      — accent-tinted, tappable. `onTap` rejoins.
+//   kicked       — muted card, "you have been removed from this
+//                  stream". 8s auto-dismiss. Added 2026-05-31 to
+//                  surface Aaron's Phase 5/22 admin-kick handling.
 //
 // **Where the state machine lives.** The DESIGN.md proposal asked for
 // the feature to own polling + signal consumption. We deliberately
@@ -27,7 +30,7 @@ import { Text } from '@/components/primitives/Text'
 import { Icon } from '@/components/primitives/Icon'
 import { theme } from '@/tokens/theme'
 
-export type StreamStateVariant = 'disconnected' | 'ended' | 'resumed'
+export type StreamStateVariant = 'disconnected' | 'ended' | 'resumed' | 'kicked'
 
 type Props = {
   variant: StreamStateVariant
@@ -41,6 +44,7 @@ const DEFAULT_DISMISS_MS: Record<StreamStateVariant, number | undefined> = {
   ended: 8000,
   disconnected: 5 * 60 * 1000,
   resumed: undefined,
+  kicked: 8000,
 }
 
 export function StreamStateBanner({
@@ -89,6 +93,11 @@ export function StreamStateBanner({
         {variant === 'resumed' && (
           <Text variant="bodyEmphasized" color={theme.colors.accent.default} numberOfLines={1}>
             Stream resumed — tap to rejoin
+          </Text>
+        )}
+        {variant === 'kicked' && (
+          <Text variant="body" color={theme.colors.text.primary} numberOfLines={1}>
+            You have been removed from this stream
           </Text>
         )}
       </View>

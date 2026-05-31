@@ -725,6 +725,88 @@ Three exit paths, all funnelling through a single `exitToGlobe(kind)` function:
 
 ---
 
+## Updates — May 2026 (Phase 5/22: reports + kick handling)
+
+### Report submission (`src/api/streams.ts`, `src/components/screens/StreamScreen.tsx`)
+
+`streamsApi.report(streamId, reason)` calls `POST /streams/:id/report`.
+
+In `StreamScreen` (viewer mode), a **⚑ flag button** appears next to the Tip button. Tapping it:
+- Shows an `AuthModal` if not signed in
+- Otherwise opens a bottom-sheet (`reportVisible` state) with four preset reasons
+- On selection, calls `streamsApi.report()` → `Alert` confirmation
+
+### Kicked by admin (`src/hooks/useSignaling.ts`, `src/lib/streamSignals.ts`, `src/components/screens/GlobeScreen.tsx`)
+
+- WS close code **4003** in `useSignaling.ts` → calls `signalKicked()` (new signal kind `'kicked'`)
+- `GlobeScreen` handles `'kicked'` signal → banner "You have been removed from this stream", auto-dismisses after 8s (same timer as `'ended'`)
+
+---
+
+## Updates — May 2026 (Phase 17: suspension handling)
+
+### `User` type (`src/types/index.ts`)
+
+`suspendedUntil: string | null` and `suspendedReason: string | null` added. Both are returned by `GET /auth/me` since they're columns on the Prisma `User` row.
+
+### Suspension banner (`app/(app)/_layout.tsx`)
+
+`SuspensionBanner` component renders an amber stripe below the status bar on all main screens when `wrldUser.suspendedUntil` is in the future. Shows `"Your account is suspended until [date]"` for temporary suspensions, `"permanently suspended"` for permanent (year ≥ 2090). Reads directly from the Zustand auth store — no extra fetch.
+
+### `/auth/me` polling (`app/_layout.tsx`)
+
+`RootNavigator` polls `GET /auth/me` every 30s while signed in, updating the Zustand store. This keeps suspension status, tier, and balances current in near-real-time. Banner appears/clears within 30s of an admin action — no user interaction required.
+
+### In-stream suspension alerts (`src/hooks/useSignaling.ts`, `src/components/screens/StreamScreen.tsx`)
+
+`useSignaling` listens for `{ type: 'error', message: '...suspended...' }` from the mediasoup WS (sent by the server when a suspended user tries to go live, chat, or react) and sets `suspensionError` state. `StreamScreen` watches `suspensionError` via `useEffect` and shows `Alert.alert`. This is the single source of truth for in-stream suspension alerts — no stale local checks.
+
+**What's blocked for suspended users:** go live, chat, emoji reactions.
+**What still works:** tipping (mediasoup authenticates them, internal tip route has no suspension check), viewing streams (anonymous, no auth required).
+
+---
+
+## Known issue: push token not unregistered on sign-out
+
+**Filed May 2026. Fixed May 2026.**
+
+`handleSignOut` in `SettingsScreen.tsx` calls `clearWrldUser()`, clears the React Query cache, then calls Clerk `signOut()`. It does NOT call `usersApi.unregisterPushToken()` first. This means the `PushSubscription` row on the backend stays associated with the device even after sign-out.
+
+**Consequence:** if a user signs out of account A and signs in as account B on the same device, account A's `PushSubscription` row still points to this device's token. Account A will continue receiving push notifications on a device that is now logged in as account B. The token is only cleaned up when account B calls `registerPushToken`, which upserts by token and reassigns the row to account B's userId. Until that upsert fires, there is a window where account A leaks to the device.
+
+**Multi-account scenario (worse):** if a device is used to test multiple accounts (common for Ben and Aaron during development), old accounts accumulate stale push subscriptions that never expire.
+
+**Fix (not yet applied):**
+
+In `handleSignOut` (`SettingsScreen.tsx`), before calling `signOut()`:
+1. Call `Notifications.getExpoPushTokenAsync({ projectId: '...' })` to retrieve the current token (the token is not persisted in the Zustand store or AsyncStorage — the easiest fix is to re-fetch it at sign-out time).
+2. Call `usersApi.unregisterPushToken(tokenData.data)`.
+3. Wrap in try/catch so a failed unregister doesn't block sign-out.
+
+```ts
+async function handleSignOut() {
+  // Unregister push token before clearing session
+  try {
+    const tokenData = await Notifications.getExpoPushTokenAsync({
+      projectId: '35ab0828-46ac-477f-8ace-453105f6601e',
+    })
+    await usersApi.unregisterPushToken(tokenData.data)
+  } catch {
+    // Don't block sign-out if this fails
+  }
+  clearWrldUser()
+  qc.clear()
+  router.navigate('/(app)/globe')
+  try {
+    await signOut()
+  } catch {}
+}
+```
+
+Alternatively, store the token in the Zustand auth store when `useRegisterPushToken` fetches it, so sign-out doesn't need to re-fetch.
+
+---
+
 ## Updates — May 2026 (Phase 11: push notifications)
 
 ### Push delivery: Expo Push
@@ -962,3 +1044,44 @@ the current tier name + "View all plans" and navigates to `/(app)/subscription`.
 `tier: 'free' | 'plus' | 'pro'` added. Populated by `GET /auth/me` — the backend
 now includes `tier` on every user response since it's a column on the `User` model.
 The auth store (`wrldUser`) carries it without any additional fetch.
+
+---
+
+## Updates — May 2026 (Report snapshots: react-native-view-shot)
+
+### New dependencies
+
+- `react-native-view-shot@4.0.3` — captures a React Native view as a JPEG/PNG
+- `expo-screen-orientation@~9.0.9` — device orientation detection
+
+Both are native modules. **An EAS dev client rebuild is required before they work on device:**
+
+```bash
+eas build --profile development --platform all
+```
+
+### Report snapshot flow (`src/components/screens/StreamScreen.tsx`)
+
+When a viewer taps ⚑ (Report):
+
+1. `captureScreen({ format: 'jpg', quality: 0.9, result: 'base64', handleGLSurfaceViewOnAndroid: true })` fires immediately — before the reason sheet appears
+2. The base64 string is stashed in `pendingSnapshotUri` ref
+3. The reason sheet opens
+
+After the viewer selects a reason:
+
+1. `streamsApi.report(streamId, reason)` → `POST /streams/:id/report` returns `reportId`
+2. `streamsApi.uploadSnapshot(reportId, b64)` posts the base64 to `POST /reports/:id/snapshot` in the background (fire-and-forget, non-fatal if it fails)
+
+**Why `captureScreen` not `captureRef`:** RTCView renders on an Android SurfaceView — a hardware GPU surface outside the normal view hierarchy. `captureRef` on any wrapping View captures only the UI layer, leaving the video black. `captureScreen` with `handleGLSurfaceViewOnAndroid: true` uses `PixelCopy.request()` on Android (API 26+) which reads directly from the GPU framebuffer. On iOS, UIKit composites everything before the screenshot so it works without special flags.
+
+**Why `result: 'base64'` not a file URI:** Axios in React Native fails silently when sending `FormData` with file URIs — the XHR layer cannot read the file before the request serialises. Capturing as base64 and posting as plain JSON bypasses multipart entirely and works reliably.
+
+### `streamsApi` changes (`src/api/streams.ts`)
+
+- `report(id, reason)` now returns `Promise<string>` (the `reportId`) instead of `Promise<void>`
+- New `uploadSnapshot(reportId, b64)` — POSTs `{ snapshot: base64String }` as JSON to `POST /reports/:id/snapshot`
+
+### `getUserMedia` resolution (`src/hooks/useMediasoup.ts`)
+
+Added `width: { ideal: 1280 }, height: { ideal: 720 }` constraints to the broadcaster camera `getUserMedia` call. React Native WebRTC negotiates up to 1280×720 on supported devices (previously defaulted to ~640×352). No EAS rebuild required — pure JS.

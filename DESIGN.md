@@ -1601,7 +1601,7 @@ this feature is the lift target either way.
 
 - **Tier:** feature (composes Pressable + Text + Icon + ActivityIndicator)
 - **Location:** `src/components/features/stream/StreamStateBanner.tsx`
-- **Variants:** `disconnected` (muted card, spinner + "waiting to reconnect" copy), `ended` (muted card; auto-dismisses after 8s by default), `resumed` (accent-tinted, tappable to rejoin via `onTap`)
+- **Variants:** `disconnected` (muted card, spinner + "waiting to reconnect" copy), `ended` (muted card; auto-dismisses after 8s by default), `resumed` (accent-tinted, tappable to rejoin via `onTap`), `kicked` (muted card; "You have been removed from this stream"; auto-dismisses after 8s — added 2026-05-31 in the main-merge integration for Aaron's Phase 5/22 admin-kick handling)
 - **Sizes:** md
 - **States:** visible (the only render state); auto-dismiss timer per variant (defaults: ended 8s, disconnected 5min cap, resumed never)
 - **Used in:** populated in 12.6 (GlobeScreen replaces inline banner)
