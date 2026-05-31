@@ -24,6 +24,7 @@ import { Pressable } from '@/components/primitives/Pressable'
 import { Text } from '@/components/primitives/Text'
 import { Icon } from '@/components/primitives/Icon'
 import { LivePill } from './LivePill'
+import { VideoPreviewTile } from './VideoPreviewTile'
 import { theme } from '@/tokens/theme'
 
 type Variant = 'trending' | 'preview' | 'compact'
@@ -140,6 +141,8 @@ const trendingStyles = StyleSheet.create({
 })
 
 // ─── Preview ─────────────────────────────────────────────────────────────────
+// Thin wrapper around VideoPreviewTile so the Viewer Sheet preview shares
+// overlay/sizing logic with clip heros and replay thumbnails.
 
 function PreviewCard({
   thumbnailUrl,
@@ -151,92 +154,17 @@ function PreviewCard({
   style,
 }: Props) {
   return (
-    <Pressable
-      variant="subtle"
+    <VideoPreviewTile
+      variant={isLive ? 'live' : 'play'}
+      thumbnailUrl={thumbnailUrl}
+      viewerCount={viewerCount}
+      channel={channel}
       onPress={onPress}
-      accessibilityRole="button"
       accessibilityLabel={title}
-      style={[previewStyles.card, style]}
-    >
-      <Thumbnail uri={thumbnailUrl ?? null} style={previewStyles.thumb} />
-      {isLive && (
-        <View style={previewStyles.liveOverlay}>
-          <LivePill />
-        </View>
-      )}
-      <View style={previewStyles.viewerOverlay}>
-        <Icon name="eye" size="sm" color={theme.colors.text.inverse} />
-        <Text variant="monoCaption" color={theme.colors.text.inverse}>
-          {formatCount(viewerCount)}
-        </Text>
-      </View>
-      {channel && (
-        <View style={previewStyles.channelOverlay}>
-          <Text variant="monoLabel" color={theme.colors.text.inverse}>
-            {channel}
-          </Text>
-        </View>
-      )}
-      <View style={previewStyles.playOverlay}>
-        <View style={previewStyles.playBtn}>
-          <Icon name="play" size="lg" color={theme.colors.text.inverse} />
-        </View>
-      </View>
-    </Pressable>
+      style={style}
+    />
   )
 }
-
-const previewStyles = StyleSheet.create({
-  card: {
-    aspectRatio: 16 / 10,
-    borderRadius: theme.radius.md,
-    overflow: 'hidden',
-    backgroundColor: theme.colors.bg.elevated,
-    borderWidth: 1,
-    borderColor: theme.colors.border.subtle,
-    alignSelf: 'stretch',
-  },
-  thumb: {
-    width: '100%',
-    height: '100%',
-  },
-  liveOverlay: {
-    position: 'absolute',
-    top: theme.spacing.md,
-    left: theme.spacing.md,
-  },
-  viewerOverlay: {
-    position: 'absolute',
-    top: theme.spacing.md,
-    right: theme.spacing.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: 4,
-    borderRadius: theme.radius.md,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-  },
-  channelOverlay: {
-    position: 'absolute',
-    bottom: theme.spacing.md,
-    left: theme.spacing.md,
-  },
-  playOverlay: {
-    position: 'absolute',
-    inset: 0 as any,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  playBtn: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-})
 
 // ─── Compact ─────────────────────────────────────────────────────────────────
 

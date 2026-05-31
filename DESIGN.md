@@ -1300,13 +1300,13 @@ keyboard behavior.
 
 - **Tier:** feature (composes Pressable + Image + Text + Icon + LivePill)
 - **Location:** `src/components/features/stream/StreamCard.tsx`
-- **Variants:** `trending` (158-wide vertical card, 88-tall thumb on top), `preview` (16:10 hero with play button), `compact` (full-width row with 72×48 thumb)
+- **Variants:** `trending` (158-wide vertical card, 88-tall thumb on top), `preview` (16:10 hero — thin wrapper around `VideoPreviewTile.live`/`play` since 2026-05-31), `compact` (full-width row with 72×48 thumb)
 - **Sizes:** controlled by variant
 - **States:** default, pressed (Pressable variant `subtle` — scale 0.98)
 - **Used in:** populated in 12.6 (replaces `NearbyStreamThumbnail` + `NearbyStreamRow`)
 - **Tweak impact:** Globe trending rail, Viewer Sheet preview, search results, future feed surfaces
-- **Shipped:** 2026-05-30 (sub-phase 12.5 — second feature)
-- **Last reviewed:** 2026-05-30
+- **Shipped:** 2026-05-30 (sub-phase 12.5 — second feature). Refactored 2026-05-31 to compose `VideoPreviewTile` for the preview variant.
+- **Last reviewed:** 2026-05-31
 
 **Mock says:** Thumbnail with overlay metadata (LivePill top-left,
 viewer count overlay, channel label corner). Title + city/channel meta
@@ -1327,6 +1327,13 @@ API: consumer-flat props, not a `Stream` object — keeps the feature
 domain-blind. Consumer screens (`GlobeScreen`, `SearchScreen`, future
 trending rail) read from their query/store and pass `thumbnailUrl`,
 `title`, `viewerCount`, `channel`, `city`, `isLive`, `onPress`.
+
+**Composition note (2026-05-31):** `preview` no longer carries its own
+overlay code — it now delegates entirely to `VideoPreviewTile` (passing
+through `thumbnailUrl`, `viewerCount`, `channel`, `onPress`, picking
+variant `live`/`play` from `isLive`). Previously the overlay logic was
+duplicated; consolidating into VideoPreviewTile keeps Clip Edit hero
+and future replay thumbnails sharing the same tile.
 
 **Gap / proposal:** None — shipped. `NearbyStreamThumbnail` and
 `NearbyStreamRow` retire in 12.6 when callers (`GlobeScreen`,
@@ -1408,12 +1415,12 @@ small caps. Value is brighter, monospace.
 
 ##### `VideoPreviewTile`
 
-- **Tier:** feature
+- **Tier:** feature (composes Pressable + Image + Text + Icon + LivePill)
 - **Location:** `src/components/features/stream/VideoPreviewTile.tsx`
-- **Variants:** `play` (with center play button), `live` (no play button, LivePill instead)
-- **Sizes:** controlled by aspect (16:10 default)
-- **States:** default, pressed
-- **Used in:** populated in 12.6
+- **Variants:** `live` (LivePill top-left, no play button — tappable to join live), `play` (centered play button, no LivePill — for clip / replay heros)
+- **Sizes:** controlled by `aspectRatio` prop (default 16/10)
+- **States:** default, pressed (via Pressable variant=subtle when onPress provided)
+- **Used in:** `StreamCard.preview` (composed, not duplicated); Clip Edit hero + future replay thumbnails next
 - **Tweak impact:** Viewer Sheet preview, Clip Edit preview hero, future replay thumbnails
 
 **Mock says:** Aspect-ratio container with simulated camera/scene
@@ -1421,11 +1428,16 @@ content. Grain texture overlay. Overlay metadata pills (LIVE top-left,
 viewer-count top-right, channel-label bottom-left). Optional center play
 button (semi-transparent circle + play icon).
 
-**Code does:** None as feature; Phase 7's `RTCView` is the real
-broadcast surface (not a preview).
+**Code does:** Shipped in 12.5. Consumer-flat props (`thumbnailUrl`,
+`viewerCount`, `channel`, `aspectRatio`, `onPress`, `accessibilityLabel`)
+keep the feature domain-blind. Placeholder fallback when no
+`thumbnailUrl`: `bg.panel` background + `video` icon. `StreamCard.preview`
+now thin-wraps this tile (passes through `thumbnailUrl`/`viewerCount`/
+`channel`/`onPress` + chooses variant by `isLive`), eliminating the
+duplicated overlay code that previously lived inside StreamCard.
 
-**Gap / proposal:** New feature for paused / preview / thumbnail states.
-Real-live broadcast uses Phase 7 `RTCView` directly (not VideoPreviewTile).
+**Note:** Real-live broadcast uses Phase 7 `RTCView` directly — this tile
+is for paused / preview / thumbnail states only.
 
 ---
 

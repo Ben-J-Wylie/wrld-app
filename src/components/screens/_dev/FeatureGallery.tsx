@@ -11,6 +11,7 @@ import { ScreenScroll } from '@/components/sections/ScreenScroll'
 import { Text } from '@/components/primitives/Text'
 import { LivePill } from '@/components/features/stream/LivePill'
 import { StreamCard } from '@/components/features/stream/StreamCard'
+import { VideoPreviewTile } from '@/components/features/stream/VideoPreviewTile'
 import { BroadcasterRow } from '@/components/features/user/BroadcasterRow'
 import { theme } from '@/tokens/theme'
 
@@ -120,6 +121,42 @@ export function FeatureGallery() {
             city="BROOKLYN"
             channel="CH 12"
             onPress={() => {}}
+          />
+        </Row>
+      </Section>
+
+      <Section title="VideoPreviewTile">
+        <Row label="live (default 16:10)">
+          <VideoPreviewTile
+            thumbnailUrl="https://picsum.photos/seed/wrldtile1/640/400"
+            viewerCount={1400}
+            channel="CH 12 · STREET"
+            onPress={() => {}}
+          />
+        </Row>
+        <Row label="play (clip hero)">
+          <VideoPreviewTile
+            variant="play"
+            thumbnailUrl="https://picsum.photos/seed/wrldtile2/640/400"
+            channel="CH 08 · NIGHT"
+            onPress={() => {}}
+          />
+        </Row>
+        <Row label="play, no overlays">
+          <VideoPreviewTile
+            variant="play"
+            thumbnailUrl="https://picsum.photos/seed/wrldtile3/640/400"
+          />
+        </Row>
+        <Row label="no thumbnail">
+          <VideoPreviewTile viewerCount={42} channel="CH 99" />
+        </Row>
+        <Row label="16:9 aspect override">
+          <VideoPreviewTile
+            variant="play"
+            thumbnailUrl="https://picsum.photos/seed/wrldtile4/640/360"
+            aspectRatio={16 / 9}
+            viewerCount={250}
           />
         </Row>
       </Section>
