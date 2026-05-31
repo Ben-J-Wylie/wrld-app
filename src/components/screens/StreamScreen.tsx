@@ -362,7 +362,7 @@ export function StreamScreen() {
   async function handleReportPress() {
     if (!isSignedIn) { setAuthModalVisible(true); return }
     try {
-      const b64 = await captureScreen({ format: 'jpg', quality: 0.9, result: 'base64' })
+      const b64 = await captureScreen({ format: 'jpg', quality: 0.9, result: 'base64', handleGLSurfaceViewOnAndroid: true })
       console.log('[report] captureScreen ok, b64 length:', b64?.length)
       pendingSnapshotUri.current = b64
     } catch (e) {
