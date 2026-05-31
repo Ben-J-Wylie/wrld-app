@@ -16,14 +16,11 @@
 // keyboard animation in earlier rounds and caused the gallery stutter
 // (see 2026-05-30 decision-log entries).
 //
-// **SafeAreaView edges: top-only.** The bottom safe-area inset on iOS
-// shrinks when the keyboard appears (the keyboard takes precedence
-// over the home indicator zone). The default 4-edge `SafeAreaView`
-// re-renders with reduced bottom padding on every keyboard event,
-// fighting `KeyboardAwareScrollView`'s own bottom-inset management.
-// Limiting `SafeAreaView` to `['top']` (and letting KAS own the
-// bottom) eliminates the race. Left/right insets are typically zero
-// on iPhones; iPads get them from the parent SafeAreaProvider.
+// SafeAreaView uses default 4-edge mode (top/bottom/left/right). An
+// earlier attempt to limit to `['top']` (to avoid the bottom-inset
+// race with KAS) broke other screens (e.g. MeScreen failed to render),
+// so reverted. The bottom-inset race is real but the cure was worse
+// than the disease.
 //
 // Requires `<KeyboardProvider>` mounted at the root layout (already
 // wired in app/_layout.tsx).
@@ -50,7 +47,7 @@ export function ScreenScroll({
   keyboardDismissMode,
 }: Props) {
   return (
-    <SafeAreaView style={[styles.root, style]} edges={['top']}>
+    <SafeAreaView style={[styles.root, style]}>
       <KeyboardAwareScrollView
         contentContainerStyle={contentContainerStyle}
         keyboardShouldPersistTaps="handled"
