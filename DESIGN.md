@@ -1462,26 +1462,40 @@ is for paused / preview / thumbnail states only.
 
 ##### `ReactionRail`
 
-- **Tier:** feature (composes IconButton + count-badge Pill + animated FloatingHearts overlay)
+- **Tier:** feature (composes Pressable + Text + Animated burst overlay + count-badge chip)
 - **Location:** `src/components/features/stream/ReactionRail.tsx`
 - **Variants:** `default`
 - **Sizes:** md (44×44 per reaction button)
-- **States:** default, pressed (per button), on (per button — colored)
-- **Used in:** populated in 12.6
+- **States:** default (glass backdrop, subtle border), pressed (scale 1.15), on (accent border + accent surface), with optional count badge
+- **Used in:** populated in 12.6 (replaces Phase-10 `ReactionLayer` once stream view migrates)
 - **Tweak impact:** Broadcast Live HUD, any future live reaction surface
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
+- **Last reviewed:** 2026-05-31
 
 **Mock says:** Vertical column of round reaction buttons (44×44, glass
 backdrop). Each button has a small count-badge in the corner. On press,
 emits a FloatingHearts animation that drifts upward (Periscope-style).
 Active reaction state: live-tinted border + icon.
 
-**Code does:** `ReactionLayer` in `features/stream/` (Phase 10) handles
-hearts. No rail UI — current code has inline reaction buttons in
-stream view. Refactor merges into one feature.
+**Code does (shipped):** Consumer-driven reactions list (`{ kind,
+emoji, count?, on? }[]`) — no hardcoded set, so any future
+reaction-set works without code changes here. Buttons render emoji
+directly via RN `<Text>` (Periscope-style); the `burst` queue is owned
+by the screen, this feature renders each `BurstEntry` as a
+`FloatingReaction` (translateY -160 over 2.2s, opacity fades out at
+1.4s) and dismisses via `onBurstDismiss(id)`. Unauthenticated mode
+routes presses to `onAuthRequest` so the screen can present the
+Phase-10 AuthModal at the point of attempt.
 
-**Gap / proposal:** New combined feature replacing ReactionLayer +
-inline buttons. Composes the icon column + the floating animation overlay
-as one cohesive surface.
+**API:** consumer-flat — `reactions`, `burst`, `authenticated?`,
+`onReact(kind)`, `onAuthRequest?`, `onBurstDismiss(id)`.
+
+**Composition note:** DESIGN.md proposed `IconButton + count-badge
+Pill`, but IconButton is Feather-glyph-only today and reactions are
+emoji. The rail builds its own 44-round button; the count badge is an
+inline chip with `monoCaption` text. If reactions ever migrate to
+bespoke icons (`src/components/primitives/icons/`), the rail can swap
+to IconButton without API changes.
 
 ---
 
@@ -1540,33 +1554,39 @@ this feature is the lift target either way.
 
 ##### `StreamStateBanner`
 
-- **Tier:** feature (composes Card + Icon + Spinner + Text + dismiss)
+- **Tier:** feature (composes Pressable + Text + Icon + ActivityIndicator)
 - **Location:** `src/components/features/stream/StreamStateBanner.tsx`
-- **Variants:** `disconnected` (spinner + waiting-to-reconnect message; polls), `ended` (auto-dismisses after 8s), `resumed` (accent-tinted, tappable to rejoin)
+- **Variants:** `disconnected` (muted card, spinner + "waiting to reconnect" copy), `ended` (muted card; auto-dismisses after 8s by default), `resumed` (accent-tinted, tappable to rejoin via `onTap`)
 - **Sizes:** md
-- **States:** entering, visible, dismissing
-- **Used in:** populated in 12.6
+- **States:** visible (the only render state); auto-dismiss timer per variant (defaults: ended 8s, disconnected 5min cap, resumed never)
+- **Used in:** populated in 12.6 (GlobeScreen replaces inline banner)
 - **Tweak impact:** GlobeScreen post-stream-exit notifications
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
+- **Last reviewed:** 2026-05-31
 
 **Mock says (C6 = extract):** Top-of-globe banner that surfaces
 stream-lifecycle state to viewers after they exit a stream. Three
 variants cover the lifecycle: broadcaster reconnecting, broadcaster
 gone, broadcaster back online.
 
-**Code does:** Inline composition in `GlobeScreen.tsx` (Phase 9) with
-local state for the banner, polling timer for reconnection, and
-auto-dismiss timer for ended. Real implementation — extraction is a
-straight lift.
+**Code does (shipped):** Presentational layer + per-variant auto-dismiss
+timer (configurable via `autoDismissMs` — pass 0 to disable). The
+`resumed` variant uses `accent.surface` background + `accent.default`
+border; the others use the muted `bg.elevated` card treatment. A
+dismiss X is always present.
 
-**Gap / proposal:** Extract as a feature managing the small state
-machine internally. Globe consumes via `<StreamStateBanner signal={...} />`
-that derives the variant from the `StreamSignal` from
-`src/lib/streamSignals.ts`. The 10s polling for the `resumed` transition
-lives inside the feature (still uses `streamsApi.near`).
+**API:** `variant`, `onDismiss`, `onTap?` (resumed), `autoDismissMs?`.
+
+**Where the state machine lives.** DESIGN.md originally proposed the
+feature also own polling + `consumeStreamSignal()` consumption. We
+kept those at the screen level (GlobeScreen reads
+`consumeStreamSignal()` in a focus effect and polls `streamsApi.near`)
+so this feature stays domain-blind — no API client or signal-store
+import. The feature owns timers + visuals; the screen owns transitions.
 **Complexity-bounding exception to Section 0.5:** one caller today
-(`GlobeScreen`), but the banner is a small state machine whose tracking,
-polling, transition, and dismiss logic earns its own feature file even
-before a second caller arrives.
+(`GlobeScreen`), but the banner's three-variant visual contract + the
+auto-dismiss timer earns its own feature file even before a second
+caller arrives.
 
 ---
 

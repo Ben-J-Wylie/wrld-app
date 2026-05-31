@@ -16,6 +16,8 @@ import { CoordHUD } from '@/components/features/stream/CoordHUD'
 import { StreamTile } from '@/components/features/stream/StreamTile'
 import { ChatMessage } from '@/components/features/chat/ChatMessage'
 import { ChatComposer } from '@/components/features/chat/ChatComposer'
+import { StreamStateBanner } from '@/components/features/stream/StreamStateBanner'
+import { ReactionRail } from '@/components/features/stream/ReactionRail'
 import { BroadcasterRow } from '@/components/features/user/BroadcasterRow'
 import { useState } from 'react'
 import { theme } from '@/tokens/theme'
@@ -274,6 +276,56 @@ export function FeatureGallery() {
         </Row>
       </Section>
 
+      <Section title="StreamStateBanner">
+        <Row label="disconnected">
+          <StreamStateBanner variant="disconnected" onDismiss={() => {}} />
+        </Row>
+        <Row label="ended (auto-dismiss disabled here)">
+          <StreamStateBanner variant="ended" autoDismissMs={0} onDismiss={() => {}} />
+        </Row>
+        <Row label="resumed (tappable)">
+          <StreamStateBanner variant="resumed" onTap={() => {}} onDismiss={() => {}} />
+        </Row>
+      </Section>
+
+      <Section title="ReactionRail">
+        <Row label="default (over video)">
+          <View style={styles.videoBg}>
+            <ReactionRail
+              reactions={[
+                { kind: 'heart', emoji: '❤️', count: 42 },
+                { kind: 'fire', emoji: '🔥', count: 18, on: true },
+                { kind: 'clap', emoji: '👏', count: 7 },
+                { kind: 'wow', emoji: '😮' },
+              ]}
+              burst={[]}
+              onReact={() => {}}
+              onBurstDismiss={() => {}}
+            />
+          </View>
+        </Row>
+        <Row label="unauthenticated">
+          <View style={styles.videoBg}>
+            <ReactionRail
+              reactions={[
+                { kind: 'heart', emoji: '❤️' },
+                { kind: 'fire', emoji: '🔥' },
+                { kind: 'clap', emoji: '👏' },
+                { kind: 'wow', emoji: '😮' },
+              ]}
+              burst={[]}
+              authenticated={false}
+              onReact={() => {}}
+              onAuthRequest={() => {}}
+              onBurstDismiss={() => {}}
+            />
+          </View>
+        </Row>
+        <Row label="with burst (live)">
+          <ReactionRailBurstDemo />
+        </Row>
+      </Section>
+
       <Section title="BroadcasterRow">
         <Row label="default">
           <BroadcasterRow
@@ -341,6 +393,31 @@ function GalleryRow({ label, children }: { label: string; children: React.ReactN
 
 // Local alias so the markup reads `<Row>` like the primitive gallery does
 const Row = GalleryRow
+
+function ReactionRailBurstDemo() {
+  const [burst, setBurst] = useState<{ id: number; kind: string }[]>([])
+  function fire(kind: string) {
+    setBurst((b) => [...b, { id: Date.now() + Math.random(), kind }])
+  }
+  function dismiss(id: number) {
+    setBurst((b) => b.filter((e) => e.id !== id))
+  }
+  return (
+    <View style={styles.videoBg}>
+      <ReactionRail
+        reactions={[
+          { kind: 'heart', emoji: '❤️', count: burst.filter((b) => b.kind === 'heart').length },
+          { kind: 'fire', emoji: '🔥', count: burst.filter((b) => b.kind === 'fire').length },
+          { kind: 'clap', emoji: '👏', count: burst.filter((b) => b.kind === 'clap').length },
+          { kind: 'wow', emoji: '😮', count: burst.filter((b) => b.kind === 'wow').length },
+        ]}
+        burst={burst}
+        onReact={fire}
+        onBurstDismiss={dismiss}
+      />
+    </View>
+  )
+}
 
 function ChatComposerDemo({
   initial,
