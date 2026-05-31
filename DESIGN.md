@@ -1783,23 +1783,24 @@ subtle ring on `bg.elevated`.
 
 ##### `ContextBanner`
 
-- **Tier:** feature (composes Card + Icon + Text)
+- **Tier:** feature (composes Icon + Text)
 - **Location:** `src/components/features/onboarding/ContextBanner.tsx`
-- **Variants:** `accent` (default, tinted accent), `warn` (warn-tinted, for stakes-raising context)
+- **Variants:** `accent` (default — accent.surface tint), `warn` (amber tint — computed inline from palette.amber400, same hex pattern as ToastBanner)
 - **Sizes:** md
 - **States:** default
 - **Used in:** populated in 12.6
 - **Tweak impact:** every wizard top — Viewer Onboarding, Creator Onboarding, gated-action flows
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
 
 **Mock says:** Top-of-wizard banner that acknowledges the user's entry
 context. E.g. "SIGN UP TO CHAT IN @KAI.DC'S STREAM" or "BECOME A CREATOR
 · 10 STEPS · ~3 MIN". Accent-tinted glass, mono-caps text, optional
 leading icon. Warn variant for higher-stakes flows.
 
-**Code does:** None.
-
-**Gap / proposal:** Feature accepting `{ icon, label, tone }`. Sits
-above the wizard's Head/Body/CTA scaffolding.
+**Code does (shipped):** Tinted row — optional leading icon + mono-caps
+label in the variant ink. Two-line truncation on the label. The warn
+tint uses the same inline rgba values from `palette.amber400` as
+ToastBanner (still no `warn.surface` token).
 
 ---
 
@@ -1873,66 +1874,66 @@ consumer's responsibility (or a separate exported util in
 
 ##### `RulesChecklist`
 
-- **Tier:** feature
+- **Tier:** feature (composes Icon + Text)
 - **Location:** `src/components/features/onboarding/RulesChecklist.tsx`
 - **Variants:** `default`
 - **Sizes:** md
-- **States:** default
-- **Used in:** populated in 12.6
+- **States:** per-rule — `met` (accent dot + check, primary label), `bad` (accent dot + x, accent label — single-accent rule), `neutral` (outline dot, muted label)
+- **Used in:** populated in 12.6 (handle + password rules)
 - **Tweak impact:** Handle picker rule visualization, password rule guidance
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
 
 **Mock says:** Vertical list of rule rows, each with a small status dot
 + label. **Met** = accent dot with check icon, ink label. **Bad** = live
 dot with X icon, live label. **Neutral** (not-yet-evaluated) = empty
 line dot, dim label. Compact mono labels in tracked caps.
 
-**Code does:** None.
-
-**Gap / proposal:** New feature accepting `rules: { label, status }[]`
-where status is `'met' | 'bad' | 'neutral'`. Used universally for any
-multi-rule validation visualization.
+**Code does (shipped):** Stack of rows — 18-circle status dot +
+`monoLabel`. Met and bad share the accent fill; the inner glyph
+distinguishes them (single-accent rule). Neutral renders as an outline
+dot only.
 
 ---
 
 ##### `SuggestionChipRow`
 
-- **Tier:** feature (composes Chip)
+- **Tier:** feature (composes Pressable + Text)
 - **Location:** `src/components/features/onboarding/SuggestionChipRow.tsx`
 - **Variants:** `default` (handle suggestions with @ prefix)
 - **Sizes:** md
-- **States:** default
-- **Used in:** populated in 12.6
+- **States:** default, pressed (opacity 0.7)
+- **Used in:** populated in 12.6 (handle picker + future tag suggestions)
 - **Tweak impact:** Handle picker (Onboarding + Change Handle), future tag-suggestion surfaces
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
 
 **Mock says:** Horizontal-wrapping row of suggestion chips. Each chip
 has an accent @ prefix + the suggested handle. Tap = fills the Input
 above.
 
-**Code does:** None.
-
-**Gap / proposal:** New feature accepting `suggestions: string[]` +
-`onPick`. Used wherever suggestion UI exists.
+**Code does (shipped):** `flex-wrap` row of pressable chips. Each chip
+combines an accent-colored `@` with the suggestion text. Tap calls
+`onPick(value)`.
 
 ---
 
 ##### `ReassuranceCard`
 
-- **Tier:** feature (composes Card + Icon + Text)
+- **Tier:** feature (composes Icon + Text)
 - **Location:** `src/components/features/onboarding/ReassuranceCard.tsx`
 - **Variants:** `default`
 - **Sizes:** md
 - **States:** default
 - **Used in:** populated in 12.6
 - **Tweak impact:** Handle wizard, Change Handle, Permission flows, any place a small reassuring info card belongs
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
 
 **Mock says:** Small card with icon-circle on left + body text on right.
 Reassuring messaging like "Your handle is changeable. Your account
 identity is permanent."
 
-**Code does:** None.
-
-**Gap / proposal:** New feature. Accepts `{ icon, body }` slot. Used
-wherever small inline info needs to land.
+**Code does (shipped):** Bordered `bg.elevated` row — 36-circle icon
+tile on `bg.panel` + body text in `text.primary`. Consumer passes
+`iconName` (Feather glyph) + `body`.
 
 ---
 
@@ -2011,20 +2012,20 @@ Emits resolved consent settings on submit.
 
 - **Tier:** feature (composes Text + Toggle)
 - **Location:** `src/components/features/onboarding/ConsentRow.tsx`
-- **Variants:** `default`, `locked` (Essential, always-on, can't toggle off)
+- **Variants:** `default`
 - **Sizes:** md
-- **States:** off, on, locked-on
-- **Used in:** populated in 12.6
+- **States:** off, on, locked-on (Toggle forced on + disabled)
+- **Used in:** populated in 12.6 (LegalAcceptanceCard rows + Settings)
 - **Tweak impact:** LegalAcceptanceCard, Settings notification preferences, future consent surfaces
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
 
 **Mock says:** Row with title (sans body, ink) + description (mono caps,
 dim) on the left, Toggle on the right. Locked variant has the Toggle
 disabled in the on state.
 
-**Code does:** None as feature.
-
-**Gap / proposal:** Extract as feature. `{ title, description, on,
-onToggle, locked }` props.
+**Code does (shipped):** Title + optional description column + Toggle
+on the right. When `locked` is true the Toggle is forced to `true` and
+disabled regardless of the `on` prop.
 
 ---
 

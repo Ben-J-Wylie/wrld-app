@@ -27,6 +27,11 @@ import { MetaStrip } from '@/components/features/user/MetaStrip'
 import { SocialChip } from '@/components/features/user/SocialChip'
 import { PassportCard } from '@/components/features/user/PassportCard'
 import { AvatarPicker } from '@/components/features/user/AvatarPicker'
+import { ContextBanner } from '@/components/features/onboarding/ContextBanner'
+import { ReassuranceCard } from '@/components/features/onboarding/ReassuranceCard'
+import { SuggestionChipRow } from '@/components/features/onboarding/SuggestionChipRow'
+import { RulesChecklist } from '@/components/features/onboarding/RulesChecklist'
+import { ConsentRow } from '@/components/features/onboarding/ConsentRow'
 import { Toggle } from '@/components/primitives/Toggle'
 import { Button } from '@/components/primitives/Button'
 import { BroadcasterRow } from '@/components/features/user/BroadcasterRow'
@@ -568,6 +573,75 @@ export function FeatureGallery() {
         </Row>
       </Section>
 
+      <Section title="ContextBanner">
+        <Row label="accent (default)">
+          <ContextBanner iconName="message-circle" label="SIGN UP TO CHAT IN @KAI.DC'S STREAM" />
+        </Row>
+        <Row label="warn (higher-stakes)">
+          <ContextBanner variant="warn" iconName="alert-triangle" label="ACCOUNT DELETION · IRREVERSIBLE" />
+        </Row>
+        <Row label="no icon">
+          <ContextBanner label="BECOME A CREATOR · 10 STEPS · ~3 MIN" />
+        </Row>
+      </Section>
+
+      <Section title="ReassuranceCard">
+        <Row label="default">
+          <ReassuranceCard
+            iconName="info"
+            body="Your handle is changeable. Your account identity is permanent."
+          />
+        </Row>
+        <Row label="lock icon">
+          <ReassuranceCard
+            iconName="lock"
+            body="Only you can see this. We never share location with broadcasters."
+          />
+        </Row>
+      </Section>
+
+      <Section title="SuggestionChipRow">
+        <Row label="default">
+          <SuggestionChipRow
+            suggestions={['benwy', 'ben.wylie', 'b_wylie', 'wyliebrooklyn', 'wylie.cam']}
+            onPick={() => {}}
+          />
+        </Row>
+      </Section>
+
+      <Section title="RulesChecklist">
+        <Row label="mixed states">
+          <RulesChecklist
+            rules={[
+              { label: 'AT LEAST 8 CHARACTERS', status: 'met' },
+              { label: 'ONE NUMBER OR SYMBOL', status: 'bad' },
+              { label: 'NOT A COMMON PASSWORD', status: 'neutral' },
+            ]}
+          />
+        </Row>
+        <Row label="all met">
+          <RulesChecklist
+            rules={[
+              { label: 'LOWERCASE A–Z, 0–9, DOT, UNDERSCORE', status: 'met' },
+              { label: '3–24 CHARACTERS', status: 'met' },
+              { label: 'NOT TAKEN', status: 'met' },
+            ]}
+          />
+        </Row>
+      </Section>
+
+      <Section title="ConsentRow">
+        <Row label="default">
+          <ConsentRowDemo title="Analytics" description="Help us understand how Wrld is used" initial={false} />
+        </Row>
+        <Row label="default (on)">
+          <ConsentRowDemo title="Personalization" description="Show me streams I might like" initial />
+        </Row>
+        <Row label="locked (Essential)">
+          <ConsentRowDemo title="Essential" description="Required for the app to work" initial locked />
+        </Row>
+      </Section>
+
       <Section title="BroadcasterRow">
         <Row label="default">
           <BroadcasterRow
@@ -677,6 +751,29 @@ function ToastBannerDemo() {
         />
       )}
     </View>
+  )
+}
+
+function ConsentRowDemo({
+  title,
+  description,
+  initial,
+  locked,
+}: {
+  title: string
+  description: string
+  initial: boolean
+  locked?: boolean
+}) {
+  const [on, setOn] = useState(initial)
+  return (
+    <ConsentRow
+      title={title}
+      description={description}
+      on={on}
+      onToggle={setOn}
+      locked={locked}
+    />
   )
 }
 
