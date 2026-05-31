@@ -1298,25 +1298,40 @@ keyboard behavior.
 
 ##### `StreamCard`
 
-- **Tier:** feature
+- **Tier:** feature (composes Pressable + Image + Text + Icon + LivePill)
 - **Location:** `src/components/features/stream/StreamCard.tsx`
-- **Variants:** `trending` (Globe bottom sheet — w:158), `preview` (Viewer Sheet — 16:10 hero), `compact` (sheet row)
+- **Variants:** `trending` (158-wide vertical card, 88-tall thumb on top), `preview` (16:10 hero with play button), `compact` (full-width row with 72×48 thumb)
 - **Sizes:** controlled by variant
-- **States:** default, pressed
-- **Used in:** populated in 12.6
+- **States:** default, pressed (Pressable variant `subtle` — scale 0.98)
+- **Used in:** populated in 12.6 (replaces `NearbyStreamThumbnail` + `NearbyStreamRow`)
 - **Tweak impact:** Globe trending rail, Viewer Sheet preview, search results, future feed surfaces
+- **Shipped:** 2026-05-30 (sub-phase 12.5 — second feature)
+- **Last reviewed:** 2026-05-30
 
 **Mock says:** Thumbnail with overlay metadata (LivePill top-left,
-viewer count bottom-right, channel label bottom-left optional). Title +
-city/channel underneath. The `trending` variant is a 158×~140 card in a
-horizontal scroll. The `preview` variant is a 16:10 hero with a play
-button center + channel label corner.
+viewer count overlay, channel label corner). Title + city/channel meta
+underneath or alongside.
 
-**Code does:** `NearbyStreamThumbnail` + `NearbyStreamRow` in
-`features/stream/`. Bespoke implementations. No shared shape.
+**Code does (shipped):** Three variant render fns inside the file.
+Each wraps content in `Pressable` (variant `subtle`) so the whole card
+gets the scale press feedback. Common shared helpers:
+- `Thumbnail` — uses RN `Image` with `resizeMode='cover'` when
+  `thumbnailUrl` is set; falls back to a `bg.panel` placeholder with a
+  small `Icon name='video'` center.
+- `formatCount(n)` — 1234 → "1.2k", 12345 → "12k".
 
-**Gap / proposal:** Unified StreamCard with the 3 variant families
-above. Old `NearbyStream*` components retire when callers migrate.
+Overlays sit absolutely-positioned within an `overflow: hidden`
+thumbnail wrap. `LivePill` renders only when `isLive` (default true).
+
+API: consumer-flat props, not a `Stream` object — keeps the feature
+domain-blind. Consumer screens (`GlobeScreen`, `SearchScreen`, future
+trending rail) read from their query/store and pass `thumbnailUrl`,
+`title`, `viewerCount`, `channel`, `city`, `isLive`, `onPress`.
+
+**Gap / proposal:** None — shipped. `NearbyStreamThumbnail` and
+`NearbyStreamRow` retire in 12.6 when callers (`GlobeScreen`,
+`NearbyStreamsDrawer`) migrate to `StreamCard.trending` /
+`StreamCard.compact` respectively.
 
 ---
 

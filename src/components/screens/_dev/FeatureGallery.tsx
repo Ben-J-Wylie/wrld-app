@@ -6,10 +6,11 @@
 //
 // Reachable in dev via expo-router push to `/(app)/feature-gallery`.
 
-import { View, StyleSheet } from 'react-native'
+import { ScrollView, View, StyleSheet } from 'react-native'
 import { ScreenScroll } from '@/components/sections/ScreenScroll'
 import { Text } from '@/components/primitives/Text'
 import { LivePill } from '@/components/features/stream/LivePill'
+import { StreamCard } from '@/components/features/stream/StreamCard'
 import { theme } from '@/tokens/theme'
 
 export function FeatureGallery() {
@@ -32,6 +33,93 @@ export function FeatureGallery() {
             <LivePill size="sm" />
             <LivePill />
           </View>
+        </Row>
+      </Section>
+
+      <Section title="StreamCard">
+        <Row label="trending (horizontal scroll)">
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.trendingScroll}
+          >
+            <StreamCard
+              thumbnailUrl="https://picsum.photos/seed/wrld1/200/120"
+              title="Atlantic Ave · street fest"
+              viewerCount={1400}
+              city="BROOKLYN"
+              channel="CH 12"
+              onPress={() => {}}
+            />
+            <StreamCard
+              thumbnailUrl="https://picsum.photos/seed/wrld2/200/120"
+              title="Golden Gate overlook"
+              viewerCount={9120}
+              city="SAN FRANCISCO"
+              channel="CH 08"
+              onPress={() => {}}
+            />
+            <StreamCard
+              thumbnailUrl="https://picsum.photos/seed/wrld3/200/120"
+              title="Aurora — north-facing"
+              viewerCount={6400}
+              city="REYKJAVÍK"
+              channel="CH 41"
+              onPress={() => {}}
+            />
+          </ScrollView>
+        </Row>
+        <Row label="preview (16:10 hero)">
+          <StreamCard
+            variant="preview"
+            thumbnailUrl="https://picsum.photos/seed/wrldhero/640/400"
+            title="Drumline forming up"
+            viewerCount={1400}
+            channel="CH 12 · STREET"
+            onPress={() => {}}
+          />
+        </Row>
+        <Row label="compact (sheet row)">
+          <View style={styles.stack}>
+            <StreamCard
+              variant="compact"
+              thumbnailUrl="https://picsum.photos/seed/wrld4/200/120"
+              title="Food truck row across the street"
+              viewerCount={620}
+              city="BROOKLYN"
+              channel="CH 18"
+              onPress={() => {}}
+            />
+            <StreamCard
+              variant="compact"
+              thumbnailUrl="https://picsum.photos/seed/wrld5/200/120"
+              title="Rooftop view — whole block in frame"
+              viewerCount={2100}
+              city="BROOKLYN"
+              channel="CH 09"
+              onPress={() => {}}
+            />
+          </View>
+        </Row>
+        <Row label="no thumbnail">
+          <StreamCard
+            title="Audio-only · pirate radio"
+            viewerCount={250}
+            city="NYC"
+            channel="CH 99"
+            onPress={() => {}}
+          />
+        </Row>
+        <Row label="not live">
+          <StreamCard
+            thumbnailUrl="https://picsum.photos/seed/wrldoff/200/120"
+            title="Yesterday's stream"
+            viewerCount={0}
+            isLive={false}
+            city="BROOKLYN"
+            channel="CH 12"
+            onPress={() => {}}
+          />
         </Row>
       </Section>
     </ScreenScroll>
@@ -77,5 +165,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.sm,
     flexWrap: 'wrap',
+  },
+  trendingScroll: {
+    gap: theme.spacing.sm,
+    paddingRight: theme.spacing.sm,
+  },
+  stack: {
+    gap: theme.spacing.sm,
   },
 })
