@@ -2359,30 +2359,36 @@ repositioning the rest of the screen**, plus tap-on-adjacent-input
 behavior that doesn't dismiss the keyboard first. Not a visual concern;
 a behavior concern.
 
-**Code does (shipped):**
+**Code does (shipped — minimal-config rewrite 2026-05-30):**
 
 ```tsx
 <SafeAreaView style={[styles.root, style]}>
   <KeyboardAwareScrollView
-    contentContainerStyle={[styles.content, contentContainerStyle]}
+    contentContainerStyle={contentContainerStyle}
     keyboardShouldPersistTaps="handled"
-    keyboardDismissMode="interactive"
-    bottomOffset={bottomOffset}
+    bottomOffset={bottomOffset}              // opt-in, no default
+    keyboardDismissMode={keyboardDismissMode} // opt-in, no default
   >
     {children}
   </KeyboardAwareScrollView>
 </SafeAreaView>
 ```
 
-Defaults:
-- `bottomOffset` = `spacing.lg` (16)
-- `contentContainerStyle.paddingBottom` = `spacing.xxxl` (48)
-- `backgroundColor` = `bg.primary` (warm cream paper)
+**Design rule: trust the library, don't fight it.** Three rounds of
+keyboard regressions taught us that layering hidden defaults on top of
+`KeyboardAwareScrollView` fights its internal animation timing and
+causes stutter. The wrapper applies exactly ONE
+universally-useful prop (`keyboardShouldPersistTaps="handled"`) and
+otherwise passes through to the library with its own defaults.
 
-Consumers override via `style` (SafeAreaView), `contentContainerStyle`
-(scroll content), `bottomOffset`. Style-array merge order is
-`[default, prop]`, so consumer overrides win for any conflicting
-property.
+`bottomOffset`, `keyboardDismissMode`, `paddingBottom`, and
+`backgroundColor` (via `style`) are opt-in via props. Consumers that
+need them set them per-use; the wrapper never silently injects them.
+
+The single defaulted-in prop:
+- `backgroundColor` = `bg.primary` via `styles.root` (overridable via
+  `style` — but every form-bearing screen wants this, and override is
+  cheap when needed)
 
 `KeyboardAwareScrollView` comes from `react-native-keyboard-controller`
 — purpose-built for RN's New Architecture (Fabric) and properly handles

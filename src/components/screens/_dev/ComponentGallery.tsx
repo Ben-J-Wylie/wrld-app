@@ -663,7 +663,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 }
 
 const styles = StyleSheet.create({
-  scroll: { padding: theme.spacing.lg, gap: theme.spacing.md },
+  scroll: { padding: theme.spacing.lg, gap: theme.spacing.md, paddingBottom: theme.spacing.xxxl },
   section: { gap: theme.spacing.sm, marginTop: theme.spacing.xl },
   row: {
     flexDirection: 'row',
