@@ -55,8 +55,7 @@ export const streamsApi = {
   uploadSnapshot: async (reportId: string, uri: string): Promise<void> => {
     const form = new FormData()
     form.append('snapshot', { uri, type: 'image/jpeg', name: 'snapshot.jpg' } as unknown as Blob)
-    await apiClient.post(`/reports/${reportId}/snapshot`, form, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    })
+    // No explicit Content-Type — Axios sets it automatically with the correct boundary
+    await apiClient.post(`/reports/${reportId}/snapshot`, form)
   },
 }

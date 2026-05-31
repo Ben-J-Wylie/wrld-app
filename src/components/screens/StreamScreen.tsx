@@ -381,7 +381,7 @@ export function StreamScreen() {
       if (pendingSnapshotUri.current) {
         const uri = pendingSnapshotUri.current
         pendingSnapshotUri.current = null
-        streamsApi.uploadSnapshot(reportId, uri).catch(() => {})
+        streamsApi.uploadSnapshot(reportId, uri).catch((e) => console.warn('snapshot upload failed:', e))
       }
       Alert.alert('Reported', 'Thanks for letting us know. We\'ll review this stream.')
     } catch {
