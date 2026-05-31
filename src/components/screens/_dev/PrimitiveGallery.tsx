@@ -1,9 +1,14 @@
-// src/components/screens/_dev/ComponentGallery.tsx
+// src/components/screens/_dev/PrimitiveGallery.tsx
 //
-// Dev-only gallery exercising every primitive variant. Mechanical
+// Dev-only gallery exercising every PRIMITIVE variant. Mechanical
 // criterion #4 (DESIGN.md): "renders without errors and covers every
 // primitive variant (default, pressed, disabled, loading where
-// applicable)." Each primitive shipped in 12.4 adds a section below.
+// applicable)."
+//
+// Companion galleries: `FeatureGallery` (features tier) and
+// `SectionGallery` (sections tier). Split into separate pages
+// 2026-05-30 as the tier count grew past comfortable single-page
+// scroll.
 //
 // Reachable in dev via expo-router push to `/(app)/gallery`. The route
 // is registered with `href: null` so it does not appear in the tab bar.
@@ -31,10 +36,9 @@ import { Slider } from '@/components/primitives/Slider'
 import { SegmentedToggle } from '@/components/primitives/SegmentedToggle'
 import { Divider } from '@/components/primitives/Divider'
 import { BrandMark } from '@/components/primitives/BrandMark'
-import { LivePill } from '@/components/features/stream/LivePill'
 import { theme } from '@/tokens/theme'
 
-export function ComponentGallery() {
+export function PrimitiveGallery() {
   const [pressCounts, setPressCounts] = useState({ default: 0, subtle: 0, none: 0 })
   const [cardTaps, setCardTaps] = useState(0)
   const [inputDefault, setInputDefault] = useState('')
@@ -624,20 +628,6 @@ export function ComponentGallery() {
           </Row>
         </Section>
 
-        <Section title="Features">
-          <Row label="LivePill md">
-            <LivePill />
-          </Row>
-          <Row label="LivePill sm">
-            <LivePill size="sm" />
-          </Row>
-          <Row label="paired">
-            <View style={styles.pillRow}>
-              <LivePill size="sm" />
-              <LivePill />
-            </View>
-          </Row>
-        </Section>
       </ScreenScroll>
 
       {sheetVariant !== null && (

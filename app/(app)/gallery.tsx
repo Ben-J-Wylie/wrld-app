@@ -1,1 +1,1 @@
-export { ComponentGallery as default } from '@/components/screens/_dev/ComponentGallery'
+export { PrimitiveGallery as default } from '@/components/screens/_dev/PrimitiveGallery'

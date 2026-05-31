@@ -10,9 +10,11 @@ The four mechanical criteria for "Phase 12 done":
    `src/components/screens/`).
 2. No `StyleSheet` in screens contains hardcoded font sizes or spacing values.
 3. Every primitive has a corresponding entry in Section 3 with current "Used in" sites.
-4. Component gallery (`src/components/screens/_dev/ComponentGallery.tsx`) renders
-   without errors and covers every primitive variant (default, pressed, disabled,
-   loading where applicable).
+4. Dev galleries (`src/components/screens/_dev/PrimitiveGallery.tsx`,
+   `FeatureGallery.tsx`, `SectionGallery.tsx` — split into three pages
+   2026-05-30 as tier counts grew past comfortable single-page scroll)
+   render without errors and cover every primitive / feature / section
+   variant (default, pressed, disabled, loading where applicable).
 
 The "feels like the same product" judgment is the _outcome_ of hitting those
 four — not a separate criterion.

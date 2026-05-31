@@ -113,8 +113,24 @@ export function SettingsScreen() {
           <Text style={styles.sectionTitle}>DEVELOPMENT</Text>
           <Pressable style={styles.row} onPress={() => router.push('/(app)/gallery')}>
             <View style={styles.rowText}>
-              <Text style={styles.rowLabel}>Component gallery</Text>
-              <Text style={styles.rowSub}>Primitives + features for sub-phase 12.4 review</Text>
+              <Text style={styles.rowLabel}>Primitive gallery</Text>
+              <Text style={styles.rowSub}>20 primitives — Text, Icon, Pressable, Button, Card, Input, …</Text>
+            </View>
+            <Text style={styles.chevron}>›</Text>
+          </Pressable>
+          <View style={styles.divider} />
+          <Pressable style={styles.row} onPress={() => router.push('/(app)/feature-gallery')}>
+            <View style={styles.rowText}>
+              <Text style={styles.rowLabel}>Feature gallery</Text>
+              <Text style={styles.rowSub}>Domain features composed from primitives</Text>
+            </View>
+            <Text style={styles.chevron}>›</Text>
+          </Pressable>
+          <View style={styles.divider} />
+          <Pressable style={styles.row} onPress={() => router.push('/(app)/section-gallery')}>
+            <View style={styles.rowText}>
+              <Text style={styles.rowLabel}>Section gallery</Text>
+              <Text style={styles.rowSub}>Screen-region patterns (ScreenScroll, future TrendingRail, etc.)</Text>
             </View>
             <Text style={styles.chevron}>›</Text>
           </Pressable>
