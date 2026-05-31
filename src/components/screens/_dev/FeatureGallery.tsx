@@ -48,6 +48,8 @@ import { ClipPreview } from '@/components/features/clip/ClipPreview'
 import { LayerEditorRow } from '@/components/features/clip/LayerEditorRow'
 import { ContextStrip } from '@/components/features/report/ContextStrip'
 import { ReasonRow } from '@/components/features/report/ReasonRow'
+import { PermissionPrePromptCard } from '@/components/features/permissions/PermissionPrePromptCard'
+import { AgeGateCard } from '@/components/features/onboarding/AgeGateCard'
 import { Toggle } from '@/components/primitives/Toggle'
 import { Button } from '@/components/primitives/Button'
 import { BroadcasterRow } from '@/components/features/user/BroadcasterRow'
@@ -999,6 +1001,27 @@ export function FeatureGallery() {
       <Section title="ReasonRow">
         <Row label="group with selection">
           <ReasonRowGroupDemo />
+        </Row>
+      </Section>
+
+      <Section title="PermissionPrePromptCard">
+        <Row label="location">
+          <PermissionPrePromptCard kind="location" onAllow={() => {}} onSkip={() => {}} />
+        </Row>
+        <Row label="notifications">
+          <PermissionPrePromptCard kind="notifications" onAllow={() => {}} onSkip={() => {}} />
+        </Row>
+        <Row label="camera">
+          <PermissionPrePromptCard kind="camera" onAllow={() => {}} onSkip={() => {}} />
+        </Row>
+        <Row label="microphone (loading)">
+          <PermissionPrePromptCard kind="microphone" loading onAllow={() => {}} onSkip={() => {}} />
+        </Row>
+      </Section>
+
+      <Section title="AgeGateCard">
+        <Row label="default refusal">
+          <AgeGateCard onBack={() => {}} />
         </Row>
       </Section>
 

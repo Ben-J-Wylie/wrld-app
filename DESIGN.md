@@ -1976,26 +1976,30 @@ driven scroll on each column.
 
 ##### `PermissionPrePromptCard`
 
-- **Tier:** feature (composes Card + Icon + Text)
+- **Tier:** feature (composes Icon + Text + Button)
 - **Location:** `src/components/features/permissions/PermissionPrePromptCard.tsx`
-- **Variants:** `location`, `notifications`, `camera`, `microphone` (each provides default icon + default copy)
+- **Variants:** `location`, `notifications`, `camera`, `microphone` (each provides default icon + title + bullets + allow-label)
 - **Sizes:** N/A
-- **States:** default
+- **States:** default, loading (Button.loading)
 - **Used in:** populated in 12.6
 - **Tweak impact:** Pre-prompt sequences before any OS permission ask
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
 
 **Mock says:** Card with a large permission illustration (icon-in-frame
 with optional ping animation) + plain title + 2–3 bullet reasons in a
 list. Sets context before the OS prompt fires. Never manipulative —
 copy says what we want and what users get back.
 
-**Code does:** None. Current code calls expo-permissions APIs directly
-with no pre-prompt.
+**Code does (shipped):** Bordered card — 64-circle accent-surface icon
+frame, centered heading title, 2–3 bullet rows (6-circle accent dot +
+text), primary Allow CTA, optional skip Button. Default title +
+bullets + allow-label are baked per kind and overridable via props
+when the surface needs more specific copy. The OS prompt fires via
+the consumer's `onAllow` handler — this feature does not call
+expo-permissions directly.
 
-**Gap / proposal:** New feature. Variants come with default icon + body
-copy that can be overridden via props. The OS prompt fires when the
-user taps the primary CTA ("Allow notifications"). Denial = wizard
-advances; never re-prompts.
+**Ping animation deferred.** The static accent-bordered icon frame
+reads as the "permission illustration" without motion in v1.
 
 ---
 
@@ -2045,25 +2049,26 @@ disabled regardless of the `on` prop.
 
 ##### `AgeGateCard`
 
-- **Tier:** feature (composes Card + Icon + Text + Button)
+- **Tier:** feature (composes Icon + Text + Button)
 - **Location:** `src/components/features/onboarding/AgeGateCard.tsx`
 - **Variants:** `default`
 - **Sizes:** lg (full-width centered)
-- **States:** default
+- **States:** default — only render state, the card itself is the
+  terminal state
 - **Used in:** populated in 12.6
 - **Tweak impact:** Onboarding age step refusal (terminal state — no retry)
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
 
 **Mock says:** Card with clock icon-circle (line-2 border) + heading
 ("Wrld is 18+") + body explaining the refusal + secondary "Take me
 back" button. Centered, respectful tone. **Terminal — no retry, no
 "try a different date" link, no joke.**
 
-**Code does:** None — current age gate is just a date input with no
-explicit refusal surface.
-
-**Gap / proposal:** New feature. Wraps the design's refusal pattern
-verbatim. The terminal-no-retry behavior is structural — the parent
-wizard doesn't allow re-entry.
+**Code does (shipped):** Bordered card — 72-circle clock icon frame
+(line-2 border in `border.strong`), display title centered, muted body
+centered, single secondary "Take me back" Button. The
+terminal-no-retry behavior is structural — the parent wizard doesn't
+allow re-entry; this card surfaces no alternative path.
 
 ---
 
