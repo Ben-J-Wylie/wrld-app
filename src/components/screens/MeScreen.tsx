@@ -1,18 +1,33 @@
+// src/components/screens/MeScreen.tsx
+//
+// 12.6 migration target. Composes:
+//   • ScreenScroll (was the wrapper already; no change)
+//   • AvatarPicker — replaces the inline Avatar + Gallery + Camera
+//     trio. AvatarPicker is domain-blind; this screen keeps its
+//     expo-image-picker wiring and surfaces uploading state via the
+//     `uploading` prop.
+//   • PursesCard (dual) — replaces the bespoke Space Bucks + Stardust
+//     blocks. $/unit conversion lives in the feature.
+//   • Input + HelpText — editable display-name + handle fields keep
+//     inline edit / save / cancel UX; errors render through HelpText
+//     (tone=err) and the hint under handle becomes HelpText (tone=dim).
+//
+// Behavior unchanged: avatar upload, profile field updates with
+// optimistic UI, signed-out fallback, loading state.
+
 import { useState } from 'react'
-import {
-  View,
-  Text,
-  StyleSheet,
-  ActivityIndicator,
-} from 'react-native'
+import { ActivityIndicator, StyleSheet, View } from 'react-native'
 import { router } from 'expo-router'
 import { useAuth } from '@clerk/clerk-expo'
 import * as ImagePicker from 'expo-image-picker'
 import { theme } from '@/tokens/theme'
 import { Button } from '@/components/primitives/Button'
 import { Input } from '@/components/primitives/Input'
-import { Avatar } from '@/components/primitives/Avatar'
+import { Text } from '@/components/primitives/Text'
+import { HelpText } from '@/components/primitives/HelpText'
 import { ScreenScroll } from '@/components/sections/ScreenScroll'
+import { AvatarPicker } from '@/components/features/user/AvatarPicker'
+import { PursesCard } from '@/components/features/wallet/PursesCard'
 import { usersApi } from '@/api/users'
 import { useCurrentUser, useSetCurrentUser } from '@/hooks/useCurrentUser'
 import { useAuthStore } from '@/stores/authStore'
@@ -86,21 +101,19 @@ export function MeScreen() {
   }
 
   async function changeAvatar(source: 'gallery' | 'camera') {
-    let result
-    if (source === 'gallery') {
-      result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
-      })
-    } else {
-      result = await ImagePicker.launchCameraAsync({
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
-      })
-    }
+    const result =
+      source === 'gallery'
+        ? await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ['images'],
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.8,
+          })
+        : await ImagePicker.launchCameraAsync({
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.8,
+          })
     if (result.canceled || !result.assets[0]) return
     const asset = result.assets[0]
     setAvatarLoading(true)
@@ -119,12 +132,10 @@ export function MeScreen() {
   if (!isSignedIn) {
     return (
       <ScreenScroll contentContainerStyle={styles.center}>
-        <Text style={styles.muted}>Sign in to access your profile</Text>
-        <Button
-          label="Sign in"
-          onPress={() => router.push('/(auth)/login')}
-          style={styles.btn}
-        />
+        <Text variant="body" color={theme.colors.text.muted}>
+          Sign in to access your profile
+        </Text>
+        <Button label="Sign in" onPress={() => router.push('/(auth)/login')} style={styles.btn} />
       </ScreenScroll>
     )
   }
@@ -139,143 +150,98 @@ export function MeScreen() {
 
   return (
     <ScreenScroll contentContainerStyle={styles.content}>
-          {/* Avatar */}
-          <View style={styles.avatarSection}>
-            {avatarLoading ? (
-              <ActivityIndicator color={theme.colors.accent.default} size="large" />
-            ) : (
-              <Avatar avatarUrl={user.avatarUrl} displayName={user.displayName} size={88} />
-            )}
-            <View style={styles.avatarBtns}>
-              <Button
-                label="Gallery"
-                onPress={() => changeAvatar('gallery')}
-                variant="secondary"
-                disabled={avatarLoading}
-              />
-              <Button
-                label="Camera"
-                onPress={() => changeAvatar('camera')}
-                variant="secondary"
-                disabled={avatarLoading}
-              />
+      <AvatarPicker
+        avatarUrl={user.avatarUrl}
+        displayName={user.displayName}
+        uploading={avatarLoading}
+        onTake={() => changeAvatar('camera')}
+        onPick={() => changeAvatar('gallery')}
+      />
+      {!!avatarError && <HelpText tone="err">{avatarError}</HelpText>}
+
+      <View style={styles.field}>
+        <HelpText>DISPLAY NAME</HelpText>
+        {editingName ? (
+          <>
+            <Input value={displayName} onChangeText={setDisplayName} autoFocus />
+            {!!nameError && <HelpText tone="err">{nameError}</HelpText>}
+            <View style={styles.fieldBtns}>
+              <Button label="Save" onPress={saveName} loading={nameLoading} />
+              <Button label="Cancel" onPress={() => setEditingName(false)} variant="secondary" />
             </View>
-            {!!avatarError && <Text style={styles.error}>{avatarError}</Text>}
+          </>
+        ) : (
+          <View style={styles.fieldRow}>
+            <Text variant="body">{user.displayName}</Text>
+            <Button label="Edit" onPress={startEditName} variant="secondary" />
           </View>
+        )}
+      </View>
 
-          {/* Display name */}
-          <View style={styles.field}>
-            <Text style={styles.fieldLabel}>DISPLAY NAME</Text>
-            {editingName ? (
-              <>
-                <Input
-                  value={displayName}
-                  onChangeText={setDisplayName}
-                  autoFocus
-                  style={styles.fieldInput}
-                />
-                {!!nameError && <Text style={styles.error}>{nameError}</Text>}
-                <View style={styles.fieldBtns}>
-                  <Button label="Save" onPress={saveName} loading={nameLoading} />
-                  <Button label="Cancel" onPress={() => setEditingName(false)} variant="secondary" />
-                </View>
-              </>
-            ) : (
-              <View style={styles.fieldRow}>
-                <Text style={styles.fieldValue}>{user.displayName}</Text>
-                <Button label="Edit" onPress={startEditName} variant="secondary" />
-              </View>
-            )}
-          </View>
-
-          {/* Handle */}
-          <View style={styles.field}>
-            <Text style={styles.fieldLabel}>HANDLE</Text>
-            {editingHandle ? (
-              <>
-                <View style={styles.handleInputRow}>
-                  <Text style={styles.at}>@</Text>
-                  <Input
-                    value={handle}
-                    onChangeText={(t) => {
-                      setHandle(t.toLowerCase())
-                      setHandleError('')
-                    }}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    autoFocus
-                    style={styles.handleInput}
-                  />
-                </View>
-                {!!handleError && <Text style={styles.error}>{handleError}</Text>}
-                <View style={styles.fieldBtns}>
-                  <Button label="Save" onPress={saveHandle} loading={handleLoading} />
-                  <Button label="Cancel" onPress={() => setEditingHandle(false)} variant="secondary" />
-                </View>
-              </>
-            ) : (
-              <View style={styles.fieldRow}>
-                <Text style={styles.fieldValue}>@{user.handle}</Text>
-                <Button label="Edit" onPress={startEditHandle} variant="secondary" />
-              </View>
-            )}
-            <Text style={styles.hint}>Handle can be changed once every 30 days.</Text>
-          </View>
-
-          {/* Space Bucks balance */}
-          <View style={styles.field}>
-            <Text style={styles.fieldLabel}>SPACE BUCKS</Text>
-            <View style={styles.fieldRow}>
-              <Text style={styles.fieldValue}>{user.spaceBucks} 🚀</Text>
-              <Text style={styles.hint}>spend-only · ${(user.spaceBucks / 100).toFixed(2)}</Text>
+      <View style={styles.field}>
+        <HelpText>HANDLE</HelpText>
+        {editingHandle ? (
+          <>
+            <Input
+              variant="prefix"
+              prefix="@"
+              value={handle}
+              onChangeText={(t) => {
+                setHandle(t.toLowerCase())
+                setHandleError('')
+              }}
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoFocus
+            />
+            {!!handleError && <HelpText tone="err">{handleError}</HelpText>}
+            <View style={styles.fieldBtns}>
+              <Button label="Save" onPress={saveHandle} loading={handleLoading} />
+              <Button label="Cancel" onPress={() => setEditingHandle(false)} variant="secondary" />
             </View>
+          </>
+        ) : (
+          <View style={styles.fieldRow}>
+            <Text variant="body">@{user.handle}</Text>
+            <Button label="Edit" onPress={startEditHandle} variant="secondary" />
           </View>
+        )}
+        <HelpText>Handle can be changed once every 30 days.</HelpText>
+      </View>
 
-          {/* Stardust balance */}
-          <View style={styles.field}>
-            <Text style={styles.fieldLabel}>STARDUST</Text>
-            <View style={styles.fieldRow}>
-              <Text style={styles.fieldValue}>{user.stardust} ✨</Text>
-              <Text style={styles.hint}>earned from tips · ${(user.stardust / 100).toFixed(2)}</Text>
-            </View>
-          </View>
+      <PursesCard spaceBucks={user.spaceBucks} starDust={user.stardust} />
 
-          <View style={styles.divider} />
-
-          {/* Settings */}
-          <Button
-            label="Settings"
-            onPress={() => router.push('/(app)/settings')}
-            variant="secondary"
-            style={styles.wide}
-          />
+      <Button
+        label="Settings"
+        onPress={() => router.push('/(app)/settings')}
+        variant="secondary"
+      />
     </ScreenScroll>
   )
 }
 
 const styles = StyleSheet.create({
-  center: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', gap: theme.spacing.md },
-  content: { padding: theme.spacing.lg, gap: theme.spacing.lg },
-  btn: { width: 160 },
-  avatarSection: { alignItems: 'center', gap: theme.spacing.md },
-  avatarBtns: { flexDirection: 'row', gap: theme.spacing.sm },
-  field: { gap: theme.spacing.sm },
-  fieldLabel: {
-    ...theme.typography.caption,
-    color: theme.colors.text.muted,
-    fontWeight: '700',
-    letterSpacing: 1.2,
+  center: {
+    flexGrow: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: theme.spacing.md,
   },
-  fieldRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  fieldValue: { ...theme.typography.body, color: theme.colors.text.primary },
-  fieldInput: { width: '100%' },
-  fieldBtns: { flexDirection: 'row', gap: theme.spacing.sm },
-  handleInputRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs, width: '100%' },
-  at: { ...theme.typography.heading, color: theme.colors.text.muted },
-  handleInput: { flex: 1 },
-  error: { ...theme.typography.caption, color: theme.colors.accent.default },
-  hint: { ...theme.typography.caption, color: theme.colors.text.muted },
-  divider: { height: 1, backgroundColor: theme.colors.border.subtle },
-  muted: { ...theme.typography.body, color: theme.colors.text.muted },
-  wide: { width: '100%' },
+  content: {
+    padding: theme.spacing.lg,
+    gap: theme.spacing.lg,
+    paddingBottom: theme.spacing.xxxl,
+  },
+  btn: { width: 160 },
+  field: { gap: theme.spacing.sm },
+  fieldRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing.md,
+  },
+  fieldBtns: {
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+  },
 })
