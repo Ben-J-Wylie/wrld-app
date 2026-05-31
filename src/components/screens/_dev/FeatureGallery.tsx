@@ -40,6 +40,9 @@ import { TransactionRow } from '@/components/features/wallet/TransactionRow'
 import { BundleCard } from '@/components/features/wallet/BundleCard'
 import { AmountInput } from '@/components/features/wallet/AmountInput'
 import { BankCard } from '@/components/features/wallet/BankCard'
+import { FeedThumb } from '@/components/features/broadcast/FeedThumb'
+import { FeedRow } from '@/components/features/broadcast/FeedRow'
+import { GoBar } from '@/components/features/broadcast/GoBar'
 import { Toggle } from '@/components/primitives/Toggle'
 import { Button } from '@/components/primitives/Button'
 import { BroadcasterRow } from '@/components/features/user/BroadcasterRow'
@@ -801,6 +804,66 @@ export function FeatureGallery() {
         </Row>
       </Section>
 
+      <Section title="FeedThumb">
+        <Row label="all kinds (md, active)">
+          <View style={styles.row}>
+            <FeedThumb kind="cam" />
+            <FeedThumb kind="audio" />
+            <FeedThumb kind="screen" />
+            <FeedThumb kind="loc" />
+            <FeedThumb kind="gyro" />
+            <FeedThumb kind="compass" />
+            <FeedThumb kind="profile" />
+          </View>
+        </Row>
+        <Row label="inactive (paused)">
+          <View style={styles.row}>
+            <FeedThumb kind="cam" active={false} />
+            <FeedThumb kind="audio" active={false} />
+            <FeedThumb kind="loc" active={false} />
+          </View>
+        </Row>
+        <Row label="lg (preview hero)">
+          <FeedThumb kind="audio" size="lg" />
+        </Row>
+      </Section>
+
+      <Section title="FeedRow">
+        <Row label="armed">
+          <FeedRowDemo kind="cam" label="Camera" detail="1080p · BACK" initialOn initialState="armed" />
+        </Row>
+        <Row label="broadcasting">
+          <FeedRowDemo kind="audio" label="Audio" detail="48 kHz · DEFAULT MIC" initialOn initialState="broadcasting" />
+        </Row>
+        <Row label="off">
+          <FeedRowDemo kind="loc" label="Location" detail="GPS · SHARE GRANULAR" initialState="off" />
+        </Row>
+        <Row label="denied">
+          <FeedRowDemo kind="screen" label="Screen" detail="System screen capture" initialState="denied" />
+        </Row>
+        <Row label="disabled">
+          <FeedRowDemo kind="gyro" label="Gyroscope" detail="Not available on this device" initialState="disabled" />
+        </Row>
+      </Section>
+
+      <Section title="GoBar">
+        <Row label="idle">
+          <GoBar variant="idle" onPress={() => {}} />
+        </Row>
+        <Row label="armed">
+          <GoBar variant="armed" onPress={() => {}} />
+        </Row>
+        <Row label="counting (3)">
+          <GoBar variant="counting" countdownSec={3} />
+        </Row>
+        <Row label="live">
+          <GoBar variant="live" onPress={() => {}} />
+        </Row>
+        <Row label="disabled">
+          <GoBar variant="disabled" />
+        </Row>
+      </Section>
+
       <Section title="BroadcasterRow">
         <Row label="default">
           <BroadcasterRow
@@ -910,6 +973,32 @@ function ToastBannerDemo() {
         />
       )}
     </View>
+  )
+}
+
+function FeedRowDemo({
+  kind,
+  label,
+  detail,
+  initialOn,
+  initialState,
+}: {
+  kind: 'cam' | 'audio' | 'screen' | 'loc' | 'gyro' | 'compass' | 'profile'
+  label: string
+  detail?: string
+  initialOn?: boolean
+  initialState: 'off' | 'armed' | 'broadcasting' | 'denied' | 'disabled'
+}) {
+  const [on, setOn] = useState(!!initialOn)
+  return (
+    <FeedRow
+      kind={kind}
+      label={label}
+      detail={detail}
+      state={initialState}
+      on={on}
+      onToggle={setOn}
+    />
   )
 }
 

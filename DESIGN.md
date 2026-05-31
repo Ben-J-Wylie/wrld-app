@@ -2326,13 +2326,14 @@ itself is v0.3.
 
 ##### `FeedRow`
 
-- **Tier:** feature (composes Card + Icon-thumb + Text + Toggle)
+- **Tier:** feature (composes FeedThumb + Text + Toggle)
 - **Location:** `src/components/features/broadcast/FeedRow.tsx`
 - **Variants:** one per layer (`cam`, `audio`, `screen`, `loc`, `gyro`, `compass`, `profile`)
-- **Sizes:** md (h:~80)
-- **States:** armed, broadcasting, denied, disabled
+- **Sizes:** md
+- **States:** off (neutral), armed (accent border + accent.surface bg), broadcasting (same + "BROADCASTING ·" detail prefix), denied (opacity 0.55, Toggle disabled, "PERMISSION DENIED ·" prefix), disabled (opacity 0.55, Toggle disabled)
 - **Used in:** populated in 12.6
 - **Tweak impact:** Go Live arming screen
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
 
 **Mock says:** Row: animated thumb (76×60, layer-specific
 visualization — see `FeedThumb` next) + meta (label + detail) + Toggle.
@@ -2340,11 +2341,11 @@ visualization — see `FeedThumb` next) + meta (label + detail) + Toggle.
 state has live-tinted border. **Denied** opacity 0.55 (OS permission
 declined).
 
-**Code does:** Current Dashboard has source-arming tiles for camera +
-audio (Phase 6). Refactor expands to 7 layers per re-baseline.
-
-**Gap / proposal:** New feature. Variant determines the thumb
-visualization (see FeedThumb sub-feature) + default detail copy.
+**Code does (shipped):** Row layout — FeedThumb on the left (active=true
+when state is armed or broadcasting), label + detail column in the
+middle, Toggle on the right. State drives the row's border + bg tone +
+detail prefix; the consumer manages `on` separately so a user can
+toggle off without changing the OS-driven `state`.
 
 ---
 
@@ -2352,42 +2353,57 @@ visualization (see FeedThumb sub-feature) + default detail copy.
 
 - **Tier:** feature (sub-component of FeedRow; usable standalone)
 - **Location:** `src/components/features/broadcast/FeedThumb.tsx`
-- **Variants:** `cam` (viewfinder), `audio` (waveform bars), `screen` (mock device with traffic lights), `loc` (ping on grid), `gyro` (rotating 3D cube), `compass` (rotating rose), `profile` (avatar silhouette)
-- **Sizes:** md (76×60), lg (Clip Edit preview hero — uses larger variant)
-- **States:** default, paused (when parent is armed=false)
+- **Variants:** `cam` (viewfinder corners), `audio` (animated bars), `screen` (mock device + traffic lights), `loc` (ping ring + pin on grid), `gyro` (rotating cube), `compass` (oscillating needle), `profile` (avatar silhouette)
+- **Sizes:** md (76×60), lg (160×110 — Clip Edit preview hero)
+- **States:** active (default), paused (opacity 0.45 + animations frozen)
 - **Used in:** populated in 12.6
 - **Tweak impact:** Go Live FeedRow thumbs, Clip Edit preview fallbacks, future broadcast-layer visualizations
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
 
 **Mock says:** Per-layer animated mini visualization. Each layer has a
 distinct visual treatment that suggests its data shape (waveform for
 audio, ping-on-grid for location, rotating cube for gyro, etc.).
 
-**Code does:** None.
-
-**Gap / proposal:** New feature. Variant selects the SVG/Animated
-treatment. Pause behavior: when parent component prop `active=false`,
-animation freezes.
+**Code does (shipped):** Per-kind renderer composing primitives + RN
+`Animated.View` patterns (no SVG yet). Audio bars vary height in a
+loop; loc pulses a ring outward while opacity fades; gyro rotates 360°;
+compass needle oscillates. When `active=false` the outer frame dims to
+opacity 0.45 and the per-kind animation effects are not started (or
+freeze at their last frame). v1 fidelity is "design-system motion"
+rather than exact mock illustration — real illustration assets can
+swap into the per-kind renderers without API change.
 
 ---
 
 ##### `GoBar`
 
-- **Tier:** feature (composes Pressable + Text + Icon)
+- **Tier:** feature (composes Pressable + Text + Icon + Animated)
 - **Location:** `src/components/features/broadcast/GoBar.tsx`
-- **Variants:** `default` (idle), `armed`, `counting` (countdown), `live`, `disabled`
+- **Variants:** `idle`, `armed`, `counting`, `live`, `disabled`
 - **Sizes:** lg (h:64, full-width, r:20)
-- **States:** managed by variant
+- **States:** managed by variant; `live` adds a slow knob-pulse loop
 - **Used in:** populated in 12.6
 - **Tweak impact:** Go Live docked bottom CTA
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
 
 **Mock says:** Big docked-bottom CTA with label + knob on the right.
 **Armed** = accent-tinted bg + glow. **Counting** = countdown ring
 overlay. **Live** = live-tinted bg + live-knob + intense glow. State
 transitions are dramatic.
 
-**Code does:** None — Phase 6 Dashboard has a simpler Go Live button.
+**Code does (shipped):** 64-tall bar with rounded-20 corners. Label
+column on the left, 48-circle knob on the right. Variants drive bg
+tint + label + knob copy:
+- idle: neutral bg, "READY WHEN YOU ARE", knob = GO
+- armed: accent.surface, "GO LIVE", knob = GO
+- counting: accent.surface, "GOING LIVE…" + "STARTING IN Ns" mono
+  caption (consumer passes `countdownSec`), knob = …
+- live: accent.surface, "LIVE · TAP TO STOP", knob = square icon with
+  slow opacity pulse (800ms ↑/↓ Animated.loop)
+- disabled: opacity 0.45, non-interactive, "CHECK YOUR SOURCES"
 
-**Gap / proposal:** New feature. Manages own state via variant prop.
+A full countdown ring overlay was scoped out for v1 — the mono caption
+carries the seconds and the live-state pulse covers the dramatic tone.
 
 ---
 
