@@ -1,13 +1,46 @@
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+// src/components/screens/ProfileScreen.tsx
+//
+// 12.6 migration target. Composes:
+//   • ScreenScroll for the scroll viewport
+//   • IconButton (arrow-left) for back navigation
+//   • Avatar primitive (size lg) + Text variants for the centered
+//     identity header
+//   • MetaStrip for the "Joined ..." caption (PublicUser carries
+//     createdAt; bio / region / pronouns / socials aren't on the
+//     PublicUser shape today, so PassportCard isn't a fit yet)
+//   • Bespoke 2-up stat cards (Followers / Following) — the big-
+//     number-with-label layout reads as the visual hierarchy of a
+//     profile flex move; MetaStrip would flatten it
+//   • FollowButton (for other profiles) / Button (for own profile)
+
+import { ActivityIndicator, StyleSheet, View } from 'react-native'
 import { useLocalSearchParams, router } from 'expo-router'
 import { useAuth } from '@clerk/clerk-expo'
 import { theme } from '@/tokens/theme'
+import { ScreenScroll } from '@/components/sections/ScreenScroll'
 import { Button } from '@/components/primitives/Button'
+import { IconButton } from '@/components/primitives/IconButton'
 import { Avatar } from '@/components/primitives/Avatar'
+import { Text } from '@/components/primitives/Text'
 import { FollowButton } from '@/components/features/user/FollowButton'
+import { MetaStrip } from '@/components/features/user/MetaStrip'
 import { useUserProfile } from '@/hooks/useUserProfile'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
+
+function formatJoined(iso: string): string {
+  try {
+    const d = new Date(iso)
+    return `Joined ${d.toLocaleString('en-US', { month: 'short', year: 'numeric' })}`
+  } catch {
+    return ''
+  }
+}
+
+function formatCount(n: number): string {
+  if (n >= 10_000) return `${Math.floor(n / 1000)}k`
+  if (n >= 1_000) return `${(n / 1000).toFixed(1)}k`
+  return String(n)
+}
 
 export function ProfileScreen() {
   const { handle } = useLocalSearchParams<{ handle: string }>()
@@ -19,98 +52,138 @@ export function ProfileScreen() {
 
   if (isLoading) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.center}>
-          <ActivityIndicator color={theme.colors.accent.default} />
-        </View>
-      </SafeAreaView>
+      <ScreenScroll contentContainerStyle={styles.loadingScroll}>
+        <ActivityIndicator color={theme.colors.accent.default} />
+      </ScreenScroll>
     )
   }
 
   if (error || !profile) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.backRow}>
-          <Button label="← Back" onPress={() => router.back()} variant="secondary" />
+      <ScreenScroll contentContainerStyle={styles.content}>
+        <View style={styles.headerRow}>
+          <IconButton
+            name="arrow-left"
+            variant="ghost"
+            onPress={() => router.back()}
+            accessibilityLabel="Back"
+          />
         </View>
-        <View style={styles.center}>
-          <Text style={styles.muted}>User not found</Text>
+        <View style={styles.notFound}>
+          <Text variant="body" color={theme.colors.text.muted}>
+            User not found
+          </Text>
         </View>
-      </SafeAreaView>
+      </ScreenScroll>
     )
   }
 
+  const joinedLine = formatJoined(profile.createdAt)
+
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.backRow}>
-        <Button label="← Back" onPress={() => router.back()} variant="secondary" />
+    <ScreenScroll contentContainerStyle={styles.content}>
+      <View style={styles.headerRow}>
+        <IconButton
+          name="arrow-left"
+          variant="ghost"
+          onPress={() => router.back()}
+          accessibilityLabel="Back"
+        />
       </View>
-      <ScrollView contentContainerStyle={styles.content}>
-        <Avatar avatarUrl={profile.avatarUrl} displayName={profile.displayName} size={88} />
-        <Text style={styles.displayName}>{profile.displayName}</Text>
-        <Text style={styles.handle}>@{profile.handle}</Text>
 
-        <View style={styles.statsRow}>
-          <View style={styles.stat}>
-            <Text style={styles.statNum}>{profile.followerCount}</Text>
-            <Text style={styles.statLabel}>Followers</Text>
-          </View>
-          <View style={styles.statDivider} />
-          <View style={styles.stat}>
-            <Text style={styles.statNum}>{profile.followingCount}</Text>
-            <Text style={styles.statLabel}>Following</Text>
-          </View>
+      <View style={styles.identity}>
+        <Avatar
+          avatarUrl={profile.avatarUrl}
+          displayName={profile.displayName}
+          size="xl"
+        />
+        <Text variant="display" style={styles.center}>
+          {profile.displayName}
+        </Text>
+        <Text variant="body" color={theme.colors.text.muted}>
+          @{profile.handle}
+        </Text>
+        {joinedLine && (
+          <MetaStrip rows={[[{ value: joinedLine }]]} style={styles.metaStrip} />
+        )}
+      </View>
+
+      <View style={styles.statsRow}>
+        <View style={styles.stat}>
+          <Text variant="display">{formatCount(profile.followerCount)}</Text>
+          <Text variant="monoLabel" color={theme.colors.text.subtle}>
+            FOLLOWERS
+          </Text>
         </View>
+        <View style={styles.statDivider} />
+        <View style={styles.stat}>
+          <Text variant="display">{formatCount(profile.followingCount)}</Text>
+          <Text variant="monoLabel" color={theme.colors.text.subtle}>
+            FOLLOWING
+          </Text>
+        </View>
+      </View>
 
-        {isSignedIn && !isOwnProfile && (
-          <View style={styles.actions}>
-            <FollowButton handle={profile.handle} />
-          </View>
-        )}
+      {isSignedIn && !isOwnProfile && (
+        <FollowButton handle={profile.handle} />
+      )}
 
-        {isOwnProfile && (
-          <View style={styles.actions}>
-            <Button
-              label="Edit Profile"
-              onPress={() => router.push('/(app)/me')}
-              variant="secondary"
-              style={styles.wide}
-            />
-          </View>
-        )}
-      </ScrollView>
-    </SafeAreaView>
+      {isOwnProfile && (
+        <Button
+          label="Edit Profile"
+          onPress={() => router.push('/(app)/me')}
+          variant="secondary"
+        />
+      )}
+    </ScreenScroll>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.colors.bg.primary },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  backRow: {
-    paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.sm,
-    paddingBottom: theme.spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border.subtle,
+  center: {
+    textAlign: 'center',
+  },
+  loadingScroll: {
+    flexGrow: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   content: {
-    alignItems: 'center',
     padding: theme.spacing.lg,
-    gap: theme.spacing.md,
+    gap: theme.spacing.lg,
+    alignItems: 'stretch',
+    paddingBottom: theme.spacing.xxxl,
   },
-  displayName: { ...theme.typography.heading, color: theme.colors.text.primary, fontWeight: '700' },
-  handle: { ...theme.typography.body, color: theme.colors.text.muted },
+  headerRow: {
+    flexDirection: 'row',
+  },
+  notFound: {
+    flexGrow: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: theme.spacing.xxl,
+  },
+  identity: {
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+  },
+  metaStrip: {
+    alignItems: 'center',
+  },
   statsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.lg,
-    marginTop: theme.spacing.sm,
+    justifyContent: 'center',
+    gap: theme.spacing.xl,
+    paddingVertical: theme.spacing.md,
   },
-  stat: { alignItems: 'center', gap: 2 },
-  statNum: { ...theme.typography.heading, color: theme.colors.text.primary, fontWeight: '700' },
-  statLabel: { ...theme.typography.caption, color: theme.colors.text.muted },
-  statDivider: { width: 1, height: 32, backgroundColor: theme.colors.border.subtle },
-  actions: { width: '100%', gap: theme.spacing.sm },
-  muted: { ...theme.typography.body, color: theme.colors.text.muted },
-  wide: { width: '100%' },
+  stat: {
+    alignItems: 'center',
+    gap: 2,
+  },
+  statDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: theme.colors.border.subtle,
+  },
 })
