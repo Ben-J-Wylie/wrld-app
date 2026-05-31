@@ -35,6 +35,11 @@ import { ConsentRow } from '@/components/features/onboarding/ConsentRow'
 import { SocialAuthButton } from '@/components/features/auth/SocialAuthButton'
 import { AuthChoiceList } from '@/components/features/auth/AuthChoiceList'
 import { PasswordStrengthMeter } from '@/components/features/auth/PasswordStrengthMeter'
+import { PursesCard } from '@/components/features/wallet/PursesCard'
+import { TransactionRow } from '@/components/features/wallet/TransactionRow'
+import { BundleCard } from '@/components/features/wallet/BundleCard'
+import { AmountInput } from '@/components/features/wallet/AmountInput'
+import { BankCard } from '@/components/features/wallet/BankCard'
 import { Toggle } from '@/components/primitives/Toggle'
 import { Button } from '@/components/primitives/Button'
 import { BroadcasterRow } from '@/components/features/user/BroadcasterRow'
@@ -687,6 +692,115 @@ export function FeatureGallery() {
         </Row>
       </Section>
 
+      <Section title="PursesCard">
+        <Row label="dual (Wallet hero)">
+          <PursesCard spaceBucks={2480} starDust={1715} />
+        </Row>
+        <Row label="single SB (Top Up strip)">
+          <PursesCard variant="single-sb" spaceBucks={2480} />
+        </Row>
+        <Row label="single SD (Cash Out hero)">
+          <PursesCard variant="single-sd" starDust={1715} />
+        </Row>
+      </Section>
+
+      <Section title="TransactionRow">
+        <Row label="tip sent">
+          <TransactionRow
+            kind="tip-sent"
+            title="Tipped @kai.dc"
+            sub="Brooklyn · Atlantic Ave"
+            amount={100}
+            currency="sb"
+          />
+        </Row>
+        <Row label="tip received">
+          <TransactionRow
+            kind="tip-received"
+            title="Tip from @mira"
+            sub="That drone shot is wild"
+            amount={70}
+            currency="sd"
+          />
+        </Row>
+        <Row label="pending topup">
+          <TransactionRow
+            kind="topup"
+            title="Top Up · 1000 SB bundle"
+            amount={1000}
+            currency="sb"
+            pending
+          />
+        </Row>
+        <Row label="promo">
+          <TransactionRow kind="promo" title="Welcome bonus" amount={50} currency="sb" />
+        </Row>
+        <Row label="pressed (subscription mock)">
+          <TransactionRow
+            kind="sub-paid"
+            title="Subscription · @kai.dc"
+            sub="Monthly"
+            amount={500}
+            currency="sb"
+            onPress={() => {}}
+          />
+        </Row>
+      </Section>
+
+      <Section title="BundleCard">
+        <Row label="default">
+          <BundleCard qty={100} priceUsd={1.0} onPress={() => {}} />
+        </Row>
+        <Row label="selected with badge">
+          <BundleCard
+            qty={500}
+            priceUsd={4.0}
+            perUnitSavingsPct={20}
+            badge="best-value"
+            selected
+            onPress={() => {}}
+          />
+        </Row>
+        <Row label="VIP badge">
+          <BundleCard
+            qty={10000}
+            priceUsd={75.0}
+            perUnitSavingsPct={25}
+            badge="vip"
+            onPress={() => {}}
+          />
+        </Row>
+        <Row label="disabled">
+          <BundleCard qty={2500} priceUsd={20.0} disabled />
+        </Row>
+      </Section>
+
+      <Section title="AmountInput">
+        <Row label="tip">
+          <AmountInputDemo variant="tip" initial={100} max={5000} />
+        </Row>
+        <Row label="cashout (with 30% fee)">
+          <AmountInputDemo variant="cashout" initial={1000} max={10000} platformFeePct={30} />
+        </Row>
+        <Row label="invalid">
+          <AmountInputDemo
+            variant="tip"
+            initial={5}
+            max={500}
+            invalidReason="MINIMUM 50 🚀"
+          />
+        </Row>
+      </Section>
+
+      <Section title="BankCard">
+        <Row label="default">
+          <BankCard bankName="Chase" last4="4242" onChange={() => {}} />
+        </Row>
+        <Row label="no Change link">
+          <BankCard bankName="Bank of America" last4="1837" />
+        </Row>
+      </Section>
+
       <Section title="BroadcasterRow">
         <Row label="default">
           <BroadcasterRow
@@ -796,6 +910,32 @@ function ToastBannerDemo() {
         />
       )}
     </View>
+  )
+}
+
+function AmountInputDemo({
+  variant,
+  initial,
+  max,
+  platformFeePct,
+  invalidReason,
+}: {
+  variant: 'tip' | 'cashout'
+  initial: number
+  max: number
+  platformFeePct?: number
+  invalidReason?: string
+}) {
+  const [v, setV] = useState(initial)
+  return (
+    <AmountInput
+      variant={variant}
+      value={v}
+      onValueChange={setV}
+      max={max}
+      platformFeePct={platformFeePct}
+      invalidReason={invalidReason}
+    />
   )
 }
 

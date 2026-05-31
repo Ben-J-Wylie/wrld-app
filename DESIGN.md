@@ -2193,13 +2193,14 @@ if a second warn-tinted surface appears.
 
 ##### `PursesCard`
 
-- **Tier:** feature (composes Card + Text + currency glyphs)
+- **Tier:** feature (composes Text)
 - **Location:** `src/components/features/wallet/PursesCard.tsx`
-- **Variants:** `dual` (Space Bucks + Star Dust hero), `single-sb`, `single-sd`
-- **Sizes:** md (hero), sm (context strip in Top Up / Cash Out)
+- **Variants:** `dual` (Space Bucks + Star Dust hero, side-by-side), `single-sb`, `single-sd`
+- **Sizes:** md (hero)
 - **States:** default
 - **Used in:** populated in 12.6
 - **Tweak impact:** Wallet v2 hero, Top Up context strip, Cash Out hero
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
 
 **Mock says:** Dual-currency hero card showing Space Bucks balance and
 Star Dust balance side-by-side. Each side: accent-tinted (SB) or
@@ -2207,102 +2208,117 @@ live-tinted (SD) glow, currency glyph (4-point star for SB, rose-cut
 gem for SD), big numeric balance (tabular), bottom row with $ equivalent
 + rate hint.
 
-**Code does:** Current Me screen surfaces Space Bucks balance inline. No
-dual-currency UI; no Star Dust yet.
-
-**Gap / proposal:** New feature. Both currencies = $0.01/unit per
-re-baseline. The 30% platform fee on transfer is invisible here (handled
-in TransactionRow / tip flow). Variant selects 1- or 2-currency
-display.
+**Code does (shipped):** Card with two Purse columns (or one for the
+single variants) separated by a hairline. Each Purse renders a
+mono-caps label ("SPACE BUCKS" / "STAR DUST") + glyph (🚀 / ✨ — copy
+glyphs; bespoke currency icons can swap in via the same purse-internal
+helper later), a display-variant tabular balance, and a mono caption
+"$X.YZ · $0.01/unit". Both currencies are $0.01/unit per the
+2026-05-29 re-baseline; the 30% platform fee on transfer is invisible
+here (handled in TransactionRow / tip flow).
 
 ---
 
 ##### `TransactionRow`
 
-- **Tier:** feature
+- **Tier:** feature (composes Pressable + Icon + Text)
 - **Location:** `src/components/features/wallet/TransactionRow.tsx`
-- **Variants:** `tip-sent`, `tip-received`, `sub-paid` (mock-only v0.2), `sub-earned` (mock-only v0.2), `ppv-paid` (mock-only v0.2), `ppv-earned` (mock-only v0.2), `topup` (stubbed v0.2), `cashout` (stubbed v0.2), `promo`, `refund`, `hold`
+- **Variants (`kind`):** `tip-sent`, `tip-received`, `sub-paid`, `sub-earned`, `ppv-paid`, `ppv-earned`, `topup`, `cashout`, `promo`, `refund`, `hold`
 - **Sizes:** md
-- **States:** default, pending, pressed
+- **States:** default, pending (PENDING label below amount), pressed
 - **Used in:** populated in 12.6
 - **Tweak impact:** Wallet v2 transaction list, future transaction-detail surfaces
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
 
 **Mock says:** Grid: thumbnail-tile (40×40, colored by kind + currency
 direction) + meta column (title + sub) + amount column (mono, signed,
 USD equivalent below). Pending state shows "PENDING" label below
 amount.
 
-**Code does:** None.
+**Code does (shipped):** 40-square icon tile (Feather glyph picked by
+kind) + meta column (title + optional sub) + right-aligned amount
+column (signed unit qty + glyph, USD line, optional PENDING in warn).
+Direction (+/−) is fixed per kind. Currency glyph baked into the
+amount line for visual scan.
 
-**Gap / proposal:** New feature. Variant kinds match the v0.2 + v0.3
-wallet model (see DESIGN.md decision log 2026-05-29 wallet entry).
-Subs + PPV variants ship but emit no real transactions in v0.2.
+**API:** `{ kind, title, sub?, amount, currency: 'sb'|'sd', pending?,
+onPress? }` — consumer-flat. Subs/PPV/topup/cashout kinds ship in
+v0.2 per the re-baseline but emit no real transactions yet.
 
 ---
 
 ##### `BundleCard`
 
-- **Tier:** feature (composes Card + Pill + Text)
+- **Tier:** feature (composes Pressable + Text)
 - **Location:** `src/components/features/wallet/BundleCard.tsx`
-- **Variants:** `default`, `with-badge` (BEST VALUE / MOST POPULAR / VIP corner badge)
+- **Variants:** `default`, plus optional `badge` prop ('best-value' / 'most-popular' / 'vip')
 - **Sizes:** md
-- **States:** default, selected, disabled
+- **States:** default, selected (accent border + accent.surface bg + filled bullet), disabled (opacity 0.45)
 - **Used in:** populated in 12.6
 - **Tweak impact:** Top Up bundle picker, future bundle surfaces
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
 
 **Mock says:** Radio card: pick bullet (22×22, animated fill) + body
 (token glyph + qty + per-token meta) + price column (USD price + per-
 unit savings %). Selected = accent border + glow. Optional corner badge
 (BEST VALUE accent / MOST POPULAR accent-hot / VIP ink).
 
-**Code does:** None — Top Up screen is a Phase 13 placeholder.
-
-**Gap / proposal:** New feature. Variants control the corner badge.
-Selected state managed by parent.
+**Code does (shipped):** 22-circle bullet (accent fill when selected)
++ body (qty 🚀 + optional "N% off vs. base") + price column. Selected
+state managed by parent — passed in via `selected`. Corner badge
+positioned absolute top-right; vip uses ink surface + cream label,
+others use accent. Animated bullet fill is deferred (instant swap on
+selection) — not visually missed.
 
 ---
 
 ##### `AmountInput`
 
-- **Tier:** feature (composes Text + Slider + Pill — semantic numeric input)
+- **Tier:** feature (composes Text + TextInput + Slider)
 - **Location:** `src/components/features/wallet/AmountInput.tsx`
-- **Variants:** `tip` (uses Space Bucks glyph + accent), `cashout` (uses Star Dust glyph + live)
+- **Variants:** `tip` (🚀 SPACE BUCKS), `cashout` (✨ STAR DUST + net-after-fee line when `platformFeePct` is set)
 - **Sizes:** md
-- **States:** default, focused, invalid (below min)
+- **States:** default, invalid (consumer provides `invalidReason`; rendered in accent)
 - **Used in:** populated in 12.6
 - **Tweak impact:** TipSheet, Cash Out screen, future amount-entry surfaces
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
 
 **Mock says:** Large numeric input (40px, sans 600) with currency glyph
 prefix + unit pill suffix. USD equivalent shown below. Fee breakdown for
 Cash Out variant (shows net amount after platform fee). Slider beneath
 for snap-to-step adjustment. Preset chips (4-up grid) for quick amounts.
 
-**Code does:** TipSheet (Phase 13) has inline amount picker. Cashout has
-its own bespoke slider.
+**Code does (shipped):** Glyph + 40px numeric `TextInput` (number-pad
+keyboard, digits-only sanitizer) + mono-caps unit label, USD line
+below, optional net-after-fee line for cashout, optional invalid
+message in accent. Slider primitive handles snap-to-step adjustment.
 
-**Gap / proposal:** Consolidate into one feature with variants for
-purpose. The slider primitive (12.4) handles the bar. Preset chips are
-external — passed as a separate prop or rendered alongside.
+**API:** `variant`, controlled `value` + `onValueChange`, `max`,
+`min?`, `step?`, `platformFeePct?`, `invalidReason?`. Preset chips
+live in a sibling section (PresetGrid) rather than inside this
+feature.
 
 ---
 
 ##### `BankCard`
 
-- **Tier:** feature (composes Card + Icon + Text + Button)
+- **Tier:** feature (composes Pressable + Icon + Text)
 - **Location:** `src/components/features/wallet/BankCard.tsx`
 - **Variants:** `default`
 - **Sizes:** md
-- **States:** default, pressed (Change button)
+- **States:** default, pressed (Change link)
 - **Used in:** populated in 12.6
 - **Tweak impact:** Cash Out payee selection, future linked-account surfaces (stubbed v0.2 per re-baseline)
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
 
 **Mock says:** Card with bank icon-tile (38×38), meta column (bank name
 masked + last 4 digits), and a "Change" link button on the right.
 
-**Code does:** None — Cash Out is mock-only in v0.2 per re-baseline.
-
-**Gap / proposal:** New feature. Component ships v0.2; underlying bank-
-linking is v0.3.
+**Code does (shipped):** 38-square icon tile (`credit-card` glyph) +
+meta column (bank name + masked "•••• XXXX") + optional "Change"
+link-style Pressable in accent. Card surface = `bg.elevated` with
+subtle border. Component ships v0.2 per re-baseline; bank-linking
+itself is v0.3.
 
 ---
 
