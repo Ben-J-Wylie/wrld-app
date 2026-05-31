@@ -14,7 +14,10 @@ import { StreamCard } from '@/components/features/stream/StreamCard'
 import { VideoPreviewTile } from '@/components/features/stream/VideoPreviewTile'
 import { CoordHUD } from '@/components/features/stream/CoordHUD'
 import { StreamTile } from '@/components/features/stream/StreamTile'
+import { ChatMessage } from '@/components/features/chat/ChatMessage'
+import { ChatComposer } from '@/components/features/chat/ChatComposer'
 import { BroadcasterRow } from '@/components/features/user/BroadcasterRow'
+import { useState } from 'react'
 import { theme } from '@/tokens/theme'
 
 export function FeatureGallery() {
@@ -238,6 +241,39 @@ export function FeatureGallery() {
         </Row>
       </Section>
 
+      <Section title="ChatMessage">
+        <Row label="user (default)">
+          <View style={styles.chatBg}>
+            <ChatMessage role="user" handle="@mira" body="that drone shot is wild" />
+            <ChatMessage role="user" handle="@kai" body="where is this exactly?" />
+          </View>
+        </Row>
+        <Row label="host (broadcaster)">
+          <View style={styles.chatBg}>
+            <ChatMessage role="host" handle="@bw" body="brooklyn — atlantic ave fest" />
+          </View>
+        </Row>
+        <Row label="mod">
+          <View style={styles.chatBg}>
+            <ChatMessage role="mod" handle="@jules" body="keep it kind everyone 🙏" />
+          </View>
+        </Row>
+        <Row label="system">
+          <View style={styles.chatBg}>
+            <ChatMessage role="system" body="STREAM PAUSED · RESUMING" />
+          </View>
+        </Row>
+      </Section>
+
+      <Section title="ChatComposer">
+        <Row label="empty"><ChatComposerDemo initial="" /></Row>
+        <Row label="has-text"><ChatComposerDemo initial="awesome stream" /></Row>
+        <Row label="sending"><ChatComposerDemo initial="awesome stream" sending /></Row>
+        <Row label="unauthenticated">
+          <ChatComposerDemo initial="" authenticated={false} />
+        </Row>
+      </Section>
+
       <Section title="BroadcasterRow">
         <Row label="default">
           <BroadcasterRow
@@ -306,6 +342,28 @@ function GalleryRow({ label, children }: { label: string; children: React.ReactN
 // Local alias so the markup reads `<Row>` like the primitive gallery does
 const Row = GalleryRow
 
+function ChatComposerDemo({
+  initial,
+  sending,
+  authenticated,
+}: {
+  initial: string
+  sending?: boolean
+  authenticated?: boolean
+}) {
+  const [value, setValue] = useState(initial)
+  return (
+    <ChatComposer
+      value={value}
+      onChangeText={setValue}
+      onSubmit={() => setValue('')}
+      sending={sending}
+      authenticated={authenticated}
+      onAuthRequest={() => {}}
+    />
+  )
+}
+
 const styles = StyleSheet.create({
   scroll: { padding: theme.spacing.lg, gap: theme.spacing.md, paddingBottom: theme.spacing.xxxl },
   section: { gap: theme.spacing.sm, marginTop: theme.spacing.xl },
@@ -338,5 +396,11 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.md,
     padding: theme.spacing.md,
     justifyContent: 'flex-start',
+  },
+  chatBg: {
+    backgroundColor: '#1d1410',
+    borderRadius: theme.radius.md,
+    padding: theme.spacing.md,
+    gap: 2,
   },
 })

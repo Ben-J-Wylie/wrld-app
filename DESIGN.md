@@ -2278,39 +2278,59 @@ transitions are dramatic.
 
 - **Tier:** feature (composes Text)
 - **Location:** `src/components/features/chat/ChatMessage.tsx`
-- **Variants:** `user` (default — dim handle), `mod` (accent-hot handle), `host` (live handle), `system` (mono caps, full-mono row)
+- **Variants:** `user` (default — handle in `text.muted`), `mod` (handle in `warn` amber), `host` (handle in `accent.default`), `system` (no handle — full mono caps line in `text.inverse`)
 - **Sizes:** md
 - **States:** default
-- **Used in:** populated in 12.6
+- **Used in:** populated in 12.6 (ChatOverlay refactor)
 - **Tweak impact:** Broadcast Live chat list, viewer chat overlay
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
+- **Last reviewed:** 2026-05-31
 
 **Mock says:** Inline message: bold colored handle (role-coded) + plain
 body. **System** messages are full mono caps. Text-shadow for legibility
 over video.
 
-**Code does:** `ChatOverlay` in features renders chat messages inline.
-Refactor splits ChatOverlay into ChatMessage (this) + ChatComposer (next).
+**Code does (shipped):** Inline row using nested RN `<Text>` so handle +
+body wrap naturally as one line. Handle uses Text variant
+`bodyEmphasized` in the role color; body uses Text variant `body` in
+`text.inverse` (cream). System rows render a single `monoLabel` line
+(no handle slot). Every text span carries a uniform text-shadow
+(`rgba(0,0,0,0.6)`, offset 0/1, radius 2) so the message stays legible
+when overlaid on the live video.
 
-**Gap / proposal:** New feature. Accepts `{ role, handle, body }`.
+**API:** consumer-flat — `{ role, handle, body }`. The feature does
+not own scrolling, virtualization, or send semantics; those belong to
+the section that wraps it (12.6 ChatOverlay refactor).
 
 ---
 
 ##### `ChatComposer`
 
-- **Tier:** feature (composes Input + IconButton)
+- **Tier:** feature (composes Input + IconButton + Spinner)
 - **Location:** `src/components/features/chat/ChatComposer.tsx`
 - **Variants:** `default`
-- **Sizes:** md (h:40 round input + 40×40 send)
-- **States:** empty, has-text, sending, disabled (unauthenticated → AuthModal on tap)
-- **Used in:** populated in 12.6
+- **Sizes:** md (h:40 pill Input + 44-circle send button)
+- **States:** empty (send disabled), has-text (send enabled), sending (input non-editable, send swaps to spinner-in-accent-disc), unauthenticated (input shows "Sign in to chat" placeholder, whole row is a Pressable that fires `onAuthRequest`)
+- **Used in:** populated in 12.6 (ChatOverlay refactor)
 - **Tweak impact:** Broadcast Live composer, ChatOverlay refactor
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
+- **Last reviewed:** 2026-05-31
 
 **Mock says:** Round 999-radius Input + circular accent send button. The
 input has a placeholder. Send disabled when empty.
 
-**Code does:** `ChatOverlay` inline composer. Refactor.
+**Code does (shipped):** Controlled feature — `value`, `onChangeText`,
+`onSubmit` passed in. The 999-radius pill + 40-tall height are applied
+via the `style` prop on the existing Input primitive (no new variant
+added; the style override is the cheaper composition). Send is an
+IconButton variant `accent` size `lg` (44px). Spinner replaces the
+send button while `sending`. Unauth mode wraps the row in a Pressable
+that calls `onAuthRequest`, so the screen can present the Phase 10
+AuthModal at the point of attempt.
 
-**Gap / proposal:** Extract as feature.
+**API:** consumer-flat — `value`, `onChangeText`, `onSubmit`,
+`sending?`, `authenticated?`, `onAuthRequest?`, `placeholder?`. Send
+enabled iff `authenticated && !sending && value.trim().length > 0`.
 
 ---
 
