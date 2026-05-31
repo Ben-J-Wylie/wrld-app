@@ -1040,3 +1040,42 @@ the current tier name + "View all plans" and navigates to `/(app)/subscription`.
 `tier: 'free' | 'plus' | 'pro'` added. Populated by `GET /auth/me` — the backend
 now includes `tier` on every user response since it's a column on the `User` model.
 The auth store (`wrldUser`) carries it without any additional fetch.
+
+---
+
+## Updates — May 2026 (Report snapshots: react-native-view-shot)
+
+### New dependencies
+
+- `react-native-view-shot@4.0.3` — captures a React Native view as a JPEG/PNG
+- `expo-screen-orientation@~9.0.9` — device orientation detection
+
+Both are native modules. **An EAS dev client rebuild is required before they work on device:**
+
+```bash
+eas build --profile development --platform all
+```
+
+### Report snapshot flow (`src/components/screens/StreamScreen.tsx`)
+
+When a viewer taps ⚑ (Report):
+
+1. `captureRef(videoContainerRef, { format: 'jpg', quality: 0.9 })` fires immediately — before the reason sheet appears — capturing the decoded video frame exactly as the viewer sees it
+2. The captured URI is stashed in `pendingSnapshotUri` ref
+3. The reason sheet opens
+
+After the viewer selects a reason:
+
+1. `streamsApi.report(streamId, reason)` → `POST /streams/:id/report` returns `reportId`
+2. `streamsApi.uploadSnapshot(reportId, uri)` uploads the JPEG to `POST /reports/:id/snapshot` in the background (fire-and-forget, non-fatal if it fails)
+
+The remote `RTCView` is wrapped in a `View ref={videoContainerRef}` so `captureRef` has a target. `videoContainerRef` is only placed on the remote video (viewer side); broadcaster capture is not attempted.
+
+### `streamsApi` changes (`src/api/streams.ts`)
+
+- `report(id, reason)` now returns `Promise<string>` (the `reportId`) instead of `Promise<void>`
+- New `uploadSnapshot(reportId, uri)` — posts multipart JPEG to `POST /reports/:id/snapshot`
+
+### `getUserMedia` resolution (`src/hooks/useMediasoup.ts`)
+
+Added `width: { ideal: 1280 }, height: { ideal: 720 }` constraints to the broadcaster camera `getUserMedia` call. React Native WebRTC negotiates up to 1280×720 on supported devices (previously defaulted to ~640×352). No EAS rebuild required — pure JS.

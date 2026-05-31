@@ -1,5 +1,6 @@
 import { View, Text, StyleSheet, ActivityIndicator, Pressable, AppState, Keyboard, Platform, Animated, Alert } from 'react-native'
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { captureRef } from 'react-native-view-shot'
 import { useLocalSearchParams, router, useFocusEffect } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { RTCView } from 'react-native-webrtc'
@@ -115,6 +116,8 @@ export function StreamScreen() {
   // Guards against double-navigation when multiple end signals arrive simultaneously
   // (e.g. broadcasterLeft WS message + viewer WS close in the same render cycle).
   const navigatingRef = useRef(false)
+  const videoContainerRef = useRef<View>(null)
+  const pendingSnapshotUri = useRef<string | null>(null)
 
   const isCameraArmed = broadcastSources.includes('camera')
   const showCameraPreview = isNew && status === 'in-room' && !!localStream && isCameraArmed
@@ -357,16 +360,28 @@ export function StreamScreen() {
     setTipSheetVisible(true)
   }
 
-  function handleReportPress() {
+  async function handleReportPress() {
     if (!isSignedIn) { setAuthModalVisible(true); return }
+    // Capture the video frame before the report sheet overlays it
+    try {
+      pendingSnapshotUri.current = await captureRef(videoContainerRef, { format: 'jpg', quality: 0.9 })
+    } catch {
+      pendingSnapshotUri.current = null
+    }
     setReportVisible(true)
   }
 
   async function submitReport(reason: string) {
     if (!streamId) return
     try {
-      await streamsApi.report(streamId, reason)
+      const reportId = await streamsApi.report(streamId, reason)
       setReportVisible(false)
+      // Upload the snapshot in the background — non-fatal if it fails
+      if (pendingSnapshotUri.current) {
+        const uri = pendingSnapshotUri.current
+        pendingSnapshotUri.current = null
+        streamsApi.uploadSnapshot(reportId, uri).catch(() => {})
+      }
       Alert.alert('Reported', 'Thanks for letting us know. We\'ll review this stream.')
     } catch {
       Alert.alert('Error', 'Could not submit report. Please try again.')
@@ -417,13 +432,15 @@ export function StreamScreen() {
 
       {/* Fullscreen remote stream (viewer) */}
       {showRemoteVideo && (
-        <RTCView
-          streamURL={(remoteStream as unknown as { toURL(): string }).toURL()}
-          style={StyleSheet.absoluteFill}
-          objectFit="cover"
-          mirror={false}
-          zOrder={0}
-        />
+        <View ref={videoContainerRef} style={StyleSheet.absoluteFill}>
+          <RTCView
+            streamURL={(remoteStream as unknown as { toURL(): string }).toURL()}
+            style={StyleSheet.absoluteFill}
+            objectFit="cover"
+            mirror={false}
+            zOrder={0}
+          />
+        </View>
       )}
 
       {/* Admin warning banner (broadcaster only, dismissible) */}

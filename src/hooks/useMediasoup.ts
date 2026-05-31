@@ -51,7 +51,9 @@ export function useMediasoup() {
       const device = await buildDevice()
 
       const stream = (await mediaDevices.getUserMedia({
-        video: sources.includes('camera') ? { facingMode: 'environment' } : false,
+        video: sources.includes('camera')
+          ? { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+          : false,
         audio: sources.includes('audio'),
       })) as unknown as MediaStream
       localStreamRef.current = stream

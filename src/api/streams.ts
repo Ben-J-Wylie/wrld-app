@@ -47,7 +47,16 @@ export const streamsApi = {
     await apiClient.delete(`/streams/${id}`)
   },
 
-  report: async (id: string, reason: string): Promise<void> => {
-    await apiClient.post(`/streams/${id}/report`, { reason })
+  report: async (id: string, reason: string): Promise<string> => {
+    const res = await apiClient.post<{ ok: boolean; reportId: string }>(`/streams/${id}/report`, { reason })
+    return res.data.reportId
+  },
+
+  uploadSnapshot: async (reportId: string, uri: string): Promise<void> => {
+    const form = new FormData()
+    form.append('snapshot', { uri, type: 'image/jpeg', name: 'snapshot.jpg' } as unknown as Blob)
+    await apiClient.post(`/reports/${reportId}/snapshot`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
   },
 }
