@@ -5,7 +5,6 @@ import { KeyboardProvider } from 'react-native-keyboard-controller'
 import { StatusBar } from 'expo-status-bar'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useEffect, useRef } from 'react'
-import { AppState } from 'react-native'
 import { ClerkProvider, useAuth } from '@clerk/clerk-expo'
 import * as Notifications from 'expo-notifications'
 import { tokenCache } from '@/lib/tokenCache'
@@ -64,19 +63,18 @@ function RootNavigator() {
     }
   }, [isLoaded, isSignedIn])
 
-  // Re-fetch user profile when app comes to foreground so changes like
-  // suspension status, tier, and balances stay current without sign-out.
+  // Poll /auth/me every 10s while signed in so suspension status, tier, and
+  // balances update in near-real-time without any user interaction.
   useEffect(() => {
     if (!isSignedIn) return
-    const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') {
-        apiClient
-          .get<{ user: User }>('/auth/me')
-          .then((res) => setWrldUser(res.data.user))
-          .catch(() => {})
-      }
-    })
-    return () => sub.remove()
+    const refresh = () => {
+      apiClient
+        .get<{ user: User }>('/auth/me')
+        .then((res) => setWrldUser(res.data.user))
+        .catch(() => {})
+    }
+    const interval = setInterval(refresh, 10_000)
+    return () => clearInterval(interval)
   }, [isSignedIn])
 
   // Register Expo push token when signed in
