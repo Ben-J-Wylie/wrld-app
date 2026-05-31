@@ -94,6 +94,8 @@ The North Star UX:
 - **Clerk** (`@clerk/clerk-expo`) for auth — added in Phase 3
 - **mediasoup-client** + **react-native-webrtc** for live media — added in Phase 7
 - **expo-gl** + **three** for the 3D globe — added in Phase 5
+- **`@expo/vector-icons`** (Feather glyph set) — added in sub-phase 12.4 for the `Icon` primitive
+- **`react-native-keyboard-controller`** + peer chain (**`react-native-reanimated`** v4, **`react-native-worklets`**) — added in sub-phase 12.4 for the `KeyboardProvider` + `KeyboardAwareScrollView` keyboard story under New Architecture. **`babel.config.js`** at repo root wires the worklets plugin.
 - React 19 / RN 0.81
 
 ### Folder layout
@@ -247,7 +249,7 @@ We're building in slices so each phase is independently verifiable.
 | 9     | ✅ done  | Stream lifecycle reliability. Every stream interruption — broadcaster force-quit, graceful leave, network drop, app backgrounded — sends the viewer back to the globe with a banner. Graceful leave → "Stream has ended" banner. Network drop / background → "Stream disconnected" banner that polls for broadcaster return; if stream resumes, banner turns green and is tappable to rejoin. Key work: typed `StreamSignal` module for cross-screen communication; `BannerData` union in globe with auto-dismiss (8s ended, 5-min reconnect poll); `exitToGlobe(kind)` with `navigatingRef` double-navigation guard in stream view; all viewer navigation uses `router.navigate('/(app)/globe')` (stream screen is a tab, not a stack — `router.back()` is a no-op from a tab); `AppState` listener disconnects broadcaster WS on app background so server immediately fires `broadcasterLeft` to viewers; server ping/pong reduced from 30s to 10s for faster connectivity-loss detection (≤20s); server closes viewer WS with code 4001 after `broadcasterLeft`; client maps code 4001 → `streamEnded` state; `setStreamEnded(false)` in `connect()` and `navigatingRef` reset on room-id change fix state persistence across multiple stream sessions (tab component is never unmounted); viewer idle UI removed — viewers are always redirected to globe, the "Watch" screen has no valid path. |
 | 10    | ✅ done  | Engagement. Ephemeral chat + emoji reactions in stream view, follow-a-streamer, AuthModal for anonymous users. **Chat:** `chatMessage` fans out through mediasoup to all room peers; auth required to send; anon viewers see the thread but get `AuthModal` on send attempt; `ChatOverlay` component (scrolling list + send input); keyboard shifts panel up via `Keyboard` event listener (KAV doesn't work inside absolute-positioned containers). **Reactions:** 4 emoji types (❤️🔥👏😮); Periscope-style `Animated` upward-drift burst; auth required; anon gets `AuthModal`. **Follow:** `FollowButton` shown to all viewers; reads real `isFollowing` from `GET /users/:identifier` (backend now includes it when request is authenticated); anon tap opens `AuthModal`; local state syncs via `useEffect` on query data so it survives `showControls` remounts. **AuthModal:** bottom-sheet signup/signin matching existing Clerk flow (email + password; signup triggers email_code verification step). **Bug fixes in this phase:** (a) viewer re-joining same stream produced black screen — `useEffect([id])` is blind to tab re-focus; replaced with `useFocusEffect` so every screen focus triggers join; (b) `FollowButton` reset to "Follow" on remount because `initialFollowing` was always `false` — fixed by reading server state via `useUserProfile`. |
 | 11    | ✅ done  | Discovery & notifications. Expo Push Notifications via Expo's servers (routes to APNs/FCM). `PushSubscription` table on backend (token, platform, timezone, lat/lng, rate-limit timestamp). Notification prefs on `User` (`notifyOnFollowedLive` default true, `notifyOnNearbyLive` default off). Fan-out on stream start: followers + nearby (10km Haversine, 1/hr rate limit — both temporarily relaxed to 100km + no limit for testing). `useRegisterPushToken` hook: permission request, Android channel, Expo token + last-known location → backend. Root layout: foreground notification display + notification-tap deep-link to stream. Settings screen: two preference toggles. **Credential setup (one-time):** iOS: `eas credentials` → APNs key (Ben's Apple account). Android: Firebase project `wrld-b1d2d`, `google-services.json` at repo root, FCM V1 service account uploaded via EAS dashboard. **Install `expo-notifications` with `npx expo install`, never `npm install`** — the latter grabs the latest SDK version which won't match the compiled native modules. Broadcaster pause banner: `'inactive'` AppState (iOS Control Center/Notification Center) sends `broadcasterPaused` signal through mediasoup; viewers see pill banner "Stream paused · resuming shortly"; `'active'` sends `broadcasterResumed`. Android `'inactive'` doesn't fire for notification shade — no freeze on Android. |
-| 12    | in progress | Design system + visual polish. Authoritative spec: [DESIGN.md](DESIGN.md) (system structure in Section 0). Broken into eight sub-phases — 12.0 system structure (Section 0 + this CLAUDE.md update + `src/canvas/README.md`); 12.1 folder migration to the tier structure (`tokens/`, `components/{primitives,features,sections,screens}/`, `canvas/scenes/earth/`, `canvas/stage/`); 12.2 asset drop + inventory pass (re-baselined v0.2 scope — see DESIGN.md decision log 2026-05-29); 12.3 token audit + `src/tokens/theme.ts` (also the green light for Aaron's monetization UI work); 12.4 primitives bottom-up; 12.5 features + sections; 12.6 screen migration one-per-commit; 12.7 motion pass. Sub-phases run sequentially with gates between them. Achieved when: every screen uses only tokens (no hex literals), the component gallery renders all primitive variants, and Ben judges the app "feels like the same product." |
+| 12    | in progress (12.0–12.4 ✅) | Design system + visual polish. Authoritative spec: [DESIGN.md](DESIGN.md) (system structure in Section 0). Broken into eight sub-phases — 12.0 ✅ system structure; 12.1 ✅ folder migration; 12.2 ✅ asset drop + inventory pass (re-baselined v0.2 scope per DESIGN.md decision log 2026-05-29); 12.3 ✅ token audit + `src/tokens/theme.ts` (light-pivot palette); 12.4 ✅ 20 primitives shipped bottom-up + `ComponentGallery` + adopted `react-native-keyboard-controller` for the New Architecture keyboard story; 12.5 features + sections (next — first item is `ScreenScroll` per the 2026-05-30 ahead-of-schedule decision); 12.6 screen migration one-per-commit; 12.7 motion pass. Sub-phases run sequentially with gates between them. Achieved when: every screen uses only tokens (no hex literals), the component gallery renders all primitive variants, and Ben judges the app "feels like the same product." |
 | 13    | upcoming | Space Bucks + Star Dust + tipping. **Dual-currency model** (re-baselined 2026-05-29 — see DESIGN.md decision log). Space Bucks ($0.01) are spend-side, Star Dust ($0.01) are receive-side. Tipping 100 Space Bucks → 30 SB platform fee → recipient gets 70 Star Dust. Both currencies admin-seeded in v0.2 (no real-money IAP, no Cash Out — both deferred to v0.3 with the wallet UI shipping as components-built-but-stubbed). Tipping is the only functional transaction kind in v0.2; subscriptions + PPV components ship but are mock-data-only. **App:** `TipSheet` bottom sheet (presets 50 🚀 · $0.50 / 100 🚀 · $1 / 500 🚀 · $5 + custom amount); tip button in viewer controls overlay; auth gate for anonymous users. **Public burst:** `tipReceived` WebSocket message fans out, floating animation with tipper handle + amount. **Broadcaster toast:** private pill banner. **Balance:** shown in `TipSheet`, Me screen, and the new Wallet v2 screen. Constants: `SPACE_BUCKS_PER_DOLLAR = 100`, `STAR_DUST_PER_DOLLAR = 100`, `PLATFORM_FEE_PCT = 30`. |
 | 14    | upcoming | Pre-v0.2 polish. Empty states, error states, first-time onboarding intro (a couple of screens introducing "what is WRLD"), globe initial orientation on user's location (not Central America), share-this-stream functionality (deep links via `wrld://stream/<id>` + Universal Links on `wrld.cam`). No App Store assets or public legal docs in v0.2 — this is an internal milestone for Ben + Aaron + small friends-and-family group, not a launch. Achieved when: Ben and Aaron each install the app on a fresh device, run through it top to bottom, and don't flinch at any rough edge. |
 
@@ -293,15 +295,33 @@ re-baseline (see DESIGN.md decision log) reshapes Aaron's parallel work:
 - **Subscriptions + PPV components ship in v0.2 mocks but are mock-data
   only.** Backend doesn't need to implement them in v0.2.
 
-Aaron's parallel work stays **backend-only with placeholder UI** until
-`src/tokens/theme.ts` lands on `main` (sub-phase 12.3). Real WRLD-styled
-monetization screens are blocked behind that gate; until then, any
-monetization UI Aaron writes is throwaway scaffolding. The two repos
+**Design branch convention:** the `design` branch was used during 12.2
+(per the 2026-05-29 decision-log entry). It merged back into `main` on
+2026-05-30 after 12.4 close-out — Aaron's 14 main-side commits + our
+30 design-side commits + one textual-conflict-resolution + a 3-line
+theme-shape codemod. **Both Ben and Aaron now write directly to
+`main` again** per the working style. The `design` branch may revive
+for future high-churn doc rewrites, but is not the default flow.
+
+`src/tokens/theme.ts` is live on `main` (the 12.3 light-pivot palette).
+Aaron's monetization UI is green-lit to compose from the 20 shipped
+primitives. The current `SubscriptionScreen` uses hardcoded hex values
+rather than tokens — that's a 12.6 migration target. The two repos
 overlap minimally (Aaron → `wrld-backend`; Ben → `wrld-app`), so merge
-conflicts should be rare. `DESIGN.md` is Ben's exclusive on the `design`
-branch; `CLAUDE.md` is shared — whoever ships a phase updates it. See
+conflicts should be rare; the recent 12.4 close-out merge produced
+exactly one. `DESIGN.md` is Ben's primary doc; `CLAUDE.md` is shared —
+whoever ships a phase updates it. See
 [DESIGN.md Section 7](DESIGN.md#7-phase-12-sub-phase-path) ("Working
 agreement with Aaron") for the canonical version.
+
+**Pulling main after 2026-05-30:** the merge added native modules
+(`@expo/vector-icons`, `react-native-keyboard-controller`,
+`react-native-reanimated`, `react-native-worklets`) plus a new
+`babel.config.js`. Aaron's existing Android dev client will red-screen
+on `Unable to resolve module react-native-reanimated` until he installs
+a fresh build. Run `eas build --profile development --platform android`
+when that happens. The dev client rebuild is also a good time to drop
+the `react-native-view-shot` Metro stub and install view-shot for real.
 
 ---
 

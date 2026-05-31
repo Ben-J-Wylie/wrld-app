@@ -2841,6 +2841,65 @@ handled by the same patterns; the seam is not a separate motion category.
 Append-only. Most recent first. Each entry: date, decision, rationale,
 constraint it imposes downstream.
 
+### 2026-05-30 — Sub-phase 12.4 shipped + `design` branch merged back to `main`
+
+20 primitives shipped on-device-reviewed in build order: `Text`, `Icon`,
+`Pressable`, `Button`, `IconButton`, `Card`, `Input`, `Textarea`,
+`HelpText`, `Pill`, `Chip`, `Avatar`, `Toggle`, `ProgressBar`,
+`Spinner`, `BottomSheet`, `Slider`, `SegmentedToggle`, `Divider`,
+`BrandMark`. `ComponentGallery` reachable in dev via Settings →
+DEVELOPMENT row. Section 3 entries all moved from gap to shipped.
+
+Mid-phase course corrections recorded:
+
+- **Keyboard story** (separate entry below). Single-line `TextInput`
+  focus broke under New Architecture; adopted
+  `react-native-keyboard-controller` after four in-house attempts
+  failed. Brought peer-chain deps `react-native-reanimated` v4 and
+  `react-native-worklets` + a `babel.config.js` with the worklets
+  plugin.
+- **Button + Input loading affordance** swapped from RN's
+  `ActivityIndicator` to the shipped `Spinner` primitive.
+- **`Switch` → `Toggle`**: SettingsScreen migrated its two notification
+  preference toggles.
+- **`Avatar`** promoted from features → primitives; 7 Phase 8 callers
+  migrated; old `src/components/features/user/Avatar.tsx` deleted.
+
+**Design branch merged to main.** The `design` branch (created
+2026-05-29 per the "Sub-phase 12.2 runs on a `design` branch" entry)
+merged back into `main` after 12.4 close-out. Aaron's 14 main-side
+commits (Phase 3 subscriptions + admin-ended stream flow +
+broadcaster orientation through mediasoup + wallet refetch + view-shot
+Metro stub) integrated with one textual conflict (`SettingsScreen.tsx`
+— both sides added new entries near each other) and one 3-line theme-
+shape codemod (`StreamScreen.tsx` `theme.colors.bg|text|textMuted` →
+new nested shape). The flat-to-nested theme codemod that landed
+atomically with 12.3 covered the existing tree; Aaron's net-new code
+on top of main re-used the flat shape, hence the small post-merge
+codemod. Aaron's `SubscriptionScreen.tsx` uses hardcoded hex values
+rather than tokens — a 12.6 migration target, not a 12.4 blocker.
+
+**Convention reverts.** Per the 2026-05-29 design-branch decision-log
+entry, the branch was a 12.2-only exception; with the merge, both Ben
+and Aaron return to writing directly to `main` (per CLAUDE.md working
+style). The `design` branch tracking ref stays on `origin` for history
+but isn't the default flow going forward.
+
+**Imposes:**
+
+- Aaron's next pull on `main` requires a dev client rebuild (`eas
+  build --profile development --platform android`) because four new
+  native modules landed (`@expo/vector-icons`,
+  `react-native-keyboard-controller`, `react-native-reanimated`,
+  `react-native-worklets`). Ben's iOS dev client was rebuilt during
+  12.4 and is current.
+- New `babel.config.js` at repo root (required by reanimated 4's
+  worklets plugin). Future dep audits should not delete it.
+- 12.5 starts now. First row is `ScreenScroll` (ahead-of-schedule per
+  the prior 2026-05-30 entry).
+- 12.6 screen migration scope grows by `SubscriptionScreen` (Aaron's
+  hex-value-styled screen converts to token + primitive composition).
+
 ### 2026-05-30 — Adopt `react-native-keyboard-controller` for keyboard handling
 
 Four rounds of RN-built-in attempts to make single-line `Input` focus
@@ -3539,20 +3598,38 @@ monetization work stays backend-only with placeholder UI. (See "Working
 agreement with Aaron" below.)
 **Gate to 12.4:** Ben signs off on `theme.ts`. Aaron's UI work unblocked.
 
-### 12.4 — Build primitives, bottom-up
+### 12.4 — Build primitives, bottom-up ✅ shipped 2026-05-30
 
-Build order: `Text`, `Pressable`, `Icon`, `Button`, `Card`, `Input`,
-`Badge`, `Spacer`, `Divider`. Each primitive gets a `ComponentGallery`
-entry and a Section 3 row. Ben reviews each on device before the next
-primitive starts.
-**Gate to 12.5:** All primitives shipped, gallery renders cleanly, Section 3
-populated.
+20 primitives shipped, in build order: `Text`, `Icon`, `Pressable`,
+`Button`, `IconButton`, `Card`, `Input`, `Textarea`, `HelpText`,
+`Pill`, `Chip`, `Avatar`, `Toggle`, `ProgressBar`, `Spinner`,
+`BottomSheet`, `Slider`, `SegmentedToggle`, `Divider`, `BrandMark`.
+Each landed with a `ComponentGallery` entry and a Section 3 row, and
+Ben reviewed each on device before the next. `ComponentGallery`
+reachable via Settings → DEVELOPMENT row (gated on `__DEV__`).
+
+Mid-phase course correction recorded in the 2026-05-30 decision-log
+entry ("Adopt `react-native-keyboard-controller`"): RN's New
+Architecture broke the single-line `TextInput` focus story; four
+in-house attempts failed before the library landed. `KeyboardProvider`
+at root + `KeyboardAwareScrollView` in the gallery; `ScreenScroll`
+ships first in 12.5 as the canonical screen-level wrapper.
+
+**Gate to 12.5:** ✅ passed. All 20 primitives shipped, Section 3
+populated, gallery renders cleanly, Ben signed off on device.
 
 ### 12.5 — Build features and sections
 
 Compose primitives. Same gallery + Section 3 discipline. Features
 represent domain things; sections represent screen regions. Sections are
 only built if the 12.2 inventory pass surfaced genuine regional repetition.
+
+**First item:** `ScreenScroll` section (Section 3) — the canonical
+form-bearing-screen wrapper that composes `SafeAreaView` +
+`KeyboardAwareScrollView` from `react-native-keyboard-controller`.
+Lands ahead of WizardShell, CategoryChipRow, and the rest per the
+2026-05-30 ahead-of-schedule decision-log entry.
+
 **Gate to 12.6:** Features and sections shipped with Section 3 entries.
 
 ### 12.6 — Migrate screens, one per commit
