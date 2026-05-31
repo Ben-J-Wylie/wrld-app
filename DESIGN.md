@@ -2085,13 +2085,14 @@ allow re-entry; this card surfaces no alternative path.
 
 ##### `LocationGranularityPicker`
 
-- **Tier:** feature (composes Card + GranularityCard sub-components)
+- **Tier:** feature (composes Pressable + Text + Icon + inline preview helpers)
 - **Location:** `src/components/features/onboarding/LocationGranularityPicker.tsx`
 - **Variants:** `default`
 - **Sizes:** N/A
-- **States:** selected option determines visual
+- **States:** selected option drives visual; bluedot adds a warn-toned "HIGHEST PRIVACY COST" caption + warn border when selected
 - **Used in:** populated in 12.6
 - **Tweak impact:** Creator wizard location step, future privacy-granularity surfaces
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
 
 **Mock says:** 4 radio cards (Bluedot — exact pin, City — fuzzy circle,
 Country — big shape, Private — eye-off). Each card has a map-style
@@ -2099,12 +2100,19 @@ visual preview, title, description, and a radio bullet. Selected card
 has accent border + glow + accent radio fill. Bluedot warns
 (`data-tone="warn"`).
 
-**Code does:** None.
+**Code does (shipped):** 4 cards (Pressable) stacked. Each row has a
+64-square preview frame (inline `GranularityPreview` helpers with a
+faint map grid + per-kind glyph) + title + mono description + 22-radio
+bullet. Selected card swaps border + bg to accent + fills the bullet.
+Bluedot adds a warn-toned subtitle and (when selected) a warn-colored
+border to telegraph the privacy cost.
 
-**Gap / proposal:** New feature. The map-visual sub-components live as
-internal helpers (Bluedot pin, City fuzzy circle, Country shape, Private
-eye-off). Emits the chosen granularity (`'bluedot' | 'city' | 'country'
-| 'private'`).
+**Inline previews.** The grid + pin / circle / shape / eye-off are
+drawn from primitives, no SVG yet. Real map illustrations can swap
+into the `GranularityPreview` switch later without API change.
+
+**API:** `value`, `onChange(next)` where the union is
+`'bluedot' | 'city' | 'country' | 'private'`.
 
 ---
 

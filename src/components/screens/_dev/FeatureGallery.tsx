@@ -51,6 +51,7 @@ import { ReasonRow } from '@/components/features/report/ReasonRow'
 import { PermissionPrePromptCard } from '@/components/features/permissions/PermissionPrePromptCard'
 import { AgeGateCard } from '@/components/features/onboarding/AgeGateCard'
 import { DOBWheel } from '@/components/features/onboarding/DOBWheel'
+import { LocationGranularityPicker } from '@/components/features/onboarding/LocationGranularityPicker'
 import { Toggle } from '@/components/primitives/Toggle'
 import { Button } from '@/components/primitives/Button'
 import { BroadcasterRow } from '@/components/features/user/BroadcasterRow'
@@ -1032,6 +1033,15 @@ export function FeatureGallery() {
         </Row>
       </Section>
 
+      <Section title="LocationGranularityPicker">
+        <Row label="default (city selected)">
+          <LocationGranularityPickerDemo initial="city" />
+        </Row>
+        <Row label="bluedot selected (warn tone)">
+          <LocationGranularityPickerDemo initial="bluedot" />
+        </Row>
+      </Section>
+
       <Section title="BroadcasterRow">
         <Row label="default">
           <BroadcasterRow
@@ -1142,6 +1152,15 @@ function ToastBannerDemo() {
       )}
     </View>
   )
+}
+
+function LocationGranularityPickerDemo({
+  initial,
+}: {
+  initial: 'bluedot' | 'city' | 'country' | 'private'
+}) {
+  const [v, setV] = useState<'bluedot' | 'city' | 'country' | 'private'>(initial)
+  return <LocationGranularityPicker value={v} onChange={setV} />
 }
 
 function DOBWheelDemo() {
