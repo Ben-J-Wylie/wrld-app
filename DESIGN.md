@@ -2871,6 +2871,42 @@ handled by the same patterns; the seam is not a separate motion category.
 Append-only. Most recent first. Each entry: date, decision, rationale,
 constraint it imposes downstream.
 
+### 2026-05-30 — `design` branch revived for 12.5+
+
+The 2026-05-30 "Sub-phase 12.4 shipped" entry said the design-branch
+convention would revert after the merge and both Ben and Aaron would
+return to direct-to-main. In practice the 12.5 work (sections +
+features + screen migrations) is going to involve another high-churn
+stretch of DESIGN.md edits, primitive tweaks, and on-device iteration
+cycles. Aaron's parallel work on `main` (Phase 3 subscriptions,
+stream/admin features) is meanwhile cleaner — fewer doc rewrites, more
+discrete commits.
+
+**Decision:** the `design` branch is back, tracked at `origin/design`,
+and Ben works there for the rest of Phase 12. Aaron continues on
+`main`. Periodic merges keep the two streams in sync (the 2026-05-30
+merge proved this is a manageable amount of work — one textual
+conflict + a 3-line theme codemod for a ~14-commit gap).
+
+**Convention:** same as the 12.2 round. Ben's exclusive editing
+surface for `DESIGN.md` is the design branch; `CLAUDE.md` is shared —
+whoever ships a phase updates it. Aaron is unaffected until the next
+merge; `design` may force-push or rewrite mid-flight without disturbing
+`main`'s history.
+
+**Imposes:**
+
+- `design` branch tracking ref reset to `main` HEAD at `c37266b` so
+  the two diverge from the latest shared state, not from the old 12.2
+  `d25eeeb` merge commit.
+- Merges from `design` → `main` continue to require:
+  (a) `main` HEAD pulled into `design` first, with theme-codemod for
+      any of Aaron's net-new code that uses pre-12.3 token shape;
+  (b) explicit Ben sign-off before pushing to `main`.
+- The "convention reverts" sentence in the 2026-05-30 12.4 close-out
+  entry is superseded by this entry — call out the design branch as
+  active when the next pulls happen.
+
 ### 2026-05-30 — CALayer reconfiguration on focus-driven shadows
 
 Symptom: tapping any `Input` or `Textarea` in the app caused the

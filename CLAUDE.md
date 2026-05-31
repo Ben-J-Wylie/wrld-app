@@ -295,13 +295,17 @@ re-baseline (see DESIGN.md decision log) reshapes Aaron's parallel work:
 - **Subscriptions + PPV components ship in v0.2 mocks but are mock-data
   only.** Backend doesn't need to implement them in v0.2.
 
-**Design branch convention:** the `design` branch was used during 12.2
-(per the 2026-05-29 decision-log entry). It merged back into `main` on
-2026-05-30 after 12.4 close-out — Aaron's 14 main-side commits + our
-30 design-side commits + one textual-conflict-resolution + a 3-line
-theme-shape codemod. **Both Ben and Aaron now write directly to
-`main` again** per the working style. The `design` branch may revive
-for future high-churn doc rewrites, but is not the default flow.
+**Design branch convention:** revived 2026-05-30 for 12.5+ work.
+Originally used during 12.2 (per the 2026-05-29 decision-log entry),
+merged back into `main` after 12.4 close-out, then re-spun off `main`
+HEAD `c37266b` for the rest of Phase 12. Ben works on `design`; Aaron
+continues on `main`; periodic merges between (the 2026-05-30 merge
+proved this is a manageable amount of work — one textual conflict +
+a 3-line theme codemod for a ~14-commit gap). The merge protocol:
+pull `main` HEAD into `design` first, theme-codemod for any of
+Aaron's net-new code on the pre-12.3 token shape, then push design →
+main only after explicit Ben sign-off. See [DESIGN.md Section 6](DESIGN.md#6-decision-log)
+("design branch revived for 12.5+") for the canonical entry.
 
 `src/tokens/theme.ts` is live on `main` (the 12.3 light-pivot palette).
 Aaron's monetization UI is green-lit to compose from the 20 shipped
