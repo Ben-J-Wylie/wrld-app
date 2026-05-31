@@ -2343,13 +2343,15 @@ single home screen — flagged at the end.
 
 ##### `ScreenScroll`
 
-- **Tier:** section (composes SafeAreaView + KeyboardAwareScrollView)
+- **Tier:** section (composes `SafeAreaView` + `KeyboardAwareScrollView`)
 - **Location:** `src/components/sections/ScreenScroll.tsx`
 - **Variants:** `default`
 - **Sizes:** N/A (full-screen wrapper)
 - **States:** default, keyboard-open
-- **Used in:** populated in 12.6
+- **Used in:** `ComponentGallery` (first migrant, 2026-05-30); rest populate as form-bearing screens migrate in 12.6
 - **Tweak impact:** every scrollable screen with focusable inputs — Gallery, Onboarding, Dashboard, Settings, Wallet, Profile editing, Report, Change Handle, AuthModal contents, etc.
+- **Shipped:** 2026-05-30 (sub-phase 12.5 — first section)
+- **Last reviewed:** 2026-05-30
 
 **Mock says:** Implicit — every form-bearing screen needs the keyboard
 to lift over content rather than crop the focused input, **without
@@ -2357,26 +2359,36 @@ repositioning the rest of the screen**, plus tap-on-adjacent-input
 behavior that doesn't dismiss the keyboard first. Not a visual concern;
 a behavior concern.
 
-**Code does (in the gallery today):**
+**Code does (shipped):**
 
 ```tsx
-<KeyboardAwareScrollView
-  contentContainerStyle={{ paddingBottom: spacing.xxxl, ... }}
-  keyboardShouldPersistTaps="handled"
-  keyboardDismissMode="interactive"
-  bottomOffset={spacing.lg}
->
-  {children}
-</KeyboardAwareScrollView>
+<SafeAreaView style={[styles.root, style]}>
+  <KeyboardAwareScrollView
+    contentContainerStyle={[styles.content, contentContainerStyle]}
+    keyboardShouldPersistTaps="handled"
+    keyboardDismissMode="interactive"
+    bottomOffset={bottomOffset}
+  >
+    {children}
+  </KeyboardAwareScrollView>
+</SafeAreaView>
 ```
 
+Defaults:
+- `bottomOffset` = `spacing.lg` (16)
+- `contentContainerStyle.paddingBottom` = `spacing.xxxl` (48)
+- `backgroundColor` = `bg.primary` (warm cream paper)
+
+Consumers override via `style` (SafeAreaView), `contentContainerStyle`
+(scroll content), `bottomOffset`. Style-array merge order is
+`[default, prop]`, so consumer overrides win for any conflicting
+property.
+
 `KeyboardAwareScrollView` comes from `react-native-keyboard-controller`
-(adopted 2026-05-30 — see decision-log entry). The library is
-purpose-built for RN's New Architecture (Fabric) and properly handles
-single-line UITextField first-responder behavior, which the plain
+— purpose-built for RN's New Architecture (Fabric) and properly handles
+single-line UITextField first-responder behavior, which plain
 ScrollView + various RN-built-in options could not. Requires
-`KeyboardProvider` at the root layout (already wired in
-`app/_layout.tsx`).
+`KeyboardProvider` at the root layout (wired in `app/_layout.tsx`).
 
 **Why not plain `ScrollView` + RN built-ins?** Tried `KeyboardAvoiding-
 View` with `behavior='padding'` (reflow bug — scroll resets to 0),
@@ -2385,17 +2397,15 @@ Fabric), and a manual scroll-restore via keyboard listeners (partially
 worked). None handled UITextField cleanly under New Architecture. The
 library is the right level of abstraction for this problem.
 
-**Gap / proposal:** Extract as a section so every form-bearing screen
-wraps in `<ScreenScroll>{children}</ScreenScroll>` and inherits the
-proven config. Props: `contentContainerStyle`, `bottomOffset`,
-`scrollRef`, `onScroll`. The Gallery becomes the first migrant; the
-7 Input-using screens migrate during 12.6.
-
 **Reuse-rule note:** Section 0.5 normally says wait for the second
-proven case. Here the second case is on the immediate horizon (real
+proven case. Here the second case was on the immediate horizon (real
 screens during 12.6 will need it) and Ben flagged the inline pattern
-as work he'd rather not have to do per-screen. So this section is
-**ahead-of-12.6 work in 12.5** — see the 2026-05-30 decision-log entry.
+as work he'd rather not have to do per-screen. The section landed as
+**ahead-of-12.6 work in 12.5** per the 2026-05-30 decision-log entry.
+
+**Gap / proposal:** None — shipped. Future additions when proven:
+`scrollRef` forwarding, `onScroll` passthrough, refresh-control slot.
+Add as the first 12.6 migrant or future consumer needs them.
 
 ---
 

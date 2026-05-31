@@ -10,8 +10,7 @@
 
 import { useState } from 'react'
 import { View, StyleSheet } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
-import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
+import { ScreenScroll } from '@/components/sections/ScreenScroll'
 import { Text } from '@/components/primitives/Text'
 import { Icon } from '@/components/primitives/Icon'
 import { Pressable } from '@/components/primitives/Pressable'
@@ -64,13 +63,8 @@ export function ComponentGallery() {
     setPressCounts((c) => ({ ...c, [k]: c[k] + 1 }))
 
   return (
-    <SafeAreaView style={styles.root}>
-      <KeyboardAwareScrollView
-        contentContainerStyle={styles.scroll}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="interactive"
-        bottomOffset={theme.spacing.lg}
-      >
+    <>
+      <ScreenScroll contentContainerStyle={styles.scroll}>
         <Text variant="display">Component gallery</Text>
         <Text variant="caption" color={theme.colors.text.muted}>
           Sub-phase 12.4 build progress. Each primitive ships with its variants exercised here.
@@ -628,7 +622,7 @@ export function ComponentGallery() {
             </View>
           </Row>
         </Section>
-      </KeyboardAwareScrollView>
+      </ScreenScroll>
 
       <BottomSheet
         visible={sheetVariant !== null}
@@ -646,7 +640,7 @@ export function ComponentGallery() {
           <Button label="Close" onPress={() => setSheetVariant(null)} variant="primary" />
         </View>
       </BottomSheet>
-    </SafeAreaView>
+    </>
   )
 }
 
@@ -669,8 +663,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: theme.colors.bg.primary },
-  scroll: { padding: theme.spacing.lg, gap: theme.spacing.md, paddingBottom: theme.spacing.xxxl },
+  scroll: { padding: theme.spacing.lg, gap: theme.spacing.md },
   section: { gap: theme.spacing.sm, marginTop: theme.spacing.xl },
   row: {
     flexDirection: 'row',
