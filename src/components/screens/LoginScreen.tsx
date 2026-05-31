@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react'
-import { View, Text, StyleSheet, Alert } from 'react-native'
+import { Text, StyleSheet, Alert } from 'react-native'
 import { Link, router } from 'expo-router'
 import { useSignIn, useAuth } from '@clerk/clerk-expo'
-import { SafeAreaView } from 'react-native-safe-area-context'
 import { Button } from '@/components/primitives/Button'
 import { Input } from '@/components/primitives/Input'
+import { ScreenScroll } from '@/components/sections/ScreenScroll'
 import { theme } from '@/tokens/theme'
 import { clerkError } from '@/lib/clerkError'
 
@@ -41,35 +41,32 @@ export function LoginScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
-        <Text style={styles.title}>WRLD</Text>
-        <Text style={styles.subtitle}>Sign in to continue</Text>
-        <Input
-          placeholder="Email"
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          keyboardType="email-address"
-        />
-        <Input
-          placeholder="Password"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-        />
-        <Button label={loading ? 'Signing in...' : 'Sign in'} onPress={handleLogin} />
-        <Link href="/(auth)/signup" style={styles.link}>
-          Don&apos;t have an account? Sign up
-        </Link>
-      </View>
-    </SafeAreaView>
+    <ScreenScroll contentContainerStyle={styles.content}>
+      <Text style={styles.title}>WRLD</Text>
+      <Text style={styles.subtitle}>Sign in to continue</Text>
+      <Input
+        placeholder="Email"
+        value={email}
+        onChangeText={setEmail}
+        autoCapitalize="none"
+        keyboardType="email-address"
+      />
+      <Input
+        placeholder="Password"
+        value={password}
+        onChangeText={setPassword}
+        secureTextEntry
+      />
+      <Button label={loading ? 'Signing in...' : 'Sign in'} onPress={handleLogin} />
+      <Link href="/(auth)/signup" style={styles.link}>
+        Don&apos;t have an account? Sign up
+      </Link>
+    </ScreenScroll>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.colors.bg.primary },
-  content: { flex: 1, padding: 24, justifyContent: 'center', gap: 16 },
+  content: { flexGrow: 1, padding: 24, justifyContent: 'center', gap: 16 },
   title: { fontSize: 48, fontWeight: '800', color: theme.colors.text.primary, textAlign: 'center' },
   subtitle: {
     fontSize: 16,

@@ -8,14 +8,22 @@
 //     KeyboardAwareScrollView (react-native-keyboard-controller)
 //       children
 //
-// Defaults are the gallery-proven config from the 2026-05-30 keyboard
-// adoption (see DESIGN.md decision log):
+// Defaults:
 //
 //   keyboardShouldPersistTaps='handled'   adjacent input/button taps
 //                                         while keyboard is up pass
 //                                         through instead of being
 //                                         eaten just to dismiss
-//   keyboardDismissMode='interactive'     natural swipe-down dismiss
+//   keyboardDismissMode='none'            keyboard stays put unless
+//                                         user explicitly dismisses
+//                                         (opt into 'on-drag' or
+//                                         'interactive' per consumer —
+//                                         'interactive' can cause an
+//                                         iOS animation stutter on
+//                                         first focus as iOS reads the
+//                                         auto-scroll-to-focused-input
+//                                         as the start of a dismiss
+//                                         gesture)
 //   bottomOffset                          distance focused input lifts
 //                                         above keyboard top
 //                                         (default: spacing.lg = 16)
@@ -40,6 +48,7 @@ type Props = {
   contentContainerStyle?: StyleProp<ViewStyle>
   style?: StyleProp<ViewStyle>
   bottomOffset?: number
+  keyboardDismissMode?: 'none' | 'on-drag' | 'interactive'
 }
 
 export function ScreenScroll({
@@ -47,13 +56,14 @@ export function ScreenScroll({
   contentContainerStyle,
   style,
   bottomOffset = theme.spacing.lg,
+  keyboardDismissMode = 'none',
 }: Props) {
   return (
     <SafeAreaView style={[styles.root, style]}>
       <KeyboardAwareScrollView
         contentContainerStyle={[styles.content, contentContainerStyle]}
         keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="interactive"
+        keyboardDismissMode={keyboardDismissMode}
         bottomOffset={bottomOffset}
       >
         {children}

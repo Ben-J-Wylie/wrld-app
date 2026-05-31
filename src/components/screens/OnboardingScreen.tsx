@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { View, Text, StyleSheet } from 'react-native'
+import { ScreenScroll } from '@/components/sections/ScreenScroll'
 import { router } from 'expo-router'
 import * as ImagePicker from 'expo-image-picker'
 import { theme } from '@/tokens/theme'
@@ -92,12 +92,7 @@ export function OnboardingScreen() {
   const displayForAvatar = wrldUser?.displayName ?? 'You'
 
   return (
-    <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+    <ScreenScroll contentContainerStyle={styles.content}>
           {step === 'handle' && (
             <>
               <Text style={styles.title}>Choose your handle</Text>
@@ -186,15 +181,11 @@ export function OnboardingScreen() {
               />
             </>
           )}
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+    </ScreenScroll>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.colors.bg.primary },
-  flex: { flex: 1 },
   content: {
     padding: theme.spacing.lg,
     gap: theme.spacing.md,

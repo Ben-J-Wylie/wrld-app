@@ -4,12 +4,12 @@ import {
   Text,
   StyleSheet,
   Pressable,
-  ScrollView,
   TextInput,
   ActivityIndicator,
   Alert,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
 import { router, useFocusEffect } from 'expo-router'
 import * as Location from 'expo-location'
 import * as Notifications from 'expo-notifications'
@@ -30,13 +30,14 @@ const ACCENT = theme.colors.accent.default
 
 function StepContent({ children }: { children: React.ReactNode }) {
   return (
-    <ScrollView
+    <KeyboardAwareScrollView
       style={styles.scroll}
       contentContainerStyle={styles.scrollContent}
       keyboardShouldPersistTaps="handled"
+      bottomOffset={theme.spacing.lg}
     >
       {children}
-    </ScrollView>
+    </KeyboardAwareScrollView>
   )
 }
 

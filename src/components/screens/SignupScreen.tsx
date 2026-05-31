@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react'
-import { View, Text, StyleSheet, Alert } from 'react-native'
+import { Text, StyleSheet, Alert } from 'react-native'
 import { Link, router } from 'expo-router'
 import { useSignUp, useAuth } from '@clerk/clerk-expo'
-import { SafeAreaView } from 'react-native-safe-area-context'
 import { Button } from '@/components/primitives/Button'
 import { Input } from '@/components/primitives/Input'
+import { ScreenScroll } from '@/components/sections/ScreenScroll'
 import { theme } from '@/tokens/theme'
 import { clerkError } from '@/lib/clerkError'
 
@@ -55,55 +55,50 @@ export function SignupScreen() {
 
   if (pendingVerification) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.content}>
-          <Text style={styles.title}>Check your email</Text>
-          <Text style={styles.subtitle}>Enter the code we sent to {email}</Text>
-          <Input
-            placeholder="Verification code"
-            value={code}
-            onChangeText={setCode}
-            keyboardType="number-pad"
-            autoComplete="one-time-code"
-          />
-          <Button
-            label={loading ? 'Verifying...' : 'Verify email'}
-            onPress={handleVerify}
-          />
-        </View>
-      </SafeAreaView>
+      <ScreenScroll contentContainerStyle={styles.content}>
+        <Text style={styles.title}>Check your email</Text>
+        <Text style={styles.subtitle}>Enter the code we sent to {email}</Text>
+        <Input
+          placeholder="Verification code"
+          value={code}
+          onChangeText={setCode}
+          keyboardType="number-pad"
+          autoComplete="one-time-code"
+        />
+        <Button
+          label={loading ? 'Verifying...' : 'Verify email'}
+          onPress={handleVerify}
+        />
+      </ScreenScroll>
     )
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
-        <Text style={styles.title}>Create account</Text>
-        <Input
-          placeholder="Email"
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          keyboardType="email-address"
-        />
-        <Input
-          placeholder="Password"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-        />
-        <Button label={loading ? 'Creating account...' : 'Sign up'} onPress={handleSignup} />
-        <Link href="/(auth)/login" style={styles.link}>
-          Already have an account? Sign in
-        </Link>
-      </View>
-    </SafeAreaView>
+    <ScreenScroll contentContainerStyle={styles.content}>
+      <Text style={styles.title}>Create account</Text>
+      <Input
+        placeholder="Email"
+        value={email}
+        onChangeText={setEmail}
+        autoCapitalize="none"
+        keyboardType="email-address"
+      />
+      <Input
+        placeholder="Password"
+        value={password}
+        onChangeText={setPassword}
+        secureTextEntry
+      />
+      <Button label={loading ? 'Creating account...' : 'Sign up'} onPress={handleSignup} />
+      <Link href="/(auth)/login" style={styles.link}>
+        Already have an account? Sign in
+      </Link>
+    </ScreenScroll>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.colors.bg.primary },
-  content: { flex: 1, padding: 24, justifyContent: 'center', gap: 16 },
+  content: { flexGrow: 1, padding: 24, justifyContent: 'center', gap: 16 },
   title: {
     fontSize: 32,
     fontWeight: '700',

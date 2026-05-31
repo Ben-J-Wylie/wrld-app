@@ -1,10 +1,10 @@
 import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
 import { router, useFocusEffect } from 'expo-router'
 import { useState, useCallback } from 'react'
 import { theme } from '@/tokens/theme'
 import { Button } from '@/components/primitives/Button'
 import { Input } from '@/components/primitives/Input'
+import { ScreenScroll } from '@/components/sections/ScreenScroll'
 import { useAuth } from '@clerk/clerk-expo'
 import { useLocation } from '@/hooks/useLocation'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
@@ -64,43 +64,38 @@ export function DashboardScreen() {
 
   if (!isSignedIn) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.scroll}>
-          <Text style={styles.title}>Go Live</Text>
-          <Text style={styles.muted}>Sign in to go live</Text>
-          <Button
-            label="Sign In"
-            onPress={() => router.push('/(auth)/login')}
-            variant="secondary"
-            style={styles.wide}
-          />
-        </View>
-      </SafeAreaView>
+      <ScreenScroll contentContainerStyle={styles.scroll}>
+        <Text style={styles.title}>Go Live</Text>
+        <Text style={styles.muted}>Sign in to go live</Text>
+        <Button
+          label="Sign In"
+          onPress={() => router.push('/(auth)/login')}
+          variant="secondary"
+          style={styles.wide}
+        />
+      </ScreenScroll>
     )
   }
 
   if (isSignedIn && currentUser && !currentUser.creatorReady) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.locked}>
-          <Text style={styles.lockedEmoji}>🎬</Text>
-          <Text style={styles.lockedTitle}>Become a creator</Text>
-          <Text style={styles.lockedBody}>
-            Complete a quick setup to unlock Go Live on WRLD. It only takes a minute.
-          </Text>
-          <Button
-            label="Get started"
-            onPress={() => router.push('/(app)/creator-onboarding')}
-            style={styles.wide}
-          />
-        </View>
-      </SafeAreaView>
+      <ScreenScroll contentContainerStyle={styles.locked}>
+        <Text style={styles.lockedEmoji}>🎬</Text>
+        <Text style={styles.lockedTitle}>Become a creator</Text>
+        <Text style={styles.lockedBody}>
+          Complete a quick setup to unlock Go Live on WRLD. It only takes a minute.
+        </Text>
+        <Button
+          label="Get started"
+          onPress={() => router.push('/(app)/creator-onboarding')}
+          style={styles.wide}
+        />
+      </ScreenScroll>
     )
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.scroll}>
+    <ScreenScroll contentContainerStyle={styles.scroll}>
         <Text style={styles.title}>Go Live</Text>
 
         {/* Stream title */}
@@ -168,15 +163,13 @@ export function DashboardScreen() {
         {readySources.size === 0 && (
           <Text style={styles.hint}>Ready at least one source to go live</Text>
         )}
-      </View>
-    </SafeAreaView>
+    </ScreenScroll>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.colors.bg.primary },
   scroll: {
-    flex: 1,
+    flexGrow: 1,
     padding: theme.spacing.lg,
     gap: theme.spacing.md,
   },
@@ -223,7 +216,7 @@ const styles = StyleSheet.create({
   hint: { ...theme.typography.caption, color: theme.colors.text.muted, textAlign: 'center' },
   wide: { width: '100%' },
   locked: {
-    flex: 1,
+    flexGrow: 1,
     padding: theme.spacing.lg,
     justifyContent: 'center',
     gap: theme.spacing.md,

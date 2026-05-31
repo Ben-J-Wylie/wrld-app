@@ -3,12 +3,8 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
 } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
 import { useAuth } from '@clerk/clerk-expo'
 import * as ImagePicker from 'expo-image-picker'
@@ -16,6 +12,7 @@ import { theme } from '@/tokens/theme'
 import { Button } from '@/components/primitives/Button'
 import { Input } from '@/components/primitives/Input'
 import { Avatar } from '@/components/primitives/Avatar'
+import { ScreenScroll } from '@/components/sections/ScreenScroll'
 import { usersApi } from '@/api/users'
 import { useCurrentUser, useSetCurrentUser } from '@/hooks/useCurrentUser'
 import { useAuthStore } from '@/stores/authStore'
@@ -121,36 +118,27 @@ export function MeScreen() {
 
   if (!isSignedIn) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.center}>
-          <Text style={styles.muted}>Sign in to access your profile</Text>
-          <Button
-            label="Sign in"
-            onPress={() => router.push('/(auth)/login')}
-            style={styles.btn}
-          />
-        </View>
-      </SafeAreaView>
+      <ScreenScroll contentContainerStyle={styles.center}>
+        <Text style={styles.muted}>Sign in to access your profile</Text>
+        <Button
+          label="Sign in"
+          onPress={() => router.push('/(auth)/login')}
+          style={styles.btn}
+        />
+      </ScreenScroll>
     )
   }
 
   if (isLoading || !user) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.center}>
-          <ActivityIndicator color={theme.colors.accent.default} />
-        </View>
-      </SafeAreaView>
+      <ScreenScroll contentContainerStyle={styles.center}>
+        <ActivityIndicator color={theme.colors.accent.default} />
+      </ScreenScroll>
     )
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <ScrollView contentContainerStyle={styles.content}>
+    <ScreenScroll contentContainerStyle={styles.content}>
           {/* Avatar */}
           <View style={styles.avatarSection}>
             {avatarLoading ? (
@@ -261,16 +249,12 @@ export function MeScreen() {
             variant="secondary"
             style={styles.wide}
           />
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+    </ScreenScroll>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.colors.bg.primary },
-  flex: { flex: 1 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: theme.spacing.md },
+  center: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', gap: theme.spacing.md },
   content: { padding: theme.spacing.lg, gap: theme.spacing.lg },
   btn: { width: 160 },
   avatarSection: { alignItems: 'center', gap: theme.spacing.md },
