@@ -361,12 +361,12 @@ export function StreamScreen() {
 
   async function handleReportPress() {
     if (!isSignedIn) { setAuthModalVisible(true); return }
-    // captureScreen() takes a system-level screenshot that works on GPU/OpenGL
-    // surfaces (RTCView). captureRef() on a wrapping View cannot reach beneath
-    // the native WebRTC surface layer.
     try {
-      pendingSnapshotUri.current = await captureScreen({ format: 'jpg', quality: 0.9 })
-    } catch {
+      const uri = await captureScreen({ format: 'jpg', quality: 0.9 })
+      console.log('[report] captureScreen ok, uri:', uri)
+      pendingSnapshotUri.current = uri
+    } catch (e) {
+      console.warn('[report] captureScreen failed:', e)
       pendingSnapshotUri.current = null
     }
     setReportVisible(true)
@@ -376,15 +376,16 @@ export function StreamScreen() {
     if (!streamId) return
     try {
       const reportId = await streamsApi.report(streamId, reason)
+      console.log('[report] filed, reportId:', reportId, 'snapshot uri:', pendingSnapshotUri.current)
       setReportVisible(false)
-      // Upload the snapshot in the background — non-fatal if it fails
       if (pendingSnapshotUri.current) {
         const uri = pendingSnapshotUri.current
         pendingSnapshotUri.current = null
-        streamsApi.uploadSnapshot(reportId, uri).catch((e) => console.warn('snapshot upload failed:', e))
+        streamsApi.uploadSnapshot(reportId, uri).catch((e) => console.warn('[report] upload failed:', e))
       }
       Alert.alert('Reported', 'Thanks for letting us know. We\'ll review this stream.')
-    } catch {
+    } catch (e) {
+      console.warn('[report] submitReport error:', e)
       Alert.alert('Error', 'Could not submit report. Please try again.')
     }
   }
