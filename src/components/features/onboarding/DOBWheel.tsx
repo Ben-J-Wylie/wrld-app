@@ -14,10 +14,9 @@
 
 import { useEffect, useMemo, useRef } from 'react'
 import {
-  FlatList,
+  ScrollView,
   StyleSheet,
   View,
-  type ListRenderItemInfo,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
   type StyleProp,
@@ -122,11 +121,15 @@ function Column<T extends string | number>({
   renderLabel: (v: T) => string
   onSelect: (i: number) => void
 }) {
-  const ref = useRef<FlatList<T>>(null)
+  // ScrollView (not FlatList) so DOBWheel can be nested in the wizard's
+  // vertical scroll without RN's "VirtualizedLists should never be
+  // nested inside plain ScrollViews with the same orientation" warning.
+  // Each column has ≤100 rows; virtualization isn't needed.
+  const ref = useRef<ScrollView>(null)
 
   useEffect(() => {
-    ref.current?.scrollToOffset({
-      offset: selectedIndex * ROW_HEIGHT,
+    ref.current?.scrollTo({
+      y: selectedIndex * ROW_HEIGHT,
       animated: false,
     })
   }, [selectedIndex])
@@ -138,36 +141,33 @@ function Column<T extends string | number>({
     if (clamped !== selectedIndex) onSelect(clamped)
   }
 
-  function renderItem({ item, index }: ListRenderItemInfo<T>) {
-    const distance = Math.abs(index - selectedIndex)
-    const opacity = distance === 0 ? 1 : distance === 1 ? 0.55 : 0.3
-    return (
-      <View style={styles.cell}>
-        <Text
-          variant={distance === 0 ? 'bodyEmphasized' : 'body'}
-          color={theme.colors.text.primary}
-          style={{ opacity }}
-        >
-          {renderLabel(item)}
-        </Text>
-      </View>
-    )
-  }
-
   return (
-    <FlatList<T>
+    <ScrollView
       ref={ref}
-      data={values}
-      keyExtractor={(item, i) => `${i}:${String(item)}`}
-      renderItem={renderItem}
       style={styles.column}
       showsVerticalScrollIndicator={false}
       snapToInterval={ROW_HEIGHT}
       decelerationRate="fast"
       onMomentumScrollEnd={onMomentumScrollEnd}
       contentContainerStyle={styles.columnInner}
-      getItemLayout={(_, i) => ({ length: ROW_HEIGHT, offset: ROW_HEIGHT * i, index: i })}
-    />
+      nestedScrollEnabled
+    >
+      {values.map((item, index) => {
+        const distance = Math.abs(index - selectedIndex)
+        const opacity = distance === 0 ? 1 : distance === 1 ? 0.55 : 0.3
+        return (
+          <View key={`${index}:${String(item)}`} style={styles.cell}>
+            <Text
+              variant={distance === 0 ? 'bodyEmphasized' : 'body'}
+              color={theme.colors.text.primary}
+              style={{ opacity }}
+            >
+              {renderLabel(item)}
+            </Text>
+          </View>
+        )
+      })}
+    </ScrollView>
   )
 }
 

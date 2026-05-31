@@ -1974,15 +1974,22 @@ year. Center selection band (line-2 borders top + bottom). Top + bottom
 fade gradient. Sans font, tabular-numeric. Selected center value is
 bright ink + 600 weight; neighbors are dimmed (opacity 0.55, 0.3).
 
-**Code does (shipped):** Each column is a `FlatList<T>` with
-`snapToInterval={ROW_HEIGHT}` and `decelerationRate='fast'` — RN's
-native snap handles the gesture without bespoke PanResponder code.
-Selected index is recomputed from `contentOffset.y` in
-`onMomentumScrollEnd`. The center band (2px borders top + bottom in
-`border.strong`) is a non-interactive overlay; soft fade at the top
-and bottom uses a translucent `bg.primary` strip rather than a real
-gradient (acceptable on a cream canvas; SkiaGradient or
-`expo-linear-gradient` can swap in later if needed).
+**Code does (shipped):** Each column is a `ScrollView` (not FlatList —
+see note below) with `snapToInterval={ROW_HEIGHT}` and
+`decelerationRate='fast'` so RN's native snap handles the gesture
+without bespoke PanResponder code. Selected index is recomputed from
+`contentOffset.y` in `onMomentumScrollEnd`. The center band (2px
+borders top + bottom in `border.strong`) is a non-interactive overlay;
+soft fade at the top and bottom uses a translucent `bg.primary` strip
+rather than a real gradient (acceptable on a cream canvas; SkiaGradient
+or `expo-linear-gradient` can swap in later if needed).
+
+**Why ScrollView, not FlatList.** Initial 2026-05-31 ship used
+`FlatList<T>`, which triggered RN's "VirtualizedLists should never be
+nested inside plain ScrollViews with the same orientation" warning
+whenever DOBWheel rendered inside a vertical-scrolling parent
+(WizardShell / ScreenScroll / FeatureGallery). Switched to `ScrollView`
+the same day. Each column has ≤100 rows; virtualization is not needed.
 
 **Day-month coupling.** Changing month or year clamps the day to the
 new month's max (e.g. picking Feb on Mar 31 lands on Feb 28/29).
