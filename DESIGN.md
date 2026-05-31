@@ -1543,24 +1543,40 @@ before a second caller arrives.
 
 ##### `BroadcasterRow`
 
-- **Tier:** feature (composes Avatar + Text + FollowButton)
+- **Tier:** feature (composes Avatar + Text + FollowButton + Pressable)
 - **Location:** `src/components/features/user/BroadcasterRow.tsx`
-- **Variants:** `default` (full row with Avatar + name + alias + follower-count + Follow), `chip` (compact rounded-pill version for HUD overlays)
-- **Sizes:** controlled by variant (default ~50px row, chip ~32px)
+- **Variants:** `default` (full row: Avatar md + name + @handle · followers + FollowButton), `chip` (32-tall rounded pill: Avatar xs + name + @handle, dark backdrop, no Follow)
+- **Sizes:** controlled by variant
 - **States:** default
 - **Used in:** populated in 12.6
-- **Tweak impact:** Viewer Sheet, Broadcast Live, Profile, stream view broadcaster identity row
+- **Tweak impact:** Viewer Sheet, Broadcast Live HUD, Profile header, stream view broadcaster identity row
+- **Shipped:** 2026-05-30 (sub-phase 12.5 — third feature)
+- **Last reviewed:** 2026-05-30
 
 **Mock says:** Avatar (sm/md) + name (sans) + handle alias (mono) +
-optional follower count + FollowButton on the right. The **chip**
-variant is a rounded-pill version with everything inline + glass blur,
-used in Broadcast Live's HUD.
+optional follower count + FollowButton on the right. The `chip` variant
+is rounded-pill, everything inline, used in Broadcast Live's HUD
+overlay.
 
-**Code does:** Inline composition in stream view's broadcaster identity
-header (Phase 8). No shared feature.
+**Code does (shipped):** Two variant render fns inside the file. The
+`default` variant lays out Avatar md + (name + `@handle · NK followers`
+two-line column) + optional FollowButton via a flex row. The `chip`
+variant is a 32-tall rounded pill (`radius.full`, `rgba(0,0,0,0.45)`
+backdrop for legibility on top of arbitrary video) with Avatar xs +
+inline name + @handle in cream text.
 
-**Gap / proposal:** Extract as feature. Variant prop controls the
-layout. `User` domain object passed as prop.
+Data is consumer-flat (not a `User` object) so the feature stays
+domain-blind. `FollowButton` reads its own follow state internally via
+`useUserProfile(handle)` — BroadcasterRow only forwards `handle` and
+`onAuthRequest`. The optional `showFollowButton` prop hides Follow when
+the row is the viewer's own identity or when Follow lives elsewhere on
+the surface (e.g. Profile header).
+
+Optional `onPress` makes the whole row tappable via Pressable
+(`variant='subtle'`); without `onPress` it renders as a plain View.
+
+**Gap / proposal:** None — shipped. The inline-composition broadcaster
+header in `StreamScreen` retires in 12.6 when the screen migrates.
 
 ---
 

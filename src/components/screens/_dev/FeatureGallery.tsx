@@ -11,6 +11,7 @@ import { ScreenScroll } from '@/components/sections/ScreenScroll'
 import { Text } from '@/components/primitives/Text'
 import { LivePill } from '@/components/features/stream/LivePill'
 import { StreamCard } from '@/components/features/stream/StreamCard'
+import { BroadcasterRow } from '@/components/features/user/BroadcasterRow'
 import { theme } from '@/tokens/theme'
 
 export function FeatureGallery() {
@@ -122,6 +123,50 @@ export function FeatureGallery() {
           />
         </Row>
       </Section>
+
+      <Section title="BroadcasterRow">
+        <Row label="default">
+          <BroadcasterRow
+            avatarUrl="https://i.pravatar.cc/100?u=kai"
+            displayName="Kai DC"
+            handle="kai.dc"
+            followerCount={1200}
+          />
+        </Row>
+        <Row label="no follower count">
+          <BroadcasterRow
+            avatarUrl="https://i.pravatar.cc/100?u=mira"
+            displayName="Mira B"
+            handle="mira.b"
+          />
+        </Row>
+        <Row label="initials avatar">
+          <BroadcasterRow
+            displayName="Jules"
+            handle="jules"
+            followerCount={42}
+          />
+        </Row>
+        <Row label="no follow button">
+          <BroadcasterRow
+            avatarUrl="https://i.pravatar.cc/100?u=ben"
+            displayName="Ben Wylie"
+            handle="benwy"
+            followerCount={8200}
+            showFollowButton={false}
+          />
+        </Row>
+        <Row label="chip (over video)">
+          <View style={styles.videoBg}>
+            <BroadcasterRow
+              variant="chip"
+              avatarUrl="https://i.pravatar.cc/100?u=kai"
+              displayName="Kai DC"
+              handle="kai.dc"
+            />
+          </View>
+        </Row>
+      </Section>
     </ScreenScroll>
   )
 }
@@ -172,5 +217,12 @@ const styles = StyleSheet.create({
   },
   stack: {
     gap: theme.spacing.sm,
+  },
+  videoBg: {
+    aspectRatio: 16 / 9,
+    backgroundColor: '#1d1410',
+    borderRadius: theme.radius.md,
+    padding: theme.spacing.md,
+    justifyContent: 'flex-start',
   },
 })
