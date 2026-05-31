@@ -20,7 +20,7 @@
 // Sizes (height): sm 22 | md 28 | lg 32. `countBadge` is its own size.
 
 import { View, StyleSheet, type StyleProp, type ViewStyle } from 'react-native'
-import type { ComponentProps } from 'react'
+import type { ComponentProps, ReactNode } from 'react'
 import { Text } from './Text'
 import { Icon } from './Icon'
 import { theme } from '@/tokens/theme'
@@ -67,10 +67,11 @@ type Props = {
   variant?: Variant
   size?: Size
   leadingIcon?: IconName
+  leading?: ReactNode
   style?: StyleProp<ViewStyle>
 }
 
-export function Pill({ label, variant = 'default', size = 'md', leadingIcon, style }: Props) {
+export function Pill({ label, variant = 'default', size = 'md', leadingIcon, leading, style }: Props) {
   const surface = SURFACE[variant]
   const height = variant === 'countBadge' ? COUNT_BADGE_SIZE : HEIGHT[size]
   const sizeStyle: ViewStyle =
@@ -87,7 +88,7 @@ export function Pill({ label, variant = 'default', size = 'md', leadingIcon, sty
         style,
       ]}
     >
-      {leadingIcon && <Icon name={leadingIcon} size="sm" color={surface.text} />}
+      {leading ?? (leadingIcon && <Icon name={leadingIcon} size="sm" color={surface.text} />)}
       <Text variant="monoLabel" color={surface.text}>
         {label}
       </Text>

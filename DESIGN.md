@@ -886,6 +886,12 @@ fill, used for notification dots and unread counts. `jurisdiction`
 uses `accent.surface` + `accent.border` + `accent.default` label —
 the only variant that doesn't invert the label to cream.
 
+**Leading slot extension (2026-05-30, alongside LivePill ship):**
+added a generic `leading?: ReactNode` prop that takes precedence over
+the existing `leadingIcon` prop. `LivePill` uses it to pass an
+`Animated.View` (pulsing dot) where an `Icon` glyph would otherwise
+live. The `leadingIcon` shortcut stays for Feather-icon callers.
+
 **Gap / proposal:** None — shipped. The animated pulsing dot is the
 `LivePill` feature's job, not Pill's.
 
@@ -1258,24 +1264,33 @@ land in any order. Each entry includes the three-way audit.
 
 ##### `LivePill`
 
-- **Tier:** feature (composes Pill + animated dot)
+- **Tier:** feature (composes `Pill.live` + animated dot)
 - **Location:** `src/components/features/stream/LivePill.tsx`
-- **Variants:** `default` (live fill + pulsing white dot), `compact` (smaller, for thumb overlays)
-- **Sizes:** sm (h:22), md (h:28)
-- **States:** default
+- **Sizes:** sm (h:22, dot 6) | md (h:28, dot 8 — default). The mock's
+  `compact` variant collapses into `size="sm"`.
+- **States:** default (always pulsing)
 - **Used in:** populated in 12.6
 - **Tweak impact:** every LIVE marker — top strips, video thumbs, broadcast HUDs, banners
+- **Shipped:** 2026-05-30 (sub-phase 12.5 — second section/feature; LivePill is the first feature row)
+- **Last reviewed:** 2026-05-30
 
 **Mock says:** Iconic LIVE marker. Live-tone fill, pulsing white square
-or dot inside (1.4–1.6s animation), all-caps mono "LIVE" label with
-tracked letter-spacing. Appears in every mock that involves an active
-broadcast.
+inside (~1.6s animation), all-caps mono "LIVE" label with tracked
+letter-spacing.
 
-**Code does:** Inline `<View>` + `<Text>` with `theme.colors.live` in
-several screens.
+**Code does (shipped):** Composes `Pill` with `variant='live'` (accent
+fill, cream label, monoLabel typography) and passes an
+`Animated.View` (cream square, `borderRadius: 1`) to the new
+`leading` slot on Pill. Pulse animation is `Animated.timing` opacity
+1 → 0.3 → 1 in 800ms-per-step loop, native driver, cleaned up on
+unmount.
 
-**Gap / proposal:** Single feature owns the pulse animation +
-visual treatment. Composes Pill (live variant) + bespoke animated dot.
+**Opacity-only animation per the 2026-05-30 CALayer rule** — pulse
+doesn't touch shadow / mask / transform / layout properties, so it's
+safe to compose inside any focusable scroll context without affecting
+keyboard behavior.
+
+**Gap / proposal:** None — shipped.
 
 ---
 

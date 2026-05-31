@@ -31,6 +31,7 @@ import { Slider } from '@/components/primitives/Slider'
 import { SegmentedToggle } from '@/components/primitives/SegmentedToggle'
 import { Divider } from '@/components/primitives/Divider'
 import { BrandMark } from '@/components/primitives/BrandMark'
+import { LivePill } from '@/components/features/stream/LivePill'
 import { theme } from '@/tokens/theme'
 
 export function ComponentGallery() {
@@ -619,6 +620,21 @@ export function ComponentGallery() {
             <View style={styles.helpPair}>
               <Input placeholder="email@wrld.cam" value="ben@wrld" onChangeText={() => {}} state="error" autoCapitalize="none" />
               <HelpText tone="err">CHECK THAT EMAIL DOMAIN</HelpText>
+            </View>
+          </Row>
+        </Section>
+
+        <Section title="Features">
+          <Row label="LivePill md">
+            <LivePill />
+          </Row>
+          <Row label="LivePill sm">
+            <LivePill size="sm" />
+          </Row>
+          <Row label="paired">
+            <View style={styles.pillRow}>
+              <LivePill size="sm" />
+              <LivePill />
             </View>
           </Row>
         </Section>
