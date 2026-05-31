@@ -82,6 +82,7 @@ export function StreamScreen() {
     status, setStatus, roomId, viewerCount, streamEnded, adminEnded, setAdminEnded,
     adminWarning, setAdminWarning,
     error: signalingError, setError,
+    suspensionError, clearSuspensionError,
     chatMessages, reactions, broadcasterPaused,
     tipEvents, confirmedBalance,
     connect, createRoom, joinRoom, disconnect,
@@ -249,6 +250,11 @@ export function StreamScreen() {
   // Broadcaster: signal orientation to admin viewers whenever the detected
   // video orientation is known (fires once after camera starts).
   useEffect(() => {
+    if (!suspensionError) return
+    Alert.alert('Account suspended', suspensionError, [{ text: 'OK', onPress: clearSuspensionError }])
+  }, [suspensionError])
+
+  useEffect(() => {
     if (!isNew || status !== 'in-room' || !localStream) return
     // track.getSettings() on react-native-webrtc reports sensor-native dims:
     // width > height = sensor native = phone held portrait. Inverted from intuition.
@@ -291,7 +297,8 @@ export function StreamScreen() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to go live'
       if (msg.toLowerCase().includes('suspended')) {
-        Alert.alert('Account suspended', msg, [{ text: 'OK', onPress: () => router.navigate('/(app)/dashboard') }])
+        // suspensionError useEffect will show the Alert; navigate back cleanly
+        router.navigate('/(app)/dashboard')
       } else {
         setStatus('error')
         setError(msg)
@@ -349,25 +356,11 @@ export function StreamScreen() {
     setTipSheetVisible(true)
   }
 
-  function suspensionAlert() {
-    const until = wrldUser?.suspendedUntil ? new Date(wrldUser.suspendedUntil) : null
-    const msg = until && until.getFullYear() < 2090
-      ? `Your account is suspended until ${until.toLocaleDateString()}.`
-      : 'Your account has been permanently suspended.'
-    Alert.alert('Account suspended', msg, [{ text: 'OK' }])
-  }
-
-  function isSuspended() {
-    return !!(wrldUser?.suspendedUntil && new Date(wrldUser.suspendedUntil) > new Date())
-  }
-
   function handleSendChat(text: string) {
-    if (isSuspended()) { suspensionAlert(); return }
     sendChatMessage(text, wrldUser?.handle ?? 'user')
   }
 
   function handleReact(kind: string) {
-    if (isSuspended()) { suspensionAlert(); return }
     sendReaction(kind, wrldUser?.handle ?? 'user')
   }
 

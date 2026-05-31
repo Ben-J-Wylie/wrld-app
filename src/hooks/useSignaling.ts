@@ -32,6 +32,7 @@ export function useSignaling() {
   const [broadcasterPaused, setBroadcasterPaused] = useState(false)
   const [tipEvents, setTipEvents] = useState<TipEvent[]>([])
   const [confirmedBalance, setConfirmedBalance] = useState<number | null>(null)
+  const [suspensionError, setSuspensionError] = useState<string | null>(null)
   const reactionCounterRef = useRef(0)
   const tipCounterRef = useRef(0)
   // Distinguishes intentional disconnect() calls from unexpected network drops.
@@ -58,6 +59,9 @@ export function useSignaling() {
       }
       if (msg.type === 'tipConfirmed') {
         setConfirmedBalance(msg.newBalance)
+      }
+      if (msg.type === 'error' && msg.message?.toLowerCase().includes('suspended')) {
+        setSuspensionError(msg.message)
       }
     })
     return unsub
@@ -192,5 +196,7 @@ export function useSignaling() {
     sendReaction,
     dismissReaction,
     dismissTip,
+    suspensionError,
+    clearSuspensionError: () => setSuspensionError(null),
   }
 }
