@@ -32,6 +32,9 @@ import { ReassuranceCard } from '@/components/features/onboarding/ReassuranceCar
 import { SuggestionChipRow } from '@/components/features/onboarding/SuggestionChipRow'
 import { RulesChecklist } from '@/components/features/onboarding/RulesChecklist'
 import { ConsentRow } from '@/components/features/onboarding/ConsentRow'
+import { SocialAuthButton } from '@/components/features/auth/SocialAuthButton'
+import { AuthChoiceList } from '@/components/features/auth/AuthChoiceList'
+import { PasswordStrengthMeter } from '@/components/features/auth/PasswordStrengthMeter'
 import { Toggle } from '@/components/primitives/Toggle'
 import { Button } from '@/components/primitives/Button'
 import { BroadcasterRow } from '@/components/features/user/BroadcasterRow'
@@ -639,6 +642,48 @@ export function FeatureGallery() {
         </Row>
         <Row label="locked (Essential)">
           <ConsentRowDemo title="Essential" description="Required for the app to work" initial locked />
+        </Row>
+      </Section>
+
+      <Section title="SocialAuthButton">
+        <Row label="apple">
+          <SocialAuthButton kind="apple" onPress={() => {}} />
+        </Row>
+        <Row label="google">
+          <SocialAuthButton kind="google" onPress={() => {}} />
+        </Row>
+        <Row label="email">
+          <SocialAuthButton kind="email" onPress={() => {}} />
+        </Row>
+        <Row label="loading">
+          <SocialAuthButton kind="apple" loading onPress={() => {}} />
+        </Row>
+      </Section>
+
+      <Section title="AuthChoiceList">
+        <Row label="default (platform-ordered)">
+          <AuthChoiceList onChoose={() => {}} />
+        </Row>
+        <Row label="loading apple">
+          <AuthChoiceList onChoose={() => {}} loadingKind="apple" />
+        </Row>
+      </Section>
+
+      <Section title="PasswordStrengthMeter">
+        <Row label="empty (score 0)">
+          <PasswordStrengthMeter score={0} />
+        </Row>
+        <Row label="weak (1)">
+          <PasswordStrengthMeter score={1} />
+        </Row>
+        <Row label="ok (2)">
+          <PasswordStrengthMeter score={2} />
+        </Row>
+        <Row label="strong (3)">
+          <PasswordStrengthMeter score={3} />
+        </Row>
+        <Row label="custom helper">
+          <PasswordStrengthMeter score={2} helper="ADD AN UPPERCASE LETTER" />
         </Row>
       </Section>
 

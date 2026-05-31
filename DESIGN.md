@@ -1808,54 +1808,57 @@ ToastBanner (still no `warn.surface` token).
 
 - **Tier:** feature (composes SocialAuthButton + Divider + Text)
 - **Location:** `src/components/features/auth/AuthChoiceList.tsx`
-- **Variants:** `default` (auto-selects platform order: iOS = Apple → Google → Email; Android = Google → Email)
+- **Variants:** `default` (platform-ordered: iOS = Apple → Google → email; Android = Google → email)
 - **Sizes:** N/A
-- **States:** default
+- **States:** default; per-kind `loadingKind` highlights an in-flight choice
 - **Used in:** populated in 12.6
 - **Tweak impact:** Onboarding Viewer step 1, Onboarding Creator step 1, AuthModal
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
 
 **Mock says:** Vertical stack of SocialAuthButton items, an "OR" divider
 mid-stack, then a "Continue with email" Button. iOS shows Apple first
 (HIG); Android shows Google first.
 
-**Code does:** AuthModal currently has email-only sign-up (no social).
-
-**Gap / proposal:** New feature. Auto-detects platform via
-`Platform.OS`. Emits a callback with the chosen kind. Backend wiring
-for Apple / Google auth is a separate Aaron task; this feature only
-handles the UI.
+**Code does (shipped):** Reads `Platform.OS` once; renders the social
+list (Apple+Google on iOS, Google only on Android), then a labelled
+"OR" divider (Divider primitive on either side of a `monoLabel`),
+then the email button. Emits `onChoose(kind)`. Backend wiring for
+each provider is the consumer's job — this feature only handles the
+UI choice + ordering.
 
 ---
 
 ##### `SocialAuthButton`
 
-- **Tier:** feature (composes Button primitive)
+- **Tier:** feature (thin wrapper around Button)
 - **Location:** `src/components/features/auth/SocialAuthButton.tsx`
-- **Variants:** `apple` (white-on-black per HIG), `google` (panel surface + brand icon), `email` (panel surface + generic mail icon)
-- **Sizes:** md (h:54)
-- **States:** default, pressed, loading
-- **Used in:** AuthChoiceList only (so far)
+- **Variants:** `apple`, `google`, `email` (all map to Button's `social` variant + matching `social` kind)
+- **Sizes:** md (h:54 — inherited from Button)
+- **States:** default, pressed, loading (Button owns the spinner swap)
+- **Used in:** AuthChoiceList (so far)
 - **Tweak impact:** Auth flows
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
 
 **Mock says:** See the variants. Brand icons baked in. Loading state
 replaces label with Spinner (matching icon color).
 
-**Code does:** None.
-
-**Gap / proposal:** Feature. Composes Button primitive with brand icon
-fixed by variant.
+**Code does (shipped):** Defaults the label per kind ("Continue with
+Apple/Google/email") and passes through to Button. The Button
+primitive's social variant already paints the right per-kind surface
++ brand glyph, so this feature is effectively a label/order helper.
 
 ---
 
 ##### `PasswordStrengthMeter`
 
-- **Tier:** feature (composes ProgressBar variant + HelpText)
+- **Tier:** feature (composes Text + bespoke 3-segment indicator)
 - **Location:** `src/components/features/auth/PasswordStrengthMeter.tsx`
 - **Variants:** `default`
 - **Sizes:** md (3 segments, 3px height)
-- **States:** weak, ok, strong (driven by password input)
+- **States:** 0 (empty — neutral) / 1 (weak — accent fill) / 2 (ok — warn fill) / 3 (strong — accent fill)
 - **Used in:** populated in 12.6
 - **Tweak impact:** Onboarding Viewer / Creator step 2, Settings password change
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
 
 **Mock says:** 3-segment indicator under the password Input. **Weak**
 (live red) = <8 chars or single class. **Ok** (warn yellow) = mid
@@ -1863,12 +1866,16 @@ strength. **Strong** (accent) = 12+ chars + mixed classes. Paired with
 HelpText giving tone-matching feedback ("TOO SHORT — 8 CHARACTERS
 MINIMUM" / "ADD A NUMBER OR SYMBOL" / "STRONG").
 
-**Code does:** None.
+**Code does (shipped):** Bespoke 3-segment row (not ProgressBar — that
+primitive shares one fill color across segments, but score=2 needs
+warn amber). Segments fill up to `score`; fill color is accent for
+1/3 and warn for 2 (so the meter telegraphs progress AND quality at
+once). Helper line uses `monoLabel` in the matching tone; default
+copy provided per score (overridable via `helper` prop).
 
-**Gap / proposal:** New feature with `score: 0 | 1 | 2 | 3` prop.
-Renders the segment fill + helper text. Score computation is the
-consumer's responsibility (or a separate exported util in
-`@/lib/passwordStrength.ts`).
+**API:** `score: 0|1|2|3`, `helper?: string`. Score computation
+belongs in `@/lib/passwordStrength.ts` (not yet shipped — the consumer
+inlines until then).
 
 ---
 
