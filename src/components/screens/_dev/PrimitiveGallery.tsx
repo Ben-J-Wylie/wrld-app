@@ -10,8 +10,9 @@
 // 2026-05-30 as the tier count grew past comfortable single-page
 // scroll.
 //
-// Reachable in dev via expo-router push to `/(app)/gallery`. The route
-// is registered with `href: null` so it does not appear in the tab bar.
+// Reachable in dev via expo-router push to `/(app)/primitive-gallery`.
+// The route is registered with `href: null` so it does not appear in
+// the tab bar.
 
 import { useState } from 'react'
 import { View, StyleSheet } from 'react-native'

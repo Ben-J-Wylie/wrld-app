@@ -111,7 +111,7 @@ export function SettingsScreen() {
       {__DEV__ && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>DEVELOPMENT</Text>
-          <Pressable style={styles.row} onPress={() => router.push('/(app)/gallery')}>
+          <Pressable style={styles.row} onPress={() => router.push('/(app)/primitive-gallery')}>
             <View style={styles.rowText}>
               <Text style={styles.rowLabel}>Primitive gallery</Text>
               <Text style={styles.rowSub}>20 primitives — Text, Icon, Pressable, Button, Card, Input, …</Text>
