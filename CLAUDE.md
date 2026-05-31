@@ -1060,21 +1060,23 @@ eas build --profile development --platform all
 
 When a viewer taps ⚑ (Report):
 
-1. `captureRef(videoContainerRef, { format: 'jpg', quality: 0.9 })` fires immediately — before the reason sheet appears — capturing the decoded video frame exactly as the viewer sees it
-2. The captured URI is stashed in `pendingSnapshotUri` ref
+1. `captureScreen({ format: 'jpg', quality: 0.9, result: 'base64', handleGLSurfaceViewOnAndroid: true })` fires immediately — before the reason sheet appears
+2. The base64 string is stashed in `pendingSnapshotUri` ref
 3. The reason sheet opens
 
 After the viewer selects a reason:
 
 1. `streamsApi.report(streamId, reason)` → `POST /streams/:id/report` returns `reportId`
-2. `streamsApi.uploadSnapshot(reportId, uri)` uploads the JPEG to `POST /reports/:id/snapshot` in the background (fire-and-forget, non-fatal if it fails)
+2. `streamsApi.uploadSnapshot(reportId, b64)` posts the base64 to `POST /reports/:id/snapshot` in the background (fire-and-forget, non-fatal if it fails)
 
-The remote `RTCView` is wrapped in a `View ref={videoContainerRef}` so `captureRef` has a target. `videoContainerRef` is only placed on the remote video (viewer side); broadcaster capture is not attempted.
+**Why `captureScreen` not `captureRef`:** RTCView renders on an Android SurfaceView — a hardware GPU surface outside the normal view hierarchy. `captureRef` on any wrapping View captures only the UI layer, leaving the video black. `captureScreen` with `handleGLSurfaceViewOnAndroid: true` uses `PixelCopy.request()` on Android (API 26+) which reads directly from the GPU framebuffer. On iOS, UIKit composites everything before the screenshot so it works without special flags.
+
+**Why `result: 'base64'` not a file URI:** Axios in React Native fails silently when sending `FormData` with file URIs — the XHR layer cannot read the file before the request serialises. Capturing as base64 and posting as plain JSON bypasses multipart entirely and works reliably.
 
 ### `streamsApi` changes (`src/api/streams.ts`)
 
 - `report(id, reason)` now returns `Promise<string>` (the `reportId`) instead of `Promise<void>`
-- New `uploadSnapshot(reportId, uri)` — posts multipart JPEG to `POST /reports/:id/snapshot`
+- New `uploadSnapshot(reportId, b64)` — POSTs `{ snapshot: base64String }` as JSON to `POST /reports/:id/snapshot`
 
 ### `getUserMedia` resolution (`src/hooks/useMediasoup.ts`)
 

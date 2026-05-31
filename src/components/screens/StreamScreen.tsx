@@ -362,11 +362,11 @@ export function StreamScreen() {
   async function handleReportPress() {
     if (!isSignedIn) { setAuthModalVisible(true); return }
     try {
-      const b64 = await captureScreen({ format: 'jpg', quality: 0.9, result: 'base64', handleGLSurfaceViewOnAndroid: true })
-      console.log('[report] captureScreen ok, b64 length:', b64?.length)
-      pendingSnapshotUri.current = b64
-    } catch (e) {
-      console.warn('[report] captureScreen failed:', e)
+      // captureScreen + handleGLSurfaceViewOnAndroid captures the GPU SurfaceView
+      // that RTCView renders into (PixelCopy path on Android, UIKit composite on iOS).
+      // result:'base64' avoids Axios FormData/multipart issues with file URIs.
+      pendingSnapshotUri.current = await captureScreen({ format: 'jpg', quality: 0.9, result: 'base64', handleGLSurfaceViewOnAndroid: true })
+    } catch {
       pendingSnapshotUri.current = null
     }
     setReportVisible(true)
@@ -376,16 +376,14 @@ export function StreamScreen() {
     if (!streamId) return
     try {
       const reportId = await streamsApi.report(streamId, reason)
-      console.log('[report] filed, reportId:', reportId, 'snapshot uri:', pendingSnapshotUri.current)
       setReportVisible(false)
       if (pendingSnapshotUri.current) {
-        const uri = pendingSnapshotUri.current
+        const b64 = pendingSnapshotUri.current
         pendingSnapshotUri.current = null
-        streamsApi.uploadSnapshot(reportId, uri).catch((e) => console.warn('[report] upload failed:', e?.message, e?.response?.status, e?.response?.data))
+        streamsApi.uploadSnapshot(reportId, b64).catch(() => {})
       }
       Alert.alert('Reported', 'Thanks for letting us know. We\'ll review this stream.')
-    } catch (e) {
-      console.warn('[report] submitReport error:', e)
+    } catch {
       Alert.alert('Error', 'Could not submit report. Please try again.')
     }
   }
