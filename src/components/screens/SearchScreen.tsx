@@ -52,6 +52,7 @@ export function SearchScreen() {
         keyExtractor={(u) => u.id}
         renderItem={({ item }) => <UserRow user={item} onPress={() => goToProfile(item.handle)} />}
         contentContainerStyle={styles.list}
+        keyboardShouldPersistTaps="handled"
       />
     </SafeAreaView>
   )
