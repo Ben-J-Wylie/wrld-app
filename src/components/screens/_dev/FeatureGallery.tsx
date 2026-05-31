@@ -13,6 +13,7 @@ import { LivePill } from '@/components/features/stream/LivePill'
 import { StreamCard } from '@/components/features/stream/StreamCard'
 import { VideoPreviewTile } from '@/components/features/stream/VideoPreviewTile'
 import { CoordHUD } from '@/components/features/stream/CoordHUD'
+import { StreamTile } from '@/components/features/stream/StreamTile'
 import { BroadcasterRow } from '@/components/features/user/BroadcasterRow'
 import { theme } from '@/tokens/theme'
 
@@ -207,6 +208,32 @@ export function FeatureGallery() {
                 { label: 'UPTIME', value: '00:00:03' },
               ]}
             />
+          </View>
+        </Row>
+      </Section>
+
+      <Section title="StreamTile">
+        <Row label="active (default)">
+          <View style={styles.row}>
+            <StreamTile iconName="video" label="CAM" value="1080p" />
+            <StreamTile iconName="mic" label="AUD" value="48 kHz" />
+            <StreamTile iconName="map-pin" label="LOC" value="GPS" />
+          </View>
+        </Row>
+        <Row label="inactive (faded)">
+          <View style={styles.row}>
+            <StreamTile iconName="monitor" label="SCRN" value="OFF" active={false} />
+            <StreamTile iconName="navigation" label="GYR" value="OFF" active={false} />
+            <StreamTile iconName="compass" label="HDG" value="OFF" active={false} />
+          </View>
+        </Row>
+        <Row label="mixed (typical viewer sheet)">
+          <View style={styles.row}>
+            <StreamTile iconName="video" label="CAM" value="1080p" onPress={() => {}} />
+            <StreamTile iconName="mic" label="AUD" value="48 kHz" onPress={() => {}} />
+            <StreamTile iconName="map-pin" label="LOC" value="GPS" onPress={() => {}} />
+            <StreamTile iconName="compass" label="HDG" value="192°" onPress={() => {}} />
+            <StreamTile iconName="monitor" label="SCRN" value="OFF" active={false} onPress={() => {}} />
           </View>
         </Row>
       </Section>

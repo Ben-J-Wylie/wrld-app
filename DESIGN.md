@@ -1369,25 +1369,36 @@ entirely — that's a parent's responsibility).
 
 ##### `StreamTile`
 
-- **Tier:** feature
+- **Tier:** feature (composes Pressable + Feather Icon + Text)
 - **Location:** `src/components/features/stream/StreamTile.tsx`
 - **Variants:** `default` (Viewer Sheet sensor row)
-- **Sizes:** md (h:~80, min-width 84)
-- **States:** on (active layer), off (faded), pressed
+- **Sizes:** md (84×80)
+- **States:** active (2px accent border, accent-tinted icon, primary text), inactive (1px subtle border, muted icon/text, opacity 0.45), pressed (Pressable variant `subtle`)
 - **Used in:** populated in 12.6
 - **Tweak impact:** Viewer Sheet's STREAMS strip, future stream-source display surfaces
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
+- **Last reviewed:** 2026-05-31
 
 **Mock says:** Vertical tile with icon-square (28×28) on top, mono-caps
 label in middle, value/spec below (e.g. "1080p", "48 kHz", "GPS", "192°"
 for compass heading, "OFF" for inactive). On-state: line-2 border tinted
 accent. Off-state: opacity 0.45.
 
-**Code does:** None — current Viewer Sheet feature is `NearbyStream*`
-patterns; no per-sensor tile.
+**Code does (shipped):** Vertical 84×80 tile. Icon-square (28×28, 1px
+border) on top — border swaps to `accent.default` when active, stays
+`border.subtle` when inactive. Inner glyph (16px Feather icon) tints
+`accent.default` when active, `text.muted` when inactive. Mono-caps
+label (`monoLabel`) center, value/spec (`monoCaption`) below. Whole
+tile dims to `opacity: 0.45` when inactive. Pressable wrapper supplies
+scale press feedback.
 
-**Gap / proposal:** New feature. Renders a layer descriptor object
-(`{ kind, label, value, active }`). Composed by Viewer Sheet's
-`StreamStrip` section.
+**API:** consumer-flat — `iconName` (Feather glyph), `label`, `value`,
+`active?`, `onPress?`. The Viewer Sheet section will map a domain
+layer (e.g. `{ kind: 'cam', resolution: '1080p' }`) into
+`{ iconName: 'video', label: 'CAM', value: '1080p', active: true }`
+before passing in. Bespoke per-layer icons (Phase 14 sensor model) can
+later live in `src/components/primitives/icons/` and be plumbed
+through the same `iconName` slot.
 
 ---
 
