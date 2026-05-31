@@ -22,6 +22,11 @@ import { SettingsRow } from '@/components/features/settings/SettingsRow'
 import { ToastBanner } from '@/components/features/feedback/ToastBanner'
 import { SearchBar } from '@/components/features/discovery/SearchBar'
 import { SwapCard } from '@/components/features/identity/SwapCard'
+import { AccountIDPill } from '@/components/features/user/AccountIDPill'
+import { MetaStrip } from '@/components/features/user/MetaStrip'
+import { SocialChip } from '@/components/features/user/SocialChip'
+import { PassportCard } from '@/components/features/user/PassportCard'
+import { AvatarPicker } from '@/components/features/user/AvatarPicker'
 import { Toggle } from '@/components/primitives/Toggle'
 import { Button } from '@/components/primitives/Button'
 import { BroadcasterRow } from '@/components/features/user/BroadcasterRow'
@@ -458,6 +463,107 @@ export function FeatureGallery() {
           <SwapCard
             fromValue="@a_really_long_old_handle_name_for_overflow_test"
             toValue="@a_really_long_new_handle_name_for_overflow_test"
+          />
+        </Row>
+      </Section>
+
+      <Section title="AccountIDPill">
+        <Row label="default">
+          <AccountIDPill accountId="0042-887-1156" />
+        </Row>
+        <Row label="raw cuid (auto-formatted)">
+          <AccountIDPill accountId="clxq7w9kk000008l4a8z9b1c2" />
+        </Row>
+      </Section>
+
+      <Section title="MetaStrip">
+        <Row label="2 rows, all fields">
+          <MetaStrip
+            rows={[
+              [{ value: '1.2k followers' }, { value: 'Joined May 2026' }],
+              [{ value: 'Brooklyn, NY' }, { value: 'they/them' }],
+            ]}
+          />
+        </Row>
+        <Row label="row hides when all items empty">
+          <MetaStrip
+            rows={[
+              [{ value: '42 followers' }, { value: 'Joined May 2026' }],
+              [{ value: '' }, { value: '' }],
+            ]}
+          />
+        </Row>
+        <Row label="labeled items">
+          <MetaStrip
+            rows={[
+              [{ label: 'STREAMS', value: '12' }, { label: 'CLIPS', value: '34' }],
+            ]}
+          />
+        </Row>
+      </Section>
+
+      <Section title="SocialChip">
+        <Row label="all kinds">
+          <View style={styles.row}>
+            <SocialChip kind="ig" handle="kai.dc" onPress={() => {}} />
+            <SocialChip kind="tt" handle="kai.dc" onPress={() => {}} />
+            <SocialChip kind="sc" handle="kai-dc" onPress={() => {}} />
+            <SocialChip kind="x" handle="kai_dc" onPress={() => {}} />
+          </View>
+        </Row>
+        <Row label="non-interactive">
+          <View style={styles.row}>
+            <SocialChip kind="ig" handle="benwy" />
+          </View>
+        </Row>
+      </Section>
+
+      <Section title="PassportCard">
+        <Row label="full">
+          <PassportCard
+            bio="Filming the city block-by-block. Atlantic Ave today."
+            region="Brooklyn, NY"
+            pronouns="he/him"
+            socials={[
+              { kind: 'ig', handle: 'benwy', onPress: () => {} },
+              { kind: 'tt', handle: 'benwy', onPress: () => {} },
+            ]}
+          />
+        </Row>
+        <Row label="bio only">
+          <PassportCard bio="No metadata, just a bio." />
+        </Row>
+        <Row label="no bio, just region + socials">
+          <PassportCard
+            region="Reykjavík"
+            socials={[{ kind: 'sc', handle: 'aurora-radio' }]}
+          />
+        </Row>
+      </Section>
+
+      <Section title="AvatarPicker">
+        <Row label="default (no avatar)">
+          <AvatarPicker
+            displayName="Ben Wylie"
+            onTake={() => {}}
+            onPick={() => {}}
+          />
+        </Row>
+        <Row label="with avatar">
+          <AvatarPicker
+            avatarUrl="https://i.pravatar.cc/100?u=benwy"
+            displayName="Ben Wylie"
+            onTake={() => {}}
+            onPick={() => {}}
+          />
+        </Row>
+        <Row label="uploading">
+          <AvatarPicker
+            avatarUrl="https://i.pravatar.cc/100?u=benwy"
+            displayName="Ben Wylie"
+            uploading
+            onTake={() => {}}
+            onPick={() => {}}
           />
         </Row>
       </Section>

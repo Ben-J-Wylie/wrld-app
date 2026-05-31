@@ -1654,112 +1654,128 @@ header in `StreamScreen` retires in 12.6 when the screen migrates.
 
 ##### `MetaStrip`
 
-- **Tier:** feature
+- **Tier:** feature (composes Text)
 - **Location:** `src/components/features/user/MetaStrip.tsx`
 - **Variants:** `default`
-- **Sizes:** md (2-row, ~28px tall)
+- **Sizes:** md (~28px per row)
 - **States:** default
 - **Used in:** populated in 12.6
 - **Tweak impact:** Profile header, My Profile header, future identity-with-metadata cards
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
 
 **Mock says:** 2-row dot-separated info pattern. Row 1: followers count
 + joined date. Row 2: region + pronouns (or any optional metadata). Mono
 font, dim ink, mid-dot separators.
 
-**Code does:** None.
-
-**Gap / proposal:** Accepts an array of `{ label, value }` pairs and
-renders them as dot-separated rows. Empty rows hidden (a user without
-pronouns just doesn't render that segment).
+**Code does (shipped):** Accepts `rows: MetaItem[][]` where
+`MetaItem = { label?, value }`. Each row renders non-empty items joined
+by " · " using `monoCaption` in `text.muted`. Rows whose items are
+all empty are skipped entirely so a user without pronouns simply
+doesn't render that segment.
 
 ---
 
 ##### `PassportCard`
 
-- **Tier:** feature (composes Card + Text + SocialChip)
+- **Tier:** feature (composes Text + Icon + SocialChip)
 - **Location:** `src/components/features/user/PassportCard.tsx`
 - **Variants:** `default`
 - **Sizes:** N/A (consumer)
 - **States:** default
 - **Used in:** populated in 12.6
 - **Tweak impact:** Profile, My Profile, future user-detail surfaces
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
 
 **Mock says:** A "passport" panel showing bio (sans body), social chips
 (SocialChip array), and a region row (icon + "FROM" label + value).
 Optional pronouns row. Missing fields just don't render. Composes Card
 + Text + the SocialChip feature.
 
-**Code does:** None — current Profile screen has inline bio rendering.
-
-**Gap / proposal:** Extract as feature that takes a `Passport` shape
-(`{ bio, region, pronouns, socials[] }`) and renders conditionally.
+**Code does (shipped):** Bordered card containing four optional
+blocks: bio paragraph, region row (`map-pin` icon + "FROM" mono label
++ region value), pronouns row, and a wrapped row of SocialChip items.
+Missing fields render nothing — a user without socials just doesn't
+get the chip row. Consumer passes a flat `{ bio, region, pronouns,
+socials }` shape; the feature stays domain-blind (no `User` import).
 
 ---
 
 ##### `SocialChip`
 
-- **Tier:** feature (composes Chip + brand-icon)
+- **Tier:** feature (composes Pressable + Icon + Text)
 - **Location:** `src/components/features/user/SocialChip.tsx`
-- **Variants:** `ig` (Instagram), `tt` (TikTok), `sc` (SoundCloud), `x` (Twitter/X — future)
+- **Variants:** `ig` (Instagram), `tt` (TikTok), `sc` (SoundCloud), `x` (Twitter/X)
 - **Sizes:** md (h:30)
-- **States:** default, pressed
-- **Used in:** populated in 12.6
+- **States:** default, pressed (opacity 0.7)
+- **Used in:** populated in 12.6 (PassportCard composes a wrap-row of these)
 - **Tweak impact:** PassportCard, future identity surfaces
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
 
 **Mock says:** Chip with brand icon + handle. Each kind has its own
 brand glyph (Instagram circle-square, TikTok stylized "S", SoundCloud
 bars). Tap = opens platform's app or web fallback.
 
-**Code does:** None.
+**Code does (shipped):** 30-tall pill — brand glyph (sm) + handle
+(`caption`). `@` prefix is auto-applied for ig/tt/x; sc gets no
+prefix. URL resolution is the consumer's job — the chip emits
+`onPress` only so the feature stays domain-blind.
 
-**Gap / proposal:** Feature wrapping the Chip primitive with brand icon
-selection. Brand icons live in this feature's adjacent assets dir.
+**Brand-icon caveat.** Feather doesn't ship true brand marks for
+TT/SC/X; v1 uses neutral fallbacks (`music`, `volume-2`, `twitter`).
+The `kind → iconName` map is internal; swapping in bespoke brand
+glyphs from `src/components/primitives/icons/` later requires no API
+change.
 
 ---
 
 ##### `AvatarPicker`
 
-- **Tier:** feature (composes Avatar + Button + image-picker logic)
+- **Tier:** feature (composes Avatar + Button + ActivityIndicator)
 - **Location:** `src/components/features/user/AvatarPicker.tsx`
 - **Variants:** `default`
 - **Sizes:** md (72px avatar + side buttons)
-- **States:** default, picking (camera/gallery sheet visible), uploading
+- **States:** default, uploading (spinner over avatar; buttons disabled)
 - **Used in:** populated in 12.6
 - **Tweak impact:** Onboarding wizards (Viewer + Creator), Settings change-avatar flow
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
 
 **Mock says:** Avatar (lg) on left + a column of two action buttons on
 the right ("Take a photo" with camera icon, "Choose from photos" with
 gallery icon). Picker invokes `expo-image-picker` and shows uploading
 state in-place.
 
-**Code does:** Inline avatar picker in `OnboardingScreen.tsx`.
+**Code does (shipped):** Row with `Avatar` (size `lg`) on the left
+(spinner overlay when `uploading`) and two `secondary` buttons stacked
+on the right ("Take a photo" / "Choose from photos") with camera + image
+icons. Buttons disabled while `uploading`.
 
-**Gap / proposal:** Extract as feature. Owns the image-picker integration
-and upload-state UI. Emits the resulting URL/file via callback.
+**Domain-blind scope.** The feature does NOT call
+`expo-image-picker` — it only emits `onTake` / `onPick`. The 12.6
+migration moves the existing `OnboardingScreen.tsx` image-picker calls
+into the consumer wiring; the feature stays free of `expo-*` imports.
 
 ---
 
 ##### `AccountIDPill`
 
-- **Tier:** feature
+- **Tier:** feature (composes Text)
 - **Location:** `src/components/features/user/AccountIDPill.tsx`
 - **Variants:** `default`
-- **Sizes:** sm (h:22)
+- **Sizes:** sm (~h:22)
 - **States:** default
 - **Used in:** populated in 12.6
-- **Tweak impact:** Settings, Change Handle confirm step, Change Handle success screen, future account-detail surfaces
+- **Tweak impact:** Settings (SettingsRow `right` slot), Change Handle confirm + success screens
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
 
 **Mock says:** Small mono-caps pill showing the user's internal account
 ID (e.g. "ACCT 0042-887-1156"). Line border, ink-faint background.
 Reinforces the identity-model framing that handle is changeable but
 account ID is permanent.
 
-**Code does:** None — current code doesn't surface account IDs to users.
-
-**Gap / proposal:** New feature. Accepts a `User` (uses `id` or
-generated display-format thereof). Surfaces in Settings + Change Handle
-flow per the re-baselined identity model (DESIGN.md decision log
-2026-05-29 indirectly via the handle-change mock).
+**Code does (shipped):** Pill — `monoLabel` "ACCT" + auto-formatted
+id. The formatter strips non-alphanumeric, uppercases, then splits
+into 4-char groups (short ids) or `XXXX-XXX-XXXX` (long cuids). Border-
+subtle ring on `bg.elevated`.
 
 ---
 
