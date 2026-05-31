@@ -19,7 +19,9 @@ import { ChatComposer } from '@/components/features/chat/ChatComposer'
 import { StreamStateBanner } from '@/components/features/stream/StreamStateBanner'
 import { ReactionRail } from '@/components/features/stream/ReactionRail'
 import { SettingsRow } from '@/components/features/settings/SettingsRow'
+import { ToastBanner } from '@/components/features/feedback/ToastBanner'
 import { Toggle } from '@/components/primitives/Toggle'
+import { Button } from '@/components/primitives/Button'
 import { BroadcasterRow } from '@/components/features/user/BroadcasterRow'
 import { useState } from 'react'
 import { theme } from '@/tokens/theme'
@@ -392,6 +394,40 @@ export function FeatureGallery() {
         </Row>
       </Section>
 
+      <Section title="ToastBanner">
+        <Row label="all variants (no auto-dismiss)">
+          <View style={styles.stack}>
+            <ToastBanner
+              variant="accent"
+              body="Handle changed to @benwy"
+              autoDismissMs={0}
+              onDismiss={() => {}}
+            />
+            <ToastBanner
+              variant="warn"
+              body="Connection unstable — reactions may delay"
+              autoDismissMs={0}
+              onDismiss={() => {}}
+            />
+            <ToastBanner
+              variant="err"
+              body="Couldn't send tip — try again in a moment"
+              autoDismissMs={0}
+              onDismiss={() => {}}
+            />
+            <ToastBanner
+              variant="success"
+              body="100 🚀 sent to @kai.dc"
+              autoDismissMs={0}
+              onDismiss={() => {}}
+            />
+          </View>
+        </Row>
+        <Row label="interactive (auto-dismiss 3.5s)">
+          <ToastBannerDemo />
+        </Row>
+      </Section>
+
       <Section title="BroadcasterRow">
         <Row label="default">
           <BroadcasterRow
@@ -459,6 +495,33 @@ function GalleryRow({ label, children }: { label: string; children: React.ReactN
 
 // Local alias so the markup reads `<Row>` like the primitive gallery does
 const Row = GalleryRow
+
+function ToastBannerDemo() {
+  const [toast, setToast] = useState<
+    { id: number; variant: 'accent' | 'warn' | 'err' | 'success'; body: string } | null
+  >(null)
+  function show(variant: 'accent' | 'warn' | 'err' | 'success', body: string) {
+    setToast({ id: Date.now(), variant, body })
+  }
+  return (
+    <View style={styles.stack}>
+      <View style={styles.row}>
+        <Button label="accent" onPress={() => show('accent', 'Handle changed to @benwy')} />
+        <Button label="warn" onPress={() => show('warn', 'Connection unstable')} />
+        <Button label="err" onPress={() => show('err', "Couldn't send tip")} />
+        <Button label="success" onPress={() => show('success', '100 🚀 sent to @kai.dc')} />
+      </View>
+      {toast && (
+        <ToastBanner
+          key={toast.id}
+          variant={toast.variant}
+          body={toast.body}
+          onDismiss={() => setToast(null)}
+        />
+      )}
+    </View>
+  )
+}
 
 function SettingsRowToggleDemo() {
   const [followedLive, setFollowedLive] = useState(true)

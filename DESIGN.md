@@ -2101,23 +2101,38 @@ toLabel, toValue }`. Strikethrough applied to old value automatically.
 
 ##### `ToastBanner`
 
-- **Tier:** feature (composes Card + Icon + Text + dismiss)
+- **Tier:** feature (composes Pressable + Icon + Text + Animated)
 - **Location:** `src/components/features/feedback/ToastBanner.tsx`
-- **Variants:** `accent` (default), `warn`, `err`, `success`
+- **Variants:** `accent` (default — accent.surface tint, info glyph), `warn` (amber tint, alert-triangle), `err` (accent.surface, alert-circle — single-accent rule), `success` (accent.surface, check-circle — single-accent rule)
 - **Sizes:** md
-- **States:** entering, visible, dismissing
-- **Used in:** populated in 12.6
+- **States:** entering (animated slide-down + fade-in on mount), visible, auto-dismiss timer
+- **Used in:** populated in 12.6 (post-handle-change confirmation, post-tip broadcaster toast, post-report submission, etc.)
 - **Tweak impact:** post-action confirmations, viewer-side ephemeral notices, post-tip broadcaster toast (Phase 13)
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
+- **Last reviewed:** 2026-05-31
 
 **Mock says:** Accent-tinted card with icon + body + optional bold
 emphasis. Auto-dismiss after 3–5s. Floats above content.
 
-**Code does:** Phase 13 has a broadcaster-side post-tip toast inline in
-stream view. Refactor would consolidate.
+**Code does (shipped):** Row layout — leading icon + body + dismiss X.
+On mount, slides down 8px while fading from 0→1 over 180ms
+(`theme.motion.timing.fast`). Auto-dismiss timer fires `onDismiss`
+after `autoDismissMs` (default 3500; pass 0 to disable for
+persistent-until-tap rows). Per-variant icon glyph + tint resolved
+internally; consumers can override the glyph via `iconName`.
 
-**Gap / proposal:** New shared feature. Single instance per surface
-(queues messages). Used for: post-handle-change confirmation, post-tip
-broadcaster toast, post-report submission, etc.
+**API:** `variant?`, `body`, `iconName?`, `onDismiss`, `autoDismissMs?`.
+The consumer owns mount/unmount + position (top of screen, inside a
+sheet, etc.).
+
+**Exit animation deferred.** v1 disappears instantly when the consumer
+unmounts after `onDismiss`. Adding a fade-out is a one-line follow-up
+if the abrupt removal reads poorly in practice.
+
+**Warn tint hex.** `rgba(200,134,30,0.10)` surface + `rgba(200,134,30,0.32)`
+border are computed inline from `palette.amber400` (#c8861e). A
+`warn.surface` / `warn.border` token pair would belong in the theme
+if a second warn-tinted surface appears.
 
 ---
 
