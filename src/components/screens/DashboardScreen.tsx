@@ -1,19 +1,60 @@
-import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-native'
-import { router, useFocusEffect } from 'expo-router'
+// src/components/screens/DashboardScreen.tsx
+//
+// 12.6 migration target — the Go Live arming screen. Composes:
+//   • ScreenScroll wrapping the whole screen
+//   • Input + HelpText for the title field
+//   • FeedRow for each broadcastable layer. Per the re-baseline, the
+//     screen now surfaces the full 7-layer sensor model in the UI
+//     (cam / audio / screen / loc / gyro / compass / profile); only
+//     cam + audio are armable today — the other 5 ship in `disabled`
+//     state so users see the design-complete model now and the
+//     backend can fill in over time without UI churn.
+//   • CoordHUD (viewer-sheet variant) for the live LAT / LON read.
+//     Pending state appears while permission/GPS is acquiring.
+//   • GoBar docked at the bottom — `disabled` while inputs are
+//     incomplete, `armed` once title + ≥1 source + GPS are ready.
+//     The bar's tap navigates straight to the stream screen; live
+//     state lives on that screen, not here.
+
 import { useState, useCallback } from 'react'
+import { StyleSheet, View } from 'react-native'
+import { router, useFocusEffect } from 'expo-router'
 import { theme } from '@/tokens/theme'
+import { ScreenScroll } from '@/components/sections/ScreenScroll'
 import { Button } from '@/components/primitives/Button'
 import { Input } from '@/components/primitives/Input'
-import { ScreenScroll } from '@/components/sections/ScreenScroll'
+import { Text } from '@/components/primitives/Text'
+import { HelpText } from '@/components/primitives/HelpText'
+import { Icon } from '@/components/primitives/Icon'
+import { FeedRow, type FeedState } from '@/components/features/broadcast/FeedRow'
+import { type FeedKind } from '@/components/features/broadcast/FeedThumb'
+import { CoordHUD } from '@/components/features/stream/CoordHUD'
+import { GoBar } from '@/components/features/broadcast/GoBar'
 import { useAuth } from '@clerk/clerk-expo'
 import { useLocation } from '@/hooks/useLocation'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
 import { activeBroadcast } from '@/lib/activeBroadcast'
 import type { SourceType } from '@/types'
 
-const SOURCES: { type: SourceType; label: string; icon: string }[] = [
-  { type: 'camera', label: 'Camera', icon: '📷' },
-  { type: 'audio', label: 'Audio', icon: '🎙️' },
+type FeedDescriptor = {
+  kind: FeedKind
+  label: string
+  armedDetail: string
+  offDetail: string
+  source?: SourceType
+}
+
+// Order matches the 7-layer sensor model. `source` maps to the existing
+// backend SourceType enum (Phase 7) — only cam + audio have backend
+// hooks today; the rest ship in `disabled` state per the spec.
+const FEEDS: FeedDescriptor[] = [
+  { kind: 'cam', label: 'Camera', armedDetail: '1080P · BACK', offDetail: 'Tap Ready to arm camera', source: 'camera' },
+  { kind: 'audio', label: 'Audio', armedDetail: '48 kHz · DEFAULT MIC', offDetail: 'Tap Ready to arm microphone', source: 'audio' },
+  { kind: 'screen', label: 'Screen', armedDetail: 'System screen capture', offDetail: 'Coming soon' },
+  { kind: 'loc', label: 'Location', armedDetail: 'GPS · SHARE GRANULAR', offDetail: 'Coming soon' },
+  { kind: 'gyro', label: 'Gyroscope', armedDetail: 'Device orientation', offDetail: 'Coming soon' },
+  { kind: 'compass', label: 'Compass', armedDetail: 'Heading', offDetail: 'Coming soon' },
+  { kind: 'profile', label: 'Identity', armedDetail: 'Shown to viewers', offDetail: 'Coming soon' },
 ]
 
 export function DashboardScreen() {
@@ -24,8 +65,6 @@ export function DashboardScreen() {
   const [title, setTitle] = useState('')
   const [readySources, setReadySources] = useState<Set<SourceType>>(new Set())
 
-  // If the user is currently live and tabs back to dashboard, send them straight
-  // to their stream instead of the setup page.
   useFocusEffect(useCallback(() => {
     const active = activeBroadcast.get()
     if (active) {
@@ -37,7 +76,7 @@ export function DashboardScreen() {
   }, []))
 
   function toggleSource(type: SourceType) {
-    setReadySources((prev: Set<SourceType>) => {
+    setReadySources((prev) => {
       const next = new Set(prev)
       if (next.has(type)) next.delete(type)
       else next.add(type)
@@ -46,7 +85,7 @@ export function DashboardScreen() {
   }
 
   function handleGoLive() {
-    if (!title.trim() || !coords || readySources.size === 0) return
+    if (!canGoLive) return
     const params = { title: title.trim(), sources: Array.from(readySources).join(',') }
     activeBroadcast.set(params)
     router.push({
@@ -64,171 +103,146 @@ export function DashboardScreen() {
 
   if (!isSignedIn) {
     return (
-      <ScreenScroll contentContainerStyle={styles.scroll}>
-        <Text style={styles.title}>Go Live</Text>
-        <Text style={styles.muted}>Sign in to go live</Text>
+      <ScreenScroll contentContainerStyle={styles.center}>
+        <Text variant="display">Go Live</Text>
+        <Text variant="body" color={theme.colors.text.muted}>
+          Sign in to go live
+        </Text>
         <Button
           label="Sign In"
           onPress={() => router.push('/(auth)/login')}
           variant="secondary"
-          style={styles.wide}
         />
       </ScreenScroll>
     )
   }
 
-  if (isSignedIn && currentUser && !currentUser.creatorReady) {
+  if (currentUser && !currentUser.creatorReady) {
     return (
-      <ScreenScroll contentContainerStyle={styles.locked}>
-        <Text style={styles.lockedEmoji}>🎬</Text>
-        <Text style={styles.lockedTitle}>Become a creator</Text>
-        <Text style={styles.lockedBody}>
+      <ScreenScroll contentContainerStyle={styles.center}>
+        <View style={styles.creatorBadge}>
+          <Icon name="film" size="lg" color={theme.colors.accent.default} />
+        </View>
+        <Text variant="display" style={styles.centerText}>
+          Become a creator
+        </Text>
+        <Text variant="body" color={theme.colors.text.muted} style={styles.centerText}>
           Complete a quick setup to unlock Go Live on WRLD. It only takes a minute.
         </Text>
         <Button
           label="Get started"
           onPress={() => router.push('/(app)/creator-onboarding')}
-          style={styles.wide}
         />
       </ScreenScroll>
     )
   }
 
+  const coordItems = [
+    {
+      label: 'LAT',
+      value: coords ? coords.latitude.toFixed(4) : locationError ? '—' : '...',
+      pending: !coords && !locationError,
+    },
+    {
+      label: 'LON',
+      value: coords ? coords.longitude.toFixed(4) : locationError ? '—' : '...',
+      pending: !coords && !locationError,
+    },
+  ]
+
   return (
     <ScreenScroll contentContainerStyle={styles.scroll}>
-        <Text style={styles.title}>Go Live</Text>
+      <Text variant="display">Go Live</Text>
 
-        {/* Stream title */}
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>TITLE</Text>
-          <Input
-            placeholder="What's happening?"
-            value={title}
-            onChangeText={setTitle}
-            autoCorrect={false}
-            style={styles.wide}
-          />
-        </View>
-
-        {/* Source cards */}
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>SOURCES</Text>
-          <Text style={styles.sectionHint}>Choose what you'll broadcast. You can switch sources once live.</Text>
-          <View style={styles.sourceGrid}>
-            {SOURCES.map(({ type, label, icon }) => {
-              const ready = readySources.has(type)
-              return (
-                <Pressable
-                  key={type}
-                  style={[styles.sourceCard, ready && styles.sourceCardReady]}
-                  onPress={() => toggleSource(type)}
-                >
-                  <Text style={styles.sourceIcon}>{icon}</Text>
-                  <Text style={[styles.sourceLabel, ready && styles.sourceLabelReady]}>{label}</Text>
-                  <View style={[styles.readyPill, ready && styles.readyPillActive]}>
-                    <Text style={[styles.readyPillText, ready && styles.readyPillTextActive]}>
-                      {ready ? 'READY' : 'OFF'}
-                    </Text>
-                  </View>
-                </Pressable>
-              )
-            })}
-          </View>
-        </View>
-
-        {/* Location */}
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>LOCATION</Text>
-          {locationLoading && (
-            <View style={styles.row}>
-              <ActivityIndicator color={theme.colors.accent.default} size="small" />
-              <Text style={styles.muted}>Detecting…</Text>
-            </View>
-          )}
-          {locationError && <Text style={styles.muted}>{locationError}</Text>}
-          {coords && !locationLoading && (
-            <Text style={styles.muted}>
-              {coords.latitude.toFixed(4)}, {coords.longitude.toFixed(4)}
-            </Text>
-          )}
-        </View>
-
-        {/* Go Live */}
-        <Button
-          label="Go Live"
-          onPress={handleGoLive}
-          disabled={!canGoLive}
-          style={styles.wide}
+      <View style={styles.section}>
+        <HelpText>TITLE</HelpText>
+        <Input
+          placeholder="What's happening?"
+          value={title}
+          onChangeText={setTitle}
+          autoCorrect={false}
         />
-        {readySources.size === 0 && (
-          <Text style={styles.hint}>Ready at least one source to go live</Text>
+      </View>
+
+      <View style={styles.section}>
+        <HelpText>SOURCES</HelpText>
+        <HelpText>CHOOSE WHAT YOU'LL BROADCAST · SWITCHABLE ONCE LIVE</HelpText>
+        <View style={styles.feeds}>
+          {FEEDS.map((feed) => {
+            const supported = feed.source !== undefined
+            const armed = !!feed.source && readySources.has(feed.source)
+            const state: FeedState = !supported ? 'disabled' : armed ? 'armed' : 'off'
+            return (
+              <FeedRow
+                key={feed.kind}
+                kind={feed.kind}
+                label={feed.label}
+                detail={armed ? feed.armedDetail : feed.offDetail}
+                state={state}
+                on={armed}
+                onToggle={() => feed.source && toggleSource(feed.source)}
+              />
+            )
+          })}
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <HelpText>LOCATION</HelpText>
+        {locationError ? (
+          <Text variant="body" color={theme.colors.text.muted}>
+            {locationError}
+          </Text>
+        ) : (
+          <CoordHUD items={coordItems} />
         )}
+      </View>
+
+      <GoBar
+        variant={canGoLive ? 'armed' : 'disabled'}
+        onPress={handleGoLive}
+      />
+      {readySources.size === 0 && (
+        <HelpText style={styles.hint}>READY AT LEAST ONE SOURCE TO GO LIVE</HelpText>
+      )}
     </ScreenScroll>
   )
 }
 
 const styles = StyleSheet.create({
   scroll: {
-    flexGrow: 1,
     padding: theme.spacing.lg,
-    gap: theme.spacing.md,
+    gap: theme.spacing.lg,
+    paddingBottom: theme.spacing.xxxl,
   },
-  title: { ...theme.typography.display, color: theme.colors.text.primary, marginBottom: theme.spacing.sm },
-  section: { gap: theme.spacing.sm },
-  sectionLabel: {
-    ...theme.typography.caption,
-    color: theme.colors.text.muted,
-    fontWeight: '700',
-    letterSpacing: 1.2,
-  },
-  sectionHint: { ...theme.typography.caption, color: theme.colors.text.muted },
-  sourceGrid: { flexDirection: 'row', gap: theme.spacing.sm },
-  sourceCard: {
-    flex: 1,
-    backgroundColor: theme.colors.bg.elevated,
-    borderRadius: theme.radius.md,
-    borderWidth: 1.5,
-    borderColor: theme.colors.border.subtle,
-    padding: theme.spacing.md,
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-  },
-  sourceCardReady: {
-    borderColor: theme.colors.accent.default,
-    backgroundColor: '#1A0A10',
-  },
-  sourceIcon: { fontSize: 28 },
-  sourceLabel: { ...theme.typography.body, color: theme.colors.text.muted, fontWeight: '600' },
-  sourceLabelReady: { color: theme.colors.text.primary },
-  readyPill: {
-    borderRadius: theme.radius.full,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: 2,
-    backgroundColor: theme.colors.border.subtle,
-    marginTop: theme.spacing.xs,
-  },
-  readyPillActive: { backgroundColor: theme.colors.accent.default },
-  readyPillText: { ...theme.typography.caption, color: theme.colors.text.muted, fontWeight: '700' },
-  readyPillTextActive: { color: '#fff' },
-  row: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
-  muted: { ...theme.typography.body, color: theme.colors.text.muted },
-  errorText: { ...theme.typography.body, color: theme.colors.accent.default },
-  hint: { ...theme.typography.caption, color: theme.colors.text.muted, textAlign: 'center' },
-  wide: { width: '100%' },
-  locked: {
+  center: {
     flexGrow: 1,
     padding: theme.spacing.lg,
     justifyContent: 'center',
-    gap: theme.spacing.md,
     alignItems: 'center',
+    gap: theme.spacing.md,
   },
-  lockedEmoji: { fontSize: 52, textAlign: 'center', marginBottom: theme.spacing.sm },
-  lockedTitle: { ...theme.typography.display, color: theme.colors.text.primary, textAlign: 'center' },
-  lockedBody: {
-    ...theme.typography.body,
-    color: theme.colors.text.muted,
+  centerText: {
     textAlign: 'center',
-    lineHeight: 22,
+  },
+  creatorBadge: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: theme.colors.accent.surface,
+    borderWidth: 2,
+    borderColor: theme.colors.accent.border,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: theme.spacing.sm,
+  },
+  section: {
+    gap: theme.spacing.sm,
+  },
+  feeds: {
+    gap: theme.spacing.sm,
+  },
+  hint: {
+    textAlign: 'center',
   },
 })
