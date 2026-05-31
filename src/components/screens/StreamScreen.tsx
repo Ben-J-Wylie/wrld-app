@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet, ActivityIndicator, Pressable, AppState, Keyboard, Platform, Animated, Alert } from 'react-native'
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { captureRef } from 'react-native-view-shot'
+import { captureScreen } from 'react-native-view-shot'
 import { useLocalSearchParams, router, useFocusEffect } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { RTCView } from 'react-native-webrtc'
@@ -116,7 +116,6 @@ export function StreamScreen() {
   // Guards against double-navigation when multiple end signals arrive simultaneously
   // (e.g. broadcasterLeft WS message + viewer WS close in the same render cycle).
   const navigatingRef = useRef(false)
-  const videoContainerRef = useRef<View>(null)
   const pendingSnapshotUri = useRef<string | null>(null)
 
   const isCameraArmed = broadcastSources.includes('camera')
@@ -362,9 +361,11 @@ export function StreamScreen() {
 
   async function handleReportPress() {
     if (!isSignedIn) { setAuthModalVisible(true); return }
-    // Capture the video frame before the report sheet overlays it
+    // captureScreen() takes a system-level screenshot that works on GPU/OpenGL
+    // surfaces (RTCView). captureRef() on a wrapping View cannot reach beneath
+    // the native WebRTC surface layer.
     try {
-      pendingSnapshotUri.current = await captureRef(videoContainerRef, { format: 'jpg', quality: 0.9 })
+      pendingSnapshotUri.current = await captureScreen({ format: 'jpg', quality: 0.9 })
     } catch {
       pendingSnapshotUri.current = null
     }
@@ -432,15 +433,13 @@ export function StreamScreen() {
 
       {/* Fullscreen remote stream (viewer) */}
       {showRemoteVideo && (
-        <View ref={videoContainerRef} style={StyleSheet.absoluteFill}>
-          <RTCView
-            streamURL={(remoteStream as unknown as { toURL(): string }).toURL()}
-            style={StyleSheet.absoluteFill}
-            objectFit="cover"
-            mirror={false}
-            zOrder={0}
-          />
-        </View>
+        <RTCView
+          streamURL={(remoteStream as unknown as { toURL(): string }).toURL()}
+          style={StyleSheet.absoluteFill}
+          objectFit="cover"
+          mirror={false}
+          zOrder={0}
+        />
       )}
 
       {/* Admin warning banner (broadcaster only, dismissible) */}
