@@ -43,6 +43,9 @@ import { BankCard } from '@/components/features/wallet/BankCard'
 import { FeedThumb } from '@/components/features/broadcast/FeedThumb'
 import { FeedRow } from '@/components/features/broadcast/FeedRow'
 import { GoBar } from '@/components/features/broadcast/GoBar'
+import { ClipCard } from '@/components/features/clip/ClipCard'
+import { ClipPreview } from '@/components/features/clip/ClipPreview'
+import { LayerEditorRow } from '@/components/features/clip/LayerEditorRow'
 import { Toggle } from '@/components/primitives/Toggle'
 import { Button } from '@/components/primitives/Button'
 import { BroadcasterRow } from '@/components/features/user/BroadcasterRow'
@@ -864,6 +867,101 @@ export function FeatureGallery() {
         </Row>
       </Section>
 
+      <Section title="ClipCard">
+        <Row label="public (default)">
+          <ClipCard
+            thumbnailUrl="https://picsum.photos/seed/wrldclip1/320/220"
+            title="Drumline forming up"
+            venue="Brooklyn"
+            date="May 24"
+            durationSec={47}
+            peakViewerCount={1400}
+            onPress={() => {}}
+          />
+        </Row>
+        <Row label="owner (with layers)">
+          <ClipCard
+            variant="owner"
+            thumbnailUrl="https://picsum.photos/seed/wrldclip2/320/220"
+            title="Atlantic Ave overlook"
+            venue="Brooklyn"
+            date="May 24"
+            durationSec={92}
+            peakViewerCount={620}
+            layers={['cam', 'aud', 'loc']}
+            onPress={() => {}}
+          />
+        </Row>
+        <Row label="owner · anon (only visible to you)">
+          <ClipCard
+            variant="owner"
+            thumbnailUrl="https://picsum.photos/seed/wrldclip3/320/220"
+            title="Quiet alley test"
+            durationSec={28}
+            layers={['cam', 'aud']}
+            anon
+            onPress={() => {}}
+          />
+        </Row>
+        <Row label="owner · draft">
+          <ClipCard
+            variant="owner"
+            thumbnailUrl="https://picsum.photos/seed/wrldclip4/320/220"
+            title="Aurora attempt — north-facing"
+            venue="Reykjavík"
+            durationSec={143}
+            layers={['cam', 'aud', 'loc', 'gyr']}
+            draft
+            onPress={() => {}}
+          />
+        </Row>
+        <Row label="no thumbnail">
+          <ClipCard
+            title="Audio-only · pirate radio"
+            durationSec={62}
+            peakViewerCount={250}
+          />
+        </Row>
+      </Section>
+
+      <Section title="ClipPreview">
+        <Row label="camera (default)">
+          <ClipPreview
+            thumbnailUrl="https://picsum.photos/seed/wrldhero/640/440"
+            progressPct={42}
+            onTogglePlay={() => {}}
+          />
+        </Row>
+        <Row label="audio-only fallback">
+          <ClipPreview variant="audio-only" progressPct={20} onTogglePlay={() => {}} />
+        </Row>
+        <Row label="map-only fallback">
+          <ClipPreview variant="map-only" progressPct={75} onTogglePlay={() => {}} playing />
+        </Row>
+      </Section>
+
+      <Section title="LayerEditorRow">
+        <Row label="on">
+          <LayerEditorRowDemo iconName="video" name="Camera" status="1080P" description="Front camera · still life" initialState="on" />
+        </Row>
+        <Row label="off">
+          <LayerEditorRowDemo iconName="mic" name="Audio" status="48 kHz" description="Mic was active — turn off to mute this clip" initialState="off" />
+        </Row>
+        <Row label="deleted (perm-cut)">
+          <LayerEditorRowDemo iconName="map-pin" name="Location" description="Removed — restore to include this layer again" initialState="deleted" />
+        </Row>
+        <Row label="id-layer (anonymize)">
+          <LayerEditorRowDemo
+            variant="id-layer"
+            iconName="user"
+            name="Identity"
+            status="PUBLIC"
+            description="Toggle off to anonymize this clip retroactively"
+            initialState="on"
+          />
+        </Row>
+      </Section>
+
       <Section title="BroadcasterRow">
         <Row label="default">
           <BroadcasterRow
@@ -973,6 +1071,37 @@ function ToastBannerDemo() {
         />
       )}
     </View>
+  )
+}
+
+function LayerEditorRowDemo({
+  variant,
+  iconName,
+  name,
+  status,
+  description,
+  initialState,
+}: {
+  variant?: 'default' | 'id-layer'
+  iconName: 'video' | 'mic' | 'map-pin' | 'user' | 'navigation' | 'compass'
+  name: string
+  status?: string
+  description?: string
+  initialState: 'on' | 'off' | 'deleted'
+}) {
+  const [state, setState] = useState<'on' | 'off' | 'deleted'>(initialState)
+  return (
+    <LayerEditorRow
+      variant={variant}
+      iconName={iconName}
+      name={name}
+      status={status}
+      description={description}
+      state={state}
+      onToggle={(on) => setState(on ? 'on' : 'off')}
+      onMenu={() => {}}
+      onUndelete={() => setState('on')}
+    />
   )
 }
 

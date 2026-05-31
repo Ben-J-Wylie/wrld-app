@@ -1344,13 +1344,14 @@ and future replay thumbnails sharing the same tile.
 
 ##### `ClipCard`
 
-- **Tier:** feature
+- **Tier:** feature (composes Pressable + Image + Text + Icon)
 - **Location:** `src/components/features/clip/ClipCard.tsx`
-- **Variants:** `public` (Profile grid), `owner` (My Profile, with anon treatment + layer badges)
-- **Sizes:** controlled by variant
-- **States:** default, pressed, anon (owner only), draft (owner only)
+- **Variants:** `public` (Profile grid), `owner` (My Profile — adds layer badge row + supports anon + draft flags)
+- **Sizes:** controlled by variant; thumb is 16:11
+- **States:** default, pressed, anon (owner only — dark overlay + lock pill + "ONLY VISIBLE TO YOU"), draft (owner only — DRAFT pill replaces viewer count)
 - **Used in:** populated in 12.6
 - **Tweak impact:** Profile clip grid, My Profile clip grid, any future replay surface
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
 
 **Mock says:** Thumbnail (16:11 aspect) with overlay metadata. Duration
 pill top-left, peak-viewer-count or anon-lock or draft pill top-right or
@@ -1359,11 +1360,17 @@ layer-badge row (5 small icon tiles showing which of CAM / AUD / LOC /
 ID / GYR were active during the recording). **Anon owner clips** get a
 desaturated + diagonal-stripe overlay and "ONLY VISIBLE TO YOU" caption.
 
-**Code does:** None — clips are new (v0.2 per re-baseline 2026-05-29).
+**Code does (shipped):** 16:11 thumbnail with placeholder fallback +
+overlays: duration pill (top-left), and one of viewer-count pill /
+DRAFT pill / lock pill in the top-right by priority. Meta block under
+the thumb carries title, optional venue · date, and (owner only) a
+5-tile layer badge row + "ONLY VISIBLE TO YOU" caption when `anon`.
 
-**Gap / proposal:** New feature. ClipCard renders a `Clip` domain object.
-Anon treatment is owner-variant-only (public-side excludes anon clips
-entirely — that's a parent's responsibility).
+**Anon treatment.** Diagonal stripes from the spec are simplified to
+a 35%-black overlay (cheap to render, communicates the "private" tone).
+Real diagonal-stripes can swap into the `anonOverlay` style without API
+change. Public-side excludes anon clips entirely — that's the parent's
+responsibility.
 
 ---
 
@@ -2471,13 +2478,14 @@ enabled iff `authenticated && !sending && value.trim().length > 0`.
 
 ##### `ClipPreview`
 
-- **Tier:** feature (composes Card + VideoPreviewTile + sub-fallbacks)
+- **Tier:** feature (composes VideoPreviewTile + FeedThumb + Pressable + Icon + Text)
 - **Location:** `src/components/features/clip/ClipPreview.tsx`
-- **Variants:** `camera` (default video), `audio-only` (waveform fallback), `map-only` (loc fallback — no cam)
+- **Variants:** `camera` (composes VideoPreviewTile.play), `audio-only` (FeedThumb.audio lg + "AUDIO ONLY"), `map-only` (FeedThumb.loc lg + "LOCATION ONLY")
 - **Sizes:** lg (16:11 hero)
-- **States:** loading, playing, paused
+- **States:** playing / paused (consumer drives via `playing`), progress (consumer drives via `progressPct`)
 - **Used in:** populated in 12.6
 - **Tweak impact:** Clip Edit hero, future clip-detail surfaces
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
 
 **Mock says:** 16:11 hero preview. Three fallback states based on which
 layers were captured: camera (default), audio-only (animated waveform +
@@ -2485,11 +2493,14 @@ layers were captured: camera (default), audio-only (animated waveform +
 Always has playback controls overlaid (play button + progress bar +
 scrubber).
 
-**Code does:** None — clips are new per re-baseline.
-
-**Gap / proposal:** New feature. Variant determined by clip's
-`layerSet` (which layers were captured). Composes VideoPreviewTile for
-camera case; bespoke for fallbacks.
+**Code does (shipped):** 16:11 framed container. Camera variant lets
+VideoPreviewTile own the thumb + play affordance; fallback variants
+reuse FeedThumb (lg) for the visualization. Bottom-docked control
+strip (rgba(0,0,0,0.45) backdrop) carries a 36-circle play/pause
+button and a 3px progress track filled in `accent.bright`. Scrubber
+gesture is not yet implemented — `onTogglePlay` is the only
+interaction surfaced. Scrub handling lives in the parent Timeline
+feature when the consumer needs it.
 
 ---
 
@@ -2517,13 +2528,14 @@ handle dragging. State tuple: `{ duration, scrub, trimStart, trimEnd }`.
 
 ##### `LayerEditorRow`
 
-- **Tier:** feature (composes Icon-tile + Text + Pill + Toggle + IconButton)
+- **Tier:** feature (composes Pressable + Text + Icon + IconButton + Toggle)
 - **Location:** `src/components/features/clip/LayerEditorRow.tsx`
-- **Variants:** `default`, `id-layer` (special treatment for ID layer toggling)
+- **Variants:** `default`, `id-layer` (consumer-driven anonymize semantics; UI parity with default in v0.2)
 - **Sizes:** md
-- **States:** on, off, deleted (perm-cut)
+- **States:** on, off, deleted (dashed accent border + strikethrough name + RESTORE button)
 - **Used in:** populated in 12.6
 - **Tweak impact:** Clip Edit layers panel
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
 
 **Mock says:** Row: icon-tile (34×34, accent-tinted when on) + col (name
 + tone-status pill + dim description) + Toggle + row-menu IconButton.
@@ -2531,11 +2543,16 @@ handle dragging. State tuple: `{ duration, scrub, trimStart, trimEnd }`.
 hide-affordance. Permanent-cut action (live-tone outline button) appears
 when the row is selected.
 
-**Code does:** None.
+**Code does (shipped):** 34-square icon tile (accent surface + border
+when on), name + optional inline status pill + optional description
+column, Toggle (hidden in `deleted`), optional row-menu IconButton
+(`more-vertical`, ghost). Deleted state replaces the Toggle with a
+RESTORE link-style Pressable that emits `onUndelete`.
 
-**Gap / proposal:** New feature. Accepts a `Layer` + `onToggle` +
-`onDelete`. ID-layer variant treats the toggle differently (anonymizes
-the clip retroactively).
+**id-layer variant.** v0.2 ships with the same UI as default — the
+distinguishing behavior (anonymize retroactively) lives in the
+consumer's `onToggle` handler. When the anonymize confirm flow lands
+the variant can hook a deeper UI in.
 
 ---
 
