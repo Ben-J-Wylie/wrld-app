@@ -12,6 +12,7 @@ import { Text } from '@/components/primitives/Text'
 import { LivePill } from '@/components/features/stream/LivePill'
 import { StreamCard } from '@/components/features/stream/StreamCard'
 import { VideoPreviewTile } from '@/components/features/stream/VideoPreviewTile'
+import { CoordHUD } from '@/components/features/stream/CoordHUD'
 import { BroadcasterRow } from '@/components/features/user/BroadcasterRow'
 import { theme } from '@/tokens/theme'
 
@@ -158,6 +159,55 @@ export function FeatureGallery() {
             aspectRatio={16 / 9}
             viewerCount={250}
           />
+        </Row>
+      </Section>
+
+      <Section title="CoordHUD">
+        <Row label="viewer-sheet (4-col)">
+          <CoordHUD
+            items={[
+              { label: 'LAT', value: '40.6782' },
+              { label: 'LON', value: '-73.9442' },
+              { label: 'ELEV', value: '12m' },
+              { label: 'UPTIME', value: '00:14:27' },
+            ]}
+          />
+        </Row>
+        <Row label="with pending">
+          <CoordHUD
+            items={[
+              { label: 'LAT', value: '40.6782' },
+              { label: 'LON', value: '-73.9442' },
+              { label: 'ELEV', value: '—', pending: true },
+              { label: 'GPS', value: '...', pending: true },
+            ]}
+          />
+        </Row>
+        <Row label="broadcast-live (over video)">
+          <View style={styles.videoBg}>
+            <CoordHUD
+              variant="broadcast-live"
+              items={[
+                { label: 'LAT', value: '40.6782' },
+                { label: 'LON', value: '-73.9442' },
+                { label: 'HDG', value: '192°' },
+                { label: 'UPTIME', value: '00:14:27' },
+              ]}
+            />
+          </View>
+        </Row>
+        <Row label="broadcast-live pending">
+          <View style={styles.videoBg}>
+            <CoordHUD
+              variant="broadcast-live"
+              items={[
+                { label: 'LAT', value: '...', pending: true },
+                { label: 'LON', value: '...', pending: true },
+                { label: 'HDG', value: '—', pending: true },
+                { label: 'UPTIME', value: '00:00:03' },
+              ]}
+            />
+          </View>
         </Row>
       </Section>
 

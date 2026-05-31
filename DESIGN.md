@@ -1393,23 +1393,31 @@ patterns; no per-sensor tile.
 
 ##### `CoordHUD`
 
-- **Tier:** feature
+- **Tier:** feature (composes Text only)
 - **Location:** `src/components/features/stream/CoordHUD.tsx`
-- **Variants:** `viewer-sheet` (4-column inline), `broadcast-live` (right-justified panel)
+- **Variants:** `viewer-sheet` (4-column inline grid, label above value, centered), `broadcast-live` (right-justified panel with rgba(0,0,0,0.45) backdrop, label left / value right per row)
 - **Sizes:** controlled by variant
-- **States:** default
+- **States:** default, pending (per item — value rendered in `text.subtle` for in-flight reads)
 - **Used in:** populated in 12.6
 - **Tweak impact:** Viewer Sheet meta block, Broadcast Live HUD overlay
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
+- **Last reviewed:** 2026-05-31
 
 **Mock says:** Grid of label/value pairs (LAT / LON / ELEV / UPTIME,
 sometimes more). All mono, tabular-numeric values. Label is dim and
 small caps. Value is brighter, monospace.
 
-**Code does:** None.
+**Code does (shipped):** Renders an array of `{ label, value, pending? }`.
+`viewer-sheet` lays cells out in a flex row with `flex: 1` per column —
+4-up is the design intent but it gracefully degrades to N cells. Label
+uses `monoCaption` in `text.subtle`; value uses `monoValue` in
+`text.primary` (or `text.subtle` when `pending`). `broadcast-live`
+swaps in a translucent panel + `text.inverse` for value (so it reads
+against arbitrary camera footage), label stays `text.subtle`.
 
-**Gap / proposal:** New feature accepting an array of `{ label, value }`
-+ optional `pending` flag (renders dim). Variant controls layout
-(inline grid vs right-justified panel).
+**API:** consumer-flat — feature stays domain-blind. The Viewer Sheet
+and Broadcast HUD screens format their own `{ label, value }` items
+from coordinates / uptime / heading.
 
 ---
 
