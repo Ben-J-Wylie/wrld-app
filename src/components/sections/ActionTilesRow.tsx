@@ -25,7 +25,7 @@ export type ActionTile = {
 
 type Props = {
   tiles: ActionTile[]
-  cols?: 3 | 4
+  cols?: 2 | 3 | 4
   style?: StyleProp<ViewStyle>
 }
 

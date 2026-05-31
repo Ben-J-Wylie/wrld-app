@@ -2890,7 +2890,7 @@ TransactionRow). Border-top separates from previous day's group.
 
 - **Tier:** section (composes Pressable + Icon + Text)
 - **Location:** `src/components/sections/ActionTilesRow.tsx`
-- **Variants:** `default` (3-up), `4-up` via the `cols` prop
+- **Variants:** `default` (3-up), `2-up` and `4-up` via the `cols` prop
 - **Sizes:** md
 - **States:** default; per-tile `primary` adds accent border + accent.surface bg + accent icon
 - **Used in:** populated in 12.6

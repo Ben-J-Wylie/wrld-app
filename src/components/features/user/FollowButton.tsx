@@ -1,3 +1,16 @@
+// src/components/features/user/FollowButton.tsx
+//
+// Already token-clean — survives 12.5/12.6 without re-rendering work.
+// Composes the Button primitive (variant swaps between 'primary' and
+// 'secondary' on follow state); reads its own follow state via the
+// useUserProfile hook so BroadcasterRow + ProfileScreen + SearchScreen
+// can drop it in without threading isFollowing through their own
+// props. Optimistic toggle with revert-on-error.
+//
+// `onAuthRequest` opt-in lets anon callers (StreamScreen viewer mode,
+// BroadcasterRow chip) intercept the tap and present an auth sheet
+// instead of firing the follow/unfollow API call.
+
 import { useState, useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { usersApi } from '@/api/users'
