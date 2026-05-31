@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ActivityIndicator, Pressable, AppState, Keyboard, Platform, Animated } from 'react-native'
+import { View, Text, StyleSheet, ActivityIndicator, Pressable, AppState, Keyboard, Platform, Animated, Alert } from 'react-native'
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useLocalSearchParams, router, useFocusEffect } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -289,8 +289,13 @@ export function StreamScreen() {
       })
       await startBroadcasting(broadcastSources)
     } catch (err) {
-      setStatus('error')
-      setError(err instanceof Error ? err.message : 'Failed to go live')
+      const msg = err instanceof Error ? err.message : 'Failed to go live'
+      if (msg.toLowerCase().includes('suspended')) {
+        Alert.alert('Account suspended', msg, [{ text: 'OK', onPress: () => router.navigate('/(app)/dashboard') }])
+      } else {
+        setStatus('error')
+        setError(msg)
+      }
     }
   }
 
@@ -344,11 +349,25 @@ export function StreamScreen() {
     setTipSheetVisible(true)
   }
 
+  function suspensionAlert() {
+    const until = wrldUser?.suspendedUntil ? new Date(wrldUser.suspendedUntil) : null
+    const msg = until && until.getFullYear() < 2090
+      ? `Your account is suspended until ${until.toLocaleDateString()}.`
+      : 'Your account has been permanently suspended.'
+    Alert.alert('Account suspended', msg, [{ text: 'OK' }])
+  }
+
+  function isSuspended() {
+    return !!(wrldUser?.suspendedUntil && new Date(wrldUser.suspendedUntil) > new Date())
+  }
+
   function handleSendChat(text: string) {
+    if (isSuspended()) { suspensionAlert(); return }
     sendChatMessage(text, wrldUser?.handle ?? 'user')
   }
 
   function handleReact(kind: string) {
+    if (isSuspended()) { suspensionAlert(); return }
     sendReaction(kind, wrldUser?.handle ?? 'user')
   }
 
