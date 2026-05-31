@@ -76,7 +76,7 @@ const TIER_LABEL: Record<Tier, string> = {
 type MatrixValue = boolean | string
 
 const MATRIX: { f: string; free: MatrixValue; plus: MatrixValue; pro: MatrixValue }[] = [
-  { f: 'Ads', free: true, plus: false, pro: false },
+  { f: 'Ad-free', free: false, plus: true, pro: true },
   { f: 'Go Live', free: true, plus: true, pro: true },
   { f: 'Receive Tips', free: true, plus: true, pro: true },
   { f: 'Send Tips', free: true, plus: true, pro: true },
