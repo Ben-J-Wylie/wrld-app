@@ -50,6 +50,7 @@ import { ContextStrip } from '@/components/features/report/ContextStrip'
 import { ReasonRow } from '@/components/features/report/ReasonRow'
 import { PermissionPrePromptCard } from '@/components/features/permissions/PermissionPrePromptCard'
 import { AgeGateCard } from '@/components/features/onboarding/AgeGateCard'
+import { DOBWheel } from '@/components/features/onboarding/DOBWheel'
 import { Toggle } from '@/components/primitives/Toggle'
 import { Button } from '@/components/primitives/Button'
 import { BroadcasterRow } from '@/components/features/user/BroadcasterRow'
@@ -1025,6 +1026,12 @@ export function FeatureGallery() {
         </Row>
       </Section>
 
+      <Section title="DOBWheel">
+        <Row label="default (scroll each column)">
+          <DOBWheelDemo />
+        </Row>
+      </Section>
+
       <Section title="BroadcasterRow">
         <Row label="default">
           <BroadcasterRow
@@ -1133,6 +1140,18 @@ function ToastBannerDemo() {
           onDismiss={() => setToast(null)}
         />
       )}
+    </View>
+  )
+}
+
+function DOBWheelDemo() {
+  const [value, setValue] = useState(new Date(2000, 4, 15))
+  return (
+    <View style={{ gap: 8 }}>
+      <DOBWheel value={value} onChange={setValue} />
+      <Text variant="monoCaption" color={theme.colors.text.muted}>
+        Selected: {value.toDateString()}
+      </Text>
     </View>
   )
 }

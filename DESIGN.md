@@ -1953,24 +1953,35 @@ tile on `bg.panel` + body text in `text.primary`. Consumer passes
 
 ##### `DOBWheel`
 
-- **Tier:** feature
+- **Tier:** feature (composes Text + FlatList per column)
 - **Location:** `src/components/features/onboarding/DOBWheel.tsx`
 - **Variants:** `default`
-- **Sizes:** md (h:178, 3 columns)
-- **States:** default
+- **Sizes:** md (h:180, 3 columns of 36-tall rows × 5 visible rows)
+- **States:** default; center band fixed; neighbors dim by distance (1 = 0.55, 2 = 0.3)
 - **Used in:** populated in 12.6
 - **Tweak impact:** Onboarding age step (Viewer + Creator wizards)
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
 
 **Mock says:** iOS-style scroll wheel picker. 3 columns: month / day /
 year. Center selection band (line-2 borders top + bottom). Top + bottom
 fade gradient. Sans font, tabular-numeric. Selected center value is
 bright ink + 600 weight; neighbors are dimmed (opacity 0.55, 0.3).
 
-**Code does:** None.
+**Code does (shipped):** Each column is a `FlatList<T>` with
+`snapToInterval={ROW_HEIGHT}` and `decelerationRate='fast'` — RN's
+native snap handles the gesture without bespoke PanResponder code.
+Selected index is recomputed from `contentOffset.y` in
+`onMomentumScrollEnd`. The center band (2px borders top + bottom in
+`border.strong`) is a non-interactive overlay; soft fade at the top
+and bottom uses a translucent `bg.primary` strip rather than a real
+gradient (acceptable on a cream canvas; SkiaGradient or
+`expo-linear-gradient` can swap in later if needed).
 
-**Gap / proposal:** New feature. Custom RN implementation (no native
-DatePicker — the design wants this specific aesthetic). PanResponder-
-driven scroll on each column.
+**Day-month coupling.** Changing month or year clamps the day to the
+new month's max (e.g. picking Feb on Mar 31 lands on Feb 28/29).
+
+**API:** `value: Date`, `onChange(next: Date)`, `minYear?`, `maxYear?`
+(defaults: today − 100 .. today).
 
 ---
 
