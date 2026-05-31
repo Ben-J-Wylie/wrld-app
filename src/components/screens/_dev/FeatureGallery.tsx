@@ -46,6 +46,7 @@ import { GoBar } from '@/components/features/broadcast/GoBar'
 import { ClipCard } from '@/components/features/clip/ClipCard'
 import { ClipPreview } from '@/components/features/clip/ClipPreview'
 import { LayerEditorRow } from '@/components/features/clip/LayerEditorRow'
+import { Timeline } from '@/components/features/clip/Timeline'
 import { ContextStrip } from '@/components/features/report/ContextStrip'
 import { ReasonRow } from '@/components/features/report/ReasonRow'
 import { PermissionPrePromptCard } from '@/components/features/permissions/PermissionPrePromptCard'
@@ -1042,6 +1043,15 @@ export function FeatureGallery() {
         </Row>
       </Section>
 
+      <Section title="Timeline">
+        <Row label="scrub only">
+          <TimelineDemo trim={false} />
+        </Row>
+        <Row label="scrub + trim">
+          <TimelineDemo trim />
+        </Row>
+      </Section>
+
       <Section title="BroadcasterRow">
         <Row label="default">
           <BroadcasterRow
@@ -1151,6 +1161,22 @@ function ToastBannerDemo() {
         />
       )}
     </View>
+  )
+}
+
+function TimelineDemo({ trim }: { trim: boolean }) {
+  const duration = 60
+  const [scrub, setScrub] = useState(12)
+  const [range, setRange] = useState({ start: 5, end: 45 })
+  return (
+    <Timeline
+      duration={duration}
+      scrub={scrub}
+      trimStart={trim ? range.start : undefined}
+      trimEnd={trim ? range.end : undefined}
+      onScrub={setScrub}
+      onTrimChange={trim ? setRange : undefined}
+    />
   )
 }
 

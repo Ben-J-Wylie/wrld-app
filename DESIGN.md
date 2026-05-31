@@ -2530,23 +2530,32 @@ feature when the consumer needs it.
 
 ##### `Timeline`
 
-- **Tier:** feature
+- **Tier:** feature (composes Text + bespoke track + PanResponder)
 - **Location:** `src/components/features/clip/Timeline.tsx`
-- **Variants:** `default`
+- **Variants:** `default` (trim handles opt-in via `trimStart` + `trimEnd` + `onTrimChange`)
 - **Sizes:** md (h:44)
-- **States:** default, scrubbing, trimming
+- **States:** scrub-only (no trim handles), trim (handles visible + draggable)
 - **Used in:** populated in 12.6
 - **Tweak impact:** Clip Edit timeline, future video-editing surfaces
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
 
 **Mock says:** Track with waveform bars in the background, current
 playhead scrubber, optional trim handles defining the "active" region
 with accent borders + handles. Trimmed-out regions get a dark overlay
 with a hatched pattern.
 
-**Code does:** None.
+**Code does (shipped):** 44-tall track with a row of waveform bars
+(default seed + `waveformPeaks?` override). Three independent
+PanResponders — one for the scrubber (clamped to `[trimStart,
+trimEnd]`), one per trim handle (clamped to keep them apart and inside
+`[0, duration]`). Trim regions outside `[trimStart, trimEnd]` get a
+30%-black overlay; the active region gets accent top/bottom borders
+inside the band. Time labels below the track (current / total).
 
-**Gap / proposal:** New feature. PanResponder-driven scrubber + trim-
-handle dragging. State tuple: `{ duration, scrub, trimStart, trimEnd }`.
+**Hatched pattern deferred.** Mock calls for diagonal-stripe overlay
+on the trimmed-out regions; v1 uses a flat black-overlay because RN
+has no built-in striped fill. A pattern primitive can swap into
+`trimOverlay` later without API change.
 
 ---
 
