@@ -9,6 +9,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { useQueryClient } from '@tanstack/react-query'
 import { usersApi } from '@/api/users'
 import { useState } from 'react'
+import * as Notifications from 'expo-notifications'
 
 export function SettingsScreen() {
   const { signOut } = useClerk()
@@ -21,6 +22,16 @@ export function SettingsScreen() {
   const [nearbyLive, setNearbyLive] = useState(wrldUser?.notifyOnNearbyLive ?? false)
 
   async function handleSignOut() {
+    // Unregister push token before clearing session so the device stops
+    // receiving notifications for this account immediately after sign-out.
+    try {
+      const tokenData = await Notifications.getExpoPushTokenAsync({
+        projectId: '35ab0828-46ac-477f-8ace-453105f6601e',
+      })
+      await usersApi.unregisterPushToken(tokenData.data)
+    } catch {
+      // Don't block sign-out if unregister fails (e.g. no notification permission)
+    }
     clearWrldUser()
     qc.clear()
     router.navigate('/(app)/globe')

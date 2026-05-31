@@ -723,7 +723,7 @@ Three exit paths, all funnelling through a single `exitToGlobe(kind)` function:
 
 ## Known issue: push token not unregistered on sign-out
 
-**Filed May 2026. Not yet fixed.**
+**Filed May 2026. Fixed May 2026.**
 
 `handleSignOut` in `SettingsScreen.tsx` calls `clearWrldUser()`, clears the React Query cache, then calls Clerk `signOut()`. It does NOT call `usersApi.unregisterPushToken()` first. This means the `PushSubscription` row on the backend stays associated with the device even after sign-out.
 
