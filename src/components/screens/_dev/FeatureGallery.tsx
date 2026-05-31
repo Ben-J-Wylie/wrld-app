@@ -21,6 +21,7 @@ import { ReactionRail } from '@/components/features/stream/ReactionRail'
 import { SettingsRow } from '@/components/features/settings/SettingsRow'
 import { ToastBanner } from '@/components/features/feedback/ToastBanner'
 import { SearchBar } from '@/components/features/discovery/SearchBar'
+import { SwapCard } from '@/components/features/identity/SwapCard'
 import { Toggle } from '@/components/primitives/Toggle'
 import { Button } from '@/components/primitives/Button'
 import { BroadcasterRow } from '@/components/features/user/BroadcasterRow'
@@ -438,6 +439,26 @@ export function FeatureGallery() {
         </Row>
         <Row label="no clear callback (no X)">
           <SearchBarDemo initial="kai" omitClear />
+        </Row>
+      </Section>
+
+      <Section title="SwapCard">
+        <Row label="handle change">
+          <SwapCard fromValue="@user_8j2k1" toValue="@benwy" />
+        </Row>
+        <Row label="display-name change (custom labels)">
+          <SwapCard
+            fromLabel="WAS"
+            fromValue="Ben"
+            toLabel="NOW"
+            toValue="Ben Wylie"
+          />
+        </Row>
+        <Row label="long values truncate">
+          <SwapCard
+            fromValue="@a_really_long_old_handle_name_for_overflow_test"
+            toValue="@a_really_long_new_handle_name_for_overflow_test"
+          />
         </Row>
       </Section>
 

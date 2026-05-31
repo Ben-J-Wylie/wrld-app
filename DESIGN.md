@@ -2101,22 +2101,30 @@ domain-blind.
 
 ##### `SwapCard`
 
-- **Tier:** feature (composes Card + Text + Icon)
+- **Tier:** feature (composes Text + Icon)
 - **Location:** `src/components/features/identity/SwapCard.tsx`
 - **Variants:** `default`
 - **Sizes:** md
 - **States:** default
-- **Used in:** populated in 12.6
+- **Used in:** populated in 12.6 (Change Handle confirm step)
 - **Tweak impact:** Change Handle confirm step, future FROM/TO confirmation surfaces
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
+- **Last reviewed:** 2026-05-31
 
 **Mock says:** Accent-tinted card showing "FROM" with strikethrough old
 value + accent arrow + "TO" with new value. Used when confirming a
 mutation that swaps one value for another.
 
-**Code does:** None.
+**Code does (shipped):** Row layout — FROM column (mono-caps label
+in `text.subtle` + value in `text.muted` with line-through), accent
+`arrow-right` icon, TO column (mono-caps label in `accent.default` +
+value in `text.primary`). Card itself is the accent-tinted surface
+(`accent.surface` bg + `accent.border` border). Both value lines use
+`numberOfLines: 1` so long values truncate rather than wrap and break
+the layout.
 
-**Gap / proposal:** New feature. Accepts `{ fromLabel, fromValue,
-toLabel, toValue }`. Strikethrough applied to old value automatically.
+**API:** `fromLabel?` (default "FROM"), `fromValue`, `toLabel?` (default
+"TO"), `toValue`. Strikethrough applied to `fromValue` automatically.
 
 ---
 
