@@ -721,6 +721,29 @@ Three exit paths, all funnelling through a single `exitToGlobe(kind)` function:
 
 ---
 
+## Updates — May 2026 (Phase 17: suspension handling)
+
+### `User` type (`src/types/index.ts`)
+
+`suspendedUntil: string | null` and `suspendedReason: string | null` added. Both are returned by `GET /auth/me` since they're columns on the Prisma `User` row.
+
+### Suspension banner (`app/(app)/_layout.tsx`)
+
+`SuspensionBanner` component renders an amber stripe below the status bar on all main screens when `wrldUser.suspendedUntil` is in the future. Shows `"Your account is suspended until [date]"` for temporary suspensions, `"permanently suspended"` for permanent (year ≥ 2090). Reads directly from the Zustand auth store — no extra fetch.
+
+### `/auth/me` polling (`app/_layout.tsx`)
+
+`RootNavigator` polls `GET /auth/me` every 30s while signed in, updating the Zustand store. This keeps suspension status, tier, and balances current in near-real-time. Banner appears/clears within 30s of an admin action — no user interaction required.
+
+### In-stream suspension alerts (`src/hooks/useSignaling.ts`, `src/components/screens/StreamScreen.tsx`)
+
+`useSignaling` listens for `{ type: 'error', message: '...suspended...' }` from the mediasoup WS (sent by the server when a suspended user tries to go live, chat, or react) and sets `suspensionError` state. `StreamScreen` watches `suspensionError` via `useEffect` and shows `Alert.alert`. This is the single source of truth for in-stream suspension alerts — no stale local checks.
+
+**What's blocked for suspended users:** go live, chat, emoji reactions.
+**What still works:** tipping (mediasoup authenticates them, internal tip route has no suspension check), viewing streams (anonymous, no auth required).
+
+---
+
 ## Known issue: push token not unregistered on sign-out
 
 **Filed May 2026. Fixed May 2026.**
