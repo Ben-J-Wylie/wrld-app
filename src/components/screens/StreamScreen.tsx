@@ -107,6 +107,7 @@ export function StreamScreen() {
   const [chatOpen, setChatOpen] = useState(false)
   const [authModalVisible, setAuthModalVisible] = useState(false)
   const [tipSheetVisible, setTipSheetVisible] = useState(false)
+  const [reportVisible, setReportVisible] = useState(false)
   const [broadcasterTipToast, setBroadcasterTipToast] = useState<string | null>(null)
   const [keyboardHeight, setKeyboardHeight] = useState(0)
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -356,6 +357,22 @@ export function StreamScreen() {
     setTipSheetVisible(true)
   }
 
+  function handleReportPress() {
+    if (!isSignedIn) { setAuthModalVisible(true); return }
+    setReportVisible(true)
+  }
+
+  async function submitReport(reason: string) {
+    if (!streamId) return
+    try {
+      await streamsApi.report(streamId, reason)
+      setReportVisible(false)
+      Alert.alert('Reported', 'Thanks for letting us know. We\'ll review this stream.')
+    } catch {
+      Alert.alert('Error', 'Could not submit report. Please try again.')
+    }
+  }
+
   function handleSendChat(text: string) {
     sendChatMessage(text, wrldUser?.handle ?? 'user')
   }
@@ -455,9 +472,14 @@ export function StreamScreen() {
         {status === 'in-room' && !streamEnded && (
           <View style={styles.headerActions}>
             {!isNew && (
-              <Pressable style={styles.tipHeaderBtn} onPress={handleTipPress} hitSlop={8}>
-                <Text style={styles.tipHeaderBtnText}>🚀 Tip</Text>
-              </Pressable>
+              <>
+                <Pressable style={styles.tipHeaderBtn} onPress={handleTipPress} hitSlop={8}>
+                  <Text style={styles.tipHeaderBtnText}>🚀 Tip</Text>
+                </Pressable>
+                <Pressable style={[styles.tipHeaderBtn, { marginLeft: 6 }]} onPress={handleReportPress} hitSlop={8}>
+                  <Text style={styles.tipHeaderBtnText}>⚑</Text>
+                </Pressable>
+              </>
             )}
             <Pressable
               onPress={() => setChatOpen((o) => !o)}
@@ -694,6 +716,29 @@ export function StreamScreen() {
         onClose={() => setTipSheetVisible(false)}
         onTip={handleTip}
       />
+
+      {/* Report modal */}
+      {reportVisible && (
+        <View style={StyleSheet.absoluteFillObject} >
+          <Pressable style={styles.reportBackdrop} onPress={() => setReportVisible(false)} />
+          <View style={styles.reportSheet}>
+            <Text style={styles.reportTitle}>Report stream</Text>
+            {[
+              'Inappropriate content',
+              'Harassment or bullying',
+              'Spam',
+              'Other',
+            ].map(reason => (
+              <Pressable key={reason} style={styles.reportOption} onPress={() => submitReport(reason)}>
+                <Text style={styles.reportOptionText}>{reason}</Text>
+              </Pressable>
+            ))}
+            <Pressable style={styles.reportCancel} onPress={() => setReportVisible(false)}>
+              <Text style={styles.reportCancelText}>Cancel</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
 
       {/* Tip burst animations — visible to all peers */}
       {status === 'in-room' && !streamEnded && (
@@ -932,4 +977,18 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 24,
   },
+  reportBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.6)' },
+  reportSheet: {
+    position: 'absolute', bottom: 0, left: 0, right: 0,
+    backgroundColor: theme.colors.bg.elevated,
+    borderTopLeftRadius: 16, borderTopRightRadius: 16,
+    padding: 24, paddingBottom: 40,
+  },
+  reportTitle: { ...theme.typography.body, color: theme.colors.text.primary, fontWeight: '600', marginBottom: 16 },
+  reportOption: {
+    paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: theme.colors.border.subtle,
+  },
+  reportOptionText: { ...theme.typography.body, color: theme.colors.text.primary },
+  reportCancel: { paddingVertical: 14, alignItems: 'center' },
+  reportCancelText: { ...theme.typography.body, color: theme.colors.text.muted },
 })

@@ -46,4 +46,8 @@ export const streamsApi = {
   end: async (id: string): Promise<void> => {
     await apiClient.delete(`/streams/${id}`)
   },
+
+  report: async (id: string, reason: string): Promise<void> => {
+    await apiClient.post(`/streams/${id}/report`, { reason })
+  },
 }

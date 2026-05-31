@@ -75,6 +75,10 @@ export function useSignaling() {
         // Server explicitly closed our socket because the broadcaster left.
         // Treat identically to receiving a broadcasterLeft WS message.
         setStreamEnded(true)
+      } else if (code === 4003) {
+        // Kicked by admin — navigate back to globe with a signal.
+        import('../lib/streamSignals').then(m => m.signalKicked())
+        setStatus('idle')
       } else {
         setStatus('dropped')
       }

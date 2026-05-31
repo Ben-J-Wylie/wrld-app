@@ -30,6 +30,7 @@ Mapbox.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '')
 type BannerData =
   | { kind: 'disconnected'; broadcasterHandle: string | null }
   | { kind: 'ended' }
+  | { kind: 'kicked' }
   | { kind: 'resumed'; stream: Stream; broadcasterHandle: string | null }
 
 export function GlobeScreen() {
@@ -56,14 +57,16 @@ export function GlobeScreen() {
       if (!signal) return
       if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current)
       if (bannerPollRef.current) clearInterval(bannerPollRef.current)
-      setBanner(signal.kind === 'ended'
-        ? { kind: 'ended' }
-        : { kind: 'disconnected', broadcasterHandle: signal.broadcasterHandle })
+      setBanner(
+        signal.kind === 'ended'       ? { kind: 'ended' } :
+        signal.kind === 'kicked'      ? { kind: 'kicked' } :
+        { kind: 'disconnected', broadcasterHandle: signal.broadcasterHandle }
+      )
     }, []),
   )
 
   useEffect(() => {
-    if (!banner || banner.kind !== 'ended') return
+    if (!banner || (banner.kind !== 'ended' && banner.kind !== 'kicked')) return
     bannerTimerRef.current = setTimeout(() => setBanner(null), 8000)
     return () => { if (bannerTimerRef.current) clearTimeout(bannerTimerRef.current) }
   }, [banner?.kind])
@@ -253,7 +256,8 @@ export function GlobeScreen() {
           <Pressable style={[styles.banner, banner.kind === 'resumed' ? styles.bannerResumed : styles.bannerMuted]} onPress={banner.kind === 'resumed' ? handleBannerTap : undefined}>
             <View style={styles.bannerContent}>
               {banner.kind === 'disconnected' && (<><ActivityIndicator size="small" color={theme.colors.text.muted} style={styles.bannerSpinner} /><Text style={styles.bannerText}>Stream disconnected — waiting to reconnect</Text></>)}
-              {banner.kind === 'ended' && <Text style={styles.bannerText}>The stream has ended</Text>}
+              {banner.kind === 'ended'  && <Text style={styles.bannerText}>The stream has ended</Text>}
+              {banner.kind === 'kicked' && <Text style={styles.bannerText}>You have been removed from this stream</Text>}
               {banner.kind === 'resumed' && <Text style={[styles.bannerText, styles.bannerTextResumed]}>Stream resumed — tap to rejoin</Text>}
             </View>
             <Pressable onPress={dismissBanner} hitSlop={12} style={styles.bannerClose}>
