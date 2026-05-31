@@ -73,16 +73,19 @@ export function Input({
   const [focused, setFocused] = useState(false)
 
   const borderColor = resolveBorderColor(state, focused)
-  const showGlow = focused || state === 'valid' || state === 'error' || state === 'loading'
-  const glowStyle = showGlow && !disabled ? theme.elevation.glow.accent : null
   const affordance = resolveAffordance(state, rightAffordance)
 
+  // NOTE: focus-driven shadow (theme.elevation.glow.accent) was removed
+  // from this style array in the focus/blur-race investigation
+  // (2026-05-30). Adding shadow properties to a UIView on focus appeared
+  // to trigger CALayer reconfiguration that cancelled iOS's keyboard
+  // appearance partway through. Border color change on focus remains
+  // (cheap property update, no layer recalc).
   return (
     <View
       style={[
         styles.wrapper,
         { height: HEIGHT[size], borderColor },
-        glowStyle,
         disabled && styles.disabled,
         style,
       ]}
