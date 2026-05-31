@@ -18,6 +18,8 @@ import { ChatMessage } from '@/components/features/chat/ChatMessage'
 import { ChatComposer } from '@/components/features/chat/ChatComposer'
 import { StreamStateBanner } from '@/components/features/stream/StreamStateBanner'
 import { ReactionRail } from '@/components/features/stream/ReactionRail'
+import { SettingsRow } from '@/components/features/settings/SettingsRow'
+import { Toggle } from '@/components/primitives/Toggle'
 import { BroadcasterRow } from '@/components/features/user/BroadcasterRow'
 import { useState } from 'react'
 import { theme } from '@/tokens/theme'
@@ -326,6 +328,70 @@ export function FeatureGallery() {
         </Row>
       </Section>
 
+      <Section title="SettingsRow">
+        <Row label="default (group)">
+          <View style={styles.settingsGroup}>
+            <SettingsRow
+              iconName="credit-card"
+              title="Plan"
+              value="Free · View all plans"
+              arrow
+              showBorderTop={false}
+              onPress={() => {}}
+            />
+            <SettingsRow
+              iconName="bell"
+              title="Notifications"
+              value="Followed live, nearby live"
+              arrow
+              onPress={() => {}}
+            />
+            <SettingsRow
+              iconName="lock"
+              title="Privacy"
+              value="Location · Profile visibility"
+              arrow
+              onPress={() => {}}
+            />
+          </View>
+        </Row>
+        <Row label="highlight (identity)">
+          <View style={styles.settingsGroup}>
+            <SettingsRow
+              variant="highlight"
+              iconName="at-sign"
+              title="@benwy"
+              value="Tap to edit handle"
+              arrow
+              showBorderTop={false}
+              onPress={() => {}}
+            />
+            <SettingsRow
+              iconName="user"
+              title="Display name"
+              value="Ben Wylie"
+              arrow
+              onPress={() => {}}
+            />
+          </View>
+        </Row>
+        <Row label="with Toggle">
+          <SettingsRowToggleDemo />
+        </Row>
+        <Row label="no icon (text-only)">
+          <View style={styles.settingsGroup}>
+            <SettingsRow
+              title="Terms of service"
+              arrow
+              showBorderTop={false}
+              onPress={() => {}}
+            />
+            <SettingsRow title="Privacy policy" arrow onPress={() => {}} />
+            <SettingsRow title="Sign out" onPress={() => {}} />
+          </View>
+        </Row>
+      </Section>
+
       <Section title="BroadcasterRow">
         <Row label="default">
           <BroadcasterRow
@@ -393,6 +459,28 @@ function GalleryRow({ label, children }: { label: string; children: React.ReactN
 
 // Local alias so the markup reads `<Row>` like the primitive gallery does
 const Row = GalleryRow
+
+function SettingsRowToggleDemo() {
+  const [followedLive, setFollowedLive] = useState(true)
+  const [nearbyLive, setNearbyLive] = useState(false)
+  return (
+    <View style={styles.settingsGroup}>
+      <SettingsRow
+        iconName="bell"
+        title="Someone I follow goes live"
+        value="Get notified when a streamer you follow starts streaming"
+        right={<Toggle value={followedLive} onValueChange={setFollowedLive} />}
+        showBorderTop={false}
+      />
+      <SettingsRow
+        iconName="map-pin"
+        title="Live stream nearby"
+        value="Get notified when someone is streaming near your last location"
+        right={<Toggle value={nearbyLive} onValueChange={setNearbyLive} />}
+      />
+    </View>
+  )
+}
 
 function ReactionRailBurstDemo() {
   const [burst, setBurst] = useState<{ id: number; kind: string }[]>([])
@@ -479,5 +567,11 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.md,
     padding: theme.spacing.md,
     gap: 2,
+  },
+  settingsGroup: {
+    borderRadius: theme.radius.md,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: theme.colors.border.subtle,
   },
 })

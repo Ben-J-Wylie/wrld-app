@@ -2044,24 +2044,37 @@ eye-off). Emits the chosen granularity (`'bluedot' | 'city' | 'country'
 
 ##### `SettingsRow`
 
-- **Tier:** feature (composes Icon + Text)
+- **Tier:** feature (composes Pressable + Icon + Text)
 - **Location:** `src/components/features/settings/SettingsRow.tsx`
-- **Variants:** `default`, `highlight` (accent-tinted background for primary identity row)
+- **Variants:** `default`, `highlight` (accent-tinted background + accent icon-tile, for primary identity row)
 - **Sizes:** md
-- **States:** default, pressed
-- **Used in:** populated in 12.6
-- **Tweak impact:** Settings, Wallet header (Top Up / Cash Out tiles also share patterns), future config surfaces
+- **States:** default, pressed (via Pressable variant `subtle`)
+- **Used in:** populated in 12.6 (Settings + Me migrations)
+- **Tweak impact:** Settings, Me, Wallet header (Top Up / Cash Out tiles share patterns), future config surfaces
+- **Shipped:** 2026-05-31 (sub-phase 12.5)
+- **Last reviewed:** 2026-05-31
 
 **Mock says:** Grid: icon-tile (36×36) + col (title + value + optional
 AccountIDPill) + chevron arrow. Border-top separates from previous row.
 The **highlight** variant is accent-tinted background for the primary
 identity row (Handle).
 
-**Code does:** Settings screen has bespoke row rendering.
+**Code does (shipped):** Row layout — optional 36×36 icon-tile on the
+left (in `bg.panel`, or accent surface + border when `variant=highlight`),
+title + optional value column in the middle, right slot on the right.
+Right slot is configurable: pass `right` for any node (Toggle,
+AccountIDPill, custom), or `arrow` for a chevron — chevron is also
+auto-supplied when `onPress` is set with no explicit right slot.
+Border-top hairline by default (opt-out with `showBorderTop={false}`
+on the first row of a group) so a stack of rows reads as a grouped
+list without the parent rendering its own dividers. Grouping rows into
+cards/sections remains the parent's job.
 
-**Gap / proposal:** Extract feature. Rows accept `{ icon, title, value,
-arrow }` plus optional `highlight` flag. Grouping into cards is the
-parent's responsibility.
+**API:** `variant?`, `iconName?` (Feather glyph or omitted for
+text-only), `title`, `value?`, `right?`, `arrow?`, `showBorderTop?`,
+`onPress?`. AccountIDPill (when shipped) drops into the `right` slot
+or alongside the title via the consumer's layout — the row stays
+domain-blind.
 
 ---
 
