@@ -721,6 +721,24 @@ Three exit paths, all funnelling through a single `exitToGlobe(kind)` function:
 
 ---
 
+## Updates — May 2026 (Phase 5/22: reports + kick handling)
+
+### Report submission (`src/api/streams.ts`, `src/components/screens/StreamScreen.tsx`)
+
+`streamsApi.report(streamId, reason)` calls `POST /streams/:id/report`.
+
+In `StreamScreen` (viewer mode), a **⚑ flag button** appears next to the Tip button. Tapping it:
+- Shows an `AuthModal` if not signed in
+- Otherwise opens a bottom-sheet (`reportVisible` state) with four preset reasons
+- On selection, calls `streamsApi.report()` → `Alert` confirmation
+
+### Kicked by admin (`src/hooks/useSignaling.ts`, `src/lib/streamSignals.ts`, `src/components/screens/GlobeScreen.tsx`)
+
+- WS close code **4003** in `useSignaling.ts` → calls `signalKicked()` (new signal kind `'kicked'`)
+- `GlobeScreen` handles `'kicked'` signal → banner "You have been removed from this stream", auto-dismisses after 8s (same timer as `'ended'`)
+
+---
+
 ## Updates — May 2026 (Phase 17: suspension handling)
 
 ### `User` type (`src/types/index.ts`)
