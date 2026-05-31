@@ -34,14 +34,17 @@ export function Textarea({
 }: Props) {
   const [focused, setFocused] = useState(false)
   const borderColor = focused ? theme.colors.accent.default : theme.colors.border.strong
-  const glowStyle = focused && !disabled ? theme.elevation.glow.accent : null
 
+  // NOTE: focus-driven shadow removed (2026-05-30 CALayer-reconfiguration
+  // fix — see Input.tsx for the diagnostic story). Adding shadow
+  // properties on focus changed the UIView's effective bounds mid-
+  // keyboard-animation, causing iOS to cancel keyboard appearance.
+  // Border color change on focus remains.
   return (
     <View
       style={[
         styles.wrapper,
         { borderColor },
-        glowStyle,
         disabled && styles.disabled,
         style,
       ]}
