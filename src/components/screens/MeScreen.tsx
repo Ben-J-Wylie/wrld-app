@@ -101,6 +101,22 @@ export function MeScreen() {
   }
 
   async function changeAvatar(source: 'gallery' | 'camera') {
+    // expo-image-picker doesn't auto-request runtime permissions —
+    // the launch* calls throw "Missing camera or camera roll permission"
+    // if we skip this step. Permission descriptions live in app.json's
+    // ios.infoPlist (NSCameraUsageDescription, NSPhotoLibraryUsageDescription).
+    const perm =
+      source === 'gallery'
+        ? await ImagePicker.requestMediaLibraryPermissionsAsync()
+        : await ImagePicker.requestCameraPermissionsAsync()
+    if (!perm.granted) {
+      setAvatarError(
+        source === 'gallery'
+          ? 'Photo library access required — enable in Settings.'
+          : 'Camera access required — enable in Settings.',
+      )
+      return
+    }
     const result =
       source === 'gallery'
         ? await ImagePicker.launchImageLibraryAsync({

@@ -231,6 +231,19 @@ export function CreatorOnboardingScreen() {
 
   // ── Avatar ──
   async function pickImage(camera: boolean) {
+    // expo-image-picker doesn't auto-request runtime permissions —
+    // the launch* calls throw "Missing camera or camera roll permission"
+    // if we skip this step.
+    const perm = camera
+      ? await ImagePicker.requestCameraPermissionsAsync()
+      : await ImagePicker.requestMediaLibraryPermissionsAsync()
+    if (!perm.granted) {
+      Alert.alert(
+        camera ? 'Camera access required' : 'Photo library access required',
+        'Enable in Settings to upload an avatar.',
+      )
+      return
+    }
     setUploading(true)
     try {
       const result = camera
