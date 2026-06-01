@@ -168,6 +168,9 @@ export function CreatorOnboardingScreen() {
 
   // Avatar step
   const [uploading, setUploading] = useState(false)
+  // Cache buster — see MeScreen for the rationale (deterministic
+  // /media/avatars/<userId>.<ext> path + RN Image cache by URL).
+  const [avatarVersion, setAvatarVersion] = useState(0)
 
   // Precision step
   const [precision, setPrecision] = useState<LocationPrecision>('city')
@@ -257,6 +260,7 @@ export function CreatorOnboardingScreen() {
       const mime = asset.mimeType ?? 'image/jpeg'
       const updated = await usersApi.uploadAvatar(asset.uri, mime)
       setCurrentUser(updated)
+      setAvatarVersion((v) => v + 1)
     } catch {
       Alert.alert('Error', 'Could not upload photo. Try again.')
     } finally {
@@ -409,7 +413,9 @@ export function CreatorOnboardingScreen() {
   }
 
   if (currentStep === 'avatar') {
-    const avatarUrl = currentUser?.avatarUrl ?? null
+    const rawAvatarUrl = currentUser?.avatarUrl ?? null
+    const avatarUrl =
+      rawAvatarUrl && avatarVersion > 0 ? `${rawAvatarUrl}?v=${avatarVersion}` : rawAvatarUrl
     const displayName = currentUser?.displayName ?? 'You'
     return (
       <WizardShell
@@ -417,9 +423,9 @@ export function CreatorOnboardingScreen() {
         current={currentIndexForProgress}
         heading="Show your face"
         body="Streams with a photo get 3× more viewer taps on the globe."
-        ctaLabel={avatarUrl ? 'Looks good — continue' : 'Continue'}
+        ctaLabel={rawAvatarUrl ? 'Looks good — continue' : 'Continue'}
         onCta={advance}
-        onSkip={avatarUrl ? undefined : advance}
+        onSkip={rawAvatarUrl ? undefined : advance}
         skipLabel="Skip — I'll add one later"
       >
         <AvatarPicker

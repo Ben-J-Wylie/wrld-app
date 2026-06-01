@@ -50,6 +50,11 @@ export function MeScreen() {
 
   const [avatarLoading, setAvatarLoading] = useState(false)
   const [avatarError, setAvatarError] = useState('')
+  // Cache buster — the backend serves avatars at a deterministic path
+  // (/media/avatars/<userId>.<ext>) so the URL string doesn't change
+  // after a re-upload, and RN's Image cache keys by URL. We bump this
+  // on every successful upload so the Image fetches the new content.
+  const [avatarVersion, setAvatarVersion] = useState(0)
 
   function startEditName() {
     setDisplayName(user?.displayName ?? '')
@@ -138,6 +143,7 @@ export function MeScreen() {
       const updated = await usersApi.uploadAvatar(asset.uri, asset.mimeType ?? 'image/jpeg')
       setCurrentUser(updated)
       setWrldUser(updated)
+      setAvatarVersion((v) => v + 1)
     } catch {
       setAvatarError('Upload failed — try again')
     } finally {
@@ -167,7 +173,11 @@ export function MeScreen() {
   return (
     <ScreenScroll contentContainerStyle={styles.content}>
       <AvatarPicker
-        avatarUrl={user.avatarUrl}
+        avatarUrl={
+          user.avatarUrl && avatarVersion > 0
+            ? `${user.avatarUrl}?v=${avatarVersion}`
+            : user.avatarUrl
+        }
         displayName={user.displayName}
         uploading={avatarLoading}
         onTake={() => changeAvatar('camera')}
