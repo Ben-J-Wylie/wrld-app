@@ -132,11 +132,13 @@ const tipStyles = StyleSheet.create({
 })
 
 export function StreamScreen() {
-  const { id, streamId, title: paramTitle, sources: paramSources } = useLocalSearchParams<{
+  const { id, streamId, title: paramTitle, sources: paramSources, lat: paramLat, lng: paramLng } = useLocalSearchParams<{
     id: string
     streamId?: string
     title?: string
     sources?: string
+    lat?: string
+    lng?: string
   }>()
   const isNew = id === 'new'
 
@@ -163,7 +165,11 @@ export function StreamScreen() {
     startBroadcasting, startViewing, switchCamera, cleanup,
   } = useMediasoup()
   const { isSignedIn } = useAuth()
-  const { coords, loading: locationLoading, error: locationError } = useLocation()
+  const { coords: liveCoords, loading: locationLoading, error: locationError } = useLocation()
+  // Prefer coords captured on the Dashboard (passed as params) over re-acquiring
+  const coords = (isNew && paramLat && paramLng)
+    ? { latitude: parseFloat(paramLat), longitude: parseFloat(paramLng) }
+    : liveCoords
   const wrldUser = useAuthStore((s: ReturnType<typeof useAuthStore.getState>) => s.wrldUser)
   const { data: streamData } = useStream(!isNew ? streamId : null)
 
@@ -511,7 +517,7 @@ export function StreamScreen() {
     }
   }
 
-  const canGoLive = !!paramTitle?.trim() && !!coords && !locationLoading && broadcastSources.length > 0
+  const canGoLive = !!paramTitle?.trim() && !!coords && !(locationLoading && !paramLat) && broadcastSources.length > 0
   const displayError = signalingError ?? mediaError
   const burst = reactions.map((r) => ({ id: r.id, kind: r.kind }))
 
@@ -657,7 +663,7 @@ export function StreamScreen() {
                       ))}
                     </View>
                   )}
-                  {locationLoading && (
+                  {locationLoading && !paramLat && (
                     <View style={styles.statusRow}>
                       <ActivityIndicator color={theme.colors.accent.default} size="small" />
                       <Text variant="body" color={theme.colors.text.muted}>
@@ -670,7 +676,7 @@ export function StreamScreen() {
                       {locationError}
                     </Text>
                   )}
-                  {coords && !locationLoading && <CoordHUD items={coordItems} />}
+                  {coords && !(locationLoading && !paramLat) && <CoordHUD items={coordItems} />}
                   <Button
                     label="Start stream"
                     onPress={handleGoLive}

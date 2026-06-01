@@ -86,7 +86,12 @@ export function DashboardScreen() {
 
   function handleGoLive() {
     if (!canGoLive) return
-    const params = { title: title.trim(), sources: Array.from(readySources).join(',') }
+    const params = {
+      title: title.trim(),
+      sources: Array.from(readySources).join(','),
+      lat: String(coords!.latitude),
+      lng: String(coords!.longitude),
+    }
     activeBroadcast.set(params)
     router.push({
       pathname: '/(app)/stream/new',
