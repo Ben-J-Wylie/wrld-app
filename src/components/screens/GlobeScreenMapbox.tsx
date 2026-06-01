@@ -182,7 +182,7 @@ export function GlobeScreenMapbox() {
       // No GPS yet — set correct initial zoom immediately (overrides any native default)
       cameraRef.current?.setCamera({
         centerCoordinate: [0, 20],
-        zoomLevel: 0.7,
+        zoomLevel: 1.5,
         animationMode: 'none',
         animationDuration: 0,
       })
@@ -328,7 +328,7 @@ export function GlobeScreenMapbox() {
 
         <Camera
           ref={cameraRef}
-          defaultSettings={{ centerCoordinate: [0, 20], zoomLevel: 0.7 }}
+          defaultSettings={{ centerCoordinate: [0, 20], zoomLevel: 1.5 }}
           maxZoomLevel={20}
         />
 
