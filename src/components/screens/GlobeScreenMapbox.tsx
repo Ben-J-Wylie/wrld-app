@@ -11,7 +11,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Platform, Pressable, StyleSheet, View } from 'react-native'
 import { router, useFocusEffect } from 'expo-router'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
-import Mapbox, { Camera, ShapeSource, CircleLayer, SymbolLayer, BackgroundLayer } from '@rnmapbox/maps'
+import Mapbox, { Camera, ShapeSource, CircleLayer, SymbolLayer, Atmosphere } from '@rnmapbox/maps'
 import { consumeStreamSignal } from '@/lib/streamSignals'
 import { streamsApi } from '@/api/streams'
 import { theme } from '@/tokens/theme'
@@ -52,6 +52,7 @@ export function GlobeScreenMapbox() {
   const [selectedStream, setSelectedStream] = useState<Stream | null>(null)
   const [selectedClusterStreams, setSelectedClusterStreams] = useState<Stream[] | null>(null)
   const [banner, setBanner] = useState<BannerData | null>(null)
+  const [scrollEnabled, setScrollEnabled] = useState(true)
   const bannerPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const coordsRef = useRef(coords)
 
@@ -65,8 +66,8 @@ export function GlobeScreenMapbox() {
   const rotLngRef          = useRef(0)
   const rotLatRef          = useRef(20)
   const userInteractingRef = useRef(false)
-  const gestureActiveRef   = useRef(false)
-  const postGestureRef     = useRef(false)
+  const gestureActiveRef       = useRef(false)
+  const stoppingInertiaRef     = useRef(false)
 
   useEffect(() => { coordsRef.current = coords }, [coords])
 
@@ -143,18 +144,16 @@ export function GlobeScreenMapbox() {
       rotLngRef.current = ((lng + 360) % 360)
       rotLatRef.current = lat
       gestureActiveRef.current = true
-      if (Platform.OS === 'ios') postGestureRef.current = false
       pauseRotation()
     } else {
-      if (Platform.OS === 'ios') {
-        if (gestureActiveRef.current) postGestureRef.current = true
-        // Keep cancelling momentum on every event until onMapIdle fires
-        if (postGestureRef.current) {
-          const [lng, lat] = state.properties.center as [number, number]
-          rotLngRef.current = ((lng + 360) % 360)
-          rotLatRef.current = lat
-          cameraRef.current?.setCamera({ centerCoordinate: [lng, lat], animationMode: 'none', animationDuration: 0 })
-        }
+      if (Platform.OS === 'ios' && gestureActiveRef.current && !stoppingInertiaRef.current) {
+        // Briefly disable scroll to cancel UIKit's deceleration animation
+        stoppingInertiaRef.current = true
+        setScrollEnabled(false)
+        setTimeout(() => {
+          setScrollEnabled(true)
+          stoppingInertiaRef.current = false
+        }, 50)
       }
       gestureActiveRef.current = false
     }
@@ -178,7 +177,6 @@ export function GlobeScreenMapbox() {
   function flyToUserLocation(lng: number, lat: number) {
     cameraRef.current?.setCamera({
       centerCoordinate: [lng, lat],
-      zoomLevel: 0.8,
       animationDuration: 1500,
       animationMode: 'easeTo',
     })
@@ -328,8 +326,8 @@ export function GlobeScreenMapbox() {
         logoEnabled={false}
         attributionEnabled={false}
         compassEnabled={false}
+        scrollEnabled={scrollEnabled}
         onCameraChanged={handleCameraChanged}
-        onMapIdle={() => { if (Platform.OS === 'ios') postGestureRef.current = false }}
         onDidFinishLoadingMap={handleMapLoad}
         onPress={() => {
           pauseRotation()
@@ -337,7 +335,7 @@ export function GlobeScreenMapbox() {
           setSelectedClusterStreams(null)
         }}
       >
-        <BackgroundLayer id="space-bg" aboveLayerID="background" style={{ backgroundColor: '#D2B48C', backgroundOpacity: 1 }} />
+        <Atmosphere style={{ spaceColor: '#D2B48C' }} />
 
         <Camera
           ref={cameraRef}
