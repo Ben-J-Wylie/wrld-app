@@ -70,6 +70,7 @@ export function useSignaling() {
 
   useEffect(() => {
     return signalingClient.onClose((code) => {
+      console.log('[signaling] onClose code:', code, 'intentional:', intentionalRef.current)
       if (intentionalRef.current) {
         setStatus('idle')
       } else if (code === 4001) {
