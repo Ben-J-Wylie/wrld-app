@@ -8,10 +8,10 @@
 // This file and GlobeScreen.tsx / EarthScene.tsx are entirely independent.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Pressable, StyleSheet, View } from 'react-native'
+import { Platform, Pressable, StyleSheet, View } from 'react-native'
 import { router, useFocusEffect } from 'expo-router'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
-import Mapbox, { Camera, ShapeSource, CircleLayer, SymbolLayer } from '@rnmapbox/maps'
+import Mapbox, { Camera, ShapeSource, CircleLayer, SymbolLayer, BackgroundLayer } from '@rnmapbox/maps'
 import { consumeStreamSignal } from '@/lib/streamSignals'
 import { streamsApi } from '@/api/streams'
 import { theme } from '@/tokens/theme'
@@ -138,14 +138,18 @@ export function GlobeScreenMapbox() {
 
   function handleCameraChanged(state: { properties: { center: number[] }; gestures: { isGestureActive: boolean } }) {
     if (state.gestures.isGestureActive) {
-      // Sync rotation refs so auto-rotation resumes from where user left off
       const [lng, lat] = state.properties.center as [number, number]
       rotLngRef.current = ((lng + 360) % 360)
       rotLatRef.current = lat
       gestureActiveRef.current = true
       pauseRotation()
-    } else {
+    } else if (gestureActiveRef.current) {
+      // Gesture just ended — on iOS kill momentum immediately to match Android feel
       gestureActiveRef.current = false
+      if (Platform.OS === 'ios') {
+        const [lng, lat] = state.properties.center as [number, number]
+        cameraRef.current?.setCamera({ centerCoordinate: [lng, lat], animationMode: 'none', animationDuration: 0 })
+      }
     }
   }
 
@@ -167,9 +171,9 @@ export function GlobeScreenMapbox() {
   function flyToUserLocation(lng: number, lat: number) {
     cameraRef.current?.setCamera({
       centerCoordinate: [lng, lat],
-      zoomLevel: 1.0,
+      zoomLevel: 0.8,
       animationDuration: 1500,
-      animationMode: 'flyTo',
+      animationMode: 'easeTo',
     })
     setTimeout(() => { userInteractingRef.current = false }, 2500)
   }
@@ -180,6 +184,14 @@ export function GlobeScreenMapbox() {
       const [lng, lat] = pendingOrientRef.current
       pendingOrientRef.current = null
       flyToUserLocation(lng, lat)
+    } else {
+      // No GPS yet — set correct initial zoom immediately (overrides any native default)
+      cameraRef.current?.setCamera({
+        centerCoordinate: [0, 20],
+        zoomLevel: 0.8,
+        animationMode: 'none',
+        animationDuration: 0,
+      })
     }
   }
 
@@ -317,10 +329,12 @@ export function GlobeScreenMapbox() {
           setSelectedClusterStreams(null)
         }}
       >
+        <BackgroundLayer id="space-background" style={{ backgroundColor: '#D2B48C' }} />
+
         <Camera
           ref={cameraRef}
           centerCoordinate={[0, 20]}
-          zoomLevel={1.0}
+          zoomLevel={0.8}
           minZoomLevel={0.5}
           maxZoomLevel={20}
           animationMode="none"
