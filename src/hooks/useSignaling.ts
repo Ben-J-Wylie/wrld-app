@@ -25,6 +25,7 @@ export function useSignaling() {
   const [viewerCount, setViewerCount] = useState(0)
   const [streamEnded, setStreamEnded] = useState(false)
   const [adminEnded, setAdminEnded] = useState(false)
+  const [kicked, setKicked] = useState(false)
   const [adminWarning, setAdminWarning] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
@@ -76,9 +77,7 @@ export function useSignaling() {
         // Treat identically to receiving a broadcasterLeft WS message.
         setStreamEnded(true)
       } else if (code === 4003) {
-        // Kicked by admin — navigate back to globe with a signal.
-        import('../lib/streamSignals').then(m => m.signalKicked())
-        setStatus('idle')
+        setKicked(true)
       } else {
         setStatus('dropped')
       }
@@ -93,6 +92,7 @@ export function useSignaling() {
     setStatus('connecting')
     setError(null)
     setStreamEnded(false)
+    setKicked(false)
     setAdminEnded(false)
     try {
       await signalingClient.connect(env.mediasoupWssUrl)
@@ -181,6 +181,7 @@ export function useSignaling() {
     viewerCount,
     streamEnded,
     adminEnded, setAdminEnded,
+    kicked,
     adminWarning, setAdminWarning,
     error, setError,
     chatMessages,

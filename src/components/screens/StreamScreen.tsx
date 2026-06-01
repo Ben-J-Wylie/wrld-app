@@ -72,7 +72,7 @@ import { FollowButton } from '@/components/features/user/FollowButton'
 import { useInvalidateCurrentUser } from '@/hooks/useCurrentUser'
 import { useInvalidateWallet } from '@/hooks/useWallet'
 import { theme } from '@/tokens/theme'
-import { signalStreamDisconnected, signalStreamEnded } from '@/lib/streamSignals'
+import { signalStreamDisconnected, signalStreamEnded, signalKicked } from '@/lib/streamSignals'
 import { activeBroadcast } from '@/lib/activeBroadcast'
 import { streamsApi } from '@/api/streams'
 import { useSignaling } from '@/hooks/useSignaling'
@@ -144,7 +144,7 @@ export function StreamScreen() {
     : []
 
   const {
-    status, setStatus, roomId, viewerCount, streamEnded, adminEnded, setAdminEnded,
+    status, setStatus, roomId, viewerCount, streamEnded, adminEnded, setAdminEnded, kicked,
     adminWarning, setAdminWarning,
     error: signalingError, setError,
     suspensionError, clearSuspensionError,
@@ -207,13 +207,21 @@ export function StreamScreen() {
     }
   }
 
-  function exitToGlobe(kind: 'ended' | 'disconnected') {
+  // Single exit point for all viewer stream-end scenarios.
+  // navigatingRef ensures only the first trigger wins when multiple signals
+  // arrive in the same render cycle (e.g. broadcasterLeft + WS close together).
+  function exitToGlobe(kind: 'ended' | 'disconnected' | 'kicked') {
     if (navigatingRef.current) return
     navigatingRef.current = true
     cleanup()
     disconnect()
-    if (kind === 'ended') signalStreamEnded()
-    else signalStreamDisconnected(broadcaster?.handle ?? null)
+    if (kind === 'ended') {
+      signalStreamEnded()
+    } else if (kind === 'kicked') {
+      signalKicked()
+    } else {
+      signalStreamDisconnected(broadcaster?.handle ?? null)
+    }
     router.navigate('/(app)/globe')
   }
 
@@ -237,6 +245,16 @@ export function StreamScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status])
 
+  // Fast path 3: kicked by admin (code 4003)
+  useEffect(() => {
+    if (!kicked || isNew) return
+    exitToGlobe('kicked')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kicked])
+
+  // Fallback: poll stream status every 10s.
+  // Catches cases where neither broadcasterLeft nor a clean WS close arrive
+  // (Android force-kill delay, iOS graceful-leave race, server-side quirks).
   useEffect(() => {
     if (isNew || !streamId || status !== 'in-room') return
     const pollId = setInterval(async () => {
