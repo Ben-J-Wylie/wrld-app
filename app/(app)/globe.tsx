@@ -1,1 +1,1 @@
-export { GlobeScreen as default } from '@/components/screens/GlobeScreen'
+export { GlobeScreenMapbox as default } from '@/components/screens/GlobeScreenMapbox'
