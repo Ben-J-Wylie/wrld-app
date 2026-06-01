@@ -397,11 +397,11 @@ export function GlobeScreenMapbox() {
             style={{
               circleColor: PIN_SINGLE,
               circleRadius: 44,
-              circleOpacity: 0.22,
+              circleOpacity: 0.35,
               circleBlur: 0.85,
               circleStrokeWidth: 1,
               circleStrokeColor: PIN_SINGLE,
-              circleStrokeOpacity: 0.4,
+              circleStrokeOpacity: 0.6,
             }}
           />
           {/* Single stream — country precision: large diffuse haze */}
@@ -411,7 +411,7 @@ export function GlobeScreenMapbox() {
             style={{
               circleColor: PIN_SINGLE,
               circleRadius: 72,
-              circleOpacity: 0.12,
+              circleOpacity: 0.25,
               circleBlur: 1,
               circleStrokeWidth: 0,
             }}
