@@ -55,4 +55,15 @@ export const streamsApi = {
   uploadSnapshot: async (reportId: string, b64: string): Promise<void> => {
     await apiClient.post(`/reports/${reportId}/snapshot`, { snapshot: b64 })
   },
+
+  getViewers: async (roomId: string): Promise<{ peerId: string; handle: string | null }[]> => {
+    const res = await apiClient.get<{ viewers: { peerId: string; handle: string | null }[] }>(
+      `/streams/${roomId}/viewers`,
+    )
+    return res.data.viewers ?? []
+  },
+
+  kickViewer: async (roomId: string, peerId: string): Promise<void> => {
+    await apiClient.post(`/streams/${roomId}/viewers/${peerId}/kick`)
+  },
 }

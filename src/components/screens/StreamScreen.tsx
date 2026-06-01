@@ -177,6 +177,8 @@ export function StreamScreen() {
   const [authModalVisible, setAuthModalVisible] = useState(false)
   const [tipSheetVisible, setTipSheetVisible] = useState(false)
   const [reportVisible, setReportVisible] = useState(false)
+  const [viewerListVisible, setViewerListVisible] = useState(false)
+  const [viewers, setViewers] = useState<{ peerId: string; handle: string | null }[]>([])
   const [broadcasterTipToast, setBroadcasterTipToast] = useState<string | null>(null)
   const [keyboardHeight, setKeyboardHeight] = useState(0)
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -396,6 +398,29 @@ export function StreamScreen() {
     cleanup()
     disconnect()
     router.navigate('/(app)/globe')
+  }
+
+  async function openViewerList() {
+    if (!roomId) return
+    setViewerListVisible(true)
+    try {
+      const list = await streamsApi.getViewers(roomId)
+      setViewers(list)
+    } catch {
+      setViewers([])
+    }
+  }
+
+  async function handleKickViewer(peerId: string) {
+    if (!roomId) return
+    setViewers(prev => prev.filter(v => v.peerId !== peerId))
+    try {
+      await streamsApi.kickViewer(roomId, peerId)
+    } catch {
+      // re-fetch on failure so list stays accurate
+      const list = await streamsApi.getViewers(roomId).catch(() => [])
+      setViewers(list)
+    }
   }
 
   function handleBack() {
@@ -748,12 +773,14 @@ export function StreamScreen() {
                       />
                     ))}
                   </View>
-                  <Text
-                    variant="body"
-                    color={showOverlay ? theme.colors.text.inverse : theme.colors.text.muted}
-                  >
-                    {viewerCount} {viewerCount === 1 ? 'viewer' : 'viewers'}
-                  </Text>
+                  <Pressable onPress={openViewerList} hitSlop={8}>
+                    <Text
+                      variant="body"
+                      color={showOverlay ? theme.colors.text.inverse : theme.colors.text.muted}
+                    >
+                      {viewerCount} {viewerCount === 1 ? 'viewer' : 'viewers'}
+                    </Text>
+                  </Pressable>
                 </View>
               )}
 
@@ -901,6 +928,44 @@ export function StreamScreen() {
           { id: 'other', iconName: 'more-horizontal', label: 'Other', onPress: () => submitReport('Other') },
         ]}
       />
+
+      {/* Viewer list sheet — broadcaster only */}
+      {viewerListVisible && (
+        <View style={styles.sheetBackdrop}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setViewerListVisible(false)} />
+          <View style={styles.viewerSheet}>
+            <Text variant="bodyEmphasized" color={theme.colors.text.primary} style={styles.sheetTitle}>
+              Viewers ({viewerCount})
+            </Text>
+            <ScrollView style={styles.viewerList} showsVerticalScrollIndicator={false}>
+              {viewers.length === 0 && (
+                <Text variant="body" color={theme.colors.text.muted} style={styles.viewerEmpty}>
+                  No signed-in viewers
+                </Text>
+              )}
+              {viewers.map(v => (
+                <View key={v.peerId} style={styles.viewerRow}>
+                  <Text variant="body" color={theme.colors.text.primary} style={styles.viewerHandle}>
+                    {v.handle ? `@${v.handle}` : 'Anonymous'}
+                  </Text>
+                  {v.handle && (
+                    <Pressable
+                      onPress={() => handleKickViewer(v.peerId)}
+                      style={styles.removeBtn}
+                      hitSlop={8}
+                    >
+                      <Text variant="caption" color={theme.colors.accent.default}>Remove</Text>
+                    </Pressable>
+                  )}
+                </View>
+              ))}
+            </ScrollView>
+            <Pressable onPress={() => setViewerListVisible(false)} style={styles.sheetCancel}>
+              <Text variant="body" color={theme.colors.text.muted}>Close</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
 
       {/* Tip burst animations — visible to all peers */}
       {status === 'in-room' && !streamEnded && (
@@ -1067,4 +1132,27 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
     maxWidth: 320,
   },
+  sheetBackdrop: { ...StyleSheet.absoluteFillObject, justifyContent: 'flex-end', zIndex: 30 },
+  viewerSheet: {
+    backgroundColor: theme.colors.bg.panel,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+    paddingTop: theme.spacing.lg,
+    paddingBottom: theme.spacing.xl,
+    maxHeight: '60%' as unknown as number,
+  },
+  sheetTitle: { paddingHorizontal: theme.spacing.lg, marginBottom: theme.spacing.sm },
+  viewerList: { paddingHorizontal: theme.spacing.lg },
+  viewerEmpty: { paddingVertical: theme.spacing.md },
+  viewerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: theme.spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: theme.colors.border.subtle,
+  },
+  viewerHandle: { flex: 1 },
+  removeBtn: { paddingLeft: theme.spacing.md },
+  sheetCancel: { alignItems: 'center', paddingTop: theme.spacing.lg, paddingHorizontal: theme.spacing.lg },
 })
