@@ -101,9 +101,26 @@ function RootNavigator() {
         streamId?: string
         mediasoupRoomId?: string
         sources?: string
+        url?: string
       }
-      if (!data.mediasoupRoomId || !data.streamId) return
-      const payload = { roomId: data.mediasoupRoomId, streamId: data.streamId, sources: data.sources ?? '' }
+
+      let roomId: string | undefined
+      let streamId = ''
+      let sources = ''
+
+      if (data.mediasoupRoomId) {
+        // Automated stream notification: full payload
+        roomId = data.mediasoupRoomId
+        streamId = data.streamId ?? ''
+        sources = data.sources ?? ''
+      } else if (data.url) {
+        // Admin broadcast deep-link: wrld://stream/<roomId>
+        const match = data.url.match(/wrld:\/\/stream\/([^/?#]+)/)
+        if (match) roomId = match[1]
+      }
+
+      if (!roomId) return
+      const payload = { roomId, streamId, sources }
       if (everLoaded.current) {
         router.push({
           pathname: `/(app)/stream/${payload.roomId}`,
