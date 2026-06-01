@@ -52,7 +52,6 @@ export function GlobeScreenMapbox() {
   const [selectedStream, setSelectedStream] = useState<Stream | null>(null)
   const [selectedClusterStreams, setSelectedClusterStreams] = useState<Stream[] | null>(null)
   const [banner, setBanner] = useState<BannerData | null>(null)
-  const [scrollEnabled, setScrollEnabled] = useState(true)
   const bannerPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const coordsRef = useRef(coords)
 
@@ -66,8 +65,7 @@ export function GlobeScreenMapbox() {
   const rotLngRef          = useRef(0)
   const rotLatRef          = useRef(20)
   const userInteractingRef = useRef(false)
-  const gestureActiveRef       = useRef(false)
-  const stoppingInertiaRef     = useRef(false)
+  const gestureActiveRef   = useRef(false)
 
   useEffect(() => { coordsRef.current = coords }, [coords])
 
@@ -146,15 +144,6 @@ export function GlobeScreenMapbox() {
       gestureActiveRef.current = true
       pauseRotation()
     } else {
-      if (Platform.OS === 'ios' && gestureActiveRef.current && !stoppingInertiaRef.current) {
-        // Briefly disable scroll to cancel UIKit's deceleration animation
-        stoppingInertiaRef.current = true
-        setScrollEnabled(false)
-        setTimeout(() => {
-          setScrollEnabled(true)
-          stoppingInertiaRef.current = false
-        }, 50)
-      }
       gestureActiveRef.current = false
     }
   }
@@ -193,7 +182,7 @@ export function GlobeScreenMapbox() {
       // No GPS yet — set correct initial zoom immediately (overrides any native default)
       cameraRef.current?.setCamera({
         centerCoordinate: [0, 20],
-        zoomLevel: 0.8,
+        zoomLevel: 0.5,
         animationMode: 'none',
         animationDuration: 0,
       })
@@ -326,7 +315,7 @@ export function GlobeScreenMapbox() {
         logoEnabled={false}
         attributionEnabled={false}
         compassEnabled={false}
-        scrollEnabled={scrollEnabled}
+        gestureSettings={{ panDecelerationFactor: Platform.OS === 'ios' ? 0 : undefined }}
         onCameraChanged={handleCameraChanged}
         onDidFinishLoadingMap={handleMapLoad}
         onPress={() => {
@@ -339,12 +328,8 @@ export function GlobeScreenMapbox() {
 
         <Camera
           ref={cameraRef}
-          centerCoordinate={[0, 20]}
-          zoomLevel={0.8}
-          minZoomLevel={0.5}
+          defaultSettings={{ centerCoordinate: [0, 20], zoomLevel: 0.5 }}
           maxZoomLevel={20}
-          animationMode="none"
-          animationDuration={0}
         />
 
         <ShapeSource
