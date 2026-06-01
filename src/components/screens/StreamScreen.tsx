@@ -211,7 +211,6 @@ export function StreamScreen() {
   // navigatingRef ensures only the first trigger wins when multiple signals
   // arrive in the same render cycle (e.g. broadcasterLeft + WS close together).
   function exitToGlobe(kind: 'ended' | 'disconnected' | 'kicked') {
-    console.log('[kick] exitToGlobe', kind, 'navigating already:', navigatingRef.current)
     if (navigatingRef.current) return
     navigatingRef.current = true
     cleanup()
@@ -248,7 +247,6 @@ export function StreamScreen() {
 
   // Fast path 3: kicked by admin (code 4003)
   useEffect(() => {
-    console.log('[kick] effect fired — kicked:', kicked, 'isNew:', isNew, 'navigating:', navigatingRef.current)
     if (!kicked || isNew) return
     exitToGlobe('kicked')
     // eslint-disable-next-line react-hooks/exhaustive-deps

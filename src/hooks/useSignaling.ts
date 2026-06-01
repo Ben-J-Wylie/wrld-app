@@ -70,7 +70,6 @@ export function useSignaling() {
 
   useEffect(() => {
     return signalingClient.onClose((code) => {
-      console.log('[signaling] onClose code:', code, 'intentional:', intentionalRef.current)
       if (intentionalRef.current) {
         setStatus('idle')
       } else if (code === 4001) {
@@ -78,7 +77,6 @@ export function useSignaling() {
         // Treat identically to receiving a broadcasterLeft WS message.
         setStreamEnded(true)
       } else if (code === 4003) {
-        console.log('[kick] onClose 4003 → setKicked(true)')
         setKicked(true)
       } else {
         setStatus('dropped')
