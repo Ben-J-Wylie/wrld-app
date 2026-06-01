@@ -740,6 +740,7 @@ In `StreamScreen` (viewer mode), a **⚑ flag button** appears next to the Tip b
 
 - WS close code **4003** in `useSignaling.ts` → calls `signalKicked()` (new signal kind `'kicked'`)
 - `GlobeScreen` handles `'kicked'` signal → banner "You have been removed from this stream", auto-dismisses after 8s (same timer as `'ended'`)
+- Kicked authenticated viewers are banned from rejoining the same stream for `KICK_BAN_MINUTES` (default 10, configurable from admin portal Config page). If they try to rejoin within the window, mediasoup throws `"You were removed from this stream — rejoin in X minutes"`, which surfaces in the stream error state. Anonymous viewers (no account) cannot be banned.
 
 ### Kick navigation race fix (`src/components/screens/StreamScreen.tsx`)
 
