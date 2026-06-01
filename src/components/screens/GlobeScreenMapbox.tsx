@@ -66,6 +66,7 @@ export function GlobeScreenMapbox() {
   const rotLatRef          = useRef(20)
   const userInteractingRef = useRef(false)
   const gestureActiveRef   = useRef(false)
+  const postGestureRef     = useRef(false)
 
   useEffect(() => { coordsRef.current = coords }, [coords])
 
@@ -142,12 +143,18 @@ export function GlobeScreenMapbox() {
       rotLngRef.current = ((lng + 360) % 360)
       rotLatRef.current = lat
       gestureActiveRef.current = true
+      if (Platform.OS === 'ios') postGestureRef.current = false
       pauseRotation()
     } else {
-      // On iOS, kill momentum when a gesture ends to match Android's deceleration feel
-      if (Platform.OS === 'ios' && gestureActiveRef.current) {
-        const [lng, lat] = state.properties.center as [number, number]
-        cameraRef.current?.setCamera({ centerCoordinate: [lng, lat], animationMode: 'none', animationDuration: 0 })
+      if (Platform.OS === 'ios') {
+        if (gestureActiveRef.current) postGestureRef.current = true
+        // Keep cancelling momentum on every event until onMapIdle fires
+        if (postGestureRef.current) {
+          const [lng, lat] = state.properties.center as [number, number]
+          rotLngRef.current = ((lng + 360) % 360)
+          rotLatRef.current = lat
+          cameraRef.current?.setCamera({ centerCoordinate: [lng, lat], animationMode: 'none', animationDuration: 0 })
+        }
       }
       gestureActiveRef.current = false
     }
@@ -322,6 +329,7 @@ export function GlobeScreenMapbox() {
         attributionEnabled={false}
         compassEnabled={false}
         onCameraChanged={handleCameraChanged}
+        onMapIdle={() => { if (Platform.OS === 'ios') postGestureRef.current = false }}
         onDidFinishLoadingMap={handleMapLoad}
         onPress={() => {
           pauseRotation()
@@ -329,7 +337,7 @@ export function GlobeScreenMapbox() {
           setSelectedClusterStreams(null)
         }}
       >
-        <BackgroundLayer id="background" existing={true} style={{ backgroundColor: '#D2B48C' }} />
+        <BackgroundLayer id="space-bg" aboveLayerID="background" style={{ backgroundColor: '#D2B48C', backgroundOpacity: 1 }} />
 
         <Camera
           ref={cameraRef}
