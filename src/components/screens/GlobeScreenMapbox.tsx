@@ -57,7 +57,9 @@ export function GlobeScreenMapbox() {
 
   const cameraRef = useRef<React.ElementRef<typeof Camera>>(null)
   const sourceRef = useRef<ShapeSource>(null)
-  const hasAutoOrientedRef = useRef(false)
+  const hasAutoOrientedRef  = useRef(false)
+  const mapReadyRef         = useRef(false)
+  const pendingOrientRef    = useRef<[number, number] | null>(null)
   const autoRotateRef      = useRef<ReturnType<typeof setInterval> | null>(null)
   const interactTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null)
   const rotLngRef          = useRef(0)
@@ -162,14 +164,36 @@ export function GlobeScreenMapbox() {
 
   // ── GPS auto-orient on first fix ──────────────────────────────────────────
 
+  function flyToUserLocation(lng: number, lat: number) {
+    cameraRef.current?.setCamera({
+      centerCoordinate: [lng, lat],
+      zoomLevel: 1.0,
+      animationDuration: 1500,
+      animationMode: 'flyTo',
+    })
+    setTimeout(() => { userInteractingRef.current = false }, 2500)
+  }
+
+  function handleMapLoad() {
+    mapReadyRef.current = true
+    if (pendingOrientRef.current) {
+      const [lng, lat] = pendingOrientRef.current
+      pendingOrientRef.current = null
+      flyToUserLocation(lng, lat)
+    }
+  }
+
   useEffect(() => {
     if (!coords || hasAutoOrientedRef.current) return
     hasAutoOrientedRef.current = true
     userInteractingRef.current = true
     rotLngRef.current = ((coords.longitude + 360) % 360)
     rotLatRef.current = coords.latitude
-    cameraRef.current?.flyTo([coords.longitude, coords.latitude], 1500)
-    setTimeout(() => { userInteractingRef.current = false }, 2500)
+    if (mapReadyRef.current) {
+      flyToUserLocation(coords.longitude, coords.latitude)
+    } else {
+      pendingOrientRef.current = [coords.longitude, coords.latitude]
+    }
   }, [coords])
 
   // ── Keep preview cards in sync with streams refresh ────────────────────────
@@ -286,6 +310,7 @@ export function GlobeScreenMapbox() {
         attributionEnabled={false}
         compassEnabled={false}
         onCameraChanged={handleCameraChanged}
+        onDidFinishLoadingMap={handleMapLoad}
         onPress={() => {
           pauseRotation()
           setSelectedStream(null)
@@ -323,12 +348,12 @@ export function GlobeScreenMapbox() {
               circleOpacity: 0.95,
             }}
           />
-          {/* Cluster count */}
+          {/* Cluster count — only render text when 2+ points */}
           <SymbolLayer
             id="cluster-count"
             filter={['has', 'point_count']}
             style={{
-              textField: ['get', 'point_count_abbreviated'] as any,
+              textField: ['case', ['>', ['get', 'point_count'], 1], ['get', 'point_count_abbreviated'], ''] as any,
               textSize: 13,
               textColor: PIN_BORDER,
               textAllowOverlap: true,
@@ -347,12 +372,12 @@ export function GlobeScreenMapbox() {
               circleOpacity: 0.95,
             }}
           />
-          {/* Single stream viewer count */}
+          {/* Single stream viewer count — hide when 0 */}
           <SymbolLayer
             id="single-count"
             filter={['!', ['has', 'point_count']]}
             style={{
-              textField: ['get', 'viewerCount'] as any,
+              textField: ['case', ['>', ['get', 'viewerCount'], 0], ['to-string', ['get', 'viewerCount']], ''] as any,
               textSize: 11,
               textColor: PIN_BORDER,
               textAllowOverlap: true,
@@ -433,7 +458,7 @@ export function GlobeScreenMapbox() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#090B1F' },
+  container: { flex: 1, backgroundColor: '#D2B48C' },
   safeArea:  { flex: 1 },
   header: {
     flexDirection: 'row',
