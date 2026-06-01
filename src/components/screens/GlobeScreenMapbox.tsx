@@ -182,7 +182,7 @@ export function GlobeScreenMapbox() {
       // No GPS yet — set correct initial zoom immediately (overrides any native default)
       cameraRef.current?.setCamera({
         centerCoordinate: [0, 20],
-        zoomLevel: 0.5,
+        zoomLevel: 0.7,
         animationMode: 'none',
         animationDuration: 0,
       })
@@ -315,7 +315,7 @@ export function GlobeScreenMapbox() {
         logoEnabled={false}
         attributionEnabled={false}
         compassEnabled={false}
-        gestureSettings={{ panDecelerationFactor: Platform.OS === 'ios' ? 0 : undefined }}
+        gestureSettings={{ panDecelerationFactor: Platform.OS === 'ios' ? 0.99 : undefined }}
         onCameraChanged={handleCameraChanged}
         onDidFinishLoadingMap={handleMapLoad}
         onPress={() => {
@@ -328,7 +328,7 @@ export function GlobeScreenMapbox() {
 
         <Camera
           ref={cameraRef}
-          defaultSettings={{ centerCoordinate: [0, 20], zoomLevel: 0.5 }}
+          defaultSettings={{ centerCoordinate: [0, 20], zoomLevel: 0.7 }}
           maxZoomLevel={20}
         />
 
