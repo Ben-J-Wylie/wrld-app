@@ -143,13 +143,13 @@ export function GlobeScreenMapbox() {
       rotLatRef.current = lat
       gestureActiveRef.current = true
       pauseRotation()
-    } else if (gestureActiveRef.current) {
-      // Gesture just ended — on iOS kill momentum immediately to match Android feel
-      gestureActiveRef.current = false
-      if (Platform.OS === 'ios') {
+    } else {
+      // On iOS, kill momentum when a gesture ends to match Android's deceleration feel
+      if (Platform.OS === 'ios' && gestureActiveRef.current) {
         const [lng, lat] = state.properties.center as [number, number]
         cameraRef.current?.setCamera({ centerCoordinate: [lng, lat], animationMode: 'none', animationDuration: 0 })
       }
+      gestureActiveRef.current = false
     }
   }
 
@@ -329,7 +329,7 @@ export function GlobeScreenMapbox() {
           setSelectedClusterStreams(null)
         }}
       >
-        <BackgroundLayer id="space-background" style={{ backgroundColor: '#D2B48C' }} />
+        <BackgroundLayer id="background" existing={true} style={{ backgroundColor: '#D2B48C' }} />
 
         <Camera
           ref={cameraRef}
