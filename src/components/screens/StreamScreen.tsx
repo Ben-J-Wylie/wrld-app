@@ -79,7 +79,7 @@ import { streamsApi } from '@/api/streams'
 import { useSignaling } from '@/hooks/useSignaling'
 import { useMediasoup } from '@/hooks/useMediasoup'
 import { useLocation } from '@/hooks/useLocation'
-import { useStream } from '@/hooks/useStream'
+import { useStream, useStreamByRoom } from '@/hooks/useStream'
 import { useAuthStore } from '@/stores/authStore'
 import type { Stream, SourceType } from '@/types'
 import type { TipEvent } from '@/hooks/useSignaling'
@@ -132,7 +132,7 @@ const tipStyles = StyleSheet.create({
 })
 
 export function StreamScreen() {
-  const { id, streamId, title: paramTitle, sources: paramSources, lat: paramLat, lng: paramLng } = useLocalSearchParams<{
+  const { id, streamId: paramStreamId, title: paramTitle, sources: paramSources, lat: paramLat, lng: paramLng } = useLocalSearchParams<{
     id: string
     streamId?: string
     title?: string
@@ -142,9 +142,12 @@ export function StreamScreen() {
   }>()
   const isNew = id === 'new'
 
+  // When arriving via a deep-link notification without full params, look up by room ID
+  const { data: streamByRoom } = useStreamByRoom(!paramStreamId && !isNew ? id : null)
+  const streamId = paramStreamId || streamByRoom?.id || ''
   const broadcastSources: SourceType[] = paramSources
     ? (paramSources.split(',').filter(Boolean) as SourceType[])
-    : []
+    : ((streamByRoom?.sources ?? []) as SourceType[])
 
   const {
     status, setStatus, roomId, viewerCount, streamEnded, adminEnded, setAdminEnded,

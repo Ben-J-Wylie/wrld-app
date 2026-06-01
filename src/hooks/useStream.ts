@@ -9,3 +9,12 @@ export function useStream(streamId: string | null | undefined) {
     staleTime: 1000 * 30,
   })
 }
+
+export function useStreamByRoom(roomId: string | null | undefined) {
+  return useQuery({
+    queryKey: ['stream-by-room', roomId],
+    queryFn: () => streamsApi.getByRoom(roomId!),
+    enabled: !!roomId,
+    staleTime: 1000 * 30,
+  })
+}
