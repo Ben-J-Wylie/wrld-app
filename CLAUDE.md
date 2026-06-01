@@ -295,29 +295,30 @@ re-baseline (see DESIGN.md decision log) reshapes Aaron's parallel work:
 - **Subscriptions + PPV components ship in v0.2 mocks but are mock-data
   only.** Backend doesn't need to implement them in v0.2.
 
-**Design branch state (2026-05-31):** 12.5 + 12.6 are both finished on
-`design`. The branch carries 47 design-system features + 13 sections +
-all 15 user-facing screens migrated to compose from them, plus the
-4 legacy feature retirements and the 3 surviving features' token cleanup.
-Ready to merge to `main` after Ben's on-device review of the full sweep.
+**Design branch state (2026-05-31, evening):** 12.5 + 12.6 merged into
+`main` at commit `f18bd48` (50 commits, includes back-merge of Aaron's
+Phase 17 + Phase 5/22 work integrated through the design system).
+Immediately re-spun the `design` branch off the same `f18bd48` HEAD for
+12.7+ work — Ben elected to keep the high-churn isolation rather than
+revert to direct-to-main, on the bet that motion-pass iteration plus
+near-term DESIGN.md / token / primitive tweaks will benefit from the
+same pattern that worked for 12.5/12.6.
 
-**Design branch convention:** revived 2026-05-30 for 12.5+ work.
-Originally used during 12.2 (per the 2026-05-29 decision-log entry),
-merged back into `main` after 12.4 close-out, then re-spun off `main`
-HEAD `c37266b` for the rest of Phase 12. Ben works on `design`; Aaron
-continues on `main`; periodic merges between. The merge protocol:
+**Design branch convention:** revived 2026-05-30 for 12.5+ work,
+merged back to `main` at 12.6 close, then re-spun the same day for
+12.7+. Ben works on `design`; Aaron continues on `main`; periodic
+merges between. The merge protocol stays as established:
 pull `main` HEAD into `design` first, theme-codemod for any of
 Aaron's net-new code on the pre-12.3 token shape, then push design →
 main only after explicit Ben sign-off. See [DESIGN.md Section 6](DESIGN.md#6-decision-log)
-("design branch revived for 12.5+") for the canonical entry.
+("design branch re-spun for 12.7+") for the canonical entry.
 
 `src/tokens/theme.ts` is live on `main` (the 12.3 light-pivot palette).
-The 2026-05-29 note that `SubscriptionScreen` (and by inference the
-wallet trio) still used hex literals is now obsolete — those four
-screens are migrated on `design` and will land via the 12.5/12.6
-close-out merge. The two repos overlap minimally (Aaron → `wrld-backend`;
-Ben → `wrld-app`), so merge conflicts should be rare; the recent 12.4
-close-out merge produced exactly one. `DESIGN.md` is Ben's primary doc;
+The 12.5/12.6 close-out also brought the 47-feature / 13-section
+register + 15 migrated screens to `main`, so Aaron can compose directly
+from primitives / features / sections for any new monetization UI. The
+two repos overlap minimally (Aaron → `wrld-backend`; Ben → `wrld-app`),
+so merge conflicts should be rare. `DESIGN.md` is Ben's primary doc;
 `CLAUDE.md` is shared — whoever ships a phase updates it. See
 [DESIGN.md Section 7](DESIGN.md#7-phase-12-sub-phase-path) ("Working
 agreement with Aaron") for the canonical version.
