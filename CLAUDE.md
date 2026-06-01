@@ -741,6 +741,13 @@ In `StreamScreen` (viewer mode), a **⚑ flag button** appears next to the Tip b
 
 - WS close code **4003** in `useSignaling.ts` → calls `signalKicked()` (new signal kind `'kicked'`)
 - `GlobeScreen` handles `'kicked'` signal → banner "You have been removed from this stream", auto-dismisses after 8s (same timer as `'ended'`)
+- Kicked authenticated viewers are banned from rejoining the same stream for `KICK_BAN_MINUTES` (default 10, configurable from admin portal Config page). If they try to rejoin within the window, mediasoup throws `"You were removed from this stream — rejoin in X minutes"`, which surfaces in the stream error state. Anonymous viewers (no account) cannot be banned.
+
+### Kick navigation race fix (`src/components/screens/StreamScreen.tsx`)
+
+The original kick path set `kicked` state in `useSignaling`'s `onClose` handler, then relied on a `useEffect([kicked])` in `StreamScreen` to call `exitToGlobe('kicked')`. This was intermittently unreliable: `signalingClient.disconnect()` is called inside `exitToGlobe`, which calls `ws.close()` on the already-server-closed socket. On some platforms that dispatches a second `onclose` event (code 1006), which hits the `else` branch in the `onClose` handler and calls `setStatus('dropped')`. The `status === 'dropped'` effect fires first (before the `kicked` effect, since `status` changed in the same render), calls `exitToGlobe('disconnected')`, and sets `navigatingRef.current = true`. When the `kicked` effect finally runs, it sees the ref is already set and bails — leaving the viewer on a white screen.
+
+**Fix:** `StreamScreen` registers its own `signalingClient.onClose` listener and calls `exitToGlobe('kicked')` directly from that callback — in the same JS event turn as the WS close, before React schedules any other effects. The `kicked` state in `useSignaling` is still maintained (for `connect()` reset), but navigation no longer goes through React's scheduler.
 
 ---
 
@@ -1086,3 +1093,94 @@ After the viewer selects a reason:
 ### `getUserMedia` resolution (`src/hooks/useMediasoup.ts`)
 
 Added `width: { ideal: 1280 }, height: { ideal: 720 }` constraints to the broadcaster camera `getUserMedia` call. React Native WebRTC negotiates up to 1280×720 on supported devices (previously defaulted to ~640×352). No EAS rebuild required — pure JS.
+
+---
+
+## Plan — Mapbox globe replacement (pending approval, not yet implemented)
+
+Replace the Three.js `EarthScene` + Mapbox handoff system with a single full-screen `Mapbox.MapView` using `projection="globe"` for the entire experience — from outer-space overview to street-level detail — with no seam or handoff.
+
+### Motivation
+
+The current architecture has two rendering layers: a Three.js canvas for the globe view and a lazy-mounted Mapbox `MapView` that fades in at close zoom. The two-layer approach introduces complexity (fade animation, `mapboxSettledRef`, `disabled` prop plumbing, camera coordinate math) and a visible transition moment. A single Mapbox globe removes all of that, and `@rnmapbox/maps@10.3.1` already in the project supports `projection="globe"`.
+
+### Revert mechanism — one line
+
+`app/(app)/globe.tsx` is a one-line re-export shim:
+
+```ts
+// current:
+export { GlobeScreen as default } from '@/components/screens/GlobeScreen'
+
+// after:
+export { GlobeScreenMapbox as default } from '@/components/screens/GlobeScreenMapbox'
+```
+
+Changing it back is the complete rollback. `GlobeScreen.tsx` and `EarthScene.tsx` are **not modified or deleted**.
+
+### New file: `src/components/screens/GlobeScreenMapbox.tsx`
+
+A self-contained screen that owns the full discovery experience. No EarthScene import, no Three.js.
+
+**Map layer:**
+- `Mapbox.MapView` with `projection="globe"`, `styleURL={Mapbox.StyleURL.SatelliteStreet}`, `logoEnabled={false}`, `attributionEnabled={false}`
+- Covers the full screen, no separate canvas layer needed
+- Built-in pinch-to-zoom and drag-to-pan — no PanResponder required
+
+**Stream pins:**
+- `ShapeSource` with a GeoJSON `FeatureCollection` built from `useStreamsNear` data
+- `cluster={true}` with `clusterRadius={50}` and `clusterMaxZoomLevel={14}` — Mapbox handles geographic grouping natively
+- Two `CircleLayer`s: one for cluster dots (blue, radius scales with point_count), one for single-stream dots (accent red, fixed radius)
+- `SymbolLayer` over each dot for viewer count text
+- `ShapeSource onPress` handles both cluster and single taps — `feature.properties.cluster` distinguishes them; `ShapeSource.getClusterLeaves()` expands a cluster to its constituent streams for the multi-stream card
+
+**Camera:**
+- `Mapbox.Camera` ref for programmatic control
+- On first valid `coords` fix: `cameraRef.current?.flyTo([coords.longitude, coords.latitude])` at zoom level ~2 (globe scale)
+- Initial state: `centerCoordinate={[0, 20]}`, `zoomLevel={1.5}` (shows full globe)
+
+**Auto-rotation:**
+- `setInterval` at 80ms increments the center longitude by ~0.15° while the user isn't interacting
+- `MapView onTouchStart` stops the interval; `onMapIdle` (after 4s) restarts it
+- On first coords fix, auto-rotation stops and camera flies to user location
+
+**Overlays (100% reused from GlobeScreen):**
+- Banner state machine (`BannerData`, disconnected-poll, `StreamStateBanner`) — copy verbatim
+- `DiscoveryHandoffCard` for single stream and cluster — same props interface
+- Header (BrandMark + WRLD + LIVE count) — identical JSX
+- Empty state card — identical JSX
+- No `IconButton` back-to-globe needed (no handoff seam to dismiss)
+
+### Feature parity checklist
+
+| Feature | Three.js approach | Mapbox globe approach |
+|---|---|---|
+| Globe display | Custom Three.js sphere + 8K texture | `MapView projection="globe"` satellite style |
+| Stream pins | DataTexture sprite pool, custom glyph rasteriser | `ShapeSource` + `CircleLayer` + `SymbolLayer` |
+| Clustering | Custom O(n²) geo-cluster algorithm | `ShapeSource cluster={true}` (Mapbox native) |
+| Drag/pan/zoom | PanResponder + Three.js camera | MapView built-in gestures |
+| Auto-rotation | `requestAnimationFrame` + Three.js rotation | `setInterval` longitude animation |
+| GPS auto-orient | First-fix sets Three.js camera theta | `cameraRef.flyTo` on first coords |
+| Tap single pin | Raycaster hit-test | `ShapeSource onPress` |
+| Tap cluster | Raycaster hit-test | `ShapeSource onPress` + `getClusterLeaves` |
+| Street-level zoom | Fade to separate Mapbox overlay | Continuous — already in Mapbox |
+| Banner | Overlay unchanged | Overlay unchanged |
+| Stream card | Overlay unchanged | Overlay unchanged |
+
+### Known visual differences from Three.js globe
+
+- **No atmosphere glow / dark side of Earth** — Three.js added a subtle glow halo and night-side darkening that Mapbox satellite style doesn't have
+- **Different pin aesthetic** — Three.js used custom DataTexture-baked circle sprites with hand-rasterised digit glyphs; Mapbox will use `CircleLayer` + `SymbolLayer` (still customisable but different look)
+- **No inertia on pan release** — Three.js PanResponder had a decay inertia effect; Mapbox gestures have their own inertia model
+- **Clustering algorithm differs** — custom O(n²) geographic centroid clustering is replaced by Mapbox's tile-based cluster algorithm (different grouping at edge cases)
+
+### Files changed
+
+| File | Change |
+|---|---|
+| `app/(app)/globe.tsx` | One-line swap to `GlobeScreenMapbox` |
+| `src/components/screens/GlobeScreenMapbox.tsx` | **New file** — full Mapbox globe screen |
+| `src/components/screens/GlobeScreen.tsx` | Untouched |
+| `src/canvas/scenes/earth/EarthScene.tsx` | Untouched |
+
+**No EAS rebuild required** — `@rnmapbox/maps` is already in the dev client. Metro hot-reload is sufficient.

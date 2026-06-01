@@ -72,7 +72,8 @@ import { FollowButton } from '@/components/features/user/FollowButton'
 import { useInvalidateCurrentUser } from '@/hooks/useCurrentUser'
 import { useInvalidateWallet } from '@/hooks/useWallet'
 import { theme } from '@/tokens/theme'
-import { signalStreamDisconnected, signalStreamEnded } from '@/lib/streamSignals'
+import { signalStreamDisconnected, signalStreamEnded, signalKicked } from '@/lib/streamSignals'
+import { signalingClient } from '@/lib/mediasoupSignaling'
 import { activeBroadcast } from '@/lib/activeBroadcast'
 import { streamsApi } from '@/api/streams'
 import { useSignaling } from '@/hooks/useSignaling'
@@ -131,11 +132,13 @@ const tipStyles = StyleSheet.create({
 })
 
 export function StreamScreen() {
-  const { id, streamId, title: paramTitle, sources: paramSources } = useLocalSearchParams<{
+  const { id, streamId, title: paramTitle, sources: paramSources, lat: paramLat, lng: paramLng } = useLocalSearchParams<{
     id: string
     streamId?: string
     title?: string
     sources?: string
+    lat?: string
+    lng?: string
   }>()
   const isNew = id === 'new'
 
@@ -162,7 +165,11 @@ export function StreamScreen() {
     startBroadcasting, startViewing, switchCamera, cleanup,
   } = useMediasoup()
   const { isSignedIn } = useAuth()
-  const { coords, loading: locationLoading, error: locationError } = useLocation()
+  const { coords: liveCoords, loading: locationLoading, error: locationError } = useLocation()
+  // Prefer coords captured on the Dashboard (passed as params) over re-acquiring
+  const coords = (isNew && paramLat && paramLng)
+    ? { latitude: parseFloat(paramLat), longitude: parseFloat(paramLng) }
+    : liveCoords
   const wrldUser = useAuthStore((s: ReturnType<typeof useAuthStore.getState>) => s.wrldUser)
   const { data: streamData } = useStream(!isNew ? streamId : null)
 
@@ -177,6 +184,8 @@ export function StreamScreen() {
   const [authModalVisible, setAuthModalVisible] = useState(false)
   const [tipSheetVisible, setTipSheetVisible] = useState(false)
   const [reportVisible, setReportVisible] = useState(false)
+  const [viewerListVisible, setViewerListVisible] = useState(false)
+  const [viewers, setViewers] = useState<{ peerId: string; handle: string | null }[]>([])
   const [broadcasterTipToast, setBroadcasterTipToast] = useState<string | null>(null)
   const [keyboardHeight, setKeyboardHeight] = useState(0)
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -207,13 +216,21 @@ export function StreamScreen() {
     }
   }
 
-  function exitToGlobe(kind: 'ended' | 'disconnected') {
+  // Single exit point for all viewer stream-end scenarios.
+  // navigatingRef ensures only the first trigger wins when multiple signals
+  // arrive in the same render cycle (e.g. broadcasterLeft + WS close together).
+  function exitToGlobe(kind: 'ended' | 'disconnected' | 'kicked') {
     if (navigatingRef.current) return
     navigatingRef.current = true
     cleanup()
     disconnect()
-    if (kind === 'ended') signalStreamEnded()
-    else signalStreamDisconnected(broadcaster?.handle ?? null)
+    if (kind === 'ended') {
+      signalStreamEnded()
+    } else if (kind === 'kicked') {
+      signalKicked()
+    } else {
+      signalStreamDisconnected(broadcaster?.handle ?? null)
+    }
     router.navigate('/(app)/globe')
   }
 
@@ -237,6 +254,20 @@ export function StreamScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status])
 
+  // Fast path 3: kicked by admin (code 4003) — handled directly in onClose so
+  // navigation fires in the same event turn as the WS close, before React
+  // scheduling can interpose another exit path that sets navigatingRef.current.
+  useEffect(() => {
+    if (isNew) return
+    return signalingClient.onClose((code) => {
+      if (code === 4003) exitToGlobe('kicked')
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isNew])
+
+  // Fallback: poll stream status every 10s.
+  // Catches cases where neither broadcasterLeft nor a clean WS close arrive
+  // (Android force-kill delay, iOS graceful-leave race, server-side quirks).
   useEffect(() => {
     if (isNew || !streamId || status !== 'in-room') return
     const pollId = setInterval(async () => {
@@ -380,6 +411,29 @@ export function StreamScreen() {
     router.navigate('/(app)/globe')
   }
 
+  async function openViewerList() {
+    if (!roomId) return
+    setViewerListVisible(true)
+    try {
+      const list = await streamsApi.getViewers(roomId)
+      setViewers(list)
+    } catch {
+      setViewers([])
+    }
+  }
+
+  async function handleKickViewer(peerId: string) {
+    if (!roomId) return
+    setViewers(prev => prev.filter(v => v.peerId !== peerId))
+    try {
+      await streamsApi.kickViewer(roomId, peerId)
+    } catch {
+      // re-fetch on failure so list stays accurate
+      const list = await streamsApi.getViewers(roomId).catch(() => [])
+      setViewers(list)
+    }
+  }
+
   function handleBack() {
     if (status === 'in-room' || status === 'dropped') {
       cleanup()
@@ -463,7 +517,7 @@ export function StreamScreen() {
     }
   }
 
-  const canGoLive = !!paramTitle?.trim() && !!coords && !locationLoading && broadcastSources.length > 0
+  const canGoLive = !!paramTitle?.trim() && !!coords && !(locationLoading && !paramLat) && broadcastSources.length > 0
   const displayError = signalingError ?? mediaError
   const burst = reactions.map((r) => ({ id: r.id, kind: r.kind }))
 
@@ -609,7 +663,7 @@ export function StreamScreen() {
                       ))}
                     </View>
                   )}
-                  {locationLoading && (
+                  {locationLoading && !paramLat && (
                     <View style={styles.statusRow}>
                       <ActivityIndicator color={theme.colors.accent.default} size="small" />
                       <Text variant="body" color={theme.colors.text.muted}>
@@ -622,7 +676,7 @@ export function StreamScreen() {
                       {locationError}
                     </Text>
                   )}
-                  {coords && !locationLoading && <CoordHUD items={coordItems} />}
+                  {coords && !(locationLoading && !paramLat) && <CoordHUD items={coordItems} />}
                   <Button
                     label="Start stream"
                     onPress={handleGoLive}
@@ -730,12 +784,14 @@ export function StreamScreen() {
                       />
                     ))}
                   </View>
-                  <Text
-                    variant="body"
-                    color={showOverlay ? theme.colors.text.inverse : theme.colors.text.muted}
-                  >
-                    {viewerCount} {viewerCount === 1 ? 'viewer' : 'viewers'}
-                  </Text>
+                  <Pressable onPress={openViewerList} hitSlop={8}>
+                    <Text
+                      variant="body"
+                      color={showOverlay ? theme.colors.text.inverse : theme.colors.text.muted}
+                    >
+                      {viewerCount} {viewerCount === 1 ? 'viewer' : 'viewers'}
+                    </Text>
+                  </Pressable>
                 </View>
               )}
 
@@ -883,6 +939,42 @@ export function StreamScreen() {
           { id: 'other', iconName: 'more-horizontal', label: 'Other', onPress: () => submitReport('Other') },
         ]}
       />
+
+      {/* Viewer list sheet — broadcaster only */}
+      {viewerListVisible && (
+        <View style={styles.sheetBackdrop}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setViewerListVisible(false)} />
+          <View style={styles.viewerSheet}>
+            <Text variant="bodyEmphasized" color={theme.colors.text.primary} style={styles.sheetTitle}>
+              Viewers ({viewerCount})
+            </Text>
+            <ScrollView style={styles.viewerList} showsVerticalScrollIndicator={false}>
+              {viewers.length === 0 && (
+                <Text variant="body" color={theme.colors.text.muted} style={styles.viewerEmpty}>
+                  No signed-in viewers
+                </Text>
+              )}
+              {viewers.map(v => (
+                <View key={v.peerId} style={styles.viewerRow}>
+                  <Text variant="body" color={theme.colors.text.primary} style={styles.viewerHandle}>
+                    {v.handle ? `@${v.handle}` : 'Anonymous'}
+                  </Text>
+                  <Pressable
+                    onPress={() => handleKickViewer(v.peerId)}
+                    style={styles.removeBtn}
+                    hitSlop={8}
+                  >
+                    <Text variant="caption" color={theme.colors.accent.default}>Remove</Text>
+                  </Pressable>
+                </View>
+              ))}
+            </ScrollView>
+            <Pressable onPress={() => setViewerListVisible(false)} style={styles.sheetCancel}>
+              <Text variant="body" color={theme.colors.text.muted}>Close</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
 
       {/* Tip burst animations — visible to all peers */}
       {status === 'in-room' && !streamEnded && (
@@ -1049,4 +1141,27 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
     maxWidth: 320,
   },
+  sheetBackdrop: { ...StyleSheet.absoluteFillObject, justifyContent: 'flex-end', zIndex: 30 },
+  viewerSheet: {
+    backgroundColor: theme.colors.bg.panel,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+    paddingTop: theme.spacing.lg,
+    paddingBottom: theme.spacing.xl,
+    maxHeight: '60%' as unknown as number,
+  },
+  sheetTitle: { paddingHorizontal: theme.spacing.lg, marginBottom: theme.spacing.sm },
+  viewerList: { paddingHorizontal: theme.spacing.lg },
+  viewerEmpty: { paddingVertical: theme.spacing.md },
+  viewerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: theme.spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: theme.colors.border.subtle,
+  },
+  viewerHandle: { flex: 1 },
+  removeBtn: { paddingLeft: theme.spacing.md },
+  sheetCancel: { alignItems: 'center', paddingTop: theme.spacing.lg, paddingHorizontal: theme.spacing.lg },
 })
