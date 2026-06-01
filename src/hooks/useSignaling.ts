@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { signalingClient } from '@/lib/mediasoupSignaling'
 import { getClerkToken } from '@/lib/clerkToken'
+import { getDeviceId } from '@/lib/deviceId'
 import { env } from '@/lib/env'
 
 export type SignalingStatus =
@@ -97,6 +98,8 @@ export function useSignaling() {
     try {
       await signalingClient.connect(env.mediasoupWssUrl)
       setStatus('connected')
+      const deviceId = await getDeviceId()
+      signalingClient.identify(deviceId)
       const token = await getClerkToken()
       if (token) {
         await signalingClient.authenticate(token)

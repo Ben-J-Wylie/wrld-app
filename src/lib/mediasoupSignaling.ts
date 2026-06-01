@@ -1,4 +1,5 @@
 export type ClientMessage =
+  | { type: 'identify'; deviceId: string }
   | { type: 'authenticate'; token: string }
   | { type: 'getRtpCapabilities' }
   | { type: 'createRoom'; title: string; lat: number; lng: number; sources: string[] }
@@ -132,6 +133,10 @@ class MediasoupSignalingClient {
         }),
       )
     })
+  }
+
+  identify(deviceId: string): void {
+    this.send({ type: 'identify', deviceId })
   }
 
   async authenticate(token: string): Promise<string> {
