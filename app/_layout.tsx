@@ -80,25 +80,45 @@ function RootNavigator() {
   // Register Expo push token when signed in
   useRegisterPushToken(!!isSignedIn)
 
-  // Handle notification taps — navigate to the stream in the payload
+  // Notification deep-link: queue until Clerk is loaded and Stack is rendered
+  const pendingStreamRef = useRef<{ roomId: string; streamId: string; sources: string } | null>(null)
+
   useEffect(() => {
-    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+    if (!isLoaded) return
+    const p = pendingStreamRef.current
+    if (!p) return
+    pendingStreamRef.current = null
+    router.push({
+      pathname: `/(app)/stream/${p.roomId}`,
+      params: { streamId: p.streamId, sources: p.sources },
+    })
+  }, [isLoaded])
+
+  useEffect(() => {
+    function handleResponse(response: Notifications.NotificationResponse | null) {
+      if (!response) return
       const data = response.notification.request.content.data as {
         streamId?: string
         mediasoupRoomId?: string
         sources?: string
       }
-      if (data.mediasoupRoomId && data.streamId) {
-        router.navigate({
-          pathname: '/(app)/stream/[id]',
-          params: {
-            id: data.mediasoupRoomId,
-            streamId: data.streamId,
-            sources: data.sources ?? '',
-          },
+      if (!data.mediasoupRoomId || !data.streamId) return
+      const payload = { roomId: data.mediasoupRoomId, streamId: data.streamId, sources: data.sources ?? '' }
+      if (everLoaded.current) {
+        router.push({
+          pathname: `/(app)/stream/${payload.roomId}`,
+          params: { streamId: payload.streamId, sources: payload.sources },
         })
+      } else {
+        pendingStreamRef.current = payload
       }
-    })
+    }
+
+    // Android cold-start: tap response is not delivered to the listener below
+    Notifications.getLastNotificationResponseAsync().then(handleResponse)
+
+    // Background / foreground taps on both platforms
+    const sub = Notifications.addNotificationResponseReceivedListener(handleResponse)
     return () => sub.remove()
   }, [])
 
