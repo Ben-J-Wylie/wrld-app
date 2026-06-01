@@ -16,6 +16,10 @@ import { ScreenScroll } from '@/components/sections/ScreenScroll'
 import { SettingsGroup } from '@/components/sections/SettingsGroup'
 import { SettingsRow } from '@/components/features/settings/SettingsRow'
 import { AccountIDPill } from '@/components/features/user/AccountIDPill'
+import {
+  LocationGranularityPicker,
+  type LocationGranularity,
+} from '@/components/features/onboarding/LocationGranularityPicker'
 import { Button } from '@/components/primitives/Button'
 import { Toggle } from '@/components/primitives/Toggle'
 import { Text } from '@/components/primitives/Text'
@@ -24,6 +28,20 @@ import { useAuthStore } from '@/stores/authStore'
 import { usersApi } from '@/api/users'
 import { theme } from '@/tokens/theme'
 import * as Notifications from 'expo-notifications'
+
+type LocationPrecision = 'exact' | 'city' | 'country' | 'off'
+
+function precisionToGranularity(p: LocationPrecision | undefined): LocationGranularity {
+  if (p === 'exact') return 'bluedot'
+  if (p === 'off') return 'private'
+  return (p ?? 'city') as LocationGranularity
+}
+
+function granularityToPrecision(g: LocationGranularity): LocationPrecision {
+  if (g === 'bluedot') return 'exact'
+  if (g === 'private') return 'off'
+  return g
+}
 
 export function SettingsScreen() {
   const { signOut } = useClerk()
@@ -34,6 +52,9 @@ export function SettingsScreen() {
 
   const [followedLive, setFollowedLive] = useState(wrldUser?.notifyOnFollowedLive ?? true)
   const [nearbyLive, setNearbyLive] = useState(wrldUser?.notifyOnNearbyLive ?? false)
+  const [locationPrecision, setLocationPrecision] = useState<LocationPrecision>(
+    wrldUser?.locationPrecision ?? 'city',
+  )
 
   async function handleSignOut() {
     // Unregister push token before clearing session so the device stops
@@ -70,6 +91,18 @@ export function SettingsScreen() {
       if (wrldUser) setWrldUser({ ...wrldUser, ...prefs })
     } catch {
       setFollowedLive(!value)
+    }
+  }
+
+  async function handleLocationPrecisionChange(granularity: LocationGranularity) {
+    const next = granularityToPrecision(granularity)
+    const prev = locationPrecision
+    setLocationPrecision(next)
+    try {
+      const updated = await usersApi.updateLocationPrecision(next)
+      if (wrldUser) setWrldUser({ ...wrldUser, ...updated })
+    } catch {
+      setLocationPrecision(prev)
     }
   }
 
@@ -123,6 +156,21 @@ export function SettingsScreen() {
           onPress={() => router.push('/(app)/subscription')}
         />
       </SettingsGroup>
+
+      {wrldUser?.creatorReady && (
+        <View style={styles.privacySection}>
+          <Text variant="monoLabel" color={theme.colors.text.subtle} style={styles.privacyLabel}>
+            PRIVACY
+          </Text>
+          <Text variant="caption" color={theme.colors.text.muted} style={styles.privacyCaption}>
+            Choose how precisely viewers see where you are when you stream.
+          </Text>
+          <LocationGranularityPicker
+            value={precisionToGranularity(locationPrecision)}
+            onChange={handleLocationPrecisionChange}
+          />
+        </View>
+      )}
 
       <SettingsGroup title="NOTIFICATIONS">
         <SettingsRow
@@ -209,5 +257,14 @@ const styles = StyleSheet.create({
   note: {
     textAlign: 'center',
     lineHeight: 18,
+  },
+  privacySection: {
+    gap: theme.spacing.sm,
+  },
+  privacyLabel: {
+    paddingHorizontal: theme.spacing.lg,
+  },
+  privacyCaption: {
+    paddingHorizontal: theme.spacing.lg,
   },
 })
