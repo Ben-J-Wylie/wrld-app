@@ -58,10 +58,12 @@ export function GlobeScreenMapbox() {
   const cameraRef = useRef<React.ElementRef<typeof Camera>>(null)
   const sourceRef = useRef<ShapeSource>(null)
   const hasAutoOrientedRef = useRef(false)
-  const autoRotateRef    = useRef<ReturnType<typeof setInterval> | null>(null)
-  const interactTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const rotLngRef        = useRef(0)
+  const autoRotateRef      = useRef<ReturnType<typeof setInterval> | null>(null)
+  const interactTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const rotLngRef          = useRef(0)
+  const rotLatRef          = useRef(20)
   const userInteractingRef = useRef(false)
+  const gestureActiveRef   = useRef(false)
 
   useEffect(() => { coordsRef.current = coords }, [coords])
 
@@ -132,12 +134,25 @@ export function GlobeScreenMapbox() {
     }, 4000)
   }
 
+  function handleCameraChanged(state: { properties: { center: number[] }; gestures: { isGestureActive: boolean } }) {
+    if (state.gestures.isGestureActive) {
+      // Sync rotation refs so auto-rotation resumes from where user left off
+      const [lng, lat] = state.properties.center as [number, number]
+      rotLngRef.current = ((lng + 360) % 360)
+      rotLatRef.current = lat
+      gestureActiveRef.current = true
+      pauseRotation()
+    } else {
+      gestureActiveRef.current = false
+    }
+  }
+
   useEffect(() => {
     autoRotateRef.current = setInterval(() => {
-      if (userInteractingRef.current) return
+      if (gestureActiveRef.current || userInteractingRef.current) return
       rotLngRef.current = ((rotLngRef.current + 0.15) + 360) % 360
       const lng = rotLngRef.current > 180 ? rotLngRef.current - 360 : rotLngRef.current
-      cameraRef.current?.setCamera({ centerCoordinate: [lng, 0], animationDuration: 0 })
+      cameraRef.current?.setCamera({ centerCoordinate: [lng, rotLatRef.current], animationDuration: 0 })
     }, 80)
     return () => {
       if (autoRotateRef.current) clearInterval(autoRotateRef.current)
@@ -151,7 +166,8 @@ export function GlobeScreenMapbox() {
     if (!coords || hasAutoOrientedRef.current) return
     hasAutoOrientedRef.current = true
     userInteractingRef.current = true
-    rotLngRef.current = coords.longitude
+    rotLngRef.current = ((coords.longitude + 360) % 360)
+    rotLatRef.current = coords.latitude
     cameraRef.current?.flyTo([coords.longitude, coords.latitude], 1500)
     setTimeout(() => { userInteractingRef.current = false }, 2500)
   }, [coords])
@@ -269,6 +285,7 @@ export function GlobeScreenMapbox() {
         logoEnabled={false}
         attributionEnabled={false}
         compassEnabled={false}
+        onCameraChanged={handleCameraChanged}
         onPress={() => {
           pauseRotation()
           setSelectedStream(null)
@@ -278,7 +295,7 @@ export function GlobeScreenMapbox() {
         <Camera
           ref={cameraRef}
           centerCoordinate={[0, 20]}
-          zoomLevel={1.5}
+          zoomLevel={1.0}
           minZoomLevel={0.5}
           maxZoomLevel={20}
           animationMode="none"
@@ -416,7 +433,7 @@ export function GlobeScreenMapbox() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000010' },
+  container: { flex: 1, backgroundColor: '#090B1F' },
   safeArea:  { flex: 1 },
   header: {
     flexDirection: 'row',
