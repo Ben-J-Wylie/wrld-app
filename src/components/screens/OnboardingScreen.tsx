@@ -16,6 +16,7 @@
 //     anonymous-viewer flow.
 
 import { useState } from 'react'
+import { Alert } from 'react-native'
 import { router } from 'expo-router'
 import * as ImagePicker from 'expo-image-picker'
 import { WizardShell } from '@/components/sections/WizardShell'
@@ -80,6 +81,20 @@ export function OnboardingScreen() {
   }
 
   async function pickAvatar(source: 'gallery' | 'camera') {
+    // expo-image-picker doesn't auto-request runtime permissions —
+    // the launch* calls throw "Missing camera or camera roll permission"
+    // if we skip this step.
+    const perm =
+      source === 'gallery'
+        ? await ImagePicker.requestMediaLibraryPermissionsAsync()
+        : await ImagePicker.requestCameraPermissionsAsync()
+    if (!perm.granted) {
+      Alert.alert(
+        source === 'gallery' ? 'Photo library access required' : 'Camera access required',
+        'Enable in Settings to upload an avatar.',
+      )
+      return
+    }
     const result =
       source === 'gallery'
         ? await ImagePicker.launchImageLibraryAsync({

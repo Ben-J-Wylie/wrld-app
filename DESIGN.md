@@ -3192,6 +3192,36 @@ handled by the same patterns; the seam is not a separate motion category.
 Append-only. Most recent first. Each entry: date, decision, rationale,
 constraint it imposes downstream.
 
+### 2026-05-31 (evening) — `design` branch re-spun for 12.7+
+
+Same-day reversal of the working-agreement note in the morning's
+"Sub-phases 12.5 + 12.6 shipped" entry, which had floated the idea of
+retiring the design branch now that 12.5/12.6 closed. Ben elected
+instead to keep the high-churn isolation alive for 12.7 (motion pass)
+plus any near-term DESIGN.md / token / primitive iteration that
+benefits from the same pattern.
+
+Mechanics: the morning's design → main merge (commit `f18bd48`) had
+already advanced `main` to carry every 12.5/12.6 commit + the
+back-merge of Aaron's Phase 17 / Phase 5/22 work. The design branch
+got reset to that same `f18bd48` HEAD (deleted + re-checked out from
+main) so the two branches diverge from the shared close-out state, not
+from the older pre-12.5 split point.
+
+Aaron stays on `main` (he's actively shipping Phase 5/22 follow-ups
+plus whatever monetization iteration comes next). Ben works on
+`design`. Merge protocol and conflict-resolution rules unchanged.
+
+**Imposes:**
+
+- The same merge protocol applies: pull `main` HEAD into `design`
+  before any design → main push; theme-codemod Aaron's net-new code
+  for the (now well-established) token shape; explicit Ben sign-off
+  for the merge direction back.
+- "Convention reverts after merge" lines from earlier entries are
+  superseded here. The branch convention should be assumed active
+  unless an explicit entry retires it.
+
 ### 2026-05-31 — Sub-phases 12.5 + 12.6 shipped on `design`
 
 Single intensive working session. Tally on close:
