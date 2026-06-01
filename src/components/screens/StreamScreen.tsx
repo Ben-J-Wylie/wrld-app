@@ -73,6 +73,7 @@ import { useInvalidateCurrentUser } from '@/hooks/useCurrentUser'
 import { useInvalidateWallet } from '@/hooks/useWallet'
 import { theme } from '@/tokens/theme'
 import { signalStreamDisconnected, signalStreamEnded, signalKicked } from '@/lib/streamSignals'
+import { signalingClient } from '@/lib/mediasoupSignaling'
 import { activeBroadcast } from '@/lib/activeBroadcast'
 import { streamsApi } from '@/api/streams'
 import { useSignaling } from '@/hooks/useSignaling'
@@ -144,7 +145,7 @@ export function StreamScreen() {
     : []
 
   const {
-    status, setStatus, roomId, viewerCount, streamEnded, adminEnded, setAdminEnded, kicked,
+    status, setStatus, roomId, viewerCount, streamEnded, adminEnded, setAdminEnded,
     adminWarning, setAdminWarning,
     error: signalingError, setError,
     suspensionError, clearSuspensionError,
@@ -247,12 +248,16 @@ export function StreamScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status])
 
-  // Fast path 3: kicked by admin (code 4003)
+  // Fast path 3: kicked by admin (code 4003) — handled directly in onClose so
+  // navigation fires in the same event turn as the WS close, before React
+  // scheduling can interpose another exit path that sets navigatingRef.current.
   useEffect(() => {
-    if (!kicked || isNew) return
-    exitToGlobe('kicked')
+    if (isNew) return
+    return signalingClient.onClose((code) => {
+      if (code === 4003) exitToGlobe('kicked')
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kicked])
+  }, [isNew])
 
   // Fallback: poll stream status every 10s.
   // Catches cases where neither broadcasterLeft nor a clean WS close arrive

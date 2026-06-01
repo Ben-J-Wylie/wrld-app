@@ -741,6 +741,12 @@ In `StreamScreen` (viewer mode), a **⚑ flag button** appears next to the Tip b
 - WS close code **4003** in `useSignaling.ts` → calls `signalKicked()` (new signal kind `'kicked'`)
 - `GlobeScreen` handles `'kicked'` signal → banner "You have been removed from this stream", auto-dismisses after 8s (same timer as `'ended'`)
 
+### Kick navigation race fix (`src/components/screens/StreamScreen.tsx`)
+
+The original kick path set `kicked` state in `useSignaling`'s `onClose` handler, then relied on a `useEffect([kicked])` in `StreamScreen` to call `exitToGlobe('kicked')`. This was intermittently unreliable: `signalingClient.disconnect()` is called inside `exitToGlobe`, which calls `ws.close()` on the already-server-closed socket. On some platforms that dispatches a second `onclose` event (code 1006), which hits the `else` branch in the `onClose` handler and calls `setStatus('dropped')`. The `status === 'dropped'` effect fires first (before the `kicked` effect, since `status` changed in the same render), calls `exitToGlobe('disconnected')`, and sets `navigatingRef.current = true`. When the `kicked` effect finally runs, it sees the ref is already set and bails — leaving the viewer on a white screen.
+
+**Fix:** `StreamScreen` registers its own `signalingClient.onClose` listener and calls `exitToGlobe('kicked')` directly from that callback — in the same JS event turn as the WS close, before React schedules any other effects. The `kicked` state in `useSignaling` is still maintained (for `connect()` reset), but navigation no longer goes through React's scheduler.
+
 ---
 
 ## Updates — May 2026 (Phase 17: suspension handling)
