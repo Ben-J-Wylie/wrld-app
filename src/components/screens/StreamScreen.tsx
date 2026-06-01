@@ -953,15 +953,13 @@ export function StreamScreen() {
                   <Text variant="body" color={theme.colors.text.primary} style={styles.viewerHandle}>
                     {v.handle ? `@${v.handle}` : 'Anonymous'}
                   </Text>
-                  {v.handle && (
-                    <Pressable
-                      onPress={() => handleKickViewer(v.peerId)}
-                      style={styles.removeBtn}
-                      hitSlop={8}
-                    >
-                      <Text variant="caption" color={theme.colors.accent.default}>Remove</Text>
-                    </Pressable>
-                  )}
+                  <Pressable
+                    onPress={() => handleKickViewer(v.peerId)}
+                    style={styles.removeBtn}
+                    hitSlop={8}
+                  >
+                    <Text variant="caption" color={theme.colors.accent.default}>Remove</Text>
+                  </Pressable>
                 </View>
               ))}
             </ScrollView>
