@@ -88,12 +88,17 @@ const DRAWER_EXPANDED_TOP_OFFSET = 190  // top stack + chrome reserved above the
 const TAP_DRAG_TOLERANCE         = 10   // |dy| under this is a tap, not a drag
 const COMMIT_DRAG_DISTANCE       = 60   // px past TAP_DRAG_TOLERANCE before a drag commits
 
-// Top-stack height below the safe-area inset: header (~40) + search row
-// (~48) + chip row (~44) = ~132. The scale ruler sits below this and
-// reads off the globe itself, so it is NOT part of the offset. Used as
-// the camera's paddingTop so the globe centers in the band between the
-// chip row and the closed-state drawer.
-const CHIP_BOTTOM_OFFSET = 132
+// Vertical placement of the projected globe sphere. Mapbox's Camera
+// padding shifts the projection center within the viewport. We frame
+// the geographic centerCoordinate at GLOBE_CENTER_FRAC of containerH
+// from the top — bigger fraction = sphere sits lower in the discovery
+// area, leaving more space above for the chip row + scale ruler and
+// less below for the drawer's peek/expanded states.
+//
+// Math: center = (paddingTop + containerH - paddingBottom) / 2.
+// Solving for paddingTop with paddingBottom = 0 gives:
+//   paddingTop = (2 * GLOBE_CENTER_FRAC - 1) * containerH.
+const GLOBE_CENTER_FRAC = 0.55
 
 type DrawerState = 'closed' | 'peek' | 'expanded'
 
@@ -578,8 +583,8 @@ export function GlobeScreenMapbox() {
           defaultSettings={{ centerCoordinate: [0, 20], zoomLevel: 1.5 }}
           maxZoomLevel={20}
           padding={{
-            paddingTop: DRAWER_CLOSED_H,
-            paddingBottom: insets.top + CHIP_BOTTOM_OFFSET,
+            paddingTop: Math.max(0, (2 * GLOBE_CENTER_FRAC - 1) * containerH),
+            paddingBottom: 0,
             paddingLeft: 0,
             paddingRight: 0,
           }}
