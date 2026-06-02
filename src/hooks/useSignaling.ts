@@ -167,6 +167,7 @@ export function useSignaling() {
   const sendBroadcasterPaused = useCallback(() => signalingClient.sendBroadcasterPaused(), [])
   const sendBroadcasterResumed = useCallback(() => signalingClient.sendBroadcasterResumed(), [])
   const sendBroadcasterOrientation = useCallback((orientation: 'portrait' | 'landscape') => signalingClient.sendBroadcasterOrientation(orientation), [])
+  const sendLocationUpdate = useCallback((lat: number, lng: number) => signalingClient.sendLocationUpdate(lat, lng), [])
   const sendTip = useCallback((amount: number) => signalingClient.sendTip(amount), [])
 
   const dismissReaction = useCallback((id: number) => {
@@ -196,6 +197,7 @@ export function useSignaling() {
     sendBroadcasterResumed,
     sendBroadcasterOrientation,
     sendTip,
+    sendLocationUpdate,
     connect,
     createRoom,
     joinRoom,

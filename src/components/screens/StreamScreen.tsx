@@ -83,6 +83,7 @@ import { streamsApi } from '@/api/streams'
 import { recordingsApi } from '@/api/recordings'
 import { useSignaling } from '@/hooks/useSignaling'
 import { useMediasoup } from '@/hooks/useMediasoup'
+import * as Location from 'expo-location'
 import { useLocation } from '@/hooks/useLocation'
 import { useStream, useStreamByRoom } from '@/hooks/useStream'
 import { useAuthStore } from '@/stores/authStore'
@@ -163,6 +164,7 @@ export function StreamScreen() {
     connect, createRoom, joinRoom, disconnect,
     sendChatMessage, sendReaction, dismissReaction,
     sendTip, dismissTip,
+    sendLocationUpdate,
     sendBroadcasterPaused, sendBroadcasterResumed, sendBroadcasterOrientation,
   } = useSignaling()
   // Broadcaster: look up the DB stream once in-room so we have streamId for recording.
@@ -386,6 +388,23 @@ export function StreamScreen() {
       }
     })
     return () => sub.remove()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isNew, status])
+
+  // Live location tracking for broadcasters — updates the stream pin as they move
+  useEffect(() => {
+    if (!isNew || status !== 'in-room') return
+    let sub: { remove(): void } | null = null
+    Location.watchPositionAsync(
+      {
+        accuracy: Location.Accuracy.Balanced,
+        distanceInterval: 10,
+      },
+      (loc) => {
+        sendLocationUpdate(loc.coords.latitude, loc.coords.longitude)
+      },
+    ).then((s) => { sub = s }).catch(() => {})
+    return () => { sub?.remove() }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isNew, status])
 
