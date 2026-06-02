@@ -88,16 +88,17 @@ const DRAWER_EXPANDED_TOP_OFFSET = 190  // top stack + chrome reserved above the
 const TAP_DRAG_TOLERANCE         = 10   // |dy| under this is a tap, not a drag
 const COMMIT_DRAG_DISTANCE       = 60   // px past TAP_DRAG_TOLERANCE before a drag commits
 
-// Vertical placement of the projected globe sphere. Mapbox's Camera
-// padding shifts the projection center within the viewport. We frame
-// the geographic centerCoordinate at GLOBE_CENTER_FRAC of containerH
-// from the top — bigger fraction = sphere sits lower in the discovery
-// area, leaving more space above for the chip row + scale ruler and
-// less below for the drawer's peek/expanded states.
+// Vertical placement of the rendered globe sphere on screen.
 //
-// Math: center = (paddingTop + containerH - paddingBottom) / 2.
-// Solving for paddingTop with paddingBottom = 0 gives:
-//   paddingTop = (2 * GLOBE_CENTER_FRAC - 1) * containerH.
+// We do NOT use Mapbox Camera padding for this — `padding` shifts the
+// geographic centerCoordinate's projected point within the viewport,
+// which moves a flat-map view but leaves the globe SPHERE at viewport
+// centre in `projection="globe"` mode.
+//
+// Instead the whole MapView is translated down with translateY. The
+// sphere keeps its rendered size; only its on-screen position moves.
+// translateY = containerH * (GLOBE_CENTER_FRAC - 0.5) lands the sphere
+// centre at GLOBE_CENTER_FRAC of the container's height from the top.
 const GLOBE_CENTER_FRAC = 0.55
 
 type DrawerState = 'closed' | 'peek' | 'expanded'
@@ -560,7 +561,10 @@ export function GlobeScreenMapbox() {
   return (
     <View style={styles.container} onLayout={onContainerLayout}>
       <Mapbox.MapView
-        style={StyleSheet.absoluteFill}
+        style={[
+          StyleSheet.absoluteFill,
+          { transform: [{ translateY: containerH * (GLOBE_CENTER_FRAC - 0.5) }] },
+        ]}
         styleURL={Mapbox.StyleURL.Light}
         projection="globe"
         logoEnabled={false}
@@ -582,12 +586,6 @@ export function GlobeScreenMapbox() {
           ref={cameraRef}
           defaultSettings={{ centerCoordinate: [0, 20], zoomLevel: 1.5 }}
           maxZoomLevel={20}
-          padding={{
-            paddingTop: Math.max(0, (2 * GLOBE_CENTER_FRAC - 1) * containerH),
-            paddingBottom: 0,
-            paddingLeft: 0,
-            paddingRight: 0,
-          }}
         />
 
         <ShapeSource
