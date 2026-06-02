@@ -61,6 +61,19 @@ export type CashoutRequest = {
 
 export type SourceType = 'camera' | 'audio'
 
+export type Recording = {
+  id: string
+  streamId: string
+  status: 'recording' | 'ready' | 'failed' | 'expired'
+  manifestUrl: string | null
+  durationSec: number | null
+  sizeBytes: number
+  startedAt: string   // ISO timestamp
+  endedAt: string | null
+  expiresAt: string | null
+  _count: { clips: number }
+}
+
 export type Stream = {
   id: string
   hostId: string
