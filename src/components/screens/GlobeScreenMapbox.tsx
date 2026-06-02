@@ -4,13 +4,42 @@
 // Uses projection="globe" so the MapView covers the full experience
 // from outer-space overview to street-level detail with no seam.
 //
-// Revert: change the one-line import in app/(app)/globe.tsx back to GlobeScreen.
-// This file and GlobeScreen.tsx / EarthScene.tsx are entirely independent.
+// Phase 14a layout (mock: docs/design/mocks/Globe Mobile.html):
+//   • Header — BrandMark + WRLD + LIVE count Pill (unchanged)
+//   • SearchBar — pill input, matches stream titles for v0.2.
+//     Place + people search wired in a follow-up.
+//   • CategoryChipRow — 5 chips: all / city / country / camera-only /
+//     audio-only. Camera + audio filter on `Stream.sources`. City +
+//     country are STUBBED today (no reverse-geocode wired); selecting
+//     them shows an empty result. Wire in a follow-up.
+//   • ScaleBar — distance scale on top-left, reads live from camera.
+//   • MapView — Mapbox satellite-streets globe (unchanged engine).
+//   • DiscoveryHandoffCard — appears on pin tap (single + cluster),
+//     independent of the drawer.
+//   • Bottom drawer — always visible. Peek = horizontal scroll of
+//     StreamCard.trending; "See all" expands to a vertical list of
+//     StreamCard.compact. Independent of pin taps. The drawer chrome
+//     lives inline here per the DESIGN.md Section 0.5 reuse rule
+//     (extract on second proven case).
+//
+// Revert: change the one-line import in app/(app)/globe.tsx back to
+// GlobeScreen. This file and GlobeScreen.tsx / EarthScene.tsx are
+// entirely independent.
 
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { Platform, Pressable, StyleSheet, View } from 'react-native'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  Animated,
+  PanResponder,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+  type LayoutChangeEvent,
+} from 'react-native'
 import { router, useFocusEffect } from 'expo-router'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
+import { LinearGradient } from 'expo-linear-gradient'
 import Mapbox, { Camera, ShapeSource, CircleLayer, SymbolLayer, Atmosphere } from '@rnmapbox/maps'
 import { consumeStreamSignal } from '@/lib/streamSignals'
 import { streamsApi } from '@/api/streams'
@@ -20,13 +49,15 @@ import { useStreamsNear } from '@/hooks/useStreamsNear'
 import { Text } from '@/components/primitives/Text'
 import { Pill } from '@/components/primitives/Pill'
 import { BrandMark } from '@/components/primitives/BrandMark'
-import { Button } from '@/components/primitives/Button'
-import { Icon } from '@/components/primitives/Icon'
 import { StreamStateBanner } from '@/components/features/stream/StreamStateBanner'
+import { StreamCard } from '@/components/features/stream/StreamCard'
 import {
   DiscoveryHandoffCard,
   type DiscoveryStream,
 } from '@/components/features/stream/DiscoveryHandoffCard'
+import { SearchBar } from '@/components/features/discovery/SearchBar'
+import { ScaleBar } from '@/components/features/discovery/ScaleBar'
+import { CategoryChipRow, type Category } from '@/components/sections/CategoryChipRow'
 import type { Stream } from '@/types'
 
 Mapbox.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '')
@@ -34,6 +65,74 @@ Mapbox.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '')
 const PIN_CLUSTER = '#5B8CFF'
 const PIN_SINGLE  = '#FF3B5C'
 const PIN_BORDER  = '#FFFFFF'
+
+// Drawer has three states:
+//   closed   — only the grip visible above the tab bar (default at app
+//              launch and whenever no search/filter is active). Tap the
+//              grip to open, swipe up to peek.
+//   peek     — grip + header + horizontal scroll of StreamCard.trending.
+//              Auto-opened when a search query or non-"All" chip activates.
+//              Height sized so the full trending card renders without
+//              cropping above the tab bar.
+//   expanded — grip + header + vertical list of StreamCard.compact, from
+//              just below the top stack down to the tab bar.
+//
+// Heights are absolute (not relative to window) — we measure the
+// Tabs.Screen content area via onLayout because Dimensions.get('window')
+// includes the tab bar and gives wrong numbers for `bottom: 0`-anchored
+// math. The drawer is positioned `bottom: 0` (i.e. just above the tab
+// bar) and we animate its height.
+const DRAWER_CLOSED_H            = 44   // grip + breathing room above the tab bar
+const DRAWER_PEEK_H              = 220  // header + StreamCard.trending (144) + rail padding
+const DRAWER_EXPANDED_TOP_OFFSET = 190  // top stack + chrome reserved above the expanded sheet
+const TAP_DRAG_TOLERANCE         = 10   // |dy| under this is a tap, not a drag
+const COMMIT_DRAG_DISTANCE       = 60   // px past TAP_DRAG_TOLERANCE before a drag commits
+
+// Vertical placement of the rendered globe sphere on screen.
+//
+// We do NOT use Mapbox Camera padding for this — `padding` shifts the
+// geographic centerCoordinate's projected point within the viewport,
+// which moves a flat-map view but leaves the globe SPHERE at viewport
+// centre in `projection="globe"` mode.
+//
+// Instead the whole MapView is translated down with translateY. The
+// sphere keeps its rendered size; only its on-screen position moves.
+// translateY = containerH * (FRAC - 0.5) lands the sphere centre at
+// FRAC of the container's height from the top.
+//
+// The sphere shifts down a few percent when the drawer opens, so the
+// drawer doesn't crowd it. peek and expanded share the same fraction
+// — the globe stays put while the drawer slides between them.
+const GLOBE_FRAC_CLOSED = 0.59
+const GLOBE_FRAC_OPEN   = 0.48
+
+type DrawerState = 'closed' | 'peek' | 'expanded'
+
+function nextStateUp(s: DrawerState): DrawerState {
+  return s === 'closed' ? 'peek' : 'expanded'
+}
+function nextStateDown(s: DrawerState): DrawerState {
+  return s === 'expanded' ? 'peek' : 'closed'
+}
+
+// Top-stack scrim: paper100 fading to transparent over the header +
+// search + chips + scale band, so the globe pattern doesn't fight the
+// foreground UI when it's behind the controls. Matches the visual
+// muting `bg.glass` gives the bottom drawer. paper100 values are
+// expressed inline as rgba because LinearGradient needs colour strings
+// with explicit alpha stops — same precedent as `bg.glass`.
+const TOP_SCRIM_HEIGHT = 220
+const TOP_SCRIM_TOP    = 'rgba(236,230,214,1)'
+const TOP_SCRIM_MID    = 'rgba(236,230,214,0.85)'
+const TOP_SCRIM_BOTTOM = 'rgba(236,230,214,0)'
+
+const CATEGORIES: Category[] = [
+  { id: 'all', label: 'All' },
+  { id: 'city', label: 'My city' },
+  { id: 'country', label: 'My country' },
+  { id: 'camera', label: 'Camera only' },
+  { id: 'audio', label: 'Audio only' },
+]
 
 type BannerData =
   | { kind: 'disconnected'; broadcasterHandle: string | null }
@@ -52,6 +151,15 @@ export function GlobeScreenMapbox() {
   const [selectedStream, setSelectedStream] = useState<Stream | null>(null)
   const [selectedClusterStreams, setSelectedClusterStreams] = useState<Stream[] | null>(null)
   const [banner, setBanner] = useState<BannerData | null>(null)
+  const [query, setQuery] = useState('')
+  const [chipId, setChipId] = useState<string | null>(null)
+  const [drawerState, setDrawerState] = useState<DrawerState>('closed')
+  const [mapCenterLat, setMapCenterLat] = useState(20)
+  const [mapZoom, setMapZoom] = useState(1.5)
+
+  const hasActiveSearch =
+    query.trim().length > 0 || (chipId !== null && chipId !== 'all')
+
   const bannerPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const coordsRef = useRef(coords)
 
@@ -136,9 +244,14 @@ export function GlobeScreenMapbox() {
     }, 4000)
   }
 
-  function handleCameraChanged(state: { properties: { center: number[] }; gestures: { isGestureActive: boolean } }) {
+  function handleCameraChanged(state: {
+    properties: { center: number[]; zoom: number }
+    gestures: { isGestureActive: boolean }
+  }) {
+    const [lng, lat] = state.properties.center as [number, number]
+    setMapCenterLat(lat)
+    setMapZoom(state.properties.zoom)
     if (state.gestures.isGestureActive) {
-      const [lng, lat] = state.properties.center as [number, number]
       rotLngRef.current = ((lng + 360) % 360)
       rotLatRef.current = lat
       gestureActiveRef.current = true
@@ -179,7 +292,6 @@ export function GlobeScreenMapbox() {
       pendingOrientRef.current = null
       flyToUserLocation(lng, lat)
     } else {
-      // No GPS yet — set correct initial zoom immediately (overrides any native default)
       cameraRef.current?.setCamera({
         centerCoordinate: [0, 20],
         zoomLevel: 1.5,
@@ -219,6 +331,38 @@ export function GlobeScreenMapbox() {
     if (updated.length === 0) setSelectedClusterStreams(null)
     else setSelectedClusterStreams(updated)
   }, [streams])
+
+  // ── Filtered streams (query + chip) ────────────────────────────────────────
+
+  const visibleStreams = useMemo(() => {
+    const all = streams ?? []
+    let out = all
+    if (chipId === 'camera') {
+      out = out.filter(s => (s.sources ?? []).includes('camera'))
+    } else if (chipId === 'audio') {
+      out = out.filter(s => (s.sources ?? []).includes('audio'))
+    } else if (chipId === 'city' || chipId === 'country') {
+      // TODO Phase 14a follow-up: wire reverse-geocode lookup for the
+      // user's city + country so these chips can filter against the
+      // backend. Today the lookup is missing, so the filter shrinks
+      // to empty rather than guess.
+      out = []
+    }
+    const q = query.trim().toLowerCase()
+    if (q.length > 0) {
+      out = out.filter(s =>
+        s.title.toLowerCase().includes(q) ||
+        (s.host?.handle ?? '').toLowerCase().includes(q) ||
+        (s.host?.displayName ?? '').toLowerCase().includes(q),
+      )
+      // TODO Phase 14a follow-up: also match Mapbox geocoding place
+      // results and people search. Today the search filters streams
+      // only — query gets matched against title + handle + displayName.
+    }
+    // Order by viewer count desc for now (until a real "trending"
+    // weighting lands).
+    return out.slice().sort((a, b) => b.viewerCount - a.viewerCount)
+  }, [streams, chipId, query])
 
   // ── Navigation ────────────────────────────────────────────────────────────
 
@@ -305,17 +449,157 @@ export function GlobeScreenMapbox() {
 
   const liveCount = streams?.length ?? 0
 
+  // ── Drawer animation + state coupling ──────────────────────────────────────
+
+  // Tabs.Screen content area — measured via onLayout because
+  // Dimensions.get('window') includes the tab bar / status bar and
+  // would push the drawer off-screen if used as the baseline.
+  const [containerH, setContainerH] = useState(0)
+
+  function onContainerLayout(e: LayoutChangeEvent) {
+    const h = e.nativeEvent.layout.height
+    if (h && h !== containerH) setContainerH(h)
+  }
+
+  const expandedH = Math.max(
+    DRAWER_PEEK_H,
+    containerH - (insets.top + DRAWER_EXPANDED_TOP_OFFSET),
+  )
+
+  const drawerHeight = useRef(new Animated.Value(DRAWER_CLOSED_H)).current
+
+  // Globe sphere on-screen y-offset is derived directly from
+  // drawerHeight so the sphere glides in sync with the drawer during
+  // drag — no separate timing animation needed. Below the closed
+  // height the sphere sits at GLOBE_FRAC_CLOSED; above the peek height
+  // it sits at GLOBE_FRAC_OPEN. Between PEEK and EXPANDED the value
+  // clamps, so the sphere stays put while the drawer keeps growing
+  // upward into its vertical scroll state.
+  const globeTranslateY = useMemo(
+    () =>
+      drawerHeight.interpolate({
+        inputRange: [DRAWER_CLOSED_H, DRAWER_PEEK_H],
+        outputRange: [
+          containerH * (GLOBE_FRAC_CLOSED - 0.5),
+          containerH * (GLOBE_FRAC_OPEN - 0.5),
+        ],
+        extrapolate: 'clamp',
+      }),
+    [drawerHeight, containerH],
+  )
+
+  // Refs used by the PanResponder so its long-lived closure reads
+  // current values, not the ones captured at mount.
+  const drawerStateRef = useRef<DrawerState>('closed')
+  const expandedHRef = useRef(expandedH)
+  const dragStartHeightRef = useRef(DRAWER_CLOSED_H)
+
+  useEffect(() => { drawerStateRef.current = drawerState }, [drawerState])
+  useEffect(() => { expandedHRef.current = expandedH }, [expandedH])
+
+  function heightForState(s: DrawerState): number {
+    return s === 'closed'
+      ? DRAWER_CLOSED_H
+      : s === 'expanded'
+        ? expandedHRef.current
+        : DRAWER_PEEK_H
+  }
+
+  function animateToState(s: DrawerState) {
+    Animated.timing(drawerHeight, {
+      toValue: heightForState(s),
+      ...theme.motion.patterns.overlay,
+      useNativeDriver: false,
+    }).start()
+  }
+
+  useEffect(() => {
+    animateToState(drawerState)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drawerState, expandedH])
+
+  // Auto-open closed → peek as soon as the user activates a search or
+  // chip filter. We don't auto-close on clear; that would yank the
+  // results out from under the user. They tap the grip (or drag) to
+  // dismiss explicitly.
+  useEffect(() => {
+    if (hasActiveSearch && drawerState === 'closed') {
+      setDrawerState('peek')
+    }
+  }, [hasActiveSearch, drawerState])
+
+  // Grip gesture: while the user drags, the drawer sticks to the finger
+  // (height = startHeight - dy, clamped between closed + expanded).
+  // On release we decide:
+  //   - drag < TAP_DRAG_TOLERANCE px       → tap, toggle closed ↔ peek
+  //   - drag ≥ COMMIT_DRAG_DISTANCE px up  → next state up
+  //   - drag ≥ COMMIT_DRAG_DISTANCE px dn  → next state down
+  //   - otherwise                          → snap back to current state
+  // PanResponder is mounted on the grip hit area only so it doesn't
+  // fight the horizontal rail's ScrollView underneath.
+  const gripPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 4,
+      onPanResponderGrant: () => {
+        drawerHeight.stopAnimation((v: number) => {
+          dragStartHeightRef.current = v
+        })
+      },
+      onPanResponderMove: (_, g) => {
+        const start = dragStartHeightRef.current
+        const max = expandedHRef.current
+        const next = Math.max(DRAWER_CLOSED_H, Math.min(max, start - g.dy))
+        drawerHeight.setValue(next)
+      },
+      onPanResponderRelease: (_, g) => {
+        const dy = g.dy
+        const current = drawerStateRef.current
+        let target: DrawerState = current
+        if (Math.abs(dy) < TAP_DRAG_TOLERANCE) {
+          target = current === 'closed' ? 'peek' : 'closed'
+        } else if (dy <= -COMMIT_DRAG_DISTANCE) {
+          target = nextStateUp(current)
+        } else if (dy >= COMMIT_DRAG_DISTANCE) {
+          target = nextStateDown(current)
+        }
+        if (target === current) {
+          // Snap back to the current state's resting height — the state
+          // setter wouldn't fire the effect if the value matches.
+          animateToState(current)
+        } else {
+          setDrawerState(target)
+        }
+      },
+      onPanResponderTerminate: () => {
+        animateToState(drawerStateRef.current)
+      },
+    }),
+  ).current
+
+  function handleSeeAllPress() {
+    setDrawerState((s) => (s === 'expanded' ? 'peek' : 'expanded'))
+  }
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} onLayout={onContainerLayout}>
+      <Animated.View
+        style={[
+          StyleSheet.absoluteFill,
+          { transform: [{ translateY: globeTranslateY }] },
+        ]}
+        pointerEvents="box-none"
+      >
       <Mapbox.MapView
         style={StyleSheet.absoluteFill}
-        styleURL={Mapbox.StyleURL.SatelliteStreet}
+        styleURL={Mapbox.StyleURL.Light}
         projection="globe"
         logoEnabled={false}
         attributionEnabled={false}
         compassEnabled={false}
+        scaleBarEnabled={false}
         gestureSettings={{ panDecelerationFactor: Platform.OS === 'ios' ? 0.99 : undefined }}
         onCameraChanged={handleCameraChanged}
         onDidFinishLoadingMap={handleMapLoad}
@@ -325,7 +609,7 @@ export function GlobeScreenMapbox() {
           setSelectedClusterStreams(null)
         }}
       >
-        <Atmosphere style={{ spaceColor: '#D2B48C' }} />
+        <Atmosphere style={{ spaceColor: theme.colors.bg.primary, color: 'transparent', highColor: 'transparent', starIntensity: 0 }} />
 
         <Camera
           ref={cameraRef}
@@ -342,7 +626,6 @@ export function GlobeScreenMapbox() {
           clusterMaxZoomLevel={14}
           onPress={handleSourcePress}
         >
-          {/* Cluster circles */}
           <CircleLayer
             id="cluster-circles"
             filter={['has', 'point_count']}
@@ -354,7 +637,6 @@ export function GlobeScreenMapbox() {
               circleOpacity: 0.95,
             }}
           />
-          {/* Cluster count — only render text when 2+ points */}
           <SymbolLayer
             id="cluster-count"
             filter={['has', 'point_count']}
@@ -366,7 +648,6 @@ export function GlobeScreenMapbox() {
               textIgnorePlacement: true,
             }}
           />
-          {/* Single stream — exact precision: sharp pin */}
           <CircleLayer
             id="single-circles"
             filter={['all', ['!', ['has', 'point_count']], ['==', ['get', 'precision'], 'exact']] as any}
@@ -378,7 +659,6 @@ export function GlobeScreenMapbox() {
               circleOpacity: 0.95,
             }}
           />
-          {/* Single stream — exact precision viewer count */}
           <SymbolLayer
             id="single-count"
             filter={['all', ['!', ['has', 'point_count']], ['==', ['get', 'precision'], 'exact']] as any}
@@ -390,7 +670,6 @@ export function GlobeScreenMapbox() {
               textIgnorePlacement: true,
             }}
           />
-          {/* Single stream — city precision: soft halo */}
           <CircleLayer
             id="single-city"
             filter={['all', ['!', ['has', 'point_count']], ['==', ['get', 'precision'], 'city']] as any}
@@ -404,7 +683,6 @@ export function GlobeScreenMapbox() {
               circleStrokeOpacity: 0.6,
             }}
           />
-          {/* Single stream — country precision: large diffuse haze */}
           <CircleLayer
             id="single-country"
             filter={['all', ['!', ['has', 'point_count']], ['==', ['get', 'precision'], 'country']] as any}
@@ -418,11 +696,23 @@ export function GlobeScreenMapbox() {
           />
         </ShapeSource>
       </Mapbox.MapView>
+      </Animated.View>
 
-      {/* Header */}
-      <View style={StyleSheet.absoluteFill} pointerEvents="none">
-        <SafeAreaView style={styles.safeArea}>
-          <View style={styles.header}>
+      {/* Top scrim — paper100 fade muting the globe behind the top stack */}
+      <LinearGradient
+        pointerEvents="none"
+        colors={[TOP_SCRIM_TOP, TOP_SCRIM_MID, TOP_SCRIM_BOTTOM]}
+        locations={[0, 0.6, 1]}
+        style={[
+          styles.topScrim,
+          { height: insets.top + TOP_SCRIM_HEIGHT },
+        ]}
+      />
+
+      {/* Top stack — header, search, chips, scale */}
+      <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+        <SafeAreaView edges={['top']} pointerEvents="box-none">
+          <View style={styles.header} pointerEvents="box-none">
             <View style={styles.wordmark}>
               <BrandMark size="hero" />
               <Text variant="display">WRLD</Text>
@@ -431,30 +721,32 @@ export function GlobeScreenMapbox() {
               <Pill size="sm" variant="accent" label={`${liveCount} LIVE`} />
             )}
           </View>
+
+          <View style={styles.searchRow}>
+            <SearchBar
+              value={query}
+              onChangeText={setQuery}
+              onClear={() => setQuery('')}
+              placeholder="Search streams, places, or people"
+            />
+          </View>
+
+          <CategoryChipRow
+            categories={CATEGORIES}
+            value={chipId}
+            onChange={setChipId}
+            style={styles.chipRow}
+          />
+
+          <View style={styles.scaleRow} pointerEvents="none">
+            <ScaleBar centerLat={mapCenterLat} zoom={mapZoom} maxWidthPx={120} />
+          </View>
         </SafeAreaView>
       </View>
 
-      {/* Empty state */}
-      {liveCount === 0 && coords && (
-        <View style={styles.emptyOverlay} pointerEvents="box-none">
-          <View style={styles.emptyCard}>
-            <View style={styles.emptyIconFrame}>
-              <Icon name="globe" size="lg" color={theme.colors.accent.default} />
-            </View>
-            <Text variant="heading" color={theme.colors.text.inverse} style={styles.center}>
-              No streams nearby
-            </Text>
-            <Text variant="body" color={theme.colors.text.muted} style={styles.center}>
-              Be the first to go live in your area
-            </Text>
-            <Button label="Go live" onPress={() => router.push('/(app)/dashboard')} />
-          </View>
-        </View>
-      )}
-
       {/* Banner */}
       {banner && (
-        <View style={[styles.bannerWrapper, { top: insets.top + 56 }]} pointerEvents="box-none">
+        <View style={[styles.bannerWrapper, { top: insets.top + 184 }]} pointerEvents="box-none">
           <StreamStateBanner
             variant={banner.kind}
             onDismiss={dismissBanner}
@@ -464,7 +756,7 @@ export function GlobeScreenMapbox() {
         </View>
       )}
 
-      {/* Single stream card */}
+      {/* Pin-tap cards */}
       {selectedStream && (
         <View style={styles.cardWrapper} pointerEvents="box-none">
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setSelectedStream(null)} />
@@ -474,8 +766,6 @@ export function GlobeScreenMapbox() {
           />
         </View>
       )}
-
-      {/* Cluster card */}
       {selectedClusterStreams && (
         <View style={styles.cardWrapper} pointerEvents="box-none">
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setSelectedClusterStreams(null)} />
@@ -485,13 +775,127 @@ export function GlobeScreenMapbox() {
           />
         </View>
       )}
+
+      {/* Bottom drawer — closed by default, opens to peek when the user
+          searches or filters, expands when they tap "See all". */}
+      <Animated.View
+        style={[
+          styles.drawer,
+          { height: drawerHeight },
+        ]}
+      >
+        <View
+          {...gripPanResponder.panHandlers}
+          style={styles.gripHitArea}
+          accessibilityRole="button"
+          accessibilityLabel={drawerState === 'closed' ? 'Open results' : 'Close results'}
+        >
+          <View style={styles.drawerGrip} />
+        </View>
+
+        {drawerState !== 'closed' && (
+          <>
+            <View style={styles.drawerHeader}>
+              <Text variant="monoLabel" color={theme.colors.text.muted}>
+                {drawerHeaderLabel(query, chipId, visibleStreams.length)}
+              </Text>
+              <Pressable onPress={handleSeeAllPress} hitSlop={8}>
+                <Text variant="bodyEmphasized" color={theme.colors.accent.default}>
+                  {drawerState === 'expanded' ? 'Less' : 'More'}
+                </Text>
+              </Pressable>
+            </View>
+
+            {visibleStreams.length === 0 ? (
+              <DrawerEmptyState chipId={chipId} query={query} />
+            ) : drawerState === 'expanded' ? (
+              <ScrollView
+                contentContainerStyle={styles.drawerVerticalList}
+                showsVerticalScrollIndicator={false}
+              >
+                {visibleStreams.map(s => (
+                  <StreamCard
+                    key={s.id}
+                    variant="compact"
+                    title={s.title}
+                    viewerCount={s.viewerCount}
+                    channel={`@${s.host?.handle ?? 'unknown'}`}
+                    city={s.host?.displayName ?? undefined}
+                    isLive={s.isLive}
+                    onPress={() => joinStream(s)}
+                  />
+                ))}
+              </ScrollView>
+            ) : (
+              <ScrollView
+                horizontal
+                contentContainerStyle={styles.drawerRail}
+                showsHorizontalScrollIndicator={false}
+              >
+                {visibleStreams.map(s => (
+                  <StreamCard
+                    key={s.id}
+                    variant="trending"
+                    title={s.title}
+                    viewerCount={s.viewerCount}
+                    channel={`@${s.host?.handle ?? 'unknown'}`}
+                    city={s.host?.displayName ?? undefined}
+                    isLive={s.isLive}
+                    onPress={() => joinStream(s)}
+                  />
+                ))}
+              </ScrollView>
+            )}
+          </>
+        )}
+      </Animated.View>
+    </View>
+  )
+}
+
+function drawerHeaderLabel(query: string, chipId: string | null, count: number): string {
+  if (query.trim().length > 0) {
+    return count === 0 ? 'No matches' : `${count} match${count === 1 ? '' : 'es'}`
+  }
+  if (chipId === 'camera') return 'Camera streams'
+  if (chipId === 'audio')  return 'Audio streams'
+  if (chipId === 'city')   return 'In your city'
+  if (chipId === 'country') return 'In your country'
+  return 'Nearby now'
+}
+
+function DrawerEmptyState({
+  chipId,
+  query,
+}: {
+  chipId: string | null
+  query: string
+}) {
+  const isFilterStub = chipId === 'city' || chipId === 'country'
+  const body =
+    query.trim().length > 0
+      ? 'No matches. Try a different search.'
+      : isFilterStub
+        ? 'This filter is coming soon.'
+        : 'No live streams nearby right now.'
+
+  return (
+    <View style={styles.drawerEmpty}>
+      <Text variant="body" color={theme.colors.text.muted} style={styles.drawerEmptyText}>
+        {body}
+      </Text>
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#D2B48C' },
-  safeArea:  { flex: 1 },
+  container: { flex: 1, backgroundColor: theme.colors.bg.primary },
+  topScrim: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -500,32 +904,85 @@ const styles = StyleSheet.create({
     paddingTop: theme.spacing.sm,
   },
   wordmark: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
-  emptyOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
-  emptyCard: {
-    backgroundColor: 'rgba(10, 10, 15, 0.88)',
-    borderRadius: theme.radius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border.subtle,
-    padding: theme.spacing.xl,
-    alignItems: 'center',
-    gap: theme.spacing.sm,
-    maxWidth: 280,
+  searchRow: {
+    paddingHorizontal: theme.spacing.md,
+    paddingTop: theme.spacing.sm,
   },
-  emptyIconFrame: {
-    width: 64, height: 64, borderRadius: 32,
-    backgroundColor: theme.colors.accent.surface,
-    borderWidth: 2, borderColor: theme.colors.accent.border,
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: theme.spacing.xs,
+  chipRow: {
+    paddingTop: theme.spacing.sm,
   },
-  center: { textAlign: 'center' },
+  scaleRow: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.sm,
+  },
   bannerWrapper: {
     position: 'absolute', left: 0, right: 0,
     paddingHorizontal: theme.spacing.md,
   },
   cardWrapper: {
-    position: 'absolute', bottom: 0, left: 0, right: 0,
+    position: 'absolute', bottom: DRAWER_PEEK_H, left: 0, right: 0,
     padding: theme.spacing.lg,
-    paddingBottom: theme.spacing.xxl,
+    paddingBottom: theme.spacing.md,
+  },
+  drawer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    overflow: 'hidden',
+    backgroundColor: theme.colors.bg.glass,
+    borderTopLeftRadius: theme.radius.md,
+    borderTopRightRadius: theme.radius.md,
+    borderTopWidth: 1,
+    borderColor: theme.colors.border.subtle,
+    paddingHorizontal: theme.spacing.md,
+    ...theme.elevation.sheet,
+  },
+  // Grip hit area — generous touch target. The View itself is 48px tall
+  // and pads the grip down 10px from the top so the visible bar sits
+  // exactly where it did at 24px height. `marginBottom: -24` pulls the
+  // next sibling (drawerHeader) back to its original y position, so
+  // layout is unchanged — only the touch area grows. The PanResponder
+  // attached to this View captures taps + swipes; the overlapped header
+  // area still routes its own Pressable taps correctly (RN dispatches
+  // to the topmost view with a responder).
+  gripHitArea: {
+    height: 48,
+    paddingTop: 10,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    marginBottom: -24,
+  },
+  drawerGrip: {
+    width: 38,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: theme.colors.border.strong,
+  },
+  drawerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: theme.spacing.xs,
+    paddingBottom: theme.spacing.sm,
+  },
+  drawerRail: {
+    gap: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.xs,
+    paddingBottom: theme.spacing.sm,
+  },
+  drawerVerticalList: {
+    gap: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.xs,
+    paddingBottom: theme.spacing.lg,
+  },
+  drawerEmpty: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: theme.spacing.sm,
+    paddingVertical: theme.spacing.lg,
+  },
+  drawerEmptyText: {
+    textAlign: 'center',
   },
 })

@@ -61,7 +61,6 @@ export default function AppLayout() {
         }}
       >
         <Tabs.Screen name="globe" options={{ title: 'Globe' }} />
-        <Tabs.Screen name="search" options={{ title: 'Search' }} />
         <Tabs.Screen name="dashboard" options={{ title: 'Dashboard' }} />
         <Tabs.Screen name="wallet" options={{ title: 'Wallet' }} />
         <Tabs.Screen name="me" options={{ title: 'Me' }} />
