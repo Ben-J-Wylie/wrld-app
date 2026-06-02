@@ -97,9 +97,14 @@ const COMMIT_DRAG_DISTANCE       = 60   // px past TAP_DRAG_TOLERANCE before a d
 //
 // Instead the whole MapView is translated down with translateY. The
 // sphere keeps its rendered size; only its on-screen position moves.
-// translateY = containerH * (GLOBE_CENTER_FRAC - 0.5) lands the sphere
-// centre at GLOBE_CENTER_FRAC of the container's height from the top.
-const GLOBE_CENTER_FRAC = 0.59
+// translateY = containerH * (FRAC - 0.5) lands the sphere centre at
+// FRAC of the container's height from the top.
+//
+// The sphere shifts down a few percent when the drawer opens, so the
+// drawer doesn't crowd it. peek and expanded share the same fraction
+// — the globe stays put while the drawer slides between them.
+const GLOBE_FRAC_CLOSED = 0.59
+const GLOBE_FRAC_OPEN   = 0.62
 
 type DrawerState = 'closed' | 'peek' | 'expanded'
 
@@ -462,6 +467,11 @@ export function GlobeScreenMapbox() {
   )
 
   const drawerHeight = useRef(new Animated.Value(DRAWER_CLOSED_H)).current
+  // Globe sphere on-screen y-offset. Animates between GLOBE_FRAC_CLOSED
+  // and GLOBE_FRAC_OPEN as the drawer opens/closes; peek and expanded
+  // share the same target so the sphere stays put during that
+  // transition.
+  const globeTranslateY = useRef(new Animated.Value(0)).current
 
   // Refs used by the PanResponder so its long-lived closure reads
   // current values, not the ones captured at mount.
@@ -492,6 +502,15 @@ export function GlobeScreenMapbox() {
     animateToState(drawerState)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drawerState, expandedH])
+
+  useEffect(() => {
+    const frac = drawerState === 'closed' ? GLOBE_FRAC_CLOSED : GLOBE_FRAC_OPEN
+    Animated.timing(globeTranslateY, {
+      toValue: containerH * (frac - 0.5),
+      ...theme.motion.patterns.overlay,
+      useNativeDriver: true,
+    }).start()
+  }, [drawerState, containerH, globeTranslateY])
 
   // Auto-open closed → peek as soon as the user activates a search or
   // chip filter. We don't auto-close on clear; that would yank the
@@ -560,11 +579,15 @@ export function GlobeScreenMapbox() {
 
   return (
     <View style={styles.container} onLayout={onContainerLayout}>
-      <Mapbox.MapView
+      <Animated.View
         style={[
           StyleSheet.absoluteFill,
-          { transform: [{ translateY: containerH * (GLOBE_CENTER_FRAC - 0.5) }] },
+          { transform: [{ translateY: globeTranslateY }] },
         ]}
+        pointerEvents="box-none"
+      >
+      <Mapbox.MapView
+        style={StyleSheet.absoluteFill}
         styleURL={Mapbox.StyleURL.Light}
         projection="globe"
         logoEnabled={false}
@@ -667,6 +690,7 @@ export function GlobeScreenMapbox() {
           />
         </ShapeSource>
       </Mapbox.MapView>
+      </Animated.View>
 
       {/* Top scrim — paper100 fade muting the globe behind the top stack */}
       <LinearGradient
