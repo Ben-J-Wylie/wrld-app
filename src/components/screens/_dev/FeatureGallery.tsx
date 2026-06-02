@@ -21,6 +21,8 @@ import { ReactionRail } from '@/components/features/stream/ReactionRail'
 import { SettingsRow } from '@/components/features/settings/SettingsRow'
 import { ToastBanner } from '@/components/features/feedback/ToastBanner'
 import { SearchBar } from '@/components/features/discovery/SearchBar'
+import { ScaleBar } from '@/components/features/discovery/ScaleBar'
+import { PlaceResult } from '@/components/features/discovery/PlaceResult'
 import { SwapCard } from '@/components/features/identity/SwapCard'
 import { AccountIDPill } from '@/components/features/user/AccountIDPill'
 import { MetaStrip } from '@/components/features/user/MetaStrip'
@@ -472,6 +474,46 @@ export function FeatureGallery() {
         </Row>
         <Row label="no clear callback (no X)">
           <SearchBarDemo initial="kai" omitClear />
+        </Row>
+      </Section>
+
+      <Section title="ScaleBar">
+        <Row label="continental (equator, zoom 3)">
+          <ScaleBar centerLat={0} zoom={3} maxWidthPx={140} />
+        </Row>
+        <Row label="regional (NYC, zoom 8)">
+          <ScaleBar centerLat={40.71} zoom={8} maxWidthPx={140} />
+        </Row>
+        <Row label="city (London, zoom 13)">
+          <ScaleBar centerLat={51.51} zoom={13} maxWidthPx={140} />
+        </Row>
+        <Row label="street (Tokyo, zoom 17)">
+          <ScaleBar centerLat={35.68} zoom={17} maxWidthPx={140} />
+        </Row>
+        <Row label="imperial unit (NYC, zoom 8)">
+          <ScaleBar centerLat={40.71} zoom={8} maxWidthPx={140} unit="imperial" />
+        </Row>
+      </Section>
+
+      <Section title="PlaceResult">
+        <Row label="city with region">
+          <PlaceResult name="Paris" region="France" onPress={() => {}} />
+        </Row>
+        <Row label="city with full region path">
+          <PlaceResult
+            name="Brooklyn"
+            region="New York, United States"
+            onPress={() => {}}
+          />
+        </Row>
+        <Row label="with live stream count">
+          <PlaceResult name="Tokyo" region="Japan" streamCount={12} onPress={() => {}} />
+        </Row>
+        <Row label="single result, no region">
+          <PlaceResult name="Reykjavík" onPress={() => {}} />
+        </Row>
+        <Row label="non-interactive (no onPress)">
+          <PlaceResult name="Svalbard" region="Norway" />
         </Row>
       </Section>
 

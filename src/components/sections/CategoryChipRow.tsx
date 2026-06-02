@@ -1,9 +1,18 @@
 // src/components/sections/CategoryChipRow.tsx
 //
-// Horizontally-scrollable row of single-select category chips. Used
-// for the Globe Mobile category filter (trimmed to All + Cities in
-// v0.2 per the 2026-05-29 decision-log entry). Same shape works for
-// any future single-select chip row.
+// Horizontally-scrollable row of single-select category chips. The
+// section is domain-blind — consumer hands it `categories: Category[]`
+// and owns the filter semantics.
+//
+// Globe-page consumer (Phase 14a) wires five chips:
+//   all              — no filter (selected → `value === null`)
+//   city / country   — geographic (current city / country derived via
+//                      Mapbox reverse-geocode on the user's coords)
+//   camera-only      — `Stream.sources` includes 'camera'
+//   audio-only       — `Stream.sources` includes 'audio'
+//
+// Same shape works for any future single-select chip row that needs
+// the "All + N category" pattern.
 
 import { ScrollView, StyleSheet, type StyleProp, type ViewStyle } from 'react-native'
 import { Chip } from '@/components/primitives/Chip'

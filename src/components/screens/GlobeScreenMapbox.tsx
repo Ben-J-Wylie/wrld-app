@@ -4,11 +4,38 @@
 // Uses projection="globe" so the MapView covers the full experience
 // from outer-space overview to street-level detail with no seam.
 //
-// Revert: change the one-line import in app/(app)/globe.tsx back to GlobeScreen.
-// This file and GlobeScreen.tsx / EarthScene.tsx are entirely independent.
+// Phase 14a layout (mock: docs/design/mocks/Globe Mobile.html):
+//   • Header — BrandMark + WRLD + LIVE count Pill (unchanged)
+//   • SearchBar — pill input, matches stream titles for v0.2.
+//     Place + people search wired in a follow-up.
+//   • CategoryChipRow — 5 chips: all / city / country / camera-only /
+//     audio-only. Camera + audio filter on `Stream.sources`. City +
+//     country are STUBBED today (no reverse-geocode wired); selecting
+//     them shows an empty result. Wire in a follow-up.
+//   • ScaleBar — distance scale on top-left, reads live from camera.
+//   • MapView — Mapbox satellite-streets globe (unchanged engine).
+//   • DiscoveryHandoffCard — appears on pin tap (single + cluster),
+//     independent of the drawer.
+//   • Bottom drawer — always visible. Peek = horizontal scroll of
+//     StreamCard.trending; "See all" expands to a vertical list of
+//     StreamCard.compact. Independent of pin taps. The drawer chrome
+//     lives inline here per the DESIGN.md Section 0.5 reuse rule
+//     (extract on second proven case).
+//
+// Revert: change the one-line import in app/(app)/globe.tsx back to
+// GlobeScreen. This file and GlobeScreen.tsx / EarthScene.tsx are
+// entirely independent.
 
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { Platform, Pressable, StyleSheet, View } from 'react-native'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  Animated,
+  Dimensions,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native'
 import { router, useFocusEffect } from 'expo-router'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import Mapbox, { Camera, ShapeSource, CircleLayer, SymbolLayer, Atmosphere } from '@rnmapbox/maps'
@@ -23,10 +50,14 @@ import { BrandMark } from '@/components/primitives/BrandMark'
 import { Button } from '@/components/primitives/Button'
 import { Icon } from '@/components/primitives/Icon'
 import { StreamStateBanner } from '@/components/features/stream/StreamStateBanner'
+import { StreamCard } from '@/components/features/stream/StreamCard'
 import {
   DiscoveryHandoffCard,
   type DiscoveryStream,
 } from '@/components/features/stream/DiscoveryHandoffCard'
+import { SearchBar } from '@/components/features/discovery/SearchBar'
+import { ScaleBar } from '@/components/features/discovery/ScaleBar'
+import { CategoryChipRow, type Category } from '@/components/sections/CategoryChipRow'
 import type { Stream } from '@/types'
 
 Mapbox.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '')
@@ -34,6 +65,18 @@ Mapbox.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '')
 const PIN_CLUSTER = '#5B8CFF'
 const PIN_SINGLE  = '#FF3B5C'
 const PIN_BORDER  = '#FFFFFF'
+
+const SCREEN_H = Dimensions.get('window').height
+const DRAWER_PEEK_H = 200
+const DRAWER_EXPANDED_BOTTOM_OFFSET = 240 // top stack + chrome above expanded sheet
+
+const CATEGORIES: Category[] = [
+  { id: 'all', label: 'All' },
+  { id: 'city', label: 'My city' },
+  { id: 'country', label: 'My country' },
+  { id: 'camera', label: 'Camera only' },
+  { id: 'audio', label: 'Audio only' },
+]
 
 type BannerData =
   | { kind: 'disconnected'; broadcasterHandle: string | null }
@@ -52,6 +95,12 @@ export function GlobeScreenMapbox() {
   const [selectedStream, setSelectedStream] = useState<Stream | null>(null)
   const [selectedClusterStreams, setSelectedClusterStreams] = useState<Stream[] | null>(null)
   const [banner, setBanner] = useState<BannerData | null>(null)
+  const [query, setQuery] = useState('')
+  const [chipId, setChipId] = useState<string | null>(null)
+  const [drawerExpanded, setDrawerExpanded] = useState(false)
+  const [mapCenterLat, setMapCenterLat] = useState(20)
+  const [mapZoom, setMapZoom] = useState(1.5)
+
   const bannerPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const coordsRef = useRef(coords)
 
@@ -136,9 +185,14 @@ export function GlobeScreenMapbox() {
     }, 4000)
   }
 
-  function handleCameraChanged(state: { properties: { center: number[] }; gestures: { isGestureActive: boolean } }) {
+  function handleCameraChanged(state: {
+    properties: { center: number[]; zoom: number }
+    gestures: { isGestureActive: boolean }
+  }) {
+    const [lng, lat] = state.properties.center as [number, number]
+    setMapCenterLat(lat)
+    setMapZoom(state.properties.zoom)
     if (state.gestures.isGestureActive) {
-      const [lng, lat] = state.properties.center as [number, number]
       rotLngRef.current = ((lng + 360) % 360)
       rotLatRef.current = lat
       gestureActiveRef.current = true
@@ -179,7 +233,6 @@ export function GlobeScreenMapbox() {
       pendingOrientRef.current = null
       flyToUserLocation(lng, lat)
     } else {
-      // No GPS yet — set correct initial zoom immediately (overrides any native default)
       cameraRef.current?.setCamera({
         centerCoordinate: [0, 20],
         zoomLevel: 1.5,
@@ -219,6 +272,38 @@ export function GlobeScreenMapbox() {
     if (updated.length === 0) setSelectedClusterStreams(null)
     else setSelectedClusterStreams(updated)
   }, [streams])
+
+  // ── Filtered streams (query + chip) ────────────────────────────────────────
+
+  const visibleStreams = useMemo(() => {
+    const all = streams ?? []
+    let out = all
+    if (chipId === 'camera') {
+      out = out.filter(s => (s.sources ?? []).includes('camera'))
+    } else if (chipId === 'audio') {
+      out = out.filter(s => (s.sources ?? []).includes('audio'))
+    } else if (chipId === 'city' || chipId === 'country') {
+      // TODO Phase 14a follow-up: wire reverse-geocode lookup for the
+      // user's city + country so these chips can filter against the
+      // backend. Today the lookup is missing, so the filter shrinks
+      // to empty rather than guess.
+      out = []
+    }
+    const q = query.trim().toLowerCase()
+    if (q.length > 0) {
+      out = out.filter(s =>
+        s.title.toLowerCase().includes(q) ||
+        (s.host?.handle ?? '').toLowerCase().includes(q) ||
+        (s.host?.displayName ?? '').toLowerCase().includes(q),
+      )
+      // TODO Phase 14a follow-up: also match Mapbox geocoding place
+      // results and people search. Today the search filters streams
+      // only — query gets matched against title + handle + displayName.
+    }
+    // Order by viewer count desc for now (until a real "trending"
+    // weighting lands).
+    return out.slice().sort((a, b) => b.viewerCount - a.viewerCount)
+  }, [streams, chipId, query])
 
   // ── Navigation ────────────────────────────────────────────────────────────
 
@@ -305,6 +390,19 @@ export function GlobeScreenMapbox() {
 
   const liveCount = streams?.length ?? 0
 
+  // ── Drawer animation ──────────────────────────────────────────────────────
+
+  const drawerTop = useRef(new Animated.Value(SCREEN_H - DRAWER_PEEK_H)).current
+  const expandedTop = insets.top + DRAWER_EXPANDED_BOTTOM_OFFSET
+
+  useEffect(() => {
+    Animated.timing(drawerTop, {
+      toValue: drawerExpanded ? expandedTop : SCREEN_H - DRAWER_PEEK_H,
+      ...theme.motion.patterns.overlay,
+      useNativeDriver: false,
+    }).start()
+  }, [drawerExpanded, expandedTop, drawerTop])
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
@@ -343,7 +441,6 @@ export function GlobeScreenMapbox() {
           clusterMaxZoomLevel={14}
           onPress={handleSourcePress}
         >
-          {/* Cluster circles */}
           <CircleLayer
             id="cluster-circles"
             filter={['has', 'point_count']}
@@ -355,7 +452,6 @@ export function GlobeScreenMapbox() {
               circleOpacity: 0.95,
             }}
           />
-          {/* Cluster count — only render text when 2+ points */}
           <SymbolLayer
             id="cluster-count"
             filter={['has', 'point_count']}
@@ -367,7 +463,6 @@ export function GlobeScreenMapbox() {
               textIgnorePlacement: true,
             }}
           />
-          {/* Single stream — exact precision: sharp pin */}
           <CircleLayer
             id="single-circles"
             filter={['all', ['!', ['has', 'point_count']], ['==', ['get', 'precision'], 'exact']] as any}
@@ -379,7 +474,6 @@ export function GlobeScreenMapbox() {
               circleOpacity: 0.95,
             }}
           />
-          {/* Single stream — exact precision viewer count */}
           <SymbolLayer
             id="single-count"
             filter={['all', ['!', ['has', 'point_count']], ['==', ['get', 'precision'], 'exact']] as any}
@@ -391,7 +485,6 @@ export function GlobeScreenMapbox() {
               textIgnorePlacement: true,
             }}
           />
-          {/* Single stream — city precision: soft halo */}
           <CircleLayer
             id="single-city"
             filter={['all', ['!', ['has', 'point_count']], ['==', ['get', 'precision'], 'city']] as any}
@@ -405,7 +498,6 @@ export function GlobeScreenMapbox() {
               circleStrokeOpacity: 0.6,
             }}
           />
-          {/* Single stream — country precision: large diffuse haze */}
           <CircleLayer
             id="single-country"
             filter={['all', ['!', ['has', 'point_count']], ['==', ['get', 'precision'], 'country']] as any}
@@ -420,10 +512,10 @@ export function GlobeScreenMapbox() {
         </ShapeSource>
       </Mapbox.MapView>
 
-      {/* Header */}
-      <View style={StyleSheet.absoluteFill} pointerEvents="none">
-        <SafeAreaView style={styles.safeArea}>
-          <View style={styles.header}>
+      {/* Top stack — header, search, chips, scale */}
+      <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+        <SafeAreaView edges={['top']} pointerEvents="box-none">
+          <View style={styles.header} pointerEvents="box-none">
             <View style={styles.wordmark}>
               <BrandMark size="hero" />
               <Text variant="display">WRLD</Text>
@@ -432,30 +524,32 @@ export function GlobeScreenMapbox() {
               <Pill size="sm" variant="accent" label={`${liveCount} LIVE`} />
             )}
           </View>
+
+          <View style={styles.searchRow}>
+            <SearchBar
+              value={query}
+              onChangeText={setQuery}
+              onClear={() => setQuery('')}
+              placeholder="Search streams, places, or people"
+            />
+          </View>
+
+          <CategoryChipRow
+            categories={CATEGORIES}
+            value={chipId}
+            onChange={setChipId}
+            style={styles.chipRow}
+          />
+
+          <View style={styles.scaleRow} pointerEvents="none">
+            <ScaleBar centerLat={mapCenterLat} zoom={mapZoom} maxWidthPx={120} />
+          </View>
         </SafeAreaView>
       </View>
 
-      {/* Empty state */}
-      {liveCount === 0 && coords && (
-        <View style={styles.emptyOverlay} pointerEvents="box-none">
-          <View style={styles.emptyCard}>
-            <View style={styles.emptyIconFrame}>
-              <Icon name="globe" size="lg" color={theme.colors.accent.default} />
-            </View>
-            <Text variant="heading" color={theme.colors.text.inverse} style={styles.center}>
-              No streams nearby
-            </Text>
-            <Text variant="body" color={theme.colors.text.muted} style={styles.center}>
-              Be the first to go live in your area
-            </Text>
-            <Button label="Go live" onPress={() => router.push('/(app)/dashboard')} />
-          </View>
-        </View>
-      )}
-
       {/* Banner */}
       {banner && (
-        <View style={[styles.bannerWrapper, { top: insets.top + 56 }]} pointerEvents="box-none">
+        <View style={[styles.bannerWrapper, { top: insets.top + 184 }]} pointerEvents="box-none">
           <StreamStateBanner
             variant={banner.kind}
             onDismiss={dismissBanner}
@@ -465,7 +559,7 @@ export function GlobeScreenMapbox() {
         </View>
       )}
 
-      {/* Single stream card */}
+      {/* Pin-tap cards */}
       {selectedStream && (
         <View style={styles.cardWrapper} pointerEvents="box-none">
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setSelectedStream(null)} />
@@ -475,8 +569,6 @@ export function GlobeScreenMapbox() {
           />
         </View>
       )}
-
-      {/* Cluster card */}
       {selectedClusterStreams && (
         <View style={styles.cardWrapper} pointerEvents="box-none">
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setSelectedClusterStreams(null)} />
@@ -486,13 +578,124 @@ export function GlobeScreenMapbox() {
           />
         </View>
       )}
+
+      {/* Bottom drawer — always visible */}
+      <Animated.View
+        style={[
+          styles.drawer,
+          {
+            top: drawerTop,
+            paddingBottom: insets.bottom + theme.spacing.sm,
+          },
+        ]}
+      >
+        <View style={styles.drawerGrip} />
+        <View style={styles.drawerHeader}>
+          <Text variant="monoLabel" color={theme.colors.text.muted}>
+            {drawerHeaderLabel(query, chipId, visibleStreams.length)}
+          </Text>
+          <Pressable
+            onPress={() => setDrawerExpanded(v => !v)}
+            hitSlop={8}
+          >
+            <Text variant="bodyEmphasized" color={theme.colors.accent.default}>
+              {drawerExpanded ? 'Collapse' : 'See all'}
+            </Text>
+          </Pressable>
+        </View>
+
+        {visibleStreams.length === 0 ? (
+          <DrawerEmptyState
+            chipId={chipId}
+            query={query}
+            onGoLive={() => router.push('/(app)/dashboard')}
+          />
+        ) : drawerExpanded ? (
+          <ScrollView
+            contentContainerStyle={styles.drawerVerticalList}
+            showsVerticalScrollIndicator={false}
+          >
+            {visibleStreams.map(s => (
+              <StreamCard
+                key={s.id}
+                variant="compact"
+                title={s.title}
+                viewerCount={s.viewerCount}
+                channel={`@${s.host?.handle ?? 'unknown'}`}
+                city={s.host?.displayName ?? undefined}
+                isLive={s.isLive}
+                onPress={() => joinStream(s)}
+              />
+            ))}
+          </ScrollView>
+        ) : (
+          <ScrollView
+            horizontal
+            contentContainerStyle={styles.drawerRail}
+            showsHorizontalScrollIndicator={false}
+          >
+            {visibleStreams.map(s => (
+              <StreamCard
+                key={s.id}
+                variant="trending"
+                title={s.title}
+                viewerCount={s.viewerCount}
+                channel={`@${s.host?.handle ?? 'unknown'}`}
+                city={s.host?.displayName ?? undefined}
+                isLive={s.isLive}
+                onPress={() => joinStream(s)}
+              />
+            ))}
+          </ScrollView>
+        )}
+      </Animated.View>
+    </View>
+  )
+}
+
+function drawerHeaderLabel(query: string, chipId: string | null, count: number): string {
+  if (query.trim().length > 0) {
+    return count === 0 ? 'No matches' : `${count} match${count === 1 ? '' : 'es'}`
+  }
+  if (chipId === 'camera') return 'Camera streams'
+  if (chipId === 'audio')  return 'Audio streams'
+  if (chipId === 'city')   return 'In your city'
+  if (chipId === 'country') return 'In your country'
+  return 'Nearby now'
+}
+
+function DrawerEmptyState({
+  chipId,
+  query,
+  onGoLive,
+}: {
+  chipId: string | null
+  query: string
+  onGoLive: () => void
+}) {
+  const isFilterStub = chipId === 'city' || chipId === 'country'
+  const body =
+    query.trim().length > 0
+      ? 'Try a different search.'
+      : isFilterStub
+        ? 'This filter is coming soon.'
+        : 'Be the first to go live in your area.'
+
+  return (
+    <View style={styles.drawerEmpty}>
+      <Icon name="globe" size="lg" color={theme.colors.text.subtle} />
+      <Text variant="body" color={theme.colors.text.muted} style={styles.drawerEmptyText}>
+        {body}
+      </Text>
+      {query.trim().length === 0 && !isFilterStub && (
+        <Button label="Go live" onPress={onGoLive} variant="secondary" />
+      )}
     </View>
   )
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#D2B48C' },
-  safeArea:  { flex: 1 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -501,32 +704,72 @@ const styles = StyleSheet.create({
     paddingTop: theme.spacing.sm,
   },
   wordmark: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
-  emptyOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
-  emptyCard: {
-    backgroundColor: 'rgba(10, 10, 15, 0.88)',
-    borderRadius: theme.radius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border.subtle,
-    padding: theme.spacing.xl,
-    alignItems: 'center',
-    gap: theme.spacing.sm,
-    maxWidth: 280,
+  searchRow: {
+    paddingHorizontal: theme.spacing.md,
+    paddingTop: theme.spacing.sm,
   },
-  emptyIconFrame: {
-    width: 64, height: 64, borderRadius: 32,
-    backgroundColor: theme.colors.accent.surface,
-    borderWidth: 2, borderColor: theme.colors.accent.border,
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: theme.spacing.xs,
+  chipRow: {
+    paddingTop: theme.spacing.sm,
   },
-  center: { textAlign: 'center' },
+  scaleRow: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.sm,
+  },
   bannerWrapper: {
     position: 'absolute', left: 0, right: 0,
     paddingHorizontal: theme.spacing.md,
   },
   cardWrapper: {
-    position: 'absolute', bottom: 0, left: 0, right: 0,
+    position: 'absolute', bottom: DRAWER_PEEK_H, left: 0, right: 0,
     padding: theme.spacing.lg,
-    paddingBottom: theme.spacing.xxl,
+    paddingBottom: theme.spacing.md,
+  },
+  drawer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: theme.colors.bg.glass,
+    borderTopLeftRadius: theme.radius.md,
+    borderTopRightRadius: theme.radius.md,
+    borderTopWidth: 1,
+    borderColor: theme.colors.border.subtle,
+    paddingHorizontal: theme.spacing.md,
+    ...theme.elevation.sheet,
+  },
+  drawerGrip: {
+    width: 38,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: theme.colors.border.strong,
+    alignSelf: 'center',
+    marginTop: theme.spacing.sm,
+    marginBottom: theme.spacing.sm,
+  },
+  drawerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: theme.spacing.xs,
+    paddingBottom: theme.spacing.sm,
+  },
+  drawerRail: {
+    gap: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.xs,
+    paddingBottom: theme.spacing.sm,
+  },
+  drawerVerticalList: {
+    gap: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.xs,
+    paddingBottom: theme.spacing.lg,
+  },
+  drawerEmpty: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: theme.spacing.sm,
+    paddingVertical: theme.spacing.lg,
+  },
+  drawerEmptyText: {
+    textAlign: 'center',
   },
 })
