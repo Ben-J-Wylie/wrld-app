@@ -316,6 +316,7 @@ export function GlobeScreenMapbox() {
         logoEnabled={false}
         attributionEnabled={false}
         compassEnabled={false}
+        scaleBarEnabled={false}
         gestureSettings={{ panDecelerationFactor: Platform.OS === 'ios' ? 0.99 : undefined }}
         onCameraChanged={handleCameraChanged}
         onDidFinishLoadingMap={handleMapLoad}
