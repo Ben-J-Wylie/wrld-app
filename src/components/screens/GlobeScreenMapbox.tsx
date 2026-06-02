@@ -467,11 +467,26 @@ export function GlobeScreenMapbox() {
   )
 
   const drawerHeight = useRef(new Animated.Value(DRAWER_CLOSED_H)).current
-  // Globe sphere on-screen y-offset. Animates between GLOBE_FRAC_CLOSED
-  // and GLOBE_FRAC_OPEN as the drawer opens/closes; peek and expanded
-  // share the same target so the sphere stays put during that
-  // transition.
-  const globeTranslateY = useRef(new Animated.Value(0)).current
+
+  // Globe sphere on-screen y-offset is derived directly from
+  // drawerHeight so the sphere glides in sync with the drawer during
+  // drag — no separate timing animation needed. Below the closed
+  // height the sphere sits at GLOBE_FRAC_CLOSED; above the peek height
+  // it sits at GLOBE_FRAC_OPEN. Between PEEK and EXPANDED the value
+  // clamps, so the sphere stays put while the drawer keeps growing
+  // upward into its vertical scroll state.
+  const globeTranslateY = useMemo(
+    () =>
+      drawerHeight.interpolate({
+        inputRange: [DRAWER_CLOSED_H, DRAWER_PEEK_H],
+        outputRange: [
+          containerH * (GLOBE_FRAC_CLOSED - 0.5),
+          containerH * (GLOBE_FRAC_OPEN - 0.5),
+        ],
+        extrapolate: 'clamp',
+      }),
+    [drawerHeight, containerH],
+  )
 
   // Refs used by the PanResponder so its long-lived closure reads
   // current values, not the ones captured at mount.
@@ -502,15 +517,6 @@ export function GlobeScreenMapbox() {
     animateToState(drawerState)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drawerState, expandedH])
-
-  useEffect(() => {
-    const frac = drawerState === 'closed' ? GLOBE_FRAC_CLOSED : GLOBE_FRAC_OPEN
-    Animated.timing(globeTranslateY, {
-      toValue: containerH * (frac - 0.5),
-      ...theme.motion.patterns.overlay,
-      useNativeDriver: true,
-    }).start()
-  }, [drawerState, containerH, globeTranslateY])
 
   // Auto-open closed → peek as soon as the user activates a search or
   // chip filter. We don't auto-close on clear; that would yank the
