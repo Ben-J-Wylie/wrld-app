@@ -62,6 +62,7 @@ export default function AppLayout() {
       >
         <Tabs.Screen name="globe" options={{ title: 'Globe' }} />
         <Tabs.Screen name="dashboard" options={{ title: 'Dashboard' }} />
+        <Tabs.Screen name="library" options={{ title: 'Library' }} />
         <Tabs.Screen name="wallet" options={{ title: 'Wallet' }} />
         <Tabs.Screen name="me" options={{ title: 'Me' }} />
         <Tabs.Screen name="creator-onboarding" options={{ href: null }} />
