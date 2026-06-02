@@ -29,12 +29,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Animated,
-  Dimensions,
+  PanResponder,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   View,
+  type LayoutChangeEvent,
 } from 'react-native'
 import { router, useFocusEffect } from 'expo-router'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -65,21 +66,35 @@ const PIN_CLUSTER = '#5B8CFF'
 const PIN_SINGLE  = '#FF3B5C'
 const PIN_BORDER  = '#FFFFFF'
 
-const SCREEN_H = Dimensions.get('window').height
 // Drawer has three states:
-//   closed   — only the grip visible (default at app launch and when no
-//              search/filter is active). Tap the grip to open.
+//   closed   — only the grip visible above the tab bar (default at app
+//              launch and whenever no search/filter is active). Tap the
+//              grip to open, swipe up to peek.
 //   peek     — grip + header + horizontal scroll of StreamCard.trending.
 //              Auto-opened when a search query or non-"All" chip activates.
+//              Height sized so the full trending card renders without
+//              cropping above the tab bar.
 //   expanded — grip + header + vertical list of StreamCard.compact, from
-//              just below the top stack down to the bottom of the screen.
-// Heights are tuned so StreamCard.trending (88 thumb + ~40 meta + border)
-// renders fully in peek without cropping.
-const DRAWER_CLOSED_BASE_H = 28      // grip + minimal padding (excludes safe-area inset)
-const DRAWER_PEEK_H = 250
-const DRAWER_EXPANDED_BOTTOM_OFFSET = 240 // top stack + chrome above expanded sheet
+//              just below the top stack down to the tab bar.
+//
+// Heights are absolute (not relative to window) — we measure the
+// Tabs.Screen content area via onLayout because Dimensions.get('window')
+// includes the tab bar and gives wrong numbers for `bottom: 0`-anchored
+// math. The drawer is positioned `bottom: 0` (i.e. just above the tab
+// bar) and we animate its height.
+const DRAWER_CLOSED_H            = 44   // grip + breathing room above the tab bar
+const DRAWER_PEEK_H              = 270  // header + StreamCard.trending (144) + rail padding
+const DRAWER_EXPANDED_TOP_OFFSET = 240  // top stack + chrome reserved above the expanded sheet
+const SWIPE_THRESHOLD            = 24   // px of drag before a swipe triggers a state change
 
 type DrawerState = 'closed' | 'peek' | 'expanded'
+
+function nextStateUp(s: DrawerState): DrawerState {
+  return s === 'closed' ? 'peek' : 'expanded'
+}
+function nextStateDown(s: DrawerState): DrawerState {
+  return s === 'expanded' ? 'peek' : 'closed'
+}
 
 // Top-stack scrim: paper100 fading to transparent over the header +
 // search + chips + scale band, so the globe pattern doesn't fight the
@@ -417,26 +432,36 @@ export function GlobeScreenMapbox() {
 
   // ── Drawer animation + state coupling ──────────────────────────────────────
 
-  const closedH = DRAWER_CLOSED_BASE_H + insets.bottom
-  const closedTop = SCREEN_H - closedH
-  const peekTop = SCREEN_H - DRAWER_PEEK_H
-  const expandedTop = insets.top + DRAWER_EXPANDED_BOTTOM_OFFSET
+  // Tabs.Screen content area — measured via onLayout because
+  // Dimensions.get('window') includes the tab bar / status bar and
+  // would push the drawer off-screen if used as the baseline.
+  const [containerH, setContainerH] = useState(0)
 
-  const drawerTop = useRef(new Animated.Value(closedTop)).current
+  function onContainerLayout(e: LayoutChangeEvent) {
+    const h = e.nativeEvent.layout.height
+    if (h && h !== containerH) setContainerH(h)
+  }
+
+  const expandedH = Math.max(
+    DRAWER_PEEK_H,
+    containerH - (insets.top + DRAWER_EXPANDED_TOP_OFFSET),
+  )
+
+  const drawerHeight = useRef(new Animated.Value(DRAWER_CLOSED_H)).current
 
   useEffect(() => {
     const target =
       drawerState === 'closed'
-        ? closedTop
+        ? DRAWER_CLOSED_H
         : drawerState === 'expanded'
-          ? expandedTop
-          : peekTop
-    Animated.timing(drawerTop, {
+          ? expandedH
+          : DRAWER_PEEK_H
+    Animated.timing(drawerHeight, {
       toValue: target,
       ...theme.motion.patterns.overlay,
       useNativeDriver: false,
     }).start()
-  }, [drawerState, closedTop, peekTop, expandedTop, drawerTop])
+  }, [drawerState, expandedH, drawerHeight])
 
   // Auto-open closed → peek as soon as the user activates a search or
   // chip filter. We don't auto-close on clear; that would yank the
@@ -448,9 +473,29 @@ export function GlobeScreenMapbox() {
     }
   }, [hasActiveSearch, drawerState])
 
-  function handleGripPress() {
-    setDrawerState((s) => (s === 'closed' ? 'peek' : 'closed'))
-  }
+  const drawerStateRef = useRef(drawerState)
+  useEffect(() => { drawerStateRef.current = drawerState }, [drawerState])
+
+  // Grip gesture: tap toggles closed ↔ peek; vertical swipe moves one
+  // state up or down. PanResponder is mounted on the grip hit area only
+  // so it doesn't fight the horizontal rail's ScrollView underneath.
+  const gripPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 4,
+      onPanResponderRelease: (_, g) => {
+        const dy = g.dy
+        if (Math.abs(dy) < SWIPE_THRESHOLD) {
+          // Treat as a tap: toggle closed ↔ peek.
+          setDrawerState((s) => (s === 'closed' ? 'peek' : 'closed'))
+        } else if (dy < 0) {
+          setDrawerState((s) => nextStateUp(s))
+        } else {
+          setDrawerState((s) => nextStateDown(s))
+        }
+      },
+    }),
+  ).current
 
   function handleSeeAllPress() {
     setDrawerState((s) => (s === 'expanded' ? 'peek' : 'expanded'))
@@ -459,7 +504,7 @@ export function GlobeScreenMapbox() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} onLayout={onContainerLayout}>
       <Mapbox.MapView
         style={StyleSheet.absoluteFill}
         styleURL={Mapbox.StyleURL.Light}
@@ -648,20 +693,17 @@ export function GlobeScreenMapbox() {
       <Animated.View
         style={[
           styles.drawer,
-          {
-            top: drawerTop,
-            paddingBottom: insets.bottom + theme.spacing.sm,
-          },
+          { height: drawerHeight },
         ]}
       >
-        <Pressable
-          onPress={handleGripPress}
+        <View
+          {...gripPanResponder.panHandlers}
+          style={styles.gripHitArea}
           accessibilityRole="button"
           accessibilityLabel={drawerState === 'closed' ? 'Open results' : 'Close results'}
-          hitSlop={8}
         >
           <View style={styles.drawerGrip} />
-        </Pressable>
+        </View>
 
         {drawerState !== 'closed' && (
           <>
@@ -799,6 +841,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
+    overflow: 'hidden',
     backgroundColor: theme.colors.bg.glass,
     borderTopLeftRadius: theme.radius.md,
     borderTopRightRadius: theme.radius.md,
@@ -807,14 +850,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.md,
     ...theme.elevation.sheet,
   },
+  // Grip hit area — 44pt iOS target. The grip bar itself is 4px tall and
+  // centered; the surrounding hit area absorbs taps + swipes via the
+  // attached PanResponder.
+  gripHitArea: {
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   drawerGrip: {
     width: 38,
     height: 4,
     borderRadius: 2,
     backgroundColor: theme.colors.border.strong,
-    alignSelf: 'center',
-    marginTop: theme.spacing.sm,
-    marginBottom: theme.spacing.sm,
   },
   drawerHeader: {
     flexDirection: 'row',
