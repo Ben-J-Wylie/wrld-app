@@ -424,7 +424,7 @@ export function GlobeScreenMapbox() {
           setSelectedClusterStreams(null)
         }}
       >
-        <Atmosphere style={{ spaceColor: 'transparent', color: 'transparent', highColor: 'transparent', starIntensity: 0 }} />
+        <Atmosphere style={{ spaceColor: theme.colors.bg.primary, color: 'transparent', highColor: 'transparent', starIntensity: 0 }} />
 
         <Camera
           ref={cameraRef}
@@ -695,7 +695,7 @@ function DrawerEmptyState({
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: 'transparent' },
+  container: { flex: 1, backgroundColor: theme.colors.bg.primary },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
