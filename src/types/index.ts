@@ -66,6 +66,7 @@ export type Recording = {
   streamId: string
   status: 'recording' | 'ready' | 'failed' | 'expired'
   manifestUrl: string | null
+  thumbnailUrl: string | null
   durationSec: number | null
   sizeBytes: number
   startedAt: string   // ISO timestamp

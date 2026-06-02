@@ -1,4 +1,4 @@
-import { StyleSheet, View, FlatList, ActivityIndicator } from 'react-native'
+import { StyleSheet, View, FlatList, ActivityIndicator, Image } from 'react-native'
 import { useAuth } from '@clerk/clerk-expo'
 import { theme } from '@/tokens/theme'
 import { Text } from '@/components/primitives/Text'
@@ -37,26 +37,39 @@ function RecordingRow({ recording }: { recording: Recording }) {
 
   return (
     <Card variant="panel" style={styles.row}>
-      <View style={styles.rowHeader}>
-        <Text variant="bodyEmphasized" color={theme.colors.text.primary}>
-          {formatDate(recording.startedAt)}
-        </Text>
-        <View style={styles.rowBadges}>
-          {isInProgress && <Pill size="sm" variant="accent" label="RECORDING" />}
-          {isReady && isUnedited && <Pill size="sm" label="UNEDITED" />}
-          {recording.status === 'failed' && <Pill size="sm" label="FAILED" />}
+      <View style={styles.rowInner}>
+        {recording.thumbnailUrl ? (
+          <Image
+            source={{ uri: recording.thumbnailUrl }}
+            style={styles.thumb}
+            resizeMode="cover"
+          />
+        ) : (
+          <View style={[styles.thumb, styles.thumbPlaceholder]} />
+        )}
+        <View style={styles.rowBody}>
+          <View style={styles.rowHeader}>
+            <Text variant="bodyEmphasized" color={theme.colors.text.primary}>
+              {formatDate(recording.startedAt)}
+            </Text>
+            <View style={styles.rowBadges}>
+              {isInProgress && <Pill size="sm" variant="accent" label="RECORDING" />}
+              {isReady && isUnedited && <Pill size="sm" label="UNEDITED" />}
+              {recording.status === 'failed' && <Pill size="sm" label="FAILED" />}
+            </View>
+          </View>
+          <Text variant="caption" color={theme.colors.text.muted}>
+            {formatTime(recording.startedAt)}
+            {isReady && recording.durationSec !== null ? `  ·  ${formatDuration(recording.durationSec)}` : ''}
+            {isReady && recording.sizeBytes > 0 ? `  ·  ${formatSize(recording.sizeBytes)}` : ''}
+          </Text>
+          {recording.expiresAt ? (
+            <Text variant="caption" color={theme.colors.text.muted} style={styles.expiry}>
+              Expires {formatDate(recording.expiresAt)}
+            </Text>
+          ) : null}
         </View>
       </View>
-      <Text variant="caption" color={theme.colors.text.muted}>
-        {formatTime(recording.startedAt)}
-        {isReady && recording.durationSec !== null ? `  ·  ${formatDuration(recording.durationSec)}` : ''}
-        {isReady && recording.sizeBytes > 0 ? `  ·  ${formatSize(recording.sizeBytes)}` : ''}
-      </Text>
-      {recording.expiresAt ? (
-        <Text variant="caption" color={theme.colors.text.muted} style={styles.expiry}>
-          Expires {formatDate(recording.expiresAt)}
-        </Text>
-      ) : null}
     </Card>
   )
 }
@@ -129,19 +142,40 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
   },
   row: {
+    padding: 0,
+    overflow: 'hidden',
+  },
+  rowInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  thumb: {
+    width: 80,
+    height: 60,
+    borderTopLeftRadius: theme.radius.md,
+    borderBottomLeftRadius: theme.radius.md,
+  },
+  thumbPlaceholder: {
+    backgroundColor: theme.colors.bg.elevated,
+  },
+  rowBody: {
+    flex: 1,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
     gap: theme.spacing.xs,
   },
   rowHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: theme.spacing.sm,
   },
   rowBadges: {
     flexDirection: 'row',
     gap: theme.spacing.xs,
   },
   expiry: {
-    marginTop: theme.spacing.xs,
+    marginTop: 2,
   },
   centeredContent: {
     flex: 1,
