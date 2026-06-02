@@ -578,8 +578,8 @@ export function GlobeScreenMapbox() {
           defaultSettings={{ centerCoordinate: [0, 20], zoomLevel: 1.5 }}
           maxZoomLevel={20}
           padding={{
-            paddingTop: insets.top + CHIP_BOTTOM_OFFSET,
-            paddingBottom: DRAWER_CLOSED_H,
+            paddingTop: DRAWER_CLOSED_H,
+            paddingBottom: insets.top + CHIP_BOTTOM_OFFSET,
             paddingLeft: 0,
             paddingRight: 0,
           }}
