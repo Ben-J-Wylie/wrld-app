@@ -48,8 +48,6 @@ import { useStreamsNear } from '@/hooks/useStreamsNear'
 import { Text } from '@/components/primitives/Text'
 import { Pill } from '@/components/primitives/Pill'
 import { BrandMark } from '@/components/primitives/BrandMark'
-import { Button } from '@/components/primitives/Button'
-import { Icon } from '@/components/primitives/Icon'
 import { StreamStateBanner } from '@/components/features/stream/StreamStateBanner'
 import { StreamCard } from '@/components/features/stream/StreamCard'
 import {
@@ -68,8 +66,20 @@ const PIN_SINGLE  = '#FF3B5C'
 const PIN_BORDER  = '#FFFFFF'
 
 const SCREEN_H = Dimensions.get('window').height
-const DRAWER_PEEK_H = 200
+// Drawer has three states:
+//   closed   — only the grip visible (default at app launch and when no
+//              search/filter is active). Tap the grip to open.
+//   peek     — grip + header + horizontal scroll of StreamCard.trending.
+//              Auto-opened when a search query or non-"All" chip activates.
+//   expanded — grip + header + vertical list of StreamCard.compact, from
+//              just below the top stack down to the bottom of the screen.
+// Heights are tuned so StreamCard.trending (88 thumb + ~40 meta + border)
+// renders fully in peek without cropping.
+const DRAWER_CLOSED_BASE_H = 28      // grip + minimal padding (excludes safe-area inset)
+const DRAWER_PEEK_H = 250
 const DRAWER_EXPANDED_BOTTOM_OFFSET = 240 // top stack + chrome above expanded sheet
+
+type DrawerState = 'closed' | 'peek' | 'expanded'
 
 // Top-stack scrim: paper100 fading to transparent over the header +
 // search + chips + scale band, so the globe pattern doesn't fight the
@@ -109,9 +119,12 @@ export function GlobeScreenMapbox() {
   const [banner, setBanner] = useState<BannerData | null>(null)
   const [query, setQuery] = useState('')
   const [chipId, setChipId] = useState<string | null>(null)
-  const [drawerExpanded, setDrawerExpanded] = useState(false)
+  const [drawerState, setDrawerState] = useState<DrawerState>('closed')
   const [mapCenterLat, setMapCenterLat] = useState(20)
   const [mapZoom, setMapZoom] = useState(1.5)
+
+  const hasActiveSearch =
+    query.trim().length > 0 || (chipId !== null && chipId !== 'all')
 
   const bannerPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const coordsRef = useRef(coords)
@@ -402,18 +415,46 @@ export function GlobeScreenMapbox() {
 
   const liveCount = streams?.length ?? 0
 
-  // ── Drawer animation ──────────────────────────────────────────────────────
+  // ── Drawer animation + state coupling ──────────────────────────────────────
 
-  const drawerTop = useRef(new Animated.Value(SCREEN_H - DRAWER_PEEK_H)).current
+  const closedH = DRAWER_CLOSED_BASE_H + insets.bottom
+  const closedTop = SCREEN_H - closedH
+  const peekTop = SCREEN_H - DRAWER_PEEK_H
   const expandedTop = insets.top + DRAWER_EXPANDED_BOTTOM_OFFSET
 
+  const drawerTop = useRef(new Animated.Value(closedTop)).current
+
   useEffect(() => {
+    const target =
+      drawerState === 'closed'
+        ? closedTop
+        : drawerState === 'expanded'
+          ? expandedTop
+          : peekTop
     Animated.timing(drawerTop, {
-      toValue: drawerExpanded ? expandedTop : SCREEN_H - DRAWER_PEEK_H,
+      toValue: target,
       ...theme.motion.patterns.overlay,
       useNativeDriver: false,
     }).start()
-  }, [drawerExpanded, expandedTop, drawerTop])
+  }, [drawerState, closedTop, peekTop, expandedTop, drawerTop])
+
+  // Auto-open closed → peek as soon as the user activates a search or
+  // chip filter. We don't auto-close on clear; that would yank the
+  // results out from under the user. They tap the grip (or drag) to
+  // dismiss explicitly.
+  useEffect(() => {
+    if (hasActiveSearch && drawerState === 'closed') {
+      setDrawerState('peek')
+    }
+  }, [hasActiveSearch, drawerState])
+
+  function handleGripPress() {
+    setDrawerState((s) => (s === 'closed' ? 'peek' : 'closed'))
+  }
+
+  function handleSeeAllPress() {
+    setDrawerState((s) => (s === 'expanded' ? 'peek' : 'expanded'))
+  }
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -602,7 +643,8 @@ export function GlobeScreenMapbox() {
         </View>
       )}
 
-      {/* Bottom drawer — always visible */}
+      {/* Bottom drawer — closed by default, opens to peek when the user
+          searches or filters, expands when they tap "See all". */}
       <Animated.View
         style={[
           styles.drawer,
@@ -612,64 +654,69 @@ export function GlobeScreenMapbox() {
           },
         ]}
       >
-        <View style={styles.drawerGrip} />
-        <View style={styles.drawerHeader}>
-          <Text variant="monoLabel" color={theme.colors.text.muted}>
-            {drawerHeaderLabel(query, chipId, visibleStreams.length)}
-          </Text>
-          <Pressable
-            onPress={() => setDrawerExpanded(v => !v)}
-            hitSlop={8}
-          >
-            <Text variant="bodyEmphasized" color={theme.colors.accent.default}>
-              {drawerExpanded ? 'Collapse' : 'See all'}
-            </Text>
-          </Pressable>
-        </View>
+        <Pressable
+          onPress={handleGripPress}
+          accessibilityRole="button"
+          accessibilityLabel={drawerState === 'closed' ? 'Open results' : 'Close results'}
+          hitSlop={8}
+        >
+          <View style={styles.drawerGrip} />
+        </Pressable>
 
-        {visibleStreams.length === 0 ? (
-          <DrawerEmptyState
-            chipId={chipId}
-            query={query}
-            onGoLive={() => router.push('/(app)/dashboard')}
-          />
-        ) : drawerExpanded ? (
-          <ScrollView
-            contentContainerStyle={styles.drawerVerticalList}
-            showsVerticalScrollIndicator={false}
-          >
-            {visibleStreams.map(s => (
-              <StreamCard
-                key={s.id}
-                variant="compact"
-                title={s.title}
-                viewerCount={s.viewerCount}
-                channel={`@${s.host?.handle ?? 'unknown'}`}
-                city={s.host?.displayName ?? undefined}
-                isLive={s.isLive}
-                onPress={() => joinStream(s)}
-              />
-            ))}
-          </ScrollView>
-        ) : (
-          <ScrollView
-            horizontal
-            contentContainerStyle={styles.drawerRail}
-            showsHorizontalScrollIndicator={false}
-          >
-            {visibleStreams.map(s => (
-              <StreamCard
-                key={s.id}
-                variant="trending"
-                title={s.title}
-                viewerCount={s.viewerCount}
-                channel={`@${s.host?.handle ?? 'unknown'}`}
-                city={s.host?.displayName ?? undefined}
-                isLive={s.isLive}
-                onPress={() => joinStream(s)}
-              />
-            ))}
-          </ScrollView>
+        {drawerState !== 'closed' && (
+          <>
+            <View style={styles.drawerHeader}>
+              <Text variant="monoLabel" color={theme.colors.text.muted}>
+                {drawerHeaderLabel(query, chipId, visibleStreams.length)}
+              </Text>
+              <Pressable onPress={handleSeeAllPress} hitSlop={8}>
+                <Text variant="bodyEmphasized" color={theme.colors.accent.default}>
+                  {drawerState === 'expanded' ? 'Collapse' : 'See all'}
+                </Text>
+              </Pressable>
+            </View>
+
+            {visibleStreams.length === 0 ? (
+              <DrawerEmptyState chipId={chipId} query={query} />
+            ) : drawerState === 'expanded' ? (
+              <ScrollView
+                contentContainerStyle={styles.drawerVerticalList}
+                showsVerticalScrollIndicator={false}
+              >
+                {visibleStreams.map(s => (
+                  <StreamCard
+                    key={s.id}
+                    variant="compact"
+                    title={s.title}
+                    viewerCount={s.viewerCount}
+                    channel={`@${s.host?.handle ?? 'unknown'}`}
+                    city={s.host?.displayName ?? undefined}
+                    isLive={s.isLive}
+                    onPress={() => joinStream(s)}
+                  />
+                ))}
+              </ScrollView>
+            ) : (
+              <ScrollView
+                horizontal
+                contentContainerStyle={styles.drawerRail}
+                showsHorizontalScrollIndicator={false}
+              >
+                {visibleStreams.map(s => (
+                  <StreamCard
+                    key={s.id}
+                    variant="trending"
+                    title={s.title}
+                    viewerCount={s.viewerCount}
+                    channel={`@${s.host?.handle ?? 'unknown'}`}
+                    city={s.host?.displayName ?? undefined}
+                    isLive={s.isLive}
+                    onPress={() => joinStream(s)}
+                  />
+                ))}
+              </ScrollView>
+            )}
+          </>
         )}
       </Animated.View>
     </View>
@@ -690,29 +737,23 @@ function drawerHeaderLabel(query: string, chipId: string | null, count: number):
 function DrawerEmptyState({
   chipId,
   query,
-  onGoLive,
 }: {
   chipId: string | null
   query: string
-  onGoLive: () => void
 }) {
   const isFilterStub = chipId === 'city' || chipId === 'country'
   const body =
     query.trim().length > 0
-      ? 'Try a different search.'
+      ? 'No matches. Try a different search.'
       : isFilterStub
         ? 'This filter is coming soon.'
-        : 'Be the first to go live in your area.'
+        : 'No live streams nearby right now.'
 
   return (
     <View style={styles.drawerEmpty}>
-      <Icon name="globe" size="lg" color={theme.colors.text.subtle} />
       <Text variant="body" color={theme.colors.text.muted} style={styles.drawerEmptyText}>
         {body}
       </Text>
-      {query.trim().length === 0 && !isFilterStub && (
-        <Button label="Go live" onPress={onGoLive} variant="secondary" />
-      )}
     </View>
   )
 }
