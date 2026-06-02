@@ -349,8 +349,6 @@ export function StreamScreen() {
     useCallback(() => {
       if (isNew) {
         setAdminEnded(false)
-        setIsRecording(false)
-        setActiveRecordingId(null)
         return
       }
       navigatingRef.current = false
@@ -389,6 +387,8 @@ export function StreamScreen() {
   }, [isNew, status])
 
   async function handleGoLive() {
+    setIsRecording(false)
+    setActiveRecordingId(null)
     const title = (paramTitle ?? '').trim()
     if (!title || !coords || broadcastSources.length === 0) return
     try {
