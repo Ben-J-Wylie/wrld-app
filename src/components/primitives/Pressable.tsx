@@ -11,13 +11,12 @@
 //   none    → 1 (no scale feedback — used by things that have their own
 //                visual press response, e.g. an Input field highlight)
 //
-// The transition is `motion.timing.fast` (180ms) with ease-out — tactile
-// without feeling sluggish.
+// The transition follows the `press` motion pattern (fast + ease-out) —
+// tactile without feeling sluggish.
 
 import { useRef } from 'react'
 import {
   Animated,
-  Easing,
   Pressable as RNPressable,
   type GestureResponderEvent,
   type StyleProp,
@@ -67,8 +66,7 @@ export function Pressable({
     if (variant !== 'none') {
       Animated.timing(scale, {
         toValue: targetScale,
-        duration: theme.motion.timing.fast,
-        easing: Easing.out(Easing.quad),
+        ...theme.motion.patterns.press,
         useNativeDriver: true,
       }).start()
     }
@@ -79,8 +77,7 @@ export function Pressable({
     if (variant !== 'none') {
       Animated.timing(scale, {
         toValue: 1,
-        duration: theme.motion.timing.fast,
-        easing: Easing.out(Easing.quad),
+        ...theme.motion.patterns.press,
         useNativeDriver: true,
       }).start()
     }

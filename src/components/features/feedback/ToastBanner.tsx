@@ -89,12 +89,12 @@ export function ToastBanner({
     Animated.parallel([
       Animated.timing(opacity, {
         toValue: 1,
-        duration: theme.motion.timing.fast,
+        ...theme.motion.patterns.overlay,
         useNativeDriver: true,
       }),
       Animated.timing(translateY, {
         toValue: 0,
-        duration: theme.motion.timing.fast,
+        ...theme.motion.patterns.overlay,
         useNativeDriver: true,
       }),
     ]).start()

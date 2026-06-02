@@ -8,10 +8,10 @@
 // Sizes: sm (h:22) | md (h:28, default). Dot scales proportionally.
 //
 // The pulse animation runs on the native driver via `Animated.timing`
-// in a `loop` — opacity fades from 1 → 0.3 → 1 across 1.6s. No
-// CALayer-affecting properties (per the 2026-05-30 focus-shadow rule
-// in DESIGN.md decision log), only opacity, so it doesn't interact
-// with focus/keyboard behavior.
+// in a `loop` — opacity fades from 1 → 0.3 → 1 across one
+// `motion.patterns.pulse` cycle. No CALayer-affecting properties (per
+// the 2026-05-30 focus-shadow rule in DESIGN.md decision log), only
+// opacity, so it doesn't interact with focus/keyboard behavior.
 
 import { useEffect, useRef } from 'react'
 import { Animated, StyleSheet, type StyleProp, type ViewStyle } from 'react-native'
@@ -31,16 +31,20 @@ export function LivePill({ size = 'md', style }: Props) {
   const opacity = useRef(new Animated.Value(1)).current
 
   useEffect(() => {
+    const half = theme.motion.patterns.pulse.duration / 2
+    const easing = theme.motion.patterns.pulse.easing
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(opacity, {
           toValue: 0.3,
-          duration: 800,
+          duration: half,
+          easing,
           useNativeDriver: true,
         }),
         Animated.timing(opacity, {
           toValue: 1,
-          duration: 800,
+          duration: half,
+          easing,
           useNativeDriver: true,
         }),
       ]),

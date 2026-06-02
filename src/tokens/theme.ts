@@ -37,6 +37,8 @@
 //   mid-tier + CCPA jurisdiction badge.
 // - **Typography:** Inter Tight (sans) + IBM Plex Mono (mono).
 
+import { Easing } from 'react-native'
+
 // ─── Palette (raw values — NOT imported by components) ─────────────────────
 
 const palette = {
@@ -183,15 +185,28 @@ export const theme = {
       slow: 350,
       pulse: 1600,
     },
+    // RN `Easing` references, not CSS strings — these go straight into
+    // `Animated.timing({ easing })`. Standard is the workhorse (ease-out
+    // quad); inOut is for symmetric pulse/loop motion; linear is for
+    // continuously rotating decor (Spinner).
     easing: {
-      standard: 'ease-out',
-      spring: 'cubic-bezier(0.4, 1.4, 0.6, 1)',
-      inOut: 'cubic-bezier(0.4, 0, 0.2, 1)',
+      standard: Easing.out(Easing.quad),
+      inOut: Easing.inOut(Easing.quad),
+      linear: Easing.linear,
     },
     press: {
       scaleLarge: 0.98,
       scaleMid: 0.96,
       scaleSmall: 0.94,
+    },
+    // Named patterns — the 12.7 vocabulary. Consumers compose by pattern,
+    // not raw duration. Three patterns ship; `screen-transition` from the
+    // DESIGN.md draft list is deferred since expo-router handles route
+    // motion and no consumer exists today.
+    patterns: {
+      press:   { duration: 180,  easing: Easing.out(Easing.quad) },   // tap feedback — fast + decisive
+      overlay: { duration: 250,  easing: Easing.out(Easing.quad) },   // modal / banner enter+exit
+      pulse:   { duration: 1600, easing: Easing.inOut(Easing.quad) }, // LIVE indicator, armed CTA — full cycle (split in half by consumer)
     },
   },
 

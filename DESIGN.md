@@ -25,9 +25,9 @@ The four mechanical criteria for "Phase 12 done":
 The "feels like the same product" judgment is the _outcome_ of hitting those
 four — not a separate criterion.
 
-**Phase 12 status (2026-05-31):** sub-phases 12.0–12.6 ✅ done on the
-`design` branch and pending merge to `main`. Only 12.7 (motion pass)
-remains.
+**Phase 12 status (2026-06-01):** sub-phases 12.0–12.7 ✅ done. 12.5/12.6
+merged to `main` at `f18bd48` (2026-05-31); 12.7 motion pass on `design`
+and pending merge.
 
 ---
 
@@ -3170,20 +3170,107 @@ implementations to refactor.
 
 ## 5. Motion patterns
 
-Empty until Section 2 ships motion tokens. Resist animating everything.
+Three named patterns ship in sub-phase 12.7, exposed via
+`theme.motion.patterns.*`. Each pattern is a `{ duration, easing }` pair
+that consumers spread into `Animated.timing()`. Consumers compose by
+pattern name, not raw duration. Resist animating everything — the patterns
+exist to unify motion that already had to exist, not to invite new motion.
 
-Anticipated named patterns (to be defined with mocks):
+The `screen-transition` pattern from the 12.0 draft list is deferred:
+expo-router handles route motion via the underlying navigator, and no
+WRLD screen currently animates its own entry/exit. If we ever need a
+custom route transition, the pattern goes here.
 
-- `screen-transition` — entry/exit between routes
-- `card-press` — primitive press feedback
-- `modal-entry` — bottom-sheet / AuthModal entry
-- `live-pulse` — live indicator pulse
+### Pattern: `press`
 
-Each pattern when defined gets: timing token (ms), easing, opacity/transform
-deltas, "Used in" sites.
+- **Token:** `theme.motion.patterns.press`
+- **Timing:** 180ms (`motion.timing.fast`)
+- **Easing:** `Easing.out(Easing.quad)` (the `standard` easing)
+- **What animates:** scale (1 → `motion.press.scaleMid/Large/Small`)
+- **Used in:** [Pressable](src/components/primitives/Pressable.tsx) — every
+  higher-tier interactive primitive composes Pressable, so this is the
+  universal tap feedback across the app.
 
-Motion at the seam (overlays appearing/transitioning over GL scenes) is
-handled by the same patterns; the seam is not a separate motion category.
+Press feedback is fast and decisive — the goal is "I tapped it" confirmation,
+not a flourish. Anything slower feels sluggish; anything snappier feels
+janky on slower hardware.
+
+### Pattern: `overlay`
+
+- **Token:** `theme.motion.patterns.overlay`
+- **Timing:** 250ms (`motion.timing.base`)
+- **Easing:** `Easing.out(Easing.quad)` (the `standard` easing)
+- **What animates:** opacity (0 → 1) + translateY (slide-in)
+- **Used in:**
+  [BottomSheet](src/components/primitives/BottomSheet.tsx) — sheet body
+  scrim opacity (sheet body itself rides a spring, not a tween) ·
+  [ToastBanner](src/components/features/feedback/ToastBanner.tsx) —
+  banner opacity + translateY entry
+
+Overlay enter/exit shares one duration so the AuthModal / TipSheet /
+ActionSheet / ToastBanner family all feel like they belong to the same
+overlay layer. Slightly slower than `press` because there's more visual
+weight settling into place.
+
+### Pattern: `pulse`
+
+- **Token:** `theme.motion.patterns.pulse`
+- **Timing:** 1600ms (`motion.timing.pulse`) — full cycle. Consumers split
+  in half (down + up) for a symmetric pulse.
+- **Easing:** `Easing.inOut(Easing.quad)` — symmetric, never reaches "rest"
+- **What animates:** opacity (1 ↔ 0.3) inside an `Animated.loop`
+- **Used in:**
+  [LivePill](src/components/features/stream/LivePill.tsx) — the leading
+  dot inside the LIVE pill ·
+  [GoBar](src/components/features/broadcast/GoBar.tsx) — the knob opacity
+  while the bar is in its `live` variant
+
+Pulse is reserved for "this is happening right now" markers. Resist
+applying it to anything else — overuse drains its meaning.
+
+### Why not `screen-transition`?
+
+The fourth name from the 12.0 placeholder is deliberately not shipped.
+expo-router uses React Navigation's underlying stack/tab transitions,
+which already feel right for our routes. Reaching into them to override
+would mean writing platform-specific animator code with no visible
+benefit. The token slot is reserved if a future screen needs custom
+transition behaviour (e.g. a wizard step animation between handle / avatar
+/ choice that's currently a hard cut).
+
+### Springs
+
+Two primitives use `Animated.spring` instead of a tween: BottomSheet's
+sheet-body translateY and Toggle / SegmentedToggle indicator translateX.
+Springs are not tokenized — they live as inline `{ stiffness, damping }`
+because RN's spring model is fundamentally different from a duration +
+easing pair, and the values are tuned per-component to the visual weight
+of the element being moved. If a third spring use case appears, we'll
+reconsider tokenizing spring profiles.
+
+### Decorative motion (not in patterns)
+
+Some motion is bespoke and lives outside the pattern system:
+
+- **Spinner rotation** — continuous `Easing.linear` loop, not a transient
+  state change
+- **FeedThumb mini-animations** — per-thumb decor (dial sweeps, waveform
+  jitter) tied to the kind of sensor; not a reusable pattern
+- **ReactionRail floaters** — Periscope-style upward decay with random
+  drift; one-off motion
+- **Tip burst** in StreamScreen — same pattern as ReactionRail
+- **GlobeScreen camera ad-hoc pans** — gesture-driven, not a tokenized
+  transition
+
+These intentionally stay outside the patterns block because they're
+decorative motion that's part of a specific component's identity. If
+they migrate to a shared pattern, they get a new entry here.
+
+### At the seam
+
+Motion at the seam (overlays appearing/transitioning over GL scenes — e.g.
+DiscoveryHandoffCard fading in over the globe) uses the same patterns
+above. The seam is not a separate motion category.
 
 ---
 
@@ -3191,6 +3278,50 @@ handled by the same patterns; the seam is not a separate motion category.
 
 Append-only. Most recent first. Each entry: date, decision, rationale,
 constraint it imposes downstream.
+
+### 2026-06-01 — Sub-phase 12.7 (motion pass) shipped
+
+Three named motion patterns ship in `theme.motion.patterns`: `press`,
+`overlay`, `pulse`. Each is a `{ duration, easing }` pair consumed by
+spreading into `Animated.timing()`. The `screen-transition` pattern from
+the 12.0 placeholder list is deferred — expo-router covers route motion
+and no consumer needs it today.
+
+Two ancillary cleanups landed alongside the patterns:
+
+- **Easing tokens converted from CSS strings to RN `Easing` references.**
+  The 12.3 token shape stored easings as `'cubic-bezier(...)'` strings,
+  which RN's `Animated` API can't consume. They were never imported by
+  any code. Replaced with `Easing.out(Easing.quad)`,
+  `Easing.inOut(Easing.quad)`, `Easing.linear`. This couples `theme.ts`
+  to `react-native` via one named import — acceptable since the codebase
+  is RN-only.
+- **The dropped `spring` easing token** (`cubic-bezier(0.4, 1.4, 0.6, 1)`)
+  had no consumer — RN's `Animated.spring` is its own thing, not a tween
+  easing, so a tween token for it was always nonsensical. Removed.
+
+Adoption:
+- [Pressable](src/components/primitives/Pressable.tsx) → `patterns.press`
+- [BottomSheet](src/components/primitives/BottomSheet.tsx) → `patterns.overlay`
+- [ToastBanner](src/components/features/feedback/ToastBanner.tsx) → `patterns.overlay`
+- [LivePill](src/components/features/stream/LivePill.tsx) → `patterns.pulse` (half-cycle each direction)
+- [GoBar](src/components/features/broadcast/GoBar.tsx) → `patterns.pulse` (half-cycle each direction)
+
+Motion left outside the pattern system: Spinner rotation, FeedThumb
+sensor-decor, ReactionRail floaters, StreamScreen tip burst, GlobeScreen
+ad-hoc camera pans, the two `Animated.spring` indicators
+(BottomSheet sheet-body, Toggle / SegmentedToggle indicator). Documented
+in Section 5.
+
+**Imposes:**
+
+- New motion that fits one of the three patterns must compose through
+  `theme.motion.patterns.*`, not via raw `duration:` literals.
+- Adding a new pattern requires a Section 5 entry + this section
+  (justify the new role, list adopters from day one).
+- Phase 12 is now complete. Next Phase 12-style cascade work (DESIGN.md
+  / token / primitive iteration) carries the same merge protocol via the
+  `design` branch.
 
 ### 2026-05-31 (evening) — `design` branch re-spun for 12.7+
 
