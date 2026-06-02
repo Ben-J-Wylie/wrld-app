@@ -409,7 +409,7 @@ export function GlobeScreenMapbox() {
     <View style={styles.container}>
       <Mapbox.MapView
         style={StyleSheet.absoluteFill}
-        styleURL={Mapbox.StyleURL.SatelliteStreet}
+        styleURL={Mapbox.StyleURL.Light}
         projection="globe"
         logoEnabled={false}
         attributionEnabled={false}
