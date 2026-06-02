@@ -17,7 +17,10 @@
 //     state lives on that screen, not here.
 
 import { useState, useCallback } from 'react'
-import { StyleSheet, View } from 'react-native'
+import { Alert, StyleSheet, View } from 'react-native'
+import { Filter as ProfanityFilter } from 'bad-words'
+
+const profanityFilter = new ProfanityFilter()
 import { router, useFocusEffect } from 'expo-router'
 import { theme } from '@/tokens/theme'
 import { ScreenScroll } from '@/components/sections/ScreenScroll'
@@ -90,6 +93,10 @@ export function DashboardScreen() {
 
   function handleGoLive() {
     if (!canGoLive) return
+    if (profanityFilter.isProfane(title.trim())) {
+      Alert.alert('Title not allowed', 'Your stream title contains prohibited content. Please choose a different title.')
+      return
+    }
     const params = {
       title: title.trim(),
       sources: Array.from(readySources).join(','),

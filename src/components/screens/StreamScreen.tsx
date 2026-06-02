@@ -43,6 +43,9 @@ import {
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { captureScreen } from 'react-native-view-shot'
+import { Filter as ProfanityFilter } from 'bad-words'
+
+const profanityFilter = new ProfanityFilter()
 import { useLocalSearchParams, router, useFocusEffect } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { RTCView } from 'react-native-webrtc'
@@ -546,6 +549,10 @@ export function StreamScreen() {
   function handleSendChat() {
     const trimmed = chatInput.trim()
     if (!trimmed) return
+    if (profanityFilter.isProfane(trimmed)) {
+      Alert.alert('Message not sent', 'Your message contains prohibited content.')
+      return
+    }
     sendChatMessage(trimmed, wrldUser?.handle ?? 'user')
     setChatInput('')
   }
