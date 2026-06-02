@@ -67,12 +67,16 @@ export function DashboardScreen() {
 
   useFocusEffect(useCallback(() => {
     const active = activeBroadcast.get()
-    if (active) {
+    if (!active) return
+    // Defer past the tab-transition commit so the navigate doesn't
+    // conflict with the incoming tab switch.
+    const t = setTimeout(() => {
       router.navigate({
         pathname: '/(app)/stream/[id]',
         params: { id: 'new', title: active.title, sources: active.sources },
       })
-    }
+    }, 0)
+    return () => clearTimeout(t)
   }, []))
 
   function toggleSource(type: SourceType) {

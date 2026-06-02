@@ -7,7 +7,7 @@ export function useRecordings(enabled = true) {
     queryKey: ['recordings'],
     queryFn: recordingsApi.list,
     enabled,
-    staleTime: 0,
+    staleTime: 10_000,
     // Poll every 3s while any recording is still processing, then stop.
     refetchInterval: (query) => {
       const data = query.state.data as Recording[] | undefined

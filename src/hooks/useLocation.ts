@@ -24,6 +24,17 @@ export function useLocation() {
         return
       }
 
+      // Seed immediately from cache so the UI is never blocked waiting for GPS.
+      const last = await Location.getLastKnownPositionAsync()
+      if (!cancelled && last) {
+        setState({
+          coords: { latitude: last.coords.latitude, longitude: last.coords.longitude },
+          error: null,
+          loading: false,
+        })
+      }
+
+      // Then get a fresh fix in the background.
       const loc = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced,
       })
