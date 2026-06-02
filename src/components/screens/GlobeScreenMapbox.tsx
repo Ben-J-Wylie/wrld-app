@@ -104,7 +104,7 @@ const COMMIT_DRAG_DISTANCE       = 60   // px past TAP_DRAG_TOLERANCE before a d
 // drawer doesn't crowd it. peek and expanded share the same fraction
 // — the globe stays put while the drawer slides between them.
 const GLOBE_FRAC_CLOSED = 0.59
-const GLOBE_FRAC_OPEN   = 0.50
+const GLOBE_FRAC_OPEN   = 0.48
 
 type DrawerState = 'closed' | 'peek' | 'expanded'
 
