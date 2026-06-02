@@ -78,7 +78,7 @@ export function BottomSheet({
         }),
         Animated.timing(scrimOpacity, {
           toValue: 1,
-          duration: theme.motion.timing.base,
+          ...theme.motion.patterns.overlay,
           useNativeDriver: true,
         }),
       ]).start()
@@ -86,12 +86,12 @@ export function BottomSheet({
       Animated.parallel([
         Animated.timing(translateY, {
           toValue: SCREEN_H,
-          duration: theme.motion.timing.base,
+          ...theme.motion.patterns.overlay,
           useNativeDriver: true,
         }),
         Animated.timing(scrimOpacity, {
           toValue: 0,
-          duration: theme.motion.timing.base,
+          ...theme.motion.patterns.overlay,
           useNativeDriver: true,
         }),
       ]).start()

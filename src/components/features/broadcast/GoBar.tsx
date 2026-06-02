@@ -59,10 +59,12 @@ export function GoBar({ variant, countdownSec, onPress, style }: Props) {
 
   useEffect(() => {
     if (variant !== 'live') return
+    const half = theme.motion.patterns.pulse.duration / 2
+    const easing = theme.motion.patterns.pulse.easing
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(pulse, { toValue: 1, duration: 800, useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 0, duration: 800, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1, duration: half, easing, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0, duration: half, easing, useNativeDriver: true }),
       ]),
     )
     loop.start()
