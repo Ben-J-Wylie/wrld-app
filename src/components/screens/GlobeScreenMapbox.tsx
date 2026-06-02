@@ -424,7 +424,7 @@ export function GlobeScreenMapbox() {
           setSelectedClusterStreams(null)
         }}
       >
-        <Atmosphere style={{ spaceColor: 'transparent' }} />
+        <Atmosphere style={{ spaceColor: 'transparent', color: 'transparent', highColor: 'transparent', starIntensity: 0 }} />
 
         <Camera
           ref={cameraRef}
