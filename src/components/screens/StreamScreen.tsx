@@ -41,6 +41,7 @@ import {
   View,
 } from 'react-native'
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { captureScreen } from 'react-native-view-shot'
 import { useLocalSearchParams, router, useFocusEffect } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -163,7 +164,16 @@ export function StreamScreen() {
   } = useSignaling()
   // Broadcaster: look up the DB stream once in-room so we have streamId for recording.
   // roomId is only available after useSignaling, so this query lives here.
-  const { data: broadcasterStream } = useStreamByRoom(isNew && !!roomId ? roomId : null)
+  // gcTime: 0 prevents a stale cache entry from a previous session's room with the same
+  // 4-digit ID being served — that would make streamId point at an ended stream and cause
+  // POST /recordings to return 400 "Stream is not live".
+  const { data: broadcasterStream } = useQuery({
+    queryKey: ['broadcaster-stream', roomId],
+    queryFn: () => streamsApi.getByRoom(roomId!),
+    enabled: isNew && !!roomId,
+    staleTime: 0,
+    gcTime: 0,
+  })
   const streamId = paramStreamId || streamByRoom?.id || broadcasterStream?.id || ''
   const invalidateCurrentUser = useInvalidateCurrentUser()
   const invalidateWallet = useInvalidateWallet()
