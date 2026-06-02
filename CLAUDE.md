@@ -1184,3 +1184,39 @@ A self-contained screen that owns the full discovery experience. No EarthScene i
 | `src/canvas/scenes/earth/EarthScene.tsx` | Untouched |
 
 **No EAS rebuild required** — `@rnmapbox/maps` is already in the dev client. Metro hot-reload is sufficient.
+
+---
+
+## Updates — June 2026 (Location precision: settings + globe rendering)
+
+### Creator location precision settings (`src/components/screens/SettingsScreen.tsx`)
+
+Creators can now update their location visibility from the Settings screen without going through creator onboarding again. A **PRIVACY** section appears between ACCOUNT and NOTIFICATIONS, but only when `wrldUser.creatorReady` is true.
+
+The section renders the existing `LocationGranularityPicker` (from `src/components/features/onboarding/LocationGranularityPicker.tsx`) inline — no new screen or navigation needed. Selecting a card saves immediately via `usersApi.updateLocationPrecision()` with optimistic update and revert on failure.
+
+**Vocabulary mapping:** The picker uses `'bluedot' | 'city' | 'country' | 'private'`; the backend uses `'exact' | 'city' | 'country' | 'off'`. Two helper functions at the top of `SettingsScreen.tsx` (`precisionToGranularity`, `granularityToPrecision`) translate between them.
+
+**Known pre-existing bug:** The creator onboarding wizard (`CreatorOnboardingScreen.tsx`) sends `'bluedot'` and `'private'` directly to `PATCH /users/me/creator-onboarding`, which validates against `'exact' | 'city' | 'country' | 'off'`. This means selecting exact or off during onboarding silently fails Zod validation on the backend. The settings screen uses the correct backend values and works correctly.
+
+### Globe precision rendering (`src/components/screens/GlobeScreenMapbox.tsx`)
+
+Each stream feature in the GeoJSON now carries a `precision` property (`'exact' | 'city' | 'country'`). Three distinct `CircleLayer` styles render based on this:
+
+| Precision | Visual | Params |
+|-----------|--------|--------|
+| `exact` | Sharp pin | r=14, opacity=0.95, blur=0 (current behavior) |
+| `city` | Soft halo | r=44, opacity=0.35, blur=0.85, stroke opacity=0.6 |
+| `country` | Diffuse haze | r=72, opacity=0.25, blur=1, no stroke |
+
+`off` precision streams are excluded server-side and never reach the client. Viewer-count labels are only rendered on `exact` pins.
+
+The city and country halos are centered on the obfuscated/centroid coordinates returned by the backend — not the creator's real location.
+
+### New API method (`src/api/users.ts`)
+
+`usersApi.updateLocationPrecision(precision)` — `PATCH /users/me` with `{ locationPrecision }`. Uses the same endpoint as profile updates (displayName, handle).
+
+### Stream type (`src/types/index.ts`)
+
+`Stream` now has `locationPrecision?: 'exact' | 'city' | 'country'`. The `'off'` value never appears in the app since those streams are filtered by the backend before delivery.
