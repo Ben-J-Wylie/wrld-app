@@ -99,7 +99,7 @@ const COMMIT_DRAG_DISTANCE       = 60   // px past TAP_DRAG_TOLERANCE before a d
 // sphere keeps its rendered size; only its on-screen position moves.
 // translateY = containerH * (GLOBE_CENTER_FRAC - 0.5) lands the sphere
 // centre at GLOBE_CENTER_FRAC of the container's height from the top.
-const GLOBE_CENTER_FRAC = 0.58
+const GLOBE_CENTER_FRAC = 0.59
 
 type DrawerState = 'closed' | 'peek' | 'expanded'
 
