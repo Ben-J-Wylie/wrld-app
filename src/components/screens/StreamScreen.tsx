@@ -76,6 +76,7 @@ import { signalStreamDisconnected, signalStreamEnded, signalKicked } from '@/lib
 import { signalingClient } from '@/lib/mediasoupSignaling'
 import { activeBroadcast } from '@/lib/activeBroadcast'
 import { streamsApi } from '@/api/streams'
+import { recordingsApi } from '@/api/recordings'
 import { useSignaling } from '@/hooks/useSignaling'
 import { useMediasoup } from '@/hooks/useMediasoup'
 import { useLocation } from '@/hooks/useLocation'
@@ -144,7 +145,6 @@ export function StreamScreen() {
 
   // When arriving via a deep-link notification without full params, look up by room ID
   const { data: streamByRoom } = useStreamByRoom(!paramStreamId && !isNew ? id : null)
-  const streamId = paramStreamId || streamByRoom?.id || ''
   const broadcastSources: SourceType[] = paramSources
     ? (paramSources.split(',').filter(Boolean) as SourceType[])
     : ((streamByRoom?.sources ?? []) as SourceType[])
@@ -161,6 +161,10 @@ export function StreamScreen() {
     sendTip, dismissTip,
     sendBroadcasterPaused, sendBroadcasterResumed, sendBroadcasterOrientation,
   } = useSignaling()
+  // Broadcaster: look up the DB stream once in-room so we have streamId for recording.
+  // roomId is only available after useSignaling, so this query lives here.
+  const { data: broadcasterStream } = useStreamByRoom(isNew && !!roomId ? roomId : null)
+  const streamId = paramStreamId || streamByRoom?.id || broadcasterStream?.id || ''
   const invalidateCurrentUser = useInvalidateCurrentUser()
   const invalidateWallet = useInvalidateWallet()
   const {
@@ -191,6 +195,8 @@ export function StreamScreen() {
   const [viewers, setViewers] = useState<{ peerId: string; handle: string | null }[]>([])
   const [broadcasterTipToast, setBroadcasterTipToast] = useState<string | null>(null)
   const [keyboardHeight, setKeyboardHeight] = useState(0)
+  const [isRecording, setIsRecording] = useState(false)
+  const [activeRecordingId, setActiveRecordingId] = useState<string | null>(null)
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const tipToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Guards against double-navigation when multiple end signals arrive simultaneously
@@ -407,7 +413,33 @@ export function StreamScreen() {
     router.navigate('/(app)/dashboard')
   }
 
+  async function handleToggleRecording() {
+    if (isRecording) {
+      if (!activeRecordingId) return
+      try {
+        await recordingsApi.stop(activeRecordingId)
+        setIsRecording(false)
+        setActiveRecordingId(null)
+      } catch (err) {
+        Alert.alert('Error', err instanceof Error ? err.message : 'Could not stop recording')
+      }
+    } else {
+      if (!streamId) return
+      try {
+        const { recordingId } = await recordingsApi.start(streamId)
+        setActiveRecordingId(recordingId)
+        setIsRecording(true)
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Could not start recording'
+        Alert.alert('Recording', msg)
+      }
+    }
+  }
+
   function handleLeave() {
+    if (isRecording && activeRecordingId) {
+      recordingsApi.stop(activeRecordingId).catch(() => {})
+    }
     activeBroadcast.clear()
     cleanup()
     disconnect()
@@ -795,6 +827,20 @@ export function StreamScreen() {
                       {viewerCount} {viewerCount === 1 ? 'viewer' : 'viewers'}
                     </Text>
                   </Pressable>
+                  <Pressable
+                    onPress={handleToggleRecording}
+                    disabled={!streamId}
+                    style={[styles.recordBtn, isRecording && styles.recordBtnActive]}
+                    hitSlop={8}
+                  >
+                    <View style={[styles.recordDot, isRecording && styles.recordDotActive]} />
+                    <Text
+                      variant="monoLabel"
+                      color={isRecording ? theme.colors.text.inverse : theme.colors.text.primary}
+                    >
+                      {isRecording ? 'STOP REC' : 'REC'}
+                    </Text>
+                  </Pressable>
                 </View>
               )}
 
@@ -1132,6 +1178,30 @@ const styles = StyleSheet.create({
     zIndex: 20,
   },
 
+  recordBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.radius.full,
+    borderWidth: 1,
+    borderColor: theme.colors.border.subtle,
+    backgroundColor: theme.colors.bg.elevated,
+  },
+  recordBtnActive: {
+    backgroundColor: '#D0233A',
+    borderColor: '#D0233A',
+  },
+  recordDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#D0233A',
+  },
+  recordDotActive: {
+    backgroundColor: theme.colors.text.inverse,
+  },
   adminEndedContainer: {
     backgroundColor: theme.colors.bg.primary,
     justifyContent: 'center',
