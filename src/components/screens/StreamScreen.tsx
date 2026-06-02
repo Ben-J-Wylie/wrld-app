@@ -207,6 +207,14 @@ export function StreamScreen() {
   const [keyboardHeight, setKeyboardHeight] = useState(0)
   const [isRecording, setIsRecording] = useState(false)
   const [activeRecordingId, setActiveRecordingId] = useState<string | null>(null)
+
+  function stopActiveRecording() {
+    if (activeRecordingId) {
+      recordingsApi.stop(activeRecordingId).catch(() => {})
+    }
+    setIsRecording(false)
+    setActiveRecordingId(null)
+  }
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const tipToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Guards against double-navigation when multiple end signals arrive simultaneously
@@ -255,6 +263,7 @@ export function StreamScreen() {
 
   useEffect(() => {
     if (!adminEnded || !isNew) return
+    stopActiveRecording()
     activeBroadcast.clear()
     cleanup()
     disconnect()
@@ -340,6 +349,8 @@ export function StreamScreen() {
     useCallback(() => {
       if (isNew) {
         setAdminEnded(false)
+        setIsRecording(false)
+        setActiveRecordingId(null)
         return
       }
       navigatingRef.current = false
@@ -364,6 +375,7 @@ export function StreamScreen() {
     if (!isNew || status !== 'in-room') return
     const sub = AppState.addEventListener('change', (nextState) => {
       if (nextState === 'background') {
+        stopActiveRecording()
         cleanup()
         disconnect()
       } else if (nextState === 'inactive') {
@@ -447,9 +459,7 @@ export function StreamScreen() {
   }
 
   function handleLeave() {
-    if (isRecording && activeRecordingId) {
-      recordingsApi.stop(activeRecordingId).catch(() => {})
-    }
+    stopActiveRecording()
     activeBroadcast.clear()
     cleanup()
     disconnect()
