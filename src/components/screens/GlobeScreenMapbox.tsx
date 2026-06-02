@@ -83,8 +83,8 @@ const PIN_BORDER  = '#FFFFFF'
 // math. The drawer is positioned `bottom: 0` (i.e. just above the tab
 // bar) and we animate its height.
 const DRAWER_CLOSED_H            = 44   // grip + breathing room above the tab bar
-const DRAWER_PEEK_H              = 250  // header + StreamCard.trending (144) + rail padding
-const DRAWER_EXPANDED_TOP_OFFSET = 220  // top stack + chrome reserved above the expanded sheet
+const DRAWER_PEEK_H              = 220  // header + StreamCard.trending (144) + rail padding
+const DRAWER_EXPANDED_TOP_OFFSET = 190  // top stack + chrome reserved above the expanded sheet
 const TAP_DRAG_TOLERANCE         = 10   // |dy| under this is a tap, not a drag
 const COMMIT_DRAG_DISTANCE       = 60   // px past TAP_DRAG_TOLERANCE before a drag commits
 
@@ -755,7 +755,7 @@ export function GlobeScreenMapbox() {
               </Text>
               <Pressable onPress={handleSeeAllPress} hitSlop={8}>
                 <Text variant="bodyEmphasized" color={theme.colors.accent.default}>
-                  {drawerState === 'expanded' ? 'Collapse' : 'See all'}
+                  {drawerState === 'expanded' ? 'Less' : 'More'}
                 </Text>
               </Pressable>
             </View>
