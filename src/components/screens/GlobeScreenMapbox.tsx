@@ -938,13 +938,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.md,
     ...theme.elevation.sheet,
   },
-  // Grip hit area — 44pt iOS target. The grip bar itself is 4px tall and
-  // centered; the surrounding hit area absorbs taps + swipes via the
-  // attached PanResponder.
+  // Grip hit area — generous touch target. The View itself is 48px tall
+  // and pads the grip down 10px from the top so the visible bar sits
+  // exactly where it did at 24px height. `marginBottom: -24` pulls the
+  // next sibling (drawerHeader) back to its original y position, so
+  // layout is unchanged — only the touch area grows. The PanResponder
+  // attached to this View captures taps + swipes; the overlapped header
+  // area still routes its own Pressable taps correctly (RN dispatches
+  // to the topmost view with a responder).
   gripHitArea: {
-    height: 24,
+    height: 48,
+    paddingTop: 10,
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
+    marginBottom: -24,
   },
   drawerGrip: {
     width: 38,
