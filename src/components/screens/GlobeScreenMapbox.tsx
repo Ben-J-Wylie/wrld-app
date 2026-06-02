@@ -88,6 +88,13 @@ const DRAWER_EXPANDED_TOP_OFFSET = 190  // top stack + chrome reserved above the
 const TAP_DRAG_TOLERANCE         = 10   // |dy| under this is a tap, not a drag
 const COMMIT_DRAG_DISTANCE       = 60   // px past TAP_DRAG_TOLERANCE before a drag commits
 
+// Top-stack height below the safe-area inset: header (~40) + search row
+// (~48) + chip row (~44) = ~132. The scale ruler sits below this and
+// reads off the globe itself, so it is NOT part of the offset. Used as
+// the camera's paddingTop so the globe centers in the band between the
+// chip row and the closed-state drawer.
+const CHIP_BOTTOM_OFFSET = 132
+
 type DrawerState = 'closed' | 'peek' | 'expanded'
 
 function nextStateUp(s: DrawerState): DrawerState {
@@ -570,6 +577,12 @@ export function GlobeScreenMapbox() {
           ref={cameraRef}
           defaultSettings={{ centerCoordinate: [0, 20], zoomLevel: 1.5 }}
           maxZoomLevel={20}
+          padding={{
+            paddingTop: insets.top + CHIP_BOTTOM_OFFSET,
+            paddingBottom: DRAWER_CLOSED_H,
+            paddingLeft: 0,
+            paddingRight: 0,
+          }}
         />
 
         <ShapeSource
