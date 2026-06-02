@@ -1,4 +1,6 @@
 import { StyleSheet, View, FlatList, ActivityIndicator, Image } from 'react-native'
+import { useCallback } from 'react'
+import { useFocusEffect } from 'expo-router'
 import { useAuth } from '@clerk/clerk-expo'
 import { theme } from '@/tokens/theme'
 import { Text } from '@/components/primitives/Text'
@@ -76,7 +78,11 @@ function RecordingRow({ recording }: { recording: Recording }) {
 
 export const LibraryScreen = () => {
   const { isSignedIn } = useAuth()
-  const { data: recordings, isLoading, isError } = useRecordings(!!isSignedIn)
+  const { data: recordings, isLoading, isError, refetch } = useRecordings(!!isSignedIn)
+
+  useFocusEffect(useCallback(() => {
+    if (isSignedIn) refetch()
+  }, [isSignedIn]))
 
   if (!isSignedIn) {
     return (

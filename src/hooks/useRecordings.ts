@@ -6,6 +6,6 @@ export function useRecordings(enabled = true) {
     queryKey: ['recordings'],
     queryFn: recordingsApi.list,
     enabled,
-    staleTime: 1000 * 30,
+    staleTime: 0,
   })
 }
