@@ -83,9 +83,10 @@ const PIN_BORDER  = '#FFFFFF'
 // math. The drawer is positioned `bottom: 0` (i.e. just above the tab
 // bar) and we animate its height.
 const DRAWER_CLOSED_H            = 44   // grip + breathing room above the tab bar
-const DRAWER_PEEK_H              = 270  // header + StreamCard.trending (144) + rail padding
-const DRAWER_EXPANDED_TOP_OFFSET = 240  // top stack + chrome reserved above the expanded sheet
-const SWIPE_THRESHOLD            = 24   // px of drag before a swipe triggers a state change
+const DRAWER_PEEK_H              = 250  // header + StreamCard.trending (144) + rail padding
+const DRAWER_EXPANDED_TOP_OFFSET = 220  // top stack + chrome reserved above the expanded sheet
+const TAP_DRAG_TOLERANCE         = 10   // |dy| under this is a tap, not a drag
+const COMMIT_DRAG_DISTANCE       = 60   // px past TAP_DRAG_TOLERANCE before a drag commits
 
 type DrawerState = 'closed' | 'peek' | 'expanded'
 
@@ -103,8 +104,8 @@ function nextStateDown(s: DrawerState): DrawerState {
 // expressed inline as rgba because LinearGradient needs colour strings
 // with explicit alpha stops — same precedent as `bg.glass`.
 const TOP_SCRIM_HEIGHT = 220
-const TOP_SCRIM_TOP    = 'rgba(236,230,214,0.92)'
-const TOP_SCRIM_MID    = 'rgba(236,230,214,0.65)'
+const TOP_SCRIM_TOP    = 'rgba(236,230,214,1)'
+const TOP_SCRIM_MID    = 'rgba(236,230,214,0.85)'
 const TOP_SCRIM_BOTTOM = 'rgba(236,230,214,0)'
 
 const CATEGORIES: Category[] = [
@@ -449,19 +450,35 @@ export function GlobeScreenMapbox() {
 
   const drawerHeight = useRef(new Animated.Value(DRAWER_CLOSED_H)).current
 
-  useEffect(() => {
-    const target =
-      drawerState === 'closed'
-        ? DRAWER_CLOSED_H
-        : drawerState === 'expanded'
-          ? expandedH
-          : DRAWER_PEEK_H
+  // Refs used by the PanResponder so its long-lived closure reads
+  // current values, not the ones captured at mount.
+  const drawerStateRef = useRef<DrawerState>('closed')
+  const expandedHRef = useRef(expandedH)
+  const dragStartHeightRef = useRef(DRAWER_CLOSED_H)
+
+  useEffect(() => { drawerStateRef.current = drawerState }, [drawerState])
+  useEffect(() => { expandedHRef.current = expandedH }, [expandedH])
+
+  function heightForState(s: DrawerState): number {
+    return s === 'closed'
+      ? DRAWER_CLOSED_H
+      : s === 'expanded'
+        ? expandedHRef.current
+        : DRAWER_PEEK_H
+  }
+
+  function animateToState(s: DrawerState) {
     Animated.timing(drawerHeight, {
-      toValue: target,
+      toValue: heightForState(s),
       ...theme.motion.patterns.overlay,
       useNativeDriver: false,
     }).start()
-  }, [drawerState, expandedH, drawerHeight])
+  }
+
+  useEffect(() => {
+    animateToState(drawerState)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drawerState, expandedH])
 
   // Auto-open closed → peek as soon as the user activates a search or
   // chip filter. We don't auto-close on clear; that would yank the
@@ -473,26 +490,51 @@ export function GlobeScreenMapbox() {
     }
   }, [hasActiveSearch, drawerState])
 
-  const drawerStateRef = useRef(drawerState)
-  useEffect(() => { drawerStateRef.current = drawerState }, [drawerState])
-
-  // Grip gesture: tap toggles closed ↔ peek; vertical swipe moves one
-  // state up or down. PanResponder is mounted on the grip hit area only
-  // so it doesn't fight the horizontal rail's ScrollView underneath.
+  // Grip gesture: while the user drags, the drawer sticks to the finger
+  // (height = startHeight - dy, clamped between closed + expanded).
+  // On release we decide:
+  //   - drag < TAP_DRAG_TOLERANCE px       → tap, toggle closed ↔ peek
+  //   - drag ≥ COMMIT_DRAG_DISTANCE px up  → next state up
+  //   - drag ≥ COMMIT_DRAG_DISTANCE px dn  → next state down
+  //   - otherwise                          → snap back to current state
+  // PanResponder is mounted on the grip hit area only so it doesn't
+  // fight the horizontal rail's ScrollView underneath.
   const gripPanResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 4,
+      onPanResponderGrant: () => {
+        drawerHeight.stopAnimation((v: number) => {
+          dragStartHeightRef.current = v
+        })
+      },
+      onPanResponderMove: (_, g) => {
+        const start = dragStartHeightRef.current
+        const max = expandedHRef.current
+        const next = Math.max(DRAWER_CLOSED_H, Math.min(max, start - g.dy))
+        drawerHeight.setValue(next)
+      },
       onPanResponderRelease: (_, g) => {
         const dy = g.dy
-        if (Math.abs(dy) < SWIPE_THRESHOLD) {
-          // Treat as a tap: toggle closed ↔ peek.
-          setDrawerState((s) => (s === 'closed' ? 'peek' : 'closed'))
-        } else if (dy < 0) {
-          setDrawerState((s) => nextStateUp(s))
-        } else {
-          setDrawerState((s) => nextStateDown(s))
+        const current = drawerStateRef.current
+        let target: DrawerState = current
+        if (Math.abs(dy) < TAP_DRAG_TOLERANCE) {
+          target = current === 'closed' ? 'peek' : 'closed'
+        } else if (dy <= -COMMIT_DRAG_DISTANCE) {
+          target = nextStateUp(current)
+        } else if (dy >= COMMIT_DRAG_DISTANCE) {
+          target = nextStateDown(current)
         }
+        if (target === current) {
+          // Snap back to the current state's resting height — the state
+          // setter wouldn't fire the effect if the value matches.
+          animateToState(current)
+        } else {
+          setDrawerState(target)
+        }
+      },
+      onPanResponderTerminate: () => {
+        animateToState(drawerStateRef.current)
       },
     }),
   ).current
