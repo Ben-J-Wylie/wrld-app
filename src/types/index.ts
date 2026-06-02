@@ -75,6 +75,7 @@ export type Stream = {
   isLive: boolean
   mediasoupRoomId?: string | null
   sources: SourceType[]
+  locationPrecision?: 'exact' | 'city' | 'country'
   distanceKm?: number
   distanceMeters?: number
 }

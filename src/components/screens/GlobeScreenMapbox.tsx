@@ -182,7 +182,7 @@ export function GlobeScreenMapbox() {
       // No GPS yet — set correct initial zoom immediately (overrides any native default)
       cameraRef.current?.setCamera({
         centerCoordinate: [0, 20],
-        zoomLevel: 0.5,
+        zoomLevel: 1.5,
         animationMode: 'none',
         animationDuration: 0,
       })
@@ -265,12 +265,13 @@ export function GlobeScreenMapbox() {
         type: 'Feature' as const,
         geometry: { type: 'Point' as const, coordinates: [s.lng!, s.lat!] },
         properties: {
-          streamId:       s.id,
-          mediasoupRoomId: s.mediasoupRoomId ?? '',
-          title:          s.title,
-          viewerCount:    s.viewerCount,
-          handle:         s.host?.handle ?? 'unknown',
-          sources:        (s.sources ?? []).join(','),
+          streamId:         s.id,
+          mediasoupRoomId:  s.mediasoupRoomId ?? '',
+          title:            s.title,
+          viewerCount:      s.viewerCount,
+          handle:           s.host?.handle ?? 'unknown',
+          sources:          (s.sources ?? []).join(','),
+          precision:        s.locationPrecision ?? 'exact',
         },
       })),
   }
@@ -315,7 +316,7 @@ export function GlobeScreenMapbox() {
         logoEnabled={false}
         attributionEnabled={false}
         compassEnabled={false}
-        gestureSettings={{ panDecelerationFactor: Platform.OS === 'ios' ? 0 : undefined }}
+        gestureSettings={{ panDecelerationFactor: Platform.OS === 'ios' ? 0.99 : undefined }}
         onCameraChanged={handleCameraChanged}
         onDidFinishLoadingMap={handleMapLoad}
         onPress={() => {
@@ -328,7 +329,7 @@ export function GlobeScreenMapbox() {
 
         <Camera
           ref={cameraRef}
-          defaultSettings={{ centerCoordinate: [0, 20], zoomLevel: 0.5 }}
+          defaultSettings={{ centerCoordinate: [0, 20], zoomLevel: 1.5 }}
           maxZoomLevel={20}
         />
 
@@ -365,10 +366,10 @@ export function GlobeScreenMapbox() {
               textIgnorePlacement: true,
             }}
           />
-          {/* Single stream circles */}
+          {/* Single stream — exact precision: sharp pin */}
           <CircleLayer
             id="single-circles"
-            filter={['!', ['has', 'point_count']]}
+            filter={['all', ['!', ['has', 'point_count']], ['==', ['get', 'precision'], 'exact']] as any}
             style={{
               circleColor: PIN_SINGLE,
               circleRadius: 14,
@@ -377,16 +378,42 @@ export function GlobeScreenMapbox() {
               circleOpacity: 0.95,
             }}
           />
-          {/* Single stream viewer count — hide when 0 */}
+          {/* Single stream — exact precision viewer count */}
           <SymbolLayer
             id="single-count"
-            filter={['!', ['has', 'point_count']]}
+            filter={['all', ['!', ['has', 'point_count']], ['==', ['get', 'precision'], 'exact']] as any}
             style={{
               textField: ['case', ['>', ['get', 'viewerCount'], 0], ['to-string', ['get', 'viewerCount']], ''] as any,
               textSize: 11,
               textColor: PIN_BORDER,
               textAllowOverlap: true,
               textIgnorePlacement: true,
+            }}
+          />
+          {/* Single stream — city precision: soft halo */}
+          <CircleLayer
+            id="single-city"
+            filter={['all', ['!', ['has', 'point_count']], ['==', ['get', 'precision'], 'city']] as any}
+            style={{
+              circleColor: PIN_SINGLE,
+              circleRadius: 44,
+              circleOpacity: 0.35,
+              circleBlur: 0.85,
+              circleStrokeWidth: 1,
+              circleStrokeColor: PIN_SINGLE,
+              circleStrokeOpacity: 0.6,
+            }}
+          />
+          {/* Single stream — country precision: large diffuse haze */}
+          <CircleLayer
+            id="single-country"
+            filter={['all', ['!', ['has', 'point_count']], ['==', ['get', 'precision'], 'country']] as any}
+            style={{
+              circleColor: PIN_SINGLE,
+              circleRadius: 72,
+              circleOpacity: 0.25,
+              circleBlur: 1,
+              circleStrokeWidth: 0,
             }}
           />
         </ShapeSource>
