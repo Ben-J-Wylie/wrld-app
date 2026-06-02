@@ -38,6 +38,7 @@ import {
 } from 'react-native'
 import { router, useFocusEffect } from 'expo-router'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
+import { LinearGradient } from 'expo-linear-gradient'
 import Mapbox, { Camera, ShapeSource, CircleLayer, SymbolLayer, Atmosphere } from '@rnmapbox/maps'
 import { consumeStreamSignal } from '@/lib/streamSignals'
 import { streamsApi } from '@/api/streams'
@@ -69,6 +70,17 @@ const PIN_BORDER  = '#FFFFFF'
 const SCREEN_H = Dimensions.get('window').height
 const DRAWER_PEEK_H = 200
 const DRAWER_EXPANDED_BOTTOM_OFFSET = 240 // top stack + chrome above expanded sheet
+
+// Top-stack scrim: paper100 fading to transparent over the header +
+// search + chips + scale band, so the globe pattern doesn't fight the
+// foreground UI when it's behind the controls. Matches the visual
+// muting `bg.glass` gives the bottom drawer. paper100 values are
+// expressed inline as rgba because LinearGradient needs colour strings
+// with explicit alpha stops — same precedent as `bg.glass`.
+const TOP_SCRIM_HEIGHT = 220
+const TOP_SCRIM_TOP    = 'rgba(236,230,214,0.92)'
+const TOP_SCRIM_MID    = 'rgba(236,230,214,0.65)'
+const TOP_SCRIM_BOTTOM = 'rgba(236,230,214,0)'
 
 const CATEGORIES: Category[] = [
   { id: 'all', label: 'All' },
@@ -512,6 +524,17 @@ export function GlobeScreenMapbox() {
         </ShapeSource>
       </Mapbox.MapView>
 
+      {/* Top scrim — paper100 fade muting the globe behind the top stack */}
+      <LinearGradient
+        pointerEvents="none"
+        colors={[TOP_SCRIM_TOP, TOP_SCRIM_MID, TOP_SCRIM_BOTTOM]}
+        locations={[0, 0.6, 1]}
+        style={[
+          styles.topScrim,
+          { height: insets.top + TOP_SCRIM_HEIGHT },
+        ]}
+      />
+
       {/* Top stack — header, search, chips, scale */}
       <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
         <SafeAreaView edges={['top']} pointerEvents="box-none">
@@ -696,6 +719,12 @@ function DrawerEmptyState({
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.bg.primary },
+  topScrim: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
