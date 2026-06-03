@@ -1284,3 +1284,81 @@ All changes are pure TypeScript/JS — no new native modules. Metro hot reload p
 ### Activation dependency
 
 Stripe keys must be configured in the backend before the subscribe/monetize flows work end-to-end. Until then, `usersApi.createSubscribeSession` will throw a 400 ("Stripe account not connected") which the UI surfaces as an Alert.
+
+---
+
+## Updates — June 2026 (Subscriptions, globe UX, offline states)
+
+### Globe card — subscription badge (`src/components/features/stream/DiscoveryHandoffCard.tsx`)
+
+`DiscoveryStream` type gains `subscribersOnly?: boolean` and `subscriptionPriceUsd?: number | null`.
+
+**Single pin card:** shows a lock icon + "Subscribers only · $X/mo" when `subscribersOnly = true`, or a star icon + "Subscriptions available · $X/mo" when the creator has subscriptions enabled but the stream is open. Uses `theme.colors.accent.default` for both, in a `lockRow` flex row.
+
+**Cluster rows:** appends 🔒 for subscriber-only streams, ⭐ for streams from subscribable creators.
+
+### Globe pin colors (`src/components/screens/GlobeScreenMapbox.tsx`)
+
+Pin colors now follow subscription status:
+- **Single free stream** → red (`#FF3B5C`)
+- **Single subscriber-only stream** → purple (`#A855F7`)
+- **Cluster of all subscriber-only** → purple
+- **Cluster of mixed or all-free** → red
+
+Uses Mapbox `clusterProperties: { subscriberCount: ['+', ['case', ['get', 'subscribersOnly'], 1, 0]] }` to aggregate across cluster members. Cluster color expression: `purple if subscriberCount === point_count, else red`. The old blue cluster color (`#5B8CFF`) is retired — clusters are now the same red as singles (or purple for all-paid).
+
+`toDiscovery` now passes `subscribersOnly: stream.subscribersOnly` and `subscriptionPriceUsd: stream.host?.subscriptionPriceUsd` through to the card.
+
+### Subscription paywall — App Store compliance (`src/components/screens/StreamScreen.tsx`)
+
+The old "Subscribe" button opened a Stripe checkout session via `Linking.openURL`, which violates App Store guideline 3.1.1 (in-app purchase of digital content consumed in-app). Replaced with:
+- Lock icon
+- Creator handle + price caption
+- "Subscribe at wrld.cam to watch" informational note
+- Back button only
+
+No in-app payment flow is initiated. This is the safe pattern for both App Store and Google Play.
+
+### Broadcaster live screen — lock badge (`src/components/screens/StreamScreen.tsx`)
+
+When a broadcaster is live with `subscribersOnly = true`, a 🔒 icon + "LOCKED" text appears inline in the source pills row (alongside CAMERA, AUDIO badges) so the broadcaster can see the gate is active.
+
+### Subscriber-only fix — `subscribersOnly` read from `activeBroadcast` (`src/components/screens/StreamScreen.tsx`)
+
+The `subscribersOnly` value was being read from Expo Router route params (`paramSubscribersOnly`), which gets overwritten by the Dashboard's `useFocusEffect` recovery navigation (that navigation fires without `subscribersOnly` in its params). Fixed to read from `activeBroadcast.get()?.subscribersOnly ?? paramSubscribersOnly` instead — `activeBroadcast` is set at Go Live time and is not affected by subsequent navigations.
+
+### Viewer disconnect on screen unfocus (`src/components/screens/StreamScreen.tsx`)
+
+The `useFocusEffect` for viewers (non-broadcaster stream screens) had no cleanup function. When a viewer navigated away via the tab bar (rather than the in-stream back button), the WebSocket stayed open and mediasoup never received a close event — viewer count stayed at 1. Fixed by returning a cleanup from `useFocusEffect` that calls `cleanup()` and `disconnect()` on unfocus.
+
+### Dashboard recovery navigation — `subscribersOnly` (`src/components/screens/DashboardScreen.tsx`)
+
+The `useFocusEffect` recovery path (re-routes an active broadcast back to the stream screen on Dashboard focus) was not including `subscribersOnly` in its params. Fixed to pass `subscribersOnly: active.subscribersOnly ?? 'false'`.
+
+### Monetize screen — subscriber stats (`src/components/screens/MonetizeScreen.tsx`)
+
+When subscriptions are configured, shows two stat boxes above the enable toggle:
+- **Subscribers** — active + past_due count from the backend
+- **Est. Monthly** — `subscriberCount × subscriptionPriceUsd` in dollars
+
+Data comes from the updated `GET /users/me/subscription/settings` which now returns `subscriberCount` and `estimatedMrrUsd`.
+
+`src/api/users.ts` — `getSubscriptionSettings()` return type updated to include `subscriberCount: number` and `estimatedMrrUsd: number`.
+
+`src/types/index.ts` — `Stream.host` now includes `subscriptionPriceUsd?: number | null`.
+
+### Offline / error states
+
+**`src/components/screens/LibraryScreen.tsx`:** The error block (`isError || isRefetchError`) now shows:
+- "No connection" (body)
+- "Check your internet connection and try again." (caption)
+- "Your recordings and clips are safely stored online." (caption)
+- "Try again" pill button calling `refetch()`
+
+`isRefetchError` is needed in addition to `isError` because TanStack Query keeps stale cached data and never sets `isError = true` when a background refetch fails — only `isRefetchError` fires in that case.
+
+**`src/hooks/useRecordings.ts`:** Added `retry: 1` so the error state surfaces after one retry instead of three (significantly faster offline detection).
+
+**`src/components/screens/WalletScreen.tsx`:** Added `isError` + `refetch` to the `useWallet()` destructuring. New error block before the loading spinner shows "No connection / Check your internet connection" with a "Try again" button. Previously the wallet showed an infinite spinner when offline.
+
+**`src/components/screens/StreamScreen.tsx`:** Added `isNetworkError(msg)` helper that matches on "websocket", "network", "connection" (case-insensitive). When the go-live or join fails with a network error, shows "No connection / Check your internet connection" instead of the raw "WebSocket connection failed" message. Non-network errors (banned keyword, suspended, subscription required) still show their specific message. Retry button relabelled "Try again".
