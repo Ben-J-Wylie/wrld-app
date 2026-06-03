@@ -17,7 +17,10 @@
 //     state lives on that screen, not here.
 
 import { useState, useCallback } from 'react'
-import { StyleSheet, View } from 'react-native'
+import { Alert, StyleSheet, View } from 'react-native'
+import { Filter as ProfanityFilter } from 'bad-words'
+
+const profanityFilter = new ProfanityFilter()
 import { router, useFocusEffect } from 'expo-router'
 import { theme } from '@/tokens/theme'
 import { ScreenScroll } from '@/components/sections/ScreenScroll'
@@ -26,6 +29,7 @@ import { Input } from '@/components/primitives/Input'
 import { Text } from '@/components/primitives/Text'
 import { HelpText } from '@/components/primitives/HelpText'
 import { Icon } from '@/components/primitives/Icon'
+import { Toggle } from '@/components/primitives/Toggle'
 import { FeedRow, type FeedState } from '@/components/features/broadcast/FeedRow'
 import { type FeedKind } from '@/components/features/broadcast/FeedThumb'
 import { CoordHUD } from '@/components/features/stream/CoordHUD'
@@ -64,6 +68,7 @@ export function DashboardScreen() {
 
   const [title, setTitle] = useState('')
   const [readySources, setReadySources] = useState<Set<SourceType>>(new Set())
+  const [subscribersOnly, setSubscribersOnly] = useState(false)
 
   useFocusEffect(useCallback(() => {
     const active = activeBroadcast.get()
@@ -73,7 +78,7 @@ export function DashboardScreen() {
     const t = setTimeout(() => {
       router.navigate({
         pathname: '/(app)/stream/[id]',
-        params: { id: 'new', title: active.title, sources: active.sources },
+        params: { id: 'new', title: active.title, sources: active.sources, subscribersOnly: active.subscribersOnly ?? 'false' },
       })
     }, 0)
     return () => clearTimeout(t)
@@ -90,11 +95,16 @@ export function DashboardScreen() {
 
   function handleGoLive() {
     if (!canGoLive) return
+    if (profanityFilter.isProfane(title.trim())) {
+      Alert.alert('Title not allowed', 'Your stream title contains prohibited content. Please choose a different title.')
+      return
+    }
     const params = {
       title: title.trim(),
       sources: Array.from(readySources).join(','),
       lat: String(coords!.latitude),
       lng: String(coords!.longitude),
+      subscribersOnly: String(subscribersOnly),
     }
     activeBroadcast.set(params)
     router.push({
@@ -207,6 +217,18 @@ export function DashboardScreen() {
         )}
       </View>
 
+      {currentUser?.subscriptionEnabled && (
+        <View style={styles.subscribersOnlyRow}>
+          <View style={styles.subscribersOnlyText}>
+            <Text variant="body">Subscribers only</Text>
+            <Text variant="caption" color={theme.colors.text.muted}>
+              Only your subscribers can watch this stream
+            </Text>
+          </View>
+          <Toggle value={subscribersOnly} onValueChange={setSubscribersOnly} />
+        </View>
+      )}
+
       <GoBar
         variant={canGoLive ? 'armed' : 'disabled'}
         onPress={handleGoLive}
@@ -230,6 +252,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     gap: theme.spacing.md,
+  },
+  subscribersOnlyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing.md,
+  },
+  subscribersOnlyText: {
+    flex: 1,
+    gap: theme.spacing.xs,
   },
   centerText: {
     textAlign: 'center',

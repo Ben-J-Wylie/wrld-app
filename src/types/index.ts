@@ -18,6 +18,10 @@ export type User = {
   dateOfBirth?: string
   locationPrecision?: 'exact' | 'city' | 'country' | 'off'
   creatorReady: boolean
+  usedStorageBytes: number
+  storageQuotaBytes: number
+  subscriptionEnabled: boolean
+  subscriptionPriceUsd: number | null
 }
 
 export type PublicUser = {
@@ -29,6 +33,8 @@ export type PublicUser = {
   followerCount: number
   followingCount: number
   isFollowing: boolean
+  subscriptionEnabled: boolean
+  subscriptionPriceUsd: number | null  // monthly price in cents
 }
 
 export type WalletTransaction = {
@@ -78,7 +84,7 @@ export type Recording = {
 export type Stream = {
   id: string
   hostId: string
-  host?: { id: string; handle: string; displayName: string; avatarUrl: string | null }
+  host?: { id: string; handle: string; displayName: string; avatarUrl: string | null; subscriptionPriceUsd?: number | null }
   hostDisplayName?: string
   title: string
   lat: number
@@ -89,6 +95,7 @@ export type Stream = {
   isLive: boolean
   mediasoupRoomId?: string | null
   sources: SourceType[]
+  subscribersOnly?: boolean
   locationPrecision?: 'exact' | 'city' | 'country'
   distanceKm?: number
   distanceMeters?: number

@@ -34,6 +34,7 @@ import {
   Animated,
   AppState,
   Keyboard,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -43,6 +44,9 @@ import {
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { captureScreen } from 'react-native-view-shot'
+import { Filter as ProfanityFilter } from 'bad-words'
+
+const profanityFilter = new ProfanityFilter()
 import { useLocalSearchParams, router, useFocusEffect } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { RTCView } from 'react-native-webrtc'
@@ -50,6 +54,7 @@ import { useAuth } from '@clerk/clerk-expo'
 import { Button } from '@/components/primitives/Button'
 import { Text } from '@/components/primitives/Text'
 import { Pill } from '@/components/primitives/Pill'
+import { Icon } from '@/components/primitives/Icon'
 import { IconButton } from '@/components/primitives/IconButton'
 import { HelpText } from '@/components/primitives/HelpText'
 import { LivePill } from '@/components/features/stream/LivePill'
@@ -78,8 +83,10 @@ import { signalingClient } from '@/lib/mediasoupSignaling'
 import { activeBroadcast } from '@/lib/activeBroadcast'
 import { streamsApi } from '@/api/streams'
 import { recordingsApi } from '@/api/recordings'
+import { usersApi } from '@/api/users'
 import { useSignaling } from '@/hooks/useSignaling'
 import { useMediasoup } from '@/hooks/useMediasoup'
+import * as Location from 'expo-location'
 import { useLocation } from '@/hooks/useLocation'
 import { useStream, useStreamByRoom } from '@/hooks/useStream'
 import { useAuthStore } from '@/stores/authStore'
@@ -97,6 +104,12 @@ const REACTION_CONFIGS: ReactionConfig[] = [
   { kind: 'clap', emoji: '👏' },
   { kind: 'wow', emoji: '😮' },
 ]
+
+function isNetworkError(msg: string | null | undefined): boolean {
+  if (!msg) return false
+  const lower = msg.toLowerCase()
+  return lower.includes('websocket') || lower.includes('network') || lower.includes('connection')
+}
 
 function FloatingTip({ tip, onDone }: { tip: TipEvent; onDone: (id: number) => void }) {
   const translateY = useRef(new Animated.Value(0)).current
@@ -134,13 +147,14 @@ const tipStyles = StyleSheet.create({
 })
 
 export function StreamScreen() {
-  const { id, streamId: paramStreamId, title: paramTitle, sources: paramSources, lat: paramLat, lng: paramLng } = useLocalSearchParams<{
+  const { id, streamId: paramStreamId, title: paramTitle, sources: paramSources, lat: paramLat, lng: paramLng, subscribersOnly: paramSubscribersOnly } = useLocalSearchParams<{
     id: string
     streamId?: string
     title?: string
     sources?: string
     lat?: string
     lng?: string
+    subscribersOnly?: string
   }>()
   const isNew = id === 'new'
 
@@ -160,6 +174,7 @@ export function StreamScreen() {
     connect, createRoom, joinRoom, disconnect,
     sendChatMessage, sendReaction, dismissReaction,
     sendTip, dismissTip,
+    sendLocationUpdate,
     sendBroadcasterPaused, sendBroadcasterResumed, sendBroadcasterOrientation,
   } = useSignaling()
   // Broadcaster: look up the DB stream once in-room so we have streamId for recording.
@@ -207,8 +222,10 @@ export function StreamScreen() {
   const [keyboardHeight, setKeyboardHeight] = useState(0)
   const [isRecording, setIsRecording] = useState(false)
   const [activeRecordingId, setActiveRecordingId] = useState<string | null>(null)
+  const stoppedByUserRef = useRef(false)
 
   function stopActiveRecording() {
+    stoppedByUserRef.current = true
     if (activeRecordingId) {
       recordingsApi.stop(activeRecordingId).catch(() => {})
     }
@@ -354,6 +371,10 @@ export function StreamScreen() {
       navigatingRef.current = false
       cleanup()
       handleJoin()
+      return () => {
+        cleanup()
+        disconnect()
+      }
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [id]),
   )
@@ -386,6 +407,48 @@ export function StreamScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isNew, status])
 
+  // Live location tracking for broadcasters — updates the stream pin as they move
+  useEffect(() => {
+    if (!isNew || status !== 'in-room') return
+    let sub: { remove(): void } | null = null
+    Location.watchPositionAsync(
+      {
+        accuracy: Location.Accuracy.Balanced,
+        distanceInterval: 10,
+      },
+      (loc) => {
+        sendLocationUpdate(loc.coords.latitude, loc.coords.longitude)
+      },
+    ).then((s) => { sub = s }).catch(() => {})
+    return () => { sub?.remove() }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isNew, status])
+
+  // Poll recording status while recording is active. When the server stops
+  // the recording due to quota, finalize cleanly and alert the broadcaster.
+  useEffect(() => {
+    if (!isRecording || !activeRecordingId) return
+    const id = activeRecordingId
+    const interval = setInterval(async () => {
+      try {
+        const list = await recordingsApi.list()
+        const rec = list.find(r => r.id === id)
+        if (rec && rec.status !== 'recording') {
+          if (!stoppedByUserRef.current) {
+            setIsRecording(false)
+            setActiveRecordingId(null)
+            const message = rec.status === 'failed'
+              ? 'The recording encountered an error and was stopped. Your stream continues.'
+              : 'You\'ve reached your storage limit. Your stream continues.'
+            Alert.alert('Recording stopped', message)
+          }
+          stoppedByUserRef.current = false
+        }
+      } catch {}
+    }, 5_000)
+    return () => clearInterval(interval)
+  }, [isRecording, activeRecordingId])
+
   async function handleGoLive() {
     setIsRecording(false)
     setActiveRecordingId(null)
@@ -398,6 +461,7 @@ export function StreamScreen() {
         lat: coords.latitude,
         lng: coords.longitude,
         sources: broadcastSources,
+        subscribersOnly: (activeBroadcast.get()?.subscribersOnly ?? paramSubscribersOnly) === 'true',
       })
       await startBroadcasting(broadcastSources)
     } catch (err) {
@@ -451,9 +515,10 @@ export function StreamScreen() {
         const { recordingId } = await recordingsApi.start(streamId)
         setActiveRecordingId(recordingId)
         setIsRecording(true)
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Could not start recording'
-        Alert.alert('Recording', msg)
+      } catch (err: unknown) {
+        const serverMsg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        const msg = serverMsg ?? 'Could not start recording'
+        Alert.alert('Storage full', msg)
       }
     }
   }
@@ -546,6 +611,10 @@ export function StreamScreen() {
   function handleSendChat() {
     const trimmed = chatInput.trim()
     if (!trimmed) return
+    if (profanityFilter.isProfane(trimmed)) {
+      Alert.alert('Message not sent', 'Your message contains prohibited content.')
+      return
+    }
     sendChatMessage(trimmed, wrldUser?.handle ?? 'user')
     setChatInput('')
   }
@@ -838,6 +907,12 @@ export function StreamScreen() {
                         label={SOURCE_LABELS[s].toUpperCase()}
                       />
                     ))}
+                    {(activeBroadcast.get()?.subscribersOnly ?? paramSubscribersOnly) === 'true' && (
+                      <View style={styles.lockBadge}>
+                        <Icon name="lock" size="sm" color={theme.colors.accent.default} />
+                        <Text variant="monoCaption" color={theme.colors.accent.default}>LOCKED</Text>
+                      </View>
+                    )}
                   </View>
                   <Pressable onPress={openViewerList} hitSlop={8}>
                     <Text
@@ -901,19 +976,53 @@ export function StreamScreen() {
           )}
 
           {/* ── Error ────────────────────────────────────────────── */}
-          {status === 'error' && (
+          {status === 'error' && displayError === 'Subscription required' && !isNew ? (
             <View style={styles.actions}>
-              <Text variant="body" color={theme.colors.accent.default} style={styles.center}>
-                {displayError}
+              <Icon name="lock" size="lg" color={theme.colors.text.muted} />
+              <Text variant="body" color={theme.colors.text.primary} style={styles.center}>
+                Subscribers only
               </Text>
-              <Button label="Retry" onPress={isNew ? handleGoLive : handleJoin} />
+              {broadcaster && (
+                <Text variant="caption" color={theme.colors.text.muted} style={styles.center}>
+                  @{broadcaster.handle}
+                  {streamData?.host?.subscriptionPriceUsd
+                    ? ` · $${(streamData.host as unknown as { subscriptionPriceUsd: number }).subscriptionPriceUsd / 100}/mo`
+                    : ''}
+                </Text>
+              )}
+              <Text variant="caption" color={theme.colors.text.muted} style={styles.center}>
+                Subscribe at wrld.cam to watch
+              </Text>
               <Button
                 label="Back"
                 onPress={() => router.navigate('/(app)/globe')}
                 variant="secondary"
               />
             </View>
-          )}
+          ) : status === 'error' ? (
+            <View style={styles.actions}>
+              {isNetworkError(displayError) ? (
+                <>
+                  <Text variant="body" color={theme.colors.text.primary} style={styles.center}>
+                    No connection
+                  </Text>
+                  <Text variant="caption" color={theme.colors.text.muted} style={styles.center}>
+                    Check your internet connection and try again.
+                  </Text>
+                </>
+              ) : (
+                <Text variant="body" color={theme.colors.accent.default} style={styles.center}>
+                  {displayError}
+                </Text>
+              )}
+              <Button label="Try again" onPress={isNew ? handleGoLive : handleJoin} />
+              <Button
+                label="Back"
+                onPress={() => router.navigate('/(app)/globe')}
+                variant="secondary"
+              />
+            </View>
+          ) : null}
 
           {/* ── Hop error ────────────────────────────────────────── */}
           {hopError && (
@@ -1112,6 +1221,11 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
     flexWrap: 'wrap',
     justifyContent: 'center',
+  },
+  lockBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   sourceSwitchBtn: {
     borderRadius: theme.radius.full,

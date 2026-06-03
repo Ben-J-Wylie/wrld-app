@@ -2,7 +2,7 @@ export type ClientMessage =
   | { type: 'identify'; deviceId: string }
   | { type: 'authenticate'; token: string }
   | { type: 'getRtpCapabilities' }
-  | { type: 'createRoom'; title: string; lat: number; lng: number; sources: string[] }
+  | { type: 'createRoom'; title: string; lat: number; lng: number; sources: string[]; subscribersOnly: boolean }
   | { type: 'joinRoom'; roomId: string }
   | { type: 'createTransport'; direction: 'send' | 'recv' }
   | { type: 'connectTransport'; transportId: string; dtlsParameters: unknown }
@@ -13,6 +13,7 @@ export type ClientMessage =
   | { type: 'broadcasterPaused' }
   | { type: 'broadcasterResumed' }
   | { type: 'broadcasterOrientation'; orientation: 'portrait' | 'landscape' }
+  | { type: 'locationUpdate'; lat: number; lng: number }
   | { type: 'tip'; amount: number }
 
 export type ServerMessage =
@@ -151,7 +152,7 @@ class MediasoupSignalingClient {
     return reply.rtpCapabilities
   }
 
-  async createRoom(meta: { title: string; lat: number; lng: number; sources: string[] }): Promise<string> {
+  async createRoom(meta: { title: string; lat: number; lng: number; sources: string[]; subscribersOnly: boolean }): Promise<string> {
     this.send({ type: 'createRoom', ...meta })
     const reply = await this.waitFor('roomCreated')
     return reply.roomId
@@ -214,6 +215,10 @@ class MediasoupSignalingClient {
 
   sendBroadcasterOrientation(orientation: 'portrait' | 'landscape'): void {
     this.send({ type: 'broadcasterOrientation', orientation })
+  }
+
+  sendLocationUpdate(lat: number, lng: number): void {
+    this.send({ type: 'locationUpdate', lat, lng })
   }
 
   sendTip(amount: number): void {

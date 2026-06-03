@@ -1,4 +1,4 @@
-type BroadcastParams = { title: string; sources: string }
+type BroadcastParams = { title: string; sources: string; subscribersOnly?: string }
 
 let _active: BroadcastParams | null = null
 

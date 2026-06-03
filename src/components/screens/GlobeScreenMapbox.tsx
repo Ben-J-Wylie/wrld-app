@@ -45,7 +45,7 @@ import { consumeStreamSignal } from '@/lib/streamSignals'
 import { streamsApi } from '@/api/streams'
 import { theme } from '@/tokens/theme'
 import { useLocation } from '@/hooks/useLocation'
-import { useStreamsNear } from '@/hooks/useStreamsNear'
+import { useDiscoverySocket } from '@/hooks/useDiscoverySocket'
 import { Text } from '@/components/primitives/Text'
 import { Pill } from '@/components/primitives/Pill'
 import { BrandMark } from '@/components/primitives/BrandMark'
@@ -62,9 +62,9 @@ import type { Stream } from '@/types'
 
 Mapbox.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '')
 
-const PIN_CLUSTER = '#5B8CFF'
-const PIN_SINGLE  = '#FF3B5C'
-const PIN_BORDER  = '#FFFFFF'
+const PIN_RED    = '#FF3B5C'
+const PIN_PURPLE = '#A855F7'
+const PIN_BORDER = '#FFFFFF'
 
 // Drawer has three states:
 //   closed   — only the grip visible above the tab bar (default at app
@@ -142,10 +142,7 @@ type BannerData =
 
 export function GlobeScreenMapbox() {
   const { coords } = useLocation()
-  const { data: streams } = useStreamsNear(
-    coords?.latitude ?? null,
-    coords?.longitude ?? null,
-  )
+  const streams = useDiscoverySocket()
   const insets = useSafeAreaInsets()
 
   const [selectedStream, setSelectedStream] = useState<Stream | null>(null)
@@ -395,6 +392,8 @@ export function GlobeScreenMapbox() {
       avatarUrl: stream.host?.avatarUrl,
       viewerCount: stream.viewerCount,
       isLive: stream.isLive,
+      subscribersOnly: stream.subscribersOnly,
+      subscriptionPriceUsd: stream.host?.subscriptionPriceUsd,
       onJoin: () => joinStream(stream),
     }
   }
@@ -403,7 +402,7 @@ export function GlobeScreenMapbox() {
 
   const geoJSON = {
     type: 'FeatureCollection' as const,
-    features: (streams ?? [])
+    features: streams
       .filter(s => s.lat != null && s.lng != null)
       .map(s => ({
         type: 'Feature' as const,
@@ -416,6 +415,7 @@ export function GlobeScreenMapbox() {
           handle:           s.host?.handle ?? 'unknown',
           sources:          (s.sources ?? []).join(','),
           precision:        s.locationPrecision ?? 'exact',
+          subscribersOnly:  s.subscribersOnly === true,
         },
       })),
   }
@@ -431,7 +431,7 @@ export function GlobeScreenMapbox() {
       try {
         const leaves = await sourceRef.current?.getClusterLeaves(feature, 100, 0) as any
         const clusterStreams = ((leaves?.features ?? []) as any[])
-          .map((f: any) => streams?.find(s => s.id === f.properties?.streamId))
+          .map((f: any) => streams.find(s => s.id === f.properties?.streamId))
           .filter((s): s is Stream => s != null)
         if (clusterStreams.length > 0) {
           setSelectedClusterStreams(clusterStreams)
@@ -439,7 +439,7 @@ export function GlobeScreenMapbox() {
         }
       } catch {}
     } else {
-      const stream = streams?.find(s => s.id === feature.properties?.streamId)
+      const stream = streams.find(s => s.id === feature.properties?.streamId)
       if (stream) {
         setSelectedStream(stream)
         setSelectedClusterStreams(null)
@@ -447,7 +447,7 @@ export function GlobeScreenMapbox() {
     }
   }
 
-  const liveCount = streams?.length ?? 0
+  const liveCount = streams.length
 
   // ── Drawer animation + state coupling ──────────────────────────────────────
 
@@ -624,13 +624,22 @@ export function GlobeScreenMapbox() {
           cluster
           clusterRadius={50}
           clusterMaxZoomLevel={14}
+          clusterProperties={{
+            // sum of 1s for each subscribersOnly stream in the cluster
+            subscriberCount: ['+', ['case', ['get', 'subscribersOnly'], 1, 0]],
+          }}
           onPress={handleSourcePress}
         >
           <CircleLayer
             id="cluster-circles"
             filter={['has', 'point_count']}
             style={{
-              circleColor: PIN_CLUSTER,
+              // purple if every stream in cluster is subscriber-only, red otherwise
+              circleColor: ['case',
+                ['==', ['get', 'subscriberCount'], ['get', 'point_count']],
+                PIN_PURPLE,
+                PIN_RED,
+              ] as any,
               circleRadius: ['step', ['get', 'point_count'], 18, 5, 22, 15, 26] as any,
               circleStrokeWidth: 2,
               circleStrokeColor: PIN_BORDER,
@@ -652,7 +661,7 @@ export function GlobeScreenMapbox() {
             id="single-circles"
             filter={['all', ['!', ['has', 'point_count']], ['==', ['get', 'precision'], 'exact']] as any}
             style={{
-              circleColor: PIN_SINGLE,
+              circleColor: ['case', ['get', 'subscribersOnly'], PIN_PURPLE, PIN_RED] as any,
               circleRadius: 14,
               circleStrokeWidth: 2,
               circleStrokeColor: PIN_BORDER,
@@ -674,12 +683,12 @@ export function GlobeScreenMapbox() {
             id="single-city"
             filter={['all', ['!', ['has', 'point_count']], ['==', ['get', 'precision'], 'city']] as any}
             style={{
-              circleColor: PIN_SINGLE,
+              circleColor: ['case', ['get', 'subscribersOnly'], PIN_PURPLE, PIN_RED] as any,
               circleRadius: 44,
               circleOpacity: 0.35,
               circleBlur: 0.85,
               circleStrokeWidth: 1,
-              circleStrokeColor: PIN_SINGLE,
+              circleStrokeColor: ['case', ['get', 'subscribersOnly'], PIN_PURPLE, PIN_RED] as any,
               circleStrokeOpacity: 0.6,
             }}
           />
@@ -687,7 +696,7 @@ export function GlobeScreenMapbox() {
             id="single-country"
             filter={['all', ['!', ['has', 'point_count']], ['==', ['get', 'precision'], 'country']] as any}
             style={{
-              circleColor: PIN_SINGLE,
+              circleColor: ['case', ['get', 'subscribersOnly'], PIN_PURPLE, PIN_RED] as any,
               circleRadius: 72,
               circleOpacity: 0.25,
               circleBlur: 1,

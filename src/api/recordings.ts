@@ -15,4 +15,8 @@ export const recordingsApi = {
   stop: async (recordingId: string): Promise<void> => {
     await apiClient.post(`/recordings/${recordingId}/stop`)
   },
+
+  delete: async (recordingId: string): Promise<void> => {
+    await apiClient.delete(`/recordings/${recordingId}`)
+  },
 }

@@ -39,6 +39,8 @@ export type DiscoveryStream = {
   city?: string
   distance?: string
   layers?: StreamStripLayer[]
+  subscribersOnly?: boolean
+  subscriptionPriceUsd?: number | null
   onJoin: () => void
 }
 
@@ -71,6 +73,10 @@ export function DiscoveryHandoffCard(props: Props) {
 // ─── Single ──────────────────────────────────────────────────────────────────
 
 function SingleCard({ stream, onDismiss, style }: SingleProps) {
+  const priceLabel = stream.subscriptionPriceUsd
+    ? `$${(stream.subscriptionPriceUsd / 100).toFixed(2)}/mo`
+    : null
+
   return (
     <View style={[styles.card, style]}>
       <View style={styles.row}>
@@ -86,6 +92,18 @@ function SingleCard({ stream, onDismiss, style }: SingleProps) {
           <Text variant="monoCaption" color={theme.colors.text.muted} numberOfLines={1}>
             @{stream.handle} · {formatViewers(stream.viewerCount)} watching
           </Text>
+          {priceLabel != null && (
+            <View style={styles.lockRow}>
+              <Icon
+                name={stream.subscribersOnly ? 'lock' : 'star'}
+                size="sm"
+                color={theme.colors.accent.default}
+              />
+              <Text variant="monoCaption" color={theme.colors.accent.default}>
+                {stream.subscribersOnly ? 'Subscribers only' : 'Subscriptions available'} · {priceLabel}
+              </Text>
+            </View>
+          )}
         </View>
         {stream.isLive !== false && <LivePill size="sm" />}
         {onDismiss && (
@@ -147,6 +165,7 @@ function ClusterCard({ streams, locationLabel, onDismiss, style }: ClusterProps)
               <Text variant="monoCaption" color={theme.colors.text.muted} numberOfLines={1}>
                 @{s.handle} · {formatViewers(s.viewerCount)}
                 {s.distance ? ` · ${s.distance}` : ''}
+                {s.subscribersOnly ? ' · 🔒' : s.subscriptionPriceUsd ? ' · ⭐' : ''}
               </Text>
             </View>
             <Pressable
@@ -210,6 +229,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.sm,
     paddingVertical: theme.spacing.xs,
+  },
+  lockRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
   },
   joinChip: {
     paddingHorizontal: theme.spacing.sm,

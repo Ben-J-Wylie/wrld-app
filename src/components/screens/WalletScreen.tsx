@@ -17,7 +17,7 @@
 //   • Empty state composes Card-style surface + Icon + Text + Button.
 
 import { useState } from 'react'
-import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native'
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
 import { useAuth } from '@clerk/clerk-expo'
@@ -114,7 +114,7 @@ function mapWalletTx(
 
 export function WalletScreen() {
   const { isSignedIn } = useAuth()
-  const { data, isLoading } = useWallet()
+  const { data, isLoading, isError, refetch } = useWallet()
   const [filter, setFilter] = useState<string | null>(null)
 
   if (!isSignedIn) {
@@ -125,6 +125,22 @@ export function WalletScreen() {
             Sign in to view your wallet
           </Text>
           <Button label="Sign in" onPress={() => router.push('/(auth)/login')} />
+        </View>
+      </SafeAreaView>
+    )
+  }
+
+  if (isError) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.center}>
+          <Text variant="body" color={theme.colors.text.primary}>No connection</Text>
+          <Text variant="caption" color={theme.colors.text.muted} style={styles.centerText}>
+            Check your internet connection and try again.
+          </Text>
+          <Pressable onPress={() => refetch()} style={styles.retryBtn}>
+            <Text variant="monoLabel" color={theme.colors.accent.default}>Try again</Text>
+          </Pressable>
         </View>
       </SafeAreaView>
     )
@@ -221,6 +237,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: theme.spacing.md,
     textAlign: 'center',
+    padding: theme.spacing.xl,
+  },
+  centerText: {
+    textAlign: 'center',
+  },
+  retryBtn: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.radius.full,
+    borderWidth: 1,
+    borderColor: theme.colors.accent.default,
   },
   listContent: {
     paddingBottom: theme.spacing.xxxl,

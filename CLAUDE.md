@@ -334,6 +334,105 @@ the `react-native-view-shot` Metro stub and install view-shot for real.
 
 ---
 
+## Clips initiative — model, working split & rollout (June 2026)
+
+The v0.2 recording/clips scope (re-baselined 2026-05-29) now has a decided
+capture + editing model and a Ben/Aaron working split. This section is the
+working reference for both; matching DECIDED sections live in
+`wrld-backend/CLAUDE.md` and `wrld-mediasoup/CLAUDE.md`.
+
+### Capture model (decided)
+
+- **Two independent buttons.** **Go Live** publishes the broadcast set; **Record**
+  captures the record set. Independent — live without recording, record without
+  going live, both, or neither.
+- **Two source sets.** Per source, a **broadcast** toggle (airs live?) and a
+  **record** toggle (saved?), set independently. All four combinations per source
+  are valid.
+- **Seven sources** (the v0.2 layer model): camera, audio, screen, location, gyro,
+  compass, identity. Identity is an **Attributed / Anon flag**, not a recorded
+  track.
+- **Privacy tiers.**
+  - *Sensitive* — camera, audio, location (and **screen — OPEN**, see below):
+    enabling **record** (especially record-without-broadcast) requires an explicit,
+    visible **consent step**, and the during-broadcast **on-air-vs-recording
+    indicator** must show recording state.
+  - *Benign* — gyro, compass: record-on by default, low friction.
+- **Guardrail (non-negotiable).** Nothing is captured silently. Record is always a
+  visible chosen state, plus a persistent on-air-vs-recording indicator while
+  broadcasting. The durable user-facing version of this promise is the Capture
+  Privacy Constitution (pre-launch backlog).
+
+### Editing model — per-source manifest (DECIDED June 2026)
+
+A **Recording** is per-source tracks; a **Clip** is a **non-destructive manifest**
+over a recording — no re-encode. `ClipEditScreen` (an unbuilt route) edits the
+manifest:
+
+- **Trim** — in-point / out-point.
+- **Per-source** — on / off / **delete permanently** (the only destructive edit:
+  removes a track from disk, reclaims quota); reveal a record-only source.
+- **Identity** — Attributed / Anon. **Location** — `locDisplayPrecision`, only ever
+  ≤ the captured ceiling. **Visibility** — public / anon / draft. **Tags.**
+
+Most clip components shipped in 12.5 against mock data (ClipCard, ClipPreview,
+Timeline, LayerEditorRow, FeedRow/FeedThumb). Storage usage is already available:
+`GET /auth/me` returns `usedStorageBytes` + `storageQuotaBytes` — surface it in the
+editor / profile.
+
+### Open decisions (not settled — resolve before C3/C4)
+
+- **Profile vs Library** — where editable material lives: a separate **Library
+  page** (Aaron's lean) vs **profile-as-library** + preview-public-view toggle
+  (Ben's lean). Pending the Claude Design comparison mocks. The mock brief and the
+  app handoff currently *assume* profile-as-library, but it is **not decided** —
+  settle before C5.
+- **Screen source tier** — sensitive (consent-gated record) or benign. Mocked as
+  sensitive; confirm.
+
+*(Resolved at C0: per-track `recordingReady` ✅ Aaron June 2026; existing-data
+migration ✅ delete June 2026 — all legacy recordings purged from production.)*
+
+### Working split (Ben / Aaron) — follows the tier boundary
+
+- **Ben (`design` branch) — the component library.** Primitives / features /
+  sections + DESIGN.md + galleries. The remaining clip additions are
+  component-library work, so they're Ben's: the **FeedRow two-dimension control**
+  (broadcast + record toggles, built from `SegmentedToggle`, with sensitive-tier
+  consent treatment and the location-precision sub-control), the **Go Live + Record
+  button states**, the **during-broadcast on-air-vs-recording indicator**, and the
+  **LayerEditorRow not-captured state**. Plus the DESIGN.md Section 3 inventory +
+  galleries.
+- **Aaron (`main` branch) — screens + app logic.** Shared types (`SourceType` is
+  already the 7-union; add `CaptureMode`, the two-set arming, the `Clip` manifest
+  type), `DashboardScreen` assembly (two buttons + per-source two-toggle arming +
+  defaults + consent flow + extend the go-live/record payload with the record set +
+  wire the indicator), `ClipEditScreen` (compose the components + inline LayerPanel
+  / TagsCard + wire the manifest), the profile screens (blocked on the
+  profile/library decision), storage display, telemetry playback.
+- **The seam.** Aaron does not touch `primitives/`, `features/`, `sections/`, or
+  DESIGN.md; Ben does not touch `screens/`, `hooks/`, or `api/`. Integration via
+  `design` → `main` merges.
+
+### Phased rollout (C0–C6)
+
+| Stage | Owner | Branch / repo | What | Depends on |
+|---|---|---|---|---|
+| **C0** | Ben + Aaron | — | Decisions & contracts. ✅ Model decided; ✅ per-track `recordingReady` Aaron June 2026; ✅ existing-data delete Aaron June 2026. Still open: **record-set payload shape** (only blocks C3 — C1 can proceed with provisional shape); **screen-tier** (blocks C2); **profile/library** (blocks C5). | — |
+| **C1** | Aaron | mediasoup + backend | Per-track recording substrate (per-source tracks + `.jsonl` telemetry; per-track `recordingReady`), landed in lockstep across both repos. Provisional record-set shape is sufficient — final shape confirmed before C3. **Can start now.** | C0 model ✅ |
+| **C2** | Ben | `design` | Component-library additions (FeedRow two-dimension control, LayerEditorRow not-captured, during-broadcast indicator, loc-precision sub-control) + DESIGN.md inventory + galleries. | C0 screen-tier decision |
+| **C3** | Aaron | `main` | Go Live / Record assembly on `DashboardScreen` (two buttons, per-source two-toggle arming, defaults, consent flow, payload, indicator wiring) + shared types. | C2 + record-set payload shape finalised |
+| **C4** | Aaron | `main` | Clip editor — build `ClipEditScreen` (trim + per-source on/off/delete + reveal + attribution + visibility/publish), wired to the manifest. | C1, C2 |
+| **C5** | Aaron | `main` | Profile / library surface + storage display. **Blocked on the profile/library decision.** | C4 + profile/library decision |
+| **C6** | Aaron | `main` | Telemetry tracks playback (loc/gyro/compass overlays). | C1 |
+
+**Parallelism.** C1 (Aaron) and C2 (Ben) run in parallel after C0. C3/C4 consume
+Ben's C2 components — Aaron builds against the current mock-state versions and
+integrates the new states when `design` → `main` lands. C5 needs C4 **and** the
+profile/library decision. C6 last.
+
+---
+
 ## v0.2 beta milestone — architectural decision (May 2026)
 
 Decided between Phase 7 and Phase 8. This section documents what v0.2 is,
@@ -457,6 +556,12 @@ not a blank page:
 - App Store submission assets (icon, screenshots, listing copy)
 - Production-grade observability (log aggregation, metrics, alerting)
 - Geo-discovery at scale (clustering, viewport-based queries on globe)
+- **Capture Privacy Constitution** — a formal, user-facing statement of which
+  sources are privacy-sensitive, the consent semantics for recording each
+  (especially record-without-broadcast), and the durable promise that nothing is
+  captured silently. v0.2 ships the working tiering + consent UX + on-air-vs-
+  recording indicator (see the clips-initiative section above); formalizing it as a
+  stated policy is its own pre-launch initiative.
 
 ---
 
@@ -553,9 +658,16 @@ When in doubt, ask before assuming.
 - **Don't put either Mapbox token in committed files.** Both the public
   (`pk.`) and secret download (`sk.`) tokens go in EAS secrets + local `.env`
   only. GitHub secret scanning blocks `pk.` tokens in committed files.
-- **Don't scope v0.3 features into v0.2 phases.** Recording, monetization,
-  sensor sources beyond audio/video, public-launch hardening — all deferred.
-  See "v0.2 beta milestone" above for the non-goals list.
+- **Don't scope v0.3 features into v0.2 phases.** Deferred to v0.3: real-money
+  payments, subscriptions/PPV as functional features, time machine, vignettes,
+  sensors beyond the seven, and public-launch hardening. (Recording/clips and
+  the 7-layer sensor model were re-baselined **into** v0.2 — see the 2026-05-29
+  entry and the clips-initiative section above.) See "v0.2 beta milestone" for
+  the full non-goals list.
+- **Don't build the clip editor on a baked / re-encoded clip model.** The decided
+  model (June 2026) is a non-destructive **manifest** over per-source recording
+  tracks — editing writes the manifest; permanent-delete is the only destructive
+  op. See the clips-initiative section above and `wrld-backend/CLAUDE.md`.
 
 ---
 
@@ -1220,3 +1332,145 @@ The city and country halos are centered on the obfuscated/centroid coordinates r
 ### Stream type (`src/types/index.ts`)
 
 `Stream` now has `locationPrecision?: 'exact' | 'city' | 'country'`. The `'off'` value never appears in the app since those streams are filtered by the backend before delivery.
+
+---
+
+## Updates — June 2026 (Creator subscriptions — app UI)
+
+### What was built
+
+App-side wiring for per-creator subscriptions. Payment happens on the web (system browser via `Linking.openURL`) — no IAP, no WebView — to comply with App Store rules. The app creates a short-lived checkout session via the API, opens the returned URL in the browser, and checks subscription status when it regains focus.
+
+### New screen: `MonetizeScreen` (`src/components/screens/MonetizeScreen.tsx`)
+
+Route: `/(app)/monetize` (registered as hidden tab in `_layout.tsx`). Entry point: Settings → ACCOUNT → "Monetize" row (only visible when `wrldUser.creatorReady = true`).
+
+**Three states:**
+1. **Not connected** — explains the 70/30 split, "Connect Stripe" button opens `POST /users/me/subscription/onboard` URL in browser
+2. **Connected, no price** — enable/disable toggle (disabled until price set), price input + Save, Stripe dashboard link
+3. **Connected with price** — toggle enabled, current price shown, change price, Stripe dashboard link
+
+All mutations call the relevant `usersApi` methods and invalidate `subscription-settings` + `currentUser` query caches.
+
+### Profile screen additions (`src/components/screens/ProfileScreen.tsx`)
+
+When viewing another user's profile and `profile.subscriptionEnabled && profile.subscriptionPriceUsd`:
+- **Not subscribed** → "Subscribe · $X/mo" button → `usersApi.createSubscribeSession(handle)` → `Linking.openURL(url)`; refetches status when app returns to foreground
+- **Already subscribed** → "Subscribed · $X/mo" button (secondary style) → `Alert.alert` with "Cancel subscription" destructive option → `usersApi.cancelSubscription(handle)`
+
+Subscription status fetched via `useQuery(['subscription-status', handle])` — only enabled when signed in, not own profile, and creator has subscriptions enabled.
+
+### Stream screen additions (`src/components/screens/StreamScreen.tsx`)
+
+Handles `'Subscription required'` error from mediasoup `joinRoom` separately from other errors. When viewer is blocked:
+- Shows "This stream is for subscribers only" + creator handle + price
+- "Subscribe" button → subscribe-session → `Linking.openURL`
+- "Back" button → globe
+
+`subscribersOnly` route param accepted (`paramSubscribersOnly?: string`). Passed as `subscribersOnly: paramSubscribersOnly === 'true'` to `createRoom`.
+
+### Dashboard additions (`src/components/screens/DashboardScreen.tsx`)
+
+"Subscribers only" toggle (`Toggle` primitive) shown between the Location section and GoBar — only when `currentUser?.subscriptionEnabled = true`. State: `subscribersOnly: boolean`, defaults `false`. Value passed as `String(subscribersOnly)` route param to `/(app)/stream/new`.
+
+### Type updates (`src/types/index.ts`)
+
+- `User` — added `subscriptionEnabled: boolean`, `subscriptionPriceUsd: number | null`
+- `PublicUser` — added `subscriptionEnabled: boolean`, `subscriptionPriceUsd: number | null`
+- `Stream` — added `subscribersOnly?: boolean`
+
+### API additions (`src/api/users.ts`)
+
+`getSubscriptionStatus(handle)`, `createSubscribeSession(handle)`, `cancelSubscription(handle)`, `getSubscriptionSettings()`, `startSubscriptionOnboard()`, `updateSubscriptionSettings(settings)`, `getSubscriptionDashboardUrl()`
+
+### Signaling updates
+
+`createRoom` in both `src/lib/mediasoupSignaling.ts` and `src/hooks/useSignaling.ts` now requires `subscribersOnly: boolean`. `ClientMessage` union updated accordingly.
+
+`src/lib/activeBroadcast.ts` — `BroadcastParams` extended with `subscribersOnly?: string`.
+
+### No EAS rebuild required
+
+All changes are pure TypeScript/JS — no new native modules. Metro hot reload picks them up immediately.
+
+### Activation dependency
+
+Stripe keys must be configured in the backend before the subscribe/monetize flows work end-to-end. Until then, `usersApi.createSubscribeSession` will throw a 400 ("Stripe account not connected") which the UI surfaces as an Alert.
+
+---
+
+## Updates — June 2026 (Subscriptions, globe UX, offline states)
+
+### Globe card — subscription badge (`src/components/features/stream/DiscoveryHandoffCard.tsx`)
+
+`DiscoveryStream` type gains `subscribersOnly?: boolean` and `subscriptionPriceUsd?: number | null`.
+
+**Single pin card:** shows a lock icon + "Subscribers only · $X/mo" when `subscribersOnly = true`, or a star icon + "Subscriptions available · $X/mo" when the creator has subscriptions enabled but the stream is open. Uses `theme.colors.accent.default` for both, in a `lockRow` flex row.
+
+**Cluster rows:** appends 🔒 for subscriber-only streams, ⭐ for streams from subscribable creators.
+
+### Globe pin colors (`src/components/screens/GlobeScreenMapbox.tsx`)
+
+Pin colors now follow subscription status:
+- **Single free stream** → red (`#FF3B5C`)
+- **Single subscriber-only stream** → purple (`#A855F7`)
+- **Cluster of all subscriber-only** → purple
+- **Cluster of mixed or all-free** → red
+
+Uses Mapbox `clusterProperties: { subscriberCount: ['+', ['case', ['get', 'subscribersOnly'], 1, 0]] }` to aggregate across cluster members. Cluster color expression: `purple if subscriberCount === point_count, else red`. The old blue cluster color (`#5B8CFF`) is retired — clusters are now the same red as singles (or purple for all-paid).
+
+`toDiscovery` now passes `subscribersOnly: stream.subscribersOnly` and `subscriptionPriceUsd: stream.host?.subscriptionPriceUsd` through to the card.
+
+### Subscription paywall — App Store compliance (`src/components/screens/StreamScreen.tsx`)
+
+The old "Subscribe" button opened a Stripe checkout session via `Linking.openURL`, which violates App Store guideline 3.1.1 (in-app purchase of digital content consumed in-app). Replaced with:
+- Lock icon
+- Creator handle + price caption
+- "Subscribe at wrld.cam to watch" informational note
+- Back button only
+
+No in-app payment flow is initiated. This is the safe pattern for both App Store and Google Play.
+
+### Broadcaster live screen — lock badge (`src/components/screens/StreamScreen.tsx`)
+
+When a broadcaster is live with `subscribersOnly = true`, a 🔒 icon + "LOCKED" text appears inline in the source pills row (alongside CAMERA, AUDIO badges) so the broadcaster can see the gate is active.
+
+### Subscriber-only fix — `subscribersOnly` read from `activeBroadcast` (`src/components/screens/StreamScreen.tsx`)
+
+The `subscribersOnly` value was being read from Expo Router route params (`paramSubscribersOnly`), which gets overwritten by the Dashboard's `useFocusEffect` recovery navigation (that navigation fires without `subscribersOnly` in its params). Fixed to read from `activeBroadcast.get()?.subscribersOnly ?? paramSubscribersOnly` instead — `activeBroadcast` is set at Go Live time and is not affected by subsequent navigations.
+
+### Viewer disconnect on screen unfocus (`src/components/screens/StreamScreen.tsx`)
+
+The `useFocusEffect` for viewers (non-broadcaster stream screens) had no cleanup function. When a viewer navigated away via the tab bar (rather than the in-stream back button), the WebSocket stayed open and mediasoup never received a close event — viewer count stayed at 1. Fixed by returning a cleanup from `useFocusEffect` that calls `cleanup()` and `disconnect()` on unfocus.
+
+### Dashboard recovery navigation — `subscribersOnly` (`src/components/screens/DashboardScreen.tsx`)
+
+The `useFocusEffect` recovery path (re-routes an active broadcast back to the stream screen on Dashboard focus) was not including `subscribersOnly` in its params. Fixed to pass `subscribersOnly: active.subscribersOnly ?? 'false'`.
+
+### Monetize screen — subscriber stats (`src/components/screens/MonetizeScreen.tsx`)
+
+When subscriptions are configured, shows two stat boxes above the enable toggle:
+- **Subscribers** — active + past_due count from the backend
+- **Est. Monthly** — `subscriberCount × subscriptionPriceUsd` in dollars
+
+Data comes from the updated `GET /users/me/subscription/settings` which now returns `subscriberCount` and `estimatedMrrUsd`.
+
+`src/api/users.ts` — `getSubscriptionSettings()` return type updated to include `subscriberCount: number` and `estimatedMrrUsd: number`.
+
+`src/types/index.ts` — `Stream.host` now includes `subscriptionPriceUsd?: number | null`.
+
+### Offline / error states
+
+**`src/components/screens/LibraryScreen.tsx`:** The error block (`isError || isRefetchError`) now shows:
+- "No connection" (body)
+- "Check your internet connection and try again." (caption)
+- "Your recordings and clips are safely stored online." (caption)
+- "Try again" pill button calling `refetch()`
+
+`isRefetchError` is needed in addition to `isError` because TanStack Query keeps stale cached data and never sets `isError = true` when a background refetch fails — only `isRefetchError` fires in that case.
+
+**`src/hooks/useRecordings.ts`:** Added `retry: 1` so the error state surfaces after one retry instead of three (significantly faster offline detection).
+
+**`src/components/screens/WalletScreen.tsx`:** Added `isError` + `refetch` to the `useWallet()` destructuring. New error block before the loading spinner shows "No connection / Check your internet connection" with a "Try again" button. Previously the wallet showed an infinite spinner when offline.
+
+**`src/components/screens/StreamScreen.tsx`:** Added `isNetworkError(msg)` helper that matches on "websocket", "network", "connection" (case-insensitive). When the go-live or join fails with a network error, shows "No connection / Check your internet connection" instead of the raw "WebSocket connection failed" message. Non-network errors (banned keyword, suspended, subscription required) still show their specific message. Retry button relabelled "Try again".

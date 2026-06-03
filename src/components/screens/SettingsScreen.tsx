@@ -155,6 +155,15 @@ export function SettingsScreen() {
           showBorderTop={false}
           onPress={() => router.push('/(app)/subscription')}
         />
+        {wrldUser?.creatorReady && (
+          <SettingsRow
+            iconName="dollar-sign"
+            title="Monetize"
+            value={wrldUser.subscriptionEnabled ? 'Subscriptions on' : 'Set up subscriptions'}
+            arrow
+            onPress={() => router.push('/(app)/monetize')}
+          />
+        )}
       </SettingsGroup>
 
       {wrldUser?.creatorReady && (

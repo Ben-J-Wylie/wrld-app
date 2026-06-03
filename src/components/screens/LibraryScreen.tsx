@@ -1,5 +1,5 @@
-import { StyleSheet, View, FlatList, ActivityIndicator, Image } from 'react-native'
-import { useCallback } from 'react'
+import { StyleSheet, View, FlatList, ActivityIndicator, Image, Pressable, Alert } from 'react-native'
+import { useCallback, useState } from 'react'
 import { useFocusEffect } from 'expo-router'
 import { useAuth } from '@clerk/clerk-expo'
 import { theme } from '@/tokens/theme'
@@ -8,6 +8,8 @@ import { Pill } from '@/components/primitives/Pill'
 import { Card } from '@/components/primitives/Card'
 import { ScreenScroll } from '@/components/sections/ScreenScroll'
 import { useRecordings } from '@/hooks/useRecordings'
+import { useAuthStore } from '@/stores/authStore'
+import { recordingsApi } from '@/api/recordings'
 import type { Recording } from '@/types'
 
 function formatDate(iso: string): string {
@@ -32,10 +34,35 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-function RecordingRow({ recording }: { recording: Recording }) {
+function RecordingRow({ recording, onDelete }: { recording: Recording; onDelete: (id: string) => void }) {
   const isUnedited = recording._count.clips === 0
   const isReady = recording.status === 'ready'
   const isInProgress = recording.status === 'recording'
+  const [deleting, setDeleting] = useState(false)
+
+  function handleDelete() {
+    Alert.alert(
+      'Delete recording',
+      'This will permanently delete the recording and any clips from the server.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            setDeleting(true)
+            try {
+              await recordingsApi.delete(recording.id)
+              onDelete(recording.id)
+            } catch {
+              setDeleting(false)
+              Alert.alert('Error', 'Could not delete recording. Please try again.')
+            }
+          },
+        },
+      ],
+    )
+  }
 
   return (
     <Card variant="panel" style={styles.row}>
@@ -70,6 +97,18 @@ function RecordingRow({ recording }: { recording: Recording }) {
               Expires {formatDate(recording.expiresAt)}
             </Text>
           ) : null}
+          {!isInProgress && (
+            <Pressable
+              onPress={handleDelete}
+              disabled={deleting}
+              style={styles.deleteBtn}
+              hitSlop={8}
+            >
+              <Text variant="caption" color={deleting ? theme.colors.text.subtle : '#E5534B'}>
+                {deleting ? 'Deleting…' : 'Delete'}
+              </Text>
+            </Pressable>
+          )}
         </View>
       </View>
     </Card>
@@ -78,11 +117,24 @@ function RecordingRow({ recording }: { recording: Recording }) {
 
 export const LibraryScreen = () => {
   const { isSignedIn } = useAuth()
-  const { data: recordings, isLoading, isError, refetch } = useRecordings(!!isSignedIn)
+  const wrldUser = useAuthStore(s => s.wrldUser)
+  const { data: recordings, isLoading, isError, isRefetchError, refetch } = useRecordings(!!isSignedIn)
+  const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set())
+
+  const usedBytes = wrldUser?.usedStorageBytes ?? 0
+  const quotaBytes = wrldUser?.storageQuotaBytes ?? 0
+  const pct = quotaBytes > 0 ? Math.min(100, Math.round((usedBytes / quotaBytes) * 100)) : 0
+  const quotaGb = quotaBytes > 0 ? parseFloat((quotaBytes / 1024 ** 3).toFixed(1)).toString() : null
 
   useFocusEffect(useCallback(() => {
     if (isSignedIn) refetch()
   }, [isSignedIn]))
+
+  function handleDelete(id: string) {
+    setDeletedIds(prev => new Set([...prev, id]))
+  }
+
+  const visibleRecordings = (recordings ?? []).filter(r => !deletedIds.has(r.id))
 
   if (!isSignedIn) {
     return (
@@ -102,12 +154,23 @@ export const LibraryScreen = () => {
     )
   }
 
-  if (isError) {
+  if (isError || isRefetchError) {
     return (
       <ScreenScroll contentContainerStyle={styles.centeredContent}>
-        <Text variant="body" color={theme.colors.text.muted} style={styles.centeredText}>
-          Could not load recordings.
+        <Text variant="body" color={theme.colors.text.primary} style={styles.centeredText}>
+          No connection
         </Text>
+        <Text variant="caption" color={theme.colors.text.muted} style={styles.centeredText}>
+          Check your internet connection and try again.
+        </Text>
+        <Text variant="caption" color={theme.colors.text.muted} style={styles.centeredText}>
+          Your recordings and clips are safely stored online.
+        </Text>
+        <Pressable onPress={() => refetch()} style={styles.retryBtn}>
+          <Text variant="monoLabel" color={theme.colors.accent.default}>
+            Try again
+          </Text>
+        </Pressable>
       </ScreenScroll>
     )
   }
@@ -116,8 +179,13 @@ export const LibraryScreen = () => {
     <ScreenScroll>
       <View style={styles.header}>
         <Text variant="heading">Library</Text>
+        {quotaGb !== null && (
+          <Text variant="caption" color={pct >= 90 ? '#E5534B' : theme.colors.text.muted}>
+            {pct}% of {quotaGb} GB used
+          </Text>
+        )}
       </View>
-      {!recordings?.length ? (
+      {!visibleRecordings.length ? (
         <View style={styles.centeredContent}>
           <Text variant="body" color={theme.colors.text.muted} style={styles.centeredText}>
             Your recordings will appear here.
@@ -125,9 +193,9 @@ export const LibraryScreen = () => {
         </View>
       ) : (
         <FlatList
-          data={recordings}
+          data={visibleRecordings}
           keyExtractor={(r) => r.id}
-          renderItem={({ item }) => <RecordingRow recording={item} />}
+          renderItem={({ item }) => <RecordingRow recording={item} onDelete={handleDelete} />}
           contentContainerStyle={styles.list}
           scrollEnabled={false}
         />
@@ -141,6 +209,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.lg,
     paddingBottom: theme.spacing.md,
+    gap: 2,
   },
   list: {
     paddingHorizontal: theme.spacing.lg,
@@ -183,6 +252,10 @@ const styles = StyleSheet.create({
   expiry: {
     marginTop: 2,
   },
+  deleteBtn: {
+    marginTop: theme.spacing.xs,
+    alignSelf: 'flex-start',
+  },
   centeredContent: {
     flex: 1,
     alignItems: 'center',
@@ -191,5 +264,13 @@ const styles = StyleSheet.create({
   },
   centeredText: {
     textAlign: 'center',
+  },
+  retryBtn: {
+    marginTop: theme.spacing.md,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.radius.full,
+    borderWidth: 1,
+    borderColor: theme.colors.accent.default,
   },
 })
