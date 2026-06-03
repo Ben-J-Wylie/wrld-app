@@ -157,9 +157,20 @@ export const LibraryScreen = () => {
   if (isError) {
     return (
       <ScreenScroll contentContainerStyle={styles.centeredContent}>
-        <Text variant="body" color={theme.colors.text.muted} style={styles.centeredText}>
-          Could not load recordings.
+        <Text variant="body" color={theme.colors.text.primary} style={styles.centeredText}>
+          No connection
         </Text>
+        <Text variant="caption" color={theme.colors.text.muted} style={styles.centeredText}>
+          Check your internet connection and try again.
+        </Text>
+        <Text variant="caption" color={theme.colors.text.muted} style={styles.centeredText}>
+          Your recordings and clips are safely stored online.
+        </Text>
+        <Pressable onPress={() => refetch()} style={styles.retryBtn}>
+          <Text variant="monoLabel" color={theme.colors.accent.default}>
+            Try again
+          </Text>
+        </Pressable>
       </ScreenScroll>
     )
   }
@@ -253,5 +264,13 @@ const styles = StyleSheet.create({
   },
   centeredText: {
     textAlign: 'center',
+  },
+  retryBtn: {
+    marginTop: theme.spacing.md,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.radius.full,
+    borderWidth: 1,
+    borderColor: theme.colors.accent.default,
   },
 })
