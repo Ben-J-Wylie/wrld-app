@@ -92,11 +92,15 @@ function SingleCard({ stream, onDismiss, style }: SingleProps) {
           <Text variant="monoCaption" color={theme.colors.text.muted} numberOfLines={1}>
             @{stream.handle} · {formatViewers(stream.viewerCount)} watching
           </Text>
-          {stream.subscribersOnly && (
+          {priceLabel != null && (
             <View style={styles.lockRow}>
-              <Icon name="lock" size="sm" color={theme.colors.accent.default} />
+              <Icon
+                name={stream.subscribersOnly ? 'lock' : 'star'}
+                size="sm"
+                color={theme.colors.accent.default}
+              />
               <Text variant="monoCaption" color={theme.colors.accent.default}>
-                Subscribers only{priceLabel ? ` · ${priceLabel}` : ''}
+                {stream.subscribersOnly ? 'Subscribers only' : 'Subscriptions available'} · {priceLabel}
               </Text>
             </View>
           )}
@@ -161,7 +165,7 @@ function ClusterCard({ streams, locationLabel, onDismiss, style }: ClusterProps)
               <Text variant="monoCaption" color={theme.colors.text.muted} numberOfLines={1}>
                 @{s.handle} · {formatViewers(s.viewerCount)}
                 {s.distance ? ` · ${s.distance}` : ''}
-                {s.subscribersOnly ? ' · 🔒' : ''}
+                {s.subscribersOnly ? ' · 🔒' : s.subscriptionPriceUsd ? ' · ⭐' : ''}
               </Text>
             </View>
             <Pressable
