@@ -451,7 +451,7 @@ export function StreamScreen() {
         lat: coords.latitude,
         lng: coords.longitude,
         sources: broadcastSources,
-        subscribersOnly: paramSubscribersOnly === 'true',
+        subscribersOnly: (activeBroadcast.get()?.subscribersOnly ?? paramSubscribersOnly) === 'true',
       })
       await startBroadcasting(broadcastSources)
     } catch (err) {
