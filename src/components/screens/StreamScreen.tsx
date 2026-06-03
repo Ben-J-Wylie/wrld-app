@@ -431,7 +431,7 @@ export function StreamScreen() {
           stoppedByUserRef.current = false
         }
       } catch {}
-    }, 10_000)
+    }, 5_000)
     return () => clearInterval(interval)
   }, [isRecording, activeRecordingId])
 
