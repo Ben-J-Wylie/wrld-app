@@ -334,6 +334,105 @@ the `react-native-view-shot` Metro stub and install view-shot for real.
 
 ---
 
+## Clips initiative — model, working split & rollout (June 2026)
+
+The v0.2 recording/clips scope (re-baselined 2026-05-29) now has a decided
+capture + editing model and a Ben/Aaron working split. This section is the
+working reference for both; matching DECIDED sections live in
+`wrld-backend/CLAUDE.md` and `wrld-mediasoup/CLAUDE.md`.
+
+### Capture model (decided)
+
+- **Two independent buttons.** **Go Live** publishes the broadcast set; **Record**
+  captures the record set. Independent — live without recording, record without
+  going live, both, or neither.
+- **Two source sets.** Per source, a **broadcast** toggle (airs live?) and a
+  **record** toggle (saved?), set independently. All four combinations per source
+  are valid.
+- **Seven sources** (the v0.2 layer model): camera, audio, screen, location, gyro,
+  compass, identity. Identity is an **Attributed / Anon flag**, not a recorded
+  track.
+- **Privacy tiers.**
+  - *Sensitive* — camera, audio, location (and **screen — OPEN**, see below):
+    enabling **record** (especially record-without-broadcast) requires an explicit,
+    visible **consent step**, and the during-broadcast **on-air-vs-recording
+    indicator** must show recording state.
+  - *Benign* — gyro, compass: record-on by default, low friction.
+- **Guardrail (non-negotiable).** Nothing is captured silently. Record is always a
+  visible chosen state, plus a persistent on-air-vs-recording indicator while
+  broadcasting. The durable user-facing version of this promise is the Capture
+  Privacy Constitution (pre-launch backlog).
+
+### Editing model — per-source manifest (DECIDED June 2026)
+
+A **Recording** is per-source tracks; a **Clip** is a **non-destructive manifest**
+over a recording — no re-encode. `ClipEditScreen` (an unbuilt route) edits the
+manifest:
+
+- **Trim** — in-point / out-point.
+- **Per-source** — on / off / **delete permanently** (the only destructive edit:
+  removes a track from disk, reclaims quota); reveal a record-only source.
+- **Identity** — Attributed / Anon. **Location** — `locDisplayPrecision`, only ever
+  ≤ the captured ceiling. **Visibility** — public / anon / draft. **Tags.**
+
+Most clip components shipped in 12.5 against mock data (ClipCard, ClipPreview,
+Timeline, LayerEditorRow, FeedRow/FeedThumb). Storage usage is already available:
+`GET /auth/me` returns `usedStorageBytes` + `storageQuotaBytes` — surface it in the
+editor / profile.
+
+### Open decisions (not settled — resolve before C3/C4)
+
+- **Profile vs Library** — where editable material lives: a separate **Library
+  page** (Aaron's lean) vs **profile-as-library** + preview-public-view toggle
+  (Ben's lean). Pending the Claude Design comparison mocks. The mock brief and the
+  app handoff currently *assume* profile-as-library, but it is **not decided** —
+  settle before C5.
+- **Screen source tier** — sensitive (consent-gated record) or benign. Mocked as
+  sensitive; confirm.
+
+*(Resolved at C0: per-track `recordingReady` ✅ Aaron June 2026; existing-data
+migration ✅ delete June 2026 — all legacy recordings purged from production.)*
+
+### Working split (Ben / Aaron) — follows the tier boundary
+
+- **Ben (`design` branch) — the component library.** Primitives / features /
+  sections + DESIGN.md + galleries. The remaining clip additions are
+  component-library work, so they're Ben's: the **FeedRow two-dimension control**
+  (broadcast + record toggles, built from `SegmentedToggle`, with sensitive-tier
+  consent treatment and the location-precision sub-control), the **Go Live + Record
+  button states**, the **during-broadcast on-air-vs-recording indicator**, and the
+  **LayerEditorRow not-captured state**. Plus the DESIGN.md Section 3 inventory +
+  galleries.
+- **Aaron (`main` branch) — screens + app logic.** Shared types (`SourceType` is
+  already the 7-union; add `CaptureMode`, the two-set arming, the `Clip` manifest
+  type), `DashboardScreen` assembly (two buttons + per-source two-toggle arming +
+  defaults + consent flow + extend the go-live/record payload with the record set +
+  wire the indicator), `ClipEditScreen` (compose the components + inline LayerPanel
+  / TagsCard + wire the manifest), the profile screens (blocked on the
+  profile/library decision), storage display, telemetry playback.
+- **The seam.** Aaron does not touch `primitives/`, `features/`, `sections/`, or
+  DESIGN.md; Ben does not touch `screens/`, `hooks/`, or `api/`. Integration via
+  `design` → `main` merges.
+
+### Phased rollout (C0–C6)
+
+| Stage | Owner | Branch / repo | What | Depends on |
+|---|---|---|---|---|
+| **C0** | Ben + Aaron | — | Decisions & contracts. ✅ Model decided; ✅ per-track `recordingReady` Aaron June 2026; ✅ existing-data delete Aaron June 2026. Still open: **record-set payload shape** (only blocks C3 — C1 can proceed with provisional shape); **screen-tier** (blocks C2); **profile/library** (blocks C5). | — |
+| **C1** | Aaron | mediasoup + backend | Per-track recording substrate (per-source tracks + `.jsonl` telemetry; per-track `recordingReady`), landed in lockstep across both repos. Provisional record-set shape is sufficient — final shape confirmed before C3. **Can start now.** | C0 model ✅ |
+| **C2** | Ben | `design` | Component-library additions (FeedRow two-dimension control, LayerEditorRow not-captured, during-broadcast indicator, loc-precision sub-control) + DESIGN.md inventory + galleries. | C0 screen-tier decision |
+| **C3** | Aaron | `main` | Go Live / Record assembly on `DashboardScreen` (two buttons, per-source two-toggle arming, defaults, consent flow, payload, indicator wiring) + shared types. | C2 + record-set payload shape finalised |
+| **C4** | Aaron | `main` | Clip editor — build `ClipEditScreen` (trim + per-source on/off/delete + reveal + attribution + visibility/publish), wired to the manifest. | C1, C2 |
+| **C5** | Aaron | `main` | Profile / library surface + storage display. **Blocked on the profile/library decision.** | C4 + profile/library decision |
+| **C6** | Aaron | `main` | Telemetry tracks playback (loc/gyro/compass overlays). | C1 |
+
+**Parallelism.** C1 (Aaron) and C2 (Ben) run in parallel after C0. C3/C4 consume
+Ben's C2 components — Aaron builds against the current mock-state versions and
+integrates the new states when `design` → `main` lands. C5 needs C4 **and** the
+profile/library decision. C6 last.
+
+---
+
 ## v0.2 beta milestone — architectural decision (May 2026)
 
 Decided between Phase 7 and Phase 8. This section documents what v0.2 is,
@@ -457,6 +556,12 @@ not a blank page:
 - App Store submission assets (icon, screenshots, listing copy)
 - Production-grade observability (log aggregation, metrics, alerting)
 - Geo-discovery at scale (clustering, viewport-based queries on globe)
+- **Capture Privacy Constitution** — a formal, user-facing statement of which
+  sources are privacy-sensitive, the consent semantics for recording each
+  (especially record-without-broadcast), and the durable promise that nothing is
+  captured silently. v0.2 ships the working tiering + consent UX + on-air-vs-
+  recording indicator (see the clips-initiative section above); formalizing it as a
+  stated policy is its own pre-launch initiative.
 
 ---
 
@@ -553,9 +658,16 @@ When in doubt, ask before assuming.
 - **Don't put either Mapbox token in committed files.** Both the public
   (`pk.`) and secret download (`sk.`) tokens go in EAS secrets + local `.env`
   only. GitHub secret scanning blocks `pk.` tokens in committed files.
-- **Don't scope v0.3 features into v0.2 phases.** Recording, monetization,
-  sensor sources beyond audio/video, public-launch hardening — all deferred.
-  See "v0.2 beta milestone" above for the non-goals list.
+- **Don't scope v0.3 features into v0.2 phases.** Deferred to v0.3: real-money
+  payments, subscriptions/PPV as functional features, time machine, vignettes,
+  sensors beyond the seven, and public-launch hardening. (Recording/clips and
+  the 7-layer sensor model were re-baselined **into** v0.2 — see the 2026-05-29
+  entry and the clips-initiative section above.) See "v0.2 beta milestone" for
+  the full non-goals list.
+- **Don't build the clip editor on a baked / re-encoded clip model.** The decided
+  model (June 2026) is a non-destructive **manifest** over per-source recording
+  tracks — editing writes the manifest; permanent-delete is the only destructive
+  op. See the clips-initiative section above and `wrld-backend/CLAUDE.md`.
 
 ---
 
