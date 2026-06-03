@@ -62,9 +62,9 @@ import type { Stream } from '@/types'
 
 Mapbox.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '')
 
-const PIN_CLUSTER = '#5B8CFF'
-const PIN_SINGLE  = '#FF3B5C'
-const PIN_BORDER  = '#FFFFFF'
+const PIN_RED    = '#FF3B5C'
+const PIN_PURPLE = '#A855F7'
+const PIN_BORDER = '#FFFFFF'
 
 // Drawer has three states:
 //   closed   — only the grip visible above the tab bar (default at app
@@ -415,6 +415,7 @@ export function GlobeScreenMapbox() {
           handle:           s.host?.handle ?? 'unknown',
           sources:          (s.sources ?? []).join(','),
           precision:        s.locationPrecision ?? 'exact',
+          subscribersOnly:  s.subscribersOnly === true,
         },
       })),
   }
@@ -623,13 +624,22 @@ export function GlobeScreenMapbox() {
           cluster
           clusterRadius={50}
           clusterMaxZoomLevel={14}
+          clusterProperties={{
+            // sum of 1s for each subscribersOnly stream in the cluster
+            subscriberCount: ['+', ['case', ['get', 'subscribersOnly'], 1, 0]],
+          }}
           onPress={handleSourcePress}
         >
           <CircleLayer
             id="cluster-circles"
             filter={['has', 'point_count']}
             style={{
-              circleColor: PIN_CLUSTER,
+              // purple if every stream in cluster is subscriber-only, red otherwise
+              circleColor: ['case',
+                ['==', ['get', 'subscriberCount'], ['get', 'point_count']],
+                PIN_PURPLE,
+                PIN_RED,
+              ] as any,
               circleRadius: ['step', ['get', 'point_count'], 18, 5, 22, 15, 26] as any,
               circleStrokeWidth: 2,
               circleStrokeColor: PIN_BORDER,
@@ -651,7 +661,7 @@ export function GlobeScreenMapbox() {
             id="single-circles"
             filter={['all', ['!', ['has', 'point_count']], ['==', ['get', 'precision'], 'exact']] as any}
             style={{
-              circleColor: PIN_SINGLE,
+              circleColor: ['case', ['get', 'subscribersOnly'], PIN_PURPLE, PIN_RED] as any,
               circleRadius: 14,
               circleStrokeWidth: 2,
               circleStrokeColor: PIN_BORDER,
@@ -673,12 +683,12 @@ export function GlobeScreenMapbox() {
             id="single-city"
             filter={['all', ['!', ['has', 'point_count']], ['==', ['get', 'precision'], 'city']] as any}
             style={{
-              circleColor: PIN_SINGLE,
+              circleColor: ['case', ['get', 'subscribersOnly'], PIN_PURPLE, PIN_RED] as any,
               circleRadius: 44,
               circleOpacity: 0.35,
               circleBlur: 0.85,
               circleStrokeWidth: 1,
-              circleStrokeColor: PIN_SINGLE,
+              circleStrokeColor: ['case', ['get', 'subscribersOnly'], PIN_PURPLE, PIN_RED] as any,
               circleStrokeOpacity: 0.6,
             }}
           />
@@ -686,7 +696,7 @@ export function GlobeScreenMapbox() {
             id="single-country"
             filter={['all', ['!', ['has', 'point_count']], ['==', ['get', 'precision'], 'country']] as any}
             style={{
-              circleColor: PIN_SINGLE,
+              circleColor: ['case', ['get', 'subscribersOnly'], PIN_PURPLE, PIN_RED] as any,
               circleRadius: 72,
               circleOpacity: 0.25,
               circleBlur: 1,
