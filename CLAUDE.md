@@ -1220,3 +1220,67 @@ The city and country halos are centered on the obfuscated/centroid coordinates r
 ### Stream type (`src/types/index.ts`)
 
 `Stream` now has `locationPrecision?: 'exact' | 'city' | 'country'`. The `'off'` value never appears in the app since those streams are filtered by the backend before delivery.
+
+---
+
+## Updates — June 2026 (Creator subscriptions — app UI)
+
+### What was built
+
+App-side wiring for per-creator subscriptions. Payment happens on the web (system browser via `Linking.openURL`) — no IAP, no WebView — to comply with App Store rules. The app creates a short-lived checkout session via the API, opens the returned URL in the browser, and checks subscription status when it regains focus.
+
+### New screen: `MonetizeScreen` (`src/components/screens/MonetizeScreen.tsx`)
+
+Route: `/(app)/monetize` (registered as hidden tab in `_layout.tsx`). Entry point: Settings → ACCOUNT → "Monetize" row (only visible when `wrldUser.creatorReady = true`).
+
+**Three states:**
+1. **Not connected** — explains the 70/30 split, "Connect Stripe" button opens `POST /users/me/subscription/onboard` URL in browser
+2. **Connected, no price** — enable/disable toggle (disabled until price set), price input + Save, Stripe dashboard link
+3. **Connected with price** — toggle enabled, current price shown, change price, Stripe dashboard link
+
+All mutations call the relevant `usersApi` methods and invalidate `subscription-settings` + `currentUser` query caches.
+
+### Profile screen additions (`src/components/screens/ProfileScreen.tsx`)
+
+When viewing another user's profile and `profile.subscriptionEnabled && profile.subscriptionPriceUsd`:
+- **Not subscribed** → "Subscribe · $X/mo" button → `usersApi.createSubscribeSession(handle)` → `Linking.openURL(url)`; refetches status when app returns to foreground
+- **Already subscribed** → "Subscribed · $X/mo" button (secondary style) → `Alert.alert` with "Cancel subscription" destructive option → `usersApi.cancelSubscription(handle)`
+
+Subscription status fetched via `useQuery(['subscription-status', handle])` — only enabled when signed in, not own profile, and creator has subscriptions enabled.
+
+### Stream screen additions (`src/components/screens/StreamScreen.tsx`)
+
+Handles `'Subscription required'` error from mediasoup `joinRoom` separately from other errors. When viewer is blocked:
+- Shows "This stream is for subscribers only" + creator handle + price
+- "Subscribe" button → subscribe-session → `Linking.openURL`
+- "Back" button → globe
+
+`subscribersOnly` route param accepted (`paramSubscribersOnly?: string`). Passed as `subscribersOnly: paramSubscribersOnly === 'true'` to `createRoom`.
+
+### Dashboard additions (`src/components/screens/DashboardScreen.tsx`)
+
+"Subscribers only" toggle (`Toggle` primitive) shown between the Location section and GoBar — only when `currentUser?.subscriptionEnabled = true`. State: `subscribersOnly: boolean`, defaults `false`. Value passed as `String(subscribersOnly)` route param to `/(app)/stream/new`.
+
+### Type updates (`src/types/index.ts`)
+
+- `User` — added `subscriptionEnabled: boolean`, `subscriptionPriceUsd: number | null`
+- `PublicUser` — added `subscriptionEnabled: boolean`, `subscriptionPriceUsd: number | null`
+- `Stream` — added `subscribersOnly?: boolean`
+
+### API additions (`src/api/users.ts`)
+
+`getSubscriptionStatus(handle)`, `createSubscribeSession(handle)`, `cancelSubscription(handle)`, `getSubscriptionSettings()`, `startSubscriptionOnboard()`, `updateSubscriptionSettings(settings)`, `getSubscriptionDashboardUrl()`
+
+### Signaling updates
+
+`createRoom` in both `src/lib/mediasoupSignaling.ts` and `src/hooks/useSignaling.ts` now requires `subscribersOnly: boolean`. `ClientMessage` union updated accordingly.
+
+`src/lib/activeBroadcast.ts` — `BroadcastParams` extended with `subscribersOnly?: string`.
+
+### No EAS rebuild required
+
+All changes are pure TypeScript/JS — no new native modules. Metro hot reload picks them up immediately.
+
+### Activation dependency
+
+Stripe keys must be configured in the backend before the subscribe/monetize flows work end-to-end. Until then, `usersApi.createSubscribeSession` will throw a 400 ("Stripe account not connected") which the UI surfaces as an Alert.
