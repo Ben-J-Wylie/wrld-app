@@ -901,6 +901,12 @@ export function StreamScreen() {
                         label={SOURCE_LABELS[s].toUpperCase()}
                       />
                     ))}
+                    {(activeBroadcast.get()?.subscribersOnly ?? paramSubscribersOnly) === 'true' && (
+                      <View style={styles.lockBadge}>
+                        <Icon name="lock" size="sm" color={theme.colors.accent.default} />
+                        <Text variant="monoCaption" color={theme.colors.accent.default}>LOCKED</Text>
+                      </View>
+                    )}
                   </View>
                   <Pressable onPress={openViewerList} hitSlop={8}>
                     <Text
@@ -1198,6 +1204,11 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
     flexWrap: 'wrap',
     justifyContent: 'center',
+  },
+  lockBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   sourceSwitchBtn: {
     borderRadius: theme.radius.full,
