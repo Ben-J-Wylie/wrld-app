@@ -212,8 +212,10 @@ export function StreamScreen() {
   const [keyboardHeight, setKeyboardHeight] = useState(0)
   const [isRecording, setIsRecording] = useState(false)
   const [activeRecordingId, setActiveRecordingId] = useState<string | null>(null)
+  const stoppedByUserRef = useRef(false)
 
   function stopActiveRecording() {
+    stoppedByUserRef.current = true
     if (activeRecordingId) {
       recordingsApi.stop(activeRecordingId).catch(() => {})
     }
@@ -407,6 +409,31 @@ export function StreamScreen() {
     return () => { sub?.remove() }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isNew, status])
+
+  // Poll recording status while recording is active. When the server stops
+  // the recording due to quota, finalize cleanly and alert the broadcaster.
+  useEffect(() => {
+    if (!isRecording || !activeRecordingId) return
+    const id = activeRecordingId
+    const interval = setInterval(async () => {
+      try {
+        const list = await recordingsApi.list()
+        const rec = list.find(r => r.id === id)
+        if (rec && rec.status !== 'recording') {
+          if (!stoppedByUserRef.current) {
+            setIsRecording(false)
+            setActiveRecordingId(null)
+            Alert.alert(
+              'Recording stopped',
+              'You\'ve reached your storage limit. Your stream continues.',
+            )
+          }
+          stoppedByUserRef.current = false
+        }
+      } catch {}
+    }, 10_000)
+    return () => clearInterval(interval)
+  }, [isRecording, activeRecordingId])
 
   async function handleGoLive() {
     setIsRecording(false)
