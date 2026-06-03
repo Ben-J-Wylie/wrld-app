@@ -8,6 +8,7 @@ export function useRecordings(enabled = true) {
     queryFn: recordingsApi.list,
     enabled,
     staleTime: 10_000,
+    retry: 1,
     // Poll every 3s while any recording is in-flight, recently failed,
     // or ready but still awaiting its thumbnail (extracted async after status update).
     refetchInterval: (query) => {

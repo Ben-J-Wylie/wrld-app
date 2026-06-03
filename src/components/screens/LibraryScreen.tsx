@@ -118,7 +118,7 @@ function RecordingRow({ recording, onDelete }: { recording: Recording; onDelete:
 export const LibraryScreen = () => {
   const { isSignedIn } = useAuth()
   const wrldUser = useAuthStore(s => s.wrldUser)
-  const { data: recordings, isLoading, isError, refetch } = useRecordings(!!isSignedIn)
+  const { data: recordings, isLoading, isError, isRefetchError, refetch } = useRecordings(!!isSignedIn)
   const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set())
 
   const usedBytes = wrldUser?.usedStorageBytes ?? 0
@@ -154,7 +154,7 @@ export const LibraryScreen = () => {
     )
   }
 
-  if (isError) {
+  if (isError || isRefetchError) {
     return (
       <ScreenScroll contentContainerStyle={styles.centeredContent}>
         <Text variant="body" color={theme.colors.text.primary} style={styles.centeredText}>
