@@ -60,12 +60,7 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
   return context.resolveRequest(context, moduleName, platform)
 }
 
-// --- 4. Suppress package exports warnings from packages with incomplete
-// exports fields (e.g. event-target-shim inside react-native-webrtc).
-// Metro falls back to file resolution correctly; this just stops the noise.
-config.resolver.unstable_enablePackageExports = false
-
-// --- 5. Cap worker count ---
+// --- 4. Cap worker count ---
 config.maxWorkers = 4
 
 module.exports = config
