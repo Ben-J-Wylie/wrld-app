@@ -431,10 +431,10 @@ export function StreamScreen() {
           if (!stoppedByUserRef.current) {
             setIsRecording(false)
             setActiveRecordingId(null)
-            Alert.alert(
-              'Recording stopped',
-              'You\'ve reached your storage limit. Your stream continues.',
-            )
+            const message = rec.status === 'failed'
+              ? 'The recording encountered an error and was stopped. Your stream continues.'
+              : 'You\'ve reached your storage limit. Your stream continues.'
+            Alert.alert('Recording stopped', message)
           }
           stoppedByUserRef.current = false
         }
