@@ -2408,6 +2408,15 @@ middle, Toggle on the right. State drives the row's border + bg tone +
 detail prefix; the consumer manages `on` separately so a user can
 toggle off without changing the OS-driven `state`.
 
+**Planned (clips initiative · C2 · Ben / `design`):** extend the single Toggle to
+a **two-dimension control** — a **broadcast** affordance and a **record**
+affordance per source, built from `SegmentedToggle` (not a new control). Sensitive
+sources (cam / audio / loc; screen OPEN) route their record affordance through a
+visible consent step rather than toggling silently; the `loc` variant exposes a
+precision sub-control (reuse `LocationGranularityPicker`) as the capture ceiling.
+Keep the OS-driven `denied` / `disabled` states gating selectability. See the
+2026-06-03 decision-log entry.
+
 ---
 
 ##### `FeedThumb`
@@ -2465,6 +2474,30 @@ tint + label + knob copy:
 
 A full countdown ring overlay was scoped out for v1 — the mono caption
 carries the seconds and the live-state pulse covers the dramatic tone.
+
+**Planned (clips initiative · C2 · Ben / `design`):** add **Record** button states
+alongside the Go Live states, since recording is independent of going live (two
+buttons). Whether that's a GoBar variant set or a sibling control is Ben's
+inventory call. See the 2026-06-03 decision-log entry.
+
+---
+
+##### `BroadcastStatusIndicator` (planned)
+
+- **Tier:** feature (likely composes Pill + Text + Icon) — **or inline**, TBD
+- **Location:** `src/components/features/broadcast/` (if extracted)
+- **Status:** **Planned (clips initiative · C2 · Ben / `design`)** — not built
+- **Tweak impact:** broadcaster live overlay (StreamScreen)
+
+**Intent:** a persistent during-broadcast readout distinguishing what's **on air**
+from what's **only recording**, sitting with the existing live HUD (● LIVE, viewer
+count, source badges) over the video. Required by the capture guardrail — nothing
+recorded silently. States: live + recording the same set; live but recording a
+larger set (a sensitive source recorded record-only); recording but not live.
+Reads over arbitrary video, so it uses the same translucent dark-glass treatment as
+the other over-content HUD surfaces (pending the `bg.darkGlass` token). **Open:**
+Ben's inventory call whether this is a reusable feature or stays inline in
+StreamScreen — hence no shipped API yet.
 
 ---
 
@@ -2616,6 +2649,14 @@ RESTORE link-style Pressable that emits `onUndelete`.
 distinguishing behavior (anonymize retroactively) lives in the
 consumer's `onToggle` handler. When the anonymize confirm flow lands
 the variant can hook a deeper UI in.
+
+**Planned (clips initiative · C2 · Ben / `design`):** the per-source manifest model
+needs two state clarifications. (1) Add a **not-captured** state — a source that
+wasn't in the record set (disabled / greyed, nothing to enable). (2) Distinguish
+the reversible hide (shipped `deleted` + RESTORE, i.e. manifest `off`) from an
+**irreversible delete-permanently** (removes the track from disk, reclaims quota,
+confirm dialog, no RESTORE). Revealing a record-only source is the `off → on`
+transition. See the 2026-06-03 decision-log entry.
 
 ---
 
@@ -3278,6 +3319,58 @@ above. The seam is not a separate motion category.
 
 Append-only. Most recent first. Each entry: date, decision, rationale,
 constraint it imposes downstream.
+
+### 2026-06-03 — Clips initiative: per-source manifest model + two-button capture (DECIDED)
+
+Builds on the 2026-05-29 clips + sensor entries. Those established the 7-layer
+model, anon-on-My-Profile, and per-layer post-edit intent; this entry settles the
+**data model** behind them and the **capture UX**, reconciled across all three
+repos (see the DECIDED sections in `wrld-backend/CLAUDE.md` and
+`wrld-mediasoup/CLAUDE.md`).
+
+**Decision — per-source manifest.** A Recording is **per-source tracks**
+(non-baked); a Clip is a **non-destructive manifest** over a recording. Editing
+writes the manifest — no re-encode. This supersedes the shipped backend's
+single-output recording + baked-clip approach for new work. Per-layer post-edit
+(the 2026-05-29 intent) is realized as manifest source-state: on / off (reversible)
+/ delete-permanently (irreversible — removes the track from disk, reclaims quota) /
+not-captured (the source wasn't recorded).
+
+**Decision — two buttons, two source sets.** Going live and recording are
+independent. **Go Live** publishes the broadcast set; **Record** captures the
+record set. Per source, a broadcast affordance and a record affordance, set
+independently (all four combinations valid). A source can be recorded without being
+broadcast and vice versa.
+
+**Decision — capture privacy tiers.** Sensitive sources (camera, audio, location;
+**screen OPEN**) require an explicit, visible consent step to **record** —
+especially record-without-broadcast — plus a persistent during-broadcast
+on-air-vs-recording indicator. Benign sources (gyro, compass) record-on by default.
+Identity is an Attributed / Anon flag, not a track. Guardrail: nothing captured
+silently. The durable user-facing version is the Capture Privacy Constitution
+(CLAUDE.md pre-launch backlog).
+
+**Open — profile vs library.** Where editable material lives (a separate Library
+page vs profile-as-library + preview-public-view) is **not decided** — pending the
+Claude Design comparison mocks. Don't bake either into components yet.
+
+**Imposes (this doc / `design` lane, clips C2):**
+- **FeedRow** gains a two-dimension control — broadcast + record toggles (built
+  from `SegmentedToggle`), sensitive-tier consent treatment, and a
+  location-precision sub-control (reusing `LocationGranularityPicker`).
+- **Record button states** alongside GoBar's Go Live states.
+- **During-broadcast on-air-vs-recording indicator** — new; Ben's inventory call
+  whether it's a reusable feature or stays inline in StreamScreen.
+- **LayerEditorRow** gains a **not-captured** state and a distinct, irreversible
+  **delete-permanently** treatment (the shipped `deleted` + RESTORE is the
+  reversible hide, not permanent deletion).
+- The Section 3 entries above carry "Planned (clips initiative · C2)" notes. The
+  clip mock set (Go Live & Record, consent sheet, indicator, clip editor, and the
+  profile-vs-library comparison) lands in `docs/design/mocks/` and feeds the
+  inventory pass.
+- Phasing + the Ben/Aaron lane split live in `CLAUDE.md` ("Clips initiative —
+  model, working split & rollout"). Ben owns these component additions on `design`;
+  Aaron composes them into screens on `main`.
 
 ### 2026-06-01 — Sub-phase 12.7 (motion pass) shipped
 
