@@ -500,9 +500,10 @@ export function StreamScreen() {
         const { recordingId } = await recordingsApi.start(streamId)
         setActiveRecordingId(recordingId)
         setIsRecording(true)
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Could not start recording'
-        Alert.alert('Recording', msg)
+      } catch (err: unknown) {
+        const serverMsg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+        const msg = serverMsg ?? 'Could not start recording'
+        Alert.alert('Storage full', msg)
       }
     }
   }
