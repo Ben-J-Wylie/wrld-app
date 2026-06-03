@@ -54,6 +54,7 @@ import { useAuth } from '@clerk/clerk-expo'
 import { Button } from '@/components/primitives/Button'
 import { Text } from '@/components/primitives/Text'
 import { Pill } from '@/components/primitives/Pill'
+import { Icon } from '@/components/primitives/Icon'
 import { IconButton } from '@/components/primitives/IconButton'
 import { HelpText } from '@/components/primitives/HelpText'
 import { LivePill } from '@/components/features/stream/LivePill'
@@ -961,29 +962,21 @@ export function StreamScreen() {
           {/* ── Error ────────────────────────────────────────────── */}
           {status === 'error' && displayError === 'Subscription required' && !isNew ? (
             <View style={styles.actions}>
+              <Icon name="lock" size="lg" color={theme.colors.text.muted} />
               <Text variant="body" color={theme.colors.text.primary} style={styles.center}>
-                This stream is for subscribers only
+                Subscribers only
               </Text>
               {broadcaster && (
-                <Text variant="caption" color={theme.colors.text.secondary} style={styles.center}>
+                <Text variant="caption" color={theme.colors.text.muted} style={styles.center}>
                   @{broadcaster.handle}
                   {streamData?.host?.subscriptionPriceUsd
                     ? ` · $${(streamData.host as unknown as { subscriptionPriceUsd: number }).subscriptionPriceUsd / 100}/mo`
                     : ''}
                 </Text>
               )}
-              <Button
-                label="Subscribe"
-                onPress={async () => {
-                  if (!broadcaster?.handle) return
-                  try {
-                    const { url } = await usersApi.createSubscribeSession(broadcaster.handle)
-                    await Linking.openURL(url)
-                  } catch {
-                    Alert.alert('Error', 'Could not open subscription page')
-                  }
-                }}
-              />
+              <Text variant="caption" color={theme.colors.text.muted} style={styles.center}>
+                Subscribe at wrld.cam to watch
+              </Text>
               <Button
                 label="Back"
                 onPress={() => router.navigate('/(app)/globe')}

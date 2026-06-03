@@ -84,7 +84,7 @@ export type Recording = {
 export type Stream = {
   id: string
   hostId: string
-  host?: { id: string; handle: string; displayName: string; avatarUrl: string | null }
+  host?: { id: string; handle: string; displayName: string; avatarUrl: string | null; subscriptionPriceUsd?: number | null }
   hostDisplayName?: string
   title: string
   lat: number

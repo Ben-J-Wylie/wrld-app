@@ -392,6 +392,8 @@ export function GlobeScreenMapbox() {
       avatarUrl: stream.host?.avatarUrl,
       viewerCount: stream.viewerCount,
       isLive: stream.isLive,
+      subscribersOnly: stream.subscribersOnly,
+      subscriptionPriceUsd: stream.host?.subscriptionPriceUsd,
       onJoin: () => joinStream(stream),
     }
   }
