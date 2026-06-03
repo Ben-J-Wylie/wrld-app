@@ -97,6 +97,28 @@ export function MonetizeScreen() {
         </>
       ) : (
         <>
+          {/* Subscriber stats */}
+          {(settings.subscriberCount > 0 || settings.subscriptionPriceUsd) && (
+            <View style={styles.statsRow}>
+              <View style={styles.statBox}>
+                <Text variant="display">{settings.subscriberCount}</Text>
+                <Text variant="monoCaption" color={theme.colors.text.muted}>
+                  {settings.subscriberCount === 1 ? 'SUBSCRIBER' : 'SUBSCRIBERS'}
+                </Text>
+              </View>
+              {settings.subscriptionPriceUsd != null && (
+                <View style={styles.statBox}>
+                  <Text variant="display">
+                    ${(settings.estimatedMrrUsd / 100).toFixed(0)}
+                  </Text>
+                  <Text variant="monoCaption" color={theme.colors.text.muted}>
+                    EST. MONTHLY
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
+
           {/* Enable / disable */}
           <View style={styles.row}>
             <View style={styles.rowText}>
@@ -178,5 +200,19 @@ const styles = StyleSheet.create({
   },
   section: {
     gap: theme.spacing.sm,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: theme.spacing.md,
+  },
+  statBox: {
+    flex: 1,
+    backgroundColor: theme.colors.bg.elevated,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border.subtle,
+    padding: theme.spacing.lg,
+    alignItems: 'center',
+    gap: theme.spacing.xs,
   },
 })

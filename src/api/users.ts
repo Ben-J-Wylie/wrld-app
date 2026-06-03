@@ -128,12 +128,16 @@ export const usersApi = {
     subscriptionPriceUsd: number | null
     onboardingComplete: boolean
     stripeConnectId: string | null
+    subscriberCount: number
+    estimatedMrrUsd: number
   }> => {
     const res = await apiClient.get<{
       subscriptionEnabled: boolean
       subscriptionPriceUsd: number | null
       onboardingComplete: boolean
       stripeConnectId: string | null
+      subscriberCount: number
+      estimatedMrrUsd: number
     }>('/users/me/subscription/settings')
     return res.data
   },
