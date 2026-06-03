@@ -365,6 +365,10 @@ export function StreamScreen() {
       navigatingRef.current = false
       cleanup()
       handleJoin()
+      return () => {
+        cleanup()
+        disconnect()
+      }
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [id]),
   )
