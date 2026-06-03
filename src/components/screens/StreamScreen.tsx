@@ -105,6 +105,12 @@ const REACTION_CONFIGS: ReactionConfig[] = [
   { kind: 'wow', emoji: '😮' },
 ]
 
+function isNetworkError(msg: string | null | undefined): boolean {
+  if (!msg) return false
+  const lower = msg.toLowerCase()
+  return lower.includes('websocket') || lower.includes('network') || lower.includes('connection')
+}
+
 function FloatingTip({ tip, onDone }: { tip: TipEvent; onDone: (id: number) => void }) {
   const translateY = useRef(new Animated.Value(0)).current
   const opacity = useRef(new Animated.Value(1)).current
@@ -995,10 +1001,21 @@ export function StreamScreen() {
             </View>
           ) : status === 'error' ? (
             <View style={styles.actions}>
-              <Text variant="body" color={theme.colors.accent.default} style={styles.center}>
-                {displayError}
-              </Text>
-              <Button label="Retry" onPress={isNew ? handleGoLive : handleJoin} />
+              {isNetworkError(displayError) ? (
+                <>
+                  <Text variant="body" color={theme.colors.text.primary} style={styles.center}>
+                    No connection
+                  </Text>
+                  <Text variant="caption" color={theme.colors.text.muted} style={styles.center}>
+                    Check your internet connection and try again.
+                  </Text>
+                </>
+              ) : (
+                <Text variant="body" color={theme.colors.accent.default} style={styles.center}>
+                  {displayError}
+                </Text>
+              )}
+              <Button label="Try again" onPress={isNew ? handleGoLive : handleJoin} />
               <Button
                 label="Back"
                 onPress={() => router.navigate('/(app)/globe')}
