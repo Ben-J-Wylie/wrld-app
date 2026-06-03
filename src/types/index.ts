@@ -18,6 +18,8 @@ export type User = {
   dateOfBirth?: string
   locationPrecision?: 'exact' | 'city' | 'country' | 'off'
   creatorReady: boolean
+  usedStorageBytes: number
+  storageQuotaBytes: number
 }
 
 export type PublicUser = {

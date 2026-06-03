@@ -8,6 +8,7 @@ import { Pill } from '@/components/primitives/Pill'
 import { Card } from '@/components/primitives/Card'
 import { ScreenScroll } from '@/components/sections/ScreenScroll'
 import { useRecordings } from '@/hooks/useRecordings'
+import { useAuthStore } from '@/stores/authStore'
 import { recordingsApi } from '@/api/recordings'
 import type { Recording } from '@/types'
 
@@ -116,8 +117,14 @@ function RecordingRow({ recording, onDelete }: { recording: Recording; onDelete:
 
 export const LibraryScreen = () => {
   const { isSignedIn } = useAuth()
+  const wrldUser = useAuthStore(s => s.wrldUser)
   const { data: recordings, isLoading, isError, refetch } = useRecordings(!!isSignedIn)
   const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set())
+
+  const usedBytes = wrldUser?.usedStorageBytes ?? 0
+  const quotaBytes = wrldUser?.storageQuotaBytes ?? 0
+  const pct = quotaBytes > 0 ? Math.min(100, Math.round((usedBytes / quotaBytes) * 100)) : 0
+  const quotaGb = quotaBytes > 0 ? (quotaBytes / 1024 ** 3).toFixed(0) : null
 
   useFocusEffect(useCallback(() => {
     if (isSignedIn) refetch()
@@ -161,6 +168,11 @@ export const LibraryScreen = () => {
     <ScreenScroll>
       <View style={styles.header}>
         <Text variant="heading">Library</Text>
+        {quotaGb !== null && (
+          <Text variant="caption" color={pct >= 90 ? '#E5534B' : theme.colors.text.muted}>
+            {pct}% of {quotaGb} GB used
+          </Text>
+        )}
       </View>
       {!visibleRecordings.length ? (
         <View style={styles.centeredContent}>
@@ -186,6 +198,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.lg,
     paddingBottom: theme.spacing.md,
+    gap: 2,
   },
   list: {
     paddingHorizontal: theme.spacing.lg,
