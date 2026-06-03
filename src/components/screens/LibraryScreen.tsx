@@ -124,7 +124,7 @@ export const LibraryScreen = () => {
   const usedBytes = wrldUser?.usedStorageBytes ?? 0
   const quotaBytes = wrldUser?.storageQuotaBytes ?? 0
   const pct = quotaBytes > 0 ? Math.min(100, Math.round((usedBytes / quotaBytes) * 100)) : 0
-  const quotaGb = quotaBytes > 0 ? (quotaBytes / 1024 ** 3).toFixed(0) : null
+  const quotaGb = quotaBytes > 0 ? parseFloat((quotaBytes / 1024 ** 3).toFixed(1)).toString() : null
 
   useFocusEffect(useCallback(() => {
     if (isSignedIn) refetch()
