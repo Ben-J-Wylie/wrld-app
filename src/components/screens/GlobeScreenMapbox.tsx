@@ -45,7 +45,7 @@ import { consumeStreamSignal } from '@/lib/streamSignals'
 import { streamsApi } from '@/api/streams'
 import { theme } from '@/tokens/theme'
 import { useLocation } from '@/hooks/useLocation'
-import { useStreamsNear } from '@/hooks/useStreamsNear'
+import { useDiscoverySocket } from '@/hooks/useDiscoverySocket'
 import { Text } from '@/components/primitives/Text'
 import { Pill } from '@/components/primitives/Pill'
 import { BrandMark } from '@/components/primitives/BrandMark'
@@ -142,10 +142,7 @@ type BannerData =
 
 export function GlobeScreenMapbox() {
   const { coords } = useLocation()
-  const { data: streams } = useStreamsNear(
-    coords?.latitude ?? null,
-    coords?.longitude ?? null,
-  )
+  const streams = useDiscoverySocket()
   const insets = useSafeAreaInsets()
 
   const [selectedStream, setSelectedStream] = useState<Stream | null>(null)
@@ -403,7 +400,7 @@ export function GlobeScreenMapbox() {
 
   const geoJSON = {
     type: 'FeatureCollection' as const,
-    features: (streams ?? [])
+    features: streams
       .filter(s => s.lat != null && s.lng != null)
       .map(s => ({
         type: 'Feature' as const,
@@ -431,7 +428,7 @@ export function GlobeScreenMapbox() {
       try {
         const leaves = await sourceRef.current?.getClusterLeaves(feature, 100, 0) as any
         const clusterStreams = ((leaves?.features ?? []) as any[])
-          .map((f: any) => streams?.find(s => s.id === f.properties?.streamId))
+          .map((f: any) => streams.find(s => s.id === f.properties?.streamId))
           .filter((s): s is Stream => s != null)
         if (clusterStreams.length > 0) {
           setSelectedClusterStreams(clusterStreams)
@@ -439,7 +436,7 @@ export function GlobeScreenMapbox() {
         }
       } catch {}
     } else {
-      const stream = streams?.find(s => s.id === feature.properties?.streamId)
+      const stream = streams.find(s => s.id === feature.properties?.streamId)
       if (stream) {
         setSelectedStream(stream)
         setSelectedClusterStreams(null)
@@ -447,7 +444,7 @@ export function GlobeScreenMapbox() {
     }
   }
 
-  const liveCount = streams?.length ?? 0
+  const liveCount = streams.length
 
   // ── Drawer animation + state coupling ──────────────────────────────────────
 
