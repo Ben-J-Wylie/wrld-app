@@ -78,7 +78,7 @@ export function DashboardScreen() {
     const t = setTimeout(() => {
       router.navigate({
         pathname: '/(app)/stream/[id]',
-        params: { id: 'new', title: active.title, sources: active.sources },
+        params: { id: 'new', title: active.title, sources: active.sources, subscribersOnly: active.subscribersOnly ?? 'false' },
       })
     }, 0)
     return () => clearTimeout(t)
