@@ -73,6 +73,7 @@ export default function AppLayout() {
         <Tabs.Screen name="profile/[handle]" options={{ href: null }} />
         <Tabs.Screen name="settings" options={{ href: null }} />
         <Tabs.Screen name="subscription" options={{ href: null }} />
+        <Tabs.Screen name="monetize" options={{ href: null }} />
         <Tabs.Screen name="primitive-gallery" options={{ href: null }} />
         <Tabs.Screen name="feature-gallery" options={{ href: null }} />
         <Tabs.Screen name="section-gallery" options={{ href: null }} />

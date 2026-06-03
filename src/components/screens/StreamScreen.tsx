@@ -34,6 +34,7 @@ import {
   Animated,
   AppState,
   Keyboard,
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -81,6 +82,7 @@ import { signalingClient } from '@/lib/mediasoupSignaling'
 import { activeBroadcast } from '@/lib/activeBroadcast'
 import { streamsApi } from '@/api/streams'
 import { recordingsApi } from '@/api/recordings'
+import { usersApi } from '@/api/users'
 import { useSignaling } from '@/hooks/useSignaling'
 import { useMediasoup } from '@/hooks/useMediasoup'
 import * as Location from 'expo-location'
@@ -138,13 +140,14 @@ const tipStyles = StyleSheet.create({
 })
 
 export function StreamScreen() {
-  const { id, streamId: paramStreamId, title: paramTitle, sources: paramSources, lat: paramLat, lng: paramLng } = useLocalSearchParams<{
+  const { id, streamId: paramStreamId, title: paramTitle, sources: paramSources, lat: paramLat, lng: paramLng, subscribersOnly: paramSubscribersOnly } = useLocalSearchParams<{
     id: string
     streamId?: string
     title?: string
     sources?: string
     lat?: string
     lng?: string
+    subscribersOnly?: string
   }>()
   const isNew = id === 'new'
 
@@ -447,6 +450,7 @@ export function StreamScreen() {
         lat: coords.latitude,
         lng: coords.longitude,
         sources: broadcastSources,
+        subscribersOnly: paramSubscribersOnly === 'true',
       })
       await startBroadcasting(broadcastSources)
     } catch (err) {
@@ -955,7 +959,38 @@ export function StreamScreen() {
           )}
 
           {/* ── Error ────────────────────────────────────────────── */}
-          {status === 'error' && (
+          {status === 'error' && displayError === 'Subscription required' && !isNew ? (
+            <View style={styles.actions}>
+              <Text variant="body" color={theme.colors.text.primary} style={styles.center}>
+                This stream is for subscribers only
+              </Text>
+              {broadcaster && (
+                <Text variant="caption" color={theme.colors.text.secondary} style={styles.center}>
+                  @{broadcaster.handle}
+                  {streamData?.host?.subscriptionPriceUsd
+                    ? ` · $${(streamData.host as unknown as { subscriptionPriceUsd: number }).subscriptionPriceUsd / 100}/mo`
+                    : ''}
+                </Text>
+              )}
+              <Button
+                label="Subscribe"
+                onPress={async () => {
+                  if (!broadcaster?.handle) return
+                  try {
+                    const { url } = await usersApi.createSubscribeSession(broadcaster.handle)
+                    await Linking.openURL(url)
+                  } catch {
+                    Alert.alert('Error', 'Could not open subscription page')
+                  }
+                }}
+              />
+              <Button
+                label="Back"
+                onPress={() => router.navigate('/(app)/globe')}
+                variant="secondary"
+              />
+            </View>
+          ) : status === 'error' ? (
             <View style={styles.actions}>
               <Text variant="body" color={theme.colors.accent.default} style={styles.center}>
                 {displayError}
@@ -967,7 +1002,7 @@ export function StreamScreen() {
                 variant="secondary"
               />
             </View>
-          )}
+          ) : null}
 
           {/* ── Hop error ────────────────────────────────────────── */}
           {hopError && (

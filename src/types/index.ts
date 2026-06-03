@@ -20,6 +20,8 @@ export type User = {
   creatorReady: boolean
   usedStorageBytes: number
   storageQuotaBytes: number
+  subscriptionEnabled: boolean
+  subscriptionPriceUsd: number | null
 }
 
 export type PublicUser = {
@@ -31,6 +33,8 @@ export type PublicUser = {
   followerCount: number
   followingCount: number
   isFollowing: boolean
+  subscriptionEnabled: boolean
+  subscriptionPriceUsd: number | null  // monthly price in cents
 }
 
 export type WalletTransaction = {
@@ -91,6 +95,7 @@ export type Stream = {
   isLive: boolean
   mediasoupRoomId?: string | null
   sources: SourceType[]
+  subscribersOnly?: boolean
   locationPrecision?: 'exact' | 'city' | 'country'
   distanceKm?: number
   distanceMeters?: number

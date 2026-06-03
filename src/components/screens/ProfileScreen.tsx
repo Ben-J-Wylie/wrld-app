@@ -13,7 +13,7 @@
 //     profile flex move; MetaStrip would flatten it
 //   • FollowButton (for other profiles) / Button (for own profile)
 
-import { ActivityIndicator, StyleSheet, View } from 'react-native'
+import { ActivityIndicator, Alert, Linking, StyleSheet, View } from 'react-native'
 import { useLocalSearchParams, router } from 'expo-router'
 import { useAuth } from '@clerk/clerk-expo'
 import { theme } from '@/tokens/theme'
@@ -26,6 +26,8 @@ import { FollowButton } from '@/components/features/user/FollowButton'
 import { MetaStrip } from '@/components/features/user/MetaStrip'
 import { useUserProfile } from '@/hooks/useUserProfile'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
+import { usersApi } from '@/api/users'
+import { useQuery } from '@tanstack/react-query'
 
 function formatJoined(iso: string): string {
   try {
@@ -49,6 +51,12 @@ export function ProfileScreen() {
   const { data: me } = useCurrentUser()
 
   const isOwnProfile = !!me && me.handle === handle
+
+  const { data: subStatus, refetch: refetchSubStatus } = useQuery({
+    queryKey: ['subscription-status', handle],
+    queryFn: () => usersApi.getSubscriptionStatus(handle!),
+    enabled: !!isSignedIn && !isOwnProfile && !!profile?.subscriptionEnabled,
+  })
 
   if (isLoading) {
     return (
@@ -126,6 +134,48 @@ export function ProfileScreen() {
 
       {isSignedIn && !isOwnProfile && (
         <FollowButton handle={profile.handle} />
+      )}
+
+      {!isOwnProfile && profile.subscriptionEnabled && profile.subscriptionPriceUsd && (
+        subStatus?.subscribed ? (
+          <View style={{ gap: theme.spacing.sm }}>
+            <Button
+              label={`Subscribed · $${(profile.subscriptionPriceUsd / 100).toFixed(2)}/mo`}
+              variant="secondary"
+              onPress={() => {
+                Alert.alert(
+                  'Manage subscription',
+                  'Your subscription is active.',
+                  [
+                    { text: 'Cancel subscription', style: 'destructive', onPress: async () => {
+                      try {
+                        await usersApi.cancelSubscription(profile.handle)
+                        refetchSubStatus()
+                      } catch {
+                        Alert.alert('Error', 'Could not cancel subscription')
+                      }
+                    }},
+                    { text: 'Dismiss', style: 'cancel' },
+                  ],
+                )
+              }}
+            />
+          </View>
+        ) : (
+          <Button
+            label={`Subscribe · $${(profile.subscriptionPriceUsd / 100).toFixed(2)}/mo`}
+            onPress={async () => {
+              try {
+                const { url } = await usersApi.createSubscribeSession(profile.handle)
+                await Linking.openURL(url)
+                // Refetch status when app regains focus after browser payment
+                refetchSubStatus()
+              } catch {
+                Alert.alert('Error', 'Could not open subscription page')
+              }
+            }}
+          />
+        )
       )}
 
       {isOwnProfile && (

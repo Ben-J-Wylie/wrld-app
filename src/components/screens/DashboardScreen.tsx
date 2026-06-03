@@ -29,6 +29,7 @@ import { Input } from '@/components/primitives/Input'
 import { Text } from '@/components/primitives/Text'
 import { HelpText } from '@/components/primitives/HelpText'
 import { Icon } from '@/components/primitives/Icon'
+import { Toggle } from '@/components/primitives/Toggle'
 import { FeedRow, type FeedState } from '@/components/features/broadcast/FeedRow'
 import { type FeedKind } from '@/components/features/broadcast/FeedThumb'
 import { CoordHUD } from '@/components/features/stream/CoordHUD'
@@ -67,6 +68,7 @@ export function DashboardScreen() {
 
   const [title, setTitle] = useState('')
   const [readySources, setReadySources] = useState<Set<SourceType>>(new Set())
+  const [subscribersOnly, setSubscribersOnly] = useState(false)
 
   useFocusEffect(useCallback(() => {
     const active = activeBroadcast.get()
@@ -102,6 +104,7 @@ export function DashboardScreen() {
       sources: Array.from(readySources).join(','),
       lat: String(coords!.latitude),
       lng: String(coords!.longitude),
+      subscribersOnly: String(subscribersOnly),
     }
     activeBroadcast.set(params)
     router.push({
@@ -214,6 +217,18 @@ export function DashboardScreen() {
         )}
       </View>
 
+      {currentUser?.subscriptionEnabled && (
+        <View style={styles.subscribersOnlyRow}>
+          <View style={styles.subscribersOnlyText}>
+            <Text variant="body">Subscribers only</Text>
+            <Text variant="caption" color={theme.colors.text.muted}>
+              Only your subscribers can watch this stream
+            </Text>
+          </View>
+          <Toggle value={subscribersOnly} onValueChange={setSubscribersOnly} />
+        </View>
+      )}
+
       <GoBar
         variant={canGoLive ? 'armed' : 'disabled'}
         onPress={handleGoLive}
@@ -237,6 +252,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     gap: theme.spacing.md,
+  },
+  subscribersOnlyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing.md,
+  },
+  subscribersOnlyText: {
+    flex: 1,
+    gap: theme.spacing.xs,
   },
   centerText: {
     textAlign: 'center',

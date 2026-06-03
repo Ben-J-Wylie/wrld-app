@@ -106,4 +106,52 @@ export const usersApi = {
     }>('/users/me/notification-preferences', prefs)
     return res.data.preferences
   },
+
+  getSubscriptionStatus: async (handle: string): Promise<{ subscribed: boolean; currentPeriodEnd: string | null }> => {
+    const res = await apiClient.get<{ subscribed: boolean; currentPeriodEnd: string | null }>(
+      `/users/${handle}/subscription-status`,
+    )
+    return res.data
+  },
+
+  createSubscribeSession: async (handle: string): Promise<{ url: string }> => {
+    const res = await apiClient.post<{ url: string }>(`/users/${handle}/subscribe-session`)
+    return res.data
+  },
+
+  cancelSubscription: async (handle: string): Promise<void> => {
+    await apiClient.delete(`/users/${handle}/subscribe`)
+  },
+
+  getSubscriptionSettings: async (): Promise<{
+    subscriptionEnabled: boolean
+    subscriptionPriceUsd: number | null
+    onboardingComplete: boolean
+    stripeConnectId: string | null
+  }> => {
+    const res = await apiClient.get<{
+      subscriptionEnabled: boolean
+      subscriptionPriceUsd: number | null
+      onboardingComplete: boolean
+      stripeConnectId: string | null
+    }>('/users/me/subscription/settings')
+    return res.data
+  },
+
+  startSubscriptionOnboard: async (): Promise<{ url: string }> => {
+    const res = await apiClient.post<{ url: string }>('/users/me/subscription/onboard')
+    return res.data
+  },
+
+  updateSubscriptionSettings: async (settings: {
+    subscriptionPriceUsd?: number
+    subscriptionEnabled?: boolean
+  }): Promise<void> => {
+    await apiClient.patch('/users/me/subscription/settings', settings)
+  },
+
+  getSubscriptionDashboardUrl: async (): Promise<{ url: string }> => {
+    const res = await apiClient.get<{ url: string }>('/users/me/subscription/dashboard')
+    return res.data
+  },
 }
