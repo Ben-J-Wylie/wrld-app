@@ -1649,13 +1649,21 @@ scrubbed (→ `onOffsetChange(0)`).
 **Direction note.** Drag-down = newer, drag-up = older (wheel physics,
 newer above) — a one-line flip if it reads wrong on device.
 
+**Type + layout (2026-06-04).** Font matches the drawer's "nearby now"
+label — `monoLabel` (IBM Plex Mono caps). Month renders as a 3-letter
+abbreviation (JAN…DEC); hours are 24h; the time group is `HH : MM : SS`
+with colons; the fields spread across the bar with `justifyContent:
+'space-between'` (year far-left, LIVE/NOW far-right).
+
 **Over-globe treatment.** No background for now (sits directly over the
-globe per Ben, 2026-06-04) — values are cream (`text.inverse`) with a soft
-warm-dark text-shadow halo (`clockText`) for legibility over arbitrary
-imagery; a translucent gradient below may come later. The full-bar tap
-region uses a raw RN `Pressable` (not the primitive): the primitive routes
-`style` to an inner `Animated.View` whose `flex:1` can't resolve, which
-collapsed the content to 0 height — RN `Pressable` takes `flex:1` directly.
+globe per Ben) — **no drop shadow**; text is **cream** (`text.inverse`)
+rather than the drawer's muted-dark ink so it stays legible over the dark
+globe (dark ink would vanish without a backdrop). A translucent gradient
+below may come later; the exact muted-dark "nearby now" tone can return
+once that lands. The full-bar tap region uses a raw RN `Pressable` (not
+the primitive): the primitive routes `style` to an inner `Animated.View`
+whose `flex:1` can't resolve, which collapsed the content to 0 height — RN
+`Pressable` takes `flex:1` directly.
 
 **Seam (Aaron / backend).** The component only emits `offsetMs`;
 `GlobeScreenMapbox` holds it and carries a commented TIME-MACHINE seam at

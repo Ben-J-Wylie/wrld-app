@@ -21,7 +21,7 @@
 // This is the UI half; the globe consumes `offsetMs` to drive the historical
 // replay query (stubbed until the backend lands).
 
-import { useEffect, useRef, useState, Fragment } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   Animated,
   PanResponder,
@@ -37,16 +37,16 @@ import { theme } from '@/tokens/theme'
 
 type FieldKey = 'year' | 'month' | 'day' | 'hour' | 'minute' | 'second'
 
-type FieldDef = { key: FieldKey; label: string; digits: number; groupGap?: boolean }
+const FIELD_LABEL: Record<FieldKey, string> = {
+  year: 'YEAR',
+  month: 'MONTH',
+  day: 'DAY',
+  hour: 'HR',
+  minute: 'MIN',
+  second: 'SEC',
+}
 
-const FIELDS: FieldDef[] = [
-  { key: 'year', label: 'YR', digits: 4 },
-  { key: 'month', label: 'MO', digits: 2 },
-  { key: 'day', label: 'DY', digits: 2 },
-  { key: 'hour', label: 'HR', digits: 2, groupGap: true },
-  { key: 'minute', label: 'MIN', digits: 2 },
-  { key: 'second', label: 'SEC', digits: 2 },
-]
+const MONTH_ABBR = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
 
 const COLLAPSED_H = 50
 const EXPANDED_H = 104
@@ -80,6 +80,16 @@ function stepDate(d: Date, key: FieldKey, delta: number): Date {
 
 function pad(n: number, digits: number): string {
   return String(Math.abs(n)).padStart(digits, '0')
+}
+
+// Display string per field: month → 3-letter abbreviation, hours in 24h,
+// everything else zero-padded.
+function formatField(d: Date, key: FieldKey): string {
+  switch (key) {
+    case 'year': return String(d.getFullYear())
+    case 'month': return MONTH_ABBR[d.getMonth()]! // getMonth() is always 0–11
+    default: return pad(fieldValue(d, key), 2)
+  }
 }
 
 type Props = {
@@ -138,24 +148,29 @@ export function TimeScrubber({ offsetMs, onOffsetChange, minYear = 2026, style }
           on the whole bar anyway. */}
       <RNPressable onPress={() => setExpanded((e) => !e)} style={styles.press}>
         <View style={styles.row}>
-          {FIELDS.map((f) => (
-            <Fragment key={f.key}>
-              {f.groupGap && <View style={styles.groupGap} />}
-              <Field
-                def={f}
-                playhead={playhead}
-                expanded={expanded}
-                expandedRef={expandedRef}
-                offsetRef={offsetRef}
-                onScrub={scrub}
-              />
-            </Fragment>
+          {(['year', 'month', 'day'] as FieldKey[]).map((key) => (
+            <Field
+              key={key}
+              fieldKey={key}
+              playhead={playhead}
+              expanded={expanded}
+              expandedRef={expandedRef}
+              offsetRef={offsetRef}
+              onScrub={scrub}
+            />
           ))}
-          <View style={styles.spacer} />
+          {/* HH : MM : SS — tight group with colons */}
+          <View style={styles.timeGroup}>
+            <Field fieldKey="hour" playhead={playhead} expanded={expanded} expandedRef={expandedRef} offsetRef={offsetRef} onScrub={scrub} />
+            <Text variant="monoLabel" color={theme.colors.text.inverse} style={styles.colon}>:</Text>
+            <Field fieldKey="minute" playhead={playhead} expanded={expanded} expandedRef={expandedRef} offsetRef={offsetRef} onScrub={scrub} />
+            <Text variant="monoLabel" color={theme.colors.text.inverse} style={styles.colon}>:</Text>
+            <Field fieldKey="second" playhead={playhead} expanded={expanded} expandedRef={expandedRef} offsetRef={offsetRef} onScrub={scrub} />
+          </View>
           {live ? (
             <View style={styles.liveTag}>
               <View style={styles.liveDot} />
-              <Text variant="monoLabel" color={theme.colors.text.inverse} style={styles.clockText}>
+              <Text variant="monoLabel" color={theme.colors.text.inverse}>
                 LIVE
               </Text>
             </View>
@@ -174,14 +189,14 @@ export function TimeScrubber({ offsetMs, onOffsetChange, minYear = 2026, style }
 }
 
 function Field({
-  def,
+  fieldKey,
   playhead,
   expanded,
   expandedRef,
   offsetRef,
   onScrub,
 }: {
-  def: FieldDef
+  fieldKey: FieldKey
   playhead: Date
   expanded: boolean
   expandedRef: React.MutableRefObject<boolean>
@@ -200,32 +215,32 @@ function Field({
         // Wheel physics: newer value sits above, older below. Drag down (dy>0)
         // brings the newer value to centre (+); drag up brings the older (−).
         const delta = Math.round(g.dy / STEP_PX)
-        onScrub(def.key, startPlayhead.current, delta)
+        onScrub(fieldKey, startPlayhead.current, delta)
       },
     }),
   ).current
 
-  const current = pad(fieldValue(playhead, def.key), def.digits)
-  const above = pad(fieldValue(stepDate(playhead, def.key, 1), def.key), def.digits)
-  const below = pad(fieldValue(stepDate(playhead, def.key, -1), def.key), def.digits)
+  const current = formatField(playhead, fieldKey)
+  const above = formatField(stepDate(playhead, fieldKey, 1), fieldKey)
+  const below = formatField(stepDate(playhead, fieldKey, -1), fieldKey)
 
   return (
     <View style={styles.field} {...responder.panHandlers}>
       {expanded && (
-        <Text variant="monoValue" color={theme.colors.text.inverse} style={[styles.clockText, styles.ghost]}>
+        <Text variant="monoLabel" color={theme.colors.text.inverse} style={styles.ghost}>
           {above}
         </Text>
       )}
-      <Text variant="monoValue" color={theme.colors.text.inverse} style={styles.clockText}>
+      <Text variant="monoLabel" color={theme.colors.text.inverse}>
         {current}
       </Text>
       {expanded && (
         <>
-          <Text variant="monoValue" color={theme.colors.text.inverse} style={[styles.clockText, styles.ghost]}>
+          <Text variant="monoLabel" color={theme.colors.text.inverse} style={styles.ghost}>
             {below}
           </Text>
-          <Text variant="monoLabel" color={theme.colors.text.inverse} style={[styles.clockText, styles.fieldLabel]}>
-            {def.label}
+          <Text variant="monoLabel" color={theme.colors.text.inverse} style={styles.fieldLabel}>
+            {FIELD_LABEL[fieldKey]}
           </Text>
         </>
       )}
@@ -238,29 +253,30 @@ const NOW_DOT = 7
 const styles = StyleSheet.create({
   bar: {
     // No background for now — sits directly over the globe. (A translucent
-    // gradient below may come later.) Values stay legible via clockText shadow.
+    // gradient below may come later.) Cream text carries the legibility.
     overflow: 'hidden',
   },
   press: {
     flex: 1,
   },
-  // Soft warm-dark halo so the cream clock reads over arbitrary globe imagery.
-  clockText: {
-    textShadowColor: 'rgba(20,16,13,0.55)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
-  },
   row: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: theme.spacing.lg,
-    gap: theme.spacing.xs,
   },
   field: {
     alignItems: 'center',
     justifyContent: 'center',
-    minWidth: 28,
+  },
+  timeGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xxs,
+  },
+  colon: {
+    opacity: 0.6,
   },
   ghost: {
     opacity: 0.3,
@@ -268,12 +284,6 @@ const styles = StyleSheet.create({
   fieldLabel: {
     marginTop: theme.spacing.xxs,
     opacity: 0.55,
-  },
-  groupGap: {
-    width: theme.spacing.sm,
-  },
-  spacer: {
-    flex: 1,
   },
   liveTag: {
     flexDirection: 'row',
