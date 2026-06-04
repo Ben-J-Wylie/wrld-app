@@ -36,6 +36,11 @@ export const ppvApi = {
     return res.data.events
   },
 
+  listAllEvents: async (): Promise<PpvEvent[]> => {
+    const res = await apiClient.get<{ events: PpvEvent[] }>('/ppv-events/discover')
+    return res.data.events
+  },
+
   getMyEvent: async (id: string): Promise<PpvEvent> => {
     const res = await apiClient.get<{ event: PpvEvent }>(`/ppv-events/${id}`)
     return res.data.event

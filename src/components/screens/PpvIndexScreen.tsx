@@ -1,10 +1,9 @@
-import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from 'react-native'
-import { useCallback, useState } from 'react'
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native'
+import { useCallback } from 'react'
 import { router, useFocusEffect } from 'expo-router'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { theme } from '@/tokens/theme'
 import { ScreenScroll } from '@/components/sections/ScreenScroll'
-import { Button } from '@/components/primitives/Button'
 import { Text } from '@/components/primitives/Text'
 import { ppvApi } from '@/api/ppvEvents'
 import type { PpvEvent } from '@/types'
@@ -38,17 +37,18 @@ function formatCountdown(iso: string): string {
   return 'starting soon'
 }
 
-function EventCard({ event, onDelete }: { event: PpvEvent; onDelete: (id: string) => void }) {
+function EventCard({ event }: { event: PpvEvent }) {
   const isLive = event.status === 'live'
   const isScheduled = event.status === 'scheduled'
-  const isCancelled = event.status === 'cancelled'
   const countdown = isScheduled ? formatCountdown(event.scheduledAt) : ''
-  const netRevenue = event.netRevenueCents ?? 0
 
   return (
     <Pressable
       style={styles.card}
-      onPress={() => !isCancelled && router.push({ pathname: '/(app)/ppv/[id]/manage', params: { id: event.id } })}
+      onPress={() => router.push({
+        pathname: '/(app)/ppv/[id]',
+        params: { id: event.id, handle: event.host?.handle ?? '' },
+      })}
     >
       <View style={styles.cardTop}>
         <Text variant="bodyEmphasized" style={styles.cardTitle}>{event.title}</Text>
@@ -62,6 +62,10 @@ function EventCard({ event, onDelete }: { event: PpvEvent; onDelete: (id: string
         </View>
       </View>
 
+      {event.host && (
+        <Text variant="caption" color={theme.colors.text.muted}>@{event.host.handle}</Text>
+      )}
+
       <View style={styles.dateRow}>
         <Text variant="caption" color={theme.colors.text.muted}>{formatDate(event.scheduledAt)}</Text>
         {countdown ? (
@@ -69,24 +73,16 @@ function EventCard({ event, onDelete }: { event: PpvEvent; onDelete: (id: string
         ) : null}
       </View>
 
-      <View style={styles.statsRow}>
-        <View style={styles.stat}>
-          <Text variant="display">{event.purchaseCount}</Text>
-          <Text variant="monoCaption" color={theme.colors.text.muted}>
-            {event.purchaseCount === 1 ? 'TICKET' : 'TICKETS'}
-          </Text>
-        </View>
-        <View style={styles.stat}>
-          <Text variant="display">${(event.priceUsd / 100).toFixed(2)}</Text>
-          <Text variant="monoCaption" color={theme.colors.text.muted}>PER TICKET</Text>
-        </View>
-        <View style={styles.stat}>
-          <Text variant="display">${(netRevenue / 100).toFixed(2)}</Text>
-          <Text variant="monoCaption" color={theme.colors.text.muted}>YOUR TAKE</Text>
-        </View>
+      <View style={styles.priceRow}>
+        <Text variant="caption" color={theme.colors.text.muted}>
+          ${(event.priceUsd / 100).toFixed(2)} per ticket
+        </Text>
+        {event.subscribersFreeAccess && (
+          <Text variant="caption" color={theme.colors.accent.default}>· free for subscribers</Text>
+        )}
       </View>
 
-      {event.durationMinutes || event.replayAccess || event.subscribersFreeAccess ? (
+      {event.durationMinutes || event.replayAccess ? (
         <View style={styles.tagsRow}>
           {event.durationMinutes ? (
             <View style={styles.tag}>
@@ -98,81 +94,26 @@ function EventCard({ event, onDelete }: { event: PpvEvent; onDelete: (id: string
               <Text variant="caption" color={theme.colors.text.muted}>Replay included</Text>
             </View>
           ) : null}
-          {event.subscribersFreeAccess ? (
-            <View style={styles.tag}>
-              <Text variant="caption" color={theme.colors.accent.default}>Free for subscribers</Text>
-            </View>
-          ) : null}
         </View>
       ) : null}
-
-      {isCancelled && (
-        <Pressable
-          style={styles.deleteBtn}
-          onPress={(e) => {
-            e.stopPropagation?.()
-            onDelete(event.id)
-          }}
-          hitSlop={8}
-        >
-          <Text variant="monoCaption" color="#D0233A">DELETE EVENT</Text>
-        </Pressable>
-      )}
     </Pressable>
   )
 }
 
 export function PpvIndexScreen() {
-  const qc = useQueryClient()
-  const [deleting, setDeleting] = useState<string | null>(null)
   const { data: events, isLoading, refetch } = useQuery({
-    queryKey: ['my-ppv-events'],
-    queryFn: () => ppvApi.listMyEvents(),
+    queryKey: ['all-ppv-events'],
+    queryFn: () => ppvApi.listAllEvents(),
   })
 
   useFocusEffect(useCallback(() => { refetch() }, [refetch]))
 
-  function handleDelete(id: string) {
-    const event = events?.find(e => e.id === id)
-    Alert.alert(
-      'Delete event',
-      `Delete "${event?.title ?? 'this event'}"? This cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            setDeleting(id)
-            try {
-              await ppvApi.deleteEvent(id)
-              qc.setQueryData<typeof events>(['my-ppv-events'], prev =>
-                prev?.filter(e => e.id !== id) ?? [],
-              )
-            } catch {
-              Alert.alert('Error', 'Could not delete event')
-            } finally {
-              setDeleting(null)
-            }
-          },
-        },
-      ],
-    )
-  }
-
-  const upcoming = events?.filter(e => e.status === 'scheduled' || e.status === 'live') ?? []
-  const past = events?.filter(e => e.status === 'ended' || e.status === 'cancelled') ?? []
+  const upcoming = events?.filter(e => e.status === 'scheduled') ?? []
+  const live = events?.filter(e => e.status === 'live') ?? []
 
   return (
     <ScreenScroll contentContainerStyle={styles.content}>
-      <View style={styles.header}>
-        <Text variant="heading">PPV Events</Text>
-        <Button
-          label="+ Schedule"
-          variant="secondary"
-          onPress={() => router.push('/(app)/ppv/create')}
-        />
-      </View>
+      <Text variant="heading">Events</Text>
 
       {isLoading ? (
         <View style={styles.center}>
@@ -181,28 +122,24 @@ export function PpvIndexScreen() {
       ) : !events || events.length === 0 ? (
         <View style={styles.empty}>
           <Text variant="body" color={theme.colors.text.muted} style={styles.emptyText}>
-            You haven't scheduled any PPV events yet.
+            No upcoming events right now.
           </Text>
           <Text variant="caption" color={theme.colors.text.muted} style={styles.emptyText}>
-            Schedule a paid live event, set a ticket price, and viewers purchase access before you go live.
+            When creators schedule paid live events they'll appear here.
           </Text>
-          <Button
-            label="Schedule your first event"
-            onPress={() => router.push('/(app)/ppv/create')}
-          />
         </View>
       ) : (
         <>
+          {live.length > 0 && (
+            <View style={styles.section}>
+              <Text variant="monoLabel" color={theme.colors.text.muted}>LIVE NOW</Text>
+              {live.map(e => <EventCard key={e.id} event={e} />)}
+            </View>
+          )}
           {upcoming.length > 0 && (
             <View style={styles.section}>
               <Text variant="monoLabel" color={theme.colors.text.muted}>UPCOMING</Text>
-              {upcoming.map(e => <EventCard key={e.id} event={e} onDelete={handleDelete} />)}
-            </View>
-          )}
-          {past.length > 0 && (
-            <View style={styles.section}>
-              <Text variant="monoLabel" color={theme.colors.text.muted}>PAST</Text>
-              {past.map(e => <EventCard key={e.id} event={e} onDelete={handleDelete} />)}
+              {upcoming.map(e => <EventCard key={e.id} event={e} />)}
             </View>
           )}
         </>
@@ -216,11 +153,6 @@ const styles = StyleSheet.create({
     padding: theme.spacing.lg,
     gap: theme.spacing.lg,
     paddingBottom: theme.spacing.xxxl,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
   },
   center: {
     paddingVertical: theme.spacing.xxl,
@@ -263,17 +195,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.sm,
   },
-  statsRow: {
+  priceRow: {
     flexDirection: 'row',
-    gap: theme.spacing.sm,
-    paddingTop: theme.spacing.xs,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: theme.colors.border.subtle,
-  },
-  stat: {
-    flex: 1,
     alignItems: 'center',
-    gap: 2,
+    gap: theme.spacing.sm,
   },
   tagsRow: {
     flexDirection: 'row',
@@ -286,12 +211,5 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.full,
     borderWidth: 1,
     borderColor: theme.colors.border.subtle,
-  },
-  deleteBtn: {
-    marginTop: theme.spacing.xs,
-    paddingVertical: theme.spacing.sm,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(208,35,58,0.25)',
-    alignItems: 'center',
   },
 })
