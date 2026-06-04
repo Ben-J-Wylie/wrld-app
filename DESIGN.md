@@ -1654,7 +1654,12 @@ hours 24h. **Blurred clips to the single band row** (no peeking
 neighbours); tap expands (`motion.patterns.overlay`) to 5 rows so the ±2
 neighbours come into view above/below the band (over the globe).
 **Future cells are greyed** (`text.subtle`) — values after the present are
-unreachable, and the cue says so. **Status slot:** "● LIVE" in **accent**
+unreachable, and the cue says so. **Focused, the centre value goes bold**
+(`fontWeight: '700'`) — blurred it reverts, and the ghost neighbours are
+never bold. (We don't bundle a separate bold *mono weight* — in fact the
+design fonts aren't bundled at all yet, so they fall back to the system
+font; the bold is a weight override, which the fallback honours.)
+**Status slot:** "● LIVE" in **accent**
 (the one electric element, non-interactive) when live; "● PAST" muted +
 tappable (→ `onOffsetChange(0)`, jump back to live) when scrubbed. LIVE
 and PAST are both 4-char mono in a fixed slot, so the swap never reflows.
@@ -1682,7 +1687,17 @@ the dials wouldn't scroll. The scrub clamps at the present, so you can't
 dial into the future — and that clamp is the **only** way one wheel moves
 the others: dialling forward past now snaps the whole clock back to live.
 (`onPanResponderTerminationRequest: false` keeps a parent scroll from
-stealing a drag mid-gesture.)
+stealing a drag mid-gesture.) Touch targets are widened with `HIT_SLOP`
+(±12 horizontal ≈ half the gap, ±18 vertical) so the narrow wheels are
+easy to grab.
+
+**Playback pause.** When a scrub lands in the **past** and the finger
+lifts, the clock holds for ~1 s before real-time playback resumes —
+`paused` freezes the displayed playhead at `frozenRef`, then a timer
+rebases `offsetMs` so playback continues from exactly where it was held
+(no time jump). Scrubbing all the way to **live** ticks with real time
+immediately, even mid-drag (no hold). A fresh scrub cancels a pending
+resume.
 
 **Carry is intentional.** The dial uses native `Date` arithmetic
 (`stepDate`), so scrolling a wheel past its boundary **carries into the

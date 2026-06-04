@@ -128,7 +128,20 @@ export function TimeScrubber({ offsetMs, onOffsetChange, minYear = DEFAULT_MIN_Y
     }).start()
   }, [expanded, height])
 
-  const playMs = Date.now() - offsetMs
+  // Playback pause: after a scrub lands in the past, hold the clock still for
+  // a beat before real-time playback resumes (`paused` freezes the displayed
+  // playhead at `frozenRef`). Scrubbing all the way to live ticks immediately.
+  const [paused, setPaused] = useState(false)
+  const frozenRef = useRef(Date.now() - offsetMs)
+  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(
+    () => () => {
+      if (holdTimer.current) clearTimeout(holdTimer.current)
+    },
+    [],
+  )
+
+  const playMs = paused ? frozenRef.current : Date.now() - offsetMs
   const playhead = new Date(playMs)
   const live = offsetMs <= 0
 
@@ -151,15 +164,49 @@ export function TimeScrubber({ offsetMs, onOffsetChange, minYear = DEFAULT_MIN_Y
 
   // Absolute-from-gesture-start scrub: no drift from stale offset reads.
   function scrub(key: FieldKey, startPlayhead: Date, delta: number) {
+    if (holdTimer.current) {
+      clearTimeout(holdTimer.current) // a fresh scrub supersedes a pending resume
+      holdTimer.current = null
+    }
     const next = stepDate(startPlayhead, key, delta)
     let newOffset = Date.now() - next.getTime()
     if (newOffset < 0) newOffset = 0
     if (newOffset > maxOffset) newOffset = maxOffset
     onChangeRef.current(newOffset)
+    if (newOffset <= 0) {
+      setPaused(false) // reached live → tick real time, even mid-drag
+    } else {
+      frozenRef.current = Date.now() - newOffset // in the past → hold the instant
+      setPaused(true)
+    }
+  }
+
+  // Finger lifted after a scrub. In the past, hold ~1s, then rebase the offset
+  // so playback resumes from exactly where it was held (no time jump).
+  function scrubEnd() {
+    if (offsetRef.current <= 0) {
+      setPaused(false)
+      return
+    }
+    if (holdTimer.current) clearTimeout(holdTimer.current)
+    holdTimer.current = setTimeout(() => {
+      onChangeRef.current(Date.now() - frozenRef.current)
+      setPaused(false)
+      holdTimer.current = null
+    }, 1000)
   }
 
   const toggleExpand = () => setExpanded((e) => !e)
-  const fieldProps = { playhead, direction, expandedRef, offsetRef, onScrub: scrub, onToggle: toggleExpand }
+  const fieldProps = {
+    playhead,
+    direction,
+    focused: expanded,
+    expandedRef,
+    offsetRef,
+    onScrub: scrub,
+    onScrubEnd: scrubEnd,
+    onToggle: toggleExpand,
+  }
 
   return (
     <Animated.View style={[styles.bar, { height }, style]}>
@@ -192,7 +239,12 @@ export function TimeScrubber({ offsetMs, onOffsetChange, minYear = DEFAULT_MIN_Y
             </View>
           ) : (
             // Scrubbed into the past — muted, tap to jump back to live.
-            <Pressable variant="default" onPress={() => onOffsetChange(0)} style={styles.statusTag}>
+            <Pressable
+              variant="default"
+              onPress={() => onOffsetChange(0)}
+              hitSlop={HIT_SLOP}
+              style={styles.statusTag}
+            >
               <View style={[styles.statusDot, { backgroundColor: theme.colors.text.muted }]} />
               <Text variant="monoLabel" color={theme.colors.text.muted}>
                 PAST
@@ -221,17 +273,21 @@ function Field({
   fieldKey,
   playhead,
   direction,
+  focused,
   expandedRef,
   offsetRef,
   onScrub,
+  onScrubEnd,
   onToggle,
 }: {
   fieldKey: FieldKey
   playhead: Date
   direction: number
+  focused: boolean
   expandedRef: React.MutableRefObject<boolean>
   offsetRef: React.MutableRefObject<number>
   onScrub: (key: FieldKey, startPlayhead: Date, delta: number) => void
+  onScrubEnd: () => void
   onToggle: () => void
 }) {
   // One responder per field handles BOTH tap (toggle expand) and drag (dial)
@@ -258,7 +314,8 @@ function Field({
         }
       },
       onPanResponderRelease: () => {
-        if (!moved.current) onToggle()
+        if (moved.current) onScrubEnd()
+        else onToggle()
       },
     }),
   ).current
@@ -287,7 +344,11 @@ function Field({
   const nowMs = Date.now()
 
   return (
-    <View style={[styles.field, { width: FIELD_W[fieldKey] }]} {...responder.panHandlers}>
+    <View
+      style={[styles.field, { width: FIELD_W[fieldKey] }]}
+      hitSlop={HIT_SLOP}
+      {...responder.panHandlers}
+    >
       <Animated.View style={{ transform: [{ translateY: slide }] }}>
         {WINDOW.map((delta) => {
           const cellDate = stepDate(playhead, fieldKey, delta)
@@ -296,12 +357,15 @@ function Field({
           // Future values are unreachable (the scrub clamps at the present) —
           // gray them so it reads as "can't dial past now".
           const isFuture = cellDate.getTime() > nowMs
+          // The centre value goes bold when focused (expanded); blurred it
+          // reverts, and the ghost neighbours are never bold.
+          const bold = focused && dist === 0
           return (
             <View key={delta} style={styles.cell}>
               <Text
                 variant="monoLabel"
                 color={isFuture ? theme.colors.text.subtle : theme.colors.text.primary}
-                style={{ opacity }}
+                style={[{ opacity }, bold && styles.boldCentre]}
               >
                 {formatField(cellDate, fieldKey)}
               </Text>
@@ -315,6 +379,10 @@ function Field({
 
 const STATUS_DOT = 7
 const STATUS_W = 58
+// Generous touch padding so the narrow wheels are easy to grab/drag. Left/
+// right ≈ half the inter-wheel gap so neighbours don't fight; vertical extends
+// the collapsed tap target well past the thin band.
+const HIT_SLOP = { top: 18, bottom: 18, left: 12, right: 12 }
 
 const styles = StyleSheet.create({
   bar: {
@@ -351,6 +419,9 @@ const styles = StyleSheet.create({
     height: ROW_H,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  boldCentre: {
+    fontWeight: '700',
   },
   gap: {
     width: theme.spacing.xl,
