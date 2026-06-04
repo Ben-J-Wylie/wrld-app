@@ -577,21 +577,63 @@ are what the past is made of).
   touch** via a `collapseSignal` prop the globe bumps from `onTouchStart` on
   every overlay group *except* the `MapView` and the scrubber. Full detail in
   [DESIGN.md](DESIGN.md) (TimeScrubber Section 3 + decision log).
-- **Aaron (`main`) — backend replay.** At the seam: when `timeOffsetMs > 0`,
-  swap the live `useDiscoverySocket()` feed for a historical "surviving clips
-  near, at playhead" query, re-fetching as the playhead advances, so the globe
-  actually replays. Pins/cards then resolve to clips (tap → view clip; channel-
-  hop among clips at the same event/instant). Until that lands the globe keeps
-  showing the live feed regardless of the clock.
+- **Aaron (`main`) — backend replay.** At the seam in `GlobeScreenMapbox`
+  (line ~146): when `timeOffsetMs > 0`, swap `useDiscoverySocket()` for
+  `useHistoricalClips(playheadMs)`. Globe replays surviving clips as the
+  playhead advances. Tap → clip viewer with seek. See "Backend contract" below.
+
+### Backend contract (decided 2026-06-04)
+
+**Unified `DiscoveryPin` type** — replaces `DiscoveryStream` as the globe's
+pin shape. Discriminated union so live and historical items share one renderer:
+
+```ts
+type DiscoveryPin =
+  | { kind: 'stream'; /* all existing DiscoveryStream fields */ }
+  | { kind: 'clip';   id: string; recordingId: string; title: string | null;
+      lat: number; lng: number; locationPrecision: 'exact' | 'city' | 'country';
+      host: { id: string; handle: string; displayName: string; avatarUrl: string | null };
+      seekOffsetSec: number; clipStartMs: number; clipEndMs: number;
+      subscribersOnly: boolean; }
+```
+
+`DiscoveryHandoffCard` gets a `kind` discriminant: shows "Watch" CTA for
+clips (navigates to `/(app)/clips/[id]?seekSec=N`) vs "Join" for streams.
+Pin renderer (CircleLayer/SymbolLayer/location-precision halos) is unchanged —
+same fields, same visual rules.
+
+**`useHistoricalClips(playheadMs: number)`** — TanStack Query hook, stale 5s,
+calls `GET /clips/discover?at=<ISO>`. Disabled when `playheadMs` is 0 (live).
+Re-fetches automatically as the playhead advances (the playhead ticks every 1s
+so the query cache naturally refreshes on staleness).
+
+**New app route: `/(app)/clips/[id].tsx`** — clip viewer screen. Accepts
+`seekSec` query param. Plays the clip's HLS `manifestUrl` seeking to
+`seekSec` on load. Similar structure to `stream/[id].tsx` viewer path but
+for recorded content; no WebSocket, no live viewer count.
+
+**Location precision on historical pins** — uses `stream.locationPrecision`
+(set at go-live, immutable), NOT the user's current `User.locationPrecision`.
+This preserves the broadcaster's privacy choice at the time of recording.
+Fallback when null: `'exact'` (not the user's current setting). Clips where
+the stream was `'off'` are excluded entirely — same rule as the live feed.
+Future: when `Clip.locDisplayPrecision` is added (C4 clip editor work), the
+globe uses `clip.locDisplayPrecision ?? stream.locationPrecision` instead.
+
+**Seek offset** — computed server-side as
+`T_sec − (recording.startedAt_unix_sec + clip.startSec)`, where T is the
+playhead at tap time. Always within `[0, clip.endSec − clip.startSec]`
+because a pin only exists at T when `clipStart ≤ T ≤ clipEnd`.
 
 ### v1 UI notes / open
 
 - Direction: drag-down = newer, drag-up = older (wheel physics, newer above).
   Trivially flippable if it reads wrong on device.
-- Granularity floor (how far back, retention) and clip-at-instant semantics are
-  Aaron's data calls. `minYear` defaults to **10 years back**
-  (`DEFAULT_MIN_YEAR`) so the YEAR wheel has room to spin — the real data floor
-  (WRLD launched 2026) is the backend's call; pass `minYear` to override.
+- `minYear` defaults to **10 years back** (`DEFAULT_MIN_YEAR`) so the YEAR
+  wheel has room to spin — the real data floor (WRLD launched 2026) is the
+  backend's call; pass `minYear` to override once the earliest clip date is
+  known (query `MIN(recording.startedAt)` from the discover endpoint or a
+  dedicated endpoint).
 - **Needs on-device testing** — gesture feel (the `HIT_SLOP` sizes, the tap
   vs drag threshold), the drawer-tracking position, and the
   blur-on-outside-touch (relies on `onTouchStart` bubbling to the `box-none`
