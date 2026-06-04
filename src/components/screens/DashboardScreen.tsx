@@ -90,7 +90,7 @@ const SOURCE_GROUPS: SourceDescriptor[][] = [
 ]
 
 const PRECISION_OPTIONS: { value: LocationPrecision; label: string }[] = [
-  { value: 'bluedot', label: 'BLUEDOT' },
+  { value: 'exact', label: 'EXACT' },
   { value: 'city', label: 'CITY' },
   { value: 'country', label: 'COUNTRY' },
   { value: 'private', label: 'PRIVATE' },

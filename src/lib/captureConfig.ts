@@ -13,7 +13,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 
 const KEY = '@wrld_capture_config'
 
-export type LocationPrecision = 'bluedot' | 'city' | 'country' | 'private'
+export type LocationPrecision = 'exact' | 'city' | 'country' | 'private'
 export type IdentityFlag = 'public' | 'anon'
 
 // air / rec are keyed by source kind (string) → on/off. Kept as plain
@@ -28,11 +28,11 @@ export type CaptureConfig = {
 
 // Fresh-install defaults: camera + audio + location all Air and Rec on;
 // every other source off; identity public; location precision ceiling at
-// blue dot.
+// exact.
 export const DEFAULT_CAPTURE_CONFIG: CaptureConfig = {
   air: { cam: true, audio: true, loc: true },
   rec: { cam: true, audio: true, loc: true },
-  precision: 'bluedot',
+  precision: 'exact',
   identity: 'public',
   subscribersOnly: false,
 }
@@ -43,7 +43,10 @@ export async function loadCaptureConfig(): Promise<CaptureConfig> {
     if (!raw) return DEFAULT_CAPTURE_CONFIG
     const parsed = JSON.parse(raw) as Partial<CaptureConfig>
     // Top-level spread fills any field a previous version didn't persist.
-    return { ...DEFAULT_CAPTURE_CONFIG, ...parsed }
+    const merged = { ...DEFAULT_CAPTURE_CONFIG, ...parsed }
+    // Migrate the renamed precision value (bluedot → exact, 2026-06-04).
+    if ((merged.precision as string) === 'bluedot') merged.precision = 'exact'
+    return merged
   } catch {
     return DEFAULT_CAPTURE_CONFIG
   }
