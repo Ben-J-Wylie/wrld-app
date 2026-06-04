@@ -15,12 +15,16 @@
 // The thumb sits in the on-position for both armed and on; armed signals
 // "configured, not yet committed" via outline-not-fill.
 //
+// The armed outline is an absolutely-positioned overlay ring (not a
+// `borderWidth` on the track) so it adds zero box geometry — thumb travel
+// and vertical fit stay a clean 2px all around in every state.
+//
 // Single canonical size (44 × 26 track, 22 × 22 thumb). Variants and
 // sizes intentionally absent — toggles should feel the same everywhere
 // they appear (consent rows, settings, layer filters, Clip Edit).
 
 import { useEffect, useRef } from 'react'
-import { Animated, StyleSheet, type StyleProp, type ViewStyle } from 'react-native'
+import { Animated, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
 import { Pressable } from './Pressable'
 import { theme } from '@/tokens/theme'
 
@@ -28,10 +32,8 @@ const TRACK_W = 44
 const TRACK_H = 26
 const THUMB = 22
 const PAD = 2
-const BORDER = 1.5
-// A transparent border is reserved in every state so thumb travel is
-// identical whether or not the armed outline is showing.
-const TRANSLATE = TRACK_W - 2 * BORDER - 2 * PAD - THUMB
+const OUTLINE = 1.5
+const TRANSLATE = TRACK_W - 2 * PAD - THUMB
 
 type Props = {
   value: boolean
@@ -75,22 +77,15 @@ export function Toggle({ value, onValueChange, armed, disabled, accessibilityLab
       accessibilityRole="switch"
       accessibilityLabel={accessibilityLabel}
       accessibilityState={{ checked: value, disabled: !!disabled }}
-      style={[
-        styles.track,
-        {
-          backgroundColor: trackBg,
-          borderColor: isArmed ? theme.colors.accent.default : 'transparent',
-        },
-        disabled && styles.disabled,
-        style,
-      ]}
+      style={[styles.track, { backgroundColor: trackBg }, disabled && styles.disabled, style]}
     >
+      {isArmed && <View pointerEvents="none" style={styles.outline} />}
       <Animated.View
         style={[
           styles.thumb,
           {
             backgroundColor: thumbBg,
-            borderWidth: isArmed ? BORDER : 0,
+            borderWidth: isArmed ? OUTLINE : 0,
             borderColor: isArmed ? theme.colors.accent.default : 'transparent',
             transform: [{ translateX: thumbX }],
           },
@@ -105,9 +100,14 @@ const styles = StyleSheet.create({
     width: TRACK_W,
     height: TRACK_H,
     borderRadius: TRACK_H / 2,
-    borderWidth: BORDER,
     padding: PAD,
     justifyContent: 'center',
+  },
+  outline: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: TRACK_H / 2,
+    borderWidth: OUTLINE,
+    borderColor: theme.colors.accent.default,
   },
   thumb: {
     width: THUMB,

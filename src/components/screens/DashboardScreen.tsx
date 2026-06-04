@@ -34,14 +34,12 @@ import { ScreenScroll } from '@/components/sections/ScreenScroll'
 import { Button } from '@/components/primitives/Button'
 import { Input } from '@/components/primitives/Input'
 import { Text } from '@/components/primitives/Text'
-import { HelpText } from '@/components/primitives/HelpText'
 import { Icon } from '@/components/primitives/Icon'
 import { Toggle } from '@/components/primitives/Toggle'
 import { SegmentedToggle } from '@/components/primitives/SegmentedToggle'
 import { Divider } from '@/components/primitives/Divider'
 import { FeedRow, type SourceAvailability } from '@/components/features/broadcast/FeedRow'
 import { type FeedKind } from '@/components/features/broadcast/FeedThumb'
-import { CoordHUD } from '@/components/features/stream/CoordHUD'
 import { GoBar } from '@/components/features/broadcast/GoBar'
 import { useAuth } from '@clerk/clerk-expo'
 import { useLocation } from '@/hooks/useLocation'
@@ -100,7 +98,7 @@ const IDENTITY_OPTIONS: { value: IdentityFlag; label: string }[] = [
 export function DashboardScreen() {
   const { isSignedIn } = useAuth()
   const { data: currentUser } = useCurrentUser()
-  const { coords, loading: locationLoading, error: locationError } = useLocation()
+  const { coords, loading: locationLoading } = useLocation()
   const insets = useSafeAreaInsets()
 
   const [title, setTitle] = useState('')
@@ -215,11 +213,6 @@ export function DashboardScreen() {
     )
   }
 
-  const coordItems = [
-    { label: 'LAT', value: coords ? coords.latitude.toFixed(4) : locationError ? '—' : '...', pending: !coords && !locationError },
-    { label: 'LON', value: coords ? coords.longitude.toFixed(4) : locationError ? '—' : '...', pending: !coords && !locationError },
-  ]
-
   // No camera/audio aired → the commit is a record-only / data-only
   // session; the bar reads "START RECORDING" instead of "GO LIVE".
   const recordOnly = !anyAir && anyRec
@@ -256,7 +249,6 @@ export function DashboardScreen() {
           src.kind === 'loc' ? (
             <View style={styles.precision}>
               <SegmentedToggle options={PRECISION_OPTIONS} value={precision} onChange={setPrecision} />
-              <HelpText>CAPTURE CEILING · REC CAN'T EXCEED LIVE</HelpText>
             </View>
           ) : undefined
         }
@@ -277,27 +269,13 @@ export function DashboardScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.section}>
-          <HelpText>SOURCES · AIR = BROADCAST · REC = SAVE TO DEVICE</HelpText>
-          <View style={styles.sourceGroups}>
-            {SOURCE_GROUPS.map((group, gi) => (
-              <Fragment key={gi}>
-                {gi > 0 && <Divider tone="strong" />}
-                <View style={styles.sourceList}>{group.map(renderSource)}</View>
-              </Fragment>
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <HelpText>LOCATION</HelpText>
-          {locationError ? (
-            <Text variant="body" color={theme.colors.text.muted}>
-              {locationError}
-            </Text>
-          ) : (
-            <CoordHUD items={coordItems} />
-          )}
+        <View style={styles.sourceGroups}>
+          {SOURCE_GROUPS.map((group, gi) => (
+            <Fragment key={gi}>
+              {gi > 0 && <Divider tone="strong" />}
+              <View style={styles.sourceList}>{group.map(renderSource)}</View>
+            </Fragment>
+          ))}
         </View>
 
         {currentUser?.subscriptionEnabled && (
@@ -320,9 +298,6 @@ export function DashboardScreen() {
           knobLabel={recordOnly ? 'REC' : undefined}
           onPress={handleGoLive}
         />
-        {!anyAir && !anyRec && (
-          <HelpText style={styles.hint}>ARM ANY SOURCE TO GO LIVE OR RECORD</HelpText>
-        )}
       </View>
     </View>
   )
@@ -351,8 +326,6 @@ const styles = StyleSheet.create({
   },
   footer: {
     paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.md,
-    gap: theme.spacing.sm,
     backgroundColor: theme.colors.bg.primary,
     borderTopWidth: 1,
     borderTopColor: theme.colors.border.subtle,
@@ -399,11 +372,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: theme.spacing.sm,
-  },
-  section: {
-    gap: theme.spacing.sm,
-  },
-  hint: {
-    textAlign: 'center',
   },
 })

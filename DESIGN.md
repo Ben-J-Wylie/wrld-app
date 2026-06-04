@@ -1022,8 +1022,11 @@ true the thumb sits in the on-position but renders **outline-not-fill**:
 dark (`text.primary`) track with an `accent.default` outline, light
 (`bg.panelHi`) thumb with an `accent.default` outline. On commit the
 consumer drops `armed` and the toggle fills accent (the existing `on`
-look). A transparent `BORDER` is reserved in every state so thumb travel
-is identical whether or not the outline is showing.
+look). The track outline is an **absolutely-positioned overlay ring**
+(not a `borderWidth` on the track) so it adds zero box geometry — thumb
+travel and vertical fit stay a clean 2px all around in every state
+(corrected 2026-06-03: the first armed implementation used a track border
+that shrank the thumb's travel and vertical gap).
 
 **Gap / proposal:** None — shipped.
 
