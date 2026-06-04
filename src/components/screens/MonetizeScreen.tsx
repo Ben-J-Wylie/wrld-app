@@ -6,10 +6,10 @@
 //   3. Toggle subscriptions on/off
 //   4. Open their Stripe Express dashboard for payout management
 
-import { Alert, Linking, StyleSheet, View } from 'react-native'
+import { Alert, Linking, Pressable, StyleSheet, View } from 'react-native'
 import { useState } from 'react'
 import { router } from 'expo-router'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { theme } from '@/tokens/theme'
 import { ScreenScroll } from '@/components/sections/ScreenScroll'
 import { Button } from '@/components/primitives/Button'
@@ -19,6 +19,7 @@ import { Toggle } from '@/components/primitives/Toggle'
 import { IconButton } from '@/components/primitives/IconButton'
 import { Input } from '@/components/primitives/Input'
 import { usersApi } from '@/api/users'
+import { ppvApi } from '@/api/ppvEvents'
 
 export function MonetizeScreen() {
   const qc = useQueryClient()
@@ -26,6 +27,11 @@ export function MonetizeScreen() {
   const { data: settings, isLoading } = useQuery({
     queryKey: ['subscription-settings'],
     queryFn: () => usersApi.getSubscriptionSettings(),
+  })
+
+  const { data: myEvents } = useQuery({
+    queryKey: ['my-ppv-events'],
+    queryFn: () => ppvApi.listMyEvents(),
   })
 
   const [priceInput, setPriceInput] = useState('')
@@ -82,13 +88,13 @@ export function MonetizeScreen() {
   return (
     <ScreenScroll contentContainerStyle={styles.scroll}>
       <View style={styles.header}>
-        <IconButton iconName="arrow-left" onPress={() => router.back()} />
-        <Text variant="title">Monetize</Text>
+        <IconButton name="arrow-left" onPress={() => router.back()} accessibilityLabel="Back" />
+        <Text variant="heading">Monetize</Text>
       </View>
 
       {isLoading ? null : !settings?.onboardingComplete ? (
         <>
-          <Text variant="body" color={theme.colors.text.secondary}>
+          <Text variant="body" color={theme.colors.text.muted}>
             Connect a Stripe account to receive subscription payments. Stripe handles billing,
             payouts, and tax compliance.
           </Text>
@@ -173,6 +179,53 @@ export function MonetizeScreen() {
           </View>
         </>
       )}
+
+      {/* ── PPV Events ──────────────────────────────────────── */}
+      <View style={styles.section}>
+        <View style={styles.ppvHeader}>
+          <HelpText>PAY-PER-VIEW EVENTS</HelpText>
+          <Button
+            label="+ Schedule event"
+            variant="secondary"
+            onPress={() => router.push('/(app)/ppv/create')}
+          />
+        </View>
+        {myEvents && myEvents.length > 0 ? (
+          myEvents.map(event => (
+            <Pressable
+              key={event.id}
+              style={styles.ppvCard}
+              onPress={() => router.push({
+                pathname: '/(app)/ppv/[id]/manage',
+                params: { id: event.id },
+              })}
+            >
+              <View style={styles.ppvCardRow}>
+                <View style={styles.ppvCardInfo}>
+                  <Text variant="bodyEmphasized">{event.title}</Text>
+                  <Text variant="caption" color={theme.colors.text.muted}>
+                    {new Date(event.scheduledAt).toLocaleDateString('en-US', {
+                      month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+                    })}
+                  </Text>
+                </View>
+                <View style={styles.ppvCardRight}>
+                  <Text variant="caption" color={theme.colors.text.muted}>
+                    {event.status.toUpperCase()}
+                  </Text>
+                  <Text variant="bodyEmphasized" color={theme.colors.accent.default}>
+                    ${(event.priceUsd / 100).toFixed(2)}
+                  </Text>
+                </View>
+              </View>
+            </Pressable>
+          ))
+        ) : (
+          <Text variant="caption" color={theme.colors.text.muted}>
+            No events scheduled yet. Create a PPV event to sell tickets to your next stream.
+          </Text>
+        )}
+      </View>
     </ScreenScroll>
   )
 }
@@ -214,5 +267,31 @@ const styles = StyleSheet.create({
     padding: theme.spacing.lg,
     alignItems: 'center',
     gap: theme.spacing.xs,
+  },
+  ppvHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  ppvCard: {
+    backgroundColor: theme.colors.bg.elevated,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border.subtle,
+    padding: theme.spacing.md,
+  },
+  ppvCardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing.sm,
+  },
+  ppvCardInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  ppvCardRight: {
+    alignItems: 'flex-end',
+    gap: 2,
   },
 })

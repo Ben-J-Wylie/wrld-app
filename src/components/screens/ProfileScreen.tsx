@@ -13,7 +13,7 @@
 //     profile flex move; MetaStrip would flatten it
 //   • FollowButton (for other profiles) / Button (for own profile)
 
-import { ActivityIndicator, Alert, Linking, StyleSheet, View } from 'react-native'
+import { ActivityIndicator, Alert, Linking, Pressable, StyleSheet, View } from 'react-native'
 import { useLocalSearchParams, router } from 'expo-router'
 import { useAuth } from '@clerk/clerk-expo'
 import { theme } from '@/tokens/theme'
@@ -27,7 +27,17 @@ import { MetaStrip } from '@/components/features/user/MetaStrip'
 import { useUserProfile } from '@/hooks/useUserProfile'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
 import { usersApi } from '@/api/users'
+import { ppvApi } from '@/api/ppvEvents'
 import { useQuery } from '@tanstack/react-query'
+
+function formatEventDate(iso: string): string {
+  return new Date(iso).toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
 
 function formatJoined(iso: string): string {
   try {
@@ -56,6 +66,12 @@ export function ProfileScreen() {
     queryKey: ['subscription-status', handle],
     queryFn: () => usersApi.getSubscriptionStatus(handle!),
     enabled: !!isSignedIn && !isOwnProfile && !!profile?.subscriptionEnabled,
+  })
+
+  const { data: ppvEvents } = useQuery({
+    queryKey: ['ppv-events-profile', handle],
+    queryFn: () => ppvApi.getCreatorEvents(handle!),
+    enabled: !!handle,
   })
 
   if (isLoading) {
@@ -185,6 +201,41 @@ export function ProfileScreen() {
           variant="secondary"
         />
       )}
+
+      {ppvEvents && ppvEvents.length > 0 && (
+        <View style={styles.ppvSection}>
+          <Text variant="monoLabel" color={theme.colors.text.muted}>
+            UPCOMING EVENTS
+          </Text>
+          {ppvEvents.map(event => (
+            <Pressable
+              key={event.id}
+              style={styles.ppvCard}
+              onPress={() => router.push({
+                pathname: '/(app)/ppv/[id]',
+                params: { id: event.id, handle: handle ?? '' },
+              })}
+            >
+              <View style={styles.ppvCardRow}>
+                <View style={styles.ppvCardInfo}>
+                  <Text variant="bodyEmphasized">{event.title}</Text>
+                  <Text variant="caption" color={theme.colors.text.muted}>
+                    {formatEventDate(event.scheduledAt)}
+                  </Text>
+                </View>
+                <Text variant="bodyEmphasized" color={theme.colors.accent.default}>
+                  ${(event.priceUsd / 100).toFixed(2)}
+                </Text>
+              </View>
+              {event.hasAccess && (
+                <Text variant="caption" color={theme.colors.accent.default}>
+                  ✓ Access purchased
+                </Text>
+              )}
+            </Pressable>
+          ))}
+        </View>
+      )}
     </ScreenScroll>
   )
 }
@@ -235,5 +286,26 @@ const styles = StyleSheet.create({
     width: 1,
     height: 40,
     backgroundColor: theme.colors.border.subtle,
+  },
+  ppvSection: {
+    gap: theme.spacing.sm,
+  },
+  ppvCard: {
+    backgroundColor: theme.colors.bg.elevated,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border.subtle,
+    padding: theme.spacing.md,
+    gap: theme.spacing.xxs,
+  },
+  ppvCardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing.sm,
+  },
+  ppvCardInfo: {
+    flex: 1,
+    gap: 2,
   },
 })
