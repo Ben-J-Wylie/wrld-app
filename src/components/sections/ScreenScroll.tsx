@@ -25,6 +25,7 @@
 // Requires `<KeyboardProvider>` mounted at the root layout (already
 // wired in app/_layout.tsx).
 
+import React from 'react'
 import { StyleSheet, type StyleProp, type ViewStyle } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
@@ -37,6 +38,7 @@ type Props = {
   style?: StyleProp<ViewStyle>
   bottomOffset?: number
   keyboardDismissMode?: 'none' | 'on-drag' | 'interactive'
+  refreshControl?: React.ReactElement<any>
 }
 
 export function ScreenScroll({
@@ -45,6 +47,7 @@ export function ScreenScroll({
   style,
   bottomOffset,
   keyboardDismissMode,
+  refreshControl,
 }: Props) {
   return (
     <SafeAreaView style={[styles.root, style]}>
@@ -53,6 +56,7 @@ export function ScreenScroll({
         keyboardShouldPersistTaps="handled"
         bottomOffset={bottomOffset}
         keyboardDismissMode={keyboardDismissMode}
+        refreshControl={refreshControl}
       >
         {children}
       </KeyboardAwareScrollView>

@@ -1,5 +1,5 @@
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native'
-import { useCallback } from 'react'
+import { ActivityIndicator, Pressable, RefreshControl, StyleSheet, View } from 'react-native'
+import { useCallback, useState } from 'react'
 import { router, useFocusEffect } from 'expo-router'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '@clerk/clerk-expo'
@@ -133,6 +133,7 @@ function EventCard({ event, isSignedIn }: { event: PpvEvent; isSignedIn: boolean
 
 export function PpvIndexScreen() {
   const { isSignedIn } = useAuth()
+  const [refreshing, setRefreshing] = useState(false)
   const { data: events, isLoading, refetch } = useQuery({
     queryKey: ['all-ppv-events'],
     queryFn: () => ppvApi.listAllEvents(),
@@ -140,11 +141,26 @@ export function PpvIndexScreen() {
 
   useFocusEffect(useCallback(() => { refetch() }, [refetch]))
 
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true)
+    await refetch()
+    setRefreshing(false)
+  }, [refetch])
+
   const upcoming = events?.filter(e => e.status === 'scheduled') ?? []
   const live = events?.filter(e => e.status === 'live') ?? []
 
   return (
-    <ScreenScroll contentContainerStyle={styles.content}>
+    <ScreenScroll
+      contentContainerStyle={styles.content}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={handleRefresh}
+          tintColor={theme.colors.accent.default}
+        />
+      }
+    >
       <Text variant="heading">Events</Text>
 
       {isLoading ? (
