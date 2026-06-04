@@ -26,10 +26,13 @@ export type CaptureConfig = {
   subscribersOnly: boolean
 }
 
+// Fresh-install defaults: camera + audio + location all Air and Rec on;
+// every other source off; identity public; location precision ceiling at
+// blue dot.
 export const DEFAULT_CAPTURE_CONFIG: CaptureConfig = {
-  air: { cam: true, audio: true },
-  rec: {},
-  precision: 'city',
+  air: { cam: true, audio: true, loc: true },
+  rec: { cam: true, audio: true, loc: true },
+  precision: 'bluedot',
   identity: 'public',
   subscribersOnly: false,
 }
