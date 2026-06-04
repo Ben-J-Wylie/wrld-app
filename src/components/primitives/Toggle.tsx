@@ -8,12 +8,13 @@
 // Three appearances (added `armed` 2026-06-03 for the clips capture
 // model — see DESIGN.md decision-log entry):
 //   off   (value false)         — warm-line track, warm-ink thumb
-//   armed (value true + armed)   — "cued" on-position: dark track + accent
-//                                  outline, light thumb + accent outline
+//   armed (value true + armed)   — "cued" on-position: same gray track as
+//                                  off + a 1px accent outline ring; thumb
+//                                  is accent-filled with a 1px ink stroke
 //                                  (set, but not yet live)
 //   on    (value true)           — accent-filled track, cream thumb (live)
 // The thumb sits in the on-position for both armed and on; armed signals
-// "configured, not yet committed" via outline-not-fill.
+// "configured, not yet committed" — the trough stays gray (not filled).
 //
 // The armed outline is an absolutely-positioned overlay ring (not a
 // `borderWidth` on the track) so it adds zero box geometry — thumb travel
@@ -32,7 +33,7 @@ const TRACK_W = 44
 const TRACK_H = 26
 const THUMB = 22
 const PAD = 2
-const OUTLINE = 1.5
+const OUTLINE = 1
 const TRANSLATE = TRACK_W - 2 * PAD - THUMB
 
 type Props = {
@@ -58,15 +59,14 @@ export function Toggle({ value, onValueChange, armed, disabled, accessibilityLab
   }, [value, thumbX])
 
   const isArmed = value && !!armed
-  const trackBg = !value
-    ? theme.colors.border.strong
-    : isArmed
-      ? theme.colors.text.primary
-      : theme.colors.accent.default
+  // Armed keeps the off-state gray trough (the accent ring carries the
+  // "cued" signal); only the live `on` state fills the track accent.
+  const trackBg =
+    value && !isArmed ? theme.colors.accent.default : theme.colors.border.strong
   const thumbBg = !value
     ? theme.colors.text.primary
     : isArmed
-      ? theme.colors.bg.panelHi
+      ? theme.colors.accent.default
       : theme.colors.text.inverse
 
   return (
@@ -86,7 +86,7 @@ export function Toggle({ value, onValueChange, armed, disabled, accessibilityLab
           {
             backgroundColor: thumbBg,
             borderWidth: isArmed ? OUTLINE : 0,
-            borderColor: isArmed ? theme.colors.accent.default : 'transparent',
+            borderColor: isArmed ? theme.colors.text.primary : 'transparent',
             transform: [{ translateX: thumbX }],
           },
         ]}

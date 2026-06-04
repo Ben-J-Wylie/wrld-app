@@ -1018,15 +1018,19 @@ screen.
 between off and on, for "configured but not yet committed" — the Go Live
 & Record source toggles use it so the toggles are set-it-and-forget-it
 and the single Go Live button never flips them. With `armed` + `value`
-true the thumb sits in the on-position but renders **outline-not-fill**:
-dark (`text.primary`) track with an `accent.default` outline, light
-(`bg.panelHi`) thumb with an `accent.default` outline. On commit the
-consumer drops `armed` and the toggle fills accent (the existing `on`
-look). The track outline is an **absolutely-positioned overlay ring**
-(not a `borderWidth` on the track) so it adds zero box geometry — thumb
-travel and vertical fit stay a clean 2px all around in every state
-(corrected 2026-06-03: the first armed implementation used a track border
-that shrank the thumb's travel and vertical gap).
+true the thumb sits in the on-position, but the **trough keeps the
+off-state gray** (`border.strong`) with a **1px `accent.default` outline
+ring**, and the **thumb is accent-filled** (`accent.default`) with a
+**1px ink stroke** (`text.primary`). The accent ring + accent thumb carry
+the "cued" signal; the gray trough says "not yet live." On commit the
+consumer drops `armed` and the toggle fills the track accent (the
+existing `on` look). The track outline is an **absolutely-positioned
+overlay ring** (not a `borderWidth` on the track) so it adds zero box
+geometry — thumb travel and vertical fit stay a clean 2px all around in
+every state. (Treatment revised 2026-06-03: was a dark trough + light
+thumb; now gray-trough + accent-thumb. An earlier implementation used a
+track border that shrank the thumb's travel — replaced by the overlay
+ring.)
 
 **Gap / proposal:** None — shipped.
 

@@ -258,7 +258,7 @@ export function DashboardScreen() {
 
   return (
     <View style={styles.screen}>
-      <View style={[styles.header, { paddingTop: insets.top + theme.spacing.md }]}>
+      <View style={[styles.header, { paddingTop: insets.top + theme.spacing.sm }]}>
         <Text variant="heading">Go Live</Text>
         <Input placeholder="What's happening?" value={title} onChangeText={setTitle} autoCorrect={false} />
       </View>
@@ -310,7 +310,7 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: theme.spacing.lg,
-    paddingBottom: theme.spacing.md,
+    paddingBottom: theme.spacing.sm,
     gap: theme.spacing.sm,
     backgroundColor: theme.colors.bg.primary,
     borderBottomWidth: 1,
@@ -326,6 +326,8 @@ const styles = StyleSheet.create({
   },
   footer: {
     paddingHorizontal: theme.spacing.lg,
+    // Top gap above the button mirrors the header's gap below the input.
+    paddingTop: theme.spacing.sm,
     backgroundColor: theme.colors.bg.primary,
     borderTopWidth: 1,
     borderTopColor: theme.colors.border.subtle,
