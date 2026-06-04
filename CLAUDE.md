@@ -474,6 +474,15 @@ What shipped on `design` (all token-clean, in galleries, DESIGN.md Section 3):
 Not done (still C2/C4): `LayerEditorRow` not-captured + delete-permanently
 states (clip-editor work).
 
+**Sensitivity friction removed for now (2026-06-03, late).** The
+SENSITIVE/BENIGN badges, the Rec consent lock-hint, and the
+`RecordConsentSheet` disclaimer are disabled on the Dashboard — Rec flips
+directly for every source. This **temporarily relaxes the "nothing
+recorded silently" guardrail** below (the consent step is the part
+removed; the on-air-vs-recording indicator stays). `RecordConsentSheet`
+remains a shipped feature for when consent returns — re-enable before any
+non-friends-and-family exposure. See DESIGN.md decision log.
+
 ### Backend follow-ups this build assumes (Aaron / mediasoup)
 
 The app UI is open ahead of the backend. To make it real:

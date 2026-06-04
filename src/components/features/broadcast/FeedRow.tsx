@@ -1,16 +1,10 @@
 // src/components/features/broadcast/FeedRow.tsx
 //
 // Capture source row on the Go Live & Record arming screen — one per
-// broadcastable layer. Redesigned 2026-06-03 for the clips initiative
-// two-affordance model (see DESIGN.md 2026-06-03 decision-log entry):
-// each source carries TWO independent affordances —
+// broadcastable layer. Two independent affordances per source —
 //   • Air — broadcast this source live
 //   • Rec — save this source to the device (record set)
 // All four combinations are valid (air-only, rec-only, both, neither).
-//
-// Sensitivity drives the consent gate: a `sensitive` source's Rec
-// affordance shows a lock hint when off; the consumer intercepts
-// `onRecChange(true)` to present the RecordConsentSheet before flipping.
 //
 // Availability gates selectability:
 //   available — both toggles live
@@ -22,8 +16,12 @@
 //
 // `trailing` replaces the Air/Rec affordances entirely — used by the
 // Identity row, which is a flag (Attributed / Anon) rather than a
-// capturable track, so it composes the same thumb + meta layout but
-// swaps a control into the affordance slot.
+// capturable track.
+//
+// Note (2026-06-03): the sensitivity badges (SENSITIVE/BENIGN) and the
+// record consent lock-hint were removed for now — the record-consent
+// flow is disabled at the screen level. The two-affordance model and the
+// on-air-vs-recording indicator remain. See DESIGN.md decision log.
 //
 // FeedThumb is composed as the long-standing documented sub-component.
 // Each row is a self-contained bordered card; the consumer stacks them
@@ -33,26 +31,20 @@ import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
 import type { ReactNode } from 'react'
 import { Text } from '@/components/primitives/Text'
 import { Toggle } from '@/components/primitives/Toggle'
-import { Icon } from '@/components/primitives/Icon'
 import { FeedThumb, type FeedKind } from './FeedThumb'
 import { theme } from '@/tokens/theme'
 
-export type SourceSensitivity = 'sensitive' | 'benign'
 export type SourceAvailability = 'available' | 'denied' | 'disabled'
 
 type Props = {
   kind: FeedKind
   label: string
   detail?: string
-  sensitivity?: SourceSensitivity
   availability?: SourceAvailability
   air?: boolean
   onAirChange?: (v: boolean) => void
   rec?: boolean
   onRecChange?: (v: boolean) => void
-  // When true and `rec` is off, the Rec affordance shows a lock hint.
-  // The consumer routes `onRecChange(true)` through a consent step.
-  recNeedsConsent?: boolean
   // While the broadcast hasn't gone live, on-toggles render in the
   // "armed" (cued, outline-not-fill) state; once live they fill accent.
   live?: boolean
@@ -67,20 +59,17 @@ export function FeedRow({
   kind,
   label,
   detail,
-  sensitivity,
   availability = 'available',
   air = false,
   onAirChange,
   rec = false,
   onRecChange,
-  recNeedsConsent,
   live = false,
   trailing,
   footer,
   style,
 }: Props) {
   const locked = availability !== 'available'
-  const lockHint = !!recNeedsConsent && !rec && !locked
   const detailPrefix = availability === 'denied' ? 'PERMISSION DENIED · ' : ''
   // When the card is locked it already dims as a whole, so keep the thumb
   // at full opacity to avoid muddy double-dimming. Identity (trailing) and
@@ -92,26 +81,9 @@ export function FeedRow({
       <View style={styles.row}>
         <FeedThumb kind={kind} active={thumbActive} />
         <View style={styles.col}>
-          <View style={styles.nameRow}>
-            <Text variant="bodyEmphasized" numberOfLines={1}>
-              {label}
-            </Text>
-            {sensitivity && (
-              <View
-                style={[
-                  styles.tag,
-                  sensitivity === 'sensitive' ? styles.tagSensitive : styles.tagBenign,
-                ]}
-              >
-                <Text
-                  variant="monoLabel"
-                  color={sensitivity === 'sensitive' ? theme.colors.accent.default : theme.colors.text.subtle}
-                >
-                  {sensitivity === 'sensitive' ? 'SENSITIVE' : 'BENIGN'}
-                </Text>
-              </View>
-            )}
-          </View>
+          <Text variant="bodyEmphasized" numberOfLines={1}>
+            {label}
+          </Text>
           {detail && (
             <Text variant="monoCaption" color={theme.colors.text.muted} numberOfLines={2}>
               {detailPrefix}
@@ -128,12 +100,9 @@ export function FeedRow({
               <Toggle value={air} armed={!live} onValueChange={onAirChange ?? (() => {})} disabled={locked} accessibilityLabel={`${label} broadcast`} />
             </View>
             <View style={styles.aff}>
-              <View style={styles.recLabel}>
-                <Text variant="monoLabel" color={rec ? theme.colors.accent.default : theme.colors.text.subtle}>
-                  REC
-                </Text>
-                {lockHint && <Icon name="lock" size="sm" color={theme.colors.text.subtle} />}
-              </View>
+              <Text variant="monoLabel" color={rec ? theme.colors.accent.default : theme.colors.text.subtle}>
+                REC
+              </Text>
               <Toggle value={rec} armed={!live} onValueChange={onRecChange ?? (() => {})} disabled={locked} accessibilityLabel={`${label} record`} />
             </View>
           </View>
@@ -166,35 +135,11 @@ const styles = StyleSheet.create({
     gap: theme.spacing.xxs,
     minWidth: 0,
   },
-  nameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-  },
-  tag: {
-    borderRadius: theme.radius.md,
-    borderWidth: 1,
-    paddingHorizontal: theme.spacing.xs,
-    paddingVertical: theme.spacing.xxs,
-  },
-  tagSensitive: {
-    borderColor: theme.colors.accent.border,
-    backgroundColor: theme.colors.accent.surface,
-  },
-  tagBenign: {
-    borderColor: theme.colors.border.strong,
-    backgroundColor: 'transparent',
-  },
   affs: {
     flexDirection: 'row',
     gap: theme.spacing.sm,
   },
   aff: {
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-  },
-  recLabel: {
-    flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.xs,
   },

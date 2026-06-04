@@ -11,8 +11,9 @@
 // Each source carries an Air affordance (broadcast) + a Rec affordance
 // (save to device); while not yet live an on-toggle shows the "armed"
 // (cued, outline-not-fill) state. Pressing Go Live commits whatever the
-// toggles say; it never flips them. Sensitive sources gate Rec through
-// RecordConsentSheet. Identity is a flag (Attributed / Anon), not a track.
+// toggles say; it never flips them. Identity is a flag (Attributed /
+// Anon), not a track. (Record consent + sensitivity badges removed for
+// now — see DESIGN.md 2026-06-03 decision-log entry.)
 //
 // Source suite & honesty (this branch): every source is interactive so
 // the full model is visible, but only camera/audio Air actually streams
@@ -38,8 +39,7 @@ import { Icon } from '@/components/primitives/Icon'
 import { Toggle } from '@/components/primitives/Toggle'
 import { SegmentedToggle } from '@/components/primitives/SegmentedToggle'
 import { Divider } from '@/components/primitives/Divider'
-import { FeedRow, type SourceAvailability, type SourceSensitivity } from '@/components/features/broadcast/FeedRow'
-import { RecordConsentSheet } from '@/components/features/broadcast/RecordConsentSheet'
+import { FeedRow, type SourceAvailability } from '@/components/features/broadcast/FeedRow'
 import { type FeedKind } from '@/components/features/broadcast/FeedThumb'
 import { CoordHUD } from '@/components/features/stream/CoordHUD'
 import { GoBar } from '@/components/features/broadcast/GoBar'
@@ -53,7 +53,6 @@ type SourceDescriptor = {
   kind: FeedKind
   label: string
   detail: string
-  sensitivity?: SourceSensitivity
   availability: SourceAvailability
   broadcastSource?: SourceType
   identityRow?: boolean
@@ -65,22 +64,22 @@ type SourceDescriptor = {
 const SOURCE_GROUPS: SourceDescriptor[][] = [
   [
     { kind: 'profile', label: 'Identity', detail: 'Off = anonymous · a flag, not a track', availability: 'available', identityRow: true },
-    { kind: 'loc', label: 'Location', detail: 'Telemetry · gated by precision setting', sensitivity: 'sensitive', availability: 'available' },
+    { kind: 'loc', label: 'Location', detail: 'Telemetry · gated by precision setting', availability: 'available' },
   ],
   [
-    { kind: 'cam', label: 'Camera', detail: 'Media · rear · 1080p', sensitivity: 'sensitive', availability: 'available', broadcastSource: 'camera' },
-    { kind: 'audio', label: 'Audio', detail: 'Media · mic · 48 kHz', sensitivity: 'sensitive', availability: 'available', broadcastSource: 'audio' },
-    { kind: 'screen', label: 'Screen', detail: 'Media · whole-screen · capture pending', sensitivity: 'sensitive', availability: 'available' },
+    { kind: 'cam', label: 'Camera', detail: 'Media · rear · 1080p', availability: 'available', broadcastSource: 'camera' },
+    { kind: 'audio', label: 'Audio', detail: 'Media · mic · 48 kHz', availability: 'available', broadcastSource: 'audio' },
+    { kind: 'screen', label: 'Screen', detail: 'Media · whole-screen · capture pending', availability: 'available' },
   ],
   [
-    { kind: 'compass', label: 'Compass', detail: 'Telemetry · heading · true north · capture pending', sensitivity: 'benign', availability: 'available' },
-    { kind: 'gyro', label: 'Gyro', detail: 'Telemetry · orientation · ~60 Hz · capture pending', sensitivity: 'benign', availability: 'available' },
-    { kind: 'motion', label: 'Motion intensity', detail: 'Telemetry · derived from accelerometer · v0.3+', sensitivity: 'benign', availability: 'available' },
-    { kind: 'speed', label: 'Speed', detail: 'Telemetry · derived from GPS · v0.3+', sensitivity: 'benign', availability: 'available' },
-    { kind: 'temp', label: 'Ambient temp', detail: 'Telemetry · ambient temperature · v0.3+', sensitivity: 'benign', availability: 'available' },
+    { kind: 'compass', label: 'Compass', detail: 'Telemetry · heading · true north · capture pending', availability: 'available' },
+    { kind: 'gyro', label: 'Gyro', detail: 'Telemetry · orientation · ~60 Hz · capture pending', availability: 'available' },
+    { kind: 'motion', label: 'Motion intensity', detail: 'Telemetry · derived from accelerometer · v0.3+', availability: 'available' },
+    { kind: 'speed', label: 'Speed', detail: 'Telemetry · derived from GPS · v0.3+', availability: 'available' },
+    { kind: 'temp', label: 'Ambient temp', detail: 'Telemetry · ambient temperature · v0.3+', availability: 'available' },
   ],
   [
-    { kind: 'torch', label: 'Torch', detail: 'Device state · on / off · v0.3+', sensitivity: 'benign', availability: 'available' },
+    { kind: 'torch', label: 'Torch', detail: 'Device state · on / off · v0.3+', availability: 'available' },
   ],
 ]
 
@@ -107,11 +106,9 @@ export function DashboardScreen() {
   const [title, setTitle] = useState('')
   const [air, setAir] = useState<Partial<Record<FeedKind, boolean>>>({ cam: true, audio: true })
   const [rec, setRec] = useState<Partial<Record<FeedKind, boolean>>>({})
-  const [consented, setConsented] = useState<Set<FeedKind>>(new Set())
   const [precision, setPrecision] = useState<PrecisionCeiling>('city')
   const [identity, setIdentity] = useState<IdentityFlag>('attributed')
   const [subscribersOnly, setSubscribersOnly] = useState(false)
-  const [consentTarget, setConsentTarget] = useState<SourceDescriptor | null>(null)
 
   useFocusEffect(useCallback(() => {
     const active = activeBroadcast.get()
@@ -138,26 +135,10 @@ export function DashboardScreen() {
     setAir((prev) => ({ ...prev, [kind]: v }))
   }
 
-  // Sensitive sources route Rec-on through the consent sheet; everything
-  // else (and any already-consented source) flips immediately.
-  function requestRec(src: SourceDescriptor, v: boolean) {
-    if (!v) {
-      setRec((prev) => ({ ...prev, [src.kind]: false }))
-      return
-    }
-    if (src.sensitivity === 'sensitive' && !consented.has(src.kind)) {
-      setConsentTarget(src)
-      return
-    }
-    setRec((prev) => ({ ...prev, [src.kind]: true }))
-  }
-
-  function confirmConsent() {
-    if (!consentTarget) return
-    const kind = consentTarget.kind
-    setConsented((prev) => new Set(prev).add(kind))
-    setRec((prev) => ({ ...prev, [kind]: true }))
-    setConsentTarget(null)
+  // Record consent is disabled for now — Rec flips directly for every
+  // source (see DESIGN.md 2026-06-03 decision-log entry).
+  function setRecFor(kind: FeedKind, v: boolean) {
+    setRec((prev) => ({ ...prev, [kind]: v }))
   }
 
   // The media subset that actually streams today (camera/audio).
@@ -266,13 +247,11 @@ export function DashboardScreen() {
         kind={src.kind}
         label={src.label}
         detail={src.detail}
-        sensitivity={src.sensitivity}
         availability={src.availability}
         air={!!air[src.kind]}
         onAirChange={(v) => setAirFor(src.kind, v)}
         rec={!!rec[src.kind]}
-        onRecChange={(v) => requestRec(src, v)}
-        recNeedsConsent={src.sensitivity === 'sensitive' && !consented.has(src.kind)}
+        onRecChange={(v) => setRecFor(src.kind, v)}
         footer={
           src.kind === 'loc' ? (
             <View style={styles.precision}>
@@ -345,13 +324,6 @@ export function DashboardScreen() {
           <HelpText style={styles.hint}>ARM ANY SOURCE TO GO LIVE OR RECORD</HelpText>
         )}
       </View>
-
-      <RecordConsentSheet
-        visible={!!consentTarget}
-        onClose={() => setConsentTarget(null)}
-        sourceLabel={(consentTarget?.label ?? '').toLowerCase()}
-        onConfirm={confirmConsent}
-      />
     </View>
   )
 }

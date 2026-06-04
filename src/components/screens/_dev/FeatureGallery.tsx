@@ -897,9 +897,9 @@ export function FeatureGallery() {
       <Section title="FeedRow">
         <Row label="two-affordance (Air + Rec), gap-separated cards">
           <View style={styles.sourceStack}>
-            <FeedRowDemo kind="cam" label="Camera" detail="Media · rear · 1080p" sensitivity="sensitive" recNeedsConsent initialAir />
-            <FeedRowDemo kind="audio" label="Audio" detail="Media · mic · 48 kHz" sensitivity="sensitive" recNeedsConsent initialAir />
-            <FeedRowDemo kind="speed" label="Speed" detail="Telemetry · derived from GPS · v0.3+" sensitivity="benign" availability="disabled" />
+            <FeedRowDemo kind="cam" label="Camera" detail="Media · rear · 1080p" initialAir />
+            <FeedRowDemo kind="audio" label="Audio" detail="Media · mic · 48 kHz" initialAir />
+            <FeedRowDemo kind="speed" label="Speed" detail="Telemetry · derived from GPS · v0.3+" availability="disabled" />
           </View>
         </Row>
         <Row label="identity (trailing segment)">
@@ -909,8 +909,8 @@ export function FeatureGallery() {
         </Row>
         <Row label="denied / disabled">
           <View style={styles.sourceStack}>
-            <FeedRowDemo kind="screen" label="Screen" detail="Media · whole-screen · capture pending" sensitivity="sensitive" availability="disabled" />
-            <FeedRowDemo kind="compass" label="Compass" detail="Heading · true north" sensitivity="benign" availability="denied" />
+            <FeedRowDemo kind="screen" label="Screen" detail="Media · whole-screen · capture pending" availability="disabled" />
+            <FeedRowDemo kind="compass" label="Compass" detail="Heading · true north" availability="denied" />
           </View>
         </Row>
       </Section>
@@ -1489,18 +1489,14 @@ function FeedRowDemo({
   kind,
   label,
   detail,
-  sensitivity,
   availability,
-  recNeedsConsent,
   initialAir,
   initialRec,
 }: {
   kind: 'cam' | 'audio' | 'screen' | 'loc' | 'gyro' | 'compass' | 'profile' | 'speed' | 'torch' | 'temp' | 'motion'
   label: string
   detail?: string
-  sensitivity?: 'sensitive' | 'benign'
   availability?: 'available' | 'denied' | 'disabled'
-  recNeedsConsent?: boolean
   initialAir?: boolean
   initialRec?: boolean
 }) {
@@ -1511,9 +1507,7 @@ function FeedRowDemo({
       kind={kind}
       label={label}
       detail={detail}
-      sensitivity={sensitivity}
       availability={availability}
-      recNeedsConsent={recNeedsConsent}
       air={air}
       onAirChange={setAir}
       rec={rec}

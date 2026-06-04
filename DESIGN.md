@@ -2398,36 +2398,38 @@ itself is v0.3.
 
 ##### `FeedRow`
 
-- **Tier:** feature (composes FeedThumb + Text + Toggle + Icon)
+- **Tier:** feature (composes FeedThumb + Text + Toggle)
 - **Location:** `src/components/features/broadcast/FeedRow.tsx`
 - **Variants:** one per layer (`cam`, `audio`, `screen`, `loc`, `gyro`, `compass`)
 - **Sizes:** md
-- **States:** per-affordance air on/off + rec on/off (all four combinations valid); availability `available` / `denied` ("PERMISSION DENIED ·" prefix) / `disabled` (dimmed 0.55, toggles locked — the detail text carries the status, e.g. "capture pending" / "v0.3+"); sensitive sources show a lock hint on the Rec affordance until consented
+- **States:** per-affordance air on/off + rec on/off (all four combinations valid); availability `available` / `denied` ("PERMISSION DENIED ·" prefix) / `disabled` (dimmed 0.55, toggles locked — the detail text carries the status, e.g. "capture pending" / "v0.3+")
 - **Used in:** `DashboardScreen` (Go Live & Record arming — full source suite + Identity row) — 2026-06-03
 - **Tweak impact:** Go Live & Record arming screen
-- **Shipped:** 2026-05-31 (sub-phase 12.5). **Redesigned 2026-06-03** to the two-affordance capture model (clips initiative · C2).
+- **Shipped:** 2026-05-31 (sub-phase 12.5). **Redesigned 2026-06-03** to the two-affordance capture model (clips initiative · C2). **Sensitivity badges + record-consent lock-hint removed 2026-06-03** (see decision log).
 
-**Mock says:** Row: thumb + meta (label + sensitivity tag + detail) +
-TWO affordances per source — **Air** (broadcast live) and **Rec** (save
-to device). Sensitive sources gate Rec through a consent step. Location
+**Mock says:** Row: thumb + meta (label + detail) + TWO affordances per
+source — **Air** (broadcast live) and **Rec** (save to device). Location
 carries a precision-ceiling sub-control below the row.
 
 **Code does (shipped 2026-06-03):** Self-contained bordered card
-(FeedThumb + meta column with a SENSITIVE/BENIGN tag + the two labelled
-`AIR` / `REC` Toggles); the consumer stacks cards with a gap.
-`recNeedsConsent` shows a lock Icon by the Rec label while off — the
-consumer intercepts `onRecChange(true)` to present `RecordConsentSheet`
-before flipping. `availability` (`denied` / `disabled`) dims the card
-and locks both toggles. The optional `footer` slot renders a full-width
-sub-control under the row (DashboardScreen passes a 4-segment precision
-ceiling for `loc`). The `trailing` slot **replaces** the Air/Rec
-affordances entirely — the Identity row uses it for an inline
-Attributed/Anon `SegmentedToggle`, since identity is a flag, not a
-capturable track (air/rec props become optional when `trailing` is set).
-The `live` prop (default false) renders on-toggles in the Toggle `armed`
-(cued, outline-not-fill) state until the broadcast actually goes live —
-so the toggles are set-it-and-forget-it and the commit button never
-flips them.
+(FeedThumb + meta column with label + detail + the two labelled `AIR` /
+`REC` Toggles); the consumer stacks cards with a gap. `availability`
+(`denied` / `disabled`) dims the card and locks both toggles. The
+optional `footer` slot renders a full-width sub-control under the row
+(DashboardScreen passes a 4-segment precision ceiling for `loc`). The
+`trailing` slot **replaces** the Air/Rec affordances entirely — the
+Identity row uses it for an inline Attributed/Anon `SegmentedToggle`,
+since identity is a flag, not a capturable track (air/rec props become
+optional when `trailing` is set). The `live` prop (default false)
+renders on-toggles in the Toggle `armed` (cued, outline-not-fill) state
+until the broadcast actually goes live — so the toggles are
+set-it-and-forget-it and the commit button never flips them.
+
+**Sensitivity friction removed (2026-06-03).** The SENSITIVE/BENIGN tag,
+the Rec consent lock-hint, and the `sensitivity` / `recNeedsConsent`
+props are gone for now — Rec flips directly for every source and the
+Dashboard no longer presents `RecordConsentSheet`. The feature (and its
+gallery entry) survive for when the consent flow returns.
 
 **Composition note.** The 2026-06-03 plan proposed building the two
 affordances from `SegmentedToggle`; the chosen go-live-record mock uses
@@ -3402,6 +3404,34 @@ above. The seam is not a separate motion category.
 
 Append-only. Most recent first. Each entry: date, decision, rationale,
 constraint it imposes downstream.
+
+### 2026-06-03 (late) — Capture sensitivity friction removed (for now)
+
+Stripped the sensitivity layer from the Go Live & Record surface: the
+**SENSITIVE/BENIGN badges**, the **Rec consent lock-hint**, and the
+**record-consent disclaimer** (`RecordConsentSheet`) are all disabled.
+`FeedRow` dropped its `sensitivity` / `recNeedsConsent` props (and its
+`Icon` compose); the Dashboard's `requestRec` consent branch, `consented`
+state, and `RecordConsentSheet` render are gone — Rec flips directly for
+every source.
+
+**Rationale.** For the v0.2 friends-and-family dogfood the consent step +
+badges were friction without payoff at this stage; Ben opted to remove
+them for now and revisit. The two-affordance model, the precision ceiling,
+and the on-air-vs-recording indicator (the *visible* half of the capture
+guardrail) all remain.
+
+**Imposes:**
+
+- This **temporarily relaxes** the "nothing recorded silently" guardrail
+  documented as *non-negotiable* in [CLAUDE.md](CLAUDE.md) (clips section):
+  the consent step is the part removed; the during-broadcast indicator
+  stays. Re-enabling is the path back to the full guardrail before any
+  non-friends-and-family exposure.
+- `RecordConsentSheet` stays a shipped feature (gallery entry intact),
+  unused by the Dashboard — the runway for bringing consent back.
+- Don't reintroduce sensitivity badges or per-source consent without a
+  decision-log entry flipping this one.
 
 ### 2026-06-03 (evening) — Go Live & Record dashboard built (clips C2 + dashboard); two model refinements
 
