@@ -190,6 +190,12 @@ export function PpvCreateScreen() {
       }
       if (replayAccess !== existing?.replayAccess) updates.replayAccess = replayAccess
 
+      // Capacity is always editable (backend validates >= purchaseCount)
+      const newCapacity = capacity ? parseInt(capacity) : null
+      if (newCapacity !== (existing?.maxCapacity ?? null)) {
+        updates.maxCapacity = newCapacity
+      }
+
       if ((existing?.purchaseCount ?? 0) === 0) {
         if (parsedDate) {
           const newMs = parsedDate.getTime()
@@ -198,10 +204,6 @@ export function PpvCreateScreen() {
         }
         if (subscribersFree !== existing?.subscribersFreeAccess) {
           updates.subscribersFreeAccess = subscribersFree
-        }
-        const newCapacity = capacity ? parseInt(capacity) : null
-        if (newCapacity !== (existing?.maxCapacity ?? null)) {
-          updates.maxCapacity = newCapacity
         }
       }
 
@@ -328,10 +330,11 @@ export function PpvCreateScreen() {
           onChangeText={setCapacity}
           placeholder="Leave empty for unlimited"
           keyboardType="number-pad"
-          editable={!hasPurchases}
         />
-        {hasPurchases ? (
-          <HelpText>Capacity is locked after the first purchase</HelpText>
+        {hasPurchases && capacity && parseInt(capacity) < (existing?.purchaseCount ?? 0) ? (
+          <HelpText>Cannot be less than {existing?.purchaseCount} (current purchasers)</HelpText>
+        ) : hasPurchases ? (
+          <HelpText>Currently {existing?.purchaseCount} ticket{existing?.purchaseCount === 1 ? '' : 's'} sold</HelpText>
         ) : (
           <HelpText>Max number of tickets available</HelpText>
         )}
