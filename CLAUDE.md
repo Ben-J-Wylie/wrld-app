@@ -742,28 +742,43 @@ clean while giving adult creators a real home.
   than a filter toggle. The navigation metaphor reinforces that you're entering a
   different space with different rules. The "Venus" naming is on-brand for WRLD
   without being crude.
-- **App Store / Play Store compliance.** Adult content apps are permitted on both
-  stores under strict conditions: app rated 17+ / 18+, real age verification (not
-  tap-to-confirm), content gated behind a paywall or subscription, and robust
-  moderation/reporting. Live-streaming adult content is higher-risk than static
-  content because it can't be pre-screened — moderation tooling must be in place
-  before launch.
-- **Age verification.** Must be real — government ID check or equivalent — not a
-  birthday picker. This is a legal requirement in the UK (Online Safety Act), EU,
-  and increasingly the US. Likely requires a third-party age-verification provider.
+- **App Store / Play Store reality.** OnlyFans has no app on either store — their
+  platform is web-only (PWA) by necessity, not choice. This is the clearest industry
+  signal: adult content as a primary use case is effectively incompatible with App
+  Store distribution. A 17+ rating gets you violence and mature themes; it does not
+  get you live adult content at scale. Distribution options for Venus:
+  1. **Web-only** — `venus.wrld.cam` as a PWA, completely separate from the app.
+     Users who want Venus go there in a browser. Main WRLD app stays store-compliant.
+     Downside: loses the native WebRTC + globe UX that makes WRLD distinctive.
+  2. **Sideloaded Android only** — Android allows outside-Play installs. iOS doesn't
+     without enterprise certificates. Effectively Android-only.
+  3. **Skip Venus entirely** — WRLD stays general-audience. Lower legal exposure,
+     no moderation overhead. Worth deciding whether adult content is core to the
+     business model before investing in the infrastructure.
+  4. **TestFlight / EAS dev client** — feasible for internal testing before store
+     submission is a concern, but not a launch path.
+  **The distribution question must be decided before any Venus work begins.**
+- **Age verification.** A birthday picker does not meet legal requirements. The UK
+  Online Safety Act and several US state laws require "highly effective" age
+  assurance. Accepted methods include: credit card check (widely used, lowest
+  friction, Stripe already has this), open banking, mobile carrier confirmation,
+  government ID scan + liveness check (Stripe Identity, Veriff, Yoti), or face age
+  estimation. Credit card on file is the lowest-friction defensible option since
+  Stripe already processes WRLD payments — gate Venus access on a verified payment
+  method. Get legal advice before launch.
 - **Venus globe.** NASA/ESA Magellan radar surface data is publicly available as
   raster tiles and looks genuinely distinct from Earth. The existing Mapbox globe
   renderer (`GlobeScreenMapbox`) would be the foundation — a second globe screen
-  (`GlobeScreenVenus`) with a Venus-textured style and filtered to `isAdult` streams
-  only. Navigation from Earth → Venus is a UI decision (separate tab, a destination
-  you fly to, or a portal button on the globe).
-- **Backend changes needed.** `Stream.contentRating String @default('general')` (or
-  `isAdult Boolean`). Discovery endpoint filters by `contentRating` — Earth gets
-  `general` only, Venus gets `adult` only. Broadcaster dashboard gets a content
-  rating toggle (requires age-verified account). Age verification status on `User`.
-- **Deferred until.** Age verification provider decision, App Store 17+ rating
-  submission, and adult content moderation tooling (automated flagging + human
-  review queue) are all prerequisites. Do not build Venus without these in place.
+  (`GlobeScreenVenus`) with a Venus-textured style, filtered to `contentRating =
+  'adult'` streams only. Navigation from Earth → Venus is a UI decision (separate
+  tab, a destination you fly to, or a portal button on the globe).
+- **Backend changes needed.** `Stream.contentRating String @default('general')`.
+  Discovery and `findStreamsNear` filter by `contentRating`. Broadcaster dashboard
+  gets a content rating toggle (gated on age-verified account). `User.ageVerified
+  Boolean` to track verification status. See `wrld-backend/CLAUDE.md` v0.3 section.
+- **Deferred until.** Distribution decision first. Then: age verification provider,
+  legal review, and adult content moderation tooling (automated flagging + human
+  review queue in the admin portal). Do not build Venus without all three resolved.
 
 ---
 
