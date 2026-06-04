@@ -1729,6 +1729,18 @@ When a viewer has access to a `scheduled` event:
 
 `ppvEventId?: string` added to the `createRoom` message type, `MediasoupSignalingClient.createRoom()` method, and the `useSignaling` `createRoom` hook. No mediasoup changes needed — it already forwards `ppvEventId` to `POST /internal/streams/started`.
 
+### Pull-to-refresh on the Events tab (`src/components/screens/PpvIndexScreen.tsx`, `src/components/sections/ScreenScroll.tsx`)
+
+`ScreenScroll` gained a `refreshControl?: React.ReactElement<any>` passthrough prop (forwarded to `KeyboardAwareScrollView`). `PpvIndexScreen` wires a `RefreshControl` (accent-coloured) that calls `refetch()` on drag-down, showing the native pull indicator while in flight.
+
+### Host's own events on the Events tab (`src/components/screens/PpvIndexScreen.tsx`)
+
+`PpvIndexScreen` now reads `currentUser?.id` via `useCurrentUser` and compares it against `event.hostId` on each card:
+
+- **MY EVENT badge** — accent-coloured pill shown to the left of the status badge on the host's own events.
+- **Tap → manage screen** — tapping a "my event" card navigates to `PpvManageScreen` instead of the viewer detail/buy screen.
+- **No viewer CTAs** — "Join now" and "You have access" notes are hidden for the host's own cards.
+
 ### Overlap prevention UI (`src/components/screens/PpvCreateScreen.tsx`, `src/api/ppvEvents.ts`)
 
 - `ppvApi.createEvent` now returns `{ event, warning? }` (was `event` directly).
