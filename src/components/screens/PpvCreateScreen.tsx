@@ -1,5 +1,5 @@
-import { Alert, StyleSheet, View } from 'react-native'
-import { useState } from 'react'
+import { Alert, Pressable, StyleSheet, View } from 'react-native'
+import { useEffect, useState } from 'react'
 import { router, useLocalSearchParams } from 'expo-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { theme } from '@/tokens/theme'
@@ -12,27 +12,57 @@ import { HelpText } from '@/components/primitives/HelpText'
 import { ppvApi } from '@/api/ppvEvents'
 import type { UpdatePpvEventData } from '@/api/ppvEvents'
 
-// Format a JS Date as a local datetime string for display/input
-function toLocalISOString(d: Date): string {
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+const pad = (n: number) => String(n).padStart(2, '0')
+
+function dateToInputs(d: Date) {
+  const m = d.getMonth() + 1
+  const day = d.getDate()
+  const year = d.getFullYear()
+  const hours = d.getHours()
+  const minutes = d.getMinutes()
+  const hour12 = hours % 12 === 0 ? 12 : hours % 12
+  return {
+    dateStr: `${pad(m)}/${pad(day)}/${year}`,
+    timeStr: `${hour12}:${pad(minutes)}`,
+    isPM: hours >= 12,
+  }
 }
 
-// Parse a local datetime input string to a UTC ISO string
-function localInputToUtcISO(input: string, tz: string): string {
-  // We store the local string + timezone for display purposes.
-  // For storage, we convert using the device's interpretation of the tz offset.
-  // Simplified: treat the input as local device time → UTC.
-  const d = new Date(input)
-  return d.toISOString()
+function parseDateInputs(dateStr: string, timeStr: string, isPM: boolean): Date | null {
+  const dp = dateStr.split('/')
+  if (dp.length !== 3 || !dp[0] || !dp[1] || !dp[2]) return null
+  const m = parseInt(dp[0], 10)
+  const d = parseInt(dp[1], 10)
+  const y = parseInt(dp[2], 10)
+
+  const tp = timeStr.split(':')
+  if (tp.length !== 2 || !tp[0] || !tp[1]) return null
+  let h = parseInt(tp[0], 10)
+  const min = parseInt(tp[1], 10)
+
+  if ([m, d, y, h, min].some(isNaN)) return null
+  if (m < 1 || m > 12 || d < 1 || d > 31 || y < 2020) return null
+  if (h < 1 || h > 12 || min < 0 || min > 59) return null
+
+  if (isPM && h !== 12) h += 12
+  if (!isPM && h === 12) h = 0
+
+  const result = new Date(y, m - 1, d, h, min, 0, 0)
+  return isNaN(result.getTime()) ? null : result
 }
+
+const DATE_PRESETS = [
+  { label: 'Tonight', hours: 0 },
+  { label: 'Tomorrow', hours: 24 },
+  { label: '+1 week', hours: 168 },
+  { label: '+2 weeks', hours: 336 },
+]
 
 export function PpvCreateScreen() {
   const { eventId } = useLocalSearchParams<{ eventId?: string }>()
   const isEdit = !!eventId
   const qc = useQueryClient()
 
-  // Editing: load existing event
   const { data: existing } = useQuery({
     queryKey: ['ppv-event-manage', eventId],
     queryFn: () => ppvApi.getMyEvent(eventId!),
@@ -41,18 +71,20 @@ export function PpvCreateScreen() {
 
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
 
-  // Default: 7 days from now, on the hour
-  const defaultDate = new Date()
-  defaultDate.setDate(defaultDate.getDate() + 7)
-  defaultDate.setMinutes(0, 0, 0)
+  const makeDefault = () => {
+    const d = new Date()
+    d.setDate(d.getDate() + 7)
+    d.setHours(20, 0, 0, 0)
+    return d
+  }
+
+  const { dateStr: defDate, timeStr: defTime, isPM: defPM } = dateToInputs(makeDefault())
 
   const [title, setTitle] = useState(existing?.title ?? '')
   const [description, setDescription] = useState(existing?.description ?? '')
-  const [dateInput, setDateInput] = useState(
-    existing?.scheduledAt
-      ? toLocalISOString(new Date(existing.scheduledAt))
-      : toLocalISOString(defaultDate),
-  )
+  const [dateStr, setDateStr] = useState(defDate)
+  const [timeStr, setTimeStr] = useState(defTime)
+  const [isPM, setIsPM] = useState(defPM)
   const [duration, setDuration] = useState(
     existing?.durationMinutes ? String(existing.durationMinutes) : '',
   )
@@ -63,24 +95,67 @@ export function PpvCreateScreen() {
   const [replayAccess, setReplayAccess] = useState(existing?.replayAccess ?? true)
   const [saving, setSaving] = useState(false)
 
+  // Sync form when editing an existing event loads
+  useEffect(() => {
+    if (!existing) return
+    setTitle(existing.title)
+    setDescription(existing.description ?? '')
+    setDuration(existing.durationMinutes ? String(existing.durationMinutes) : '')
+    setPriceDollars(String((existing.priceUsd / 100).toFixed(2)))
+    setSubscribersFree(existing.subscribersFreeAccess)
+    setReplayAccess(existing.replayAccess)
+    const { dateStr: ds, timeStr: ts, isPM: pm } = dateToInputs(new Date(existing.scheduledAt))
+    setDateStr(ds)
+    setTimeStr(ts)
+    setIsPM(pm)
+  }, [existing?.id])
+
+  function applyPreset(hours: number) {
+    const d = new Date()
+    if (hours === 0) {
+      // Tonight: next 8 PM, or +2h if already past 8 PM
+      d.setHours(20, 0, 0, 0)
+      if (d <= new Date()) d.setDate(d.getDate() + 1)
+    } else {
+      d.setTime(d.getTime() + hours * 3_600_000)
+      d.setMinutes(0, 0, 0)
+    }
+    const { dateStr: ds, timeStr: ts, isPM: pm } = dateToInputs(d)
+    setDateStr(ds)
+    setTimeStr(ts)
+    setIsPM(pm)
+  }
+
+  const parsedDate = parseDateInputs(dateStr, timeStr, isPM)
+  const dateValid = parsedDate !== null && parsedDate > new Date()
+
   const priceCents = priceDollars ? Math.round(parseFloat(priceDollars) * 100) : 0
   const priceValid = priceCents >= 100
   const titleValid = title.trim().length > 0
-  const dateValid = (() => {
-    const d = new Date(dateInput)
-    return !isNaN(d.getTime()) && d > new Date()
-  })()
   const canSave = titleValid && priceValid && dateValid && !isEdit
   const canUpdate = isEdit && titleValid && !saving
 
+  const hasPurchases = (existing?.purchaseCount ?? 0) > 0
+
+  const datePreview = parsedDate
+    ? parsedDate.toLocaleString('en-US', {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+      })
+    : null
+
   async function handleSave() {
+    if (!parsedDate) return
     setSaving(true)
     try {
-      const scheduledAt = localInputToUtcISO(dateInput, tz)
       const event = await ppvApi.createEvent({
         title: title.trim(),
         description: description.trim() || undefined,
-        scheduledAt,
+        scheduledAt: parsedDate.toISOString(),
         timezone: tz,
         durationMinutes: duration ? parseInt(duration) : undefined,
         priceUsd: priceCents,
@@ -110,10 +185,12 @@ export function PpvCreateScreen() {
       }
       if (replayAccess !== existing?.replayAccess) updates.replayAccess = replayAccess
 
-      // Only allow scheduledAt and subscribersFree changes before first purchase
       if ((existing?.purchaseCount ?? 0) === 0) {
-        const newUtc = localInputToUtcISO(dateInput, tz)
-        if (newUtc !== existing?.scheduledAt) updates.scheduledAt = newUtc
+        if (parsedDate) {
+          const newMs = parsedDate.getTime()
+          const existingMs = existing?.scheduledAt ? new Date(existing.scheduledAt).getTime() : 0
+          if (Math.abs(newMs - existingMs) > 60_000) updates.scheduledAt = parsedDate.toISOString()
+        }
         if (subscribersFree !== existing?.subscribersFreeAccess) {
           updates.subscribersFreeAccess = subscribersFree
         }
@@ -129,8 +206,6 @@ export function PpvCreateScreen() {
       setSaving(false)
     }
   }
-
-  const hasPurchases = (existing?.purchaseCount ?? 0) > 0
 
   return (
     <ScreenScroll contentContainerStyle={styles.content}>
@@ -158,19 +233,72 @@ export function PpvCreateScreen() {
         />
       </View>
 
+      {/* ── Date & time ─────────────────────────────────── */}
       <View style={styles.field}>
         <Text variant="monoLabel">Date & time ({tz})</Text>
+
+        {!hasPurchases && (
+          <View style={styles.presetRow}>
+            {DATE_PRESETS.map(p => (
+              <Pressable key={p.hours} style={styles.preset} onPress={() => applyPreset(p.hours)}>
+                <Text variant="caption" color={theme.colors.text.muted}>{p.label}</Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
+
         <Input
-          value={dateInput}
-          onChangeText={setDateInput}
-          placeholder="YYYY-MM-DDTHH:MM"
+          value={dateStr}
+          onChangeText={setDateStr}
+          placeholder="MM/DD/YYYY"
+          keyboardType="numbers-and-punctuation"
+          maxLength={10}
           editable={!hasPurchases}
         />
+
+        <View style={styles.timeRow}>
+          <View style={styles.timeInputWrap}>
+            <Input
+              value={timeStr}
+              onChangeText={setTimeStr}
+              placeholder="H:MM"
+              keyboardType="numbers-and-punctuation"
+              maxLength={5}
+              editable={!hasPurchases}
+            />
+          </View>
+          <Pressable
+            style={[styles.ampmBtn, !isPM && styles.ampmActive]}
+            onPress={() => !hasPurchases && setIsPM(false)}
+          >
+            <Text
+              variant="monoLabel"
+              color={!isPM ? theme.colors.accent.default : theme.colors.text.muted}
+            >
+              AM
+            </Text>
+          </Pressable>
+          <Pressable
+            style={[styles.ampmBtn, isPM && styles.ampmActive]}
+            onPress={() => !hasPurchases && setIsPM(true)}
+          >
+            <Text
+              variant="monoLabel"
+              color={isPM ? theme.colors.accent.default : theme.colors.text.muted}
+            >
+              PM
+            </Text>
+          </Pressable>
+        </View>
+
+        {dateValid && datePreview ? (
+          <Text variant="caption" color={theme.colors.text.muted}>{datePreview}</Text>
+        ) : (!dateValid && (dateStr.length > 3 || timeStr.length > 1)) ? (
+          <HelpText>Enter a valid future date and time</HelpText>
+        ) : null}
+
         {hasPurchases && (
           <HelpText>Date is locked after the first purchase</HelpText>
-        )}
-        {!dateValid && dateInput.length > 0 && (
-          <HelpText>Must be a valid future date</HelpText>
         )}
       </View>
 
@@ -241,7 +369,40 @@ const styles = StyleSheet.create({
     paddingBottom: theme.spacing.xxxl,
   },
   field: {
-    gap: theme.spacing.xs,
+    gap: theme.spacing.sm,
+  },
+  presetRow: {
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    flexWrap: 'wrap',
+  },
+  preset: {
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.radius.full,
+    borderWidth: 1,
+    borderColor: theme.colors.border.subtle,
+    backgroundColor: theme.colors.bg.elevated,
+  },
+  timeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+  },
+  timeInputWrap: {
+    flex: 1,
+  },
+  ampmBtn: {
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border.subtle,
+    backgroundColor: theme.colors.bg.elevated,
+  },
+  ampmActive: {
+    borderColor: theme.colors.accent.border,
+    backgroundColor: theme.colors.accent.surface,
   },
   row: {
     flexDirection: 'row',

@@ -32,11 +32,24 @@ import { useQuery } from '@tanstack/react-query'
 
 function formatEventDate(iso: string): string {
   return new Date(iso).toLocaleString('en-US', {
+    weekday: 'short',
     month: 'short',
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
   })
+}
+
+function formatCountdown(iso: string): string {
+  const diff = new Date(iso).getTime() - Date.now()
+  if (diff <= 0) return ''
+  const days = Math.floor(diff / 86_400_000)
+  const hours = Math.floor((diff % 86_400_000) / 3_600_000)
+  const mins = Math.floor((diff % 3_600_000) / 60_000)
+  if (days > 0) return `in ${days}d ${hours}h`
+  if (hours > 0) return `in ${hours}h ${mins}m`
+  if (mins > 0) return `in ${mins}m`
+  return 'starting soon'
 }
 
 function formatJoined(iso: string): string {
@@ -207,33 +220,85 @@ export function ProfileScreen() {
           <Text variant="monoLabel" color={theme.colors.text.muted}>
             UPCOMING EVENTS
           </Text>
-          {ppvEvents.map(event => (
-            <Pressable
-              key={event.id}
-              style={styles.ppvCard}
-              onPress={() => router.push({
-                pathname: '/(app)/ppv/[id]',
-                params: { id: event.id, handle: handle ?? '' },
-              })}
-            >
-              <View style={styles.ppvCardRow}>
-                <View style={styles.ppvCardInfo}>
-                  <Text variant="bodyEmphasized">{event.title}</Text>
+          {ppvEvents.map(event => {
+            const isLive = event.status === 'live'
+            const countdown = !isLive ? formatCountdown(event.scheduledAt) : ''
+            return (
+              <Pressable
+                key={event.id}
+                style={styles.ppvCard}
+                onPress={() => router.push({
+                  pathname: '/(app)/ppv/[id]',
+                  params: { id: event.id, handle: handle ?? '' },
+                })}
+              >
+                {/* Title row with status badge */}
+                <View style={styles.ppvTitleRow}>
+                  <Text variant="bodyEmphasized" style={styles.ppvTitle}>{event.title}</Text>
+                  {isLive && (
+                    <View style={styles.liveBadge}>
+                      <Text variant="monoCaption" color={theme.colors.text.inverse}>LIVE</Text>
+                    </View>
+                  )}
+                </View>
+
+                {/* Description snippet */}
+                {event.description ? (
+                  <Text variant="caption" color={theme.colors.text.muted} numberOfLines={2}>
+                    {event.description}
+                  </Text>
+                ) : null}
+
+                {/* Date + countdown */}
+                <View style={styles.ppvMeta}>
                   <Text variant="caption" color={theme.colors.text.muted}>
                     {formatEventDate(event.scheduledAt)}
                   </Text>
+                  {countdown ? (
+                    <Text variant="caption" color={theme.colors.accent.default}>
+                      {countdown}
+                    </Text>
+                  ) : null}
                 </View>
-                <Text variant="bodyEmphasized" color={theme.colors.accent.default}>
-                  ${(event.priceUsd / 100).toFixed(2)}
-                </Text>
-              </View>
-              {event.hasAccess && (
-                <Text variant="caption" color={theme.colors.accent.default}>
-                  ✓ Access purchased
-                </Text>
-              )}
-            </Pressable>
-          ))}
+
+                {/* Details row: duration, subscriber access */}
+                {(event.durationMinutes || event.subscribersFreeAccess) ? (
+                  <View style={styles.ppvDetails}>
+                    {event.durationMinutes ? (
+                      <Text variant="caption" color={theme.colors.text.muted}>
+                        ~{event.durationMinutes} min
+                      </Text>
+                    ) : null}
+                    {event.subscribersFreeAccess ? (
+                      <Text variant="caption" color={theme.colors.accent.default}>
+                        Free for subscribers
+                      </Text>
+                    ) : null}
+                  </View>
+                ) : null}
+
+                {/* Price + access CTA */}
+                <View style={styles.ppvFooter}>
+                  <Text variant="bodyEmphasized" color={theme.colors.accent.default}>
+                    ${(event.priceUsd / 100).toFixed(2)}
+                  </Text>
+                  {event.hasAccess ? (
+                    <View style={styles.accessBadge}>
+                      <Text variant="monoCaption" color={theme.colors.accent.default}>
+                        ✓ Access purchased
+                      </Text>
+                    </View>
+                  ) : (
+                    <View style={styles.buyBtn}>
+                      <Text variant="monoCaption" color={theme.colors.text.inverse}>
+                        {isLive ? 'WATCH NOW' : 'BUY TICKET'}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </Pressable>
+            )
+          })}
         </View>
       )}
     </ScreenScroll>
@@ -296,16 +361,50 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.border.subtle,
     padding: theme.spacing.md,
-    gap: theme.spacing.xxs,
+    gap: theme.spacing.sm,
   },
-  ppvCardRow: {
+  ppvTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: theme.spacing.sm,
   },
-  ppvCardInfo: {
+  ppvTitle: {
     flex: 1,
-    gap: 2,
+  },
+  liveBadge: {
+    backgroundColor: '#D0233A',
+    borderRadius: theme.radius.md,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 2,
+  },
+  ppvMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+  },
+  ppvDetails: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.md,
+  },
+  ppvFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: theme.spacing.xs,
+  },
+  accessBadge: {
+    borderRadius: theme.radius.full,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: theme.colors.accent.border,
+  },
+  buyBtn: {
+    backgroundColor: theme.colors.accent.default,
+    borderRadius: theme.radius.full,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: 5,
   },
 })
