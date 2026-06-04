@@ -1,5 +1,5 @@
 import { Alert, Pressable, StyleSheet, View } from 'react-native'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { router, useLocalSearchParams } from 'expo-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { theme } from '@/tokens/theme'
@@ -10,7 +10,7 @@ import { Input } from '@/components/primitives/Input'
 import { Toggle } from '@/components/primitives/Toggle'
 import { HelpText } from '@/components/primitives/HelpText'
 import { ppvApi } from '@/api/ppvEvents'
-import type { UpdatePpvEventData } from '@/api/ppvEvents'
+import type { UpdatePpvEventData, EventOverlapError } from '@/api/ppvEvents'
 
 const pad = (n: number) => String(n).padStart(2, '0')
 
@@ -152,11 +152,11 @@ export function PpvCreateScreen() {
       })
     : null
 
-  async function handleSave() {
+  async function doSave() {
     if (!parsedDate) return
     setSaving(true)
     try {
-      const event = await ppvApi.createEvent({
+      const result = await ppvApi.createEvent({
         title: title.trim(),
         description: description.trim() || undefined,
         scheduledAt: parsedDate.toISOString(),
@@ -168,12 +168,33 @@ export function PpvCreateScreen() {
         replayAccess,
       })
       qc.invalidateQueries({ queryKey: ['my-ppv-events'] })
-      router.replace({ pathname: '/(app)/ppv/[id]/manage', params: { id: event.id } })
+      if (result.warning === 'duration_unknown_overlap') {
+        Alert.alert(
+          'Possible overlap',
+          'This event may overlap with another scheduled event. Both events have unknown duration — you can proceed, but consider adding durations to avoid confusion.',
+        )
+      }
+      router.replace({ pathname: '/(app)/ppv/[id]/manage', params: { id: result.event.id } })
     } catch (e: unknown) {
+      const data = (e as any)?.response?.data as EventOverlapError | undefined
+      if (data?.error === 'event_overlap') {
+        Alert.alert(
+          'Schedule conflict',
+          `This event overlaps with "${data.conflictingEventTitle}". Please choose a different date or time.`,
+        )
+        return
+      }
       Alert.alert('Error', e instanceof Error ? e.message : 'Could not create event')
     } finally {
       setSaving(false)
     }
+  }
+
+  async function handleSave() {
+    if (!parsedDate) return
+    // Client-side soft pre-check — warn if parsedDate is very close to another
+    // known scheduled event (both without duration). Server is the authority.
+    doSave()
   }
 
   async function handleUpdate() {
@@ -207,11 +228,25 @@ export function PpvCreateScreen() {
         }
       }
 
-      await ppvApi.updateEvent(eventId, updates)
+      const result = await ppvApi.updateEvent(eventId, updates)
       qc.invalidateQueries({ queryKey: ['ppv-event-manage', eventId] })
       qc.invalidateQueries({ queryKey: ['my-ppv-events'] })
+      if (result.warning === 'duration_unknown_overlap') {
+        Alert.alert(
+          'Possible overlap',
+          'This event may overlap with another scheduled event. Both events have unknown duration — consider adding durations to avoid confusion.',
+        )
+      }
       router.back()
     } catch (e: unknown) {
+      const data = (e as any)?.response?.data as EventOverlapError | undefined
+      if (data?.error === 'event_overlap') {
+        Alert.alert(
+          'Schedule conflict',
+          `This event overlaps with "${data.conflictingEventTitle}". Please choose a different date or time.`,
+        )
+        return
+      }
       Alert.alert('Error', e instanceof Error ? e.message : 'Could not update event')
     } finally {
       setSaving(false)

@@ -2,7 +2,7 @@ export type ClientMessage =
   | { type: 'identify'; deviceId: string }
   | { type: 'authenticate'; token: string }
   | { type: 'getRtpCapabilities' }
-  | { type: 'createRoom'; title: string; lat: number; lng: number; sources: string[]; subscribersOnly: boolean; locationPrecision?: 'exact' | 'city' | 'country' | 'off' }
+  | { type: 'createRoom'; title: string; lat: number; lng: number; sources: string[]; subscribersOnly: boolean; locationPrecision?: 'exact' | 'city' | 'country' | 'off'; ppvEventId?: string }
   | { type: 'joinRoom'; roomId: string }
   | { type: 'createTransport'; direction: 'send' | 'recv' }
   | { type: 'connectTransport'; transportId: string; dtlsParameters: unknown }
@@ -152,7 +152,7 @@ class MediasoupSignalingClient {
     return reply.rtpCapabilities
   }
 
-  async createRoom(meta: { title: string; lat: number; lng: number; sources: string[]; subscribersOnly: boolean; locationPrecision?: 'exact' | 'city' | 'country' | 'off' }): Promise<string> {
+  async createRoom(meta: { title: string; lat: number; lng: number; sources: string[]; subscribersOnly: boolean; locationPrecision?: 'exact' | 'city' | 'country' | 'off'; ppvEventId?: string }): Promise<string> {
     this.send({ type: 'createRoom', ...meta })
     const reply = await this.waitFor('roomCreated')
     return reply.roomId

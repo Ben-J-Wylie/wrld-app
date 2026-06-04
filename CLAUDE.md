@@ -1746,3 +1746,75 @@ Viewer-facing purchase screen. Navigated to from ProfileScreen event cards.
 ### New type: `PpvEvent` (`src/types/index.ts`)
 
 Full event shape returned by all creator endpoints. Includes `netRevenueCents` and `grossRevenueCents` (computed server-side from `PPV_PLATFORM_FEE_RATE` RemoteConfig — never hardcoded in the app). `hasAccess?: boolean` on public/viewer responses.
+
+---
+
+## Updates — June 2026 (Events tab redesign)
+
+### Events tab now shows all creators' events
+
+`PpvIndexScreen` was redesigned from a creator-only management view to a global discovery feed:
+
+- Calls `ppvApi.listAllEvents()` → `GET /ppv-events/discover` (new backend endpoint, optional auth)
+- Cards navigate to `PpvEventDetailScreen` (detail/buy view) instead of `PpvManageScreen` (edit view)
+- Cards show `@handle` of the creator instead of revenue stats (tickets sold, your take)
+- "LIVE NOW" section for active events, "UPCOMING" for scheduled ones
+- Header is "Events" with no schedule button — scheduling remains in the Monetize menu
+- Empty state explains what the tab is for
+- `PpvEventDetailScreen` already shows `by @handle` and the full purchase/access flow — no changes needed there
+
+Creator management (edit, cancel, delete) remains exclusively in `PpvManageScreen`, reachable from the Monetize tab.
+
+`ppvApi` additions:
+- `listAllEvents()` → `GET /ppv-events/discover`
+
+---
+
+## Updates — June 2026 (PPV enforcement, overlap prevention, waiting room)
+
+### Events tab — ACCESS badge + status-aware cards (`src/components/screens/PpvIndexScreen.tsx`)
+
+- Green **ACCESS ✓** badge on cards where `hasAccess = true` (returned by the discover endpoint when authenticated).
+- `status = live`, has access + `streamId` populated → **"Join now →"** button navigates directly to `/(app)/stream/[id]`.
+- `status = scheduled`, has access → inline note "You have access — you'll be notified when it starts."
+- All other states behave as before (tap → detail screen with buy button or info).
+
+### Virtual waiting room (`src/components/screens/PpvEventDetailScreen.tsx`)
+
+When a viewer has access to a `scheduled` event:
+- A 30 s `setInterval` polls `ppvApi.getCreatorEvents(handle)` and tracks the event's `status` + `streamId` in local state (`liveStatus`).
+- While `status = scheduled`: shows a spinner + "Waiting for the stream to start… checking every 30 seconds."
+- When status flips to `live` and `streamId` is populated: spinner is replaced by a **"Join now →"** button pointing at `/(app)/stream/[id]`.
+- Poll runs only when `isSignedIn && hasAccess && status === 'scheduled'`; cleans up on unmount/unfocus.
+
+### Broadcaster go-live flow (`src/components/screens/DashboardScreen.tsx`)
+
+`ppvApi.listMyScheduledEvents()` fetches the creator's scheduled events on dashboard mount (query key `my-scheduled-ppv-events`, stale 60 s). A PPV event selector row is shown below "Subscribers only" whenever the creator has at least one scheduled event:
+
+- **Enforcement window** (30 min before `scheduledAt` through end of event): the matching event is auto-selected, the selector is locked, and a blue pill badge reads "LOCKED". The dashboard shows: `"Your event '…' is starting — this stream will be linked to it"`.
+- **Outside window**: chip list lets the broadcaster pick "No event" or any scheduled event.
+- `ppvEventId` is passed to `createRoom` on go-live.
+
+### `createRoom` chain (`src/lib/mediasoupSignaling.ts`, `src/hooks/useSignaling.ts`)
+
+`ppvEventId?: string` added to the `createRoom` message type, `MediasoupSignalingClient.createRoom()` method, and the `useSignaling` `createRoom` hook. No mediasoup changes needed — it already forwards `ppvEventId` to `POST /internal/streams/started`.
+
+### Pull-to-refresh on the Events tab (`src/components/screens/PpvIndexScreen.tsx`, `src/components/sections/ScreenScroll.tsx`)
+
+`ScreenScroll` gained a `refreshControl?: React.ReactElement<any>` passthrough prop (forwarded to `KeyboardAwareScrollView`). `PpvIndexScreen` wires a `RefreshControl` (accent-coloured) that calls `refetch()` on drag-down, showing the native pull indicator while in flight.
+
+### Host's own events on the Events tab (`src/components/screens/PpvIndexScreen.tsx`)
+
+`PpvIndexScreen` now reads `currentUser?.id` via `useCurrentUser` and compares it against `event.hostId` on each card:
+
+- **MY EVENT badge** — accent-coloured pill shown to the left of the status badge on the host's own events.
+- **Tap → manage screen** — tapping a "my event" card navigates to `PpvManageScreen` instead of the viewer detail/buy screen.
+- **No viewer CTAs** — "Join now" and "You have access" notes are hidden for the host's own cards.
+
+### Overlap prevention UI (`src/components/screens/PpvCreateScreen.tsx`, `src/api/ppvEvents.ts`)
+
+- `ppvApi.createEvent` now returns `{ event, warning? }` (was `event` directly).
+- `ppvApi.updateEvent` now returns `{ event?, warning?, ok? }`.
+- On **409** `{ error: 'event_overlap' }`: Alert "Schedule conflict — overlaps with '…'". No navigation.
+- On **200 + `warning: 'duration_unknown_overlap'`**: Alert "Possible overlap" shown after successful save/navigate.
+- New `EventOverlapError` type exported from `ppvApi` for typed error handling.

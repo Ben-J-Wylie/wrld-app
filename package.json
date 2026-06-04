@@ -22,7 +22,6 @@
     "expo-auth-session": "~7.0.11",
     "expo-crypto": "~15.0.9",
     "expo-dev-client": "~6.0.21",
-    "expo-gl": "~16.0.10",
     "expo-image-picker": "~17.0.11",
     "expo-linear-gradient": "~15.0.8",
     "expo-location": "~19.0.8",
@@ -30,7 +29,6 @@
     "expo-router": "~6.0.23",
     "expo-screen-orientation": "~9.0.9",
     "expo-status-bar": "~3.0.9",
-    "expo-three": "^7.0.1",
     "expo-web-browser": "~15.0.11",
     "mediasoup-client": "^3.18.7",
     "react": "19.1.0",
@@ -44,7 +42,6 @@
     "react-native-web": "^0.21.0",
     "react-native-webrtc": "^124.0.7",
     "react-native-worklets": "0.5.1",
-    "three": "~0.145.0",
     "zustand": "^5.0.1"
   },
   "devDependencies": {

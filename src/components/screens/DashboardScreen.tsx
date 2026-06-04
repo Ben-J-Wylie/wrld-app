@@ -29,6 +29,7 @@ import { Filter as ProfanityFilter } from 'bad-words'
 
 const profanityFilter = new ProfanityFilter()
 import { router } from 'expo-router'
+import { useQuery } from '@tanstack/react-query'
 import { theme } from '@/tokens/theme'
 import { ScreenScroll } from '@/components/sections/ScreenScroll'
 import { Button } from '@/components/primitives/Button'
@@ -53,7 +54,21 @@ import {
   type LocationPrecision,
   type IdentityFlag,
 } from '@/lib/captureConfig'
-import type { SourceType } from '@/types'
+import { ppvApi } from '@/api/ppvEvents'
+import type { SourceType, PpvEvent } from '@/types'
+
+// The enforcement window is 30 minutes before scheduledAt through the end of the event.
+const PPV_ENFORCE_BEFORE_MS = 30 * 60_000
+
+function getEnforcedEvent(events: PpvEvent[]): PpvEvent | null {
+  const now = Date.now()
+  for (const ev of events) {
+    const start = new Date(ev.scheduledAt).getTime()
+    const end = ev.durationMinutes ? start + ev.durationMinutes * 60_000 : Infinity
+    if (now >= start - PPV_ENFORCE_BEFORE_MS && now < end) return ev
+  }
+  return null
+}
 
 type SourceDescriptor = {
   kind: FeedKind
@@ -105,6 +120,36 @@ const IDENTITY_OPTIONS: { value: IdentityFlag; label: string }[] = [
 // screen bottom by trimming the bottom inset gap.
 const FOOTER_DROP = 30
 
+function PpvOption({ label, selected, onSelect }: { label: string; selected: boolean; onSelect: () => void }) {
+  return (
+    <View
+      style={[ppvOptionStyles.option, selected && ppvOptionStyles.selected]}
+    >
+      <Text
+        variant="caption"
+        color={selected ? theme.colors.accent.default : theme.colors.text.muted}
+        onPress={onSelect}
+      >
+        {label}
+      </Text>
+    </View>
+  )
+}
+
+const ppvOptionStyles = StyleSheet.create({
+  option: {
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.radius.full,
+    borderWidth: 1,
+    borderColor: theme.colors.border.subtle,
+  },
+  selected: {
+    borderColor: theme.colors.accent.border,
+    backgroundColor: theme.colors.accent.surface,
+  },
+})
+
 export function DashboardScreen() {
   const { isSignedIn } = useAuth()
   const { data: currentUser } = useCurrentUser()
@@ -117,6 +162,26 @@ export function DashboardScreen() {
   const { startBroadcasting, cleanup } = useMediasoup()
   const [isLive, setIsLive] = useState(false)
   const [starting, setStarting] = useState(false)
+
+  // Scheduled PPV events — used for the PPV event selector row
+  const { data: scheduledEvents } = useQuery({
+    queryKey: ['my-scheduled-ppv-events'],
+    queryFn: () => ppvApi.listMyScheduledEvents(),
+    enabled: isSignedIn,
+    staleTime: 60_000,
+  })
+
+  // Derived: which event (if any) is in the enforcement window right now
+  const enforcedEvent = useMemo(
+    () => getEnforcedEvent(scheduledEvents ?? []),
+    [scheduledEvents],
+  )
+
+  // ppvEventId: enforced event is auto-selected and locked; user can select
+  // from other scheduled events when no enforcement is active
+  const [manualPpvEventId, setManualPpvEventId] = useState<string | null>(null)
+  const ppvEventId: string | null = enforcedEvent ? enforcedEvent.id : manualPpvEventId
+  const ppvEventLocked = !!enforcedEvent
 
   // Title ("what's happening") is intentionally per-session — it never
   // persists. Everything else hydrates from the saved capture config.
@@ -232,6 +297,7 @@ export function DashboardScreen() {
         subscribersOnly,
         // Dashboard vocab 'private' maps to the backend's 'off'.
         locationPrecision: precision === 'private' ? 'off' : precision,
+        ppvEventId: ppvEventId ?? undefined,
       })
       await startBroadcasting(broadcastSources)
       setIsLive(true)
@@ -352,6 +418,49 @@ export function DashboardScreen() {
             <Toggle value={subscribersOnly} onValueChange={setSubscribersOnly} />
           </View>
         )}
+
+        {/* PPV event selector — shown when creator has at least one scheduled event */}
+        {(scheduledEvents?.length ?? 0) > 0 && (
+          <View style={styles.ppvEventSection}>
+            <View style={styles.ppvEventHeader}>
+              <Icon name="lock" size="sm" color={theme.colors.text.muted} />
+              <Text variant="body">PPV event</Text>
+              {ppvEventLocked && (
+                <View style={styles.ppvLockedBadge}>
+                  <Text variant="monoCaption" color={theme.colors.text.inverse}>LOCKED</Text>
+                </View>
+              )}
+            </View>
+            <Text variant="caption" color={theme.colors.text.muted}>
+              {ppvEventLocked
+                ? `Your event "${enforcedEvent!.title}" is starting — this stream will be linked to it`
+                : 'Link this stream to a scheduled PPV event (optional)'}
+            </Text>
+            {!ppvEventLocked && (
+              <View style={styles.ppvOptions}>
+                <PpvOption
+                  label="No event"
+                  selected={manualPpvEventId === null}
+                  onSelect={() => setManualPpvEventId(null)}
+                />
+                {scheduledEvents!.map(ev => (
+                  <PpvOption
+                    key={ev.id}
+                    label={ev.title}
+                    selected={manualPpvEventId === ev.id}
+                    onSelect={() => setManualPpvEventId(ev.id)}
+                  />
+                ))}
+              </View>
+            )}
+            {ppvEventLocked && (
+              <View style={styles.ppvSelectedRow}>
+                <Icon name="calendar" size="sm" color={theme.colors.accent.default} />
+                <Text variant="caption" color={theme.colors.accent.default}>{enforcedEvent!.title}</Text>
+              </View>
+            )}
+          </View>
+        )}
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: Math.max(theme.spacing.sm, insets.bottom + theme.spacing.md - FOOTER_DROP) }]}>
@@ -422,6 +531,32 @@ const styles = StyleSheet.create({
   },
   subscribersOnlyText: {
     flex: 1,
+    gap: theme.spacing.xs,
+  },
+  ppvEventSection: {
+    gap: theme.spacing.sm,
+    paddingTop: theme.spacing.sm,
+  },
+  ppvEventHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+  },
+  ppvLockedBadge: {
+    backgroundColor: theme.colors.accent.default,
+    borderRadius: theme.radius.full,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 2,
+    marginLeft: theme.spacing.xs,
+  },
+  ppvOptions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+  },
+  ppvSelectedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: theme.spacing.xs,
   },
   centerText: {
