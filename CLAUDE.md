@@ -1700,61 +1700,39 @@ Creator management (edit, cancel, delete) remains exclusively in `PpvManageScree
 
 ---
 
-## PPV — next phase decisions (decided June 2026, not yet coded)
+## Updates — June 2026 (PPV enforcement, overlap prevention, waiting room)
 
-### Viewer journey from the events tab
+### Events tab — ACCESS badge + status-aware cards (`src/components/screens/PpvIndexScreen.tsx`)
 
-**Access badge on cards:** `hasAccess` is already returned by the discover endpoint. Show a green "ACCESS ✓" badge on cards where the viewer has access (either purchased or subscriber-free). Single badge regardless of how they got access — the detail screen already explains the reason.
+- Green **ACCESS ✓** badge on cards where `hasAccess = true` (returned by the discover endpoint when authenticated).
+- `status = live`, has access + `streamId` populated → **"Join now →"** button navigates directly to `/(app)/stream/[id]`.
+- `status = scheduled`, has access → inline note "You have access — you'll be notified when it starts."
+- All other states behave as before (tap → detail screen with buy button or info).
 
-**Tapping a card:**
-- `status = scheduled`, no access → detail screen with buy button
-- `status = scheduled`, has access → detail screen with "This event hasn't started yet. You'll be notified when it goes live." — no join button yet
-- `status = live`, has access → detail screen with a **"Join now"** button that navigates to the stream using `event.streamId`
-- `status = live`, no access → detail screen with buy button (event in progress — they can still buy)
-- `status = ended`, replay access + has access → detail screen with replay link (future)
+### Virtual waiting room (`src/components/screens/PpvEventDetailScreen.tsx`)
 
-**Virtual waiting room:** no actual mediasoup room is pre-created when an event is scheduled. The "waiting room" is the detail screen itself — it polls/watches event status. When `event.status` flips to `live` and `event.streamId` is populated, the "Join now" button appears (or auto-navigates if the viewer is already on the screen). No mediasoup architecture changes needed for this.
+When a viewer has access to a `scheduled` event:
+- A 30 s `setInterval` polls `ppvApi.getCreatorEvents(handle)` and tracks the event's `status` + `streamId` in local state (`liveStatus`).
+- While `status = scheduled`: shows a spinner + "Waiting for the stream to start… checking every 30 seconds."
+- When status flips to `live` and `streamId` is populated: spinner is replaced by a **"Join now →"** button pointing at `/(app)/stream/[id]`.
+- Poll runs only when `isSignedIn && hasAccess && status === 'scheduled'`; cleans up on unmount/unfocus.
 
-### Broadcaster go-live linking
+### Broadcaster go-live flow (`src/components/screens/DashboardScreen.tsx`)
 
-**Dashboard PPV selector:** a new row in the dashboard scroll area (below "Subscribers only") lets the broadcaster pick a scheduled event to link to their stream. Only shown if they have at least one `scheduled` event.
+`ppvApi.listMyScheduledEvents()` fetches the creator's scheduled events on dashboard mount (query key `my-scheduled-ppv-events`, stale 60 s). A PPV event selector row is shown below "Subscribers only" whenever the creator has at least one scheduled event:
 
-**Enforcement window:** from 30 minutes before `scheduledAt` through the end of the event window (`scheduledAt + durationMinutes`, or indefinite if no duration). During this window:
-- The PPV event is pre-selected and locked — the broadcaster cannot deselect it
-- Going live without linking is blocked (dashboard + backend enforcement)
-- Dashboard shows a countdown: "Your PPV event starts in X min — this stream will be linked to it"
+- **Enforcement window** (30 min before `scheduledAt` through end of event): the matching event is auto-selected, the selector is locked, and a blue pill badge reads "LOCKED". The dashboard shows: `"Your event '…' is starting — this stream will be linked to it"`.
+- **Outside window**: chip list lets the broadcaster pick "No event" or any scheduled event.
+- `ppvEventId` is passed to `createRoom` on go-live.
 
-**If already live when the event starts (server-side auto-link):**
-- The heartbeat handler (`POST /internal/streams/heartbeat`) checks whether the broadcaster has a `scheduled` event whose `scheduledAt` has passed and whose `streamId` is still null
-- If found: auto-links the stream to the event, flips `PpvEvent.status = 'live'`
-- Viewers already in the free stream are NOT kicked (access is checked at `joinRoom` time, not continuously) — new joiners hit the paywall
-- The `stream_ended` discovery WebSocket event for the original free stream carries a new payload field `ppvTransition: { eventId, eventTitle }` so the app can show "Broadcaster's PPV event has started — join here" instead of a generic "stream ended" message
+### `createRoom` chain (`src/lib/mediasoupSignaling.ts`, `src/hooks/useSignaling.ts`)
 
-**If not live when the event starts:** the dashboard auto-selects and locks the event; broadcaster goes live normally and the stream is linked at `createRoom` time via `ppvEventId`.
+`ppvEventId?: string` added to the `createRoom` message type, `MediasoupSignalingClient.createRoom()` method, and the `useSignaling` `createRoom` hook. No mediasoup changes needed — it already forwards `ppvEventId` to `POST /internal/streams/started`.
 
-**The placeholder text** currently in `PpvManageScreen` ("Set your event's ID in the PPV field when prompted") should be removed once the dashboard selector is built.
+### Overlap prevention UI (`src/components/screens/PpvCreateScreen.tsx`, `src/api/ppvEvents.ts`)
 
-### `createRoom` chain changes needed (app side)
-
-Three files need `ppvEventId?: string` threaded through:
-1. `src/lib/mediasoupSignaling.ts` — add to message type and `createRoom` method
-2. `src/hooks/useSignaling.ts` — add to `createRoom` hook signature
-3. `src/components/screens/DashboardScreen.tsx` — fetch scheduled events, add selector row, pass `ppvEventId`
-
-### Overlap prevention (create + edit)
-
-A creator cannot have two PPV events whose windows conflict. Conflict detection runs on `POST /ppv-events` and `PATCH /ppv-events/:id` (the event being edited is excluded from its own check).
-
-| Existing event | New/edited event | Behaviour |
-|---|---|---|
-| Has duration | Has duration | Full overlap check — **hard block** (409) |
-| Has duration | No duration | **Hard block** if new start falls inside existing window |
-| **No duration** | Either | **Warn** if new start is within `PPV_OVERLAP_WARNING_MINUTES` of existing start — user can acknowledge and proceed |
-| No duration | No duration | **Warn** if starts are within `PPV_OVERLAP_WARNING_MINUTES` of each other |
-
-`PPV_OVERLAP_WARNING_MINUTES` — new RemoteConfig key (type: `number`, default `60`). Editable from the admin Config page. Warning is soft (acknowledgeable), not a second hard block.
-
-Backend response for a hard conflict: `409 { error: 'event_overlap', conflictingEventId, conflictingEventTitle }`.
-Backend response for a soft warning: `200` (event created/updated) with a `warning: 'duration_unknown_overlap'` field alongside the event — the app surfaces the warning in a dismissible alert after the action succeeds.
-
-The app's create/edit form (`PpvCreateScreen`) should also do a lightweight client-side pre-check against already-fetched scheduled events and show inline warning text before the user submits, so the feedback is immediate.
+- `ppvApi.createEvent` now returns `{ event, warning? }` (was `event` directly).
+- `ppvApi.updateEvent` now returns `{ event?, warning?, ok? }`.
+- On **409** `{ error: 'event_overlap' }`: Alert "Schedule conflict — overlaps with '…'". No navigation.
+- On **200 + `warning: 'duration_unknown_overlap'`**: Alert "Possible overlap" shown after successful save/navigate.
+- New `EventOverlapError` type exported from `ppvApi` for typed error handling.

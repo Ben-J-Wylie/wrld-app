@@ -23,10 +23,20 @@ export type UpdatePpvEventData = {
   maxCapacity?: number | null
 }
 
+export type CreateEventResult = { event: PpvEvent; warning?: 'duration_unknown_overlap' }
+export type EventOverlapError = { error: 'event_overlap'; conflictingEventId: string; conflictingEventTitle: string }
+
 export const ppvApi = {
-  createEvent: async (data: CreatePpvEventData): Promise<PpvEvent> => {
-    const res = await apiClient.post<{ event: PpvEvent }>('/ppv-events', data)
-    return res.data.event
+  createEvent: async (data: CreatePpvEventData): Promise<CreateEventResult> => {
+    const res = await apiClient.post<CreateEventResult>('/ppv-events', data)
+    return res.data
+  },
+
+  listMyScheduledEvents: async (): Promise<PpvEvent[]> => {
+    const res = await apiClient.get<{ events: PpvEvent[] }>('/ppv-events', {
+      params: { status: 'scheduled' },
+    })
+    return res.data.events
   },
 
   listMyEvents: async (status?: string): Promise<PpvEvent[]> => {
@@ -46,9 +56,9 @@ export const ppvApi = {
     return res.data.event
   },
 
-  updateEvent: async (id: string, data: UpdatePpvEventData): Promise<PpvEvent> => {
-    const res = await apiClient.patch<{ event: PpvEvent }>(`/ppv-events/${id}`, data)
-    return res.data.event
+  updateEvent: async (id: string, data: UpdatePpvEventData): Promise<{ event?: PpvEvent; warning?: 'duration_unknown_overlap'; ok?: boolean }> => {
+    const res = await apiClient.patch<{ event?: PpvEvent; warning?: 'duration_unknown_overlap'; ok?: boolean }>(`/ppv-events/${id}`, data)
+    return res.data
   },
 
   cancelEvent: async (id: string): Promise<{ refundCount: number }> => {
