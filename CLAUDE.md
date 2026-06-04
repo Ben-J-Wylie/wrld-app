@@ -1474,3 +1474,107 @@ Data comes from the updated `GET /users/me/subscription/settings` which now retu
 **`src/components/screens/WalletScreen.tsx`:** Added `isError` + `refetch` to the `useWallet()` destructuring. New error block before the loading spinner shows "No connection / Check your internet connection" with a "Try again" button. Previously the wallet showed an infinite spinner when offline.
 
 **`src/components/screens/StreamScreen.tsx`:** Added `isNetworkError(msg)` helper that matches on "websocket", "network", "connection" (case-insensitive). When the go-live or join fails with a network error, shows "No connection / Check your internet connection" instead of the raw "WebSocket connection failed" message. Non-network errors (banned keyword, suspended, subscription required) still show their specific message. Retry button relabelled "Try again".
+
+---
+
+## Updates — June 2026 (PPV events — app)
+
+### What was built
+
+Pay-per-view event management in the app. Creators schedule paid live events; viewers purchase one-time access via Stripe (same web-browser pattern as creator subscriptions, App Store compliant).
+
+### New tab: Events (`app/(app)/ppv/`)
+
+A dedicated **Events** tab in the bottom nav (after Me). Built as a Stack navigator so the index is always the initial screen:
+
+- `app/(app)/ppv/_layout.tsx` — Stack (headerShown: false). Required to prevent Expo Router from matching the dynamic `[id]` segment when the tab first loads, which would render PpvEventDetailScreen with no event data.
+- `app/(app)/ppv/index.tsx` → `PpvIndexScreen`
+- `app/(app)/ppv/create.tsx` → `PpvCreateScreen`
+- `app/(app)/ppv/[id]/index.tsx` → `PpvEventDetailScreen`
+- `app/(app)/ppv/[id]/manage.tsx` → `PpvManageScreen`
+
+### PpvIndexScreen (`src/components/screens/PpvIndexScreen.tsx`)
+
+Creator-facing event list. Refetches on every tab focus.
+
+- **UPCOMING** section — scheduled + live events
+- **PAST** section — ended + cancelled events
+- Per card: status badge, date + countdown, tickets sold, ticket price, your take (70%), duration/replay/subscriber-free tags
+- Cancelled cards show a **DELETE EVENT** button (red, hairline separator). Tapping shows `Alert.alert` confirmation before calling `ppvApi.deleteEvent()`. Optimistic removal via `qc.setQueryData`.
+- Cancelled cards are non-tappable (no manage screen for a cancelled event)
+- Empty state with explainer and "Schedule your first event" CTA
+
+### PpvCreateScreen (`src/components/screens/PpvCreateScreen.tsx`)
+
+Create and edit form. Used for both new events and editing existing ones (via `?eventId` param from PpvManageScreen).
+
+**Date & time UX** — replaced the raw `YYYY-MM-DDTHH:MM` ISO input with:
+- Quick preset chips: Tonight, Tomorrow, +1 week, +2 weeks
+- Separate `MM/DD/YYYY` date field + `H:MM` time field + AM/PM toggle buttons
+- Human-readable preview ("Saturday, June 14, 2026 at 8:00 PM") once a valid future date is entered
+- `useEffect` syncs fields when editing an existing event loads
+
+**Fields:** Title, Description, Date & time, Duration, Capacity (optional, editable at any time — backend validates ≥ current purchasers), Price (locked after creation), Subscribers get free access (locked after first purchase), Replay access.
+
+### PpvManageScreen (`src/components/screens/PpvManageScreen.tsx`)
+
+Creator dashboard for a single event. Refetches on focus.
+
+- Status badge, description, schedule details, countdown
+- Stats row: Sold / Cap (or Purchasers when unlimited), Per ticket, Your earnings (70%)
+- Duration, replay, subscriber-free notes
+- Go Live → Dashboard button (for scheduled/live events)
+- Edit event → PpvCreateScreen in edit mode
+- Cancel & refund button with confirmation alert
+- Loading state distinguishes "still fetching" from "query errored" (shows "Event not found" + back button on error)
+
+### PpvEventDetailScreen (`src/components/screens/PpvEventDetailScreen.tsx`)
+
+Viewer-facing purchase screen. Navigated to from ProfileScreen event cards.
+
+- Tries React Query cache first (seeded by ProfileScreen), falls back to fetching via `handle` param
+- Shows spinner while loading; "Event not found" + back if not found
+- Once loaded: event title, host handle, description, full date, countdown ("Starts in X" or "Live now"), duration, price, replay badge, subscriber free-access note
+- **Buy ticket · $X.XX** → `ppvApi.createAccessSession()` → Stripe checkout in browser
+- **Access purchased ✓** state with next-step guidance (join from profile if live, notification if scheduled)
+- Subscriber free access granted directly (no Stripe checkout)
+
+### ProfileScreen additions (`src/components/screens/ProfileScreen.tsx`)
+
+**UPCOMING EVENTS** section at the bottom of any creator's profile. Only shows `scheduled` and `live` events. Per card:
+- Title + LIVE badge
+- Description snippet (2 lines)
+- Date + countdown
+- Duration and "Free for subscribers" indicator
+- **BUY TICKET** / **WATCH NOW** CTA; "✓ Access purchased" badge if already purchased
+- Tapping navigates to PpvEventDetailScreen with `id` + `handle` params
+
+### MonetizeScreen additions (`src/components/screens/MonetizeScreen.tsx`)
+
+**PAY-PER-VIEW EVENTS** section at the bottom (always visible, regardless of Stripe status):
+- Lists all creator's events (any status) as tappable cards → PpvManageScreen
+- "+ Schedule event" button → PpvCreateScreen
+
+### StreamScreen additions (`src/components/screens/StreamScreen.tsx`)
+
+`'PPV access required'` error from mediasoup `joinRoom` handled as a separate paywall state (alongside the existing subscription paywall). Shows lock icon, "Purchase access at wrld.cam to watch", back button only — no in-app payment flow initiated (App Store compliant).
+
+### New API module: `src/api/ppvEvents.ts`
+
+`ppvApi` — full client for all PPV endpoints:
+
+| Method | Notes |
+|--------|-------|
+| `createEvent` | `POST /ppv-events` |
+| `listMyEvents(status?)` | `GET /ppv-events` |
+| `getMyEvent(id)` | `GET /ppv-events/:id` |
+| `updateEvent(id, data)` | `PATCH /ppv-events/:id` |
+| `cancelEvent(id)` | `POST /ppv-events/:id/cancel` |
+| `deleteEvent(id)` | `DELETE /ppv-events/:id` (soft delete) |
+| `getCreatorEvents(handle)` | `GET /users/:handle/ppv-events` (public) |
+| `createAccessSession(eventId)` | `POST /ppv-events/:id/access-session` |
+| `getAccessStatus(eventId)` | `GET /ppv-events/:id/access-status` |
+
+### New type: `PpvEvent` (`src/types/index.ts`)
+
+Full event shape returned by all creator endpoints. Includes `netRevenueCents` and `grossRevenueCents` (computed server-side from `PPV_PLATFORM_FEE_RATE` RemoteConfig — never hardcoded in the app). `hasAccess?: boolean` on public/viewer responses.
