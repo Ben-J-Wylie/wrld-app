@@ -101,6 +101,9 @@ type Props = {
   offsetMs: number
   onOffsetChange: (ms: number) => void
   minYear?: number
+  // Bump this (a monotonically-increasing counter) to force the dial to
+  // blur + collapse — the host fires it when any *other* UI is touched.
+  collapseSignal?: number
   style?: StyleProp<ViewStyle>
 }
 
@@ -109,8 +112,25 @@ type Props = {
 // call; this just keeps the dial from being stuck on a single year.)
 const DEFAULT_MIN_YEAR = new Date().getFullYear() - 10
 
-export function TimeScrubber({ offsetMs, onOffsetChange, minYear = DEFAULT_MIN_YEAR, style }: Props) {
+export function TimeScrubber({
+  offsetMs,
+  onOffsetChange,
+  minYear = DEFAULT_MIN_YEAR,
+  collapseSignal = 0,
+  style,
+}: Props) {
   const [expanded, setExpanded] = useState(false)
+
+  // Collapse when the host signals an outside interaction (skip the first
+  // run so mounting doesn't count as one).
+  const firstSignal = useRef(true)
+  useEffect(() => {
+    if (firstSignal.current) {
+      firstSignal.current = false
+      return
+    }
+    setExpanded(false)
+  }, [collapseSignal])
   // Force a re-render every second so the playhead ticks (live and playback).
   const [, setTick] = useState(0)
   useEffect(() => {
@@ -193,7 +213,7 @@ export function TimeScrubber({ offsetMs, onOffsetChange, minYear = DEFAULT_MIN_Y
       onChangeRef.current(Date.now() - frozenRef.current)
       setPaused(false)
       holdTimer.current = null
-    }, 1000)
+    }, 500)
   }
 
   const toggleExpand = () => setExpanded((e) => !e)

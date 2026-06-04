@@ -154,6 +154,10 @@ export function GlobeScreenMapbox() {
 
   // 0 = live present; >0 = playback offset behind now (Time Machine).
   const [timeOffsetMs, setTimeOffsetMs] = useState(0)
+  // Bumped whenever any overlay UI (not the globe, not the clock) is touched,
+  // so the TimeScrubber blurs + collapses. Spinning/zooming the globe doesn't.
+  const [clockCollapseSignal, setClockCollapseSignal] = useState(0)
+  const collapseClock = () => setClockCollapseSignal((n) => n + 1)
 
   const [selectedStream, setSelectedStream] = useState<Stream | null>(null)
   const [selectedClusterStreams, setSelectedClusterStreams] = useState<Stream[] | null>(null)
@@ -729,7 +733,7 @@ export function GlobeScreenMapbox() {
       />
 
       {/* Top stack — header, search, chips, scale */}
-      <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+      <View style={StyleSheet.absoluteFill} pointerEvents="box-none" onTouchStart={collapseClock}>
         <SafeAreaView edges={['top']} pointerEvents="box-none">
           <View style={styles.header} pointerEvents="box-none">
             <View style={styles.wordmark}>
@@ -765,7 +769,11 @@ export function GlobeScreenMapbox() {
 
       {/* Banner */}
       {banner && (
-        <View style={[styles.bannerWrapper, { top: insets.top + 184 }]} pointerEvents="box-none">
+        <View
+          style={[styles.bannerWrapper, { top: insets.top + 184 }]}
+          pointerEvents="box-none"
+          onTouchStart={collapseClock}
+        >
           <StreamStateBanner
             variant={banner.kind}
             onDismiss={dismissBanner}
@@ -777,7 +785,7 @@ export function GlobeScreenMapbox() {
 
       {/* Pin-tap cards */}
       {selectedStream && (
-        <View style={styles.cardWrapper} pointerEvents="box-none">
+        <View style={styles.cardWrapper} pointerEvents="box-none" onTouchStart={collapseClock}>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setSelectedStream(null)} />
           <DiscoveryHandoffCard
             stream={toDiscovery(selectedStream)}
@@ -786,7 +794,7 @@ export function GlobeScreenMapbox() {
         </View>
       )}
       {selectedClusterStreams && (
-        <View style={styles.cardWrapper} pointerEvents="box-none">
+        <View style={styles.cardWrapper} pointerEvents="box-none" onTouchStart={collapseClock}>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setSelectedClusterStreams(null)} />
           <DiscoveryHandoffCard
             streams={selectedClusterStreams.map(toDiscovery)}
@@ -798,7 +806,11 @@ export function GlobeScreenMapbox() {
       {/* Time machine — rides right on top of the drawer (its bottom tracks
           the animated drawer height) so it stays just above it as it slides. */}
       <Animated.View style={[styles.timeScrubber, { bottom: drawerHeight }]}>
-        <TimeScrubber offsetMs={timeOffsetMs} onOffsetChange={setTimeOffsetMs} />
+        <TimeScrubber
+          offsetMs={timeOffsetMs}
+          onOffsetChange={setTimeOffsetMs}
+          collapseSignal={clockCollapseSignal}
+        />
       </Animated.View>
 
       {/* Bottom drawer — closed by default, opens to peek when the user
@@ -808,6 +820,7 @@ export function GlobeScreenMapbox() {
           styles.drawer,
           { height: drawerHeight },
         ]}
+        onTouchStart={collapseClock}
       >
         <View
           {...gripPanResponder.panHandlers}

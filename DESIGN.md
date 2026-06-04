@@ -1692,12 +1692,19 @@ stealing a drag mid-gesture.) Touch targets are widened with `HIT_SLOP`
 easy to grab.
 
 **Playback pause.** When a scrub lands in the **past** and the finger
-lifts, the clock holds for ~1 s before real-time playback resumes —
+lifts, the clock holds for ~0.5 s before real-time playback resumes —
 `paused` freezes the displayed playhead at `frozenRef`, then a timer
 rebases `offsetMs` so playback continues from exactly where it was held
 (no time jump). Scrubbing all the way to **live** ticks with real time
 immediately, even mid-drag (no hold). A fresh scrub cancels a pending
 resume.
+
+**Blur on outside interaction.** The dial collapses as soon as *any other*
+UI is touched — but not the globe. A `collapseSignal` prop (a counter)
+collapses the dial whenever it increments; `GlobeScreenMapbox` bumps it
+from an `onTouchStart` on each overlay group (top stack, banner, pin
+cards, drawer) but **not** on the `MapView` or the scrubber itself, so
+spinning/zooming the globe leaves an expanded dial alone.
 
 **Carry is intentional.** The dial uses native `Date` arithmetic
 (`stepDate`), so scrolling a wheel past its boundary **carries into the
