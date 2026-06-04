@@ -38,13 +38,15 @@ type FieldKey = 'year' | 'month' | 'day' | 'hour' | 'minute' | 'second'
 
 const MONTH_ABBR = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
 
-// Fixed per-field widths so a value change never reflows the row. Sized for
-// monoLabel (~10px + letter-spacing) at the BOLD focused weight — the centre
-// value goes bold, which is wider, so the month must fit "MAR"/"MAY" bold
-// without wrapping. (Cells also clamp to one line as a backstop.)
+// Fixed per-field widths so a value change never reflows the row. These are
+// tuned against the SYSTEM FALLBACK font (the design fonts aren't bundled
+// yet) — they're provisional and should be re-tuned once IBM Plex Mono is
+// bundled, since monospace makes every month/digit a uniform, exact width.
+// Cells are `numberOfLines={1}` so a value can never wrap to two rows even if
+// the bold focused weight slightly overflows a field on the fallback font.
 const FIELD_W: Record<FieldKey, number> = {
-  year: 36,
-  month: 36,
+  year: 34,
+  month: 28,
   day: 20,
   hour: 20,
   minute: 20,

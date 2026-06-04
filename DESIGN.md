@@ -1670,10 +1670,14 @@ colons sit centred *inside* the hour-minute and minute-second gaps (a
 year-month gap. The whole content is centred (`justifyContent: 'center'`)
 so the margin left-of-year equals the margin right-of-status. **Fixed
 per-field widths** (`FIELD_W`) + a fixed-width status slot mean a value
-change (e.g. JUL→AUG, or the live/NOW swap) never reflows the row. The
-widths are sized for the **bold focused weight** (the centre value goes
-bold, which is wider — month/year must fit e.g. bold "MAR"/"2026"), and
-every cell is `numberOfLines={1}` so a value can never wrap to two rows.
+change (e.g. JUL→AUG, or the live/NOW swap) never reflows the row. Every
+cell is `numberOfLines={1}` so a value can never wrap to two rows.
+**`FIELD_W` is provisional** — tuned against the *system fallback* font
+(the design fonts aren't bundled yet, see Section 6 / decision log). It
+should be re-tuned once **IBM Plex Mono** is bundled: monospace makes
+every month + digit a uniform, exact width, so the bold focused weight
+fits precisely with no wrap, clip, or guesswork. Until then bold "MAR"/
+"MAY" may sit a touch tight on the fallback font.
 
 **Animated tick / dial slide.** Every value change — a live tick or a
 scrub step — animates the field's cell column by one row: newer scrolls
