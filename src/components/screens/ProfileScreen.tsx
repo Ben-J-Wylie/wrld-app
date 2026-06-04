@@ -13,7 +13,7 @@
 //     profile flex move; MetaStrip would flatten it
 //   • FollowButton (for other profiles) / Button (for own profile)
 
-import { ActivityIndicator, Alert, Linking, StyleSheet, View } from 'react-native'
+import { ActivityIndicator, Alert, Linking, Pressable, StyleSheet, View } from 'react-native'
 import { useLocalSearchParams, router } from 'expo-router'
 import { useAuth } from '@clerk/clerk-expo'
 import { theme } from '@/tokens/theme'
@@ -27,7 +27,30 @@ import { MetaStrip } from '@/components/features/user/MetaStrip'
 import { useUserProfile } from '@/hooks/useUserProfile'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
 import { usersApi } from '@/api/users'
+import { ppvApi } from '@/api/ppvEvents'
 import { useQuery } from '@tanstack/react-query'
+
+function formatEventDate(iso: string): string {
+  return new Date(iso).toLocaleString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
+function formatCountdown(iso: string): string {
+  const diff = new Date(iso).getTime() - Date.now()
+  if (diff <= 0) return ''
+  const days = Math.floor(diff / 86_400_000)
+  const hours = Math.floor((diff % 86_400_000) / 3_600_000)
+  const mins = Math.floor((diff % 3_600_000) / 60_000)
+  if (days > 0) return `in ${days}d ${hours}h`
+  if (hours > 0) return `in ${hours}h ${mins}m`
+  if (mins > 0) return `in ${mins}m`
+  return 'starting soon'
+}
 
 function formatJoined(iso: string): string {
   try {
@@ -56,6 +79,12 @@ export function ProfileScreen() {
     queryKey: ['subscription-status', handle],
     queryFn: () => usersApi.getSubscriptionStatus(handle!),
     enabled: !!isSignedIn && !isOwnProfile && !!profile?.subscriptionEnabled,
+  })
+
+  const { data: ppvEvents } = useQuery({
+    queryKey: ['ppv-events-profile', handle],
+    queryFn: () => ppvApi.getCreatorEvents(handle!),
+    enabled: !!handle,
   })
 
   if (isLoading) {
@@ -185,6 +214,93 @@ export function ProfileScreen() {
           variant="secondary"
         />
       )}
+
+      {ppvEvents && ppvEvents.length > 0 && (
+        <View style={styles.ppvSection}>
+          <Text variant="monoLabel" color={theme.colors.text.muted}>
+            UPCOMING EVENTS
+          </Text>
+          {ppvEvents.map(event => {
+            const isLive = event.status === 'live'
+            const countdown = !isLive ? formatCountdown(event.scheduledAt) : ''
+            return (
+              <Pressable
+                key={event.id}
+                style={styles.ppvCard}
+                onPress={() => router.push({
+                  pathname: '/(app)/ppv/[id]',
+                  params: { id: event.id, handle: handle ?? '' },
+                })}
+              >
+                {/* Title row with status badge */}
+                <View style={styles.ppvTitleRow}>
+                  <Text variant="bodyEmphasized" style={styles.ppvTitle}>{event.title}</Text>
+                  {isLive && (
+                    <View style={styles.liveBadge}>
+                      <Text variant="monoCaption" color={theme.colors.text.inverse}>LIVE</Text>
+                    </View>
+                  )}
+                </View>
+
+                {/* Description snippet */}
+                {event.description ? (
+                  <Text variant="caption" color={theme.colors.text.muted} numberOfLines={2}>
+                    {event.description}
+                  </Text>
+                ) : null}
+
+                {/* Date + countdown */}
+                <View style={styles.ppvMeta}>
+                  <Text variant="caption" color={theme.colors.text.muted}>
+                    {formatEventDate(event.scheduledAt)}
+                  </Text>
+                  {countdown ? (
+                    <Text variant="caption" color={theme.colors.accent.default}>
+                      {countdown}
+                    </Text>
+                  ) : null}
+                </View>
+
+                {/* Details row: duration, subscriber access */}
+                {(event.durationMinutes || event.subscribersFreeAccess) ? (
+                  <View style={styles.ppvDetails}>
+                    {event.durationMinutes ? (
+                      <Text variant="caption" color={theme.colors.text.muted}>
+                        ~{event.durationMinutes} min
+                      </Text>
+                    ) : null}
+                    {event.subscribersFreeAccess ? (
+                      <Text variant="caption" color={theme.colors.accent.default}>
+                        Free for subscribers
+                      </Text>
+                    ) : null}
+                  </View>
+                ) : null}
+
+                {/* Price + access CTA */}
+                <View style={styles.ppvFooter}>
+                  <Text variant="bodyEmphasized" color={theme.colors.accent.default}>
+                    ${(event.priceUsd / 100).toFixed(2)}
+                  </Text>
+                  {event.hasAccess ? (
+                    <View style={styles.accessBadge}>
+                      <Text variant="monoCaption" color={theme.colors.accent.default}>
+                        ✓ Access purchased
+                      </Text>
+                    </View>
+                  ) : (
+                    <View style={styles.buyBtn}>
+                      <Text variant="monoCaption" color={theme.colors.text.inverse}>
+                        {isLive ? 'WATCH NOW' : 'BUY TICKET'}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </Pressable>
+            )
+          })}
+        </View>
+      )}
     </ScreenScroll>
   )
 }
@@ -235,5 +351,60 @@ const styles = StyleSheet.create({
     width: 1,
     height: 40,
     backgroundColor: theme.colors.border.subtle,
+  },
+  ppvSection: {
+    gap: theme.spacing.sm,
+  },
+  ppvCard: {
+    backgroundColor: theme.colors.bg.elevated,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border.subtle,
+    padding: theme.spacing.md,
+    gap: theme.spacing.sm,
+  },
+  ppvTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing.sm,
+  },
+  ppvTitle: {
+    flex: 1,
+  },
+  liveBadge: {
+    backgroundColor: '#D0233A',
+    borderRadius: theme.radius.md,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 2,
+  },
+  ppvMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+  },
+  ppvDetails: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.md,
+  },
+  ppvFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: theme.spacing.xs,
+  },
+  accessBadge: {
+    borderRadius: theme.radius.full,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: theme.colors.accent.border,
+  },
+  buyBtn: {
+    backgroundColor: theme.colors.accent.default,
+    borderRadius: theme.radius.full,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: 5,
   },
 })

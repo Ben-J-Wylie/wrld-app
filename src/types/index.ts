@@ -81,6 +81,29 @@ export type Recording = {
   _count: { clips: number }
 }
 
+export type PpvEvent = {
+  id: string
+  hostId: string
+  host?: { id: string; handle: string; displayName: string; avatarUrl: string | null }
+  streamId: string | null
+  title: string
+  description: string | null
+  scheduledAt: string      // ISO UTC
+  timezone: string         // creator's IANA timezone
+  durationMinutes: number | null
+  priceUsd: number         // cents
+  subscribersFreeAccess: boolean
+  maxCapacity: number | null
+  replayAccess: boolean
+  status: 'scheduled' | 'live' | 'ended' | 'cancelled'
+  purchaseCount: number
+  thumbnailUrl: string | null
+  hasAccess?: boolean      // viewer-facing: true if viewer has purchased or has subscriber free access
+  grossRevenueCents?: number
+  netRevenueCents?: number
+  createdAt?: string
+}
+
 export type Stream = {
   id: string
   hostId: string

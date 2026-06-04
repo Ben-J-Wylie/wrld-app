@@ -1017,6 +1017,26 @@ export function StreamScreen() {
                 variant="secondary"
               />
             </View>
+          ) : status === 'error' && displayError === 'PPV access required' && !isNew ? (
+            <View style={styles.actions}>
+              <Icon name="lock" size="lg" color={theme.colors.text.muted} />
+              <Text variant="body" color={theme.colors.text.primary} style={styles.center}>
+                Pay-per-view event
+              </Text>
+              {broadcaster && (
+                <Text variant="caption" color={theme.colors.text.muted} style={styles.center}>
+                  @{broadcaster.handle}
+                </Text>
+              )}
+              <Text variant="caption" color={theme.colors.text.muted} style={styles.center}>
+                Purchase access at wrld.cam to watch
+              </Text>
+              <Button
+                label="Back"
+                onPress={() => router.navigate('/(app)/globe')}
+                variant="secondary"
+              />
+            </View>
           ) : status === 'error' ? (
             <View style={styles.actions}>
               {isNetworkError(displayError) ? (
