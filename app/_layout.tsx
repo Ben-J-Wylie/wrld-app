@@ -12,6 +12,7 @@ import { env } from '@/lib/env'
 import { setClerkTokenGetter } from '@/lib/clerkToken'
 import { useAuthStore } from '@/stores/authStore'
 import { useRegisterPushToken } from '@/hooks/useRegisterPushToken'
+import { useUserSocket } from '@/hooks/useUserSocket'
 import { apiClient } from '@/api/client'
 import type { User } from '@/types'
 
@@ -79,6 +80,9 @@ function RootNavigator() {
 
   // Register Expo push token when signed in
   useRegisterPushToken(!!isSignedIn)
+
+  // Persistent user push channel — receives recording_updated events
+  useUserSocket(!!isSignedIn)
 
   // Notification deep-link: queue until Clerk is loaded and Stack is rendered
   const pendingStreamRef = useRef<{ roomId: string; streamId: string; sources: string } | null>(null)
