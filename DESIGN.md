@@ -1641,29 +1641,31 @@ gesture start** (captures the playhead on grant, applies the total
 `round(dy / STEP_PX)` delta each move — no drift from stale offset reads).
 `stepDate` uses native `Date` setters so carry/borrow is correct across
 all fields + variable month/year lengths. Clamped to `[0, now-minYear]`
-(no future, floor at `minYear`, default 2026). Expand animates height
-(`motion.patterns.overlay`); ghosts are the ±1 field values at
-`text.subtle`. "● LIVE" tag when live; accent "● NOW" Pressable when
+(no future, floor at `minYear`, default 2026).
+
+**DOBWheel-style treatment (2026-06-04).** Each field is a vertical wheel
+framed by a centred **band** (two horizontal `border.strong` lines), with
+**fade strips** at the top/bottom edges — styled to match `DOBWheel`.
+Collapsed shows only the centre value; tapped, the bar grows
+(`motion.patterns.overlay`) to 5 rows and the **±2 ghost neighbours** fade
+in above/below (`bodyEmphasized` centre, `body` neighbours at opacity
+0.55 / 0.3 — exactly DOBWheel's coloring), all `text.primary` ink. Month
+renders as a 3-letter abbreviation (JAN…DEC); hours are 24h; the time
+group is `HH:MM:SS` with colons; fields spread via `justifyContent:
+'space-between'`. "● LIVE" tag when live; accent "● NOW" Pressable when
 scrubbed (→ `onOffsetChange(0)`).
 
 **Direction note.** Drag-down = newer, drag-up = older (wheel physics,
 newer above) — a one-line flip if it reads wrong on device.
 
-**Type + layout (2026-06-04).** Font matches the drawer's "nearby now"
-label — `monoLabel` (IBM Plex Mono caps). Month renders as a 3-letter
-abbreviation (JAN…DEC); hours are 24h; the time group is `HH : MM : SS`
-with colons; the fields spread across the bar with `justifyContent:
-'space-between'` (year far-left, LIVE/NOW far-right).
-
-**Over-globe treatment.** No background for now (sits directly over the
-globe per Ben) — **no drop shadow**; text is **cream** (`text.inverse`)
-rather than the drawer's muted-dark ink so it stays legible over the dark
-globe (dark ink would vanish without a backdrop). A translucent gradient
-below may come later; the exact muted-dark "nearby now" tone can return
-once that lands. The full-bar tap region uses a raw RN `Pressable` (not
-the primitive): the primitive routes `style` to an inner `Animated.View`
-whose `flex:1` can't resolve, which collapsed the content to 0 height — RN
-`Pressable` takes `flex:1` directly.
+**Surface (2026-06-04 retract).** First pass was background-less with cream
+text, which read too faint over the globe. Retracted to the drawer's
+translucent **`bg.glass`** (so the dark DOBWheel ink reads and the bar reads
+continuous with the drawer below it) + a hairline top border. The full-bar
+tap region uses a raw RN `Pressable` (not the primitive): the primitive
+routes `style` to an inner `Animated.View` whose `flex:1` can't resolve,
+which collapsed the content to 0 height — RN `Pressable` takes `flex:1`
+directly.
 
 **Seam (Aaron / backend).** The component only emits `offsetMs`;
 `GlobeScreenMapbox` holds it and carries a commented TIME-MACHINE seam at

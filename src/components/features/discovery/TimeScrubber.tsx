@@ -11,15 +11,13 @@
 //     (real-time PLAYBACK), and the globe replays the surviving clips/pins
 //     alive at the playhead (backend: Aaron). A "NOW" button returns to live.
 //
-// Six fields — YR · MO · DY · HR · MIN · SEC — each independently spinnable.
-// Collapsed: just the ticking values. Tap to expand: each field shows ghosted
-// neighbours above/below to hint it can be spun; drag a field vertically to
-// step it (Date arithmetic carries/borrows correctly — spinning MIN past 00
-// rolls the hour, etc.). Can't spin into the future (clamped at now) or before
-// `minYear`.
-//
-// This is the UI half; the globe consumes `offsetMs` to drive the historical
-// replay query (stubbed until the backend lands).
+// Styled like DOBWheel: each of the six fields (YEAR · MONTH · DAY · HH:MM:SS)
+// is a vertical wheel framed by a centred band (two horizontal lines). Blurred
+// (collapsed) shows only the centre value; tapped (expanded) the bar grows and
+// the ±2 ghost neighbours fade in above/below, just like the DOBWheel.
+// Drag a field vertically to scrub (Date arithmetic carries/borrows correctly;
+// no future, floor at `minYear`). Sits on the drawer's translucent glass so the
+// dark ink reads over the globe.
 
 import { useEffect, useRef, useState } from 'react'
 import {
@@ -37,19 +35,11 @@ import { theme } from '@/tokens/theme'
 
 type FieldKey = 'year' | 'month' | 'day' | 'hour' | 'minute' | 'second'
 
-const FIELD_LABEL: Record<FieldKey, string> = {
-  year: 'YEAR',
-  month: 'MONTH',
-  day: 'DAY',
-  hour: 'HR',
-  minute: 'MIN',
-  second: 'SEC',
-}
-
 const MONTH_ABBR = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
 
-const COLLAPSED_H = 50
-const EXPANDED_H = 104
+const ROW_H = 26
+const COLLAPSED_H = ROW_H + 24 // centre row + breathing room
+const EXPANDED_H = ROW_H * 5 // centre + 2 above + 2 below (DOBWheel's 5 rows)
 const STEP_PX = 26 // vertical drag distance per one unit step
 
 function fieldValue(d: Date, key: FieldKey): number {
@@ -140,37 +130,32 @@ export function TimeScrubber({ offsetMs, onOffsetChange, minYear = 2026, style }
     onChangeRef.current(newOffset)
   }
 
+  const fieldProps = { playhead, expanded, expandedRef, offsetRef, onScrub: scrub }
+
   return (
     <Animated.View style={[styles.bar, { height }, style]}>
-      {/* Raw RN Pressable (not the primitive): the primitive routes `style`
-          to an inner Animated.View whose flex:1 can't resolve, collapsing the
-          content. RN Pressable takes flex:1 directly. No scale feedback wanted
-          on the whole bar anyway. */}
+      {/* Centred band — two horizontal lines framing the centre value, like DOBWheel. */}
+      <View style={styles.bandWrap} pointerEvents="none">
+        <View style={styles.band} />
+      </View>
+
       <RNPressable onPress={() => setExpanded((e) => !e)} style={styles.press}>
         <View style={styles.row}>
           {(['year', 'month', 'day'] as FieldKey[]).map((key) => (
-            <Field
-              key={key}
-              fieldKey={key}
-              playhead={playhead}
-              expanded={expanded}
-              expandedRef={expandedRef}
-              offsetRef={offsetRef}
-              onScrub={scrub}
-            />
+            <Field key={key} fieldKey={key} {...fieldProps} />
           ))}
           {/* HH : MM : SS — tight group with colons */}
           <View style={styles.timeGroup}>
-            <Field fieldKey="hour" playhead={playhead} expanded={expanded} expandedRef={expandedRef} offsetRef={offsetRef} onScrub={scrub} />
-            <Text variant="monoLabel" color={theme.colors.text.inverse} style={styles.colon}>:</Text>
-            <Field fieldKey="minute" playhead={playhead} expanded={expanded} expandedRef={expandedRef} offsetRef={offsetRef} onScrub={scrub} />
-            <Text variant="monoLabel" color={theme.colors.text.inverse} style={styles.colon}>:</Text>
-            <Field fieldKey="second" playhead={playhead} expanded={expanded} expandedRef={expandedRef} offsetRef={offsetRef} onScrub={scrub} />
+            <Field fieldKey="hour" {...fieldProps} />
+            <Text variant="bodyEmphasized" color={theme.colors.text.primary}>:</Text>
+            <Field fieldKey="minute" {...fieldProps} />
+            <Text variant="bodyEmphasized" color={theme.colors.text.primary}>:</Text>
+            <Field fieldKey="second" {...fieldProps} />
           </View>
           {live ? (
             <View style={styles.liveTag}>
               <View style={styles.liveDot} />
-              <Text variant="monoLabel" color={theme.colors.text.inverse}>
+              <Text variant="monoLabel" color={theme.colors.text.muted}>
                 LIVE
               </Text>
             </View>
@@ -184,9 +169,21 @@ export function TimeScrubber({ offsetMs, onOffsetChange, minYear = 2026, style }
           )}
         </View>
       </RNPressable>
+
+      {/* Edge fade so the ±2 ghosts soften at the top/bottom (expanded only). */}
+      {expanded && (
+        <>
+          <View style={styles.fadeTop} pointerEvents="none" />
+          <View style={styles.fadeBottom} pointerEvents="none" />
+        </>
+      )}
     </Animated.View>
   )
 }
+
+// Deltas top→bottom: newer values above, older below (wheel physics).
+const COLLAPSED_DELTAS = [0]
+const EXPANDED_DELTAS = [2, 1, 0, -1, -2]
 
 function Field({
   fieldKey,
@@ -212,38 +209,32 @@ function Field({
         startPlayhead.current = new Date(Date.now() - offsetRef.current)
       },
       onPanResponderMove: (_, g) => {
-        // Wheel physics: newer value sits above, older below. Drag down (dy>0)
-        // brings the newer value to centre (+); drag up brings the older (−).
+        // Drag down (dy>0) brings the newer value to centre (+); up → older (−).
         const delta = Math.round(g.dy / STEP_PX)
         onScrub(fieldKey, startPlayhead.current, delta)
       },
     }),
   ).current
 
-  const current = formatField(playhead, fieldKey)
-  const above = formatField(stepDate(playhead, fieldKey, 1), fieldKey)
-  const below = formatField(stepDate(playhead, fieldKey, -1), fieldKey)
+  const deltas = expanded ? EXPANDED_DELTAS : COLLAPSED_DELTAS
 
   return (
     <View style={styles.field} {...responder.panHandlers}>
-      {expanded && (
-        <Text variant="monoLabel" color={theme.colors.text.inverse} style={styles.ghost}>
-          {above}
-        </Text>
-      )}
-      <Text variant="monoLabel" color={theme.colors.text.inverse}>
-        {current}
-      </Text>
-      {expanded && (
-        <>
-          <Text variant="monoLabel" color={theme.colors.text.inverse} style={styles.ghost}>
-            {below}
-          </Text>
-          <Text variant="monoLabel" color={theme.colors.text.inverse} style={styles.fieldLabel}>
-            {FIELD_LABEL[fieldKey]}
-          </Text>
-        </>
-      )}
+      {deltas.map((delta) => {
+        const dist = Math.abs(delta)
+        const opacity = dist === 0 ? 1 : dist === 1 ? 0.55 : 0.3
+        return (
+          <View key={delta} style={styles.cell}>
+            <Text
+              variant={dist === 0 ? 'bodyEmphasized' : 'body'}
+              color={theme.colors.text.primary}
+              style={{ opacity }}
+            >
+              {formatField(stepDate(playhead, fieldKey, delta), fieldKey)}
+            </Text>
+          </View>
+        )
+      })}
     </View>
   )
 }
@@ -252,12 +243,26 @@ const NOW_DOT = 7
 
 const styles = StyleSheet.create({
   bar: {
-    // No background for now — sits directly over the globe. (A translucent
-    // gradient below may come later.) Cream text carries the legibility.
     overflow: 'hidden',
+    // Retract from fully-transparent: the drawer's translucent glass so the
+    // dark DOBWheel-style ink reads over the globe and reads continuous with
+    // the drawer below.
+    backgroundColor: theme.colors.bg.glass,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border.subtle,
   },
   press: {
     flex: 1,
+  },
+  bandWrap: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+  },
+  band: {
+    height: ROW_H,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: theme.colors.border.strong,
   },
   row: {
     flex: 1,
@@ -268,22 +273,16 @@ const styles = StyleSheet.create({
   },
   field: {
     alignItems: 'center',
+  },
+  cell: {
+    height: ROW_H,
+    alignItems: 'center',
     justifyContent: 'center',
   },
   timeGroup: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.xxs,
-  },
-  colon: {
-    opacity: 0.6,
-  },
-  ghost: {
-    opacity: 0.3,
-  },
-  fieldLabel: {
-    marginTop: theme.spacing.xxs,
-    opacity: 0.55,
   },
   liveTag: {
     flexDirection: 'row',
@@ -294,7 +293,7 @@ const styles = StyleSheet.create({
     width: NOW_DOT,
     height: NOW_DOT,
     borderRadius: NOW_DOT / 2,
-    backgroundColor: theme.colors.text.inverse,
+    backgroundColor: theme.colors.text.muted,
   },
   nowBtn: {
     flexDirection: 'row',
@@ -310,5 +309,23 @@ const styles = StyleSheet.create({
     height: NOW_DOT,
     borderRadius: NOW_DOT / 2,
     backgroundColor: theme.colors.text.inverse,
+  },
+  fadeTop: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    height: ROW_H,
+    backgroundColor: theme.colors.bg.glass,
+    opacity: 0.6,
+  },
+  fadeBottom: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: ROW_H,
+    backgroundColor: theme.colors.bg.glass,
+    opacity: 0.6,
   },
 })
