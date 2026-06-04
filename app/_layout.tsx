@@ -6,6 +6,7 @@ import { StatusBar } from 'expo-status-bar'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useEffect, useRef } from 'react'
 import { ClerkProvider, useAuth } from '@clerk/clerk-expo'
+import { useFonts } from 'expo-font'
 import * as Notifications from 'expo-notifications'
 import { tokenCache } from '@/lib/tokenCache'
 import { env } from '@/lib/env'
@@ -156,6 +157,19 @@ function RootNavigator() {
 }
 
 export default function RootLayout() {
+  // Bundle the design-system fonts (loaded at runtime from local assets — no
+  // native rebuild). Keys are the family names the theme references, so
+  // `theme.typography.*` resolves to the real faces. A load error falls
+  // through to the system fallback rather than bricking startup.
+  const [fontsLoaded, fontError] = useFonts({
+    InterTight_500Medium: require('../assets/fonts/InterTight_500Medium.ttf'),
+    InterTight_600SemiBold: require('../assets/fonts/InterTight_600SemiBold.ttf'),
+    IBMPlexMono_500Medium: require('../assets/fonts/IBMPlexMono_500Medium.ttf'),
+    IBMPlexMono_700Bold: require('../assets/fonts/IBMPlexMono_700Bold.ttf'),
+  })
+
+  if (!fontsLoaded && !fontError) return null
+
   return (
     <ClerkProvider publishableKey={env.clerkPublishableKey} tokenCache={tokenCache}>
       <QueryClientProvider client={queryClient}>

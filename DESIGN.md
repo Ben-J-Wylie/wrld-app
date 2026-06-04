@@ -1655,10 +1655,9 @@ neighbours); tap expands (`motion.patterns.overlay`) to 5 rows so the ±2
 neighbours come into view above/below the band (over the globe).
 **Future cells are greyed** (`text.subtle`) — values after the present are
 unreachable, and the cue says so. **Focused, the centre value goes bold**
-(`fontWeight: '700'`) — blurred it reverts, and the ghost neighbours are
-never bold. (We don't bundle a separate bold *mono weight* — in fact the
-design fonts aren't bundled at all yet, so they fall back to the system
-font; the bold is a weight override, which the fallback honours.)
+via the real `IBMPlexMono_700Bold` face (`styles.boldCentre`, not a
+`fontWeight` override — static fonts don't synthesise); blurred it reverts
+to `IBMPlexMono_500Medium`, and the ghost neighbours are never bold.
 **Status slot:** "● LIVE" in **accent**
 (the one electric element, non-interactive) when live; "● PAST" muted +
 tappable (→ `onOffsetChange(0)`, jump back to live) when scrubbed. LIVE
@@ -1671,13 +1670,11 @@ year-month gap. The whole content is centred (`justifyContent: 'center'`)
 so the margin left-of-year equals the margin right-of-status. **Fixed
 per-field widths** (`FIELD_W`) + a fixed-width status slot mean a value
 change (e.g. JUL→AUG, or the live/NOW swap) never reflows the row. Every
-cell is `numberOfLines={1}` so a value can never wrap to two rows.
-**`FIELD_W` is provisional** — tuned against the *system fallback* font
-(the design fonts aren't bundled yet, see Section 6 / decision log). It
-should be re-tuned once **IBM Plex Mono** is bundled: monospace makes
-every month + digit a uniform, exact width, so the bold focused weight
-fits precisely with no wrap, clip, or guesswork. Until then bold "MAR"/
-"MAY" may sit a touch tight on the fallback font.
+cell is `numberOfLines={1}` as a backstop. `FIELD_W` is sized for **IBM
+Plex Mono** (now bundled — see Section 6 / decision log): monospace gives
+every month + digit a single, uniform advance that the bold focused face
+shares, so the bold centre never gets wider than its field — no wrap,
+clip, or guesswork.
 
 **Animated tick / dial slide.** Every value change — a live tick or a
 scrub step — animates the field's cell column by one row: newer scrolls
@@ -3529,6 +3526,33 @@ above. The seam is not a separate motion category.
 
 Append-only. Most recent first. Each entry: date, decision, rationale,
 constraint it imposes downstream.
+
+### 2026-06-04 — Design fonts actually bundled (Inter Tight + IBM Plex Mono)
+
+The design-system fonts were never loaded — `theme.typography.*` names families
+like `InterTight_600SemiBold` / `IBMPlexMono_500Medium`, but nothing registered
+them, so the whole app silently fell back to the system font. Bundled the **4
+weights actually referenced** (Inter Tight 500/600, IBM Plex Mono 500/700) via
+**runtime `useFonts`** in `app/_layout.tsx`, folded into the splash gate so
+there's no flash of fallback.
+
+**Decisions / constraints:**
+- **Runtime `useFonts`, not the native config-plugin.** The `useFonts` keys
+  *are* the family names, so they match the theme with zero token churn, and
+  there's **no EAS rebuild** (works in the existing dev client). Native embed
+  (which would need a rebuild) stays a v0.3 option — the family names don't
+  change, so it's a non-breaking swap later. `expo-font` is a declared direct
+  dep but is **NOT** in `app.json` plugins (that's the native-embed path).
+- **Files committed to `assets/fonts/`** (4 `.ttf`, ~890KB), sourced from the
+  `@expo-google-fonts/*` packages which were then removed — so no font npm deps
+  and nothing extra for Metro to watch (Ben's EMFILE budget).
+- **IBM Plex Mono 700 is a real face**, so the TimeScrubber bold focused centre
+  is `fontFamily: 'IBMPlexMono_700Bold'` (not a `fontWeight` override — static
+  fonts don't synthesise). Monospace ⇒ bold shares the medium advance ⇒ the
+  MAR/MAY wrap is gone and `FIELD_W` is exact (no longer provisional).
+- **Global visual shift:** every screen now renders the real design fonts
+  instead of system fallback — intended (the system was designed for them), but
+  worth eyeballing a few screens on device.
 
 ### 2026-06-04 — Time Machine: running-clock scrubber on the globe (UI v1)
 

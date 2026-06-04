@@ -38,12 +38,10 @@ type FieldKey = 'year' | 'month' | 'day' | 'hour' | 'minute' | 'second'
 
 const MONTH_ABBR = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
 
-// Fixed per-field widths so a value change never reflows the row. These are
-// tuned against the SYSTEM FALLBACK font (the design fonts aren't bundled
-// yet) — they're provisional and should be re-tuned once IBM Plex Mono is
-// bundled, since monospace makes every month/digit a uniform, exact width.
-// Cells are `numberOfLines={1}` so a value can never wrap to two rows even if
-// the bold focused weight slightly overflows a field on the fallback font.
+// Fixed per-field widths so a value change never reflows the row. Sized for
+// IBM Plex Mono at the monoLabel size — monospace means every glyph (and the
+// bold focused face) shares one advance, so these hold for both weights and
+// for every month/digit. Cells are `numberOfLines={1}` as a backstop.
 const FIELD_W: Record<FieldKey, number> = {
   year: 34,
   month: 28,
@@ -446,7 +444,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   boldCentre: {
-    fontWeight: '700',
+    // Real bold face (not a fontWeight override — static fonts don't
+    // synthesize). IBM Plex Mono is monospace, so bold has the same advance
+    // as the medium weight: the centre never gets wider than its field.
+    fontFamily: 'IBMPlexMono_700Bold',
   },
   gap: {
     width: theme.spacing.xl,
