@@ -363,20 +363,26 @@ working reference for both; matching DECIDED sections live in
   broadcasting. The durable user-facing version of this promise is the Capture
   Privacy Constitution (pre-launch backlog).
 
-> **App UI as shipped (2026-06-03/04) diverges on a few points** — kept in
-> sync here so this section reads true against the build. The decided model
-> above is still the cross-repo (backend / mediasoup) contract; the app made
-> these v0.2 UX calls: (1) a **single in-place Go Live / Stop button**, not
-> two — the per-source Air/Rec toggles are the source of truth (armed → live);
-> (2) **broadcasting happens on the dashboard headlessly** (no StreamScreen
-> hop, no preview/viewer-count/chat/recording on it yet); (3) the
-> **SENSITIVE/BENIGN badges + the record-consent step are removed for now**
-> (the guardrail's consent half is temporarily relaxed; the on-air-vs-recording
-> indicator stays — re-enable before non-friends-and-family exposure); (4) the
-> identity flag's UI label is **Public** / Anon; (5) dashboard location
-> precision labels are **EXACT / CITY / COUNTRY / PRIVATE** (the separate
+> **App UI as shipped diverges on a few points** — kept in sync here so this
+> section reads true against the build. The decided model above is still the
+> cross-repo (backend / mediasoup) contract; the app made these v0.2 UX calls:
+> (1) **the dashboard arms Air only** — the per-source **Rec toggle was removed
+> 2026-06-04**; recording is a single **Record button on the stream view** that
+> records whatever is on air. *(2026-06-03 had Air+Rec per source on the
+> dashboard with one commit button — superseded.)* (2) **Go Live navigates to
+> the stream view** (`stream/new`), which goes live on arrival — no intermediate
+> "Start stream" step. *(2026-06-03 broadcast headlessly in place on the
+> dashboard — superseded 2026-06-04.)* In-app navigation keeps the broadcast
+> alive (the stream tab never unmounts); a tab-bar **live-return bar** + the
+> globe's **black self-pin** navigate back; backgrounding/closing still end it.
+> (3) the **SENSITIVE/BENIGN badges + the record-consent step are removed for
+> now** (the guardrail's consent half is temporarily relaxed; the
+> on-air-vs-recording indicator stays — re-enable before non-friends-and-family
+> exposure); (4) the identity flag's UI label is **Public** / Anon; (5) dashboard
+> location precision labels are **EXACT / CITY / COUNTRY / PRIVATE** (the separate
 > `LocationGranularityPicker` feature keeps its own `bluedot` vocabulary). Full
-> detail + caveats in **App-side build** below and the DESIGN.md decision log.
+> detail: the **June 2026 (Record moves to the stream view…)** update section
+> near the end of this file + the DESIGN.md decision log.
 
 ### Editing model — per-source manifest (DECIDED June 2026)
 
@@ -448,12 +454,24 @@ profile/library decision. C6 last.
 
 ### App-side build (Ben, `design`, 2026-06-03) — C2 done + C3 advanced
 
+> **⚠️ Partially superseded 2026-06-04.** Two of this session's calls were
+> reversed — the per-source **Rec toggle was removed from the dashboard**
+> (recording is now a single Record button on the stream view), and the
+> **headless dashboard broadcast was replaced** by Go Live navigating to the
+> stream view (which auto-goes-live). The component inventory and the rest of
+> this section still stand. See **Updates — June 2026 (Record moves to the
+> stream view…)** near the end of this file for the current model. Inline
+> markers below flag the two reversed bullets.
+
 Ben built the Go Live & Record dashboard end-to-end this session on `design`,
 which **advances into what the split scoped as Aaron's C3** (`DashboardScreen`
 assembly). Flagged here so Aaron doesn't rebuild it and the `design → main`
 merge is coordinated. Two model refinements Ben made this session:
 
-- **One commit button, not two.** The per-source Air/Rec toggles are the single
+- **One commit button, not two.** *(⚠️ Superseded 2026-06-04: the Rec toggle was
+  removed from the dashboard — it arms Air only; recording moved to a Record
+  button on the stream view. The single Go Live button remains, but no longer
+  has a "START RECORDING" mode.)* The per-source Air/Rec toggles are the single
   source of truth (set-it-and-forget-it); a single docked **Go Live** button
   commits whatever they say and never flips them. The `Toggle` primitive gained
   an **`armed`** state (on-position, outline-not-fill) so an on-but-not-yet-live
@@ -499,7 +517,10 @@ removed; the on-air-vs-recording indicator stays). `RecordConsentSheet`
 remains a shipped feature for when consent returns — re-enable before any
 non-friends-and-family exposure. See DESIGN.md decision log.
 
-**Headless broadcast on the dashboard (2026-06-03, late).** Go Live now
+**Headless broadcast on the dashboard (2026-06-03, late).** *(⚠️ Reversed
+2026-06-04 — Go Live now navigates to the stream view, which auto-goes-live;
+the dashboard no longer broadcasts in place. The paragraph below describes the
+retired headless approach.)* Go Live now
 starts/stops the stream **in place** on the dashboard (reusing
 `useSignaling` + `useMediasoup`) — no navigation to `StreamScreen`. The
 armed toggles flip to live and the button becomes STOP STREAM. Caveats:
@@ -1818,3 +1839,94 @@ When a viewer has access to a `scheduled` event:
 - On **409** `{ error: 'event_overlap' }`: Alert "Schedule conflict — overlaps with '…'". No navigation.
 - On **200 + `warning: 'duration_unknown_overlap'`**: Alert "Possible overlap" shown after successful save/navigate.
 - New `EventOverlapError` type exported from `ppvApi` for typed error handling.
+
+---
+
+## Updates — June 2026 (Record moves to the stream view; dashboard Air/Rec + headless broadcast reversed)
+
+Reverses two earlier clips-initiative app calls (the 2026-06-03 "single
+commit button" / "headless broadcast on the dashboard" entries above). The
+DESIGN.md decision-log entry of 2026-06-04 is canonical.
+
+### The model now
+
+- **Dashboard arms Air only.** The per-source **Rec** toggle is gone from the
+  dashboard — each `FeedRow` shows just the Air affordance, plus the Identity
+  (Public/Anon) flag and Location precision controls. The persisted capture
+  config no longer has a `rec` set.
+- **Record lives on the stream view.** A single **Record** button (already
+  present in `StreamScreen`) records whatever is on air; each recording becomes
+  a clip in the Library. The recordings → Library pipeline is unchanged
+  (`recordingsApi.start/stop`, `useRecordings`, `LibraryScreen`).
+- **Go Live navigates to the stream view and auto-goes-live.** No in-place
+  headless broadcast on the dashboard, and no intermediate "Start stream" step
+  on `StreamScreen` — the broadcaster lands on their live page immediately.
+  Data-only broadcasts (no camera/audio armed) are still allowed.
+
+### Files changed (app, `design` branch)
+
+- **`src/components/screens/DashboardScreen.tsx`** — removed `useSignaling` /
+  `useMediasoup` / headless go-live + `AppState`/`streamEnded` stop effects and
+  the `rec` state. `handleGoLive` now profanity-checks, stashes intent in
+  `activeBroadcast` (incl. `ppvEventId`), and `router.push`es to
+  `/(app)/stream/[id]` (`id: 'new'`) with title/sources/lat/lng/subscribersOnly/
+  precision params. `canGoLive` requires any aired source. `GoBar` is just
+  armed/disabled "GO LIVE" (no live/recordOnly states).
+- **`src/components/screens/StreamScreen.tsx`** — broadcaster auto-goes-live in
+  the focus effect (guarded via a `statusRef` so it fires on a fresh
+  navigation / re-entry after a drop, but not on a plain refocus while live);
+  `handleGoLive` allows empty `broadcastSources` (data-only) and forwards
+  `ppvEventId` from `activeBroadcast`; on app-background the broadcaster is sent
+  to the dashboard (so the "Going live…" idle frame can't get stuck); the idle
+  "Start stream" arming preview + `CoordHUD` are retired.
+- **`src/components/features/broadcast/FeedRow.tsx`** — new **`showRec`** prop
+  (default `true`); the Rec affordance only renders when `showRec`. The gallery
+  keeps both; the dashboard passes `showRec={false}`.
+- **`src/lib/captureConfig.ts`** — dropped the `rec` field from `CaptureConfig`
+  and the default (old persisted `rec` keys are ignored harmlessly).
+- **`src/lib/activeBroadcast.ts`** — dropped `record`, added `ppvEventId`.
+
+### Live-return bar (same day)
+
+In-app navigation must keep the broadcast alive (only Leave / app-background /
+close end it). The stream tab never unmounts, so the broadcast already survives
+tab switches — the gap was getting back. Added a persistent **`LiveReturnBar`**
+above the tab bar:
+
+- **`src/stores/broadcastStore.ts`** — new Zustand store (`isLive`). `StreamScreen`
+  sets it from `status === 'in-room'` (broadcaster only) and clears it on
+  Leave / start-new / drop / admin-end.
+- **`app/(app)/_layout.tsx`** — `Tabs` now takes a `tabBar` prop that renders
+  `LiveReturnBar` above `@react-navigation/bottom-tabs`' `BottomTabBar`. The bar
+  shows while `isLive` (and not already on `/stream/`), and on tap navigates to
+  `stream/new` (carrying title/sources/etc. from `activeBroadcast`); the focus
+  effect sees the stream still in-room and does not restart it.
+
+The shared navigation lives in `returnToActiveBroadcast()`
+(`src/lib/activeBroadcast.ts`), reused by both the tab-bar bar and the globe.
+
+### Own stream on the globe (same day)
+
+In `GlobeScreenMapbox`, the broadcaster's own live stream (matched by
+`hostId === wrldUser.id`):
+
+- is **excluded from the drawer** (peek rail + expanded list) and from the
+  pin/cluster cards (all other curation rules unchanged);
+- still shows a **pin, rendered black** (`#111111`) — an `isSelf` GeoJSON
+  property feeds a `case` in the exact / city / country single-pin
+  `CircleLayer`s;
+- **tapping the black pin** calls `returnToActiveBroadcast()` (the same return
+  link) instead of opening a join card.
+
+**Pin numbers (same day).** Numbers on the globe are now **clusters-only** — the
+single-pin viewer-count `SymbolLayer` was removed, so single pins (any
+precision) show no number. The cluster count **excludes the viewer's own
+stream**: a `selfCount` cluster property (sum of `isSelf`) is subtracted from
+`point_count` for the displayed `cluster-count` label.
+
+### Not yet tested on device
+
+Auto-go-live timing, re-entry after a connection drop, the background→dashboard
+navigation, the live-return bar (visual stacking above the tab bar, return nav
+restoring the camera preview), and the globe self-pin (black render + tap-to-
+return + drawer exclusion) all need an on-device pass.

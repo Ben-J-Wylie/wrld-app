@@ -2562,6 +2562,13 @@ the shipped row composes two `Toggle`s. The location ceiling reuses
 `LocationGranularityPicker` card — the picker is too heavy for an inline
 footer.
 
+**Rec affordance now optional (2026-06-04).** Recording moved off the dashboard
+to a single Record button on the stream view (see the decision log). `FeedRow`
+gained a **`showRec`** prop (default `true`) — the Rec Toggle only renders when
+`showRec`. `DashboardScreen` passes `showRec={false}` (it arms **Air only**
+now); the gallery keeps the default so the two-affordance capability stays
+documented for a future per-source record surface (e.g. the clip editor).
+
 ---
 
 ##### `FeedThumb`
@@ -3526,6 +3533,69 @@ above. The seam is not a separate motion category.
 
 Append-only. Most recent first. Each entry: date, decision, rationale,
 constraint it imposes downstream.
+
+### 2026-06-04 — Record moves off the dashboard to the stream view; headless broadcast reversed
+
+The dashboard's **per-source Air/Rec two-affordance model is reversed**. The
+dashboard now arms **Air only** (plus the Identity flag and Location precision
+controls); there is no Rec toggle on it anymore. Recording is now a **single
+Record button on the stream view** — pressing it records whatever is on air;
+each recording becomes a clip in the user's Library (the recordings → Library
+pipeline already existed and is unchanged).
+
+In the same change, the **headless dashboard broadcast is reversed**: Go Live no
+longer goes live in place on the dashboard. It now **navigates to the stream
+view** (`stream/new`), which **auto-goes-live on arrival** — there is no
+intermediate "Start stream" step. The broadcaster lands on their live stream
+page, where the Record button lives.
+
+**Rationale (Ben):** the capture model is simpler as "arm what airs, then
+record what airs" — one record control in one place, at the moment of
+broadcast, instead of a second per-source dimension set-and-forgotten on the
+dashboard. Putting the Record button on the stream view requires the broadcaster
+to actually be there, which is why headless is reversed.
+
+**Constraints downstream:**
+- `FeedRow` keeps its two-affordance capability behind a new **`showRec` prop**
+  (default `true`, so the gallery still documents Air+Rec); `DashboardScreen`
+  passes `showRec={false}`. `Toggle.armed` is unaffected.
+- `captureConfig` dropped its `rec` set (Air-only now). `activeBroadcast` dropped
+  `record` and gained `ppvEventId` (so the rerouted go-live still links PPV
+  events — previously only the headless path forwarded it).
+- `StreamScreen` auto-goes-live on focus (guarded so refocusing while live
+  doesn't restart); data-only broadcasts (no camera/audio) are allowed; the
+  broadcaster is sent to the dashboard on app-background so the screen never
+  sits stuck on the "Going live…" frame. `CoordHUD` / the idle arming preview on
+  StreamScreen are retired.
+- The on-air-vs-recording indicator (`BroadcastStatusIndicator`) and the Record
+  button itself were already on the stream view — only the dashboard side and
+  the navigation changed. **Needs on-device testing** (auto-go-live timing,
+  re-entry after a drop, background→dashboard nav).
+
+**Live-return bar (same day).** Navigating to another page in-app must NOT end
+the broadcast — only the stream view's Leave, app-background, and close do. The
+stream tab never unmounts, so the broadcast already survives in-app navigation;
+the missing piece was a way back. A persistent **`LiveReturnBar`** now sits
+directly above the tab bar (rendered via the `Tabs` `tabBar` prop wrapping
+`BottomTabBar`) whenever a broadcast is live — a `LivePill` + "Return to your
+stream" + chevron, tapping it navigates back to `stream/new` (which sees the
+stream still in-room and does not restart it). Backed by a new reactive
+`useBroadcastStore` (`isLive`), set by `StreamScreen` while the broadcaster is
+in-room and cleared on every end path. Hidden while already on the stream view.
+The navigation is shared via `returnToActiveBroadcast()` in `lib/activeBroadcast`.
+
+**Own stream on the globe (same day).** A streamer never sees their own stream in
+the globe drawer or the pin cards (filtered by `hostId === my user id` in
+`GlobeScreenMapbox`). Their own pin still shows, rendered **black**
+(`#111111`, via an `isSelf` GeoJSON property added to each of the exact/city/
+country single-pin layers) — tapping it calls `returnToActiveBroadcast()` (same
+path as the tab-bar link) instead of opening a join card. Self is also filtered
+out of cluster-leaf cards. All other drawer curation rules are unchanged.
+
+**Pin numbers are clusters-only (same day).** The single-pin viewer-count label
+was removed — numbers on the globe now appear only on clusters. The cluster
+count excludes the viewer's own stream (a `selfCount` cluster property is
+subtracted from `point_count` in the `cluster-count` label).
 
 ### 2026-06-04 — Sans weight scale dialled down one step
 
