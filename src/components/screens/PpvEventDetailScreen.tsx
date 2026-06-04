@@ -1,4 +1,4 @@
-import { Alert, Linking, StyleSheet, View } from 'react-native'
+import { ActivityIndicator, Alert, Linking, StyleSheet, View } from 'react-native'
 import { useCallback, useEffect, useState } from 'react'
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -22,24 +22,13 @@ function formatCountdown(targetIso: string): string {
   return `${mins}m`
 }
 
-function formatEventTime(isoUtc: string): string {
-  const d = new Date(isoUtc)
-  return d.toLocaleString('en-US', {
-    weekday: 'short',
-    month: 'short',
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleString('en-US', {
+    weekday: 'long',
+    month: 'long',
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
-    timeZoneName: 'short',
-  })
-}
-
-function formatCreatorTime(isoUtc: string, tz: string): string {
-  return new Date(isoUtc).toLocaleString('en-US', {
-    timeZone: tz,
-    hour: 'numeric',
-    minute: '2-digit',
-    timeZoneName: 'short',
   })
 }
 
@@ -51,18 +40,20 @@ export function PpvEventDetailScreen() {
   const [purchasing, setPurchasing] = useState(false)
   const [accessStatus, setAccessStatus] = useState<{ hasAccess: boolean; free: boolean } | null>(null)
 
-  // Load event from cache populated by ProfileScreen, or re-fetch via the handle param
+  // Try cache first (seeded by ProfileScreen), then fetch if needed
   const cachedEvents = handle
     ? (qc.getQueryData<Awaited<ReturnType<typeof ppvApi.getCreatorEvents>>>(['ppv-events-profile', handle]) ?? [])
     : []
-  const eventData = cachedEvents.find(e => e.id === id) ?? null
+  const cachedEvent = cachedEvents.find(e => e.id === id) ?? null
 
-  const { data: fetchedEvents } = useQuery({
+  const { data: fetchedEvents, isLoading } = useQuery({
     queryKey: ['ppv-events-profile', handle],
     queryFn: () => ppvApi.getCreatorEvents(handle!),
-    enabled: !!handle && cachedEvents.length === 0,
+    enabled: !!handle && !cachedEvent,
+    staleTime: 60_000,
   })
-  const event = eventData ?? fetchedEvents?.find(e => e.id === id) ?? null
+
+  const event = cachedEvent ?? fetchedEvents?.find(e => e.id === id) ?? null
 
   useFocusEffect(useCallback(() => {
     if (!isSignedIn) return
@@ -107,91 +98,119 @@ export function PpvEventDetailScreen() {
 
   const hasAccess = accessStatus?.hasAccess ?? event?.hasAccess ?? false
   const isFreeAccess = accessStatus?.free ?? false
+  const isLive = event?.status === 'live'
+
+  if (isLoading && !event) {
+    return (
+      <ScreenScroll contentContainerStyle={styles.content}>
+        <View style={styles.loadingWrap}>
+          <ActivityIndicator color={theme.colors.accent.default} />
+        </View>
+        <Button label="Back" variant="secondary" onPress={() => router.back()} />
+      </ScreenScroll>
+    )
+  }
+
+  if (!event) {
+    return (
+      <ScreenScroll contentContainerStyle={styles.content}>
+        <Text variant="body" color={theme.colors.text.muted} style={styles.center}>
+          Event not found.
+        </Text>
+        <Button label="Back" variant="secondary" onPress={() => router.back()} />
+      </ScreenScroll>
+    )
+  }
 
   return (
     <ScreenScroll contentContainerStyle={styles.content}>
-      <View style={styles.icon}><Icon name="video" size="lg" color={theme.colors.accent.default} /></View>
-
-      {/* ── Title & creator ───────────────────────────────── */}
-      <View style={styles.center}>
-        <Text variant="heading" style={styles.textCenter}>
-          {event?.title ?? 'PPV Event'}
-        </Text>
-        {event?.host && (
-          <Text variant="caption" color={theme.colors.text.muted} style={styles.textCenter}>
-            @{event.host.handle}
-          </Text>
-        )}
-        {event?.description && (
-          <Text variant="body" color={theme.colors.text.muted} style={styles.textCenter}>
-            {event.description}
-          </Text>
+      {/* ── Header ──────────────────────────────────────────── */}
+      <View style={styles.titleRow}>
+        <Text variant="heading" style={styles.flex}>{event.title}</Text>
+        {isLive && (
+          <View style={styles.liveBadge}>
+            <Text variant="monoCaption" color={theme.colors.text.inverse}>LIVE</Text>
+          </View>
         )}
       </View>
 
-      {/* ── Price + schedule ─────────────────────────────── */}
-      {event && (
-        <View style={styles.card}>
-          <View style={styles.row}>
-            <Icon name="tag" size="sm" color={theme.colors.text.muted} />
-            <Text variant="body">${(event.priceUsd / 100).toFixed(2)}</Text>
-            {event.subscribersFreeAccess && (
-              <Text variant="caption" color={theme.colors.text.muted}> · Free for subscribers</Text>
-            )}
-          </View>
-          {countdown.length > 0 && (
-            <View style={styles.row}>
-              <Icon name="clock" size="sm" color={theme.colors.text.muted} />
-              <Text variant="body">Starts in {countdown}</Text>
-            </View>
-          )}
-          {event.durationMinutes && (
-            <View style={styles.row}>
-              <Icon name="clock" size="sm" color={theme.colors.text.muted} />
-              <Text variant="body">~{event.durationMinutes} min</Text>
-            </View>
-          )}
-          {event.replayAccess && (
-            <View style={styles.row}>
-              <Icon name="film" size="sm" color={theme.colors.text.muted} />
-              <Text variant="body">Replay access included</Text>
-            </View>
-          )}
-        </View>
+      {event.host && (
+        <Text variant="caption" color={theme.colors.text.muted}>by @{event.host.handle}</Text>
       )}
 
-      {/* ── Access status ─────────────────────────────────── */}
+      {event.description ? (
+        <Text variant="body" color={theme.colors.text.muted}>{event.description}</Text>
+      ) : null}
+
+      {/* ── Event details ───────────────────────────────────── */}
+      <View style={styles.card}>
+        <View style={styles.row}>
+          <Icon name="calendar" size="sm" color={theme.colors.text.muted} />
+          <Text variant="body">{formatDate(event.scheduledAt)}</Text>
+        </View>
+        {countdown ? (
+          <View style={styles.row}>
+            <Icon name="clock" size="sm" color={theme.colors.accent.default} />
+            <Text variant="body" color={theme.colors.accent.default}>
+              {isLive ? 'Live now' : `Starts in ${countdown}`}
+            </Text>
+          </View>
+        ) : null}
+        {event.durationMinutes ? (
+          <View style={styles.row}>
+            <Icon name="clock" size="sm" color={theme.colors.text.muted} />
+            <Text variant="body">~{event.durationMinutes} min</Text>
+          </View>
+        ) : null}
+        <View style={styles.row}>
+          <Icon name="tag" size="sm" color={theme.colors.text.muted} />
+          <Text variant="body">${(event.priceUsd / 100).toFixed(2)}</Text>
+          {event.subscribersFreeAccess && (
+            <Text variant="caption" color={theme.colors.accent.default}> · free for subscribers</Text>
+          )}
+        </View>
+        {event.replayAccess && (
+          <View style={styles.row}>
+            <Icon name="film" size="sm" color={theme.colors.text.muted} />
+            <Text variant="body">Replay access included</Text>
+          </View>
+        )}
+      </View>
+
+      {/* ── Access / purchase ───────────────────────────────── */}
       {hasAccess ? (
         <View style={styles.accessGranted}>
           <Icon name="check-circle" size="md" color={theme.colors.accent.default} />
-          <Text variant="body" color={theme.colors.accent.default}>
-            {isFreeAccess ? 'Free access (subscriber)' : 'Access purchased ✓'}
+          <Text variant="bodyEmphasized" color={theme.colors.accent.default}>
+            {isFreeAccess ? 'Free access — you\'re a subscriber' : 'Access purchased ✓'}
           </Text>
-          <HelpText>You'll receive a notification when the stream starts.</HelpText>
+          {!isLive && (
+            <HelpText>You'll receive a notification when the stream starts.</HelpText>
+          )}
+          {isLive && (
+            <Text variant="caption" color={theme.colors.text.muted}>
+              The stream is live — join from the creator's profile.
+            </Text>
+          )}
         </View>
       ) : (
         <View style={styles.purchaseArea}>
-          <Text variant="body" color={theme.colors.text.muted} style={styles.textCenter}>
-            Purchase once to watch live{event?.replayAccess ? ' and keep replay access' : ''}.
-          </Text>
           <Button
-            label={purchasing ? 'Opening checkout…' : `Buy access · $${event ? (event.priceUsd / 100).toFixed(2) : '—'}`}
+            label={purchasing ? 'Opening checkout…' : `Buy ticket · $${(event.priceUsd / 100).toFixed(2)}`}
             onPress={handlePurchase}
             disabled={purchasing}
           />
+          <Text variant="caption" color={theme.colors.text.muted} style={styles.center}>
+            One-time purchase. {event.replayAccess ? 'Includes replay access.' : ''}
+            {event.subscribersFreeAccess ? '\nSubscribers get free access.' : ''}
+          </Text>
           {!isSignedIn && (
-            <HelpText style={styles.textCenter}>
-              Sign in to purchase access
-            </HelpText>
+            <HelpText style={styles.center}>Sign in to purchase access.</HelpText>
           )}
         </View>
       )}
 
-      <Button
-        label="Back"
-        variant="secondary"
-        onPress={() => router.back()}
-      />
+      <Button label="Back" variant="secondary" onPress={() => router.back()} />
     </ScreenScroll>
   )
 }
@@ -199,25 +218,39 @@ export function PpvEventDetailScreen() {
 const styles = StyleSheet.create({
   content: {
     padding: theme.spacing.lg,
-    gap: theme.spacing.lg,
+    gap: theme.spacing.md,
     alignItems: 'stretch',
     paddingBottom: theme.spacing.xxxl,
   },
-  icon: {
-    alignSelf: 'center',
+  loadingWrap: {
+    paddingVertical: theme.spacing.xxl,
+    alignItems: 'center',
   },
   center: {
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-  },
-  textCenter: {
     textAlign: 'center',
+  },
+  flex: {
+    flex: 1,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: theme.spacing.sm,
+  },
+  liveBadge: {
+    backgroundColor: '#D0233A',
+    borderRadius: theme.radius.md,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 3,
+    marginTop: 2,
   },
   card: {
     backgroundColor: theme.colors.bg.elevated,
-    borderRadius: 12,
+    borderRadius: theme.radius.md,
     padding: theme.spacing.md,
     gap: theme.spacing.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.border.subtle,
   },
   row: {
     flexDirection: 'row',
@@ -229,10 +262,11 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
     padding: theme.spacing.lg,
     backgroundColor: theme.colors.bg.elevated,
-    borderRadius: 12,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border.subtle,
   },
   purchaseArea: {
-    gap: theme.spacing.md,
-    alignItems: 'stretch',
+    gap: theme.spacing.sm,
   },
 })
