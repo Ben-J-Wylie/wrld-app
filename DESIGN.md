@@ -1679,8 +1679,18 @@ drag — a near-still release toggles expand, a vertical drag (when
 expanded) dials. There is **no wrapping Pressable**: an earlier version
 wrapped the bar in one for tap-to-expand, and it swallowed the touch so
 the dials wouldn't scroll. The scrub clamps at the present, so you can't
-dial into the future. (`onPanResponderTerminationRequest: false` keeps a
-parent scroll from stealing a drag mid-gesture.)
+dial into the future — and that clamp is the **only** way one wheel moves
+the others: dialling forward past now snaps the whole clock back to live.
+(`onPanResponderTerminationRequest: false` keeps a parent scroll from
+stealing a drag mid-gesture.)
+
+**Carry is intentional.** The dial uses native `Date` arithmetic
+(`stepDate`), so scrolling a wheel past its boundary **carries into the
+wheel on its left** — dialling the month back past JAN rolls to DEC *and*
+ticks the year down; hour past 00 borrows a day. Ben likes this; don't
+"fix" it into independent wheels. The YEAR wheel needs multi-year range to
+move, so `minYear` defaults to **10 years back** (`DEFAULT_MIN_YEAR`) —
+the real data floor (WRLD launched 2026) is the backend's call.
 
 **Surface.** No bar background — the band is the only fill (over the globe,
 the neighbours sit on the transparent area when expanded). The earlier

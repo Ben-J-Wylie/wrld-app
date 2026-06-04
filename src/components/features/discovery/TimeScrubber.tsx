@@ -104,7 +104,12 @@ type Props = {
   style?: StyleProp<ViewStyle>
 }
 
-export function TimeScrubber({ offsetMs, onOffsetChange, minYear = 2026, style }: Props) {
+// Default floor: 10 years back, so the YEAR wheel actually has room to spin.
+// (WRLD only has clips from 2026 on — the real data floor is the backend's
+// call; this just keeps the dial from being stuck on a single year.)
+const DEFAULT_MIN_YEAR = new Date().getFullYear() - 10
+
+export function TimeScrubber({ offsetMs, onOffsetChange, minYear = DEFAULT_MIN_YEAR, style }: Props) {
   const [expanded, setExpanded] = useState(false)
   // Force a re-render every second so the playhead ticks (live and playback).
   const [, setTick] = useState(0)
