@@ -14,6 +14,11 @@
 // Knob on the right slides between "READY" / "GO" / "STOP" by variant.
 // Animation is opt-in: state transitions render new bg + label
 // instantly; consumers add layout transitions externally if needed.
+//
+// `label` / `knobLabel` override the per-variant defaults — used by the
+// record-commit CTA on the Go Live & Record screen (clips initiative),
+// where the same armed bar reads "START RECORDING" / "REC" instead of
+// "GO LIVE" / "GO".
 
 import { useEffect, useRef } from 'react'
 import {
@@ -33,6 +38,8 @@ export type GoBarVariant = 'idle' | 'armed' | 'counting' | 'live' | 'disabled'
 type Props = {
   variant: GoBarVariant
   countdownSec?: number
+  label?: string
+  knobLabel?: string
   onPress?: () => void
   style?: StyleProp<ViewStyle>
 }
@@ -53,8 +60,10 @@ const KNOB_LABEL: Record<GoBarVariant, string> = {
   disabled: '—',
 }
 
-export function GoBar({ variant, countdownSec, onPress, style }: Props) {
+export function GoBar({ variant, countdownSec, label, knobLabel, onPress, style }: Props) {
   const tintedBg = variant === 'armed' || variant === 'counting' || variant === 'live'
+  const barLabel = label ?? LABEL[variant]
+  const barKnobLabel = knobLabel ?? KNOB_LABEL[variant]
   const pulse = useRef(new Animated.Value(0)).current
 
   useEffect(() => {
@@ -79,7 +88,7 @@ export function GoBar({ variant, countdownSec, onPress, style }: Props) {
       onPress={onPress ?? (() => {})}
       disabled={variant === 'disabled' || !onPress}
       accessibilityRole="button"
-      accessibilityLabel={LABEL[variant]}
+      accessibilityLabel={barLabel}
       style={[
         styles.bar,
         tintedBg && styles.tinted,
@@ -89,7 +98,7 @@ export function GoBar({ variant, countdownSec, onPress, style }: Props) {
     >
       <View style={styles.labelCol}>
         <Text variant="bodyEmphasized" color={tintedBg ? theme.colors.accent.default : theme.colors.text.primary}>
-          {LABEL[variant]}
+          {barLabel}
         </Text>
         {variant === 'counting' && countdownSec !== undefined && (
           <Text variant="monoLabel" color={theme.colors.accent.default}>
@@ -108,7 +117,7 @@ export function GoBar({ variant, countdownSec, onPress, style }: Props) {
           <Icon name="square" size="md" color={theme.colors.text.inverse} />
         ) : (
           <Text variant="monoLabel" color={tintedBg ? theme.colors.text.inverse : theme.colors.text.primary}>
-            {KNOB_LABEL[variant]}
+            {barKnobLabel}
           </Text>
         )}
       </Animated.View>

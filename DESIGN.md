@@ -2387,35 +2387,39 @@ itself is v0.3.
 
 ##### `FeedRow`
 
-- **Tier:** feature (composes FeedThumb + Text + Toggle)
+- **Tier:** feature (composes FeedThumb + Text + Toggle + Icon)
 - **Location:** `src/components/features/broadcast/FeedRow.tsx`
-- **Variants:** one per layer (`cam`, `audio`, `screen`, `loc`, `gyro`, `compass`, `profile`)
+- **Variants:** one per layer (`cam`, `audio`, `screen`, `loc`, `gyro`, `compass`)
 - **Sizes:** md
-- **States:** off (neutral), armed (accent border + accent.surface bg), broadcasting (same + "BROADCASTING ·" detail prefix), denied (opacity 0.55, Toggle disabled, "PERMISSION DENIED ·" prefix), disabled (opacity 0.55, Toggle disabled)
-- **Used in:** populated in 12.6
-- **Tweak impact:** Go Live arming screen
-- **Shipped:** 2026-05-31 (sub-phase 12.5)
+- **States:** per-affordance air on/off + rec on/off (all four combinations valid); availability `available` / `denied` ("PERMISSION DENIED ·") / `disabled` ("COMING SOON ·" — dimmed 0.55, toggles locked); sensitive sources show a lock hint on the Rec affordance until consented
+- **Used in:** `DashboardScreen` (Go Live & Record arming) — 2026-06-03
+- **Tweak impact:** Go Live & Record arming screen
+- **Shipped:** 2026-05-31 (sub-phase 12.5). **Redesigned 2026-06-03** to the two-affordance capture model (clips initiative · C2).
 
-**Mock says:** Row: animated thumb (76×60, layer-specific
-visualization — see `FeedThumb` next) + meta (label + detail) + Toggle.
-**Armed** state has accent-tinted border + tinted background. **Broadcasting**
-state has live-tinted border. **Denied** opacity 0.55 (OS permission
-declined).
+**Mock says:** Row: thumb + meta (label + sensitivity tag + detail) +
+TWO affordances per source — **Air** (broadcast live) and **Rec** (save
+to device). Sensitive sources gate Rec through a consent step. Location
+carries a precision-ceiling sub-control below the row.
 
-**Code does (shipped):** Row layout — FeedThumb on the left (active=true
-when state is armed or broadcasting), label + detail column in the
-middle, Toggle on the right. State drives the row's border + bg tone +
-detail prefix; the consumer manages `on` separately so a user can
-toggle off without changing the OS-driven `state`.
+**Code does (shipped 2026-06-03):** Border-less row (FeedThumb + meta
+column with a SENSITIVE/BENIGN tag + the two labelled `AIR` / `REC`
+Toggles). `recNeedsConsent` shows a lock Icon by the Rec label while
+off — the consumer intercepts `onRecChange(true)` to present
+`RecordConsentSheet` before flipping. `availability` (`denied` /
+`disabled`) dims the row and locks both toggles. The optional `footer`
+slot renders a full-width sub-control under the row (DashboardScreen
+passes a 4-segment precision ceiling for `loc`). `showBorderTop`
+follows the SettingsRow grouping contract so a parent can wrap the rows
+in one bordered container with hairline dividers.
 
-**Planned (clips initiative · C2 · Ben / `design`):** extend the single Toggle to
-a **two-dimension control** — a **broadcast** affordance and a **record**
-affordance per source, built from `SegmentedToggle` (not a new control). Sensitive
-sources (cam / audio / loc; screen OPEN) route their record affordance through a
-visible consent step rather than toggling silently; the `loc` variant exposes a
-precision sub-control (reuse `LocationGranularityPicker`) as the capture ceiling.
-Keep the OS-driven `denied` / `disabled` states gating selectability. See the
-2026-06-03 decision-log entry.
+**Composition note.** The 2026-06-03 plan proposed building the two
+affordances from `SegmentedToggle`; the chosen go-live-record mock uses
+two independent Toggles (air can be on without rec and vice versa — a
+segmented Live/Vault/Off control can't express air-without-record), so
+the shipped row composes two `Toggle`s. The location ceiling reuses
+`SegmentedToggle` (4 options) rather than the full
+`LocationGranularityPicker` card — the picker is too heavy for an inline
+footer.
 
 ---
 
@@ -2475,29 +2479,90 @@ tint + label + knob copy:
 A full countdown ring overlay was scoped out for v1 — the mono caption
 carries the seconds and the live-state pulse covers the dramatic tone.
 
-**Planned (clips initiative · C2 · Ben / `design`):** add **Record** button states
-alongside the Go Live states, since recording is independent of going live (two
-buttons). Whether that's a GoBar variant set or a sibling control is Ben's
-inventory call. See the 2026-06-03 decision-log entry.
+**Clips-initiative resolution (shipped 2026-06-03 · C2):** the record
+intent is split into a sibling control rather than new GoBar variants —
+the **ArmButton** pair (Go Live · Record) at the top of the screen owns
+the two intents, and GoBar stays the single docked commit. GoBar gained
+optional `label` / `knobLabel` overrides so the same `armed` bar can read
+"START RECORDING" / "REC" for the record-only commit. See the 2026-06-03
+decision-log entry and the `ArmButton` entry below.
 
 ---
 
-##### `BroadcastStatusIndicator` (planned)
+##### `ArmButton`
 
-- **Tier:** feature (likely composes Pill + Text + Icon) — **or inline**, TBD
-- **Location:** `src/components/features/broadcast/` (if extracted)
-- **Status:** **Planned (clips initiative · C2 · Ben / `design`)** — not built
-- **Tweak impact:** broadcaster live overlay (StreamScreen)
+- **Tier:** feature (composes Pressable + Icon + Text)
+- **Location:** `src/components/features/broadcast/ArmButton.tsx`
+- **Variants:** Go Live (passes `iconName`) · Record (omits `iconName` → renders a filled accent dot)
+- **States:** `idle` (neutral surface, hollow dot), `armed` (accent.surface + accent.border, accent state label), `active` (accent fill + cream content — committed/live/recording)
+- **Used in:** `DashboardScreen` (top arming pair) — 2026-06-03
+- **Tweak impact:** Go Live & Record arming screen
+- **Shipped:** 2026-06-03 (clips initiative · C2)
 
-**Intent:** a persistent during-broadcast readout distinguishing what's **on air**
-from what's **only recording**, sitting with the existing live HUD (● LIVE, viewer
-count, source badges) over the video. Required by the capture guardrail — nothing
-recorded silently. States: live + recording the same set; live but recording a
-larger set (a sensitive source recorded record-only); recording but not live.
-Reads over arbitrary video, so it uses the same translucent dark-glass treatment as
-the other over-content HUD surfaces (pending the `bg.darkGlass` token). **Open:**
-Ben's inventory call whether this is a reusable feature or stays inline in
-StreamScreen — hence no shipped API yet.
+**Mock says (A1):** Two tall arming cards at the top — Go Live (left)
+and Record (right) — each idle / armed (cued) / active (firing), since
+going live and recording are independent intents.
+
+**Code does (shipped):** Tall (min-h 96) card composing an icon-or-dot +
+label ledge, a state dot top-right, and a mono-caps state label.
+`armed` swaps to accent surface + border; `active` fills accent with
+cream (`text.inverse`) content. Consumer-flat — `label`, `stateLabel`,
+`state`, optional `iconName`, `onPress`. DashboardScreen derives state
+from the per-source air/rec sets and uses each button as a master
+arm/disarm of its intent's defaults.
+
+---
+
+##### `RecordConsentSheet`
+
+- **Tier:** feature (composes BottomSheet + Icon + Text + Button)
+- **Location:** `src/components/features/broadcast/RecordConsentSheet.tsx`
+- **Variants:** `default` (per-source copy defaulted from `sourceLabel`, fully overridable)
+- **States:** visible / hidden (consumer-driven)
+- **Used in:** `DashboardScreen` (sensitive-source record gate) — 2026-06-03
+- **Tweak impact:** Go Live & Record arming — sensitive-source record consent
+- **Shipped:** 2026-06-03 (clips initiative · C2)
+
+**Mock says (A2):** Bottom sheet shown when Record is enabled for a
+sensitive source. Lock icon-frame + title + lede + a "what's saved"
+list (each row: accent dot + bold line + mono sub-caption) + accent
+"Turn on recording" / quiet "Not now" + fine print. Non-manipulative,
+easy decline.
+
+**Code does (shipped):** `BottomSheet` (`expanded`) hosting the
+accent-framed lock icon, heading, muted lede, a bordered bullet list
+(`{ text, caption }[]` with per-source defaults), the confirm + "Not
+now" Buttons, and the mono fine-print line. Confirm flips the source's
+Rec on and records consent so it won't re-prompt. The capture guardrail
+("nothing recorded silently") is realised here.
+
+---
+
+##### `BroadcastStatusIndicator`
+
+- **Tier:** feature (composes Text + Icon)
+- **Location:** `src/components/features/broadcast/BroadcastStatusIndicator.tsx`
+- **Variants:** none — the header + note are derived from the air/rec asymmetry (`live + recording same set` / `recording more than airing` / `recording but not live`), both overridable
+- **States:** per-source AIR / REC chips (accent fill for on, outline + red dot for rec, dim for off)
+- **Used in:** `StreamScreen` (broadcaster live overlay, while recording) — 2026-06-03
+- **Tweak impact:** broadcaster live overlay
+- **Shipped:** 2026-06-03 (clips initiative · C2). Resolves the "(planned)" feature-or-inline question — shipped as a reusable feature.
+
+**Mock says (A3):** Persistent during-broadcast readout distinguishing
+what's **on air** from what's **only recording**, over the live video.
+Translucent dark panel; header + "● REC"; per-source rows with AIR / REC
+chips; a note line explaining the asymmetry.
+
+**Code does (shipped):** Dark-glass panel (documented `rgba(...)`
+exception to criterion 1, pending a `bg.darkGlass` token — same
+treatment as StreamScreen's other over-video surfaces) with a header
+(auto or overridden) + REC badge, per-source rows (Icon + label + AIR/REC
+chips), and a derived note. Consumer-flat `sources: { label, iconName,
+air, rec }[]`. **Faithful-state note:** the shipped backend records the
+aired set as a whole, so StreamScreen renders the "on air is also saved"
+case while recording; the per-source asymmetry cases (rec-only sensitive
+source) are exercised in the gallery and light up when backend supports
+per-source record (Aaron's lane).
 
 ---
 
@@ -3185,7 +3250,7 @@ primitives/features/sections in sub-phase 12.6.
 | `app/(auth)/login.tsx`                | `LoginScreen.tsx`                    | Clerk sign-in — BrandMark + Text variants + Button                              | 2026-05-31 |
 | `app/(auth)/signup.tsx`                | `SignupScreen.tsx`                    | Clerk sign-up + verify — adds PasswordStrengthMeter                             | 2026-05-31 |
 | `app/(app)/globe.tsx`                  | `GlobeScreen.tsx`                     | Globe (mounts `EarthScene`) — overlay layer composes StreamStateBanner + DiscoveryHandoffCard + Pill (LIVE count) | 2026-05-31 |
-| `app/(app)/dashboard.tsx`              | `DashboardScreen.tsx`                 | Source arming + Go Live — 7-layer FeedRow stack + CoordHUD + GoBar; cam + audio armable, other 5 ship in `disabled` state | 2026-05-31 |
+| `app/(app)/dashboard.tsx`              | `DashboardScreen.tsx`                 | Go Live & Record arming — **rewritten 2026-06-03 (clips C2)** to the two-affordance capture model: ArmButton pair + grouped two-affordance FeedRow list (Air/Rec) + RecordConsentSheet + location precision ceiling + identity Attributed/Anon + GoBar. Cam + audio Air wired end-to-end; rec/identity/precision carried forward; screen/gyro/compass `disabled` | 2026-05-31 · 2026-06-03 |
 | `app/(app)/stream/[id].tsx`            | `StreamScreen.tsx`                    | Broadcaster (id=new) / viewer (id=room) — ChatOverlay + ReactionLayer retire in favor of ChatMessage/Composer + ReactionRail | 2026-05-31 |
 | `app/(app)/me.tsx`                     | `MeScreen.tsx`                        | Own profile / account settings — AvatarPicker + PursesCard dual + Input prefix '@' | 2026-05-31 |
 | `app/(app)/profile/[handle].tsx`       | `ProfileScreen.tsx`                   | Public profile + follow — Avatar xl + MetaStrip 'Joined ...' + Text-variant stats; PassportCard deferred until PublicUser shape grows | 2026-05-31 |

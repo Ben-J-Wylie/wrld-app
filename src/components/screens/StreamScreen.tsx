@@ -58,6 +58,7 @@ import { Icon } from '@/components/primitives/Icon'
 import { IconButton } from '@/components/primitives/IconButton'
 import { HelpText } from '@/components/primitives/HelpText'
 import { LivePill } from '@/components/features/stream/LivePill'
+import { BroadcastStatusIndicator } from '@/components/features/broadcast/BroadcastStatusIndicator'
 import { BroadcasterRow } from '@/components/features/user/BroadcasterRow'
 import { CoordHUD } from '@/components/features/stream/CoordHUD'
 import {
@@ -895,6 +896,23 @@ export function StreamScreen() {
                 />
               )}
 
+              {/* On-air-vs-recording indicator (clips initiative). The
+                  shipped backend records the aired set as a whole, so the
+                  faithful state today is "everything on air is also saved";
+                  per-source record asymmetry lands when backend supports
+                  it (Aaron's lane). Shown only while actually recording. */}
+              {isNew && isRecording && broadcastSources.length > 0 && (
+                <BroadcastStatusIndicator
+                  style={styles.recIndicator}
+                  sources={broadcastSources.map((s) => ({
+                    label: SOURCE_LABELS[s],
+                    iconName: s === 'camera' ? 'video' : 'mic',
+                    air: true,
+                    rec: true,
+                  }))}
+                />
+              )}
+
               {isNew && (
                 <View style={styles.section}>
                   {!showOverlay && <HelpText>BROADCASTING</HelpText>}
@@ -1203,6 +1221,7 @@ const styles = StyleSheet.create({
   },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
   liveRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
+  recIndicator: { width: '100%' },
   actions: { width: '100%', gap: theme.spacing.sm, alignItems: 'center' },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
   roomInfo: { width: '100%', alignItems: 'center', gap: theme.spacing.lg },

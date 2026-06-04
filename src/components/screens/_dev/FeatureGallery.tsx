@@ -45,6 +45,9 @@ import { BankCard } from '@/components/features/wallet/BankCard'
 import { FeedThumb } from '@/components/features/broadcast/FeedThumb'
 import { FeedRow } from '@/components/features/broadcast/FeedRow'
 import { GoBar } from '@/components/features/broadcast/GoBar'
+import { ArmButton } from '@/components/features/broadcast/ArmButton'
+import { RecordConsentSheet } from '@/components/features/broadcast/RecordConsentSheet'
+import { BroadcastStatusIndicator } from '@/components/features/broadcast/BroadcastStatusIndicator'
 import { ClipCard } from '@/components/features/clip/ClipCard'
 import { ClipPreview } from '@/components/features/clip/ClipPreview'
 import { LayerEditorRow } from '@/components/features/clip/LayerEditorRow'
@@ -883,20 +886,33 @@ export function FeatureGallery() {
       </Section>
 
       <Section title="FeedRow">
-        <Row label="armed">
-          <FeedRowDemo kind="cam" label="Camera" detail="1080p · BACK" initialOn initialState="armed" />
+        <Row label="two-affordance (Air + Rec), grouped list">
+          <View style={styles.groupedList}>
+            <FeedRowDemo kind="cam" label="Camera" detail="Rear · 1080p" sensitivity="sensitive" recNeedsConsent showBorderTop={false} initialAir />
+            <FeedRowDemo kind="audio" label="Audio" detail="Mic · 48 kHz" sensitivity="sensitive" recNeedsConsent initialAir />
+            <FeedRowDemo kind="gyro" label="Gyro" detail="Orientation" sensitivity="benign" initialRec />
+          </View>
         </Row>
-        <Row label="broadcasting">
-          <FeedRowDemo kind="audio" label="Audio" detail="48 kHz · DEFAULT MIC" initialOn initialState="broadcasting" />
+        <Row label="denied / disabled">
+          <View style={styles.groupedList}>
+            <FeedRowDemo kind="screen" label="Screen" detail="System screen capture" sensitivity="sensitive" availability="disabled" showBorderTop={false} />
+            <FeedRowDemo kind="compass" label="Compass" detail="Heading" sensitivity="benign" availability="denied" />
+          </View>
         </Row>
-        <Row label="off">
-          <FeedRowDemo kind="loc" label="Location" detail="GPS · SHARE GRANULAR" initialState="off" />
+      </Section>
+
+      <Section title="ArmButton">
+        <Row label="pair (idle / armed)">
+          <View style={styles.row}>
+            <ArmButton label="Go Live" iconName="radio" state="armed" stateLabel="Armed · 2 sources" onPress={() => {}} />
+            <ArmButton label="Record" state="idle" stateLabel="Off" onPress={() => {}} />
+          </View>
         </Row>
-        <Row label="denied">
-          <FeedRowDemo kind="screen" label="Screen" detail="System screen capture" initialState="denied" />
-        </Row>
-        <Row label="disabled">
-          <FeedRowDemo kind="gyro" label="Gyroscope" detail="Not available on this device" initialState="disabled" />
+        <Row label="active">
+          <View style={styles.row}>
+            <ArmButton label="Go Live" iconName="radio" state="active" stateLabel="Live" onPress={() => {}} />
+            <ArmButton label="Record" state="active" stateLabel="To disk" onPress={() => {}} />
+          </View>
         </Row>
       </Section>
 
@@ -913,8 +929,52 @@ export function FeatureGallery() {
         <Row label="live">
           <GoBar variant="live" onPress={() => {}} />
         </Row>
+        <Row label="record-commit (label override)">
+          <GoBar variant="armed" label="START RECORDING" knobLabel="REC" onPress={() => {}} />
+        </Row>
         <Row label="disabled">
           <GoBar variant="disabled" />
+        </Row>
+      </Section>
+
+      <Section title="RecordConsentSheet">
+        <Row label="opens a sheet (sensitive-source record consent)">
+          <RecordConsentSheetDemo />
+        </Row>
+      </Section>
+
+      <Section title="BroadcastStatusIndicator">
+        <Row label="live + recording same set">
+          <View style={styles.darkStage}>
+            <BroadcastStatusIndicator
+              sources={[
+                { label: 'Camera', iconName: 'video', air: true, rec: true },
+                { label: 'Audio', iconName: 'mic', air: true, rec: true },
+                { label: 'Location · city', iconName: 'map-pin', air: true, rec: true },
+              ]}
+            />
+          </View>
+        </Row>
+        <Row label="recording a larger set">
+          <View style={styles.darkStage}>
+            <BroadcastStatusIndicator
+              sources={[
+                { label: 'Audio', iconName: 'mic', air: true, rec: true },
+                { label: 'Camera', iconName: 'video', air: false, rec: true },
+                { label: 'Location · city', iconName: 'map-pin', air: true, rec: true },
+              ]}
+            />
+          </View>
+        </Row>
+        <Row label="recording but not live">
+          <View style={styles.darkStage}>
+            <BroadcastStatusIndicator
+              sources={[
+                { label: 'Camera', iconName: 'video', air: false, rec: true },
+                { label: 'Audio', iconName: 'mic', air: false, rec: true },
+              ]}
+            />
+          </View>
         </Row>
       </Section>
 
@@ -1415,25 +1475,54 @@ function FeedRowDemo({
   kind,
   label,
   detail,
-  initialOn,
-  initialState,
+  sensitivity,
+  availability,
+  recNeedsConsent,
+  initialAir,
+  initialRec,
+  showBorderTop,
 }: {
   kind: 'cam' | 'audio' | 'screen' | 'loc' | 'gyro' | 'compass' | 'profile'
   label: string
   detail?: string
-  initialOn?: boolean
-  initialState: 'off' | 'armed' | 'broadcasting' | 'denied' | 'disabled'
+  sensitivity?: 'sensitive' | 'benign'
+  availability?: 'available' | 'denied' | 'disabled'
+  recNeedsConsent?: boolean
+  initialAir?: boolean
+  initialRec?: boolean
+  showBorderTop?: boolean
 }) {
-  const [on, setOn] = useState(!!initialOn)
+  const [air, setAir] = useState(!!initialAir)
+  const [rec, setRec] = useState(!!initialRec)
   return (
     <FeedRow
       kind={kind}
       label={label}
       detail={detail}
-      state={initialState}
-      on={on}
-      onToggle={setOn}
+      sensitivity={sensitivity}
+      availability={availability}
+      recNeedsConsent={recNeedsConsent}
+      air={air}
+      onAirChange={setAir}
+      rec={rec}
+      onRecChange={setRec}
+      showBorderTop={showBorderTop}
     />
+  )
+}
+
+function RecordConsentSheetDemo() {
+  const [visible, setVisible] = useState(false)
+  return (
+    <View>
+      <Button label="Open consent sheet" onPress={() => setVisible(true)} variant="secondary" />
+      <RecordConsentSheet
+        visible={visible}
+        onClose={() => setVisible(false)}
+        sourceLabel="camera"
+        onConfirm={() => setVisible(false)}
+      />
+    </View>
   )
 }
 
@@ -1573,6 +1662,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.sm,
     flexWrap: 'wrap',
+  },
+  groupedList: {
+    borderWidth: 1,
+    borderColor: theme.colors.border.subtle,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.colors.bg.elevated,
+    overflow: 'hidden',
+    alignSelf: 'stretch',
+  },
+  darkStage: {
+    alignSelf: 'stretch',
+    padding: theme.spacing.md,
+    borderRadius: theme.radius.md,
+    backgroundColor: '#1d1410',
   },
   trendingScroll: {
     gap: theme.spacing.sm,
