@@ -75,9 +75,6 @@ export default function AppLayout() {
         <Tabs.Screen name="settings" options={{ href: null }} />
         <Tabs.Screen name="subscription" options={{ href: null }} />
         <Tabs.Screen name="monetize" options={{ href: null }} />
-        <Tabs.Screen name="ppv/create" options={{ href: null }} />
-        <Tabs.Screen name="ppv/[id]" options={{ href: null }} />
-        <Tabs.Screen name="ppv/[id]/manage" options={{ href: null }} />
         <Tabs.Screen name="primitive-gallery" options={{ href: null }} />
         <Tabs.Screen name="feature-gallery" options={{ href: null }} />
         <Tabs.Screen name="section-gallery" options={{ href: null }} />
