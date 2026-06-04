@@ -148,8 +148,14 @@ export function PpvManageScreen() {
       {/* ── Stats ─────────────────────────────────────────── */}
       <View style={styles.statsRow}>
         <View style={styles.statCard}>
-          <Text variant="heading">{event.purchaseCount}</Text>
-          <Text variant="caption" color={theme.colors.text.muted}>Purchasers</Text>
+          <Text variant="heading">
+            {event.maxCapacity != null
+              ? `${event.purchaseCount} / ${event.maxCapacity}`
+              : String(event.purchaseCount)}
+          </Text>
+          <Text variant="caption" color={theme.colors.text.muted}>
+            {event.maxCapacity != null ? 'Sold / Cap' : 'Purchasers'}
+          </Text>
         </View>
         <View style={styles.statCard}>
           <Text variant="heading">${(event.priceUsd / 100).toFixed(2)}</Text>
