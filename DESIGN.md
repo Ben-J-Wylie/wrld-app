@@ -1652,8 +1652,12 @@ and focused states. A fixed **WINDOW** of cells (±3) renders per field;
 (0.5 / 0.28 / 0.12). Month is a 3-letter abbreviation (JAN…DEC);
 hours 24h. **Blurred clips to the single band row** (no peeking
 neighbours); tap expands (`motion.patterns.overlay`) to 5 rows so the ±2
-neighbours come into view above/below the band (over the globe). "● LIVE"
-tag when live; accent "● NOW" Pressable when scrubbed.
+neighbours come into view above/below the band (over the globe).
+**Future cells are greyed** (`text.subtle`) — values after the present are
+unreachable, and the cue says so. **Status slot:** "● LIVE" in **accent**
+(the one electric element, non-interactive) when live; "● PAST" muted +
+tappable (→ `onOffsetChange(0)`, jump back to live) when scrubbed. LIVE
+and PAST are both 4-char mono in a fixed slot, so the swap never reflows.
 
 **Spacing (2026-06-04).** Equal fixed gaps between every wheel — the `:`
 colons sit centred *inside* the hour-minute and minute-second gaps (a
@@ -1670,12 +1674,17 @@ new one slides home). So the motion itself cues which way to spin, and
 dragging reads as dialling. `useLayoutEffect` seeds the start offset
 before paint (no flash); only fields whose value actually changed animate.
 
+**Gesture.** Each field owns **one** `PanResponder` handling both tap and
+drag — a near-still release toggles expand, a vertical drag (when
+expanded) dials. There is **no wrapping Pressable**: an earlier version
+wrapped the bar in one for tap-to-expand, and it swallowed the touch so
+the dials wouldn't scroll. The scrub clamps at the present, so you can't
+dial into the future. (`onPanResponderTerminationRequest: false` keeps a
+parent scroll from stealing a drag mid-gesture.)
+
 **Surface.** No bar background — the band is the only fill (over the globe,
 the neighbours sit on the transparent area when expanded). The earlier
-center-out gradient was dropped per Ben. The full-bar tap region uses a
-raw RN `Pressable` (the primitive routes `style` to an inner
-`Animated.View` whose `flex:1` can't resolve, which collapsed it to 0
-height).
+center-out gradient was dropped per Ben.
 
 **Seam (Aaron / backend).** The component only emits `offsetMs`;
 `GlobeScreenMapbox` holds it and carries a commented TIME-MACHINE seam at

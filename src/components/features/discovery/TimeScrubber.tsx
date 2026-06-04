@@ -25,7 +25,6 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   Animated,
   PanResponder,
-  Pressable as RNPressable,
   StyleSheet,
   View,
   type StyleProp,
@@ -154,7 +153,8 @@ export function TimeScrubber({ offsetMs, onOffsetChange, minYear = 2026, style }
     onChangeRef.current(newOffset)
   }
 
-  const fieldProps = { playhead, direction, expandedRef, offsetRef, onScrub: scrub }
+  const toggleExpand = () => setExpanded((e) => !e)
+  const fieldProps = { playhead, direction, expandedRef, offsetRef, onScrub: scrub, onToggle: toggleExpand }
 
   return (
     <Animated.View style={[styles.bar, { height }, style]}>
@@ -163,39 +163,39 @@ export function TimeScrubber({ offsetMs, onOffsetChange, minYear = 2026, style }
         <View style={styles.band} />
       </View>
 
-      <RNPressable onPress={() => setExpanded((e) => !e)} style={styles.press}>
-        <View style={styles.row}>
-          <Field fieldKey="year" {...fieldProps} />
-          <Gap />
-          <Field fieldKey="month" {...fieldProps} />
-          <Gap />
-          <Field fieldKey="day" {...fieldProps} />
-          <Gap />
-          <Field fieldKey="hour" {...fieldProps} />
-          <Gap colon />
-          <Field fieldKey="minute" {...fieldProps} />
-          <Gap colon />
-          <Field fieldKey="second" {...fieldProps} />
-          <Gap />
-          <View style={styles.statusSlot}>
-            {live ? (
-              <View style={styles.liveTag}>
-                <View style={styles.liveDot} />
-                <Text variant="monoLabel" color={theme.colors.text.muted}>
-                  LIVE
-                </Text>
-              </View>
-            ) : (
-              <Pressable variant="default" onPress={() => onOffsetChange(0)} style={styles.nowBtn}>
-                <View style={styles.nowDot} />
-                <Text variant="monoLabel" color={theme.colors.text.inverse}>
-                  NOW
-                </Text>
-              </Pressable>
-            )}
-          </View>
+      <View style={styles.row}>
+        <Field fieldKey="year" {...fieldProps} />
+        <Gap />
+        <Field fieldKey="month" {...fieldProps} />
+        <Gap />
+        <Field fieldKey="day" {...fieldProps} />
+        <Gap />
+        <Field fieldKey="hour" {...fieldProps} />
+        <Gap colon />
+        <Field fieldKey="minute" {...fieldProps} />
+        <Gap colon />
+        <Field fieldKey="second" {...fieldProps} />
+        <Gap />
+        <View style={styles.statusSlot}>
+          {live ? (
+            // The one electric element — accent, and not interactive (you're live).
+            <View style={styles.statusTag}>
+              <View style={[styles.statusDot, { backgroundColor: theme.colors.accent.default }]} />
+              <Text variant="monoLabel" color={theme.colors.accent.default}>
+                LIVE
+              </Text>
+            </View>
+          ) : (
+            // Scrubbed into the past — muted, tap to jump back to live.
+            <Pressable variant="default" onPress={() => onOffsetChange(0)} style={styles.statusTag}>
+              <View style={[styles.statusDot, { backgroundColor: theme.colors.text.muted }]} />
+              <Text variant="monoLabel" color={theme.colors.text.muted}>
+                PAST
+              </Text>
+            </Pressable>
+          )}
         </View>
-      </RNPressable>
+      </View>
     </Animated.View>
   )
 }
@@ -219,6 +219,7 @@ function Field({
   expandedRef,
   offsetRef,
   onScrub,
+  onToggle,
 }: {
   fieldKey: FieldKey
   playhead: Date
@@ -226,19 +227,33 @@ function Field({
   expandedRef: React.MutableRefObject<boolean>
   offsetRef: React.MutableRefObject<number>
   onScrub: (key: FieldKey, startPlayhead: Date, delta: number) => void
+  onToggle: () => void
 }) {
+  // One responder per field handles BOTH tap (toggle expand) and drag (dial)
+  // — no parent Pressable to fight for the touch. A near-still release is a
+  // tap; a vertical drag (when expanded) scrubs.
   const startPlayhead = useRef<Date>(playhead)
+  const moved = useRef(false)
   const responder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_, g) => expandedRef.current && Math.abs(g.dy) > 4,
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: () => {
         startPlayhead.current = new Date(Date.now() - offsetRef.current)
+        moved.current = false
       },
       onPanResponderMove: (_, g) => {
-        // Drag down (dy>0) → newer (+); drag up → older (−).
-        const delta = Math.round(g.dy / STEP_PX)
-        onScrub(fieldKey, startPlayhead.current, delta)
+        if (Math.abs(g.dy) > 4) moved.current = true
+        if (expandedRef.current) {
+          // Drag down (dy>0) → newer (+); drag up → older (−). The scrub
+          // itself clamps at the present, so you can't dial into the future.
+          const delta = Math.round(g.dy / STEP_PX)
+          onScrub(fieldKey, startPlayhead.current, delta)
+        }
+      },
+      onPanResponderRelease: () => {
+        if (!moved.current) onToggle()
       },
     }),
   ).current
@@ -264,16 +279,26 @@ function Field({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current])
 
+  const nowMs = Date.now()
+
   return (
     <View style={[styles.field, { width: FIELD_W[fieldKey] }]} {...responder.panHandlers}>
       <Animated.View style={{ transform: [{ translateY: slide }] }}>
         {WINDOW.map((delta) => {
+          const cellDate = stepDate(playhead, fieldKey, delta)
           const dist = Math.abs(delta)
           const opacity = dist === 0 ? 1 : dist === 1 ? 0.5 : dist === 2 ? 0.28 : 0.12
+          // Future values are unreachable (the scrub clamps at the present) —
+          // gray them so it reads as "can't dial past now".
+          const isFuture = cellDate.getTime() > nowMs
           return (
             <View key={delta} style={styles.cell}>
-              <Text variant="monoLabel" color={theme.colors.text.primary} style={{ opacity }}>
-                {formatField(stepDate(playhead, fieldKey, delta), fieldKey)}
+              <Text
+                variant="monoLabel"
+                color={isFuture ? theme.colors.text.subtle : theme.colors.text.primary}
+                style={{ opacity }}
+              >
+                {formatField(cellDate, fieldKey)}
               </Text>
             </View>
           )
@@ -283,16 +308,13 @@ function Field({
   )
 }
 
-const NOW_DOT = 7
+const STATUS_DOT = 7
 const STATUS_W = 58
 
 const styles = StyleSheet.create({
   bar: {
     overflow: 'hidden',
     // No background — the selection band (below) is the only filled surface.
-  },
-  press: {
-    flex: 1,
   },
   bandWrap: {
     ...StyleSheet.absoluteFillObject,
@@ -334,30 +356,14 @@ const styles = StyleSheet.create({
     width: STATUS_W,
     alignItems: 'center',
   },
-  liveTag: {
+  statusTag: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.xs,
   },
-  liveDot: {
-    width: NOW_DOT,
-    height: NOW_DOT,
-    borderRadius: NOW_DOT / 2,
-    backgroundColor: theme.colors.text.muted,
-  },
-  nowBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
-    borderRadius: theme.radius.full,
-    backgroundColor: theme.colors.accent.default,
-  },
-  nowDot: {
-    width: NOW_DOT,
-    height: NOW_DOT,
-    borderRadius: NOW_DOT / 2,
-    backgroundColor: theme.colors.text.inverse,
+  statusDot: {
+    width: STATUS_DOT,
+    height: STATUS_DOT,
+    borderRadius: STATUS_DOT / 2,
   },
 })
