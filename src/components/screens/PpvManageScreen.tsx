@@ -39,7 +39,7 @@ export function PpvManageScreen() {
   const [countdown, setCountdown] = useState('')
   const [cancelling, setCancelling] = useState(false)
 
-  const { data: event, refetch } = useQuery({
+  const { data: event, isLoading, refetch } = useQuery({
     queryKey: ['ppv-event-manage', id],
     queryFn: () => ppvApi.getMyEvent(id),
     enabled: !!id,
@@ -89,7 +89,12 @@ export function PpvManageScreen() {
   if (!event) {
     return (
       <ScreenScroll contentContainerStyle={styles.content}>
-        <Text variant="body" color={theme.colors.text.muted}>Loading…</Text>
+        <Text variant="body" color={theme.colors.text.muted}>
+          {isLoading ? 'Loading…' : 'Event not found.'}
+        </Text>
+        {!isLoading && (
+          <Button label="Back" variant="secondary" onPress={() => router.back()} />
+        )}
       </ScreenScroll>
     )
   }
