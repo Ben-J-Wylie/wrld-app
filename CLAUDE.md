@@ -547,22 +547,36 @@ are what the past is made of).
   - offset 0 → reads as a live ticking clock; the globe is live.
   - offset > 0 → **real-time playback**: the playhead ticks forward at 1× from
     the scrubbed instant, and the globe replays the surviving clips/pins alive
-    at the playhead as it advances. A **NOW** button returns to live.
-- **Six independently-spinnable fields** — YR · MO · DY · HR · MIN · SEC. Each
+    at the playhead as it advances. A muted, tappable **PAST** status (which
+    replaces the **LIVE** tag when scrubbed) jumps back to live.
+- **Six spinnable fields** — YR · MO · DY · HR · MIN · SEC. Each
   ticks/carries correctly (native `Date` arithmetic — spinning MIN past 00
-  rolls the hour, etc.). Collapsed = just the ticking values; tap to expand
-  shows ghosted neighbours above/below and enables per-field vertical drag to
-  scrub. Can't scrub into the future (clamped at now) or before `minYear`.
+  rolls the hour, month past JAN rolls to DEC + drops the year, etc.). **The
+  carry is intentional** (Ben likes it) — the wheels are *not* independent.
+  The only cross-wheel reset is dialling **forward past now**, which snaps the
+  whole clock back to live. Collapsed = just the ticking centre value (clipped
+  to the band, no peeking neighbours); tap to expand shows ghosted neighbours
+  above/below and enables per-field vertical drag to scrub. Can't scrub into
+  the future (clamped at now, future cells greyed) or before `minYear`.
 - **Accepted caveat:** the past experience is thinner than live — only
   *surviving clips*, not everything that was aired. That's fine.
 
 ### Working split (Ben / Aaron)
 
-- **Ben (`design`) — UI, done (v1).** `TimeScrubber` feature
+- **Ben (`design`) — UI, done (v1 + refined).** `TimeScrubber` feature
   (`src/components/features/discovery/TimeScrubber.tsx`) + gallery entry; wired
   into `GlobeScreenMapbox` as the overlay above the drawer; globe holds
   `timeOffsetMs` state and a clearly-commented **TIME MACHINE SEAM** at the
-  discovery data source.
+  discovery data source. Refined since v1 (all on `design`): animated dial
+  slide per tick/scrub; one band-only `bg.glass` surface between two lines
+  (no gradient); equal centred wheel gaps with the colons mid-gap; fixed
+  field widths (no reflow on value change); future cells greyed; LIVE(accent)
+  / PAST(tap-to-live) status; bold centre value when focused; generous
+  `HIT_SLOP`; a 500 ms hold after a past-scrub release before playback
+  resumes (live ticks immediately); and **blur+collapse on any outside UI
+  touch** via a `collapseSignal` prop the globe bumps from `onTouchStart` on
+  every overlay group *except* the `MapView` and the scrubber. Full detail in
+  [DESIGN.md](DESIGN.md) (TimeScrubber Section 3 + decision log).
 - **Aaron (`main`) — backend replay.** At the seam: when `timeOffsetMs > 0`,
   swap the live `useDiscoverySocket()` feed for a historical "surviving clips
   near, at playhead" query, re-fetching as the playhead advances, so the globe
@@ -575,8 +589,13 @@ are what the past is made of).
 - Direction: drag-down = newer, drag-up = older (wheel physics, newer above).
   Trivially flippable if it reads wrong on device.
 - Granularity floor (how far back, retention) and clip-at-instant semantics are
-  Aaron's data calls. `minYear` defaults to 2026 (WRLD launch).
-- **Needs on-device testing** — gesture feel + the drawer-tracking position.
+  Aaron's data calls. `minYear` defaults to **10 years back**
+  (`DEFAULT_MIN_YEAR`) so the YEAR wheel has room to spin — the real data floor
+  (WRLD launched 2026) is the backend's call; pass `minYear` to override.
+- **Needs on-device testing** — gesture feel (the `HIT_SLOP` sizes, the tap
+  vs drag threshold), the drawer-tracking position, and the
+  blur-on-outside-touch (relies on `onTouchStart` bubbling to the `box-none`
+  overlay wrappers).
 
 ---
 
