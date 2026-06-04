@@ -12,7 +12,9 @@ export function useCurrentUser() {
     queryFn: usersApi.getMe,
     enabled: !!isSignedIn,
     staleTime: 1000 * 60,
-    refetchInterval: 1000 * 60,
+    // user_updated WS patches cover all server-side changes (balances, tier,
+    // suspension). No polling needed; 60s fallback for WS reconnect gaps.
+    refetchInterval: 60_000,
   })
 }
 

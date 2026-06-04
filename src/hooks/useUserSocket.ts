@@ -3,7 +3,7 @@ import { useAuth } from '@clerk/clerk-expo'
 import { useQueryClient } from '@tanstack/react-query'
 import { env } from '@/lib/env'
 import { useAuthStore } from '@/stores/authStore'
-import type { Recording } from '@/types'
+import type { Recording, WalletData } from '@/types'
 
 // Convert https://api.wrld.cam → wss://api.wrld.cam/ws
 const WS_URL = env.apiBaseUrl.replace(/^https?/, (s) => (s === 'https' ? 'wss' : 'ws')) + '/ws'
@@ -51,6 +51,12 @@ export function useUserSocket(enabled: boolean) {
           if (event.type === 'user_updated') {
             const current = useAuthStore.getState().wrldUser
             if (current) setWrldUser({ ...current, ...event.patch })
+            // Keep wallet cache in sync when balance fields are pushed
+            if ('spaceBucks' in event.patch || 'stardust' in event.patch) {
+              qc.setQueryData<WalletData>(['wallet'], (prev) =>
+                prev ? { ...prev, ...event.patch } : prev,
+              )
+            }
           }
 
           if (event.type === 'recording_updated') {

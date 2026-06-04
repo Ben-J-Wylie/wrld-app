@@ -6,6 +6,8 @@ export function useStreamsNear(lat: number | null, lng: number | null, radiusKm 
     queryKey: ['streams', 'near', lat, lng, radiusKm],
     queryFn: () => streamsApi.near(lat!, lng!, radiusKm),
     enabled: lat !== null && lng !== null,
-    refetchInterval: 5_000,
+    // Discovery WS pushes stream_started/ended/location_updated in real time.
+    // 60s is a fallback for missed events during a WS reconnect gap.
+    refetchInterval: 60_000,
   })
 }
