@@ -1676,3 +1676,85 @@ Viewer-facing purchase screen. Navigated to from ProfileScreen event cards.
 ### New type: `PpvEvent` (`src/types/index.ts`)
 
 Full event shape returned by all creator endpoints. Includes `netRevenueCents` and `grossRevenueCents` (computed server-side from `PPV_PLATFORM_FEE_RATE` RemoteConfig — never hardcoded in the app). `hasAccess?: boolean` on public/viewer responses.
+
+---
+
+## Updates — June 2026 (Events tab redesign)
+
+### Events tab now shows all creators' events
+
+`PpvIndexScreen` was redesigned from a creator-only management view to a global discovery feed:
+
+- Calls `ppvApi.listAllEvents()` → `GET /ppv-events/discover` (new backend endpoint, optional auth)
+- Cards navigate to `PpvEventDetailScreen` (detail/buy view) instead of `PpvManageScreen` (edit view)
+- Cards show `@handle` of the creator instead of revenue stats (tickets sold, your take)
+- "LIVE NOW" section for active events, "UPCOMING" for scheduled ones
+- Header is "Events" with no schedule button — scheduling remains in the Monetize menu
+- Empty state explains what the tab is for
+- `PpvEventDetailScreen` already shows `by @handle` and the full purchase/access flow — no changes needed there
+
+Creator management (edit, cancel, delete) remains exclusively in `PpvManageScreen`, reachable from the Monetize tab.
+
+`ppvApi` additions:
+- `listAllEvents()` → `GET /ppv-events/discover`
+
+---
+
+## PPV — next phase decisions (decided June 2026, not yet coded)
+
+### Viewer journey from the events tab
+
+**Access badge on cards:** `hasAccess` is already returned by the discover endpoint. Show a green "ACCESS ✓" badge on cards where the viewer has access (either purchased or subscriber-free). Single badge regardless of how they got access — the detail screen already explains the reason.
+
+**Tapping a card:**
+- `status = scheduled`, no access → detail screen with buy button
+- `status = scheduled`, has access → detail screen with "This event hasn't started yet. You'll be notified when it goes live." — no join button yet
+- `status = live`, has access → detail screen with a **"Join now"** button that navigates to the stream using `event.streamId`
+- `status = live`, no access → detail screen with buy button (event in progress — they can still buy)
+- `status = ended`, replay access + has access → detail screen with replay link (future)
+
+**Virtual waiting room:** no actual mediasoup room is pre-created when an event is scheduled. The "waiting room" is the detail screen itself — it polls/watches event status. When `event.status` flips to `live` and `event.streamId` is populated, the "Join now" button appears (or auto-navigates if the viewer is already on the screen). No mediasoup architecture changes needed for this.
+
+### Broadcaster go-live linking
+
+**Dashboard PPV selector:** a new row in the dashboard scroll area (below "Subscribers only") lets the broadcaster pick a scheduled event to link to their stream. Only shown if they have at least one `scheduled` event.
+
+**Enforcement window:** from 30 minutes before `scheduledAt` through the end of the event window (`scheduledAt + durationMinutes`, or indefinite if no duration). During this window:
+- The PPV event is pre-selected and locked — the broadcaster cannot deselect it
+- Going live without linking is blocked (dashboard + backend enforcement)
+- Dashboard shows a countdown: "Your PPV event starts in X min — this stream will be linked to it"
+
+**If already live when the event starts (server-side auto-link):**
+- The heartbeat handler (`POST /internal/streams/heartbeat`) checks whether the broadcaster has a `scheduled` event whose `scheduledAt` has passed and whose `streamId` is still null
+- If found: auto-links the stream to the event, flips `PpvEvent.status = 'live'`
+- Viewers already in the free stream are NOT kicked (access is checked at `joinRoom` time, not continuously) — new joiners hit the paywall
+- The `stream_ended` discovery WebSocket event for the original free stream carries a new payload field `ppvTransition: { eventId, eventTitle }` so the app can show "Broadcaster's PPV event has started — join here" instead of a generic "stream ended" message
+
+**If not live when the event starts:** the dashboard auto-selects and locks the event; broadcaster goes live normally and the stream is linked at `createRoom` time via `ppvEventId`.
+
+**The placeholder text** currently in `PpvManageScreen` ("Set your event's ID in the PPV field when prompted") should be removed once the dashboard selector is built.
+
+### `createRoom` chain changes needed (app side)
+
+Three files need `ppvEventId?: string` threaded through:
+1. `src/lib/mediasoupSignaling.ts` — add to message type and `createRoom` method
+2. `src/hooks/useSignaling.ts` — add to `createRoom` hook signature
+3. `src/components/screens/DashboardScreen.tsx` — fetch scheduled events, add selector row, pass `ppvEventId`
+
+### Overlap prevention (create + edit)
+
+A creator cannot have two PPV events whose windows conflict. Conflict detection runs on `POST /ppv-events` and `PATCH /ppv-events/:id` (the event being edited is excluded from its own check).
+
+| Existing event | New/edited event | Behaviour |
+|---|---|---|
+| Has duration | Has duration | Full overlap check — **hard block** (409) |
+| Has duration | No duration | **Hard block** if new start falls inside existing window |
+| **No duration** | Either | **Warn** if new start is within `PPV_OVERLAP_WARNING_MINUTES` of existing start — user can acknowledge and proceed |
+| No duration | No duration | **Warn** if starts are within `PPV_OVERLAP_WARNING_MINUTES` of each other |
+
+`PPV_OVERLAP_WARNING_MINUTES` — new RemoteConfig key (type: `number`, default `60`). Editable from the admin Config page. Warning is soft (acknowledgeable), not a second hard block.
+
+Backend response for a hard conflict: `409 { error: 'event_overlap', conflictingEventId, conflictingEventTitle }`.
+Backend response for a soft warning: `200` (event created/updated) with a `warning: 'duration_unknown_overlap'` field alongside the event — the app surfaces the warning in a dismissible alert after the action succeeds.
+
+The app's create/edit form (`PpvCreateScreen`) should also do a lightweight client-side pre-check against already-fetched scheduled events and show inline warning text before the user submits, so the feedback is immediate.
