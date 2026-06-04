@@ -8,6 +8,7 @@ import { ScreenScroll } from '@/components/sections/ScreenScroll'
 import { Text } from '@/components/primitives/Text'
 import { Button } from '@/components/primitives/Button'
 import { ppvApi } from '@/api/ppvEvents'
+import { useCurrentUser } from '@/hooks/useCurrentUser'
 import type { PpvEvent } from '@/types'
 
 const STATUS_COLORS: Record<string, string> = {
@@ -39,17 +40,22 @@ function formatCountdown(iso: string): string {
   return 'starting soon'
 }
 
-function EventCard({ event, isSignedIn }: { event: PpvEvent; isSignedIn: boolean }) {
+function EventCard({ event, isSignedIn, currentUserId }: { event: PpvEvent; isSignedIn: boolean; currentUserId?: string }) {
   const isLive = event.status === 'live'
   const isScheduled = event.status === 'scheduled'
   const countdown = isScheduled ? formatCountdown(event.scheduledAt) : ''
+  const isMyEvent = !!currentUserId && event.hostId === currentUserId
   // hasAccess from the discover endpoint (set when viewer is authenticated)
   const hasAccess = event.hasAccess ?? false
   const canJoin = isLive && hasAccess && !!event.streamId
 
   function handlePress() {
+    if (isMyEvent) {
+      // Host taps their own event → go to the manage screen
+      router.push({ pathname: '/(app)/ppv/[id]/manage', params: { id: event.id } })
+      return
+    }
     if (canJoin) {
-      // Navigate directly to the stream
       router.push({
         pathname: '/(app)/stream/[id]',
         params: { id: event.streamId!, sources: '' },
@@ -67,7 +73,12 @@ function EventCard({ event, isSignedIn }: { event: PpvEvent; isSignedIn: boolean
       <View style={styles.cardTop}>
         <Text variant="bodyEmphasized" style={styles.cardTitle}>{event.title}</Text>
         <View style={styles.badgeRow}>
-          {hasAccess && isSignedIn && (
+          {isMyEvent && (
+            <View style={[styles.badge, styles.myEventBadge]}>
+              <Text variant="monoCaption" color={theme.colors.accent.default}>MY EVENT</Text>
+            </View>
+          )}
+          {hasAccess && isSignedIn && !isMyEvent && (
             <View style={[styles.badge, styles.accessBadge]}>
               <Text variant="monoCaption" color="#22c55e">ACCESS ✓</Text>
             </View>
@@ -119,10 +130,10 @@ function EventCard({ event, isSignedIn }: { event: PpvEvent; isSignedIn: boolean
       ) : null}
 
       {/* CTA row — only shown in special cases on the index (detail screen handles purchase) */}
-      {isLive && hasAccess && isSignedIn && (
+      {!isMyEvent && isLive && hasAccess && isSignedIn && (
         <Button label="Join now →" onPress={handlePress} />
       )}
-      {isScheduled && hasAccess && isSignedIn && (
+      {!isMyEvent && isScheduled && hasAccess && isSignedIn && (
         <Text variant="caption" color={theme.colors.text.muted}>
           You have access — you'll be notified when it starts.
         </Text>
@@ -133,6 +144,7 @@ function EventCard({ event, isSignedIn }: { event: PpvEvent; isSignedIn: boolean
 
 export function PpvIndexScreen() {
   const { isSignedIn } = useAuth()
+  const { data: currentUser } = useCurrentUser()
   const [refreshing, setRefreshing] = useState(false)
   const { data: events, isLoading, refetch } = useQuery({
     queryKey: ['all-ppv-events'],
@@ -181,13 +193,13 @@ export function PpvIndexScreen() {
           {live.length > 0 && (
             <View style={styles.section}>
               <Text variant="monoLabel" color={theme.colors.text.muted}>LIVE NOW</Text>
-              {live.map(e => <EventCard key={e.id} event={e} isSignedIn={!!isSignedIn} />)}
+              {live.map(e => <EventCard key={e.id} event={e} isSignedIn={!!isSignedIn} currentUserId={currentUser?.id} />)}
             </View>
           )}
           {upcoming.length > 0 && (
             <View style={styles.section}>
               <Text variant="monoLabel" color={theme.colors.text.muted}>UPCOMING</Text>
-              {upcoming.map(e => <EventCard key={e.id} event={e} isSignedIn={!!isSignedIn} />)}
+              {upcoming.map(e => <EventCard key={e.id} event={e} isSignedIn={!!isSignedIn} currentUserId={currentUser?.id} />)}
             </View>
           )}
         </>
@@ -247,6 +259,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(34,197,94,0.12)',
     borderWidth: 1,
     borderColor: 'rgba(34,197,94,0.3)',
+  },
+  myEventBadge: {
+    backgroundColor: theme.colors.accent.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.accent.border,
   },
   dateRow: {
     flexDirection: 'row',
