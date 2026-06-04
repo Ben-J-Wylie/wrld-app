@@ -11,15 +11,16 @@
 //     (real-time PLAYBACK), and the globe replays the surviving clips/pins
 //     alive at the playhead (backend: Aaron). A "NOW" button returns to live.
 //
-// Styled like DOBWheel: each of the six fields (YEAR · MONTH · DAY · HH:MM:SS)
-// is a vertical wheel framed by a centred band (two horizontal lines). Blurred
-// (collapsed) shows only the centre value; tapped (expanded) the bar grows and
-// the ±2 ghost neighbours fade in above/below, just like the DOBWheel.
-// Drag a field vertically to scrub (Date arithmetic carries/borrows correctly;
-// no future, floor at `minYear`). Sits on the drawer's translucent glass so the
-// dark ink reads over the globe.
+// Each of the six fields (YEAR · MONTH · DAY · HH : MM : SS) is a vertical
+// dial framed by a centred band (two lines). Each value change — a live tick
+// or a scrub — animates the dial scrolling by one row (down = newer, up =
+// older), so the motion itself hints which way to spin. Tap to expand: the
+// bar grows and the ±ghost neighbours come into view. A center-out cream
+// gradient (matching the header scrim) holds the centre legible and fades the
+// edges into the globe. Drag a field to dial; Date arithmetic carries/borrows
+// correctly; no future, floor at `minYear`.
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   Animated,
   PanResponder,
@@ -29,6 +30,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native'
+import { LinearGradient } from 'expo-linear-gradient'
 import { Pressable } from '@/components/primitives/Pressable'
 import { Text } from '@/components/primitives/Text'
 import { theme } from '@/tokens/theme'
@@ -38,9 +40,22 @@ type FieldKey = 'year' | 'month' | 'day' | 'hour' | 'minute' | 'second'
 const MONTH_ABBR = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
 
 const ROW_H = 26
-const COLLAPSED_H = ROW_H + 24 // centre row + breathing room
-const EXPANDED_H = ROW_H * 5 // centre + 2 above + 2 below (DOBWheel's 5 rows)
+const COLLAPSED_H = ROW_H + 22 // centre row + breathing room
+const EXPANDED_H = ROW_H * 5 // centre + 2 above + 2 below in view
 const STEP_PX = 26 // vertical drag distance per one unit step
+// Window of cells rendered per field — wider than what's visible so the
+// one-row slide animation always has a neighbour to scroll in.
+const WINDOW = [3, 2, 1, 0, -1, -2, -3] // newer (top) → older (bottom)
+
+// Center-out cream gradient — matches the globe's header scrim (paper100).
+const GRAD_CREAM = '236,230,214'
+const GRAD_COLORS = [
+  `rgba(${GRAD_CREAM},0)`,
+  `rgba(${GRAD_CREAM},0.9)`,
+  `rgba(${GRAD_CREAM},0.9)`,
+  `rgba(${GRAD_CREAM},0)`,
+] as const
+const GRAD_LOCATIONS = [0, 0.32, 0.68, 1] as const
 
 function fieldValue(d: Date, key: FieldKey): number {
   switch (key) {
@@ -108,8 +123,17 @@ export function TimeScrubber({ offsetMs, onOffsetChange, minYear = 2026, style }
     }).start()
   }, [expanded, height])
 
-  const playhead = new Date(Date.now() - offsetMs)
+  const playMs = Date.now() - offsetMs
+  const playhead = new Date(playMs)
   const live = offsetMs <= 0
+
+  // Direction of the latest playhead change → drives the dial slide
+  // (+1 newer = scroll down, −1 older = scroll up). Updated after render.
+  const prevPlayMs = useRef(playMs)
+  const direction = playMs > prevPlayMs.current ? 1 : playMs < prevPlayMs.current ? -1 : 0
+  useEffect(() => {
+    prevPlayMs.current = playMs
+  })
 
   // Refs the per-field PanResponders read so they never go stale.
   const offsetRef = useRef(offsetMs)
@@ -120,8 +144,7 @@ export function TimeScrubber({ offsetMs, onOffsetChange, minYear = 2026, style }
   expandedRef.current = expanded
   const maxOffset = Date.now() - new Date(minYear, 0, 1).getTime()
 
-  // Absolute-from-gesture-start scrub: avoids drift from stale offset reads
-  // during a fast drag. `delta` is in time units for the field (+ newer / − older).
+  // Absolute-from-gesture-start scrub: no drift from stale offset reads.
   function scrub(key: FieldKey, startPlayhead: Date, delta: number) {
     const next = stepDate(startPlayhead, key, delta)
     let newOffset = Date.now() - next.getTime()
@@ -130,26 +153,31 @@ export function TimeScrubber({ offsetMs, onOffsetChange, minYear = 2026, style }
     onChangeRef.current(newOffset)
   }
 
-  const fieldProps = { playhead, expanded, expandedRef, offsetRef, onScrub: scrub }
+  const fieldProps = { playhead, direction, expandedRef, offsetRef, onScrub: scrub }
 
   return (
     <Animated.View style={[styles.bar, { height }, style]}>
-      {/* Centred band — two horizontal lines framing the centre value, like DOBWheel. */}
+      <LinearGradient
+        colors={GRAD_COLORS}
+        locations={GRAD_LOCATIONS}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
+      {/* Centred band — two lines framing the centre value. */}
       <View style={styles.bandWrap} pointerEvents="none">
         <View style={styles.band} />
       </View>
 
       <RNPressable onPress={() => setExpanded((e) => !e)} style={styles.press}>
         <View style={styles.row}>
-          {(['year', 'month', 'day'] as FieldKey[]).map((key) => (
-            <Field key={key} fieldKey={key} {...fieldProps} />
-          ))}
-          {/* HH : MM : SS — tight group with colons */}
-          <View style={styles.timeGroup}>
+          <View style={styles.clock}>
+            <Field fieldKey="year" {...fieldProps} />
+            <Field fieldKey="month" {...fieldProps} />
+            <Field fieldKey="day" {...fieldProps} />
             <Field fieldKey="hour" {...fieldProps} />
-            <Text variant="bodyEmphasized" color={theme.colors.text.primary}>:</Text>
+            <Colon />
             <Field fieldKey="minute" {...fieldProps} />
-            <Text variant="bodyEmphasized" color={theme.colors.text.primary}>:</Text>
+            <Colon />
             <Field fieldKey="second" {...fieldProps} />
           </View>
           {live ? (
@@ -169,33 +197,29 @@ export function TimeScrubber({ offsetMs, onOffsetChange, minYear = 2026, style }
           )}
         </View>
       </RNPressable>
-
-      {/* Edge fade so the ±2 ghosts soften at the top/bottom (expanded only). */}
-      {expanded && (
-        <>
-          <View style={styles.fadeTop} pointerEvents="none" />
-          <View style={styles.fadeBottom} pointerEvents="none" />
-        </>
-      )}
     </Animated.View>
   )
 }
 
-// Deltas top→bottom: newer values above, older below (wheel physics).
-const COLLAPSED_DELTAS = [0]
-const EXPANDED_DELTAS = [2, 1, 0, -1, -2]
+function Colon() {
+  return (
+    <Text variant="bodyEmphasized" color={theme.colors.text.primary}>
+      :
+    </Text>
+  )
+}
 
 function Field({
   fieldKey,
   playhead,
-  expanded,
+  direction,
   expandedRef,
   offsetRef,
   onScrub,
 }: {
   fieldKey: FieldKey
   playhead: Date
-  expanded: boolean
+  direction: number
   expandedRef: React.MutableRefObject<boolean>
   offsetRef: React.MutableRefObject<number>
   onScrub: (key: FieldKey, startPlayhead: Date, delta: number) => void
@@ -209,32 +233,53 @@ function Field({
         startPlayhead.current = new Date(Date.now() - offsetRef.current)
       },
       onPanResponderMove: (_, g) => {
-        // Drag down (dy>0) brings the newer value to centre (+); up → older (−).
+        // Drag down (dy>0) → newer (+); drag up → older (−).
         const delta = Math.round(g.dy / STEP_PX)
         onScrub(fieldKey, startPlayhead.current, delta)
       },
     }),
   ).current
 
-  const deltas = expanded ? EXPANDED_DELTAS : COLLAPSED_DELTAS
+  const current = formatField(playhead, fieldKey)
+
+  // Dial slide: when the value changes, start the column one row off (so the
+  // OLD value is at the band) and animate it home — newer scrolls down, older
+  // scrolls up. useLayoutEffect sets the start offset before paint (no flash).
+  const slide = useRef(new Animated.Value(0)).current
+  const prevValue = useRef(current)
+  useLayoutEffect(() => {
+    if (prevValue.current !== current && direction !== 0) {
+      slide.setValue(direction > 0 ? -ROW_H : ROW_H)
+      Animated.timing(slide, {
+        toValue: 0,
+        duration: theme.motion.patterns.overlay.duration,
+        easing: theme.motion.patterns.overlay.easing,
+        useNativeDriver: true,
+      }).start()
+    }
+    prevValue.current = current
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [current])
 
   return (
     <View style={styles.field} {...responder.panHandlers}>
-      {deltas.map((delta) => {
-        const dist = Math.abs(delta)
-        const opacity = dist === 0 ? 1 : dist === 1 ? 0.55 : 0.3
-        return (
-          <View key={delta} style={styles.cell}>
-            <Text
-              variant={dist === 0 ? 'bodyEmphasized' : 'body'}
-              color={theme.colors.text.primary}
-              style={{ opacity }}
-            >
-              {formatField(stepDate(playhead, fieldKey, delta), fieldKey)}
-            </Text>
-          </View>
-        )
-      })}
+      <Animated.View style={{ transform: [{ translateY: slide }] }}>
+        {WINDOW.map((delta) => {
+          const dist = Math.abs(delta)
+          const opacity = dist === 0 ? 1 : dist === 1 ? 0.55 : dist === 2 ? 0.3 : 0.12
+          return (
+            <View key={delta} style={styles.cell}>
+              <Text
+                variant={dist === 0 ? 'bodyEmphasized' : 'body'}
+                color={theme.colors.text.primary}
+                style={{ opacity }}
+              >
+                {formatField(stepDate(playhead, fieldKey, delta), fieldKey)}
+              </Text>
+            </View>
+          )
+        })}
+      </Animated.View>
     </View>
   )
 }
@@ -244,12 +289,8 @@ const NOW_DOT = 7
 const styles = StyleSheet.create({
   bar: {
     overflow: 'hidden',
-    // Retract from fully-transparent: the drawer's translucent glass so the
-    // dark DOBWheel-style ink reads over the globe and reads continuous with
-    // the drawer below.
-    backgroundColor: theme.colors.bg.glass,
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.border.subtle,
+    // No solid surface — a center-out cream gradient (above) holds the centre
+    // legible and fades the dial edges into the globe.
   },
   press: {
     flex: 1,
@@ -268,26 +309,33 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: theme.spacing.lg,
   },
-  field: {
+  clock: {
+    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-evenly',
+  },
+  field: {
+    // Fill the bar height (so the whole dial is a drag target) and clip its
+    // own WINDOW; the centre cell sits at the band, neighbours fade via the
+    // gradient. alignSelf stretch overrides the row's centre alignment.
+    alignSelf: 'stretch',
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   cell: {
     height: ROW_H,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  timeGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.xxs,
-  },
   liveTag: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.xs,
+    marginLeft: theme.spacing.sm,
   },
   liveDot: {
     width: NOW_DOT,
@@ -299,6 +347,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.xs,
+    marginLeft: theme.spacing.sm,
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: theme.spacing.xs,
     borderRadius: theme.radius.full,
@@ -309,23 +358,5 @@ const styles = StyleSheet.create({
     height: NOW_DOT,
     borderRadius: NOW_DOT / 2,
     backgroundColor: theme.colors.text.inverse,
-  },
-  fadeTop: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    height: ROW_H,
-    backgroundColor: theme.colors.bg.glass,
-    opacity: 0.6,
-  },
-  fadeBottom: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: ROW_H,
-    backgroundColor: theme.colors.bg.glass,
-    opacity: 0.6,
   },
 })

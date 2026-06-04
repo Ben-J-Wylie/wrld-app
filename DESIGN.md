@@ -1643,29 +1643,33 @@ gesture start** (captures the playhead on grant, applies the total
 all fields + variable month/year lengths. Clamped to `[0, now-minYear]`
 (no future, floor at `minYear`, default 2026).
 
-**DOBWheel-style treatment (2026-06-04).** Each field is a vertical wheel
-framed by a centred **band** (two horizontal `border.strong` lines), with
-**fade strips** at the top/bottom edges — styled to match `DOBWheel`.
-Collapsed shows only the centre value; tapped, the bar grows
-(`motion.patterns.overlay`) to 5 rows and the **±2 ghost neighbours** fade
-in above/below (`bodyEmphasized` centre, `body` neighbours at opacity
-0.55 / 0.3 — exactly DOBWheel's coloring), all `text.primary` ink. Month
-renders as a 3-letter abbreviation (JAN…DEC); hours are 24h; the time
-group is `HH:MM:SS` with colons; fields spread via `justifyContent:
-'space-between'`. "● LIVE" tag when live; accent "● NOW" Pressable when
-scrubbed (→ `onOffsetChange(0)`).
+**Dial treatment (2026-06-04).** Each field is a vertical dial framed by a
+centred **band** (two horizontal `border.strong` lines). A fixed **WINDOW**
+of cells (±3) renders per field; `text.primary` ink, `bodyEmphasized`
+centre, `body` neighbours dimmed by distance (0.55 / 0.3 / 0.12) — DOBWheel
+coloring. Month is a 3-letter abbreviation (JAN…DEC); hours 24h; the
+clock spreads with `justifyContent: 'space-evenly'` so the gaps are even
+across all fields incl. the `:` colons of `HH : MM : SS`. Collapsed clips
+to the centre row; tap expands (`motion.patterns.overlay`) to ~5 rows.
+"● LIVE" tag when live; accent "● NOW" Pressable when scrubbed.
 
-**Direction note.** Drag-down = newer, drag-up = older (wheel physics,
-newer above) — a one-line flip if it reads wrong on device.
+**Animated tick / dial slide.** Every value change — a live tick or a
+scrub step — animates the field's cell column by one row: newer scrolls
+**down**, older scrolls **up** (the OLD value starts at the band and the
+new one slides home). So the motion itself cues which way to spin, and
+dragging reads as dialling. `useLayoutEffect` seeds the start offset
+before paint (no flash); only fields whose value actually changed animate.
+Drag direction matches: down = newer, up = older.
 
-**Surface (2026-06-04 retract).** First pass was background-less with cream
-text, which read too faint over the globe. Retracted to the drawer's
-translucent **`bg.glass`** (so the dark DOBWheel ink reads and the bar reads
-continuous with the drawer below it) + a hairline top border. The full-bar
-tap region uses a raw RN `Pressable` (not the primitive): the primitive
-routes `style` to an inner `Animated.View` whose `flex:1` can't resolve,
-which collapsed the content to 0 height — RN `Pressable` takes `flex:1`
-directly.
+**Center-out gradient surface (2026-06-04).** No solid background — a
+vertical `LinearGradient` (cream `rgba(236,230,214,…)` matching the header
+scrim) is fully opaque across the middle band (locations 0.32–0.68) and
+fades to transparent at the top/bottom, so the centre value is legible and
+the dial edges melt into the globe. Replaces the earlier `bg.glass` +
+fade-strip approach (first cream-over-transparent pass read too faint).
+The full-bar tap region uses a raw RN `Pressable` (the primitive routes
+`style` to an inner `Animated.View` whose `flex:1` can't resolve, which
+collapsed the content to 0 height).
 
 **Seam (Aaron / backend).** The component only emits `offsetMs`;
 `GlobeScreenMapbox` holds it and carries a commented TIME-MACHINE seam at
