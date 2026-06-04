@@ -459,10 +459,11 @@ export function StreamScreen() {
 
     // Translate app vocab → backend vocab; fall back to activeBroadcast then param
     const rawPrecision = activeBroadcast.get()?.precision ?? paramPrecision
-    const precisionMap: Record<string, 'exact' | 'city' | 'country'> = {
+    const precisionMap: Record<string, 'exact' | 'city' | 'country' | 'off'> = {
       bluedot: 'exact',
       city: 'city',
       country: 'country',
+      private: 'off',
     }
     const locationPrecision = precisionMap[rawPrecision ?? ''] ?? 'exact'
 
