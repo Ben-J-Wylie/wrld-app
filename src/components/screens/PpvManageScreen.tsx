@@ -103,9 +103,8 @@ export function PpvManageScreen() {
   const isScheduled = event.status === 'scheduled'
   const isLive = event.status === 'live'
   const canGoLive = isScheduled || isLive
-  const feeRate = 0.30
-  const netRevenue = event.netRevenueCents ?? Math.round((event.priceUsd * event.purchaseCount) * (1 - feeRate))
-  const grossRevenue = event.grossRevenueCents ?? event.priceUsd * event.purchaseCount
+  const netRevenue = event.netRevenueCents ?? 0
+  const grossRevenue = event.grossRevenueCents ?? 0
 
   return (
     <ScreenScroll contentContainerStyle={styles.content}>

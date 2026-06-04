@@ -43,8 +43,7 @@ function EventCard({ event, onDelete }: { event: PpvEvent; onDelete: (id: string
   const isScheduled = event.status === 'scheduled'
   const isCancelled = event.status === 'cancelled'
   const countdown = isScheduled ? formatCountdown(event.scheduledAt) : ''
-  const feeRate = 0.30
-  const netRevenue = event.netRevenueCents ?? Math.round(event.priceUsd * event.purchaseCount * (1 - feeRate))
+  const netRevenue = event.netRevenueCents ?? 0
 
   return (
     <Pressable
