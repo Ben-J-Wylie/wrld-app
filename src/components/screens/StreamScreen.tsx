@@ -148,7 +148,7 @@ const tipStyles = StyleSheet.create({
 })
 
 export function StreamScreen() {
-  const { id, streamId: paramStreamId, title: paramTitle, sources: paramSources, lat: paramLat, lng: paramLng, subscribersOnly: paramSubscribersOnly } = useLocalSearchParams<{
+  const { id, streamId: paramStreamId, title: paramTitle, sources: paramSources, lat: paramLat, lng: paramLng, subscribersOnly: paramSubscribersOnly, precision: paramPrecision } = useLocalSearchParams<{
     id: string
     streamId?: string
     title?: string
@@ -156,6 +156,7 @@ export function StreamScreen() {
     lat?: string
     lng?: string
     subscribersOnly?: string
+    precision?: string
   }>()
   const isNew = id === 'new'
 
@@ -455,6 +456,16 @@ export function StreamScreen() {
     setActiveRecordingId(null)
     const title = (paramTitle ?? '').trim()
     if (!title || !coords || broadcastSources.length === 0) return
+
+    // Translate app vocab → backend vocab; fall back to activeBroadcast then param
+    const rawPrecision = activeBroadcast.get()?.precision ?? paramPrecision
+    const precisionMap: Record<string, 'exact' | 'city' | 'country'> = {
+      bluedot: 'exact',
+      city: 'city',
+      country: 'country',
+    }
+    const locationPrecision = precisionMap[rawPrecision ?? ''] ?? 'exact'
+
     try {
       await connect()
       await createRoom({
@@ -463,6 +474,7 @@ export function StreamScreen() {
         lng: coords.longitude,
         sources: broadcastSources,
         subscribersOnly: (activeBroadcast.get()?.subscribersOnly ?? paramSubscribersOnly) === 'true',
+        locationPrecision,
       })
       await startBroadcasting(broadcastSources)
     } catch (err) {
