@@ -1,0 +1,583 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>WRLD — Go Live &amp; Record (clips)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* ════════════════════════════════════════════════════════════════
+     WRLD clips — shipped design language (light, inverted-newspaper)
+     Cream paper · warm dark ink · single crimson accent · flat surfaces
+     ════════════════════════════════════════════════════════════════ */
+  :root{
+    --paper:#f3eee2;        /* cream, just inside white */
+    --paper-raise:#f8f4ea;  /* raised surface */
+    --paper-sink:#eae4d5;   /* recessed / track */
+    --ink:#1c1814;          /* warm dark, never #000 */
+    --ink-dim:rgba(28,24,20,0.60);
+    --ink-faint:rgba(28,24,20,0.34);
+    --line:rgba(28,24,20,0.14);
+    --line-2:rgba(28,24,20,0.24);
+    --accent:#d92e3a;       /* the only saturated color */
+    --accent-ink:#fbf3ea;   /* text on accent */
+    --accent-wash:rgba(217,46,58,0.08);
+    --accent-line:rgba(217,46,58,0.40);
+    --ok:#3f6b4a;           /* desaturated green, included-checks only */
+    --sans:"Inter Tight", ui-sans-serif, system-ui, sans-serif;
+    --mono:"IBM Plex Mono", ui-monospace, monospace;
+    --r:4px;                /* chrome radius */
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:#cfc8b8;font-family:var(--sans);color:var(--ink);-webkit-font-smoothing:antialiased}
+  body{padding:46px 30px 80px}
+
+  .pageh{ max-width:1500px; margin:0 auto 30px }
+  .pageh .kick{ font:600 10px var(--mono); letter-spacing:0.18em; color:var(--accent); text-transform:uppercase; margin-bottom:12px }
+  .pageh h1{ font:600 30px/1.08 var(--sans); letter-spacing:-0.02em; margin:0 0 8px; color:var(--ink) }
+  .pageh p{ font:500 13px/1.6 var(--sans); color:var(--ink-dim); max-width:720px; margin:0 }
+  .pageh .lineage{ display:inline-block; margin-top:12px; font:500 10px var(--mono); letter-spacing:0.1em;
+    color:var(--ink-dim); border:1px solid var(--line-2); border-radius:var(--r); padding:5px 9px; text-transform:uppercase }
+
+  .canvas{ max-width:1500px; margin:0 auto;
+    display:flex; flex-wrap:wrap; gap:40px 28px; align-items:flex-start }
+
+  .frame{ display:flex; flex-direction:column; gap:12px; flex:none }
+  .frame .cap{ max-width:390px }
+  .frame .cap .id{ font:600 11px var(--mono); letter-spacing:0.12em; color:var(--accent); text-transform:uppercase }
+  .frame .cap .nm{ font:600 14px var(--sans); letter-spacing:-0.01em; color:var(--ink); margin-top:2px }
+  .frame .cap .ds{ font:500 11px/1.5 var(--sans); color:var(--ink-dim); margin-top:4px; text-wrap:pretty }
+
+  /* Portrait phone — Pro range, flex-friendly inside */
+  .phone{ width:390px; height:844px; border-radius:30px; position:relative; overflow:hidden;
+    background:var(--paper); border:1px solid var(--line-2);
+    box-shadow:0 24px 50px rgba(60,50,35,0.28); }
+  .status{ position:absolute; top:0; left:0; right:0; height:54px; z-index:20;
+    display:flex; align-items:center; justify-content:space-between; padding:18px 28px 0;
+    font:600 15px var(--sans); color:var(--ink) }
+  .status .r{ display:flex; gap:6px; align-items:center }
+  .status svg{ display:block }
+  .home{ position:absolute; bottom:8px; left:50%; transform:translateX(-50%); z-index:40;
+    width:134px; height:5px; border-radius:100px; background:var(--ink); opacity:0.28 }
+
+  /* App scaffold */
+  .scr{ position:absolute; inset:0; padding:54px 0 0; display:flex; flex-direction:column }
+  .topbar{ display:flex; align-items:center; justify-content:space-between; padding:14px 20px 12px }
+  .topbar .ttl{ font:600 22px/1 var(--sans); letter-spacing:-0.02em }
+  .topbar .ico{ width:40px; height:40px; border-radius:var(--r); border:1px solid var(--line-2);
+    background:var(--paper-raise); display:grid; place-items:center; color:var(--ink); cursor:pointer }
+  .topbar .ico svg{ width:20px; height:20px }
+
+  .body{ flex:1; min-height:0; overflow:hidden; display:flex; flex-direction:column }
+  .scroll{ flex:1; min-height:0; overflow-y:auto; scrollbar-width:none; padding:0 20px }
+  .scroll::-webkit-scrollbar{ display:none }
+
+  /* Mono section label */
+  .mlabel{ font:600 10px var(--mono); letter-spacing:0.16em; color:var(--ink-faint); text-transform:uppercase;
+    padding:14px 2px 10px; display:flex; align-items:center; justify-content:space-between }
+  .mlabel .hint{ color:var(--ink-faint); letter-spacing:0.1em }
+
+  /* ── Arming buttons: two independent primaries ── */
+  .arm-pair{ display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:4px 20px 6px }
+  .armbtn{ border:1px solid var(--line-2); border-radius:var(--r); background:var(--paper-raise);
+    padding:16px 14px; cursor:pointer; text-align:left; display:flex; flex-direction:column; gap:10px;
+    min-height:96px; justify-content:space-between; transition:border-color .15s, background .15s; }
+  .armbtn .top{ display:flex; align-items:center; justify-content:space-between }
+  .armbtn .ledge{ display:flex; align-items:center; gap:8px; font:600 16px var(--sans); letter-spacing:-0.01em }
+  .armbtn .glyph{ width:24px; height:24px; display:grid; place-items:center; color:var(--ink) }
+  .armbtn .glyph svg{ width:22px; height:22px }
+  .armbtn .state{ font:600 10px var(--mono); letter-spacing:0.14em; text-transform:uppercase; color:var(--ink-faint) }
+  .armbtn .dot{ width:10px; height:10px; border-radius:50%; border:1.5px solid var(--line-2) }
+  /* armed (cued) */
+  .armbtn[data-state="armed"]{ border-color:var(--accent-line); background:var(--accent-wash) }
+  .armbtn[data-state="armed"] .state{ color:var(--accent) }
+  .armbtn[data-state="armed"] .dot{ border-color:var(--accent); background:transparent }
+  /* active (firing) */
+  .armbtn[data-state="active"]{ border-color:var(--accent); background:var(--accent); color:var(--accent-ink) }
+  .armbtn[data-state="active"] .ledge,
+  .armbtn[data-state="active"] .glyph{ color:var(--accent-ink) }
+  .armbtn[data-state="active"] .state{ color:var(--accent-ink) }
+  .armbtn[data-state="active"] .dot{ border-color:var(--accent-ink); background:var(--accent-ink) }
+  .rec-dot{ width:11px; height:11px; border-radius:50%; background:var(--accent); box-shadow:0 0 0 0 var(--accent) }
+  .armbtn[data-state="active"] .rec-dot{ background:var(--accent-ink) }
+
+  /* ── Source rows ── */
+  .srclist{ display:flex; flex-direction:column; border:1px solid var(--line); border-radius:var(--r); overflow:hidden; background:var(--paper-raise) }
+  .src{ display:grid; grid-template-columns:42px 1fr auto; gap:12px; align-items:center;
+    padding:13px 14px; border-top:1px solid var(--line) }
+  .src:first-child{ border-top:0 }
+  .src .thumb{ width:42px; height:42px; border-radius:var(--r); background:var(--paper-sink);
+    border:1px solid var(--line); display:grid; place-items:center; color:var(--ink-dim); overflow:hidden; position:relative }
+  .src .thumb svg{ width:20px; height:20px }
+  .src .meta{ min-width:0; display:flex; flex-direction:column; gap:3px }
+  .src .nm{ font:600 14px var(--sans); letter-spacing:-0.01em; display:flex; align-items:center; gap:7px }
+  .src .sub{ font:500 10px var(--mono); letter-spacing:0.08em; color:var(--ink-faint); text-transform:uppercase;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+  .tag-sens{ font:600 8px var(--mono); letter-spacing:0.14em; text-transform:uppercase;
+    color:var(--accent); border:1px solid var(--accent-line); border-radius:3px; padding:2px 4px; background:var(--accent-wash) }
+  .tag-benign{ font:600 8px var(--mono); letter-spacing:0.14em; text-transform:uppercase;
+    color:var(--ink-faint); border:1px solid var(--line-2); border-radius:3px; padding:2px 4px }
+
+  /* the two affordances per row */
+  .affs{ display:flex; gap:8px; align-items:center }
+  .aff{ display:flex; flex-direction:column; align-items:center; gap:5px }
+  .aff .alab{ font:600 8px var(--mono); letter-spacing:0.12em; color:var(--ink-faint); text-transform:uppercase }
+  .tgl{ width:42px; height:25px; border-radius:100px; background:var(--paper-sink); border:1px solid var(--line-2);
+    position:relative; cursor:pointer; transition:background .18s, border-color .18s }
+  .tgl::after{ content:""; position:absolute; top:2px; left:2px; width:19px; height:19px; border-radius:50%;
+    background:var(--paper-raise); border:1px solid var(--line-2); transition:transform .2s cubic-bezier(.4,1.3,.6,1) }
+  .tgl[data-on="true"]{ background:var(--accent); border-color:var(--accent) }
+  .tgl[data-on="true"]::after{ transform:translateX(17px); background:var(--accent-ink); border-color:var(--accent-ink) }
+  .tgl[data-locked="true"]{ opacity:0.45 }
+  /* record toggle that routes through consent shows a key glyph when off */
+  .tgl[data-consent="true"]::before{ content:""; position:absolute; right:5px; top:50%; transform:translateY(-50%);
+    width:11px; height:11px; background:no-repeat center/contain url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='%231c1814' stroke-opacity='0.4' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><rect x='4' y='10' width='16' height='10' rx='2'/><path d='M8 10V7a4 4 0 0 1 8 0v3'/></svg>"); }
+
+  /* precision sub-control on location */
+  .subctl{ grid-column:1 / -1; margin-top:2px; padding:10px 0 2px 54px }
+  .seg{ display:inline-flex; border:1px solid var(--line-2); border-radius:var(--r); overflow:hidden; background:var(--paper-sink) }
+  .seg button{ border:0; background:transparent; padding:7px 11px; cursor:pointer; font-family:var(--sans);
+    font:600 10px var(--mono); letter-spacing:0.1em; text-transform:uppercase; color:var(--ink-dim);
+    border-left:1px solid var(--line-2) }
+  .seg button:first-child{ border-left:0 }
+  .seg button[data-on="true"]{ background:var(--ink); color:var(--paper) }
+  .subctl .cap2{ display:block; font:500 9.5px var(--mono); letter-spacing:0.08em; color:var(--ink-faint);
+    text-transform:uppercase; margin-top:7px }
+
+  /* identity row */
+  .ident .affs .seg button[data-on="true"]{ background:var(--ink); color:var(--paper) }
+
+  /* ── Go bar (docked CTA) ── */
+  .gobar{ padding:14px 20px calc(14px + env(safe-area-inset-bottom,0px));
+    border-top:1px solid var(--line); background:var(--paper-raise);
+    display:flex; flex-direction:column; gap:10px }
+  .gobar .summary{ display:flex; align-items:center; justify-content:space-between;
+    font:600 10px var(--mono); letter-spacing:0.12em; color:var(--ink-faint); text-transform:uppercase }
+  .gobar .summary b{ color:var(--ink) }
+  .go-cta{ height:58px; border-radius:var(--r); border:0; cursor:pointer; font-family:var(--sans);
+    display:flex; align-items:center; justify-content:center; gap:10px;
+    font:600 16px var(--sans); letter-spacing:-0.01em }
+  .go-cta[data-kind="idle"]{ background:var(--paper-sink); color:var(--ink-faint); border:1px solid var(--line-2) }
+  .go-cta[data-kind="armed"]{ background:var(--accent); color:var(--accent-ink) }
+  .go-cta[data-kind="live"]{ background:var(--accent); color:var(--accent-ink) }
+  .go-cta .lv{ display:inline-flex; align-items:center; gap:8px }
+  .go-cta .blip{ width:10px; height:10px; border-radius:50%; background:var(--accent-ink) }
+
+  /* live HUD pieces (A3) */
+  .videobg{ position:absolute; inset:0; z-index:0;
+    background:
+      linear-gradient(118deg, #2a2622 0%, #46352c 38%, #6e3b34 60%, #2d2723 100%);
+  }
+  .videobg::after{ content:""; position:absolute; inset:0;
+    background:
+      radial-gradient(60% 50% at 30% 28%, rgba(255,210,160,0.22), transparent 60%),
+      radial-gradient(50% 40% at 78% 72%, rgba(217,46,58,0.28), transparent 65%);
+    mix-blend-mode:screen }
+  .videobg .figs{ position:absolute; left:0; right:0; bottom:0; height:46%;
+    background:linear-gradient(0deg, rgba(10,8,7,0.6), transparent);
+  }
+  .hud-top{ position:absolute; top:60px; left:16px; right:16px; z-index:10; display:flex; align-items:flex-start; justify-content:space-between; gap:10px }
+  .hud-panel{ background:rgba(20,16,13,0.62); border:1px solid rgba(255,240,225,0.16); border-radius:var(--r);
+    backdrop-filter:blur(2px); color:#f6efe4 }
+  .livepill{ display:inline-flex; align-items:center; gap:7px; padding:8px 11px; font:600 11px var(--mono);
+    letter-spacing:0.16em; text-transform:uppercase }
+  .livepill .d{ width:9px; height:9px; border-radius:50%; background:var(--accent) }
+  .viewers{ display:inline-flex; align-items:center; gap:6px; padding:8px 11px; font:600 11px var(--mono); letter-spacing:0.08em }
+  .viewers svg{ width:13px; height:13px; opacity:0.8 }
+
+  /* the indicator element — the focus of A3 */
+  .onair{ position:absolute; left:16px; right:16px; bottom:120px; z-index:10;
+    background:rgba(20,16,13,0.68); border:1px solid rgba(255,240,225,0.18); border-radius:var(--r);
+    overflow:hidden; color:#f6efe4 }
+  .onair .hdr{ display:flex; align-items:center; justify-content:space-between; padding:11px 13px; border-bottom:1px solid rgba(255,240,225,0.12) }
+  .onair .hdr .l{ font:600 10px var(--mono); letter-spacing:0.16em; text-transform:uppercase; opacity:0.7 }
+  .onair .rows{ display:flex; flex-direction:column }
+  .oa-row{ display:flex; align-items:center; gap:10px; padding:10px 13px; border-top:1px solid rgba(255,240,225,0.08) }
+  .oa-row:first-child{ border-top:0 }
+  .oa-row .k{ width:18px; height:18px; display:grid; place-items:center; opacity:0.85 }
+  .oa-row .k svg{ width:15px; height:15px }
+  .oa-row .nm{ flex:1; font:600 13px var(--sans); letter-spacing:-0.01em }
+  .chiprow{ display:flex; gap:6px }
+  .chip{ font:600 8.5px var(--mono); letter-spacing:0.12em; text-transform:uppercase; padding:3px 6px; border-radius:3px;
+    border:1px solid rgba(255,240,225,0.22); color:#f6efe4 }
+  .chip[data-kind="air"]{ background:var(--accent); border-color:var(--accent); color:var(--accent-ink) }
+  .chip[data-kind="rec"]{ background:transparent; border-color:rgba(255,240,225,0.5) }
+  .chip[data-kind="rec"] .rd{ display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--accent); margin-right:4px; vertical-align:middle }
+  .chip[data-kind="off"]{ opacity:0.4 }
+  .onair .note{ padding:10px 13px; font:500 10px/1.5 var(--mono); letter-spacing:0.04em; text-transform:uppercase;
+    color:rgba(246,239,228,0.66); border-top:1px solid rgba(255,240,225,0.12); display:flex; gap:8px; align-items:flex-start }
+  .onair .note .rd{ width:7px; height:7px; border-radius:50%; background:var(--accent); margin-top:3px; flex:none }
+
+  /* A2 consent bottom sheet */
+  .sheet-scrim{ position:absolute; inset:0; z-index:30; background:rgba(28,24,20,0.42) }
+  .sheet{ position:absolute; left:0; right:0; bottom:0; z-index:31; background:var(--paper-raise);
+    border-top:1px solid var(--line-2); border-radius:18px 18px 0 0; padding:10px 22px calc(24px + env(safe-area-inset-bottom,0px)) }
+  .sheet .grab{ width:40px; height:4px; border-radius:100px; background:var(--line-2); margin:6px auto 16px }
+  .sheet .s-ic{ width:46px; height:46px; border-radius:50%; background:var(--accent-wash); border:1px solid var(--accent-line);
+    color:var(--accent); display:grid; place-items:center; margin-bottom:14px }
+  .sheet .s-ic svg{ width:24px; height:24px }
+  .sheet h3{ font:600 22px/1.15 var(--sans); letter-spacing:-0.02em; margin:0 0 8px; text-wrap:pretty }
+  .sheet .lede{ font:500 13.5px/1.6 var(--sans); color:var(--ink-dim); margin:0 0 16px; text-wrap:pretty }
+  .sheet .what{ border:1px solid var(--line); border-radius:var(--r); background:var(--paper); margin-bottom:16px }
+  .sheet .what .w{ display:flex; gap:11px; padding:13px 14px; border-top:1px solid var(--line); font:500 12.5px/1.45 var(--sans); color:var(--ink) }
+  .sheet .what .w:first-child{ border-top:0 }
+  .sheet .what .w .b{ width:6px; height:6px; border-radius:50%; background:var(--accent); margin-top:6px; flex:none }
+  .sheet .what .w b{ font-weight:600 }
+  .sheet .what .w .mn{ font:500 10px var(--mono); letter-spacing:0.06em; color:var(--ink-faint); text-transform:uppercase; display:block; margin-top:2px }
+  .sheet .acts{ display:flex; flex-direction:column; gap:9px }
+  .btn-accent{ height:54px; border-radius:var(--r); border:0; background:var(--accent); color:var(--accent-ink);
+    font:600 15px var(--sans); cursor:pointer; font-family:var(--sans) }
+  .btn-quiet{ height:50px; border-radius:var(--r); border:1px solid var(--line-2); background:transparent; color:var(--ink);
+    font:600 14px var(--sans); cursor:pointer; font-family:var(--sans) }
+  .sheet .fine{ font:500 10.5px/1.5 var(--mono); letter-spacing:0.04em; color:var(--ink-faint); text-transform:uppercase; text-align:center; margin-top:12px }
+</style>
+</head>
+<body>
+
+<div class="pageh">
+  <div class="kick">Clips initiative · Family A · Go Live &amp; Record</div>
+  <h1>Go Live &amp; Record — broadcaster pre-stream &amp; live surfaces</h1>
+  <p>Two independent buttons (Go Live · Record), two source sets each with broadcast + record affordances, privacy-tiered sources with a consent gate on sensitive records, and an on-air-vs-recording indicator legible over arbitrary video. Light "inverted-newspaper" language, single crimson accent.</p>
+  <span class="lineage">SUPERSEDES: go-live-portrait (12.2)</span>
+</div>
+
+<div class="canvas">
+
+  <!-- ════════ A1 — Arming screen, default arming ════════ -->
+  <div class="frame">
+    <div class="cap">
+      <div class="id">A1 · arming</div>
+      <div class="nm">Default arming — broadcast-only</div>
+      <div class="ds">Camera/audio broadcast-on, gyro/compass record-on, sensitive records off-until-consented. Go Live armed; Record idle.</div>
+    </div>
+    <div class="phone">
+      <div class="status"><span>9:41</span><span class="r">
+        <svg width="18" height="12" viewBox="0 0 19 12"><rect x="0" y="7.5" width="3.2" height="4.5" rx="0.7" fill="#1c1814"/><rect x="4.8" y="5" width="3.2" height="7" rx="0.7" fill="#1c1814"/><rect x="9.6" y="2.5" width="3.2" height="9.5" rx="0.7" fill="#1c1814"/><rect x="14.4" y="0" width="3.2" height="12" rx="0.7" fill="#1c1814"/></svg>
+        <svg width="25" height="12" viewBox="0 0 27 13"><rect x="0.5" y="0.5" width="23" height="12" rx="3.5" stroke="#1c1814" stroke-opacity="0.5" fill="none"/><rect x="2" y="2" width="17" height="9" rx="2" fill="#1c1814"/></svg>
+      </span></div>
+      <div class="home"></div>
+      <div class="scr">
+        <div class="topbar">
+          <div class="ttl">Go live</div>
+          <div class="ico" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></div>
+        </div>
+        <div class="arm-pair">
+          <button class="armbtn" data-state="armed">
+            <div class="top"><span class="ledge"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 18 0"/><path d="M6.5 12a5.5 5.5 0 0 1 11 0"/><circle cx="12" cy="12" r="1.8" fill="currentColor"/></svg></span>Go Live</span><span class="dot"></span></div>
+            <span class="state">Armed · ready</span>
+          </button>
+          <button class="armbtn" data-state="idle">
+            <div class="top"><span class="ledge"><span class="glyph"><span class="rec-dot"></span></span>Record</span><span class="dot"></span></div>
+            <span class="state">Off</span>
+          </button>
+        </div>
+        <div class="body">
+          <div class="scroll">
+            <div class="mlabel"><span>Sources</span><span class="hint">Broadcast · Record</span></div>
+            <div class="srclist">
+              <!-- camera -->
+              <div class="src">
+                <div class="thumb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h4l2-2h6l2 2h4v12H3z"/><circle cx="12" cy="13" r="3.5"/></svg></div>
+                <div class="meta"><span class="nm">Camera <span class="tag-sens">Sensitive</span></span><span class="sub">Rear · 1080p</span></div>
+                <div class="affs">
+                  <div class="aff"><span class="alab">Air</span><div class="tgl" data-on="true"></div></div>
+                  <div class="aff"><span class="alab">Rec</span><div class="tgl" data-consent="true"></div></div>
+                </div>
+              </div>
+              <!-- audio -->
+              <div class="src">
+                <div class="thumb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></div>
+                <div class="meta"><span class="nm">Audio <span class="tag-sens">Sensitive</span></span><span class="sub">Mic · 48kHz</span></div>
+                <div class="affs">
+                  <div class="aff"><span class="alab">Air</span><div class="tgl" data-on="true"></div></div>
+                  <div class="aff"><span class="alab">Rec</span><div class="tgl" data-consent="true"></div></div>
+                </div>
+              </div>
+              <!-- location -->
+              <div class="src">
+                <div class="thumb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-7-7-12a7 7 0 0 1 14 0c0 5-7 12-7 12z"/><circle cx="12" cy="9" r="2.4"/></svg></div>
+                <div class="meta"><span class="nm">Location <span class="tag-sens">Sensitive</span></span><span class="sub">Ceiling · City</span></div>
+                <div class="affs">
+                  <div class="aff"><span class="alab">Air</span><div class="tgl" data-on="true"></div></div>
+                  <div class="aff"><span class="alab">Rec</span><div class="tgl" data-consent="true"></div></div>
+                </div>
+                <div class="subctl">
+                  <div class="seg">
+                    <button>Bluedot</button><button data-on="true">City</button><button>Country</button><button>Private</button>
+                  </div>
+                  <span class="cap2">Capture ceiling — record can't exceed what's shared live</span>
+                </div>
+              </div>
+              <!-- gyro -->
+              <div class="src">
+                <div class="thumb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="9" ry="3.6"/><ellipse cx="12" cy="12" rx="3.6" ry="9"/></svg></div>
+                <div class="meta"><span class="nm">Gyro <span class="tag-benign">Benign</span></span><span class="sub">Orientation</span></div>
+                <div class="affs">
+                  <div class="aff"><span class="alab">Air</span><div class="tgl"></div></div>
+                  <div class="aff"><span class="alab">Rec</span><div class="tgl" data-on="true"></div></div>
+                </div>
+              </div>
+              <!-- compass -->
+              <div class="src">
+                <div class="thumb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z" fill="currentColor" stroke="none"/></svg></div>
+                <div class="meta"><span class="nm">Compass <span class="tag-benign">Benign</span></span><span class="sub">Heading</span></div>
+                <div class="affs">
+                  <div class="aff"><span class="alab">Air</span><div class="tgl"></div></div>
+                  <div class="aff"><span class="alab">Rec</span><div class="tgl" data-on="true"></div></div>
+                </div>
+              </div>
+              <!-- screen (pending classification) -->
+              <div class="src">
+                <div class="thumb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg></div>
+                <div class="meta"><span class="nm">Screen <span class="tag-sens">Sensitive ?</span></span><span class="sub">Pending review</span></div>
+                <div class="affs">
+                  <div class="aff"><span class="alab">Air</span><div class="tgl"></div></div>
+                  <div class="aff"><span class="alab">Rec</span><div class="tgl" data-consent="true"></div></div>
+                </div>
+              </div>
+              <!-- identity -->
+              <div class="src ident">
+                <div class="thumb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M5 21a7 7 0 0 1 14 0"/></svg></div>
+                <div class="meta"><span class="nm">Identity</span><span class="sub">Flag · not a track</span></div>
+                <div class="affs">
+                  <div class="seg"><button data-on="true">Attributed</button><button>Anon</button></div>
+                </div>
+              </div>
+            </div>
+            <div style="height:14px"></div>
+          </div>
+          <div class="gobar">
+            <div class="summary"><span>Armed · <b>broadcast-only</b></span><span>3 sources live</span></div>
+            <button class="go-cta" data-kind="armed">Go Live</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════ A1 — record-only armed (post-consent) ════════ -->
+  <div class="frame">
+    <div class="cap">
+      <div class="id">A1 · arming</div>
+      <div class="nm">Record-only armed (sensitive, post-consent)</div>
+      <div class="ds">Camera record on after consent; Go Live idle. Record button armed. Recording without broadcasting is an allowed, visible state.</div>
+    </div>
+    <div class="phone">
+      <div class="status"><span>9:41</span><span class="r">
+        <svg width="18" height="12" viewBox="0 0 19 12"><rect x="0" y="7.5" width="3.2" height="4.5" rx="0.7" fill="#1c1814"/><rect x="4.8" y="5" width="3.2" height="7" rx="0.7" fill="#1c1814"/><rect x="9.6" y="2.5" width="3.2" height="9.5" rx="0.7" fill="#1c1814"/><rect x="14.4" y="0" width="3.2" height="12" rx="0.7" fill="#1c1814"/></svg>
+        <svg width="25" height="12" viewBox="0 0 27 13"><rect x="0.5" y="0.5" width="23" height="12" rx="3.5" stroke="#1c1814" stroke-opacity="0.5" fill="none"/><rect x="2" y="2" width="17" height="9" rx="2" fill="#1c1814"/></svg>
+      </span></div>
+      <div class="home"></div>
+      <div class="scr">
+        <div class="topbar">
+          <div class="ttl">Go live</div>
+          <div class="ico" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></div>
+        </div>
+        <div class="arm-pair">
+          <button class="armbtn" data-state="idle">
+            <div class="top"><span class="ledge"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 18 0"/><path d="M6.5 12a5.5 5.5 0 0 1 11 0"/><circle cx="12" cy="12" r="1.8" fill="currentColor"/></svg></span>Go Live</span><span class="dot"></span></div>
+            <span class="state">Off</span>
+          </button>
+          <button class="armbtn" data-state="armed">
+            <div class="top"><span class="ledge"><span class="glyph"><span class="rec-dot"></span></span>Record</span><span class="dot"></span></div>
+            <span class="state">Armed · to disk</span>
+          </button>
+        </div>
+        <div class="body">
+          <div class="scroll">
+            <div class="mlabel"><span>Sources</span><span class="hint">Broadcast · Record</span></div>
+            <div class="srclist">
+              <div class="src">
+                <div class="thumb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h4l2-2h6l2 2h4v12H3z"/><circle cx="12" cy="13" r="3.5"/></svg></div>
+                <div class="meta"><span class="nm">Camera <span class="tag-sens">Sensitive</span></span><span class="sub">Consented · to disk</span></div>
+                <div class="affs">
+                  <div class="aff"><span class="alab">Air</span><div class="tgl"></div></div>
+                  <div class="aff"><span class="alab">Rec</span><div class="tgl" data-on="true"></div></div>
+                </div>
+              </div>
+              <div class="src">
+                <div class="thumb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></div>
+                <div class="meta"><span class="nm">Audio <span class="tag-sens">Sensitive</span></span><span class="sub">Consented · to disk</span></div>
+                <div class="affs">
+                  <div class="aff"><span class="alab">Air</span><div class="tgl"></div></div>
+                  <div class="aff"><span class="alab">Rec</span><div class="tgl" data-on="true"></div></div>
+                </div>
+              </div>
+              <div class="src">
+                <div class="thumb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-7-7-12a7 7 0 0 1 14 0c0 5-7 12-7 12z"/><circle cx="12" cy="9" r="2.4"/></svg></div>
+                <div class="meta"><span class="nm">Location <span class="tag-sens">Sensitive</span></span><span class="sub">Ceiling · City</span></div>
+                <div class="affs">
+                  <div class="aff"><span class="alab">Air</span><div class="tgl"></div></div>
+                  <div class="aff"><span class="alab">Rec</span><div class="tgl" data-consent="true"></div></div>
+                </div>
+              </div>
+              <div class="src">
+                <div class="thumb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="9" ry="3.6"/><ellipse cx="12" cy="12" rx="3.6" ry="9"/></svg></div>
+                <div class="meta"><span class="nm">Gyro <span class="tag-benign">Benign</span></span><span class="sub">Orientation</span></div>
+                <div class="affs">
+                  <div class="aff"><span class="alab">Air</span><div class="tgl"></div></div>
+                  <div class="aff"><span class="alab">Rec</span><div class="tgl" data-on="true"></div></div>
+                </div>
+              </div>
+              <div class="src">
+                <div class="thumb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z" fill="currentColor" stroke="none"/></svg></div>
+                <div class="meta"><span class="nm">Compass <span class="tag-benign">Benign</span></span><span class="sub">Heading</span></div>
+                <div class="affs">
+                  <div class="aff"><span class="alab">Air</span><div class="tgl"></div></div>
+                  <div class="aff"><span class="alab">Rec</span><div class="tgl" data-on="true"></div></div>
+                </div>
+              </div>
+              <div class="src ident">
+                <div class="thumb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M5 21a7 7 0 0 1 14 0"/></svg></div>
+                <div class="meta"><span class="nm">Identity</span><span class="sub">Flag · not a track</span></div>
+                <div class="affs">
+                  <div class="seg"><button>Attributed</button><button data-on="true">Anon</button></div>
+                </div>
+              </div>
+            </div>
+            <div style="height:14px"></div>
+          </div>
+          <div class="gobar">
+            <div class="summary"><span>Armed · <b>record-only</b></span><span>5 sources to disk</span></div>
+            <button class="go-cta" data-kind="armed"><span class="lv"><span class="blip"></span>Start Recording</span></button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════ A2 — consent sheet ════════ -->
+  <div class="frame">
+    <div class="cap">
+      <div class="id">A2 · consent <span style="color:var(--ink-faint)">· NEW</span></div>
+      <div class="nm">Sensitive-source record consent</div>
+      <div class="ds">Shown when record is enabled for a sensitive source. States plainly what's saved, that it can exceed the live view, with an easy decline. Non-manipulative.</div>
+    </div>
+    <div class="phone">
+      <div class="status"><span>9:41</span><span class="r">
+        <svg width="18" height="12" viewBox="0 0 19 12"><rect x="0" y="7.5" width="3.2" height="4.5" rx="0.7" fill="#1c1814"/><rect x="4.8" y="5" width="3.2" height="7" rx="0.7" fill="#1c1814"/><rect x="9.6" y="2.5" width="3.2" height="9.5" rx="0.7" fill="#1c1814"/><rect x="14.4" y="0" width="3.2" height="12" rx="0.7" fill="#1c1814"/></svg>
+        <svg width="25" height="12" viewBox="0 0 27 13"><rect x="0.5" y="0.5" width="23" height="12" rx="3.5" stroke="#1c1814" stroke-opacity="0.5" fill="none"/><rect x="2" y="2" width="17" height="9" rx="2" fill="#1c1814"/></svg>
+      </span></div>
+      <div class="home"></div>
+      <!-- dimmed arming behind -->
+      <div class="scr" style="filter:saturate(0.6)">
+        <div class="topbar"><div class="ttl">Go live</div><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></div></div>
+        <div class="arm-pair">
+          <button class="armbtn" data-state="idle"><div class="top"><span class="ledge"><span class="glyph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 18 0"/><path d="M6.5 12a5.5 5.5 0 0 1 11 0"/><circle cx="12" cy="12" r="1.8" fill="currentColor"/></svg></span>Go Live</span><span class="dot"></span></div><span class="state">Off</span></button>
+          <button class="armbtn" data-state="idle"><div class="top"><span class="ledge"><span class="glyph"><span class="rec-dot"></span></span>Record</span><span class="dot"></span></div><span class="state">Off</span></button>
+        </div>
+      </div>
+      <div class="sheet-scrim"></div>
+      <div class="sheet">
+        <div class="grab"></div>
+        <div class="s-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></div>
+        <h3>Record the camera to your device?</h3>
+        <p class="lede">Turning on record saves this source to your phone, even if you never go live with it. You can edit or delete it afterward.</p>
+        <div class="what">
+          <div class="w"><span class="b"></span><div>Full-quality camera, saved locally<span class="mn">1080p · stored on device</span></div></div>
+          <div class="w"><span class="b"></span><div>Can capture more than viewers see<span class="mn">Record runs even when air is off</span></div></div>
+          <div class="w"><span class="b"></span><div>Useful for later multi-angle edits<span class="mn">Reveal a record-only source in the editor</span></div></div>
+        </div>
+        <div class="acts">
+          <button class="btn-accent">Turn on recording</button>
+          <button class="btn-quiet">Not now</button>
+        </div>
+        <div class="fine">You'll see a recording indicator the whole time</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════ A3 — live overlay: indicator states ════════ -->
+  <div class="frame">
+    <div class="cap">
+      <div class="id">A3 · live overlay <span style="color:var(--ink-faint)">· NEW</span></div>
+      <div class="nm">On-air-vs-recording — live + recording same set</div>
+      <div class="ds">Over-video HUD on translucent dark panel. Every aired source is also being recorded. AIR + REC chips match.</div>
+    </div>
+    <div class="phone">
+      <div class="videobg"><div class="figs"></div></div>
+      <div class="status" style="color:#f6efe4"><span>9:41</span><span class="r">
+        <svg width="18" height="12" viewBox="0 0 19 12"><rect x="0" y="7.5" width="3.2" height="4.5" rx="0.7" fill="#f6efe4"/><rect x="4.8" y="5" width="3.2" height="7" rx="0.7" fill="#f6efe4"/><rect x="9.6" y="2.5" width="3.2" height="9.5" rx="0.7" fill="#f6efe4"/><rect x="14.4" y="0" width="3.2" height="12" rx="0.7" fill="#f6efe4"/></svg>
+        <svg width="25" height="12" viewBox="0 0 27 13"><rect x="0.5" y="0.5" width="23" height="12" rx="3.5" stroke="#f6efe4" stroke-opacity="0.5" fill="none"/><rect x="2" y="2" width="17" height="9" rx="2" fill="#f6efe4"/></svg>
+      </span></div>
+      <div class="home" style="background:#f6efe4"></div>
+      <div class="hud-top">
+        <span class="hud-panel livepill"><span class="d"></span>Live</span>
+        <span class="hud-panel viewers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>1.4K · 24:11</span>
+      </div>
+      <div class="onair">
+        <div class="hdr"><span class="l">On air &amp; recording</span><span class="l" style="opacity:1;color:var(--accent)">●&nbsp;REC</span></div>
+        <div class="rows">
+          <div class="oa-row"><span class="k"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h4l2-2h6l2 2h4v12H3z"/><circle cx="12" cy="13" r="3.5"/></svg></span><span class="nm">Camera</span><span class="chiprow"><span class="chip" data-kind="air">Air</span><span class="chip" data-kind="rec"><span class="rd"></span>Rec</span></span></div>
+          <div class="oa-row"><span class="k"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></span><span class="nm">Audio</span><span class="chiprow"><span class="chip" data-kind="air">Air</span><span class="chip" data-kind="rec"><span class="rd"></span>Rec</span></span></div>
+          <div class="oa-row"><span class="k"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-7-7-12a7 7 0 0 1 14 0c0 5-7 12-7 12z"/><circle cx="12" cy="9" r="2.4"/></svg></span><span class="nm">Location · city</span><span class="chiprow"><span class="chip" data-kind="air">Air</span><span class="chip" data-kind="rec"><span class="rd"></span>Rec</span></span></div>
+        </div>
+        <div class="note"><span class="rd"></span><span>Everything on air is also saved to your device</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════ A3 — recording a larger set ════════ -->
+  <div class="frame">
+    <div class="cap">
+      <div class="id">A3 · live overlay <span style="color:var(--ink-faint)">· NEW</span></div>
+      <div class="nm">Live, but recording a larger set</div>
+      <div class="ds">Camera is record-only (off air, sensitive). The indicator makes the asymmetry obvious — REC exceeds AIR.</div>
+    </div>
+    <div class="phone">
+      <div class="videobg"><div class="figs"></div></div>
+      <div class="status" style="color:#f6efe4"><span>9:41</span><span class="r">
+        <svg width="18" height="12" viewBox="0 0 19 12"><rect x="0" y="7.5" width="3.2" height="4.5" rx="0.7" fill="#f6efe4"/><rect x="4.8" y="5" width="3.2" height="7" rx="0.7" fill="#f6efe4"/><rect x="9.6" y="2.5" width="3.2" height="9.5" rx="0.7" fill="#f6efe4"/><rect x="14.4" y="0" width="3.2" height="12" rx="0.7" fill="#f6efe4"/></svg>
+        <svg width="25" height="12" viewBox="0 0 27 13"><rect x="0.5" y="0.5" width="23" height="12" rx="3.5" stroke="#f6efe4" stroke-opacity="0.5" fill="none"/><rect x="2" y="2" width="17" height="9" rx="2" fill="#f6efe4"/></svg>
+      </span></div>
+      <div class="home" style="background:#f6efe4"></div>
+      <div class="hud-top">
+        <span class="hud-panel livepill"><span class="d"></span>Live</span>
+        <span class="hud-panel viewers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>860 · 12:03</span>
+      </div>
+      <div class="onair">
+        <div class="hdr"><span class="l">Recording more than you're airing</span><span class="l" style="opacity:1;color:var(--accent)">●&nbsp;REC</span></div>
+        <div class="rows">
+          <div class="oa-row"><span class="k"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></span><span class="nm">Audio</span><span class="chiprow"><span class="chip" data-kind="air">Air</span><span class="chip" data-kind="rec"><span class="rd"></span>Rec</span></span></div>
+          <div class="oa-row"><span class="k"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h4l2-2h6l2 2h4v12H3z"/><circle cx="12" cy="13" r="3.5"/></svg></span><span class="nm">Camera <span style="font:600 8px var(--mono);letter-spacing:0.12em;color:var(--accent);border:1px solid var(--accent);border-radius:3px;padding:1px 4px;margin-left:4px">REC-ONLY</span></span><span class="chiprow"><span class="chip" data-kind="off">Air</span><span class="chip" data-kind="rec"><span class="rd"></span>Rec</span></span></div>
+          <div class="oa-row"><span class="k"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-7-7-12a7 7 0 0 1 14 0c0 5-7 12-7 12z"/><circle cx="12" cy="9" r="2.4"/></svg></span><span class="nm">Location · city</span><span class="chiprow"><span class="chip" data-kind="air">Air</span><span class="chip" data-kind="rec"><span class="rd"></span>Rec</span></span></div>
+        </div>
+        <div class="note"><span class="rd"></span><span>Camera is saving to device but not broadcasting</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════ A3 — recording but not live ════════ -->
+  <div class="frame">
+    <div class="cap">
+      <div class="id">A3 · live overlay <span style="color:var(--ink-faint)">· NEW</span></div>
+      <div class="nm">Recording but not live</div>
+      <div class="ds">No LIVE pill, no viewer count. The only electric element is the REC indicator — content is hot, but nothing is on air.</div>
+    </div>
+    <div class="phone">
+      <div class="videobg"><div class="figs"></div></div>
+      <div class="status" style="color:#f6efe4"><span>9:41</span><span class="r">
+        <svg width="18" height="12" viewBox="0 0 19 12"><rect x="0" y="7.5" width="3.2" height="4.5" rx="0.7" fill="#f6efe4"/><rect x="4.8" y="5" width="3.2" height="7" rx="0.7" fill="#f6efe4"/><rect x="9.6" y="2.5" width="3.2" height="9.5" rx="0.7" fill="#f6efe4"/><rect x="14.4" y="0" width="3.2" height="12" rx="0.7" fill="#f6efe4"/></svg>
+        <svg width="25" height="12" viewBox="0 0 27 13"><rect x="0.5" y="0.5" width="23" height="12" rx="3.5" stroke="#f6efe4" stroke-opacity="0.5" fill="none"/><rect x="2" y="2" width="17" height="9" rx="2" fill="#f6efe4"/></svg>
+      </span></div>
+      <div class="home" style="background:#f6efe4"></div>
+      <div class="hud-top">
+        <span class="hud-panel livepill" style="border-color:var(--accent)"><span class="d"></span>REC&nbsp;·&nbsp;NOT LIVE</span>
+        <span class="hud-panel viewers" style="opacity:0.7">00:48</span>
+      </div>
+      <div class="onair">
+        <div class="hdr"><span class="l">Recording to device only</span><span class="l" style="opacity:1;color:var(--accent)">●&nbsp;REC</span></div>
+        <div class="rows">
+          <div class="oa-row"><span class="k"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h4l2-2h6l2 2h4v12H3z"/><circle cx="12" cy="13" r="3.5"/></svg></span><span class="nm">Camera</span><span class="chiprow"><span class="chip" data-kind="off">Air</span><span class="chip" data-kind="rec"><span class="rd"></span>Rec</span></span></div>
+          <div class="oa-row"><span class="k"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></span><span class="nm">Audio</span><span class="chiprow"><span class="chip" data-kind="off">Air</span><span class="chip" data-kind="rec"><span class="rd"></span>Rec</span></span></div>
+        </div>
+        <div class="note"><span class="rd"></span><span>Nothing is being broadcast — saving privately</span></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

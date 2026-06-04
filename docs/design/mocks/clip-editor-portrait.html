@@ -1,0 +1,479 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>WRLD — Clip Editor (clips)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#f3eee2; --paper-raise:#f8f4ea; --paper-sink:#eae4d5;
+    --ink:#1c1814; --ink-dim:rgba(28,24,20,0.60); --ink-faint:rgba(28,24,20,0.34);
+    --line:rgba(28,24,20,0.14); --line-2:rgba(28,24,20,0.24);
+    --accent:#d92e3a; --accent-ink:#fbf3ea; --accent-wash:rgba(217,46,58,0.08); --accent-line:rgba(217,46,58,0.40);
+    --sans:"Inter Tight", ui-sans-serif, system-ui, sans-serif;
+    --mono:"IBM Plex Mono", ui-monospace, monospace;
+    --r:4px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:#cfc8b8;font-family:var(--sans);color:var(--ink);-webkit-font-smoothing:antialiased}
+  body{padding:46px 30px 80px}
+
+  .pageh{ max-width:1500px; margin:0 auto 30px }
+  .pageh .kick{ font:600 10px var(--mono); letter-spacing:0.18em; color:var(--accent); text-transform:uppercase; margin-bottom:12px }
+  .pageh h1{ font:600 30px/1.08 var(--sans); letter-spacing:-0.02em; margin:0 0 8px }
+  .pageh p{ font:500 13px/1.6 var(--sans); color:var(--ink-dim); max-width:720px; margin:0 }
+  .pageh .lineage{ display:inline-block; margin-top:12px; font:500 10px var(--mono); letter-spacing:0.1em;
+    color:var(--ink-dim); border:1px solid var(--line-2); border-radius:var(--r); padding:5px 9px; text-transform:uppercase }
+
+  .canvas{ max-width:1500px; margin:0 auto; display:flex; flex-wrap:wrap; gap:40px 28px; align-items:flex-start }
+  .frame{ display:flex; flex-direction:column; gap:12px; flex:none }
+  .frame .cap{ max-width:390px }
+  .frame .cap .id{ font:600 11px var(--mono); letter-spacing:0.12em; color:var(--accent); text-transform:uppercase }
+  .frame .cap .nm{ font:600 14px var(--sans); letter-spacing:-0.01em; margin-top:2px }
+  .frame .cap .ds{ font:500 11px/1.5 var(--sans); color:var(--ink-dim); margin-top:4px; text-wrap:pretty }
+
+  .phone{ width:390px; height:844px; border-radius:30px; position:relative; overflow:hidden;
+    background:var(--paper); border:1px solid var(--line-2); box-shadow:0 24px 50px rgba(60,50,35,0.28) }
+  .status{ position:absolute; top:0; left:0; right:0; height:54px; z-index:20;
+    display:flex; align-items:center; justify-content:space-between; padding:18px 28px 0; font:600 15px var(--sans) }
+  .status .r{ display:flex; gap:6px; align-items:center }
+  .home{ position:absolute; bottom:8px; left:50%; transform:translateX(-50%); z-index:40;
+    width:134px; height:5px; border-radius:100px; background:var(--ink); opacity:0.28 }
+
+  .scr{ position:absolute; inset:0; padding:54px 0 0; display:flex; flex-direction:column }
+  .topbar{ display:flex; align-items:center; justify-content:space-between; padding:12px 16px }
+  .topbar .ico{ width:40px; height:40px; border-radius:var(--r); border:1px solid var(--line-2);
+    background:var(--paper-raise); display:grid; place-items:center; cursor:pointer }
+  .topbar .ico svg{ width:18px; height:18px }
+  .topbar .ttl{ font:600 16px var(--sans); letter-spacing:-0.01em }
+  .topbar .sub{ font:600 9px var(--mono); letter-spacing:0.16em; color:var(--ink-faint); text-transform:uppercase; margin-top:2px; text-align:center }
+  .body{ flex:1; min-height:0; overflow:hidden; display:flex; flex-direction:column }
+  .scroll{ flex:1; min-height:0; overflow-y:auto; scrollbar-width:none; padding:0 16px }
+  .scroll::-webkit-scrollbar{ display:none }
+  .mlabel{ font:600 10px var(--mono); letter-spacing:0.16em; color:var(--ink-faint); text-transform:uppercase;
+    padding:16px 2px 9px; display:flex; align-items:center; justify-content:space-between }
+  .mlabel .hint{ color:var(--ink-faint); letter-spacing:0.1em }
+
+  /* ── ClipPreview hero ── */
+  .preview{ position:relative; border-radius:var(--r); overflow:hidden; border:1px solid var(--line-2);
+    aspect-ratio:9/10; background:#231f1b }
+  .preview.cam{ background:linear-gradient(118deg,#2a2622,#46352c 40%,#6e3b34 62%,#2d2723) }
+  .preview.cam::after{ content:""; position:absolute; inset:0;
+    background:radial-gradient(58% 46% at 32% 30%, rgba(255,210,160,0.22), transparent 60%),
+      radial-gradient(46% 38% at 76% 70%, rgba(217,46,58,0.26), transparent 65%); mix-blend-mode:screen }
+  .preview .fig{ position:absolute; left:0; right:0; bottom:0; height:48%; background:linear-gradient(0deg, rgba(10,8,7,0.55), transparent) }
+  /* audio-only fallback */
+  .preview.audio{ background:var(--paper-sink); display:grid; place-items:center }
+  .preview.audio .wf{ display:flex; align-items:center; gap:3px; height:60px }
+  .preview.audio .wf i{ width:3px; background:var(--ink-dim); border-radius:2px }
+  .preview .falb{ position:absolute; left:0; right:0; bottom:0; padding:11px 13px;
+    font:600 10px var(--mono); letter-spacing:0.14em; text-transform:uppercase; color:var(--ink-dim);
+    display:flex; align-items:center; gap:8px; background:linear-gradient(0deg, var(--paper-sink), transparent) }
+  /* map-only fallback */
+  .preview.map{ background:repeating-linear-gradient(0deg,#e6dfce 0 11px,#e2dbc9 11px 22px),
+    repeating-linear-gradient(90deg, transparent 0 11px, rgba(28,24,20,0.05) 11px 22px) }
+  .preview.map .pin{ position:absolute; left:50%; top:46%; transform:translate(-50%,-50%);
+    width:14px; height:14px; border-radius:50%; background:var(--accent); border:2px solid var(--paper);
+    box-shadow:0 0 0 5px var(--accent-wash) }
+  .preview .play{ position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+    width:54px; height:54px; border-radius:50%; background:rgba(20,16,13,0.5); border:1px solid rgba(255,240,225,0.4);
+    display:grid; place-items:center; color:#f6efe4 }
+  .preview .play svg{ width:22px; height:22px; margin-left:3px }
+  .preview .badge{ position:absolute; top:10px; left:10px; display:inline-flex; gap:6px; align-items:center;
+    background:rgba(20,16,13,0.6); border:1px solid rgba(255,240,225,0.2); border-radius:3px; padding:5px 8px;
+    font:600 9px var(--mono); letter-spacing:0.14em; text-transform:uppercase; color:#f6efe4 }
+
+  /* ── Timeline ── */
+  .timeline{ border:1px solid var(--line); border-radius:var(--r); background:var(--paper-raise); padding:13px 14px }
+  .tl-h{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:11px }
+  .tl-h .l{ font:600 10px var(--mono); letter-spacing:0.16em; color:var(--ink-faint); text-transform:uppercase }
+  .tl-h .dur{ font:600 11px var(--mono); letter-spacing:0.04em; color:var(--ink) }
+  .tl-h .dur .o{ color:var(--ink-faint); text-decoration:line-through; margin-left:7px }
+  .track{ position:relative; height:48px; border-radius:var(--r); background:var(--paper-sink); border:1px solid var(--line); overflow:hidden }
+  .track .wf{ position:absolute; inset:0; display:flex; align-items:center; gap:2px; padding:0 8px }
+  .track .wf i{ flex:1; background:var(--ink-faint); border-radius:1px; opacity:0.5 }
+  .track .out{ position:absolute; top:0; bottom:0; background:rgba(243,238,226,0.7); z-index:2 }
+  .track .out::after{ content:""; position:absolute; inset:0; background:repeating-linear-gradient(135deg, rgba(28,24,20,0.06) 0 4px, transparent 4px 8px) }
+  .track .sel{ position:absolute; top:0; bottom:0; border-left:2px solid var(--accent); border-right:2px solid var(--accent); z-index:3 }
+  .track .sel::before,.track .sel::after{ content:""; position:absolute; top:50%; transform:translateY(-50%);
+    width:13px; height:32px; border-radius:4px; background:var(--accent) }
+  .track .sel::before{ left:-8px } .track .sel::after{ right:-8px }
+  .track .scrub{ position:absolute; top:-3px; bottom:-3px; width:2px; background:var(--ink); z-index:4 }
+  .track .scrub::before{ content:""; position:absolute; top:-3px; left:50%; transform:translateX(-50%); width:9px; height:9px; border-radius:50%; background:var(--ink) }
+  .tl-f{ display:flex; align-items:center; justify-content:space-between; margin-top:11px;
+    font:600 9.5px var(--mono); letter-spacing:0.12em; color:var(--ink-faint); text-transform:uppercase }
+  .tl-f .stamps b{ color:var(--ink) }
+  .tl-f .stamps span{ margin-right:14px }
+
+  /* ── Source list (LayerEditorRow) ── */
+  .layers{ border:1px solid var(--line); border-radius:var(--r); overflow:hidden; background:var(--paper-raise) }
+  .ler{ display:grid; grid-template-columns:38px 1fr auto 34px; gap:12px; align-items:center;
+    padding:13px 12px 13px 14px; border-top:1px solid var(--line) }
+  .ler:first-child{ border-top:0 }
+  .ler .ic{ width:38px; height:38px; border-radius:var(--r); background:var(--paper-sink); border:1px solid var(--line);
+    display:grid; place-items:center; color:var(--ink-dim) }
+  .ler .ic svg{ width:19px; height:19px }
+  .ler .meta{ min-width:0; display:flex; flex-direction:column; gap:3px }
+  .ler .nm{ font:600 14px var(--sans); letter-spacing:-0.01em; display:flex; align-items:center; gap:7px }
+  .ler .st{ font:600 9.5px var(--mono); letter-spacing:0.1em; color:var(--ink-faint); text-transform:uppercase }
+  .pip{ font:600 8px var(--mono); letter-spacing:0.13em; text-transform:uppercase; border-radius:3px; padding:2px 5px; border:1px solid var(--line-2); color:var(--ink-dim) }
+  .pip.rec{ color:var(--accent); border-color:var(--accent-line); background:var(--accent-wash) }
+  .tgl{ width:42px; height:25px; border-radius:100px; background:var(--paper-sink); border:1px solid var(--line-2); position:relative; cursor:pointer }
+  .tgl::after{ content:""; position:absolute; top:2px; left:2px; width:19px; height:19px; border-radius:50%;
+    background:var(--paper-raise); border:1px solid var(--line-2); transition:transform .2s cubic-bezier(.4,1.3,.6,1) }
+  .tgl[data-on="true"]{ background:var(--accent); border-color:var(--accent) }
+  .tgl[data-on="true"]::after{ transform:translateX(17px); background:var(--accent-ink); border-color:var(--accent-ink) }
+  .ler .row-menu{ width:34px; height:34px; border-radius:var(--r); border:0; background:transparent; color:var(--ink-faint);
+    display:grid; place-items:center; cursor:pointer }
+  .ler .row-menu svg{ width:16px; height:16px }
+  /* states */
+  .ler[data-state="off"] .ic{ color:var(--ink-faint) }
+  .ler[data-state="off"] .nm{ color:var(--ink-dim) }
+  .ler[data-state="notcap"]{ opacity:0.5 }
+  .ler[data-state="notcap"] .tgl{ pointer-events:none; opacity:0.4 }
+  .ler[data-state="notcap"] .row-menu{ opacity:0.3; pointer-events:none }
+  .ler[data-state="reveal"]{ background:var(--accent-wash) }
+  .ler[data-state="reveal"] .ic{ color:var(--accent); border-color:var(--accent-line) }
+  .ler[data-state="deleting"]{ background:var(--accent-wash) }
+  .ler[data-state="deleted"] .nm{ color:var(--ink-faint); text-decoration:line-through; text-decoration-color:var(--accent-line) }
+  .ler[data-state="deleted"] .ic{ color:var(--ink-faint); opacity:0.6 }
+  .ler[data-state="deleted"] .st{ color:var(--accent) }
+
+  /* inline delete confirm */
+  .del-confirm{ grid-column:1/-1; margin-top:4px; padding:13px; border:1px solid var(--accent-line); border-radius:var(--r); background:var(--accent-wash) }
+  .del-confirm .t{ font:600 13px var(--sans); color:var(--ink); margin-bottom:5px; display:flex; align-items:center; gap:8px }
+  .del-confirm .t svg{ width:16px; height:16px; color:var(--accent) }
+  .del-confirm .d{ font:500 11.5px/1.5 var(--sans); color:var(--ink-dim); margin-bottom:12px; text-wrap:pretty }
+  .del-confirm .d b{ color:var(--ink); font-weight:600 }
+  .del-confirm .acts{ display:grid; grid-template-columns:1fr 1.4fr; gap:8px }
+  .del-confirm .keep{ height:42px; border-radius:var(--r); border:1px solid var(--line-2); background:var(--paper); color:var(--ink); font:600 12px var(--sans); cursor:pointer; font-family:var(--sans) }
+  .del-confirm .del{ height:42px; border-radius:var(--r); border:0; background:var(--accent); color:var(--accent-ink); font:600 12px var(--sans); cursor:pointer; font-family:var(--sans) }
+
+  /* ── tags ── */
+  .tags{ display:flex; flex-wrap:wrap; gap:7px; align-items:center; padding:12px 14px; border:1px solid var(--line); border-radius:var(--r); background:var(--paper-raise) }
+  .tag{ display:inline-flex; align-items:center; gap:6px; padding:7px 7px 7px 11px; border-radius:100px;
+    border:1px solid var(--line-2); background:var(--paper); font:500 12px var(--sans) }
+  .tag .x{ width:16px; height:16px; border-radius:50%; border:0; background:transparent; color:var(--ink-faint); cursor:pointer; display:grid; place-items:center }
+  .tag .x svg{ width:9px; height:9px }
+  .tag-add{ font:600 12px var(--sans); color:var(--ink-faint); padding:7px 10px; border:1px dashed var(--line-2); border-radius:100px; cursor:pointer; background:transparent; font-family:var(--sans) }
+
+  /* ── publish bar ── */
+  .pubbar{ padding:13px 16px calc(14px + env(safe-area-inset-bottom,0px)); border-top:1px solid var(--line); background:var(--paper-raise); display:flex; gap:10px }
+  .btn-quiet{ flex:none; width:120px; height:54px; border-radius:var(--r); border:1px solid var(--line-2); background:transparent; color:var(--ink); font:600 14px var(--sans); cursor:pointer; font-family:var(--sans) }
+  .btn-accent{ flex:1; height:54px; border-radius:var(--r); border:0; background:var(--accent); color:var(--accent-ink); font:600 15px var(--sans); cursor:pointer; font-family:var(--sans) }
+
+  /* ── B3 publish & visibility ── */
+  .vis-opt{ display:grid; grid-template-columns:auto 1fr auto; gap:13px; align-items:center;
+    padding:15px 14px; border:1px solid var(--line-2); border-radius:var(--r); background:var(--paper-raise); cursor:pointer; margin-bottom:9px }
+  .vis-opt[data-sel="true"]{ border-color:var(--accent); background:var(--accent-wash) }
+  .vis-opt .vic{ width:40px; height:40px; border-radius:var(--r); background:var(--paper-sink); border:1px solid var(--line);
+    display:grid; place-items:center; color:var(--ink-dim) }
+  .vis-opt[data-sel="true"] .vic{ color:var(--accent); border-color:var(--accent-line); background:var(--paper) }
+  .vis-opt .vic svg{ width:20px; height:20px }
+  .vis-opt .vt{ font:600 15px var(--sans); letter-spacing:-0.01em }
+  .vis-opt .vd{ font:500 11px/1.45 var(--sans); color:var(--ink-dim); margin-top:3px; text-wrap:pretty }
+  .vis-opt .radio{ width:22px; height:22px; border-radius:50%; border:1.5px solid var(--line-2) }
+  .vis-opt[data-sel="true"] .radio{ border:6px solid var(--accent) }
+
+  .ident-seg{ display:flex; border:1px solid var(--line-2); border-radius:var(--r); overflow:hidden; margin-top:6px }
+  .ident-seg button{ flex:1; border:0; border-left:1px solid var(--line-2); background:transparent; padding:13px; cursor:pointer; font-family:var(--sans);
+    font:600 13px var(--sans); color:var(--ink-dim) }
+  .ident-seg button:first-child{ border-left:0 }
+  .ident-seg button[data-on="true"]{ background:var(--ink); color:var(--paper) }
+  .ident-seg button .s{ display:block; font:500 9px var(--mono); letter-spacing:0.1em; text-transform:uppercase; margin-top:3px; opacity:0.7 }
+
+  .anon-note{ margin-top:10px; padding:12px 13px; border:1px solid var(--line); border-radius:var(--r); background:var(--paper-raise);
+    display:flex; gap:10px; align-items:flex-start; font:500 11.5px/1.5 var(--sans); color:var(--ink-dim) }
+  .anon-note svg{ width:15px; height:15px; color:var(--ink-dim); flex:none; margin-top:1px }
+  .anon-note b{ color:var(--ink); font-weight:600 }
+
+  .summary-card{ border:1px solid var(--line); border-radius:var(--r); overflow:hidden; background:var(--paper-raise); margin-top:6px }
+  .summary-card .sr{ display:flex; align-items:center; justify-content:space-between; padding:12px 14px; border-top:1px solid var(--line);
+    font:500 12.5px var(--sans) }
+  .summary-card .sr:first-child{ border-top:0 }
+  .summary-card .sr .k{ color:var(--ink-dim) }
+  .summary-card .sr .v{ font:600 12px var(--mono); letter-spacing:0.04em; text-transform:uppercase }
+</style>
+</head>
+<body>
+
+<div class="pageh">
+  <div class="kick">Clips initiative · Family B · Clip Editor</div>
+  <h1>Clip Editor — post-stream edit, source states, publish</h1>
+  <p>ClipPreview hero with camera / audio-only / map-only fallbacks, Timeline with trim handles, the LayerEditorRow source list across every state (on / off / not-captured / reveal record-only / delete-permanently), and the publish + visibility step.</p>
+  <span class="lineage">SUPERSEDES: clip-edit-portrait (12.2)</span>
+</div>
+
+<div class="canvas">
+
+  <!-- ════════ B1 — editor screen ════════ -->
+  <div class="frame">
+    <div class="cap"><div class="id">B1 · editor</div><div class="nm">Clip editor — camera clip</div>
+      <div class="ds">Preview hero + trimmed timeline + source list + tags + publish. In/out points set, trimmed regions de-emphasized.</div></div>
+    <div class="phone">
+      <div class="status"><span>9:41</span><span class="r">
+        <svg width="18" height="12" viewBox="0 0 19 12"><rect x="0" y="7.5" width="3.2" height="4.5" rx="0.7" fill="#1c1814"/><rect x="4.8" y="5" width="3.2" height="7" rx="0.7" fill="#1c1814"/><rect x="9.6" y="2.5" width="3.2" height="9.5" rx="0.7" fill="#1c1814"/><rect x="14.4" y="0" width="3.2" height="12" rx="0.7" fill="#1c1814"/></svg>
+        <svg width="25" height="12" viewBox="0 0 27 13"><rect x="0.5" y="0.5" width="23" height="12" rx="3.5" stroke="#1c1814" stroke-opacity="0.5" fill="none"/><rect x="2" y="2" width="17" height="9" rx="2" fill="#1c1814"/></svg>
+      </span></div>
+      <div class="home"></div>
+      <div class="scr">
+        <div class="topbar">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></div>
+          <div><div class="ttl" style="text-align:center">Edit clip</div><div class="sub">Apr 21 · 0:23</div></div>
+          <div class="ico" style="border:0;background:transparent;color:var(--ink-faint)"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg></div>
+        </div>
+        <div class="body">
+          <div class="scroll">
+            <div class="preview cam">
+              <div class="fig"></div>
+              <span class="badge">Camera · 1080p</span>
+              <div class="play"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div>
+            </div>
+            <div class="mlabel"><span>Timeline</span><span class="hint">Trim · non-destructive</span></div>
+            <div class="timeline">
+              <div class="tl-h"><span class="l">Trim</span><span class="dur">0:18<span class="o">0:23</span></span></div>
+              <div class="track">
+                <div class="wf">
+                  <i style="height:30%"></i><i style="height:55%"></i><i style="height:42%"></i><i style="height:68%"></i><i style="height:80%"></i><i style="height:50%"></i><i style="height:62%"></i><i style="height:88%"></i><i style="height:44%"></i><i style="height:70%"></i><i style="height:34%"></i><i style="height:58%"></i><i style="height:76%"></i><i style="height:48%"></i><i style="height:64%"></i><i style="height:38%"></i><i style="height:54%"></i><i style="height:72%"></i><i style="height:40%"></i><i style="height:60%"></i><i style="height:30%"></i><i style="height:52%"></i><i style="height:46%"></i><i style="height:66%"></i>
+                </div>
+                <div class="out" style="left:0;width:12%"></div>
+                <div class="out" style="right:0;width:8%"></div>
+                <div class="sel" style="left:12%;width:80%"></div>
+                <div class="scrub" style="left:44%"></div>
+              </div>
+              <div class="tl-f"><span class="stamps"><span>In <b>0:02</b></span><span>Out <b>0:20</b></span></span><span>Drag handles</span></div>
+            </div>
+            <div class="mlabel"><span>Sources</span><span class="hint">3 captured</span></div>
+            <div class="layers">
+              <div class="ler" data-state="on">
+                <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h4l2-2h6l2 2h4v12H3z"/><circle cx="12" cy="13" r="3.5"/></svg></div>
+                <div class="meta"><span class="nm">Camera <span class="pip rec">Rec</span></span><span class="st">On · 1080p</span></div>
+                <div class="tgl" data-on="true"></div>
+                <button class="row-menu"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg></button>
+              </div>
+              <div class="ler" data-state="on">
+                <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></div>
+                <div class="meta"><span class="nm">Audio <span class="pip rec">Rec</span></span><span class="st">On · 48kHz</span></div>
+                <div class="tgl" data-on="true"></div>
+                <button class="row-menu"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg></button>
+              </div>
+              <div class="ler" data-state="on">
+                <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-7-7-12a7 7 0 0 1 14 0c0 5-7 12-7 12z"/><circle cx="12" cy="9" r="2.4"/></svg></div>
+                <div class="meta"><span class="nm">Location</span><span class="st">On · City</span></div>
+                <div class="tgl" data-on="true"></div>
+                <button class="row-menu"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg></button>
+              </div>
+            </div>
+            <div class="mlabel"><span>Tags</span></div>
+            <div class="tags">
+              <span class="tag">rooftop<button class="x"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></span>
+              <span class="tag">sunset<button class="x"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></span>
+              <button class="tag-add">+ tag</button>
+            </div>
+            <div style="height:14px"></div>
+          </div>
+          <div class="pubbar">
+            <button class="btn-quiet">Draft</button>
+            <button class="btn-accent">Publish</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════ B1 — audio-only & map-only fallbacks ════════ -->
+  <div class="frame">
+    <div class="cap"><div class="id">B1 · editor</div><div class="nm">Preview fallbacks — audio-only &amp; map-only</div>
+      <div class="ds">When camera wasn't recorded, the hero falls back: waveform for audio-only, a pinned map for location-only. Same chrome.</div></div>
+    <div class="phone">
+      <div class="status"><span>9:41</span><span class="r">
+        <svg width="18" height="12" viewBox="0 0 19 12"><rect x="0" y="7.5" width="3.2" height="4.5" rx="0.7" fill="#1c1814"/><rect x="4.8" y="5" width="3.2" height="7" rx="0.7" fill="#1c1814"/><rect x="9.6" y="2.5" width="3.2" height="9.5" rx="0.7" fill="#1c1814"/><rect x="14.4" y="0" width="3.2" height="12" rx="0.7" fill="#1c1814"/></svg>
+        <svg width="25" height="12" viewBox="0 0 27 13"><rect x="0.5" y="0.5" width="23" height="12" rx="3.5" stroke="#1c1814" stroke-opacity="0.5" fill="none"/><rect x="2" y="2" width="17" height="9" rx="2" fill="#1c1814"/></svg>
+      </span></div>
+      <div class="home"></div>
+      <div class="scr">
+        <div class="topbar">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></div>
+          <div><div class="ttl" style="text-align:center">Edit clip</div><div class="sub">Anon · 0:11</div></div>
+          <div class="ico" style="border:0;background:transparent;color:var(--ink-faint)"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg></div>
+        </div>
+        <div class="body">
+          <div class="scroll">
+            <div class="preview audio">
+              <div class="wf">
+                <i style="height:14%"></i><i style="height:40%"></i><i style="height:70%"></i><i style="height:30%"></i><i style="height:90%"></i><i style="height:55%"></i><i style="height:100%"></i><i style="height:38%"></i><i style="height:76%"></i><i style="height:22%"></i><i style="height:64%"></i><i style="height:48%"></i><i style="height:84%"></i><i style="height:30%"></i><i style="height:58%"></i><i style="height:18%"></i><i style="height:44%"></i>
+              </div>
+              <div class="falb"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>Audio only · no camera recorded</div>
+            </div>
+            <div class="mlabel"><span>Map preview · location-only clip</span></div>
+            <div class="preview map" style="aspect-ratio:9/5">
+              <div class="pin"></div>
+              <div class="falb"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-7-7-12a7 7 0 0 1 14 0c0 5-7 12-7 12z"/><circle cx="12" cy="9" r="2.4"/></svg>Map only · city precision</div>
+            </div>
+            <div class="mlabel"><span>Timeline</span></div>
+            <div class="timeline">
+              <div class="tl-h"><span class="l">Trim</span><span class="dur">0:11</span></div>
+              <div class="track">
+                <div class="wf"><i style="height:30%"></i><i style="height:55%"></i><i style="height:42%"></i><i style="height:68%"></i><i style="height:80%"></i><i style="height:50%"></i><i style="height:62%"></i><i style="height:88%"></i><i style="height:44%"></i><i style="height:70%"></i><i style="height:34%"></i><i style="height:58%"></i><i style="height:76%"></i><i style="height:48%"></i><i style="height:64%"></i><i style="height:38%"></i></div>
+                <div class="sel" style="left:0;width:100%"></div>
+                <div class="scrub" style="left:30%"></div>
+              </div>
+              <div class="tl-f"><span class="stamps"><span>In <b>0:00</b></span><span>Out <b>0:11</b></span></span><span>Full clip</span></div>
+            </div>
+            <div style="height:14px"></div>
+          </div>
+          <div class="pubbar">
+            <button class="btn-quiet">Draft</button>
+            <button class="btn-accent">Publish</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════ B2 — source row states ════════ -->
+  <div class="frame">
+    <div class="cap"><div class="id">B2 · source states <span style="color:var(--ink-faint)">· NEW: not-captured</span></div><div class="nm">LayerEditorRow — every state</div>
+      <div class="ds">On, off, not-captured (disabled — nothing to enable), reveal a record-only source (off→on), and delete-permanently confirmation (irreversible, single accent).</div></div>
+    <div class="phone">
+      <div class="status"><span>9:41</span><span class="r">
+        <svg width="18" height="12" viewBox="0 0 19 12"><rect x="0" y="7.5" width="3.2" height="4.5" rx="0.7" fill="#1c1814"/><rect x="4.8" y="5" width="3.2" height="7" rx="0.7" fill="#1c1814"/><rect x="9.6" y="2.5" width="3.2" height="9.5" rx="0.7" fill="#1c1814"/><rect x="14.4" y="0" width="3.2" height="12" rx="0.7" fill="#1c1814"/></svg>
+        <svg width="25" height="12" viewBox="0 0 27 13"><rect x="0.5" y="0.5" width="23" height="12" rx="3.5" stroke="#1c1814" stroke-opacity="0.5" fill="none"/><rect x="2" y="2" width="17" height="9" rx="2" fill="#1c1814"/></svg>
+      </span></div>
+      <div class="home"></div>
+      <div class="scr">
+        <div class="topbar">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></div>
+          <div><div class="ttl" style="text-align:center">Sources</div><div class="sub">Row states</div></div>
+          <span style="width:40px"></span>
+        </div>
+        <div class="body">
+          <div class="scroll">
+            <div class="mlabel"><span>States</span></div>
+            <div class="layers">
+              <!-- on -->
+              <div class="ler" data-state="on">
+                <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h4l2-2h6l2 2h4v12H3z"/><circle cx="12" cy="13" r="3.5"/></svg></div>
+                <div class="meta"><span class="nm">Camera <span class="pip rec">Rec</span></span><span class="st">On · included in clip</span></div>
+                <div class="tgl" data-on="true"></div>
+                <button class="row-menu"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg></button>
+              </div>
+              <!-- off -->
+              <div class="ler" data-state="off">
+                <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-7-7-12a7 7 0 0 1 14 0c0 5-7 12-7 12z"/><circle cx="12" cy="9" r="2.4"/></svg></div>
+                <div class="meta"><span class="nm">Location</span><span class="st">Off · captured, hidden</span></div>
+                <div class="tgl"></div>
+                <button class="row-menu"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg></button>
+              </div>
+              <!-- not captured (NEW) -->
+              <div class="ler" data-state="notcap">
+                <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/><path d="M4 4l16 13" stroke-opacity="0.7"/></svg></div>
+                <div class="meta"><span class="nm">Screen <span class="pip">Not captured</span></span><span class="st">Wasn't recorded · nothing to enable</span></div>
+                <div class="tgl"></div>
+                <button class="row-menu"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg></button>
+              </div>
+              <!-- reveal record-only -->
+              <div class="ler" data-state="reveal">
+                <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></div>
+                <div class="meta"><span class="nm">Audio <span class="pip rec">Record-only</span></span><span class="st">Revealed · was off by default</span></div>
+                <div class="tgl" data-on="true"></div>
+                <button class="row-menu"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg></button>
+              </div>
+              <!-- delete confirm (irreversible) -->
+              <div class="ler" data-state="deleting">
+                <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="9" ry="3.6"/><ellipse cx="12" cy="12" rx="3.6" ry="9"/></svg></div>
+                <div class="meta"><span class="nm">Gyro</span><span class="st">On · orientation</span></div>
+                <div class="tgl" data-on="true"></div>
+                <button class="row-menu" style="color:var(--accent)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg></button>
+                <div class="del-confirm">
+                  <div class="t"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18h.01"/></svg>Delete gyro permanently?</div>
+                  <div class="d">This <b>erases the recorded gyro track from disk</b>. It can't be recovered, re-enabled, or revealed later — unlike turning it off.</div>
+                  <div class="acts">
+                    <button class="keep">Keep</button>
+                    <button class="del">Delete permanently</button>
+                  </div>
+                </div>
+              </div>
+              <!-- deleted -->
+              <div class="ler" data-state="deleted">
+                <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z" fill="currentColor" stroke="none"/></svg></div>
+                <div class="meta"><span class="nm">Compass</span><span class="st">Deleted · gone from disk</span></div>
+                <span style="font:600 9px var(--mono);letter-spacing:0.14em;color:var(--accent);text-transform:uppercase">Removed</span>
+                <span style="width:34px"></span>
+              </div>
+            </div>
+            <div style="height:14px"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════ B3 — publish & visibility ════════ -->
+  <div class="frame">
+    <div class="cap"><div class="id">B3 · publish</div><div class="nm">Publish &amp; visibility</div>
+      <div class="ds">Choose public / anon / draft, set Attributed / Anon identity, confirm. Anon clips carry the "only visible to you" treatment.</div></div>
+    <div class="phone">
+      <div class="status"><span>9:41</span><span class="r">
+        <svg width="18" height="12" viewBox="0 0 19 12"><rect x="0" y="7.5" width="3.2" height="4.5" rx="0.7" fill="#1c1814"/><rect x="4.8" y="5" width="3.2" height="7" rx="0.7" fill="#1c1814"/><rect x="9.6" y="2.5" width="3.2" height="9.5" rx="0.7" fill="#1c1814"/><rect x="14.4" y="0" width="3.2" height="12" rx="0.7" fill="#1c1814"/></svg>
+        <svg width="25" height="12" viewBox="0 0 27 13"><rect x="0.5" y="0.5" width="23" height="12" rx="3.5" stroke="#1c1814" stroke-opacity="0.5" fill="none"/><rect x="2" y="2" width="17" height="9" rx="2" fill="#1c1814"/></svg>
+      </span></div>
+      <div class="home"></div>
+      <div class="scr">
+        <div class="topbar">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></div>
+          <div><div class="ttl" style="text-align:center">Publish</div><div class="sub">Visibility</div></div>
+          <span style="width:40px"></span>
+        </div>
+        <div class="body">
+          <div class="scroll">
+            <div class="mlabel"><span>Who can see this</span></div>
+            <div class="vis-opt" data-sel="true">
+              <span class="vic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18z"/></svg></span>
+              <div><div class="vt">Public</div><div class="vd">Appears on your profile and in discovery.</div></div>
+              <span class="radio"></span>
+            </div>
+            <div class="vis-opt">
+              <span class="vic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18"/><path d="M10.6 6.1A8 8 0 0 1 12 6c6 0 10 6 10 6a16 16 0 0 1-3 3.6M6.4 6.4A16 16 0 0 0 2 12s4 6 10 6a9 9 0 0 0 4-1"/></svg></span>
+              <div><div class="vt">Anonymous</div><div class="vd">Published unattributed — not linked to your profile.</div></div>
+              <span class="radio"></span>
+            </div>
+            <div class="vis-opt">
+              <span class="vic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h11l3 3v13H5z"/><path d="M9 9h6M9 13h6"/></svg></span>
+              <div><div class="vt">Draft</div><div class="vd">Saved privately. Only you can see it in your library.</div></div>
+              <span class="radio"></span>
+            </div>
+
+            <div class="mlabel"><span>Identity</span><span class="hint">A flag, not a track</span></div>
+            <div class="ident-seg">
+              <button data-on="true">Attributed<span class="s">@kai.dc</span></button>
+              <button>Anonymous<span class="s">No handle shown</span></button>
+            </div>
+            <div class="anon-note">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></svg>
+              <span>Choosing <b>Anonymous</b> visibility marks the clip <b>"only visible to you"</b> in your library and strips your handle from the published view.</span>
+            </div>
+
+            <div class="mlabel"><span>Summary</span></div>
+            <div class="summary-card">
+              <div class="sr"><span class="k">Length after trim</span><span class="v">0:18</span></div>
+              <div class="sr"><span class="k">Sources</span><span class="v">Cam · Audio · Loc</span></div>
+              <div class="sr"><span class="k">Visibility</span><span class="v" style="color:var(--accent)">Public</span></div>
+            </div>
+            <div style="height:14px"></div>
+          </div>
+          <div class="pubbar">
+            <button class="btn-quiet">Back</button>
+            <button class="btn-accent">Publish clip</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

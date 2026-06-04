@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>WRLD — Profile (clips)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#f3eee2; --paper-raise:#f8f4ea; --paper-sink:#eae4d5;
+    --ink:#1c1814; --ink-dim:rgba(28,24,20,0.60); --ink-faint:rgba(28,24,20,0.34);
+    --line:rgba(28,24,20,0.14); --line-2:rgba(28,24,20,0.24);
+    --accent:#d92e3a; --accent-ink:#fbf3ea; --accent-wash:rgba(217,46,58,0.08); --accent-line:rgba(217,46,58,0.40);
+    --sans:"Inter Tight", ui-sans-serif, system-ui, sans-serif;
+    --mono:"IBM Plex Mono", ui-monospace, monospace;
+    --r:4px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:#cfc8b8;font-family:var(--sans);color:var(--ink);-webkit-font-smoothing:antialiased}
+  body{padding:46px 30px 80px}
+
+  .pageh{ max-width:1500px; margin:0 auto 30px }
+  .pageh .kick{ font:600 10px var(--mono); letter-spacing:0.18em; color:var(--accent); text-transform:uppercase; margin-bottom:12px }
+  .pageh h1{ font:600 30px/1.08 var(--sans); letter-spacing:-0.02em; margin:0 0 8px }
+  .pageh p{ font:500 13px/1.6 var(--sans); color:var(--ink-dim); max-width:720px; margin:0 }
+  .pageh .lineage{ display:inline-block; margin-top:12px; font:500 10px var(--mono); letter-spacing:0.1em;
+    color:var(--ink-dim); border:1px solid var(--line-2); border-radius:var(--r); padding:5px 9px; text-transform:uppercase }
+
+  .canvas{ max-width:1500px; margin:0 auto; display:flex; flex-wrap:wrap; gap:40px 28px; align-items:flex-start }
+  .frame{ display:flex; flex-direction:column; gap:12px; flex:none }
+  .frame .cap{ max-width:390px }
+  .frame .cap .id{ font:600 11px var(--mono); letter-spacing:0.12em; color:var(--accent); text-transform:uppercase }
+  .frame .cap .nm{ font:600 14px var(--sans); letter-spacing:-0.01em; margin-top:2px }
+  .frame .cap .ds{ font:500 11px/1.5 var(--sans); color:var(--ink-dim); margin-top:4px; text-wrap:pretty }
+
+  .phone{ width:390px; height:844px; border-radius:30px; position:relative; overflow:hidden;
+    background:var(--paper); border:1px solid var(--line-2); box-shadow:0 24px 50px rgba(60,50,35,0.28) }
+  .status{ position:absolute; top:0; left:0; right:0; height:54px; z-index:20;
+    display:flex; align-items:center; justify-content:space-between; padding:18px 28px 0; font:600 15px var(--sans) }
+  .status .r{ display:flex; gap:6px; align-items:center }
+  .home{ position:absolute; bottom:8px; left:50%; transform:translateX(-50%); z-index:40;
+    width:134px; height:5px; border-radius:100px; background:var(--ink); opacity:0.28 }
+  .scr{ position:absolute; inset:0; padding:54px 0 0; display:flex; flex-direction:column }
+
+  /* profile header */
+  .phead{ padding:10px 16px 4px; display:flex; align-items:flex-start; gap:13px }
+  .phead .ava{ width:60px; height:60px; border-radius:50%; flex:none; border:1px solid var(--line-2);
+    background:radial-gradient(circle at 36% 30%, #e9c79a, #c07a4a 55%, #6e3f24) }
+  .phead .who{ flex:1; min-width:0; padding-top:2px }
+  .phead .nm{ font:600 20px var(--sans); letter-spacing:-0.02em }
+  .phead .hd{ font:600 10.5px var(--mono); letter-spacing:0.08em; color:var(--ink-dim); text-transform:uppercase; margin-top:3px }
+  .phead .gear{ width:38px; height:38px; border-radius:var(--r); border:1px solid var(--line-2); background:var(--paper-raise); display:grid; place-items:center; cursor:pointer; flex:none }
+  .phead .gear svg{ width:18px; height:18px }
+
+  /* view-public button (top-right action) */
+  .viewpub{ display:inline-flex; align-items:center; gap:8px; height:38px; padding:0 13px; border-radius:var(--r);
+    border:1px solid var(--line-2); background:var(--paper-raise); color:var(--ink); cursor:pointer; font-family:var(--sans);
+    font:600 11px var(--mono); letter-spacing:0.08em; text-transform:uppercase; flex:none }
+  .viewpub svg{ width:15px; height:15px; color:var(--ink-dim) }
+
+  .pstats{ display:flex; gap:20px; padding:11px 18px 6px; font:500 12px var(--sans); color:var(--ink-dim) }
+  .pstats b{ color:var(--ink); font-weight:600 }
+  .passport{ padding:0 18px 8px; font:500 12.5px/1.5 var(--sans); color:var(--ink-dim); text-wrap:pretty }
+
+  .body{ flex:1; min-height:0; overflow:hidden; display:flex; flex-direction:column }
+  .scroll{ flex:1; min-height:0; overflow-y:auto; scrollbar-width:none; padding:0 16px 16px }
+  .scroll::-webkit-scrollbar{ display:none }
+  .mlabel{ font:600 10px var(--mono); letter-spacing:0.16em; color:var(--ink-faint); text-transform:uppercase;
+    padding:14px 2px 8px; display:flex; align-items:center; justify-content:space-between }
+  .mlabel .hint{ color:var(--ink-faint); letter-spacing:0.1em }
+
+  /* filter card */
+  .filtercard{ border:1px solid var(--line); border-radius:var(--r); background:var(--paper-raise); padding:11px 12px;
+    display:flex; flex-direction:column; gap:9px }
+  .frow{ display:flex; align-items:center; gap:9px }
+  .frow .fk{ width:44px; flex:none; font:600 9px var(--mono); letter-spacing:0.14em; color:var(--ink-faint); text-transform:uppercase }
+  .seg{ display:inline-flex; border:1px solid var(--line-2); border-radius:var(--r); overflow:hidden; background:var(--paper-sink) }
+  .seg button{ border:0; border-left:1px solid var(--line-2); background:transparent; padding:6px 9px; cursor:pointer; font-family:var(--sans); font:600 9px var(--mono); letter-spacing:0.06em; text-transform:uppercase; color:var(--ink-dim) }
+  .seg button:first-child{ border-left:0 }
+  .seg button[data-on="true"]{ background:var(--ink); color:var(--paper) }
+  .chips{ display:flex; gap:5px; flex-wrap:wrap }
+  .fchip{ font:600 9px var(--mono); letter-spacing:0.06em; text-transform:uppercase; padding:5px 8px; border-radius:100px; border:1px solid var(--line-2); background:transparent; color:var(--ink-dim); cursor:pointer; font-family:var(--sans) }
+  .fchip[data-on="true"]{ border-color:var(--accent); background:var(--accent-wash); color:var(--accent) }
+
+  /* single-column feed — full-width horizontal entries */
+  .feed{ display:flex; flex-direction:column; gap:10px; padding:12px 0 0 }
+  .clip{ border:1px solid var(--line); border-radius:var(--r); overflow:hidden; background:var(--paper-raise); position:relative; cursor:pointer }
+  .clip .thumb{ aspect-ratio:16/9; position:relative; overflow:hidden }
+  .t1{ background:linear-gradient(150deg,#2a2622,#5a3a30 60%,#2d2723) }
+  .t2{ background:linear-gradient(150deg,#26282a,#3a4654 60%,#1e2226) }
+  .t3{ background:linear-gradient(150deg,#2d2622,#6e3b34 55%,#231f1b) }
+  .t4{ background:linear-gradient(150deg,#262a26,#3f5a3f 60%,#1e221e) }
+  .t5{ background:linear-gradient(150deg,#2a2730,#4a3f64 58%,#211f28) }
+  .audio{ background:var(--paper-sink); display:grid; place-items:center }
+  .audio .wf{ display:flex; gap:3px; align-items:center; height:42px }
+  .audio .wf i{ width:3px; background:var(--ink-faint); border-radius:1px }
+  .clip .ov{ position:absolute; inset:0; background:linear-gradient(0deg, rgba(10,8,7,0.55), transparent 55%) }
+  .clip .dur{ position:absolute; top:9px; right:48px; font:600 9px var(--mono); letter-spacing:0.06em; color:#f6efe4; background:rgba(20,16,13,0.55); border-radius:3px; padding:3px 6px }
+  .clip .tl{ position:absolute; left:11px; bottom:10px; right:11px; color:#f6efe4 }
+  .clip .tl .t{ font:600 15px var(--sans); letter-spacing:-0.01em; text-shadow:0 1px 4px rgba(0,0,0,0.5); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+  .clip .tl .s{ font:600 9px var(--mono); letter-spacing:0.1em; text-transform:uppercase; opacity:0.88; margin-top:3px }
+  .cbadge{ position:absolute; top:9px; left:9px; font:600 8.5px var(--mono); letter-spacing:0.13em; text-transform:uppercase; padding:3px 6px; border-radius:3px }
+  .cbadge.public{ background:var(--accent); color:var(--accent-ink) }
+  .cbadge.draft{ background:var(--paper); color:var(--ink); border:1px solid var(--line-2) }
+  .cbadge.anon{ background:rgba(20,16,13,0.6); color:#f6efe4; border:1px solid rgba(255,240,225,0.3) }
+  .clip[data-anon="true"] .thumb{ filter:saturate(0.45) }
+  .clip[data-draft="true"] .thumb{ filter:saturate(0.55) brightness(0.97) }
+  /* per-entry edit affordance, top-right */
+  .clip .edit{ position:absolute; top:9px; right:9px; width:30px; height:30px; border-radius:var(--r); z-index:4;
+    background:rgba(243,238,226,0.94); border:1px solid var(--line-2); display:grid; place-items:center; color:var(--ink); cursor:pointer }
+  .clip .edit svg{ width:15px; height:15px }
+  /* anon "only you" footer strip */
+  .clip[data-anon="true"] .onlyyou{ display:flex }
+  .clip .onlyyou{ display:none; align-items:center; gap:7px; padding:8px 11px; background:var(--paper-sink); border-top:1px solid var(--line);
+    font:600 8.5px var(--mono); letter-spacing:0.12em; text-transform:uppercase; color:var(--ink-dim) }
+  .clip .onlyyou svg{ width:12px; height:12px }
+
+  /* public-view button bar / banner */
+  .pvbanner{ margin:10px 16px 0; padding:10px 12px; border:1px solid var(--accent-line); background:var(--accent-wash); border-radius:var(--r);
+    display:flex; align-items:center; gap:9px; font:600 9.5px var(--mono); letter-spacing:0.1em; text-transform:uppercase; color:var(--accent) }
+  .pvbanner svg{ width:14px; height:14px; flex:none }
+  .pvbanner .exit{ margin-left:auto; color:var(--ink); border:1px solid var(--line-2); border-radius:3px; padding:5px 9px; background:var(--paper); font:600 9px var(--mono); letter-spacing:0.1em; cursor:pointer; font-family:var(--sans); text-transform:uppercase }
+
+  /* public follow bar */
+  .pubactions{ display:flex; gap:9px; padding:8px 16px 2px }
+  .btn-follow{ flex:1; height:46px; border-radius:var(--r); border:0; background:var(--accent); color:var(--accent-ink); font:600 14px var(--sans); cursor:pointer; font-family:var(--sans) }
+  .btn-ghost{ flex:none; width:46px; height:46px; border-radius:var(--r); border:1px solid var(--line-2); background:var(--paper-raise); display:grid; place-items:center; cursor:pointer }
+  .btn-ghost svg{ width:18px; height:18px }
+  .ptabs{ display:flex; gap:20px; padding:12px 18px 0; border-bottom:1px solid var(--line) }
+  .ptabs span{ font:600 11px var(--mono); letter-spacing:0.12em; text-transform:uppercase; color:var(--ink-faint); padding-bottom:10px; position:relative }
+  .ptabs span[data-on="true"]{ color:var(--ink) }
+  .ptabs span[data-on="true"]::after{ content:""; position:absolute; left:0; right:0; bottom:-1px; height:2px; background:var(--accent) }
+</style>
+</head>
+<body>
+
+<div class="pageh">
+  <div class="kick">Clips initiative · Family C · Profile (resolved → Option B)</div>
+  <h1>Profile — the one home for your content</h1>
+  <p>No separate Library page. Your own profile holds everything — published, drafts, anon, raw — and every entry carries an edit icon (top-right). A <strong>View public profile</strong> action rebuilds the same screen the way visitors see it: curated, published non-anon only, no management chrome.</p>
+  <span class="lineage">SUPERSEDES: my-profile-portrait (12.2) · profile-vs-library comparison → B chosen</span>
+</div>
+
+<div class="canvas">
+
+  <!-- ════════ Self view (everything + per-entry edit) ════════ -->
+  <div class="frame">
+    <div class="cap"><div class="id">Self view</div><div class="nm">Your profile — everything</div>
+      <div class="ds">Full content: published, drafts, anon. Single-column full-width entries; each has an edit icon top-right. "View public profile" sits in the header.</div></div>
+    <div class="phone">
+      <div class="status"><span>9:41</span><span class="r">
+        <svg width="18" height="12" viewBox="0 0 19 12"><rect x="0" y="7.5" width="3.2" height="4.5" rx="0.7" fill="#1c1814"/><rect x="4.8" y="5" width="3.2" height="7" rx="0.7" fill="#1c1814"/><rect x="9.6" y="2.5" width="3.2" height="9.5" rx="0.7" fill="#1c1814"/><rect x="14.4" y="0" width="3.2" height="12" rx="0.7" fill="#1c1814"/></svg>
+        <svg width="25" height="12" viewBox="0 0 27 13"><rect x="0.5" y="0.5" width="23" height="12" rx="3.5" stroke="#1c1814" stroke-opacity="0.5" fill="none"/><rect x="2" y="2" width="17" height="9" rx="2" fill="#1c1814"/></svg>
+      </span></div>
+      <div class="home"></div>
+      <div class="scr">
+        <div class="phead">
+          <div class="ava"></div>
+          <div class="who"><div class="nm">Kai</div><div class="hd">@kai.dc</div></div>
+          <button class="viewpub"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>View public</button>
+        </div>
+        <div class="pstats"><span><b>1.2K</b> followers</span><span><b>18</b> clips</span><span><b>3</b> drafts</span></div>
+        <div class="body">
+          <div class="scroll">
+            <div class="mlabel"><span>Filter</span><span class="hint">22 items</span></div>
+            <div class="filtercard">
+              <div class="frow"><span class="fk">Vis</span><div class="seg"><button data-on="true">All</button><button>Public</button><button>Anon</button><button>Draft</button></div></div>
+              <div class="frow"><span class="fk">Layers</span><div class="chips"><span class="fchip" data-on="true">Cam</span><span class="fchip">Audio</span><span class="fchip">Loc</span><span class="fchip">Gyro</span></div></div>
+              <div class="frow"><span class="fk">Date</span><div class="seg"><button data-on="true">Recent</button><button>Wk</button><button>Mo</button><button>All</button></div></div>
+            </div>
+            <div class="feed">
+              <div class="clip">
+                <div class="thumb t1"><div class="ov"></div><span class="cbadge public">Public</span><button class="edit" aria-label="Edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button><span class="dur">0:18</span><div class="tl"><div class="t">Rooftop sunset</div><div class="s">Cam · Audio · Loc · Apr 21</div></div></div>
+              </div>
+              <div class="clip" data-draft="true">
+                <div class="thumb t2"><div class="ov"></div><span class="cbadge draft">Draft</span><button class="edit" aria-label="Edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button><span class="dur">0:42</span><div class="tl"><div class="t">Soundcheck</div><div class="s">Cam · Audio · Apr 20</div></div></div>
+              </div>
+              <div class="clip" data-anon="true">
+                <div class="thumb audio"><div class="wf"><i style="height:30%"></i><i style="height:70%"></i><i style="height:45%"></i><i style="height:90%"></i><i style="height:55%"></i><i style="height:80%"></i><i style="height:35%"></i><i style="height:65%"></i><i style="height:50%"></i><i style="height:78%"></i><i style="height:40%"></i></div><span class="cbadge anon">Anon</span><button class="edit" aria-label="Edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button><span class="dur">0:11</span><div class="tl" style="color:var(--ink)"><div class="t" style="color:var(--ink);text-shadow:none">Late set</div><div class="s" style="color:var(--ink-faint)">Audio · Apr 19</div></div></div>
+                <div class="onlyyou"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18"/><path d="M10.6 6.1A8 8 0 0 1 12 6c6 0 10 6 10 6a16 16 0 0 1-3 3.6M6.4 6.4A16 16 0 0 0 2 12s4 6 10 6a9 9 0 0 0 4-1"/></svg>Only visible to you</div>
+              </div>
+              <div class="clip">
+                <div class="thumb t3"><div class="ov"></div><span class="cbadge public">Public</span><button class="edit" aria-label="Edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button><span class="dur">1:14</span><div class="tl"><div class="t">Main hour</div><div class="s">Cam · Audio · Loc · Apr 18</div></div></div>
+              </div>
+              <div class="clip">
+                <div class="thumb t4"><div class="ov"></div><span class="cbadge public">Public</span><button class="edit" aria-label="Edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button><span class="dur">0:28</span><div class="tl"><div class="t">Bridge walk</div><div class="s">Cam · Apr 14</div></div></div>
+              </div>
+            </div>
+            <div style="height:14px"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════ View public profile (rebuilt per preferences) ════════ -->
+  <div class="frame">
+    <div class="cap"><div class="id">View public</div><div class="nm">Public profile — rebuilt</div>
+      <div class="ds">Tapping "View public" rebuilds the same screen as visitors see it: published non-anon only, no edit icons, follow bar instead of filters. Banner + exit returns to self view.</div></div>
+    <div class="phone">
+      <div class="status"><span>9:41</span><span class="r">
+        <svg width="18" height="12" viewBox="0 0 19 12"><rect x="0" y="7.5" width="3.2" height="4.5" rx="0.7" fill="#1c1814"/><rect x="4.8" y="5" width="3.2" height="7" rx="0.7" fill="#1c1814"/><rect x="9.6" y="2.5" width="3.2" height="9.5" rx="0.7" fill="#1c1814"/><rect x="14.4" y="0" width="3.2" height="12" rx="0.7" fill="#1c1814"/></svg>
+        <svg width="25" height="12" viewBox="0 0 27 13"><rect x="0.5" y="0.5" width="23" height="12" rx="3.5" stroke="#1c1814" stroke-opacity="0.5" fill="none"/><rect x="2" y="2" width="17" height="9" rx="2" fill="#1c1814"/></svg>
+      </span></div>
+      <div class="home"></div>
+      <div class="scr">
+        <div class="pvbanner">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+          This is what others see
+          <button class="exit">Exit</button>
+        </div>
+        <div class="phead" style="padding-top:12px">
+          <div class="ava"></div>
+          <div class="who"><div class="nm">Kai</div><div class="hd">@kai.dc · Brooklyn</div></div>
+        </div>
+        <div class="pstats"><span><b>1.2K</b> followers</span><span><b>12</b> clips</span></div>
+        <div class="passport">Field recordings &amp; live sets from rooftops and corners around BK.</div>
+        <div class="pubactions">
+          <button class="btn-follow">Follow</button>
+          <button class="btn-ghost"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8h16v-8M16 6l-4-4-4 4M12 2v13"/></svg></button>
+        </div>
+        <div class="ptabs"><span data-on="true">Clips</span><span>About</span></div>
+        <div class="body">
+          <div class="scroll">
+            <div class="feed">
+              <div class="clip"><div class="thumb t1"><div class="ov"></div><span class="dur" style="right:9px">0:18</span><div class="tl"><div class="t">Rooftop sunset</div><div class="s">Apr 21</div></div></div></div>
+              <div class="clip"><div class="thumb t3"><div class="ov"></div><span class="dur" style="right:9px">1:14</span><div class="tl"><div class="t">Main hour</div><div class="s">Apr 18</div></div></div></div>
+              <div class="clip"><div class="thumb t4"><div class="ov"></div><span class="dur" style="right:9px">0:28</span><div class="tl"><div class="t">Bridge walk</div><div class="s">Apr 14</div></div></div></div>
+              <div class="clip"><div class="thumb t5"><div class="ov"></div><span class="dur" style="right:9px">0:52</span><div class="tl"><div class="t">Closing</div><div class="s">Apr 12</div></div></div></div>
+            </div>
+            <div style="height:14px"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

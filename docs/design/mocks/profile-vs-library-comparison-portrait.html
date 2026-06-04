@@ -1,0 +1,474 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>WRLD — Profile vs Library (comparison)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#f3eee2; --paper-raise:#f8f4ea; --paper-sink:#eae4d5;
+    --ink:#1c1814; --ink-dim:rgba(28,24,20,0.60); --ink-faint:rgba(28,24,20,0.34);
+    --line:rgba(28,24,20,0.14); --line-2:rgba(28,24,20,0.24);
+    --accent:#d92e3a; --accent-ink:#fbf3ea; --accent-wash:rgba(217,46,58,0.08); --accent-line:rgba(217,46,58,0.40);
+    --sans:"Inter Tight", ui-sans-serif, system-ui, sans-serif;
+    --mono:"IBM Plex Mono", ui-monospace, monospace;
+    --r:4px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:#cfc8b8;font-family:var(--sans);color:var(--ink);-webkit-font-smoothing:antialiased}
+  body{padding:46px 30px 80px}
+
+  .pageh{ max-width:1600px; margin:0 auto 24px }
+  .pageh .kick{ font:600 10px var(--mono); letter-spacing:0.18em; color:var(--accent); text-transform:uppercase; margin-bottom:12px }
+  .pageh h1{ font:600 30px/1.08 var(--sans); letter-spacing:-0.02em; margin:0 0 8px }
+  .pageh p{ font:500 13px/1.6 var(--sans); color:var(--ink-dim); max-width:760px; margin:0 }
+
+  /* Option banner */
+  .opt{ max-width:1600px; margin:40px auto 0; border-top:2px solid var(--ink); padding-top:18px }
+  .opt .tag{ display:inline-flex; align-items:center; gap:9px; font:600 12px var(--mono); letter-spacing:0.14em; text-transform:uppercase; color:var(--ink) }
+  .opt .tag .L{ width:26px; height:26px; border-radius:50%; background:var(--accent); color:var(--accent-ink); display:grid; place-items:center; font:600 13px var(--sans) }
+  .opt h2{ font:600 22px/1.1 var(--sans); letter-spacing:-0.02em; margin:10px 0 6px }
+  .opt .sub{ font:500 12.5px/1.55 var(--sans); color:var(--ink-dim); max-width:620px; margin:0 0 18px }
+  .opt .sub b{ color:var(--ink); font-weight:600 }
+
+  .canvas{ max-width:1600px; margin:0 auto; display:flex; flex-wrap:wrap; gap:36px 26px; align-items:flex-start }
+  .frame{ display:flex; flex-direction:column; gap:11px; flex:none }
+  .frame .cap{ max-width:380px }
+  .frame .cap .id{ font:600 11px var(--mono); letter-spacing:0.12em; color:var(--accent); text-transform:uppercase }
+  .frame .cap .nm{ font:600 14px var(--sans); letter-spacing:-0.01em; margin-top:2px }
+  .frame .cap .ds{ font:500 11px/1.5 var(--sans); color:var(--ink-dim); margin-top:4px; text-wrap:pretty }
+
+  .phone{ width:380px; height:822px; border-radius:30px; position:relative; overflow:hidden;
+    background:var(--paper); border:1px solid var(--line-2); box-shadow:0 24px 50px rgba(60,50,35,0.26) }
+  .status{ position:absolute; top:0; left:0; right:0; height:52px; z-index:20;
+    display:flex; align-items:center; justify-content:space-between; padding:17px 26px 0; font:600 14px var(--sans) }
+  .status .r{ display:flex; gap:6px; align-items:center }
+  .home{ position:absolute; bottom:7px; left:50%; transform:translateX(-50%); z-index:40;
+    width:130px; height:5px; border-radius:100px; background:var(--ink); opacity:0.28 }
+  .scr{ position:absolute; inset:0; padding:52px 0 0; display:flex; flex-direction:column }
+
+  .phead{ padding:10px 16px 4px; display:flex; align-items:center; gap:13px }
+  .phead .ava{ width:60px; height:60px; border-radius:50%; flex:none; border:1px solid var(--line-2);
+    background:radial-gradient(circle at 36% 30%, #e9c79a, #c07a4a 55%, #6e3f24) }
+  .phead .who{ flex:1; min-width:0 }
+  .phead .nm{ font:600 19px var(--sans); letter-spacing:-0.02em }
+  .phead .hd{ font:600 10.5px var(--mono); letter-spacing:0.08em; color:var(--ink-dim); text-transform:uppercase; margin-top:2px }
+  .phead .ico{ width:38px; height:38px; border-radius:var(--r); border:1px solid var(--line-2); background:var(--paper-raise); display:grid; place-items:center; cursor:pointer }
+  .phead .ico svg{ width:18px; height:18px }
+  .pstats{ display:flex; gap:20px; padding:11px 18px 4px; font:500 12px var(--sans); color:var(--ink-dim) }
+  .pstats b{ color:var(--ink); font-weight:600 }
+  .passport{ padding:2px 18px 8px; font:500 12.5px/1.5 var(--sans); color:var(--ink-dim); text-wrap:pretty }
+
+  .body{ flex:1; min-height:0; overflow:hidden; display:flex; flex-direction:column }
+  .scroll{ flex:1; min-height:0; overflow-y:auto; scrollbar-width:none; padding:0 16px 16px }
+  .scroll::-webkit-scrollbar{ display:none }
+  .mlabel{ font:600 10px var(--mono); letter-spacing:0.16em; color:var(--ink-faint); text-transform:uppercase;
+    padding:14px 2px 8px; display:flex; align-items:center; justify-content:space-between }
+  .mlabel .hint{ color:var(--ink-faint); letter-spacing:0.1em }
+
+  /* follow bar (public) */
+  .pubactions{ display:flex; gap:9px; padding:8px 16px 2px }
+  .btn-follow{ flex:1; height:46px; border-radius:var(--r); border:0; background:var(--accent); color:var(--accent-ink); font:600 14px var(--sans); cursor:pointer; font-family:var(--sans) }
+  .btn-ghost{ flex:none; width:46px; height:46px; border-radius:var(--r); border:1px solid var(--line-2); background:var(--paper-raise); display:grid; place-items:center; cursor:pointer }
+  .btn-ghost svg{ width:18px; height:18px }
+
+  /* segmented tabs (curated profile content tabs) */
+  .ptabs{ display:flex; gap:20px; padding:10px 18px 0; border-bottom:1px solid var(--line) }
+  .ptabs span{ font:600 11px var(--mono); letter-spacing:0.12em; text-transform:uppercase; color:var(--ink-faint); padding-bottom:10px; position:relative }
+  .ptabs span[data-on="true"]{ color:var(--ink) }
+  .ptabs span[data-on="true"]::after{ content:""; position:absolute; left:0; right:0; bottom:-1px; height:2px; background:var(--accent) }
+
+  /* ── ClipCard grid ── */
+  .grid{ display:grid; grid-template-columns:1fr; gap:10px; padding:12px 16px 0 }
+  .grid.dense{ gap:8px }
+  .clip{ border:1px solid var(--line); border-radius:var(--r); overflow:hidden; background:var(--paper-raise); position:relative; cursor:pointer }
+  .clip .thumb{ aspect-ratio:16/9; position:relative; overflow:hidden }
+  .clip.dense .thumb{ aspect-ratio:16/9 }
+  .t1{ background:linear-gradient(150deg,#2a2622,#5a3a30 60%,#2d2723) }
+  .t2{ background:linear-gradient(150deg,#26282a,#3a4654 60%,#1e2226) }
+  .t3{ background:linear-gradient(150deg,#2d2622,#6e3b34 55%,#231f1b) }
+  .t4{ background:linear-gradient(150deg,#262a26,#3f5a3f 60%,#1e221e) }
+  .t5{ background:linear-gradient(150deg,#2a2730,#4a3f64 58%,#211f28) }
+  .audio{ background:var(--paper-sink); display:grid; place-items:center }
+  .audio .wf{ display:flex; gap:2px; align-items:center; height:34px }
+  .audio .wf i{ width:2.5px; background:var(--ink-faint); border-radius:1px }
+  .clip .ov{ position:absolute; inset:0; background:linear-gradient(0deg, rgba(10,8,7,0.5), transparent 50%) }
+  .clip .dur{ position:absolute; top:7px; right:7px; font:600 9px var(--mono); letter-spacing:0.06em; color:#f6efe4; background:rgba(20,16,13,0.55); border-radius:3px; padding:3px 5px }
+  .clip .tl{ position:absolute; left:7px; bottom:7px; right:7px; color:#f6efe4 }
+  .clip .tl .t{ font:600 12px var(--sans); letter-spacing:-0.01em; text-shadow:0 1px 3px rgba(0,0,0,0.5); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+  .clip .tl .s{ font:600 8.5px var(--mono); letter-spacing:0.1em; text-transform:uppercase; opacity:0.85; margin-top:2px }
+  .cbadge{ position:absolute; top:7px; left:7px; font:600 8px var(--mono); letter-spacing:0.13em; text-transform:uppercase; padding:3px 5px; border-radius:3px }
+  .cbadge.draft{ background:var(--paper); color:var(--ink); border:1px solid var(--line-2) }
+  .cbadge.anon{ background:rgba(20,16,13,0.6); color:#f6efe4; border:1px solid rgba(255,240,225,0.3) }
+  .clip[data-anon="true"] .thumb{ filter:saturate(0.45) }
+  .clip[data-draft="true"] .thumb{ filter:saturate(0.55) brightness(0.97) }
+  /* owner edit affordance */
+  .clip .feather{ position:absolute; top:6px; right:6px; width:28px; height:28px; border-radius:var(--r);
+    background:rgba(243,238,226,0.92); border:1px solid var(--line-2); display:grid; place-items:center; color:var(--ink); z-index:4 }
+  .clip .feather svg{ width:14px; height:14px }
+  .clip[data-edit="true"] .dur{ top:7px; right:40px }
+
+  /* workbench filter + sort */
+  .filtercard{ margin:0; border:1px solid var(--line); border-radius:var(--r); background:var(--paper-raise); padding:11px 12px;
+    display:flex; flex-direction:column; gap:9px }
+  .frow{ display:flex; align-items:center; gap:9px }
+  .frow .fk{ width:44px; flex:none; font:600 9px var(--mono); letter-spacing:0.14em; color:var(--ink-faint); text-transform:uppercase }
+  .seg{ display:inline-flex; border:1px solid var(--line-2); border-radius:var(--r); overflow:hidden; background:var(--paper-sink) }
+  .seg button{ border:0; border-left:1px solid var(--line-2); background:transparent; padding:6px 9px; cursor:pointer; font-family:var(--sans); font:600 9px var(--mono); letter-spacing:0.06em; text-transform:uppercase; color:var(--ink-dim) }
+  .seg button:first-child{ border-left:0 }
+  .seg button[data-on="true"]{ background:var(--ink); color:var(--paper) }
+  .chips{ display:flex; gap:5px; flex-wrap:wrap }
+  .fchip{ font:600 9px var(--mono); letter-spacing:0.06em; text-transform:uppercase; padding:5px 8px; border-radius:100px; border:1px solid var(--line-2); background:transparent; color:var(--ink-dim); cursor:pointer; font-family:var(--sans) }
+  .fchip[data-on="true"]{ border-color:var(--accent); background:var(--accent-wash); color:var(--accent) }
+  .wbbar{ display:flex; align-items:center; justify-content:space-between; padding:12px 2px 4px }
+  .wbbar .ct{ font:600 10px var(--mono); letter-spacing:0.12em; color:var(--ink-faint); text-transform:uppercase }
+  .wbbar .ct b{ color:var(--ink) }
+  .sortbtn{ display:inline-flex; align-items:center; gap:7px; border:1px solid var(--line-2); border-radius:var(--r); background:var(--paper-raise);
+    padding:7px 11px; font:600 9.5px var(--mono); letter-spacing:0.1em; text-transform:uppercase; color:var(--ink); cursor:pointer; font-family:var(--sans) }
+  .sortbtn svg{ width:13px; height:13px; color:var(--ink-dim) }
+
+  /* preview toggle (option B) */
+  .viewbar{ margin:10px 16px 2px; display:flex; border:1px solid var(--line-2); border-radius:var(--r); overflow:hidden; background:var(--paper-raise) }
+  .viewbar button{ flex:1; border:0; border-left:1px solid var(--line-2); background:transparent; padding:12px; cursor:pointer; font-family:var(--sans); font:600 12px var(--sans); color:var(--ink-dim); display:flex; align-items:center; justify-content:center; gap:7px }
+  .viewbar button:first-child{ border-left:0 }
+  .viewbar button svg{ width:15px; height:15px }
+  .viewbar button[data-on="true"]{ background:var(--ink); color:var(--paper) }
+  .pvbanner{ margin:10px 16px 0; padding:10px 12px; border:1px solid var(--accent-line); background:var(--accent-wash); border-radius:var(--r);
+    display:flex; align-items:center; gap:9px; font:600 9.5px var(--mono); letter-spacing:0.1em; text-transform:uppercase; color:var(--accent) }
+  .pvbanner svg{ width:14px; height:14px; flex:none }
+  .pvbanner .exit{ margin-left:auto; color:var(--ink); border:1px solid var(--line-2); border-radius:3px; padding:4px 8px; background:var(--paper); font:600 9px var(--mono); letter-spacing:0.1em; cursor:pointer; font-family:var(--sans) }
+
+  /* tab bar (IA) */
+  .tabbar{ position:absolute; left:0; right:0; bottom:0; z-index:30; height:74px; padding:8px 8px 0;
+    background:var(--paper-raise); border-top:1px solid var(--line); display:flex }
+  .tabbar .tb{ flex:1; display:flex; flex-direction:column; align-items:center; gap:5px; padding-top:7px; color:var(--ink-faint) }
+  .tabbar .tb svg{ width:22px; height:22px }
+  .tabbar .tb .lb{ font:600 8.5px var(--mono); letter-spacing:0.1em; text-transform:uppercase }
+  .tabbar .tb[data-on="true"]{ color:var(--ink) }
+  .tabbar .tb[data-accent="true"]{ color:var(--accent) }
+
+  /* IA note diagram */
+  .ianote{ position:absolute; inset:0; padding:52px 22px 0; display:flex; flex-direction:column }
+  .ianote h3{ font:600 19px/1.2 var(--sans); letter-spacing:-0.02em; margin:18px 0 6px }
+  .ianote .lead{ font:500 12.5px/1.55 var(--sans); color:var(--ink-dim); margin:0 0 20px; text-wrap:pretty }
+  .ianote .lead b{ color:var(--ink); font-weight:600 }
+  .ia-map{ display:flex; flex-direction:column; gap:14px }
+  .ia-node{ border:1px solid var(--line-2); border-radius:var(--r); background:var(--paper-raise); padding:15px 16px }
+  .ia-node.accent{ border-color:var(--accent-line); background:var(--accent-wash) }
+  .ia-node .nh{ display:flex; align-items:center; gap:10px }
+  .ia-node .nh .ni{ width:34px; height:34px; border-radius:var(--r); background:var(--paper-sink); border:1px solid var(--line); display:grid; place-items:center; color:var(--ink-dim) }
+  .ia-node.accent .nh .ni{ color:var(--accent); border-color:var(--accent-line); background:var(--paper) }
+  .ia-node .nh .ni svg{ width:18px; height:18px }
+  .ia-node .nt{ font:600 15px var(--sans); letter-spacing:-0.01em }
+  .ia-node .nd{ font:500 11px/1.45 var(--sans); color:var(--ink-dim); margin-top:8px; text-wrap:pretty }
+  .ia-node .nd b{ color:var(--ink); font-weight:600 }
+  .ia-arrow{ display:flex; align-items:center; justify-content:center; gap:9px; color:var(--ink-faint);
+    font:600 9px var(--mono); letter-spacing:0.14em; text-transform:uppercase }
+  .ia-arrow svg{ width:18px; height:18px }
+  .ia-foot{ margin-top:auto; padding:16px 0 24px; font:500 11px/1.55 var(--mono); letter-spacing:0.04em; color:var(--ink-faint); text-transform:uppercase; border-top:1px solid var(--line) }
+
+  /* side-by-side mini */
+  .sbs{ max-width:1600px; margin:0 auto; display:flex; flex-wrap:wrap; gap:30px }
+  .sbs .col{ flex:1; min-width:360px; border:1px solid var(--line-2); border-radius:8px; background:var(--paper-raise); padding:22px }
+  .sbs .col h4{ font:600 14px var(--mono); letter-spacing:0.1em; text-transform:uppercase; margin:0 0 4px; display:flex; align-items:center; gap:9px }
+  .sbs .col h4 .L{ width:24px; height:24px; border-radius:50%; background:var(--accent); color:var(--accent-ink); display:grid; place-items:center; font:600 12px var(--sans) }
+  .sbs .col .cl{ font:500 11.5px/1.5 var(--sans); color:var(--ink-dim); margin:0 0 16px }
+  .ia-mini{ display:flex; align-items:center; gap:10px; flex-wrap:wrap }
+  .mini-node{ border:1px solid var(--line-2); border-radius:var(--r); background:var(--paper); padding:11px 13px; font:600 10px var(--mono); letter-spacing:0.08em; text-transform:uppercase; color:var(--ink); display:inline-flex; align-items:center; gap:8px }
+  .mini-node.accent{ border-color:var(--accent-line); background:var(--accent-wash); color:var(--accent) }
+  .mini-node svg{ width:15px; height:15px }
+  .mini-sep{ color:var(--ink-faint); font:600 14px var(--sans) }
+  .mini-toggle{ display:inline-flex; border:1px solid var(--line-2); border-radius:var(--r); overflow:hidden }
+  .mini-toggle span{ padding:9px 11px; font:600 9px var(--mono); letter-spacing:0.08em; text-transform:uppercase; color:var(--ink-dim); border-left:1px solid var(--line-2) }
+  .mini-toggle span:first-child{ border-left:0 }
+  .mini-toggle span[data-on="true"]{ background:var(--ink); color:var(--paper) }
+  .sbs .axes{ margin-top:18px; border-top:1px solid var(--line); padding-top:14px; display:flex; flex-direction:column; gap:11px }
+  .sbs .axis .ak{ font:600 9px var(--mono); letter-spacing:0.14em; text-transform:uppercase; color:var(--ink-faint); margin-bottom:3px }
+  .sbs .axis .av{ font:500 12px/1.45 var(--sans); color:var(--ink) }
+</style>
+</head>
+<body>
+
+<div class="pageh">
+  <div class="kick">Clips initiative · decision support · Profile vs Library</div>
+  <h1>Where does editable raw material live?</h1>
+  <p>Two positions designed at full strength on the same dataset. <strong>Option A</strong> — a calm presentational Profile + a separate dense Library workbench (Aaron). <strong>Option B</strong> — Profile <em>is</em> the library, with a preview-public toggle (Ben). The honest contrast is the deliverable; neither is under-designed.</p>
+</div>
+
+<!-- ══════════════════════════ OPTION A ══════════════════════════ -->
+<div class="opt">
+  <div class="tag"><span class="L">A</span>Dedicated Library page · Aaron</div>
+  <h2>Two destinations, each doing one job</h2>
+  <p class="sub">The public <b>Profile stays purely presentational</b> — a portfolio of curated published work, zero management chrome. The <b>Library</b> is an honest workbench: all recordings + clips, drafts + anon, filters, sort, edit entry, allowed to be dense because it's a tool.</p>
+</div>
+
+<div class="canvas">
+
+  <!-- A1 — public profile (curated) -->
+  <div class="frame">
+    <div class="cap"><div class="id">A1 · option A</div><div class="nm">Public Profile — curated</div>
+      <div class="ds">Identity + published non-anon clips only. Presentational, no management affordances. "What others see."</div></div>
+    <div class="phone">
+      <div class="status"><span>9:41</span><span class="r"><svg width="18" height="12" viewBox="0 0 19 12"><rect x="0" y="7.5" width="3.2" height="4.5" rx="0.7" fill="#1c1814"/><rect x="4.8" y="5" width="3.2" height="7" rx="0.7" fill="#1c1814"/><rect x="9.6" y="2.5" width="3.2" height="9.5" rx="0.7" fill="#1c1814"/><rect x="14.4" y="0" width="3.2" height="12" rx="0.7" fill="#1c1814"/></svg><svg width="25" height="12" viewBox="0 0 27 13"><rect x="0.5" y="0.5" width="23" height="12" rx="3.5" stroke="#1c1814" stroke-opacity="0.5" fill="none"/><rect x="2" y="2" width="17" height="9" rx="2" fill="#1c1814"/></svg></span></div>
+      <div class="home"></div>
+      <div class="scr">
+        <div class="phead" style="padding-top:6px">
+          <div class="ava"></div>
+          <div class="who"><div class="nm">Kai</div><div class="hd">@kai.dc · Brooklyn</div></div>
+        </div>
+        <div class="pstats"><span><b>1.2K</b> followers</span><span><b>12</b> clips</span></div>
+        <div class="passport">Field recordings &amp; live sets from rooftops and corners around BK.</div>
+        <div class="pubactions">
+          <button class="btn-follow">Follow</button>
+          <button class="btn-ghost"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8h16v-8M16 6l-4-4-4 4M12 2v13"/></svg></button>
+        </div>
+        <div class="ptabs"><span data-on="true">Clips</span><span>About</span></div>
+        <div class="body">
+          <div class="scroll">
+            <div class="grid">
+              <div class="clip"><div class="thumb t1"><div class="ov"></div><span class="dur">0:18</span><div class="tl"><div class="t">Rooftop sunset</div><div class="s">Apr 21</div></div></div></div>
+              <div class="clip"><div class="thumb t3"><div class="ov"></div><span class="dur">1:14</span><div class="tl"><div class="t">Main hour</div><div class="s">Apr 18</div></div></div></div>
+              <div class="clip"><div class="thumb t4"><div class="ov"></div><span class="dur">0:28</span><div class="tl"><div class="t">Bridge walk</div><div class="s">Apr 14</div></div></div></div>
+              <div class="clip"><div class="thumb t5"><div class="ov"></div><span class="dur">0:52</span><div class="tl"><div class="t">Closing</div><div class="s">Apr 12</div></div></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- A2 — library workbench -->
+  <div class="frame">
+    <div class="cap"><div class="id">A2 · option A</div><div class="nm">Library — workbench</div>
+      <div class="ds">Separate management surface: full set incl. drafts + anon, filters (VIS / LAYERS / DATE), sort, per-clip edit feather. Denser — it's a tool.</div></div>
+    <div class="phone">
+      <div class="status"><span>9:41</span><span class="r"><svg width="18" height="12" viewBox="0 0 19 12"><rect x="0" y="7.5" width="3.2" height="4.5" rx="0.7" fill="#1c1814"/><rect x="4.8" y="5" width="3.2" height="7" rx="0.7" fill="#1c1814"/><rect x="9.6" y="2.5" width="3.2" height="9.5" rx="0.7" fill="#1c1814"/><rect x="14.4" y="0" width="3.2" height="12" rx="0.7" fill="#1c1814"/></svg><svg width="25" height="12" viewBox="0 0 27 13"><rect x="0.5" y="0.5" width="23" height="12" rx="3.5" stroke="#1c1814" stroke-opacity="0.5" fill="none"/><rect x="2" y="2" width="17" height="9" rx="2" fill="#1c1814"/></svg></span></div>
+      <div class="home"></div>
+      <div class="scr">
+        <div class="phead" style="padding-bottom:0">
+          <div class="who"><div class="nm">Library</div><div class="hd">18 clips · 3 drafts · 1 anon</div></div>
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div>
+        </div>
+        <div class="body">
+          <div class="scroll">
+            <div style="height:6px"></div>
+            <div class="filtercard">
+              <div class="frow"><span class="fk">Vis</span><div class="seg"><button data-on="true">All</button><button>Public</button><button>Anon</button><button>Draft</button></div></div>
+              <div class="frow"><span class="fk">Layers</span><div class="chips"><span class="fchip" data-on="true">Cam</span><span class="fchip">Audio</span><span class="fchip">Loc</span><span class="fchip">Gyro</span></div></div>
+              <div class="frow"><span class="fk">Date</span><div class="seg"><button data-on="true">Recent</button><button>Wk</button><button>Mo</button><button>All</button></div></div>
+            </div>
+            <div class="wbbar">
+              <span class="ct"><b>22</b> items</span>
+              <button class="sortbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M6 12h12M9 18h6"/></svg>Newest</button>
+            </div>
+            <div class="grid dense">
+              <div class="clip dense" data-edit="true"><div class="thumb t1"><div class="ov"></div><button class="feather"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button><span class="dur">0:18</span><div class="tl"><div class="t">Rooftop sunset</div><div class="s">Public · Apr 21</div></div></div></div>
+              <div class="clip dense" data-edit="true" data-draft="true"><div class="thumb t2"><div class="ov"></div><span class="cbadge draft">Draft</span><button class="feather"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button><span class="dur">0:42</span><div class="tl"><div class="t">Soundcheck</div><div class="s">Draft · Apr 20</div></div></div></div>
+              <div class="clip dense" data-edit="true" data-anon="true"><div class="thumb audio"><div class="wf"><i style="height:30%"></i><i style="height:70%"></i><i style="height:45%"></i><i style="height:90%"></i><i style="height:55%"></i><i style="height:80%"></i><i style="height:35%"></i></div><span class="cbadge anon">Anon</span><button class="feather"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button><span class="dur">0:11</span><div class="tl"><div class="t">Late set</div><div class="s">Anon · Apr 19</div></div></div></div>
+              <div class="clip dense" data-edit="true"><div class="thumb t3"><div class="ov"></div><button class="feather"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button><span class="dur">1:14</span><div class="tl"><div class="t">Main hour</div><div class="s">Public · Apr 18</div></div></div></div>
+              <div class="clip dense" data-edit="true"><div class="thumb t4"><div class="ov"></div><button class="feather"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button><span class="dur">0:28</span><div class="tl"><div class="t">Bridge walk</div><div class="s">Public · Apr 14</div></div></div></div>
+              <div class="clip dense" data-edit="true" data-draft="true"><div class="thumb t5"><div class="ov"></div><span class="cbadge draft">Draft</span><button class="feather"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button><span class="dur">0:36</span><div class="tl"><div class="t">Drum circle</div><div class="s">Draft · Apr 9</div></div></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- A3 — IA note -->
+  <div class="frame">
+    <div class="cap"><div class="id">A3 · option A</div><div class="nm">IA — two destinations</div>
+      <div class="ds">Profile and Library are separate places. Library reached from a tab (or profile entry / settings). Each surface does one job.</div></div>
+    <div class="phone">
+      <div class="status"><span>9:41</span><span class="r"><svg width="18" height="12" viewBox="0 0 19 12"><rect x="0" y="7.5" width="3.2" height="4.5" rx="0.7" fill="#1c1814"/><rect x="4.8" y="5" width="3.2" height="7" rx="0.7" fill="#1c1814"/><rect x="9.6" y="2.5" width="3.2" height="9.5" rx="0.7" fill="#1c1814"/><rect x="14.4" y="0" width="3.2" height="12" rx="0.7" fill="#1c1814"/></svg><svg width="25" height="12" viewBox="0 0 27 13"><rect x="0.5" y="0.5" width="23" height="12" rx="3.5" stroke="#1c1814" stroke-opacity="0.5" fill="none"/><rect x="2" y="2" width="17" height="9" rx="2" fill="#1c1814"/></svg></span></div>
+      <div class="home"></div>
+      <div class="ianote">
+        <h3>Two places</h3>
+        <p class="lead">Management never touches the public face. The <b>Library</b> is its own destination in the tab bar.</p>
+        <div class="ia-map">
+          <div class="ia-node">
+            <div class="nh"><span class="ni"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M5 21a7 7 0 0 1 14 0"/></svg></span><span class="nt">Profile</span></div>
+            <div class="nd"><b>Presentational only.</b> Curated published clips. What visitors and the owner both see — no management chrome.</div>
+          </div>
+          <div class="ia-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>separate destinations</div>
+          <div class="ia-node accent">
+            <div class="nh"><span class="ni"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v12H4zM8 20h8M12 16v4"/></svg></span><span class="nt">Library</span></div>
+            <div class="nd"><b>Workbench.</b> All raw + clips, drafts, anon. Filters, sort, edit. Reached from its own tab — as dense as management needs.</div>
+          </div>
+        </div>
+        <div class="ia-foot">Cost · one more tab + a mental "where did I put it." Win · the public face never has to compromise for tools.</div>
+      </div>
+      <div class="tabbar">
+        <div class="tb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3a14 14 0 0 1 0 18M3 12h18"/></svg><span class="lb">Globe</span></div>
+        <div class="tb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="9"/></svg><span class="lb">Live</span></div>
+        <div class="tb" data-accent="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v12H4zM8 20h8M12 16v4"/></svg><span class="lb">Library</span></div>
+        <div class="tb" data-on="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M5 21a7 7 0 0 1 14 0"/></svg><span class="lb">Profile</span></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ══════════════════════════ OPTION B ══════════════════════════ -->
+<div class="opt">
+  <div class="tag"><span class="L">B</span>Profile-as-library + preview toggle · Ben</div>
+  <h2>One destination, two modes</h2>
+  <p class="sub">My Profile <b>is</b> the full library — raw + clips, drafts, anon, editing inline — with a <b>preview-public-view toggle</b>. One home for "my content"; the toggle makes the private→public relationship tangible and teaches exactly what's visible. The profile must stay calm even in manage mode.</p>
+</div>
+
+<div class="canvas">
+
+  <!-- B1 — manage mode -->
+  <div class="frame">
+    <div class="cap"><div class="id">B1 · option B</div><div class="nm">My Profile — manage mode</div>
+      <div class="ds">Full library incl. drafts + anon, inline edit + filters, and the visible preview-public toggle. Calm despite being the workbench.</div></div>
+    <div class="phone">
+      <div class="status"><span>9:41</span><span class="r"><svg width="18" height="12" viewBox="0 0 19 12"><rect x="0" y="7.5" width="3.2" height="4.5" rx="0.7" fill="#1c1814"/><rect x="4.8" y="5" width="3.2" height="7" rx="0.7" fill="#1c1814"/><rect x="9.6" y="2.5" width="3.2" height="9.5" rx="0.7" fill="#1c1814"/><rect x="14.4" y="0" width="3.2" height="12" rx="0.7" fill="#1c1814"/></svg><svg width="25" height="12" viewBox="0 0 27 13"><rect x="0.5" y="0.5" width="23" height="12" rx="3.5" stroke="#1c1814" stroke-opacity="0.5" fill="none"/><rect x="2" y="2" width="17" height="9" rx="2" fill="#1c1814"/></svg></span></div>
+      <div class="home"></div>
+      <div class="scr">
+        <div class="phead" style="padding-top:6px">
+          <div class="ava"></div>
+          <div class="who"><div class="nm">Kai</div><div class="hd">@kai.dc</div></div>
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.3V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 7 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 1.3-2.7H3a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 4.6 7a1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 2.7-1.3V3a2 2 0 1 1 4 0v.1A1.6 1.6 0 0 0 17 4.6a1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-1.3 2.7V11a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/></svg></div>
+        </div>
+        <div class="pstats"><span><b>1.2K</b> followers</span><span><b>18</b> clips</span><span><b>3</b> drafts</span></div>
+        <div class="viewbar">
+          <button data-on="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v12H4zM8 20h8M12 16v4"/></svg>Manage</button>
+          <button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>Preview public</button>
+        </div>
+        <div class="body">
+          <div class="scroll">
+            <div class="mlabel"><span>Filter</span><span class="hint">22 items</span></div>
+            <div class="filtercard">
+              <div class="frow"><span class="fk">Vis</span><div class="seg"><button data-on="true">All</button><button>Public</button><button>Anon</button><button>Draft</button></div></div>
+              <div class="frow"><span class="fk">Date</span><div class="seg"><button data-on="true">Recent</button><button>Wk</button><button>Mo</button><button>All</button></div></div>
+            </div>
+            <div class="grid">
+              <div class="clip" data-edit="true"><div class="thumb t1"><div class="ov"></div><button class="feather"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button><span class="dur">0:18</span><div class="tl"><div class="t">Rooftop sunset</div><div class="s">Public · Apr 21</div></div></div></div>
+              <div class="clip" data-edit="true" data-draft="true"><div class="thumb t2"><div class="ov"></div><span class="cbadge draft">Draft</span><button class="feather"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button><span class="dur">0:42</span><div class="tl"><div class="t">Soundcheck</div><div class="s">Draft · Apr 20</div></div></div></div>
+              <div class="clip" data-edit="true" data-anon="true"><div class="thumb audio"><div class="wf"><i style="height:30%"></i><i style="height:70%"></i><i style="height:45%"></i><i style="height:90%"></i><i style="height:55%"></i><i style="height:80%"></i><i style="height:35%"></i></div><span class="cbadge anon">Anon</span><button class="feather"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button><span class="dur">0:11</span><div class="tl"><div class="t">Late set</div><div class="s">Anon · Apr 19</div></div></div></div>
+              <div class="clip" data-edit="true"><div class="thumb t3"><div class="ov"></div><button class="feather"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button><span class="dur">1:14</span><div class="tl"><div class="t">Main hour</div><div class="s">Public · Apr 18</div></div></div></div>
+            </div>
+            <div style="height:14px"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- B2 — preview mode -->
+  <div class="frame">
+    <div class="cap"><div class="id">B2 · option B</div><div class="nm">My Profile — preview mode</div>
+      <div class="ds">Same screen flipped to the curated public layout (published, non-anon). Toggle in its other state + a banner. This layout IS the public Profile.</div></div>
+    <div class="phone">
+      <div class="status"><span>9:41</span><span class="r"><svg width="18" height="12" viewBox="0 0 19 12"><rect x="0" y="7.5" width="3.2" height="4.5" rx="0.7" fill="#1c1814"/><rect x="4.8" y="5" width="3.2" height="7" rx="0.7" fill="#1c1814"/><rect x="9.6" y="2.5" width="3.2" height="9.5" rx="0.7" fill="#1c1814"/><rect x="14.4" y="0" width="3.2" height="12" rx="0.7" fill="#1c1814"/></svg><svg width="25" height="12" viewBox="0 0 27 13"><rect x="0.5" y="0.5" width="23" height="12" rx="3.5" stroke="#1c1814" stroke-opacity="0.5" fill="none"/><rect x="2" y="2" width="17" height="9" rx="2" fill="#1c1814"/></svg></span></div>
+      <div class="home"></div>
+      <div class="scr">
+        <div class="phead" style="padding-top:6px">
+          <div class="ava"></div>
+          <div class="who"><div class="nm">Kai</div><div class="hd">@kai.dc · Brooklyn</div></div>
+        </div>
+        <div class="pstats"><span><b>1.2K</b> followers</span><span><b>12</b> public clips</span></div>
+        <div class="passport">Field recordings &amp; live sets from rooftops and corners around BK.</div>
+        <div class="viewbar">
+          <button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v12H4zM8 20h8M12 16v4"/></svg>Manage</button>
+          <button data-on="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>Preview public</button>
+        </div>
+        <div class="pvbanner">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+          This is what others see
+          <button class="exit">Exit</button>
+        </div>
+        <div class="body">
+          <div class="scroll">
+            <div class="grid">
+              <div class="clip"><div class="thumb t1"><div class="ov"></div><span class="dur">0:18</span><div class="tl"><div class="t">Rooftop sunset</div><div class="s">Apr 21</div></div></div></div>
+              <div class="clip"><div class="thumb t3"><div class="ov"></div><span class="dur">1:14</span><div class="tl"><div class="t">Main hour</div><div class="s">Apr 18</div></div></div></div>
+              <div class="clip"><div class="thumb t4"><div class="ov"></div><span class="dur">0:28</span><div class="tl"><div class="t">Bridge walk</div><div class="s">Apr 14</div></div></div></div>
+              <div class="clip"><div class="thumb t5"><div class="ov"></div><span class="dur">0:52</span><div class="tl"><div class="t">Closing</div><div class="s">Apr 12</div></div></div></div>
+            </div>
+            <div style="height:14px"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- B3 — IA note -->
+  <div class="frame">
+    <div class="cap"><div class="id">B3 · option B</div><div class="nm">IA — one destination + mode toggle</div>
+      <div class="ds">One place for "my content." A mode toggle reconciles manage vs. preview. The public Profile is literally B2's layout.</div></div>
+    <div class="phone">
+      <div class="status"><span>9:41</span><span class="r"><svg width="18" height="12" viewBox="0 0 19 12"><rect x="0" y="7.5" width="3.2" height="4.5" rx="0.7" fill="#1c1814"/><rect x="4.8" y="5" width="3.2" height="7" rx="0.7" fill="#1c1814"/><rect x="9.6" y="2.5" width="3.2" height="9.5" rx="0.7" fill="#1c1814"/><rect x="14.4" y="0" width="3.2" height="12" rx="0.7" fill="#1c1814"/></svg><svg width="25" height="12" viewBox="0 0 27 13"><rect x="0.5" y="0.5" width="23" height="12" rx="3.5" stroke="#1c1814" stroke-opacity="0.5" fill="none"/><rect x="2" y="2" width="17" height="9" rx="2" fill="#1c1814"/></svg></span></div>
+      <div class="home"></div>
+      <div class="ianote">
+        <h3>One place</h3>
+        <p class="lead">All "my content" lives on Profile. A <b>mode toggle</b> — not a second destination — switches manage ↔ preview.</p>
+        <div class="ia-map">
+          <div class="ia-node accent">
+            <div class="nh"><span class="ni"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M5 21a7 7 0 0 1 14 0"/></svg></span><span class="nt">My Profile</span></div>
+            <div class="nd"><b>The library + the public face, in one.</b> Drafts, anon, raw, edit tools — all here.</div>
+            <div style="margin-top:13px; display:flex; gap:0; border:1px solid var(--line-2); border-radius:var(--r); overflow:hidden; background:var(--paper)">
+              <span style="flex:1; text-align:center; padding:9px; font:600 9px var(--mono); letter-spacing:0.1em; text-transform:uppercase; background:var(--ink); color:var(--paper)">Manage</span>
+              <span style="flex:1; text-align:center; padding:9px; font:600 9px var(--mono); letter-spacing:0.1em; text-transform:uppercase; color:var(--ink-dim); border-left:1px solid var(--line-2)">Preview public</span>
+            </div>
+          </div>
+          <div class="ia-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2l4 4-4 4M3 12V8a4 4 0 0 1 4-4h14M7 22l-4-4 4-4M21 12v4a4 4 0 0 1-4 4H3"/></svg>same screen · flips</div>
+          <div class="ia-node">
+            <div class="nh"><span class="ni"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></span><span class="nt">Preview = public</span></div>
+            <div class="nd">There is no separate public page — what visitors see <b>is</b> preview mode's layout.</div>
+          </div>
+        </div>
+        <div class="ia-foot">Cost · the one screen carries two jobs; manage mode must stay calm. Win · a single home, less nav, and "what others see" is one tap away.</div>
+      </div>
+      <div class="tabbar">
+        <div class="tb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3a14 14 0 0 1 0 18M3 12h18"/></svg><span class="lb">Globe</span></div>
+        <div class="tb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="9"/></svg><span class="lb">Live</span></div>
+        <div class="tb" data-on="true" data-accent="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M5 21a7 7 0 0 1 14 0"/></svg><span class="lb">Profile</span></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ══════════════════════════ SIDE BY SIDE ══════════════════════════ -->
+<div class="opt">
+  <div class="tag">Side by side · IA at a glance</div>
+  <h2>The difference in one read</h2>
+</div>
+<div class="sbs">
+  <div class="col">
+    <h4><span class="L">A</span>Two destinations</h4>
+    <p class="cl">Public face and workbench are separate places, each optimized for its one job.</p>
+    <div class="ia-mini">
+      <span class="mini-node"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M5 21a7 7 0 0 1 14 0"/></svg>Profile · curated</span>
+      <span class="mini-sep">+</span>
+      <span class="mini-node accent"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v12H4zM8 20h8M12 16v4"/></svg>Library · workbench</span>
+    </div>
+    <div class="axes">
+      <div class="axis"><div class="ak">Management lives</div><div class="av">In its own destination.</div></div>
+      <div class="axis"><div class="ak">Public profile is</div><div class="av">Purely presentational, always.</div></div>
+      <div class="axis"><div class="ak">Density &amp; tone</div><div class="av">Workbench free to be dense; profile stays calm by construction.</div></div>
+    </div>
+  </div>
+  <div class="col">
+    <h4><span class="L">B</span>One destination, two modes</h4>
+    <p class="cl">A single home; a mode toggle reconciles managing vs. seeing what's public.</p>
+    <div class="ia-mini">
+      <span class="mini-node accent"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M5 21a7 7 0 0 1 14 0"/></svg>My Profile</span>
+      <span class="mini-sep">·</span>
+      <span class="mini-toggle"><span data-on="true">Manage</span><span>Preview</span></span>
+    </div>
+    <div class="axes">
+      <div class="axis"><div class="ak">Management lives</div><div class="av">Embedded in the profile, behind a toggle.</div></div>
+      <div class="axis"><div class="ak">Public profile is</div><div class="av">The preview-mode of a dual-purpose screen.</div></div>
+      <div class="axis"><div class="ak">Density &amp; tone</div><div class="av">Profile must stay calm even managing; the toggle carries the manage↔preview tension.</div></div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
