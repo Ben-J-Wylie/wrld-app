@@ -1517,7 +1517,7 @@ function FeedRowDemo({
 }
 
 function IdentityRowDemo() {
-  const [identity, setIdentity] = useState<'attributed' | 'anon'>('attributed')
+  const [identity, setIdentity] = useState<'public' | 'anon'>('public')
   return (
     <FeedRow
       kind="profile"
@@ -1527,7 +1527,7 @@ function IdentityRowDemo() {
         <View style={{ width: 172 }}>
           <SegmentedToggle
             options={[
-              { value: 'attributed', label: 'ATTRIBUTED' },
+              { value: 'public', label: 'PUBLIC' },
               { value: 'anon', label: 'ANON' },
             ]}
             value={identity}

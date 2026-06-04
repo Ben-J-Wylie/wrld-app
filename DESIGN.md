@@ -1020,8 +1020,8 @@ between off and on, for "configured but not yet committed" — the Go Live
 and the single Go Live button never flips them. With `armed` + `value`
 true the thumb sits in the on-position, but the **trough keeps the
 off-state gray** (`border.strong`) with a **1px `accent.default` outline
-ring**, and the **thumb is accent-filled** (`accent.default`) with a
-**1px ink stroke** (`text.primary`). The accent ring + accent thumb carry
+ring**, and the **thumb is ink/black** (`text.primary`) with a **1px
+`accent.default` stroke**. The accent ring + accent-stroked thumb carry
 the "cued" signal; the gray trough says "not yet live." On commit the
 consumer drops `armed` and the toggle fills the track accent (the
 existing `on` look). The track outline is an **absolutely-positioned
@@ -2425,7 +2425,7 @@ carries a precision-ceiling sub-control below the row.
 optional `footer` slot renders a full-width sub-control under the row
 (DashboardScreen passes a 4-segment precision ceiling for `loc`). The
 `trailing` slot **replaces** the Air/Rec affordances entirely — the
-Identity row uses it for an inline Attributed/Anon `SegmentedToggle`,
+Identity row uses it for an inline Public/Anon `SegmentedToggle`,
 since identity is a flag, not a capturable track (air/rec props become
 optional when `trailing` is set). The `live` prop (default false)
 renders on-toggles in the Toggle `armed` (cued, outline-not-fill) state

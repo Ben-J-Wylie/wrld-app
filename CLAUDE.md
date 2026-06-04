@@ -464,7 +464,8 @@ What shipped on `design` (all token-clean, in galleries, DESIGN.md Section 3):
 - **DashboardScreen** (`screens/` — normally Aaron's lane; Ben's call this
   session): full 11-source suite, Divider-grouped (identity/location ·
   cam/audio/screen · compass/gyro/motion/speed/temp · torch), all interactive;
-  Identity as a FeedRow with an inline Attributed/Anon segment; location
+  Identity as a FeedRow with an inline Public/Anon segment (label; the
+  flag concept is still "attributed / anon"); location
   precision ceiling; RecordConsentSheet on sensitive-record; sticky title (top)
   + sticky GoBar (bottom). Carries `air` / `record` / `identity` / `precision`
   forward in the go-live params.

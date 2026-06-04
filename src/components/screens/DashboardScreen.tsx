@@ -89,11 +89,15 @@ const PRECISION_OPTIONS: { value: PrecisionCeiling; label: string }[] = [
   { value: 'private', label: 'PRIVATE' },
 ]
 
-type IdentityFlag = 'attributed' | 'anon'
+type IdentityFlag = 'public' | 'anon'
 const IDENTITY_OPTIONS: { value: IdentityFlag; label: string }[] = [
-  { value: 'attributed', label: 'ATTRIBUTED' },
+  { value: 'public', label: 'PUBLIC' },
   { value: 'anon', label: 'ANON' },
 ]
+
+// Drops the footer shelf (and the Go Live button with it) lower toward the
+// screen bottom by trimming the bottom inset gap.
+const FOOTER_DROP = 30
 
 export function DashboardScreen() {
   const { isSignedIn } = useAuth()
@@ -105,7 +109,7 @@ export function DashboardScreen() {
   const [air, setAir] = useState<Partial<Record<FeedKind, boolean>>>({ cam: true, audio: true })
   const [rec, setRec] = useState<Partial<Record<FeedKind, boolean>>>({})
   const [precision, setPrecision] = useState<PrecisionCeiling>('city')
-  const [identity, setIdentity] = useState<IdentityFlag>('attributed')
+  const [identity, setIdentity] = useState<IdentityFlag>('public')
   const [subscribersOnly, setSubscribersOnly] = useState(false)
 
   useFocusEffect(useCallback(() => {
@@ -121,7 +125,7 @@ export function DashboardScreen() {
           subscribersOnly: active.subscribersOnly ?? 'false',
           air: active.air ?? '',
           record: active.record ?? '',
-          identity: active.identity ?? 'attributed',
+          identity: active.identity ?? 'public',
           precision: active.precision ?? 'city',
         },
       })
@@ -291,7 +295,7 @@ export function DashboardScreen() {
         )}
       </ScrollView>
 
-      <View style={[styles.footer, { paddingBottom: insets.bottom + theme.spacing.md }]}>
+      <View style={[styles.footer, { paddingBottom: Math.max(theme.spacing.sm, insets.bottom + theme.spacing.md - FOOTER_DROP) }]}>
         <GoBar
           variant={canGoLive ? 'armed' : 'disabled'}
           label={recordOnly ? 'START RECORDING' : undefined}

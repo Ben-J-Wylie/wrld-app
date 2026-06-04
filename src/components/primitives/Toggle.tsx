@@ -10,7 +10,7 @@
 //   off   (value false)         — warm-line track, warm-ink thumb
 //   armed (value true + armed)   — "cued" on-position: same gray track as
 //                                  off + a 1px accent outline ring; thumb
-//                                  is accent-filled with a 1px ink stroke
+//                                  is ink (black) with a 1px accent stroke
 //                                  (set, but not yet live)
 //   on    (value true)           — accent-filled track, cream thumb (live)
 // The thumb sits in the on-position for both armed and on; armed signals
@@ -63,11 +63,9 @@ export function Toggle({ value, onValueChange, armed, disabled, accessibilityLab
   // "cued" signal); only the live `on` state fills the track accent.
   const trackBg =
     value && !isArmed ? theme.colors.accent.default : theme.colors.border.strong
-  const thumbBg = !value
-    ? theme.colors.text.primary
-    : isArmed
-      ? theme.colors.accent.default
-      : theme.colors.text.inverse
+  // Armed thumb is ink (black) with a 1px accent stroke; on/live is cream.
+  const thumbBg =
+    value && !isArmed ? theme.colors.text.inverse : theme.colors.text.primary
 
   return (
     <Pressable
@@ -86,7 +84,7 @@ export function Toggle({ value, onValueChange, armed, disabled, accessibilityLab
           {
             backgroundColor: thumbBg,
             borderWidth: isArmed ? OUTLINE : 0,
-            borderColor: isArmed ? theme.colors.text.primary : 'transparent',
+            borderColor: isArmed ? theme.colors.accent.default : 'transparent',
             transform: [{ translateX: thumbX }],
           },
         ]}
