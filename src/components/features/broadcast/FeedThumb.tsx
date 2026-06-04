@@ -11,12 +11,38 @@
 // illustration assets land, the per-layer renderers swap in place.
 
 import { useEffect, useRef } from 'react'
+import type { ComponentProps } from 'react'
 import { Animated, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
 import { Text } from '@/components/primitives/Text'
 import { Icon } from '@/components/primitives/Icon'
 import { theme } from '@/tokens/theme'
 
-export type FeedKind = 'cam' | 'audio' | 'screen' | 'loc' | 'gyro' | 'compass' | 'profile'
+// The first seven are the v0.2 sensor model; speed / torch / temp /
+// motion are v0.3+ earmarked sources that ship UI-present (a static
+// glyph thumb) ahead of capture wiring.
+export type FeedKind =
+  | 'cam'
+  | 'audio'
+  | 'screen'
+  | 'loc'
+  | 'gyro'
+  | 'compass'
+  | 'profile'
+  | 'speed'
+  | 'torch'
+  | 'temp'
+  | 'motion'
+
+type IconName = ComponentProps<typeof Icon>['name']
+
+// v0.3+ earmarked sources render a static Feather glyph rather than a
+// bespoke animated visualization.
+const GLYPH: Partial<Record<FeedKind, IconName>> = {
+  speed: 'fast-forward',
+  torch: 'zap',
+  temp: 'thermometer',
+  motion: 'activity',
+}
 
 type Size = 'md' | 'lg'
 
@@ -63,7 +89,22 @@ function renderKind(kind: FeedKind, active: boolean, w: number, h: number) {
       return <CompassRose active={active} />
     case 'profile':
       return <ProfileSilhouette />
+    case 'speed':
+    case 'torch':
+    case 'temp':
+    case 'motion':
+      return <GlyphThumb name={GLYPH[kind]!} />
   }
+}
+
+function GlyphThumb({ name }: { name: IconName }) {
+  return (
+    <View style={styles.center}>
+      <View style={styles.glyphTile}>
+        <Icon name={name} size="lg" color={theme.colors.text.muted} />
+      </View>
+    </View>
+  )
 }
 
 function CamViewfinder({ w, h }: { w: number; h: number }) {
@@ -321,6 +362,16 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
+    backgroundColor: theme.colors.bg.elevated,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: theme.colors.border.subtle,
+  },
+  glyphTile: {
+    width: 36,
+    height: 36,
+    borderRadius: theme.radius.md,
     backgroundColor: theme.colors.bg.elevated,
     alignItems: 'center',
     justifyContent: 'center',

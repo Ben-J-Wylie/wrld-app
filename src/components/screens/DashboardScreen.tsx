@@ -1,25 +1,29 @@
 // src/components/screens/DashboardScreen.tsx
 //
-// Go Live & Record arming screen — rewritten 2026-06-03 for the clips
-// initiative (DESIGN.md 2026-06-03 decision-log entry). Going live and
-// recording are two independent intents, so the screen exposes:
+// Go Live & Record arming screen — clips-initiative two-affordance
+// capture model (DESIGN.md 2026-06-03 decision-log entry).
 //   • A pair of ArmButtons (Go Live · Record) summarising each intent.
-//   • A grouped source list — each FeedRow carries an Air affordance
-//     (broadcast) and a Rec affordance (save to device). All four
-//     combinations are valid.
-//   • Sensitive sources (camera / audio / location) gate their Rec
-//     affordance through RecordConsentSheet — nothing recorded silently.
-//   • Location exposes a precision ceiling (capture can't exceed what's
-//     shared live). Identity is an Attributed / Anon flag, not a track.
+//   • The full source suite, each a gap-separated FeedRow card with an
+//     Air affordance (broadcast) + a Rec affordance (save to device).
+//     All four combinations are valid.
+//   • Sensitive sources (camera / audio / location / screen) gate their
+//     Rec affordance through RecordConsentSheet — nothing recorded
+//     silently. Location exposes a precision ceiling.
+//   • Identity is its own FeedRow — a flag (Attributed / Anon), not a
+//     capturable track, so it swaps an inline segment into the affordance
+//     slot via `trailing`.
 //   • GoBar docked at the bottom commits the broadcast.
 //
-// Scope (this branch): the broadcast (Air) path for camera + audio works
-// end-to-end exactly as before. Rec flags, identity, and precision are
-// captured and carried forward in the broadcast params so the live
-// on-air-vs-recording indicator can render them; backend record-to-disk,
-// anon enforcement, and the extra sensors are follow-ups on `main`
-// (Aaron's lane). Screen / gyro / compass ship design-complete but
-// `disabled` ("coming soon") until their backend lands.
+// Source suite & honesty (this branch):
+//   armable now      camera, audio (Air wired end-to-end), location (Air
+//                    shares live; precision ceiling via settings)
+//   capture pending  screen, gyro, compass — UI present, `disabled`
+//   v0.3+ earmarked  speed, torch, ambient temp, motion intensity —
+//                    UI present, `disabled`
+//   identity         Attributed / Anon flag (carried forward)
+// Rec flags, identity, and precision are carried in the broadcast params
+// for the live indicator; backend record-to-disk for the pending/earmarked
+// sources is a follow-up on `main` (Aaron's lane).
 
 import { useMemo, useState, useCallback } from 'react'
 import { Alert, StyleSheet, View } from 'react-native'
@@ -48,27 +52,36 @@ import { useCurrentUser } from '@/hooks/useCurrentUser'
 import { activeBroadcast } from '@/lib/activeBroadcast'
 import type { SourceType } from '@/types'
 
-// A capture source = one row in the grouped list. `broadcastSource` maps
+// A capture source = one row in the stacked list. `broadcastSource` maps
 // to the backend SourceType enum where the Air path is wired (camera /
 // audio today); sources without one carry their Air flag forward but
-// don't enter the live `sources` param.
+// don't enter the live `sources` param. `identityRow` marks the Identity
+// flag row (no Air/Rec — an inline Attributed/Anon segment instead).
 type SourceDescriptor = {
   kind: FeedKind
   label: string
   detail: string
-  sensitivity: SourceSensitivity
+  sensitivity?: SourceSensitivity
   availability: SourceAvailability
   broadcastSource?: SourceType
+  identityRow?: boolean
 }
 
 const SOURCES: SourceDescriptor[] = [
-  { kind: 'cam', label: 'Camera', detail: 'Rear · 1080p', sensitivity: 'sensitive', availability: 'available', broadcastSource: 'camera' },
-  { kind: 'audio', label: 'Audio', detail: 'Mic · 48 kHz', sensitivity: 'sensitive', availability: 'available', broadcastSource: 'audio' },
-  { kind: 'loc', label: 'Location', detail: 'GPS', sensitivity: 'sensitive', availability: 'available' },
-  { kind: 'screen', label: 'Screen', detail: 'System screen capture', sensitivity: 'sensitive', availability: 'disabled' },
-  { kind: 'gyro', label: 'Gyro', detail: 'Orientation', sensitivity: 'benign', availability: 'disabled' },
-  { kind: 'compass', label: 'Compass', detail: 'Heading', sensitivity: 'benign', availability: 'disabled' },
+  { kind: 'cam', label: 'Camera', detail: 'Media · rear · 1080p', sensitivity: 'sensitive', availability: 'available', broadcastSource: 'camera' },
+  { kind: 'audio', label: 'Audio', detail: 'Media · mic · 48 kHz', sensitivity: 'sensitive', availability: 'available', broadcastSource: 'audio' },
+  { kind: 'loc', label: 'Location', detail: 'Telemetry · gated by precision setting', sensitivity: 'sensitive', availability: 'available' },
+  { kind: 'screen', label: 'Screen', detail: 'Media · whole-screen · capture pending', sensitivity: 'sensitive', availability: 'disabled' },
+  { kind: 'gyro', label: 'Gyro', detail: 'Telemetry · accelerometer + gyro · ~60 Hz · capture pending', sensitivity: 'benign', availability: 'disabled' },
+  { kind: 'compass', label: 'Compass', detail: 'Telemetry · heading · true north · capture pending', sensitivity: 'benign', availability: 'disabled' },
+  { kind: 'profile', label: 'Identity', detail: 'Off = anonymous · a flag, not a track', availability: 'available', identityRow: true },
+  { kind: 'speed', label: 'Speed', detail: 'Telemetry · derived from GPS · v0.3+', sensitivity: 'benign', availability: 'disabled' },
+  { kind: 'torch', label: 'Torch', detail: 'Device state · on / off · v0.3+', sensitivity: 'benign', availability: 'disabled' },
+  { kind: 'temp', label: 'Ambient temp', detail: 'Telemetry · ambient temperature · v0.3+', sensitivity: 'benign', availability: 'disabled' },
+  { kind: 'motion', label: 'Motion intensity', detail: 'Telemetry · motion intensity · v0.3+', sensitivity: 'benign', availability: 'disabled' },
 ]
+
+const CAMERA_SOURCE = SOURCES.find((s) => s.kind === 'cam')!
 
 type PrecisionCeiling = 'bluedot' | 'city' | 'country' | 'private'
 const PRECISION_OPTIONS: { value: PrecisionCeiling; label: string }[] = [
@@ -91,7 +104,7 @@ export function DashboardScreen() {
 
   const [title, setTitle] = useState('')
   const [air, setAir] = useState<Partial<Record<FeedKind, boolean>>>({ cam: true, audio: true })
-  const [rec, setRec] = useState<Partial<Record<FeedKind, boolean>>>({ gyro: true, compass: true })
+  const [rec, setRec] = useState<Partial<Record<FeedKind, boolean>>>({})
   const [consented, setConsented] = useState<Set<FeedKind>>(new Set())
   const [precision, setPrecision] = useState<PrecisionCeiling>('city')
   const [identity, setIdentity] = useState<IdentityFlag>('attributed')
@@ -149,7 +162,7 @@ export function DashboardScreen() {
     [air],
   )
   const recordKinds = useMemo(
-    () => SOURCES.filter((s) => rec[s.kind]).map((s) => s.kind),
+    () => SOURCES.filter((s) => !s.identityRow && rec[s.kind]).map((s) => s.kind),
     [rec],
   )
 
@@ -230,7 +243,6 @@ export function DashboardScreen() {
             state={anyAir ? 'armed' : 'idle'}
             stateLabel={anyAir ? `Armed · ${broadcastSources.length} source${broadcastSources.length > 1 ? 's' : ''}` : 'Off'}
             onPress={() => {
-              // Master arm/disarm of the broadcastable defaults.
               const next = !anyAir
               setAir((prev) => ({ ...prev, cam: next, audio: next }))
             }}
@@ -240,9 +252,10 @@ export function DashboardScreen() {
             state={anyRec ? 'armed' : 'idle'}
             stateLabel={anyRec ? `Armed · ${recordKinds.length} to disk` : 'Off'}
             onPress={() => {
-              // Master arm/disarm of the benign (no-consent) record sources.
-              const next = !anyRec
-              setRec((prev) => ({ ...prev, gyro: next, compass: next }))
+              // Armed → clear all rec. Idle → start recording setup by
+              // requesting the camera (routes through consent).
+              if (anyRec) setRec({})
+              else requestRec(CAMERA_SOURCE, true)
             }}
           />
         </View>
@@ -250,36 +263,45 @@ export function DashboardScreen() {
         <View style={styles.section}>
           <HelpText>SOURCES · AIR = BROADCAST · REC = SAVE TO DEVICE</HelpText>
           <View style={styles.sourceList}>
-            {SOURCES.map((src, i) => (
-              <FeedRow
-                key={src.kind}
-                kind={src.kind}
-                label={src.label}
-                detail={src.detail}
-                sensitivity={src.sensitivity}
-                availability={src.availability}
-                air={!!air[src.kind]}
-                onAirChange={(v) => setAirFor(src.kind, v)}
-                rec={!!rec[src.kind]}
-                onRecChange={(v) => requestRec(src, v)}
-                recNeedsConsent={src.sensitivity === 'sensitive' && !consented.has(src.kind)}
-                showBorderTop={i > 0}
-                footer={
-                  src.kind === 'loc' && src.availability === 'available' ? (
-                    <View style={styles.precision}>
-                      <SegmentedToggle options={PRECISION_OPTIONS} value={precision} onChange={setPrecision} />
-                      <HelpText>CAPTURE CEILING · REC CAN'T EXCEED WHAT'S SHARED LIVE</HelpText>
+            {SOURCES.map((src) =>
+              src.identityRow ? (
+                <FeedRow
+                  key={src.kind}
+                  kind={src.kind}
+                  label={src.label}
+                  detail={src.detail}
+                  availability={src.availability}
+                  trailing={
+                    <View style={styles.identityControl}>
+                      <SegmentedToggle options={IDENTITY_OPTIONS} value={identity} onChange={setIdentity} />
                     </View>
-                  ) : undefined
-                }
-              />
-            ))}
+                  }
+                />
+              ) : (
+                <FeedRow
+                  key={src.kind}
+                  kind={src.kind}
+                  label={src.label}
+                  detail={src.detail}
+                  sensitivity={src.sensitivity}
+                  availability={src.availability}
+                  air={!!air[src.kind]}
+                  onAirChange={(v) => setAirFor(src.kind, v)}
+                  rec={!!rec[src.kind]}
+                  onRecChange={(v) => requestRec(src, v)}
+                  recNeedsConsent={src.sensitivity === 'sensitive' && !consented.has(src.kind)}
+                  footer={
+                    src.kind === 'loc' && src.availability === 'available' ? (
+                      <View style={styles.precision}>
+                        <SegmentedToggle options={PRECISION_OPTIONS} value={precision} onChange={setPrecision} />
+                        <HelpText>CAPTURE CEILING · REC CAN'T EXCEED WHAT'S SHARED LIVE</HelpText>
+                      </View>
+                    ) : undefined
+                  }
+                />
+              ),
+            )}
           </View>
-        </View>
-
-        <View style={styles.section}>
-          <HelpText>IDENTITY · A FLAG, NOT A TRACK</HelpText>
-          <SegmentedToggle options={IDENTITY_OPTIONS} value={identity} onChange={setIdentity} />
         </View>
 
         <View style={styles.section}>
@@ -339,11 +361,10 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
   },
   sourceList: {
-    borderWidth: 1,
-    borderColor: theme.colors.border.subtle,
-    borderRadius: theme.radius.md,
-    backgroundColor: theme.colors.bg.elevated,
-    overflow: 'hidden',
+    gap: theme.spacing.sm,
+  },
+  identityControl: {
+    width: 172,
   },
   precision: {
     gap: theme.spacing.xs,

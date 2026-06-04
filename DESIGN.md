@@ -2391,8 +2391,8 @@ itself is v0.3.
 - **Location:** `src/components/features/broadcast/FeedRow.tsx`
 - **Variants:** one per layer (`cam`, `audio`, `screen`, `loc`, `gyro`, `compass`)
 - **Sizes:** md
-- **States:** per-affordance air on/off + rec on/off (all four combinations valid); availability `available` / `denied` ("PERMISSION DENIED ·") / `disabled` ("COMING SOON ·" — dimmed 0.55, toggles locked); sensitive sources show a lock hint on the Rec affordance until consented
-- **Used in:** `DashboardScreen` (Go Live & Record arming) — 2026-06-03
+- **States:** per-affordance air on/off + rec on/off (all four combinations valid); availability `available` / `denied` ("PERMISSION DENIED ·" prefix) / `disabled` (dimmed 0.55, toggles locked — the detail text carries the status, e.g. "capture pending" / "v0.3+"); sensitive sources show a lock hint on the Rec affordance until consented
+- **Used in:** `DashboardScreen` (Go Live & Record arming — full source suite + Identity row) — 2026-06-03
 - **Tweak impact:** Go Live & Record arming screen
 - **Shipped:** 2026-05-31 (sub-phase 12.5). **Redesigned 2026-06-03** to the two-affordance capture model (clips initiative · C2).
 
@@ -2401,16 +2401,18 @@ TWO affordances per source — **Air** (broadcast live) and **Rec** (save
 to device). Sensitive sources gate Rec through a consent step. Location
 carries a precision-ceiling sub-control below the row.
 
-**Code does (shipped 2026-06-03):** Border-less row (FeedThumb + meta
-column with a SENSITIVE/BENIGN tag + the two labelled `AIR` / `REC`
-Toggles). `recNeedsConsent` shows a lock Icon by the Rec label while
-off — the consumer intercepts `onRecChange(true)` to present
-`RecordConsentSheet` before flipping. `availability` (`denied` /
-`disabled`) dims the row and locks both toggles. The optional `footer`
-slot renders a full-width sub-control under the row (DashboardScreen
-passes a 4-segment precision ceiling for `loc`). `showBorderTop`
-follows the SettingsRow grouping contract so a parent can wrap the rows
-in one bordered container with hairline dividers.
+**Code does (shipped 2026-06-03):** Self-contained bordered card
+(FeedThumb + meta column with a SENSITIVE/BENIGN tag + the two labelled
+`AIR` / `REC` Toggles); the consumer stacks cards with a gap.
+`recNeedsConsent` shows a lock Icon by the Rec label while off — the
+consumer intercepts `onRecChange(true)` to present `RecordConsentSheet`
+before flipping. `availability` (`denied` / `disabled`) dims the card
+and locks both toggles. The optional `footer` slot renders a full-width
+sub-control under the row (DashboardScreen passes a 4-segment precision
+ceiling for `loc`). The `trailing` slot **replaces** the Air/Rec
+affordances entirely — the Identity row uses it for an inline
+Attributed/Anon `SegmentedToggle`, since identity is a flag, not a
+capturable track (air/rec props become optional when `trailing` is set).
 
 **Composition note.** The 2026-06-03 plan proposed building the two
 affordances from `SegmentedToggle`; the chosen go-live-record mock uses
@@ -2427,7 +2429,7 @@ footer.
 
 - **Tier:** feature (sub-component of FeedRow; usable standalone)
 - **Location:** `src/components/features/broadcast/FeedThumb.tsx`
-- **Variants:** `cam` (viewfinder corners), `audio` (animated bars), `screen` (mock device + traffic lights), `loc` (ping ring + pin on grid), `gyro` (rotating cube), `compass` (oscillating needle), `profile` (avatar silhouette)
+- **Variants:** sensor model — `cam` (viewfinder corners), `audio` (animated bars), `screen` (mock device + traffic lights), `loc` (ping ring + pin on grid), `gyro` (rotating cube), `compass` (oscillating needle), `profile` (avatar silhouette); v0.3+ earmarked (static Feather glyph) — `speed`, `torch`, `temp`, `motion`
 - **Sizes:** md (76×60), lg (160×110 — Clip Edit preview hero)
 - **States:** active (default), paused (opacity 0.45 + animations frozen)
 - **Used in:** populated in 12.6
@@ -3250,7 +3252,7 @@ primitives/features/sections in sub-phase 12.6.
 | `app/(auth)/login.tsx`                | `LoginScreen.tsx`                    | Clerk sign-in — BrandMark + Text variants + Button                              | 2026-05-31 |
 | `app/(auth)/signup.tsx`                | `SignupScreen.tsx`                    | Clerk sign-up + verify — adds PasswordStrengthMeter                             | 2026-05-31 |
 | `app/(app)/globe.tsx`                  | `GlobeScreen.tsx`                     | Globe (mounts `EarthScene`) — overlay layer composes StreamStateBanner + DiscoveryHandoffCard + Pill (LIVE count) | 2026-05-31 |
-| `app/(app)/dashboard.tsx`              | `DashboardScreen.tsx`                 | Go Live & Record arming — **rewritten 2026-06-03 (clips C2)** to the two-affordance capture model: ArmButton pair + grouped two-affordance FeedRow list (Air/Rec) + RecordConsentSheet + location precision ceiling + identity Attributed/Anon + GoBar. Cam + audio Air wired end-to-end; rec/identity/precision carried forward; screen/gyro/compass `disabled` | 2026-05-31 · 2026-06-03 |
+| `app/(app)/dashboard.tsx`              | `DashboardScreen.tsx`                 | Go Live & Record arming — **rewritten 2026-06-03 (clips C2)** to the two-affordance capture model: ArmButton pair + gap-separated FeedRow cards (Air/Rec) for the full source suite + RecordConsentSheet + location precision ceiling + Identity row (Attributed/Anon) + GoBar. Cam/audio Air wired end-to-end; rec/identity/precision carried forward. Suite: cam/audio/location armable; screen/gyro/compass `disabled` (capture pending); speed/torch/temp/motion `disabled` (v0.3+) | 2026-05-31 · 2026-06-03 |
 | `app/(app)/stream/[id].tsx`            | `StreamScreen.tsx`                    | Broadcaster (id=new) / viewer (id=room) — ChatOverlay + ReactionLayer retire in favor of ChatMessage/Composer + ReactionRail | 2026-05-31 |
 | `app/(app)/me.tsx`                     | `MeScreen.tsx`                        | Own profile / account settings — AvatarPicker + PursesCard dual + Input prefix '@' | 2026-05-31 |
 | `app/(app)/profile/[handle].tsx`       | `ProfileScreen.tsx`                   | Public profile + follow — Avatar xl + MetaStrip 'Joined ...' + Text-variant stats; PassportCard deferred until PublicUser shape grows | 2026-05-31 |

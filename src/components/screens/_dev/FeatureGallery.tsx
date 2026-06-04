@@ -62,6 +62,7 @@ import { DOBWheel } from '@/components/features/onboarding/DOBWheel'
 import { LocationGranularityPicker } from '@/components/features/onboarding/LocationGranularityPicker'
 import { Toggle } from '@/components/primitives/Toggle'
 import { Button } from '@/components/primitives/Button'
+import { SegmentedToggle } from '@/components/primitives/SegmentedToggle'
 import { BroadcasterRow } from '@/components/features/user/BroadcasterRow'
 import { useState } from 'react'
 import { theme } from '@/tokens/theme'
@@ -862,7 +863,7 @@ export function FeatureGallery() {
       </Section>
 
       <Section title="FeedThumb">
-        <Row label="all kinds (md, active)">
+        <Row label="sensor model (md, active)">
           <View style={styles.row}>
             <FeedThumb kind="cam" />
             <FeedThumb kind="audio" />
@@ -871,6 +872,14 @@ export function FeatureGallery() {
             <FeedThumb kind="gyro" />
             <FeedThumb kind="compass" />
             <FeedThumb kind="profile" />
+          </View>
+        </Row>
+        <Row label="v0.3+ earmarked (static glyph)">
+          <View style={styles.row}>
+            <FeedThumb kind="speed" />
+            <FeedThumb kind="torch" />
+            <FeedThumb kind="temp" />
+            <FeedThumb kind="motion" />
           </View>
         </Row>
         <Row label="inactive (paused)">
@@ -886,17 +895,22 @@ export function FeatureGallery() {
       </Section>
 
       <Section title="FeedRow">
-        <Row label="two-affordance (Air + Rec), grouped list">
-          <View style={styles.groupedList}>
-            <FeedRowDemo kind="cam" label="Camera" detail="Rear · 1080p" sensitivity="sensitive" recNeedsConsent showBorderTop={false} initialAir />
-            <FeedRowDemo kind="audio" label="Audio" detail="Mic · 48 kHz" sensitivity="sensitive" recNeedsConsent initialAir />
-            <FeedRowDemo kind="gyro" label="Gyro" detail="Orientation" sensitivity="benign" initialRec />
+        <Row label="two-affordance (Air + Rec), gap-separated cards">
+          <View style={styles.sourceStack}>
+            <FeedRowDemo kind="cam" label="Camera" detail="Media · rear · 1080p" sensitivity="sensitive" recNeedsConsent initialAir />
+            <FeedRowDemo kind="audio" label="Audio" detail="Media · mic · 48 kHz" sensitivity="sensitive" recNeedsConsent initialAir />
+            <FeedRowDemo kind="speed" label="Speed" detail="Telemetry · derived from GPS · v0.3+" sensitivity="benign" availability="disabled" />
+          </View>
+        </Row>
+        <Row label="identity (trailing segment)">
+          <View style={styles.sourceStack}>
+            <IdentityRowDemo />
           </View>
         </Row>
         <Row label="denied / disabled">
-          <View style={styles.groupedList}>
-            <FeedRowDemo kind="screen" label="Screen" detail="System screen capture" sensitivity="sensitive" availability="disabled" showBorderTop={false} />
-            <FeedRowDemo kind="compass" label="Compass" detail="Heading" sensitivity="benign" availability="denied" />
+          <View style={styles.sourceStack}>
+            <FeedRowDemo kind="screen" label="Screen" detail="Media · whole-screen · capture pending" sensitivity="sensitive" availability="disabled" />
+            <FeedRowDemo kind="compass" label="Compass" detail="Heading · true north" sensitivity="benign" availability="denied" />
           </View>
         </Row>
       </Section>
@@ -1480,9 +1494,8 @@ function FeedRowDemo({
   recNeedsConsent,
   initialAir,
   initialRec,
-  showBorderTop,
 }: {
-  kind: 'cam' | 'audio' | 'screen' | 'loc' | 'gyro' | 'compass' | 'profile'
+  kind: 'cam' | 'audio' | 'screen' | 'loc' | 'gyro' | 'compass' | 'profile' | 'speed' | 'torch' | 'temp' | 'motion'
   label: string
   detail?: string
   sensitivity?: 'sensitive' | 'benign'
@@ -1490,7 +1503,6 @@ function FeedRowDemo({
   recNeedsConsent?: boolean
   initialAir?: boolean
   initialRec?: boolean
-  showBorderTop?: boolean
 }) {
   const [air, setAir] = useState(!!initialAir)
   const [rec, setRec] = useState(!!initialRec)
@@ -1506,7 +1518,29 @@ function FeedRowDemo({
       onAirChange={setAir}
       rec={rec}
       onRecChange={setRec}
-      showBorderTop={showBorderTop}
+    />
+  )
+}
+
+function IdentityRowDemo() {
+  const [identity, setIdentity] = useState<'attributed' | 'anon'>('attributed')
+  return (
+    <FeedRow
+      kind="profile"
+      label="Identity"
+      detail="Off = anonymous · a flag, not a track"
+      trailing={
+        <View style={{ width: 172 }}>
+          <SegmentedToggle
+            options={[
+              { value: 'attributed', label: 'ATTRIBUTED' },
+              { value: 'anon', label: 'ANON' },
+            ]}
+            value={identity}
+            onChange={setIdentity}
+          />
+        </View>
+      }
     />
   )
 }
@@ -1663,13 +1697,9 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
     flexWrap: 'wrap',
   },
-  groupedList: {
-    borderWidth: 1,
-    borderColor: theme.colors.border.subtle,
-    borderRadius: theme.radius.md,
-    backgroundColor: theme.colors.bg.elevated,
-    overflow: 'hidden',
+  sourceStack: {
     alignSelf: 'stretch',
+    gap: theme.spacing.sm,
   },
   darkStage: {
     alignSelf: 'stretch',

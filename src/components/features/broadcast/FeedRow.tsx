@@ -1,10 +1,9 @@
 // src/components/features/broadcast/FeedRow.tsx
 //
 // Capture source row on the Go Live & Record arming screen — one per
-// broadcastable layer (cam / audio / screen / loc / gyro / compass).
-// Redesigned 2026-06-03 for the clips initiative two-affordance model
-// (see DESIGN.md 2026-06-03 decision-log entry): each source carries
-// TWO independent affordances —
+// broadcastable layer. Redesigned 2026-06-03 for the clips initiative
+// two-affordance model (see DESIGN.md 2026-06-03 decision-log entry):
+// each source carries TWO independent affordances —
 //   • Air — broadcast this source live
 //   • Rec — save this source to the device (record set)
 // All four combinations are valid (air-only, rec-only, both, neither).
@@ -15,13 +14,20 @@
 //
 // Availability gates selectability:
 //   available — both toggles live
-//   denied    — OS permission declined; dimmed, toggles disabled
-//   disabled  — not available on this device / backend; dimmed
+//   denied    — OS permission declined; dimmed, toggles disabled,
+//               "PERMISSION DENIED ·" detail prefix
+//   disabled  — not available yet (capture pending / v0.3+ earmarked);
+//               dimmed, toggles disabled. The detail text carries the
+//               specific status — no auto prefix.
+//
+// `trailing` replaces the Air/Rec affordances entirely — used by the
+// Identity row, which is a flag (Attributed / Anon) rather than a
+// capturable track, so it composes the same thumb + meta layout but
+// swaps a control into the affordance slot.
 //
 // FeedThumb is composed as the long-standing documented sub-component.
-// Rows render border-less (no outer card) so a parent can group them in
-// a single bordered container with hairline dividers; `showBorderTop`
-// follows the SettingsRow grouping contract.
+// Each row is a self-contained bordered card; the consumer stacks them
+// with a gap.
 
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
 import type { ReactNode } from 'react'
@@ -40,21 +46,19 @@ type Props = {
   detail?: string
   sensitivity?: SourceSensitivity
   availability?: SourceAvailability
-  air: boolean
-  onAirChange: (v: boolean) => void
-  rec: boolean
-  onRecChange: (v: boolean) => void
+  air?: boolean
+  onAirChange?: (v: boolean) => void
+  rec?: boolean
+  onRecChange?: (v: boolean) => void
   // When true and `rec` is off, the Rec affordance shows a lock hint.
   // The consumer routes `onRecChange(true)` through a consent step.
   recNeedsConsent?: boolean
+  // Replaces the Air/Rec affordances (e.g. the Identity flag control).
+  trailing?: ReactNode
   // Full-width slot rendered below the row (e.g. location precision).
   footer?: ReactNode
-  showBorderTop?: boolean
   style?: StyleProp<ViewStyle>
 }
-
-// Footer indents to align under the meta column (thumb width + row gap).
-const FOOTER_INDENT = 42 + theme.spacing.md
 
 export function FeedRow({
   kind,
@@ -62,28 +66,27 @@ export function FeedRow({
   detail,
   sensitivity,
   availability = 'available',
-  air,
+  air = false,
   onAirChange,
-  rec,
+  rec = false,
   onRecChange,
   recNeedsConsent,
+  trailing,
   footer,
-  showBorderTop = true,
   style,
 }: Props) {
   const locked = availability !== 'available'
   const lockHint = !!recNeedsConsent && !rec && !locked
-  const detailPrefix =
-    availability === 'denied'
-      ? 'PERMISSION DENIED · '
-      : availability === 'disabled'
-        ? 'COMING SOON · '
-        : ''
+  const detailPrefix = availability === 'denied' ? 'PERMISSION DENIED · ' : ''
+  // When the card is locked it already dims as a whole, so keep the thumb
+  // at full opacity to avoid muddy double-dimming. Identity (trailing) and
+  // active air/rec render full too; an idle available source dims its thumb.
+  const thumbActive = trailing || locked ? true : air || rec
 
   return (
-    <View style={[styles.wrap, showBorderTop && styles.borderTop, locked && styles.dimmed, style]}>
+    <View style={[styles.card, locked && styles.dimmed, style]}>
       <View style={styles.row}>
-        <FeedThumb kind={kind} active={(air || rec) && !locked} />
+        <FeedThumb kind={kind} active={thumbActive} />
         <View style={styles.col}>
           <View style={styles.nameRow}>
             <Text variant="bodyEmphasized" numberOfLines={1}>
@@ -112,37 +115,42 @@ export function FeedRow({
             </Text>
           )}
         </View>
-        <View style={styles.affs}>
-          <View style={styles.aff}>
-            <Text variant="monoLabel" color={air ? theme.colors.accent.default : theme.colors.text.subtle}>
-              AIR
-            </Text>
-            <Toggle value={air} onValueChange={onAirChange} disabled={locked} accessibilityLabel={`${label} broadcast`} />
-          </View>
-          <View style={styles.aff}>
-            <View style={styles.recLabel}>
-              <Text variant="monoLabel" color={rec ? theme.colors.accent.default : theme.colors.text.subtle}>
-                REC
+        {trailing ?? (
+          <View style={styles.affs}>
+            <View style={styles.aff}>
+              <Text variant="monoLabel" color={air ? theme.colors.accent.default : theme.colors.text.subtle}>
+                AIR
               </Text>
-              {lockHint && <Icon name="lock" size="sm" color={theme.colors.text.subtle} />}
+              <Toggle value={air} onValueChange={onAirChange ?? (() => {})} disabled={locked} accessibilityLabel={`${label} broadcast`} />
             </View>
-            <Toggle value={rec} onValueChange={onRecChange} disabled={locked} accessibilityLabel={`${label} record`} />
+            <View style={styles.aff}>
+              <View style={styles.recLabel}>
+                <Text variant="monoLabel" color={rec ? theme.colors.accent.default : theme.colors.text.subtle}>
+                  REC
+                </Text>
+                {lockHint && <Icon name="lock" size="sm" color={theme.colors.text.subtle} />}
+              </View>
+              <Toggle value={rec} onValueChange={onRecChange ?? (() => {})} disabled={locked} accessibilityLabel={`${label} record`} />
+            </View>
           </View>
-        </View>
+        )}
       </View>
       {footer && <View style={styles.footer}>{footer}</View>}
     </View>
   )
 }
 
+// Footer indents to align under the meta column (thumb width + row gap).
+const FOOTER_INDENT = 42 + theme.spacing.md
+
 const styles = StyleSheet.create({
-  wrap: {
+  card: {
     paddingVertical: theme.spacing.md,
     paddingHorizontal: theme.spacing.md,
-  },
-  borderTop: {
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.border.subtle,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border.subtle,
+    backgroundColor: theme.colors.bg.elevated,
   },
   dimmed: {
     opacity: 0.55,
