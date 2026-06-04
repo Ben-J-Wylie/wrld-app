@@ -12,13 +12,14 @@
 //     alive at the playhead (backend: Aaron). A "NOW" button returns to live.
 //
 // Each of the six fields (YEAR · MONTH · DAY · HH : MM : SS) is a vertical
-// dial framed by a centred band (two lines). Each value change — a live tick
-// or a scrub — animates the dial scrolling by one row (down = newer, up =
-// older), so the motion itself hints which way to spin. Tap to expand: the
-// bar grows and the ±ghost neighbours come into view. A center-out cream
-// gradient (matching the header scrim) holds the centre legible and fades the
-// edges into the globe. Drag a field to dial; Date arithmetic carries/borrows
-// correctly; no future, floor at `minYear`.
+// dial. The "selection band" — a centred strip with a top + bottom line — is
+// the only filled surface; it's identical in blurred and focused states.
+// Blurred clips to that one band row (no peeking neighbours); focused, the bar
+// grows and the ±ghost neighbours come into view above/below over the globe.
+// Every value change (tick or scrub) slides the dial one row — down = newer,
+// up = older — so the motion cues which way to spin. Fields have fixed widths
+// so a value change never reflows the layout. Drag a field to dial; Date
+// arithmetic carries/borrows correctly; no future, floor at `minYear`.
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
@@ -30,7 +31,6 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native'
-import { LinearGradient } from 'expo-linear-gradient'
 import { Pressable } from '@/components/primitives/Pressable'
 import { Text } from '@/components/primitives/Text'
 import { theme } from '@/tokens/theme'
@@ -39,23 +39,23 @@ type FieldKey = 'year' | 'month' | 'day' | 'hour' | 'minute' | 'second'
 
 const MONTH_ABBR = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
 
-const ROW_H = 26
-const COLLAPSED_H = ROW_H + 22 // centre row + breathing room
-const EXPANDED_H = ROW_H * 5 // centre + 2 above + 2 below in view
-const STEP_PX = 26 // vertical drag distance per one unit step
+// Fixed per-field widths so a value change never reflows the row.
+const FIELD_W: Record<FieldKey, number> = {
+  year: 42,
+  month: 38,
+  day: 24,
+  hour: 24,
+  minute: 24,
+  second: 24,
+}
+
+const ROW_H = 36 // band height = one increment row
+const COLLAPSED_H = ROW_H // blurred: only the band row shows
+const EXPANDED_H = ROW_H * 5 // focused: centre + 2 above + 2 below
+const STEP_PX = 30 // vertical drag distance per one unit step
 // Window of cells rendered per field — wider than what's visible so the
 // one-row slide animation always has a neighbour to scroll in.
 const WINDOW = [3, 2, 1, 0, -1, -2, -3] // newer (top) → older (bottom)
-
-// Center-out cream gradient — matches the globe's header scrim (paper100).
-const GRAD_CREAM = '236,230,214'
-const GRAD_COLORS = [
-  `rgba(${GRAD_CREAM},0)`,
-  `rgba(${GRAD_CREAM},0.9)`,
-  `rgba(${GRAD_CREAM},0.9)`,
-  `rgba(${GRAD_CREAM},0)`,
-] as const
-const GRAD_LOCATIONS = [0, 0.32, 0.68, 1] as const
 
 function fieldValue(d: Date, key: FieldKey): number {
   switch (key) {
@@ -157,55 +157,57 @@ export function TimeScrubber({ offsetMs, onOffsetChange, minYear = 2026, style }
 
   return (
     <Animated.View style={[styles.bar, { height }, style]}>
-      <LinearGradient
-        colors={GRAD_COLORS}
-        locations={GRAD_LOCATIONS}
-        style={StyleSheet.absoluteFill}
-        pointerEvents="none"
-      />
-      {/* Centred band — two lines framing the centre value. */}
+      {/* Selection band — the only filled surface, identical blurred/focused. */}
       <View style={styles.bandWrap} pointerEvents="none">
         <View style={styles.band} />
       </View>
 
       <RNPressable onPress={() => setExpanded((e) => !e)} style={styles.press}>
         <View style={styles.row}>
-          <View style={styles.clock}>
-            <Field fieldKey="year" {...fieldProps} />
-            <Field fieldKey="month" {...fieldProps} />
-            <Field fieldKey="day" {...fieldProps} />
-            <Field fieldKey="hour" {...fieldProps} />
-            <Colon />
-            <Field fieldKey="minute" {...fieldProps} />
-            <Colon />
-            <Field fieldKey="second" {...fieldProps} />
+          <Field fieldKey="year" {...fieldProps} />
+          <Gap />
+          <Field fieldKey="month" {...fieldProps} />
+          <Gap />
+          <Field fieldKey="day" {...fieldProps} />
+          <Gap />
+          <Field fieldKey="hour" {...fieldProps} />
+          <Gap colon />
+          <Field fieldKey="minute" {...fieldProps} />
+          <Gap colon />
+          <Field fieldKey="second" {...fieldProps} />
+          <Gap />
+          <View style={styles.statusSlot}>
+            {live ? (
+              <View style={styles.liveTag}>
+                <View style={styles.liveDot} />
+                <Text variant="monoLabel" color={theme.colors.text.muted}>
+                  LIVE
+                </Text>
+              </View>
+            ) : (
+              <Pressable variant="default" onPress={() => onOffsetChange(0)} style={styles.nowBtn}>
+                <View style={styles.nowDot} />
+                <Text variant="monoLabel" color={theme.colors.text.inverse}>
+                  NOW
+                </Text>
+              </Pressable>
+            )}
           </View>
-          {live ? (
-            <View style={styles.liveTag}>
-              <View style={styles.liveDot} />
-              <Text variant="monoLabel" color={theme.colors.text.muted}>
-                LIVE
-              </Text>
-            </View>
-          ) : (
-            <Pressable variant="default" onPress={() => onOffsetChange(0)} style={styles.nowBtn}>
-              <View style={styles.nowDot} />
-              <Text variant="monoLabel" color={theme.colors.text.inverse}>
-                NOW
-              </Text>
-            </Pressable>
-          )}
         </View>
       </RNPressable>
     </Animated.View>
   )
 }
 
-function Colon() {
+function Gap({ colon }: { colon?: boolean }) {
   return (
-    <Text variant="bodyEmphasized" color={theme.colors.text.primary}>
-      :
-    </Text>
+    <View style={styles.gap}>
+      {colon && (
+        <Text variant="bodyEmphasized" color={theme.colors.text.primary}>
+          :
+        </Text>
+      )}
+    </View>
   )
 }
 
@@ -262,11 +264,11 @@ function Field({
   }, [current])
 
   return (
-    <View style={styles.field} {...responder.panHandlers}>
+    <View style={[styles.field, { width: FIELD_W[fieldKey] }]} {...responder.panHandlers}>
       <Animated.View style={{ transform: [{ translateY: slide }] }}>
         {WINDOW.map((delta) => {
           const dist = Math.abs(delta)
-          const opacity = dist === 0 ? 1 : dist === 1 ? 0.55 : dist === 2 ? 0.3 : 0.12
+          const opacity = dist === 0 ? 1 : dist === 1 ? 0.5 : dist === 2 ? 0.28 : 0.12
           return (
             <View key={delta} style={styles.cell}>
               <Text
@@ -285,12 +287,12 @@ function Field({
 }
 
 const NOW_DOT = 7
+const STATUS_W = 58
 
 const styles = StyleSheet.create({
   bar: {
     overflow: 'hidden',
-    // No solid surface — a center-out cream gradient (above) holds the centre
-    // legible and fades the dial edges into the globe.
+    // No background — the selection band (below) is the only filled surface.
   },
   press: {
     flex: 1,
@@ -301,6 +303,7 @@ const styles = StyleSheet.create({
   },
   band: {
     height: ROW_H,
+    backgroundColor: theme.colors.bg.glass,
     borderTopWidth: 1,
     borderBottomWidth: 1,
     borderColor: theme.colors.border.strong,
@@ -309,18 +312,12 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center', // centre the whole content (equal L/R margins)
     paddingHorizontal: theme.spacing.lg,
   },
-  clock: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-evenly',
-  },
   field: {
-    // Fill the bar height (so the whole dial is a drag target) and clip its
-    // own WINDOW; the centre cell sits at the band, neighbours fade via the
-    // gradient. alignSelf stretch overrides the row's centre alignment.
+    // Full bar height (drag target) + clips its own WINDOW so blurred shows
+    // only the band row; fixed width so values never reflow the layout.
     alignSelf: 'stretch',
     overflow: 'hidden',
     alignItems: 'center',
@@ -331,11 +328,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  gap: {
+    width: theme.spacing.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statusSlot: {
+    width: STATUS_W,
+    alignItems: 'center',
+  },
   liveTag: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.xs,
-    marginLeft: theme.spacing.sm,
   },
   liveDot: {
     width: NOW_DOT,
@@ -347,7 +352,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.xs,
-    marginLeft: theme.spacing.sm,
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: theme.spacing.xs,
     borderRadius: theme.radius.full,

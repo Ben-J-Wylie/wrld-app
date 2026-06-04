@@ -1643,15 +1643,24 @@ gesture start** (captures the playhead on grant, applies the total
 all fields + variable month/year lengths. Clamped to `[0, now-minYear]`
 (no future, floor at `minYear`, default 2026).
 
-**Dial treatment (2026-06-04).** Each field is a vertical dial framed by a
-centred **band** (two horizontal `border.strong` lines). A fixed **WINDOW**
-of cells (±3) renders per field; `text.primary` ink, `bodyEmphasized`
-centre, `body` neighbours dimmed by distance (0.55 / 0.3 / 0.12) — DOBWheel
-coloring. Month is a 3-letter abbreviation (JAN…DEC); hours 24h; the
-clock spreads with `justifyContent: 'space-evenly'` so the gaps are even
-across all fields incl. the `:` colons of `HH : MM : SS`. Collapsed clips
-to the centre row; tap expands (`motion.patterns.overlay`) to ~5 rows.
-"● LIVE" tag when live; accent "● NOW" Pressable when scrubbed.
+**Dial treatment (2026-06-04).** Each field is a vertical dial. The
+**selection band** — a centred strip with a top + bottom `border.strong`
+line — is the **only filled surface** (`bg.glass`), identical in blurred
+and focused states. A fixed **WINDOW** of cells (±3) renders per field;
+`text.primary` ink, `bodyEmphasized` centre, `body` neighbours dimmed by
+distance (0.5 / 0.28 / 0.12). Month is a 3-letter abbreviation (JAN…DEC);
+hours 24h. **Blurred clips to the single band row** (no peeking
+neighbours); tap expands (`motion.patterns.overlay`) to 5 rows so the ±2
+neighbours come into view above/below the band (over the globe). "● LIVE"
+tag when live; accent "● NOW" Pressable when scrubbed.
+
+**Spacing (2026-06-04).** Equal fixed gaps between every wheel — the `:`
+colons sit centred *inside* the hour-minute and minute-second gaps (a
+`Gap` slot), so they don't get their own column; the gap there equals the
+year-month gap. The whole content is centred (`justifyContent: 'center'`)
+so the margin left-of-year equals the margin right-of-status. **Fixed
+per-field widths** (`FIELD_W`) + a fixed-width status slot mean a value
+change (e.g. JUL→AUG, or the live/NOW swap) never reflows the row.
 
 **Animated tick / dial slide.** Every value change — a live tick or a
 scrub step — animates the field's cell column by one row: newer scrolls
@@ -1659,17 +1668,13 @@ scrub step — animates the field's cell column by one row: newer scrolls
 new one slides home). So the motion itself cues which way to spin, and
 dragging reads as dialling. `useLayoutEffect` seeds the start offset
 before paint (no flash); only fields whose value actually changed animate.
-Drag direction matches: down = newer, up = older.
 
-**Center-out gradient surface (2026-06-04).** No solid background — a
-vertical `LinearGradient` (cream `rgba(236,230,214,…)` matching the header
-scrim) is fully opaque across the middle band (locations 0.32–0.68) and
-fades to transparent at the top/bottom, so the centre value is legible and
-the dial edges melt into the globe. Replaces the earlier `bg.glass` +
-fade-strip approach (first cream-over-transparent pass read too faint).
-The full-bar tap region uses a raw RN `Pressable` (the primitive routes
-`style` to an inner `Animated.View` whose `flex:1` can't resolve, which
-collapsed the content to 0 height).
+**Surface.** No bar background — the band is the only fill (over the globe,
+the neighbours sit on the transparent area when expanded). The earlier
+center-out gradient was dropped per Ben. The full-bar tap region uses a
+raw RN `Pressable` (the primitive routes `style` to an inner
+`Animated.View` whose `flex:1` can't resolve, which collapsed it to 0
+height).
 
 **Seam (Aaron / backend).** The component only emits `offsetMs`;
 `GlobeScreenMapbox` holds it and carries a commented TIME-MACHINE seam at
