@@ -91,6 +91,9 @@ export function PpvCreateScreen() {
   const [priceDollars, setPriceDollars] = useState(
     existing?.priceUsd ? String((existing.priceUsd / 100).toFixed(2)) : '',
   )
+  const [capacity, setCapacity] = useState(
+    existing?.maxCapacity ? String(existing.maxCapacity) : '',
+  )
   const [subscribersFree, setSubscribersFree] = useState(existing?.subscribersFreeAccess ?? false)
   const [replayAccess, setReplayAccess] = useState(existing?.replayAccess ?? true)
   const [saving, setSaving] = useState(false)
@@ -101,6 +104,7 @@ export function PpvCreateScreen() {
     setTitle(existing.title)
     setDescription(existing.description ?? '')
     setDuration(existing.durationMinutes ? String(existing.durationMinutes) : '')
+    setCapacity(existing.maxCapacity ? String(existing.maxCapacity) : '')
     setPriceDollars(String((existing.priceUsd / 100).toFixed(2)))
     setSubscribersFree(existing.subscribersFreeAccess)
     setReplayAccess(existing.replayAccess)
@@ -160,6 +164,7 @@ export function PpvCreateScreen() {
         durationMinutes: duration ? parseInt(duration) : undefined,
         priceUsd: priceCents,
         subscribersFreeAccess: subscribersFree,
+        maxCapacity: capacity ? parseInt(capacity) : undefined,
         replayAccess,
       })
       qc.invalidateQueries({ queryKey: ['my-ppv-events'] })
@@ -193,6 +198,10 @@ export function PpvCreateScreen() {
         }
         if (subscribersFree !== existing?.subscribersFreeAccess) {
           updates.subscribersFreeAccess = subscribersFree
+        }
+        const newCapacity = capacity ? parseInt(capacity) : null
+        if (newCapacity !== (existing?.maxCapacity ?? null)) {
+          updates.maxCapacity = newCapacity
         }
       }
 
@@ -310,6 +319,22 @@ export function PpvCreateScreen() {
           placeholder="Minutes, e.g. 90"
           keyboardType="number-pad"
         />
+      </View>
+
+      <View style={styles.field}>
+        <Text variant="monoLabel">Capacity (optional)</Text>
+        <Input
+          value={capacity}
+          onChangeText={setCapacity}
+          placeholder="Leave empty for unlimited"
+          keyboardType="number-pad"
+          editable={!hasPurchases}
+        />
+        {hasPurchases ? (
+          <HelpText>Capacity is locked after the first purchase</HelpText>
+        ) : (
+          <HelpText>Max number of tickets available</HelpText>
+        )}
       </View>
 
       <View style={styles.field}>
