@@ -731,6 +731,40 @@ not a blank page:
   recording indicator (see the clips-initiative section above); formalizing it as a
   stated policy is its own pre-launch initiative.
 
+**Planet zones — Venus for adult content:**
+
+The concept: Earth is the default globe for general-audience streams. Venus is a
+separate planet globe for adult content — users "fly to Venus" to see those streams.
+Adult streams are completely invisible on Earth. This keeps the main experience
+clean while giving adult creators a real home.
+
+- **Why a separate planet works UX-wise.** It's a hard, memorable boundary rather
+  than a filter toggle. The navigation metaphor reinforces that you're entering a
+  different space with different rules. The "Venus" naming is on-brand for WRLD
+  without being crude.
+- **App Store / Play Store compliance.** Adult content apps are permitted on both
+  stores under strict conditions: app rated 17+ / 18+, real age verification (not
+  tap-to-confirm), content gated behind a paywall or subscription, and robust
+  moderation/reporting. Live-streaming adult content is higher-risk than static
+  content because it can't be pre-screened — moderation tooling must be in place
+  before launch.
+- **Age verification.** Must be real — government ID check or equivalent — not a
+  birthday picker. This is a legal requirement in the UK (Online Safety Act), EU,
+  and increasingly the US. Likely requires a third-party age-verification provider.
+- **Venus globe.** NASA/ESA Magellan radar surface data is publicly available as
+  raster tiles and looks genuinely distinct from Earth. The existing Mapbox globe
+  renderer (`GlobeScreenMapbox`) would be the foundation — a second globe screen
+  (`GlobeScreenVenus`) with a Venus-textured style and filtered to `isAdult` streams
+  only. Navigation from Earth → Venus is a UI decision (separate tab, a destination
+  you fly to, or a portal button on the globe).
+- **Backend changes needed.** `Stream.contentRating String @default('general')` (or
+  `isAdult Boolean`). Discovery endpoint filters by `contentRating` — Earth gets
+  `general` only, Venus gets `adult` only. Broadcaster dashboard gets a content
+  rating toggle (requires age-verified account). Age verification status on `User`.
+- **Deferred until.** Age verification provider decision, App Store 17+ rating
+  submission, and adult content moderation tooling (automated flagging + human
+  review queue) are all prerequisites. Do not build Venus without these in place.
+
 ---
 
 ## How to run things (cheat sheet)
