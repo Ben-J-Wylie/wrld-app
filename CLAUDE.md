@@ -431,6 +431,66 @@ Ben's C2 components — Aaron builds against the current mock-state versions and
 integrates the new states when `design` → `main` lands. C5 needs C4 **and** the
 profile/library decision. C6 last.
 
+### App-side build (Ben, `design`, 2026-06-03) — C2 done + C3 advanced
+
+Ben built the Go Live & Record dashboard end-to-end this session on `design`,
+which **advances into what the split scoped as Aaron's C3** (`DashboardScreen`
+assembly). Flagged here so Aaron doesn't rebuild it and the `design → main`
+merge is coordinated. Two model refinements Ben made this session:
+
+- **One commit button, not two.** The per-source Air/Rec toggles are the single
+  source of truth (set-it-and-forget-it); a single docked **Go Live** button
+  commits whatever they say and never flips them. The `Toggle` primitive gained
+  an **`armed`** state (on-position, outline-not-fill) so an on-but-not-yet-live
+  toggle reads as "cued"; on commit it fills accent. The button reads
+  "GO LIVE" when anything is aired or "START RECORDING" when only Rec is armed.
+  The underlying **two source sets** (per-source broadcast + record) are
+  unchanged — this is purely the app-side control surface; the backend payload
+  (air set + record set) is identical. (Supersedes the "Two independent buttons"
+  line in *Capture model* above for the app UI.)
+- **Any armed source can go live → data-only streams.** Going live no longer
+  requires camera/audio. Any armed source (Air or Rec, any kind) enables the
+  button — a location-only share, a telemetry feed, a torch channel (morse), or
+  a record-only "jog route, post later" session are all valid. `useMediasoup`
+  now skips `getUserMedia` when no camera/audio is armed (it throws on
+  video:false + audio:false) and produces no AV tracks; the room is still live.
+
+What shipped on `design` (all token-clean, in galleries, DESIGN.md Section 3):
+- **Components:** `FeedRow` two-affordance (Air/Rec, consent gate, `trailing`
+  slot, `live`/armed) · `FeedThumb` (+ speed/torch/temp/motion glyph kinds) ·
+  `ArmButton` (built, now unused after the single-button refinement) ·
+  `RecordConsentSheet` · `BroadcastStatusIndicator` · `Toggle.armed` ·
+  `GoBar` label/knob overrides.
+- **DashboardScreen** (`screens/` — normally Aaron's lane; Ben's call this
+  session): full 11-source suite, Divider-grouped (identity/location ·
+  cam/audio/screen · compass/gyro/motion/speed/temp · torch), all interactive;
+  Identity as a FeedRow with an inline Attributed/Anon segment; location
+  precision ceiling; RecordConsentSheet on sensitive-record; sticky title (top)
+  + sticky GoBar (bottom). Carries `air` / `record` / `identity` / `precision`
+  forward in the go-live params.
+- **StreamScreen**: shows `BroadcastStatusIndicator` while recording.
+- **`useMediasoup`** (`hooks/` — normally Aaron's lane): graceful no-AV broadcast.
+
+Not done (still C2/C4): `LayerEditorRow` not-captured + delete-permanently
+states (clip-editor work).
+
+### Backend follow-ups this build assumes (Aaron / mediasoup)
+
+The app UI is open ahead of the backend. To make it real:
+
+- **Non-AV layer producers.** A location/telemetry/torch stream goes *live*
+  today but transmits no data — viewers get a live-but-empty room. mediasoup +
+  backend need to carry the aired non-AV layers (the `air` param already lists
+  them) as data so viewers receive them. This is what makes friend-location-
+  share and torch-morse actually work.
+- **Data-only room support.** mediasoup should accept a send transport with zero
+  AV producers as a valid live room (the app already sets it up that way).
+- **Truly-private record-only.** "Record a jog route, post later" currently still
+  creates a public live room with no media. A private local-record-then-post
+  path (no public room) is the clip-recording flow, not the live flow.
+- **Per-source record-to-disk** for the carried `record` set (the C1 substrate),
+  beyond today's whole-stream recording.
+
 ---
 
 ## v0.2 beta milestone — architectural decision (May 2026)

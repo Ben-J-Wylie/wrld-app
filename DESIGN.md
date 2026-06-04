@@ -3403,6 +3403,50 @@ above. The seam is not a separate motion category.
 Append-only. Most recent first. Each entry: date, decision, rationale,
 constraint it imposes downstream.
 
+### 2026-06-03 (evening) — Go Live & Record dashboard built (clips C2 + dashboard); two model refinements
+
+The clips capture surface shipped on `design` this session. Built: `FeedRow`
+two-affordance redesign (Air/Rec, sensitivity tag, consent lock-hint, `footer`
++ `trailing` slots, `live`/armed), `FeedThumb` v0.3+ glyph kinds
+(speed/torch/temp/motion), `ArmButton`, `RecordConsentSheet`,
+`BroadcastStatusIndicator`, `Toggle.armed`, `GoBar` label/knob overrides, and a
+full `DashboardScreen` rewrite (Section 3 + 4 carry the entries). Two refinements
+to the 2026-06-03 plan entry below:
+
+- **One commit button, not two.** The per-source Air/Rec toggles are the single
+  source of truth (set-it-and-forget-it); a single docked GoBar commits whatever
+  they say and never flips them. The `Toggle` `armed` state (on-position,
+  outline-not-fill) marks "cued, not yet live"; on commit it fills accent. This
+  retires the `ArmButton` pair from the Dashboard (kept as a feature). The
+  underlying **two source sets** (per-source broadcast + record) are unchanged —
+  this is only the control surface. **Rationale:** the toggles already carry the
+  full intent; a second pair of arming buttons duplicated state and could fight
+  the toggles. Less chrome, one focal commit (Principles 2 + 3).
+- **Any armed source can go live → data-only streams.** Go-live no longer
+  requires camera/audio — any armed source (Air or Rec, any kind) enables the
+  commit. Enables location-only shares, telemetry feeds, torch channels, and
+  record-only sessions. The Dashboard shows all 11 sources interactive (the full
+  model), with honest per-source status in the detail text.
+
+**Imposes:**
+
+- New focal-commit surfaces compose `GoBar` + the `Toggle` `armed` state, not a
+  separate arming control, unless a genuine dual-intent case appears (then
+  `ArmButton` is there).
+- The `armed` Toggle state is opt-in (`armed` prop); existing toggles are
+  unaffected. Don't make it the default.
+- Layout: sticky title (top) + sticky single commit (bottom) is the arming-screen
+  pattern — header / scroll / footer column, not a single ScreenScroll.
+- App UI now runs ahead of the media backend: a no-AV (data-only) stream is live
+  but transmits nothing yet, and record-only still creates a public room.
+  Backend follow-ups (non-AV layer producers, data-only room support,
+  private record-only, per-source record-to-disk) are tracked in
+  [CLAUDE.md](CLAUDE.md) "Backend follow-ups this build assumes."
+- The build advanced into Aaron's scoped C3 (`DashboardScreen`) + touched
+  `hooks/useMediasoup` — both normally `main`/Aaron lane — at Ben's direction.
+  The `design → main` merge needs coordination so C3 isn't rebuilt; see
+  CLAUDE.md "App-side build (Ben, `design`, 2026-06-03)."
+
 ### 2026-06-03 — Clips initiative: per-source manifest model + two-button capture (DECIDED)
 
 Builds on the 2026-05-29 clips + sensor entries. Those established the 7-layer
