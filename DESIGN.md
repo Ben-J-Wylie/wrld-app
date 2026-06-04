@@ -1649,6 +1649,14 @@ scrubbed (→ `onOffsetChange(0)`).
 **Direction note.** Drag-down = newer, drag-up = older (wheel physics,
 newer above) — a one-line flip if it reads wrong on device.
 
+**Over-globe treatment.** No background for now (sits directly over the
+globe per Ben, 2026-06-04) — values are cream (`text.inverse`) with a soft
+warm-dark text-shadow halo (`clockText`) for legibility over arbitrary
+imagery; a translucent gradient below may come later. The full-bar tap
+region uses a raw RN `Pressable` (not the primitive): the primitive routes
+`style` to an inner `Animated.View` whose `flex:1` can't resolve, which
+collapsed the content to 0 height — RN `Pressable` takes `flex:1` directly.
+
 **Seam (Aaron / backend).** The component only emits `offsetMs`;
 `GlobeScreenMapbox` holds it and carries a commented TIME-MACHINE seam at
 `useDiscoverySocket()` where the live feed swaps to a historical

@@ -1350,7 +1350,12 @@ function SearchBarDemo({
 
 function TimeScrubberDemo() {
   const [offsetMs, setOffsetMs] = useState(0)
-  return <TimeScrubber offsetMs={offsetMs} onOffsetChange={setOffsetMs} />
+  // Dark stage stands in for the globe — the clock renders cream-over-content.
+  return (
+    <View style={styles.darkStage}>
+      <TimeScrubber offsetMs={offsetMs} onOffsetChange={setOffsetMs} />
+    </View>
+  )
 }
 
 function ToastBannerDemo() {

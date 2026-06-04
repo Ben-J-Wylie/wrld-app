@@ -25,6 +25,7 @@ import { useEffect, useRef, useState, Fragment } from 'react'
 import {
   Animated,
   PanResponder,
+  Pressable as RNPressable,
   StyleSheet,
   View,
   type StyleProp,
@@ -131,7 +132,11 @@ export function TimeScrubber({ offsetMs, onOffsetChange, minYear = 2026, style }
 
   return (
     <Animated.View style={[styles.bar, { height }, style]}>
-      <Pressable variant="none" onPress={() => setExpanded((e) => !e)} style={styles.press}>
+      {/* Raw RN Pressable (not the primitive): the primitive routes `style`
+          to an inner Animated.View whose flex:1 can't resolve, collapsing the
+          content. RN Pressable takes flex:1 directly. No scale feedback wanted
+          on the whole bar anyway. */}
+      <RNPressable onPress={() => setExpanded((e) => !e)} style={styles.press}>
         <View style={styles.row}>
           {FIELDS.map((f) => (
             <Fragment key={f.key}>
@@ -150,7 +155,7 @@ export function TimeScrubber({ offsetMs, onOffsetChange, minYear = 2026, style }
           {live ? (
             <View style={styles.liveTag}>
               <View style={styles.liveDot} />
-              <Text variant="monoLabel" color={theme.colors.text.muted}>
+              <Text variant="monoLabel" color={theme.colors.text.inverse} style={styles.clockText}>
                 LIVE
               </Text>
             </View>
@@ -163,7 +168,7 @@ export function TimeScrubber({ offsetMs, onOffsetChange, minYear = 2026, style }
             </Pressable>
           )}
         </View>
-      </Pressable>
+      </RNPressable>
     </Animated.View>
   )
 }
@@ -207,19 +212,19 @@ function Field({
   return (
     <View style={styles.field} {...responder.panHandlers}>
       {expanded && (
-        <Text variant="monoValue" color={theme.colors.text.subtle} style={styles.ghost}>
+        <Text variant="monoValue" color={theme.colors.text.inverse} style={[styles.clockText, styles.ghost]}>
           {above}
         </Text>
       )}
-      <Text variant="monoValue" color={theme.colors.text.primary}>
+      <Text variant="monoValue" color={theme.colors.text.inverse} style={styles.clockText}>
         {current}
       </Text>
       {expanded && (
         <>
-          <Text variant="monoValue" color={theme.colors.text.subtle} style={styles.ghost}>
+          <Text variant="monoValue" color={theme.colors.text.inverse} style={[styles.clockText, styles.ghost]}>
             {below}
           </Text>
-          <Text variant="monoLabel" color={theme.colors.text.subtle} style={styles.fieldLabel}>
+          <Text variant="monoLabel" color={theme.colors.text.inverse} style={[styles.clockText, styles.fieldLabel]}>
             {def.label}
           </Text>
         </>
@@ -232,14 +237,18 @@ const NOW_DOT = 7
 
 const styles = StyleSheet.create({
   bar: {
-    backgroundColor: theme.colors.bg.elevated,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: theme.colors.border.subtle,
+    // No background for now — sits directly over the globe. (A translucent
+    // gradient below may come later.) Values stay legible via clockText shadow.
     overflow: 'hidden',
   },
   press: {
     flex: 1,
+  },
+  // Soft warm-dark halo so the cream clock reads over arbitrary globe imagery.
+  clockText: {
+    textShadowColor: 'rgba(20,16,13,0.55)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   row: {
     flex: 1,
@@ -254,10 +263,11 @@ const styles = StyleSheet.create({
     minWidth: 28,
   },
   ghost: {
-    opacity: 0.32,
+    opacity: 0.3,
   },
   fieldLabel: {
     marginTop: theme.spacing.xxs,
+    opacity: 0.55,
   },
   groupGap: {
     width: theme.spacing.sm,
@@ -274,7 +284,7 @@ const styles = StyleSheet.create({
     width: NOW_DOT,
     height: NOW_DOT,
     borderRadius: NOW_DOT / 2,
-    backgroundColor: theme.colors.text.muted,
+    backgroundColor: theme.colors.text.inverse,
   },
   nowBtn: {
     flexDirection: 'row',
