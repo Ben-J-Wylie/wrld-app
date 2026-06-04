@@ -40,13 +40,14 @@ type FieldKey = 'year' | 'month' | 'day' | 'hour' | 'minute' | 'second'
 const MONTH_ABBR = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
 
 // Fixed per-field widths so a value change never reflows the row.
+// Sized for monoLabel (IBM Plex Mono caps, ~10px + letter-spacing).
 const FIELD_W: Record<FieldKey, number> = {
-  year: 42,
-  month: 38,
-  day: 24,
-  hour: 24,
-  minute: 24,
-  second: 24,
+  year: 36,
+  month: 30,
+  day: 22,
+  hour: 22,
+  minute: 22,
+  second: 22,
 }
 
 const ROW_H = 36 // band height = one increment row
@@ -203,7 +204,7 @@ function Gap({ colon }: { colon?: boolean }) {
   return (
     <View style={styles.gap}>
       {colon && (
-        <Text variant="bodyEmphasized" color={theme.colors.text.primary}>
+        <Text variant="monoLabel" color={theme.colors.text.primary}>
           :
         </Text>
       )}
@@ -271,11 +272,7 @@ function Field({
           const opacity = dist === 0 ? 1 : dist === 1 ? 0.5 : dist === 2 ? 0.28 : 0.12
           return (
             <View key={delta} style={styles.cell}>
-              <Text
-                variant={dist === 0 ? 'bodyEmphasized' : 'body'}
-                color={theme.colors.text.primary}
-                style={{ opacity }}
-              >
+              <Text variant="monoLabel" color={theme.colors.text.primary} style={{ opacity }}>
                 {formatField(stepDate(playhead, fieldKey, delta), fieldKey)}
               </Text>
             </View>

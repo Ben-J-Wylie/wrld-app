@@ -1647,8 +1647,9 @@ all fields + variable month/year lengths. Clamped to `[0, now-minYear]`
 **selection band** — a centred strip with a top + bottom `border.strong`
 line — is the **only filled surface** (`bg.glass`), identical in blurred
 and focused states. A fixed **WINDOW** of cells (±3) renders per field;
-`text.primary` ink, `bodyEmphasized` centre, `body` neighbours dimmed by
-distance (0.5 / 0.28 / 0.12). Month is a 3-letter abbreviation (JAN…DEC);
+`text.primary` ink in the `monoLabel` font (IBM Plex Mono caps, the
+"nearby now" type), centre at full opacity, neighbours dimmed by distance
+(0.5 / 0.28 / 0.12). Month is a 3-letter abbreviation (JAN…DEC);
 hours 24h. **Blurred clips to the single band row** (no peeking
 neighbours); tap expands (`motion.patterns.overlay`) to 5 rows so the ±2
 neighbours come into view above/below the band (over the globe). "● LIVE"
