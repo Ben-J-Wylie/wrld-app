@@ -3412,6 +3412,41 @@ above. The seam is not a separate motion category.
 Append-only. Most recent first. Each entry: date, decision, rationale,
 constraint it imposes downstream.
 
+### 2026-06-03 (late) — Dashboard goes live in place (headless broadcast)
+
+Go Live now starts the broadcast **on the dashboard** — no navigation to
+`StreamScreen`. The armed source toggles flip to the live (filled) state,
+the button becomes **STOP STREAM**, and stopping reverts the toggles to
+armed. Reuses the existing hooks: `useSignaling` (`connect` → `createRoom`
+→ `disconnect`) + `useMediasoup` (`startBroadcasting` → `cleanup`).
+
+**Rationale.** Ben wants arming and going live to be one in-place flow
+with immediate visual confirmation (toggles fill, button flips), rather
+than a hop to a separate broadcaster screen.
+
+**Imposes / caveats (v1, headless):**
+
+- **No preview / viewer count / chat / reactions / recording on the
+  dashboard.** Those remain `StreamScreen`'s domain (which still owns
+  viewing + the rich broadcaster UI). The dashboard is a headless
+  broadcast *control*. Record-to-disk and the non-AV layers are still the
+  backend follow-ups noted in CLAUDE.md.
+- **The armed set is locked while live** — toggling mid-stream isn't wired
+  to add/remove producers yet (the on-toggle handlers no-op while live).
+- **AppState `background` stops the stream** (so viewers aren't stuck on a
+  frozen frame); a server end (`broadcasterLeft` / admin) also stops it.
+- **Singleton `signalingClient` is shared** with the never-unmounted
+  `StreamScreen`. A broadcast-stop ripples to StreamScreen's `onClose`,
+  but its `navigatingRef` guard (true after any prior stream exit, reset
+  only on refocus) blocks a spurious globe navigation in the normal flow.
+  You cannot view a stream and broadcast simultaneously (one WS) — same
+  pre-existing limitation as before. **Needs on-device testing** (mediasoup
+  can't run in CI): start/stop, and the "view a stream → back to dashboard
+  → broadcast → stop" sequence.
+- The dashboard no longer sets `activeBroadcast` or navigates to
+  `/(app)/stream/new`; that broadcaster entry path is unused from the
+  dashboard now (StreamScreen's `isNew` path stays for any other caller).
+
 ### 2026-06-03 (late) — Capture sensitivity friction removed (for now)
 
 Stripped the sensitivity layer from the Go Live & Record surface: the

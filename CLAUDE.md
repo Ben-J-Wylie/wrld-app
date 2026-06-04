@@ -484,6 +484,19 @@ removed; the on-air-vs-recording indicator stays). `RecordConsentSheet`
 remains a shipped feature for when consent returns — re-enable before any
 non-friends-and-family exposure. See DESIGN.md decision log.
 
+**Headless broadcast on the dashboard (2026-06-03, late).** Go Live now
+starts/stops the stream **in place** on the dashboard (reusing
+`useSignaling` + `useMediasoup`) — no navigation to `StreamScreen`. The
+armed toggles flip to live and the button becomes STOP STREAM. Caveats:
+no preview/viewer-count/chat/recording on the dashboard; the armed set is
+locked while live; AppState background stops the stream; the singleton
+`signalingClient` is shared with the never-unmounted StreamScreen (the
+`navigatingRef` guard prevents spurious nav on stop; can't view +
+broadcast at once). StreamScreen still owns viewing + the rich
+broadcaster UI; its `isNew` broadcaster path is just no longer reached
+from the dashboard. **Needs on-device testing.** See DESIGN.md decision
+log for the full caveat list.
+
 ### Backend follow-ups this build assumes (Aaron / mediasoup)
 
 The app UI is open ahead of the backend. To make it real:

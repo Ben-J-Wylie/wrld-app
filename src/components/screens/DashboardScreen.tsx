@@ -22,13 +22,13 @@
 // screen/gyro/compass and the v0.3+ sources (speed/torch/temp/motion) is
 // a follow-up on `main` (Aaron's lane) — flagged in each row's detail.
 
-import { Fragment, useEffect, useMemo, useRef, useState, useCallback } from 'react'
-import { Alert, ScrollView, StyleSheet, View } from 'react-native'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { Alert, AppState, ScrollView, StyleSheet, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Filter as ProfanityFilter } from 'bad-words'
 
 const profanityFilter = new ProfanityFilter()
-import { router, useFocusEffect } from 'expo-router'
+import { router } from 'expo-router'
 import { theme } from '@/tokens/theme'
 import { ScreenScroll } from '@/components/sections/ScreenScroll'
 import { Button } from '@/components/primitives/Button'
@@ -44,7 +44,8 @@ import { GoBar } from '@/components/features/broadcast/GoBar'
 import { useAuth } from '@clerk/clerk-expo'
 import { useLocation } from '@/hooks/useLocation'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
-import { activeBroadcast } from '@/lib/activeBroadcast'
+import { useSignaling } from '@/hooks/useSignaling'
+import { useMediasoup } from '@/hooks/useMediasoup'
 import {
   loadCaptureConfig,
   saveCaptureConfig,
@@ -110,6 +111,13 @@ export function DashboardScreen() {
   const { coords, loading: locationLoading } = useLocation()
   const insets = useSafeAreaInsets()
 
+  // Headless broadcast lives on this screen now — Go Live starts the
+  // stream in place (no navigation to StreamScreen).
+  const { connect, createRoom, disconnect, streamEnded, adminEnded } = useSignaling()
+  const { startBroadcasting, cleanup } = useMediasoup()
+  const [isLive, setIsLive] = useState(false)
+  const [starting, setStarting] = useState(false)
+
   // Title ("what's happening") is intentionally per-session — it never
   // persists. Everything else hydrates from the saved capture config.
   const [title, setTitle] = useState('')
@@ -146,26 +154,27 @@ export function DashboardScreen() {
     saveCaptureConfig({ air, rec, precision, identity, subscribersOnly })
   }, [air, rec, precision, identity, subscribersOnly])
 
-  useFocusEffect(useCallback(() => {
-    const active = activeBroadcast.get()
-    if (!active) return
-    const t = setTimeout(() => {
-      router.navigate({
-        pathname: '/(app)/stream/[id]',
-        params: {
-          id: 'new',
-          title: active.title,
-          sources: active.sources,
-          subscribersOnly: active.subscribersOnly ?? 'false',
-          air: active.air ?? '',
-          record: active.record ?? '',
-          identity: active.identity ?? 'public',
-          precision: active.precision ?? 'city',
-        },
-      })
-    }, 0)
-    return () => clearTimeout(t)
-  }, []))
+  function handleStop() {
+    cleanup()
+    disconnect()
+    setIsLive(false)
+  }
+
+  // Stop the headless broadcast if the app backgrounds (so viewers aren't
+  // left on a frozen frame) or the server ends the stream.
+  useEffect(() => {
+    if (!isLive) return
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'background') handleStop()
+    })
+    return () => sub.remove()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLive])
+
+  useEffect(() => {
+    if (isLive && (streamEnded || adminEnded)) handleStop()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLive, streamEnded, adminEnded])
 
   function setAirFor(kind: FeedKind, v: boolean) {
     setAir((prev) => ({ ...prev, [kind]: v }))
@@ -201,25 +210,36 @@ export function DashboardScreen() {
   const canGoLive =
     isSignedIn && !!title.trim() && !!coords && !locationLoading && (anyAir || anyRec)
 
-  function handleGoLive() {
-    if (!canGoLive) return
+  // Go live in place: open the signaling WS, create the room (this is what
+  // puts the stream on the globe), and start producing the armed AV
+  // sources. Stays on the dashboard — no navigation. Record-to-disk, the
+  // non-AV layers, viewer count / chat / camera preview are not surfaced
+  // here (the headless broadcast control); those remain follow-ups.
+  async function handleStart() {
+    if (!canGoLive || starting || isLive) return
     if (profanityFilter.isProfane(title.trim())) {
       Alert.alert('Title not allowed', 'Your stream title contains prohibited content. Please choose a different title.')
       return
     }
-    const params = {
-      title: title.trim(),
-      sources: broadcastSources.join(','),
-      lat: String(coords!.latitude),
-      lng: String(coords!.longitude),
-      subscribersOnly: String(subscribersOnly),
-      air: airedKinds.join(','),
-      record: recordKinds.join(','),
-      identity,
-      precision,
+    setStarting(true)
+    try {
+      await connect()
+      await createRoom({
+        title: title.trim(),
+        lat: coords!.latitude,
+        lng: coords!.longitude,
+        sources: broadcastSources,
+        subscribersOnly,
+      })
+      await startBroadcasting(broadcastSources)
+      setIsLive(true)
+    } catch (err) {
+      cleanup()
+      disconnect()
+      Alert.alert('Could not go live', err instanceof Error ? err.message : 'Something went wrong. Please try again.')
+    } finally {
+      setStarting(false)
     }
-    activeBroadcast.set(params)
-    router.push({ pathname: '/(app)/stream/new', params })
   }
 
   if (!isSignedIn) {
@@ -279,10 +299,13 @@ export function DashboardScreen() {
         label={src.label}
         detail={src.detail}
         availability={src.availability}
+        live={isLive}
         air={!!air[src.kind]}
-        onAirChange={(v) => setAirFor(src.kind, v)}
+        // The armed source set is locked while live — toggling mid-stream
+        // isn't wired to add/remove producers yet.
+        onAirChange={(v) => !isLive && setAirFor(src.kind, v)}
         rec={!!rec[src.kind]}
-        onRecChange={(v) => setRecFor(src.kind, v)}
+        onRecChange={(v) => !isLive && setRecFor(src.kind, v)}
         footer={
           src.kind === 'loc' ? (
             <View style={styles.precision}>
@@ -331,10 +354,10 @@ export function DashboardScreen() {
 
       <View style={[styles.footer, { paddingBottom: Math.max(theme.spacing.sm, insets.bottom + theme.spacing.md - FOOTER_DROP) }]}>
         <GoBar
-          variant={canGoLive ? 'armed' : 'disabled'}
-          label={recordOnly ? 'START RECORDING' : undefined}
-          knobLabel={recordOnly ? 'REC' : undefined}
-          onPress={handleGoLive}
+          variant={isLive ? 'live' : starting ? 'counting' : canGoLive ? 'armed' : 'disabled'}
+          label={isLive ? 'STOP STREAM' : recordOnly ? 'START RECORDING' : undefined}
+          knobLabel={!isLive && recordOnly ? 'REC' : undefined}
+          onPress={isLive ? handleStop : handleStart}
         />
       </View>
     </View>
