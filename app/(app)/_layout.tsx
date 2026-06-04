@@ -9,12 +9,18 @@
 // the inline amber rgba pattern already used by ToastBanner's warn
 // variant; warn-tinted text via theme.colors.warn.
 
-import { StyleSheet, View } from 'react-native'
-import { Tabs } from 'expo-router'
+import { Fragment } from 'react'
+import { Pressable, StyleSheet, View } from 'react-native'
+import { Tabs, usePathname } from 'expo-router'
+import { BottomTabBar } from '@react-navigation/bottom-tabs'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { theme } from '@/tokens/theme'
 import { Text } from '@/components/primitives/Text'
+import { Icon } from '@/components/primitives/Icon'
+import { LivePill } from '@/components/features/stream/LivePill'
 import { useAuthStore } from '@/stores/authStore'
+import { useBroadcastStore } from '@/stores/broadcastStore'
+import { returnToActiveBroadcast } from '@/lib/activeBroadcast'
 
 // Inline warn-tint values reused from ToastBanner's warn variant —
 // remove once a `warn.surface` token lands.
@@ -45,11 +51,44 @@ function SuspensionBanner() {
   )
 }
 
+// Persistent "you're live" link that sits directly above the tab bar
+// while the user has an active outgoing broadcast. The broadcast keeps
+// running when you navigate to another page in-app (the stream tab never
+// unmounts), so this is the way back to it. Hidden while already on the
+// stream view.
+function LiveReturnBar() {
+  const isLive = useBroadcastStore((s) => s.isLive)
+  const pathname = usePathname()
+  if (!isLive) return null
+  if (pathname.startsWith('/stream/')) return null
+
+  return (
+    <Pressable
+      onPress={returnToActiveBroadcast}
+      style={styles.liveBar}
+      accessibilityRole="button"
+      accessibilityLabel="Return to your live stream"
+    >
+      <LivePill size="sm" />
+      <Text variant="bodyEmphasized" style={styles.liveBarLabel} numberOfLines={1}>
+        Return to your stream
+      </Text>
+      <Icon name="chevron-right" size="md" color={theme.colors.text.muted} />
+    </Pressable>
+  )
+}
+
 export default function AppLayout() {
   return (
     <View style={styles.root}>
       <SuspensionBanner />
       <Tabs
+        tabBar={(props) => (
+          <Fragment>
+            <LiveReturnBar />
+            <BottomTabBar {...props} />
+          </Fragment>
+        )}
         screenOptions={{
           headerShown: false,
           tabBarStyle: {
@@ -94,5 +133,18 @@ const styles = StyleSheet.create({
   },
   bannerText: {
     textAlign: 'center',
+  },
+  liveBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.sm,
+    backgroundColor: theme.colors.bg.elevated,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border.subtle,
+  },
+  liveBarLabel: {
+    flex: 1,
   },
 })

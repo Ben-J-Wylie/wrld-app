@@ -45,6 +45,11 @@ type Props = {
   onAirChange?: (v: boolean) => void
   rec?: boolean
   onRecChange?: (v: boolean) => void
+  // Whether to render the Rec affordance. Recording moved to the stream
+  // view (a single Record button records the aired set) — the dashboard
+  // arms Air only, so it sets showRec={false}. The gallery keeps it true
+  // to document the two-affordance capability.
+  showRec?: boolean
   // While the broadcast hasn't gone live, on-toggles render in the
   // "armed" (cued, outline-not-fill) state; once live they fill accent.
   live?: boolean
@@ -64,6 +69,7 @@ export function FeedRow({
   onAirChange,
   rec = false,
   onRecChange,
+  showRec = true,
   live = false,
   trailing,
   footer,
@@ -99,12 +105,14 @@ export function FeedRow({
               </Text>
               <Toggle value={air} armed={!live} onValueChange={onAirChange ?? (() => {})} disabled={locked} accessibilityLabel={`${label} broadcast`} />
             </View>
-            <View style={styles.aff}>
-              <Text variant="monoLabel" color={rec ? theme.colors.accent.default : theme.colors.text.subtle}>
-                REC
-              </Text>
-              <Toggle value={rec} armed={!live} onValueChange={onRecChange ?? (() => {})} disabled={locked} accessibilityLabel={`${label} record`} />
-            </View>
+            {showRec && (
+              <View style={styles.aff}>
+                <Text variant="monoLabel" color={rec ? theme.colors.accent.default : theme.colors.text.subtle}>
+                  REC
+                </Text>
+                <Toggle value={rec} armed={!live} onValueChange={onRecChange ?? (() => {})} disabled={locked} accessibilityLabel={`${label} record`} />
+              </View>
+            )}
           </View>
         )}
       </View>

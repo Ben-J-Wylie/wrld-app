@@ -1,19 +1,23 @@
 // src/components/screens/DashboardScreen.tsx
 //
-// Go Live & Record arming screen — clips-initiative capture model
-// (DESIGN.md 2026-06-03 decision-log entry).
+// Go Live arming screen — clips-initiative capture model
+// (DESIGN.md 2026-06-04 decision-log entry).
 //
-// Layout (2026-06-03): the title ("what's happening") is pinned at the
-// top and the single Go Live button is pinned at the bottom; the source
-// suite scrolls between them.
+// Layout: the title ("what's happening") is pinned at the top and the
+// single Go Live button is pinned at the bottom; the source suite scrolls
+// between them.
 //
 // The source toggles are the single source of truth — set-it-and-forget-it.
-// Each source carries an Air affordance (broadcast) + a Rec affordance
-// (save to device); while not yet live an on-toggle shows the "armed"
-// (cued, outline-not-fill) state. Pressing Go Live commits whatever the
-// toggles say; it never flips them. Identity is a flag (Attributed /
-// Anon), not a track. (Record consent + sensitivity badges removed for
-// now — see DESIGN.md 2026-06-03 decision-log entry.)
+// Each source carries a single Air affordance (broadcast this source
+// live); on-toggles show the "armed" (cued, outline-not-fill) state.
+// Recording is NOT armed here anymore (2026-06-04 reversal of the
+// dashboard Air/Rec model): a single Record button on the stream view
+// records whatever is on air. Identity is a flag (Public / Anon), not a
+// track; Location carries a precision ceiling.
+//
+// Go Live navigates to the stream view (stream/new), which goes live
+// immediately on arrival — there is no in-place headless broadcast and no
+// intermediate "Start stream" step anymore.
 //
 // Source suite & honesty (this branch): every source is interactive so
 // the full model is visible, but only camera/audio Air actually streams
@@ -23,7 +27,7 @@
 // a follow-up on `main` (Aaron's lane) — flagged in each row's detail.
 
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
-import { Alert, AppState, ScrollView, StyleSheet, View } from 'react-native'
+import { Alert, ScrollView, StyleSheet, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Filter as ProfanityFilter } from 'bad-words'
 
@@ -45,8 +49,7 @@ import { GoBar } from '@/components/features/broadcast/GoBar'
 import { useAuth } from '@clerk/clerk-expo'
 import { useLocation } from '@/hooks/useLocation'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
-import { useSignaling } from '@/hooks/useSignaling'
-import { useMediasoup } from '@/hooks/useMediasoup'
+import { activeBroadcast } from '@/lib/activeBroadcast'
 import {
   loadCaptureConfig,
   saveCaptureConfig,
@@ -156,13 +159,6 @@ export function DashboardScreen() {
   const { coords, loading: locationLoading } = useLocation()
   const insets = useSafeAreaInsets()
 
-  // Headless broadcast lives on this screen now — Go Live starts the
-  // stream in place (no navigation to StreamScreen).
-  const { connect, createRoom, disconnect, streamEnded, adminEnded } = useSignaling()
-  const { startBroadcasting, cleanup } = useMediasoup()
-  const [isLive, setIsLive] = useState(false)
-  const [starting, setStarting] = useState(false)
-
   // Scheduled PPV events — used for the PPV event selector row
   const { data: scheduledEvents } = useQuery({
     queryKey: ['my-scheduled-ppv-events'],
@@ -187,7 +183,6 @@ export function DashboardScreen() {
   // persists. Everything else hydrates from the saved capture config.
   const [title, setTitle] = useState('')
   const [air, setAir] = useState<Partial<Record<FeedKind, boolean>>>(DEFAULT_CAPTURE_CONFIG.air)
-  const [rec, setRec] = useState<Partial<Record<FeedKind, boolean>>>(DEFAULT_CAPTURE_CONFIG.rec)
   const [precision, setPrecision] = useState<LocationPrecision>(DEFAULT_CAPTURE_CONFIG.precision)
   const [identity, setIdentity] = useState<IdentityFlag>(DEFAULT_CAPTURE_CONFIG.identity)
   const [subscribersOnly, setSubscribersOnly] = useState(DEFAULT_CAPTURE_CONFIG.subscribersOnly)
@@ -201,7 +196,6 @@ export function DashboardScreen() {
     loadCaptureConfig().then((cfg) => {
       if (!active) return
       setAir(cfg.air as Partial<Record<FeedKind, boolean>>)
-      setRec(cfg.rec as Partial<Record<FeedKind, boolean>>)
       setPrecision(cfg.precision)
       setIdentity(cfg.identity)
       setSubscribersOnly(cfg.subscribersOnly)
@@ -216,39 +210,11 @@ export function DashboardScreen() {
   // excluded by design.
   useEffect(() => {
     if (!hydratedRef.current) return
-    saveCaptureConfig({ air, rec, precision, identity, subscribersOnly })
-  }, [air, rec, precision, identity, subscribersOnly])
-
-  function handleStop() {
-    cleanup()
-    disconnect()
-    setIsLive(false)
-  }
-
-  // Stop the headless broadcast if the app backgrounds (so viewers aren't
-  // left on a frozen frame) or the server ends the stream.
-  useEffect(() => {
-    if (!isLive) return
-    const sub = AppState.addEventListener('change', (next) => {
-      if (next === 'background') handleStop()
-    })
-    return () => sub.remove()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLive])
-
-  useEffect(() => {
-    if (isLive && (streamEnded || adminEnded)) handleStop()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLive, streamEnded, adminEnded])
+    saveCaptureConfig({ air, precision, identity, subscribersOnly })
+  }, [air, precision, identity, subscribersOnly])
 
   function setAirFor(kind: FeedKind, v: boolean) {
     setAir((prev) => ({ ...prev, [kind]: v }))
-  }
-
-  // Record consent is disabled for now — Rec flips directly for every
-  // source (see DESIGN.md 2026-06-03 decision-log entry).
-  function setRecFor(kind: FeedKind, v: boolean) {
-    setRec((prev) => ({ ...prev, [kind]: v }))
   }
 
   // The media subset that actually streams today (camera/audio).
@@ -262,52 +228,48 @@ export function DashboardScreen() {
     () => SOURCE_GROUPS.flat().filter((s) => !s.identityRow && air[s.kind]).map((s) => s.kind),
     [air],
   )
-  const recordKinds = useMemo(
-    () => SOURCE_GROUPS.flat().filter((s) => !s.identityRow && rec[s.kind]).map((s) => s.kind),
-    [rec],
-  )
 
   const anyAir = airedKinds.length > 0
-  const anyRec = recordKinds.length > 0
-  // Any armed source — Air or Rec, any kind — is enough to go live. A
-  // location-only share, a telemetry feed, a torch channel, or a private
-  // record-only session are all valid broadcasts.
+  // Any aired source — any kind — is enough to go live. A location-only
+  // share, a telemetry feed, or a torch channel are all valid broadcasts;
+  // they don't require camera/audio.
   const canGoLive =
-    isSignedIn && !!title.trim() && !!coords && !locationLoading && (anyAir || anyRec)
+    isSignedIn && !!title.trim() && !!coords && !locationLoading && anyAir
 
-  // Go live in place: open the signaling WS, create the room (this is what
-  // puts the stream on the globe), and start producing the armed AV
-  // sources. Stays on the dashboard — no navigation. Record-to-disk, the
-  // non-AV layers, viewer count / chat / camera preview are not surfaced
-  // here (the headless broadcast control); those remain follow-ups.
-  async function handleStart() {
-    if (!canGoLive || starting || isLive) return
+  // Go Live navigates to the stream view (stream/new), which goes live on
+  // arrival. The dashboard only collects the arming config; createRoom +
+  // startBroadcasting + recording all live on the stream view now. The
+  // capture intent is stashed in activeBroadcast (durable across the
+  // navigation params, which a later recovery nav can overwrite) and also
+  // passed as route params.
+  function handleGoLive() {
+    if (!canGoLive) return
     if (profanityFilter.isProfane(title.trim())) {
       Alert.alert('Title not allowed', 'Your stream title contains prohibited content. Please choose a different title.')
       return
     }
-    setStarting(true)
-    try {
-      await connect()
-      await createRoom({
+    const sourcesParam = broadcastSources.join(',')
+    activeBroadcast.set({
+      title: title.trim(),
+      sources: sourcesParam,
+      subscribersOnly: String(subscribersOnly),
+      air: airedKinds.join(','),
+      identity,
+      precision,
+      ppvEventId: ppvEventId ?? undefined,
+    })
+    router.push({
+      pathname: '/(app)/stream/[id]',
+      params: {
+        id: 'new',
         title: title.trim(),
-        lat: coords!.latitude,
-        lng: coords!.longitude,
-        sources: broadcastSources,
-        subscribersOnly,
-        // Dashboard vocab 'private' maps to the backend's 'off'.
-        locationPrecision: precision === 'private' ? 'off' : precision,
-        ppvEventId: ppvEventId ?? undefined,
-      })
-      await startBroadcasting(broadcastSources)
-      setIsLive(true)
-    } catch (err) {
-      cleanup()
-      disconnect()
-      Alert.alert('Could not go live', err instanceof Error ? err.message : 'Something went wrong. Please try again.')
-    } finally {
-      setStarting(false)
-    }
+        sources: sourcesParam,
+        lat: String(coords!.latitude),
+        lng: String(coords!.longitude),
+        subscribersOnly: String(subscribersOnly),
+        precision,
+      },
+    })
   }
 
   if (!isSignedIn) {
@@ -339,10 +301,6 @@ export function DashboardScreen() {
     )
   }
 
-  // No camera/audio aired → the commit is a record-only / data-only
-  // session; the bar reads "START RECORDING" instead of "GO LIVE".
-  const recordOnly = !anyAir && anyRec
-
   function renderSource(src: SourceDescriptor) {
     if (src.identityRow) {
       return (
@@ -367,13 +325,11 @@ export function DashboardScreen() {
         label={src.label}
         detail={src.detail}
         availability={src.availability}
-        live={isLive}
         air={!!air[src.kind]}
-        // The armed source set is locked while live — toggling mid-stream
-        // isn't wired to add/remove producers yet.
-        onAirChange={(v) => !isLive && setAirFor(src.kind, v)}
-        rec={!!rec[src.kind]}
-        onRecChange={(v) => !isLive && setRecFor(src.kind, v)}
+        onAirChange={(v) => setAirFor(src.kind, v)}
+        // Recording is no longer armed on the dashboard — a single Record
+        // button on the stream view records the aired set.
+        showRec={false}
         footer={
           src.kind === 'loc' ? (
             <View style={styles.precision}>
@@ -465,10 +421,8 @@ export function DashboardScreen() {
 
       <View style={[styles.footer, { paddingBottom: Math.max(theme.spacing.sm, insets.bottom + theme.spacing.md - FOOTER_DROP) }]}>
         <GoBar
-          variant={isLive ? 'live' : starting ? 'counting' : canGoLive ? 'armed' : 'disabled'}
-          label={isLive ? 'STOP STREAM' : recordOnly ? 'START RECORDING' : undefined}
-          knobLabel={!isLive && recordOnly ? 'REC' : undefined}
-          onPress={isLive ? handleStop : handleStart}
+          variant={canGoLive ? 'armed' : 'disabled'}
+          onPress={handleGoLive}
         />
       </View>
     </View>

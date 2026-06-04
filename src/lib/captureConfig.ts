@@ -1,11 +1,13 @@
 // src/lib/captureConfig.ts
 //
-// Persists the Go Live & Record dashboard's capture configuration across
-// app launches (AsyncStorage, same pattern as deviceId / tokenCache).
-// Everything the user sets on the dashboard persists — per-source Air/Rec,
-// the location precision ceiling, the identity flag, and subscribers-only.
-// The one thing that does NOT persist is the title ("what's happening")
-// field, which stays per-session in the screen's local state.
+// Persists the Go Live dashboard's capture configuration across app
+// launches (AsyncStorage, same pattern as deviceId / tokenCache).
+// Everything the user sets on the dashboard persists — per-source Air
+// arming, the location precision ceiling, the identity flag, and
+// subscribers-only. Recording is no longer armed here (a single Record
+// button on the stream view records the aired set), so there is no rec
+// set. The one thing that does NOT persist is the title ("what's
+// happening") field, which stays per-session in the screen's local state.
 //
 // No save button — the dashboard auto-saves on every change.
 
@@ -16,22 +18,19 @@ const KEY = '@wrld_capture_config'
 export type LocationPrecision = 'exact' | 'city' | 'country' | 'private'
 export type IdentityFlag = 'public' | 'anon'
 
-// air / rec are keyed by source kind (string) → on/off. Kept as plain
-// string-keyed maps so this module stays free of component-tier imports.
+// air is keyed by source kind (string) → on/off. Kept as a plain
+// string-keyed map so this module stays free of component-tier imports.
 export type CaptureConfig = {
   air: Partial<Record<string, boolean>>
-  rec: Partial<Record<string, boolean>>
   precision: LocationPrecision
   identity: IdentityFlag
   subscribersOnly: boolean
 }
 
-// Fresh-install defaults: camera + audio + location all Air and Rec on;
-// every other source off; identity public; location precision ceiling at
-// exact.
+// Fresh-install defaults: camera + audio + location all aired; every
+// other source off; identity public; location precision ceiling at exact.
 export const DEFAULT_CAPTURE_CONFIG: CaptureConfig = {
   air: { cam: true, audio: true, loc: true },
-  rec: { cam: true, audio: true, loc: true },
   precision: 'exact',
   identity: 'public',
   subscribersOnly: false,

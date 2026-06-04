@@ -42,8 +42,10 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import Mapbox, { Camera, ShapeSource, CircleLayer, SymbolLayer, Atmosphere } from '@rnmapbox/maps'
 import { consumeStreamSignal } from '@/lib/streamSignals'
+import { returnToActiveBroadcast } from '@/lib/activeBroadcast'
 import { streamsApi } from '@/api/streams'
 import { theme } from '@/tokens/theme'
+import { useAuthStore } from '@/stores/authStore'
 import { useLocation } from '@/hooks/useLocation'
 import { useDiscoverySocket } from '@/hooks/useDiscoverySocket'
 import { Text } from '@/components/primitives/Text'
@@ -65,6 +67,7 @@ Mapbox.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '')
 
 const PIN_RED    = '#FF3B5C'
 const PIN_PURPLE = '#A855F7'
+const PIN_BLACK  = '#111111' // the viewer's own stream pin (tap → return to it)
 const PIN_BORDER = '#FFFFFF'
 
 // Drawer has three states:
@@ -151,6 +154,14 @@ export function GlobeScreenMapbox() {
   // Until that lands, the globe keeps showing the live feed regardless.
   const streams = useDiscoverySocket()
   const insets = useSafeAreaInsets()
+  // The viewer's own user id — used to identify their own live stream on the
+  // globe: it's excluded from the drawer + cards, its pin renders black, and
+  // tapping it returns to their stream view instead of opening a join card.
+  const myUserId = useAuthStore((s) => s.wrldUser?.id) ?? null
+  const isSelfStream = useCallback(
+    (s: Stream) => !!myUserId && s.hostId === myUserId,
+    [myUserId],
+  )
 
   // 0 = live present; >0 = playback offset behind now (Time Machine).
   const [timeOffsetMs, setTimeOffsetMs] = useState(0)
@@ -347,7 +358,9 @@ export function GlobeScreenMapbox() {
 
   const visibleStreams = useMemo(() => {
     const all = streams ?? []
-    let out = all
+    // A streamer never sees their own stream in the drawer. All other
+    // curation rules below are unchanged.
+    let out = all.filter(s => !isSelfStream(s))
     if (chipId === 'camera') {
       out = out.filter(s => (s.sources ?? []).includes('camera'))
     } else if (chipId === 'audio') {
@@ -373,7 +386,7 @@ export function GlobeScreenMapbox() {
     // Order by viewer count desc for now (until a real "trending"
     // weighting lands).
     return out.slice().sort((a, b) => b.viewerCount - a.viewerCount)
-  }, [streams, chipId, query])
+  }, [streams, chipId, query, isSelfStream])
 
   // ── Navigation ────────────────────────────────────────────────────────────
 
@@ -430,6 +443,7 @@ export function GlobeScreenMapbox() {
           sources:          (s.sources ?? []).join(','),
           precision:        s.locationPrecision ?? 'exact',
           subscribersOnly:  s.subscribersOnly === true,
+          isSelf:           isSelfStream(s),
         },
       })),
   }
@@ -447,6 +461,8 @@ export function GlobeScreenMapbox() {
         const clusterStreams = ((leaves?.features ?? []) as any[])
           .map((f: any) => streams.find(s => s.id === f.properties?.streamId))
           .filter((s): s is Stream => s != null)
+          // A streamer never sees their own stream in the cluster card either.
+          .filter(s => !isSelfStream(s))
         if (clusterStreams.length > 0) {
           setSelectedClusterStreams(clusterStreams)
           setSelectedStream(null)
@@ -455,6 +471,12 @@ export function GlobeScreenMapbox() {
     } else {
       const stream = streams.find(s => s.id === feature.properties?.streamId)
       if (stream) {
+        // Tapping your own (black) pin returns to your stream view instead of
+        // opening a join card — same path as the tab-bar live-return link.
+        if (isSelfStream(stream)) {
+          returnToActiveBroadcast()
+          return
+        }
         setSelectedStream(stream)
         setSelectedClusterStreams(null)
       }
@@ -641,6 +663,9 @@ export function GlobeScreenMapbox() {
           clusterProperties={{
             // sum of 1s for each subscribersOnly stream in the cluster
             subscriberCount: ['+', ['case', ['get', 'subscribersOnly'], 1, 0]],
+            // sum of 1s for the viewer's own stream(s) — subtracted from the
+            // displayed count so a streamer is never counted in their cluster.
+            selfCount: ['+', ['case', ['get', 'isSelf'], 1, 0]],
           }}
           onPress={handleSourcePress}
         >
@@ -664,7 +689,12 @@ export function GlobeScreenMapbox() {
             id="cluster-count"
             filter={['has', 'point_count']}
             style={{
-              textField: ['case', ['>', ['get', 'point_count'], 1], ['get', 'point_count_abbreviated'], ''] as any,
+              // Count excludes the viewer's own stream(s) in the cluster.
+              textField: ['case',
+                ['>', ['-', ['get', 'point_count'], ['get', 'selfCount']], 1],
+                ['to-string', ['-', ['get', 'point_count'], ['get', 'selfCount']]],
+                '',
+              ] as any,
               textSize: 13,
               textColor: PIN_BORDER,
               textAllowOverlap: true,
@@ -675,34 +705,35 @@ export function GlobeScreenMapbox() {
             id="single-circles"
             filter={['all', ['!', ['has', 'point_count']], ['==', ['get', 'precision'], 'exact']] as any}
             style={{
-              circleColor: ['case', ['get', 'subscribersOnly'], PIN_PURPLE, PIN_RED] as any,
+              circleColor: ['case',
+                ['get', 'isSelf'], PIN_BLACK,
+                ['get', 'subscribersOnly'], PIN_PURPLE,
+                PIN_RED,
+              ] as any,
               circleRadius: 14,
               circleStrokeWidth: 2,
               circleStrokeColor: PIN_BORDER,
               circleOpacity: 0.95,
             }}
           />
-          <SymbolLayer
-            id="single-count"
-            filter={['all', ['!', ['has', 'point_count']], ['==', ['get', 'precision'], 'exact']] as any}
-            style={{
-              textField: ['case', ['>', ['get', 'viewerCount'], 0], ['to-string', ['get', 'viewerCount']], ''] as any,
-              textSize: 11,
-              textColor: PIN_BORDER,
-              textAllowOverlap: true,
-              textIgnorePlacement: true,
-            }}
-          />
           <CircleLayer
             id="single-city"
             filter={['all', ['!', ['has', 'point_count']], ['==', ['get', 'precision'], 'city']] as any}
             style={{
-              circleColor: ['case', ['get', 'subscribersOnly'], PIN_PURPLE, PIN_RED] as any,
+              circleColor: ['case',
+                ['get', 'isSelf'], PIN_BLACK,
+                ['get', 'subscribersOnly'], PIN_PURPLE,
+                PIN_RED,
+              ] as any,
               circleRadius: 44,
               circleOpacity: 0.35,
               circleBlur: 0.85,
               circleStrokeWidth: 1,
-              circleStrokeColor: ['case', ['get', 'subscribersOnly'], PIN_PURPLE, PIN_RED] as any,
+              circleStrokeColor: ['case',
+                ['get', 'isSelf'], PIN_BLACK,
+                ['get', 'subscribersOnly'], PIN_PURPLE,
+                PIN_RED,
+              ] as any,
               circleStrokeOpacity: 0.6,
             }}
           />
@@ -710,7 +741,11 @@ export function GlobeScreenMapbox() {
             id="single-country"
             filter={['all', ['!', ['has', 'point_count']], ['==', ['get', 'precision'], 'country']] as any}
             style={{
-              circleColor: ['case', ['get', 'subscribersOnly'], PIN_PURPLE, PIN_RED] as any,
+              circleColor: ['case',
+                ['get', 'isSelf'], PIN_BLACK,
+                ['get', 'subscribersOnly'], PIN_PURPLE,
+                PIN_RED,
+              ] as any,
               circleRadius: 72,
               circleOpacity: 0.25,
               circleBlur: 1,

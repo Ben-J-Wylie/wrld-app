@@ -12,7 +12,6 @@
 //   • BroadcasterRow for the identity strip (chip variant when the
 //     viewer is the broadcaster of their own stream, default variant
 //     when viewing someone else's stream).
-//   • CoordHUD for the broadcaster's idle-state location read.
 //   • IconButton for back, flip camera, chat toggle, dismiss-warning,
 //     report, and tip header affordances.
 //   • Pill (accent, sm) for the BROADCASTING source badges.
@@ -60,7 +59,6 @@ import { HelpText } from '@/components/primitives/HelpText'
 import { LivePill } from '@/components/features/stream/LivePill'
 import { BroadcastStatusIndicator } from '@/components/features/broadcast/BroadcastStatusIndicator'
 import { BroadcasterRow } from '@/components/features/user/BroadcasterRow'
-import { CoordHUD } from '@/components/features/stream/CoordHUD'
 import {
   ChatMessage as ChatMessageRow,
   type ChatRole,
@@ -82,6 +80,7 @@ import { theme } from '@/tokens/theme'
 import { signalStreamDisconnected, signalStreamEnded, signalKicked } from '@/lib/streamSignals'
 import { signalingClient } from '@/lib/mediasoupSignaling'
 import { activeBroadcast } from '@/lib/activeBroadcast'
+import { useBroadcastStore } from '@/stores/broadcastStore'
 import { streamsApi } from '@/api/streams'
 import { recordingsApi } from '@/api/recordings'
 import { usersApi } from '@/api/users'
@@ -199,7 +198,7 @@ export function StreamScreen() {
     startBroadcasting, startViewing, switchCamera, cleanup,
   } = useMediasoup()
   const { isSignedIn } = useAuth()
-  const { coords: liveCoords, loading: locationLoading, error: locationError } = useLocation()
+  const { coords: liveCoords, loading: locationLoading } = useLocation()
   // Prefer coords captured on the Dashboard (passed as params) over re-acquiring
   const coords = (isNew && paramLat && paramLng)
     ? { latitude: parseFloat(paramLat), longitude: parseFloat(paramLng) }
@@ -240,6 +239,14 @@ export function StreamScreen() {
   // (e.g. broadcasterLeft WS message + viewer WS close in the same render cycle).
   const navigatingRef = useRef(false)
   const pendingSnapshotUri = useRef<string | null>(null)
+  // Latest-value refs so the focus effect (memoized on [id]) can auto-go-live
+  // with the current status + params without re-subscribing on every change.
+  const statusRef = useRef(status)
+  statusRef.current = status
+  // Assigned below render — handleGoLive is a hoisted function declaration,
+  // so it's already defined at this point in the render body.
+  const handleGoLiveRef = useRef<() => void>(() => {})
+  handleGoLiveRef.current = handleGoLive
 
   const isCameraArmed = broadcastSources.includes('camera')
   const showCameraPreview = isNew && status === 'in-room' && !!localStream && isCameraArmed
@@ -368,6 +375,16 @@ export function StreamScreen() {
     useCallback(() => {
       if (isNew) {
         setAdminEnded(false)
+        // Auto-go-live on arrival — there's no intermediate "Start stream"
+        // step anymore. Fire on focus unless we're already live or mid-
+        // connect, so: a fresh navigation from the dashboard starts the
+        // stream; re-entering after a drop/error starts a fresh one; but
+        // simply returning to this tab while live does NOT restart it.
+        const s = statusRef.current
+        if (s !== 'in-room' && s !== 'connecting' && s !== 'connected' && s !== 'authenticated') {
+          cleanup()
+          handleGoLiveRef.current()
+        }
         return
       }
       navigatingRef.current = false
@@ -386,6 +403,15 @@ export function StreamScreen() {
     Alert.alert('Account suspended', suspensionError, [{ text: 'OK', onPress: clearSuspensionError }])
   }, [suspensionError])
 
+  // Mirror the broadcaster's in-room state into the global store so the tab
+  // bar can show a "return to your stream" link while the broadcast keeps
+  // running in the background (the stream tab never unmounts). Cleared the
+  // moment the broadcast leaves the room (Leave, drop, admin-end, etc.).
+  useEffect(() => {
+    if (!isNew) return
+    useBroadcastStore.getState().setLive(status === 'in-room')
+  }, [isNew, status])
+
   useEffect(() => {
     if (!isNew || status !== 'in-room' || !localStream) return
     sendBroadcasterOrientation(videoIsLandscape ? 'portrait' : 'landscape')
@@ -399,6 +425,11 @@ export function StreamScreen() {
         stopActiveRecording()
         cleanup()
         disconnect()
+        // Returning to foreground won't re-fire the focus effect (the tab
+        // never blurred), so the screen would sit on the "Going live…"
+        // idle frame forever. Send the broadcaster back to the dashboard
+        // to re-arm and Go Live again.
+        router.navigate('/(app)/dashboard')
       } else if (nextState === 'inactive') {
         sendBroadcasterPaused()
       } else if (nextState === 'active') {
@@ -455,12 +486,16 @@ export function StreamScreen() {
     setIsRecording(false)
     setActiveRecordingId(null)
     const title = (paramTitle ?? '').trim()
-    if (!title || !coords || broadcastSources.length === 0) return
+    // Data-only broadcasts (location/telemetry only, no camera/audio) are
+    // valid — broadcastSources may be empty; startBroadcasting skips
+    // getUserMedia in that case. Only title + coords are required.
+    if (!title || !coords) return
 
     // Translate app vocab → backend vocab; fall back to activeBroadcast then param
     const rawPrecision = activeBroadcast.get()?.precision ?? paramPrecision
     const precisionMap: Record<string, 'exact' | 'city' | 'country' | 'off'> = {
       bluedot: 'exact',
+      exact: 'exact',
       city: 'city',
       country: 'country',
       private: 'off',
@@ -476,6 +511,7 @@ export function StreamScreen() {
         sources: broadcastSources,
         subscribersOnly: (activeBroadcast.get()?.subscribersOnly ?? paramSubscribersOnly) === 'true',
         locationPrecision,
+        ppvEventId: activeBroadcast.get()?.ppvEventId,
       })
       await startBroadcasting(broadcastSources)
     } catch (err) {
@@ -507,6 +543,7 @@ export function StreamScreen() {
   }
 
   function handleStartNew() {
+    useBroadcastStore.getState().setLive(false)
     activeBroadcast.clear()
     cleanup()
     disconnect()
@@ -538,6 +575,7 @@ export function StreamScreen() {
   }
 
   function handleLeave() {
+    useBroadcastStore.getState().setLive(false)
     stopActiveRecording()
     activeBroadcast.clear()
     cleanup()
@@ -655,22 +693,8 @@ export function StreamScreen() {
     }
   }
 
-  const canGoLive = !!paramTitle?.trim() && !!coords && !(locationLoading && !paramLat) && broadcastSources.length > 0
   const displayError = signalingError ?? mediaError
   const burst = reactions.map((r) => ({ id: r.id, kind: r.kind }))
-
-  const coordItems = [
-    {
-      label: 'LAT',
-      value: coords ? coords.latitude.toFixed(4) : locationError ? '—' : '...',
-      pending: !coords && !locationError,
-    },
-    {
-      label: 'LON',
-      value: coords ? coords.longitude.toFixed(4) : locationError ? '—' : '...',
-      pending: !coords && !locationError,
-    },
-  ]
 
   function chatRoleFor(from: string): ChatRole {
     if (broadcaster && from === broadcaster.handle) return 'host'
@@ -784,45 +808,31 @@ export function StreamScreen() {
         <View style={styles.content}>
           {!showOverlay && isNew && <Text variant="display">Go Live</Text>}
 
-          {/* ── Idle (broadcaster only) ───────────────────────────── */}
+          {/* ── Going live (broadcaster only) ─────────────────────── */}
+          {/* No intermediate "Start stream" step — the screen auto-goes-live
+              on arrival (see the focus effect). This is the brief idle frame
+              before the connecting status takes over. */}
           {status === 'idle' && isNew && (
             <View style={styles.actions}>
-              {isNew && isSignedIn && (
+              {isSignedIn ? (
                 <>
-                  {paramTitle && (
-                    <Text variant="heading" style={styles.center}>
-                      {paramTitle}
-                    </Text>
-                  )}
-                  {broadcastSources.length > 0 && (
-                    <View style={styles.sourceRow}>
-                      {broadcastSources.map((s) => (
-                        <Pill key={s} size="sm" label={SOURCE_LABELS[s].toUpperCase()} />
-                      ))}
-                    </View>
-                  )}
-                  {locationLoading && !paramLat && (
+                  {locationLoading && !paramLat ? (
                     <View style={styles.statusRow}>
                       <ActivityIndicator color={theme.colors.accent.default} size="small" />
                       <Text variant="body" color={theme.colors.text.muted}>
                         Detecting location…
                       </Text>
                     </View>
+                  ) : (
+                    <View style={styles.statusRow}>
+                      <ActivityIndicator color={theme.colors.accent.default} />
+                      <Text variant="body" color={theme.colors.text.muted}>
+                        Going live…
+                      </Text>
+                    </View>
                   )}
-                  {locationError && (
-                    <Text variant="body" color={theme.colors.text.muted}>
-                      {locationError}
-                    </Text>
-                  )}
-                  {coords && !(locationLoading && !paramLat) && <CoordHUD items={coordItems} />}
-                  <Button
-                    label="Start stream"
-                    onPress={handleGoLive}
-                    disabled={!canGoLive}
-                  />
                 </>
-              )}
-              {isNew && !isSignedIn && (
+              ) : (
                 <Text variant="body" color={theme.colors.text.muted}>
                   Sign in to go live
                 </Text>
