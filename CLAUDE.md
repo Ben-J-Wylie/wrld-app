@@ -363,6 +363,21 @@ working reference for both; matching DECIDED sections live in
   broadcasting. The durable user-facing version of this promise is the Capture
   Privacy Constitution (pre-launch backlog).
 
+> **App UI as shipped (2026-06-03/04) diverges on a few points** — kept in
+> sync here so this section reads true against the build. The decided model
+> above is still the cross-repo (backend / mediasoup) contract; the app made
+> these v0.2 UX calls: (1) a **single in-place Go Live / Stop button**, not
+> two — the per-source Air/Rec toggles are the source of truth (armed → live);
+> (2) **broadcasting happens on the dashboard headlessly** (no StreamScreen
+> hop, no preview/viewer-count/chat/recording on it yet); (3) the
+> **SENSITIVE/BENIGN badges + the record-consent step are removed for now**
+> (the guardrail's consent half is temporarily relaxed; the on-air-vs-recording
+> indicator stays — re-enable before non-friends-and-family exposure); (4) the
+> identity flag's UI label is **Public** / Anon; (5) dashboard location
+> precision labels are **EXACT / CITY / COUNTRY / PRIVATE** (the separate
+> `LocationGranularityPicker` feature keeps its own `bluedot` vocabulary). Full
+> detail + caveats in **App-side build** below and the DESIGN.md decision log.
+
 ### Editing model — per-source manifest (DECIDED June 2026)
 
 A **Recording** is per-source tracks; a **Clip** is a **non-destructive manifest**
