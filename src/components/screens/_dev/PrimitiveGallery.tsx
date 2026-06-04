@@ -559,6 +559,9 @@ export function PrimitiveGallery() {
           <Row label="on → tap me">
             <Toggle value={toggleB} onValueChange={setToggleB} accessibilityLabel="Toggle B" />
           </Row>
+          <Row label="armed (cued — outline, not fill)">
+            <Toggle value={true} armed onValueChange={() => {}} accessibilityLabel="Armed" />
+          </Row>
           <Row label="disabled off">
             <Toggle value={false} onValueChange={() => {}} disabled accessibilityLabel="Disabled off" />
           </Row>

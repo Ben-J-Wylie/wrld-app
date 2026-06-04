@@ -53,6 +53,9 @@ type Props = {
   // When true and `rec` is off, the Rec affordance shows a lock hint.
   // The consumer routes `onRecChange(true)` through a consent step.
   recNeedsConsent?: boolean
+  // While the broadcast hasn't gone live, on-toggles render in the
+  // "armed" (cued, outline-not-fill) state; once live they fill accent.
+  live?: boolean
   // Replaces the Air/Rec affordances (e.g. the Identity flag control).
   trailing?: ReactNode
   // Full-width slot rendered below the row (e.g. location precision).
@@ -71,6 +74,7 @@ export function FeedRow({
   rec = false,
   onRecChange,
   recNeedsConsent,
+  live = false,
   trailing,
   footer,
   style,
@@ -121,7 +125,7 @@ export function FeedRow({
               <Text variant="monoLabel" color={air ? theme.colors.accent.default : theme.colors.text.subtle}>
                 AIR
               </Text>
-              <Toggle value={air} onValueChange={onAirChange ?? (() => {})} disabled={locked} accessibilityLabel={`${label} broadcast`} />
+              <Toggle value={air} armed={!live} onValueChange={onAirChange ?? (() => {})} disabled={locked} accessibilityLabel={`${label} broadcast`} />
             </View>
             <View style={styles.aff}>
               <View style={styles.recLabel}>
@@ -130,7 +134,7 @@ export function FeedRow({
                 </Text>
                 {lockHint && <Icon name="lock" size="sm" color={theme.colors.text.subtle} />}
               </View>
-              <Toggle value={rec} onValueChange={onRecChange ?? (() => {})} disabled={locked} accessibilityLabel={`${label} record`} />
+              <Toggle value={rec} armed={!live} onValueChange={onRecChange ?? (() => {})} disabled={locked} accessibilityLabel={`${label} record`} />
             </View>
           </View>
         )}

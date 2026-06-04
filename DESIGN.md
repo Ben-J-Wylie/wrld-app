@@ -990,11 +990,11 @@ via the `size: Size | number` API. The old feature file was deleted.
 - **Location:** `src/components/primitives/Toggle.tsx`
 - **Variants:** `default`
 - **Sizes:** single canonical size (track 44 × 26, thumb 22 × 22, padding 2)
-- **States:** off, on, disabled (opacity 0.4)
-- **Used in:** `SettingsScreen` (notification preferences — migrated from RN `Switch` in this commit)
-- **Tweak impact:** every binary switch — consent rows, layer toggles, settings notifications, Clip Edit per-layer toggles
-- **Shipped:** 2026-05-30 (sub-phase 12.4 — thirteenth primitive)
-- **Last reviewed:** 2026-05-30
+- **States:** off, **armed** (cued on-position — added 2026-06-03), on, disabled (opacity 0.4)
+- **Used in:** `SettingsScreen` (notification preferences); `FeedRow` Air/Rec affordances (armed state — 2026-06-03)
+- **Tweak impact:** every binary switch — consent rows, layer toggles, settings notifications, Clip Edit per-layer toggles, capture Air/Rec
+- **Shipped:** 2026-05-30 (sub-phase 12.4 — thirteenth primitive). **`armed` state added 2026-06-03** (clips capture model).
+- **Last reviewed:** 2026-06-03
 
 **Mock says:** Animated track-and-thumb switch. Off = dark track + ink
 thumb. On = accent track + cream thumb, animated translate (0 → +18px)
@@ -1013,6 +1013,17 @@ announce the state.
 SettingsScreen's two RN `Switch` callers (notification prefs) migrated
 to `Toggle` in this commit. RN `Switch` imports removed from the
 screen.
+
+**`armed` state (2026-06-03, clips capture model).** A third appearance
+between off and on, for "configured but not yet committed" — the Go Live
+& Record source toggles use it so the toggles are set-it-and-forget-it
+and the single Go Live button never flips them. With `armed` + `value`
+true the thumb sits in the on-position but renders **outline-not-fill**:
+dark (`text.primary`) track with an `accent.default` outline, light
+(`bg.panelHi`) thumb with an `accent.default` outline. On commit the
+consumer drops `armed` and the toggle fills accent (the existing `on`
+look). A transparent `BORDER` is reserved in every state so thumb travel
+is identical whether or not the outline is showing.
 
 **Gap / proposal:** None — shipped.
 
@@ -2413,6 +2424,10 @@ ceiling for `loc`). The `trailing` slot **replaces** the Air/Rec
 affordances entirely — the Identity row uses it for an inline
 Attributed/Anon `SegmentedToggle`, since identity is a flag, not a
 capturable track (air/rec props become optional when `trailing` is set).
+The `live` prop (default false) renders on-toggles in the Toggle `armed`
+(cued, outline-not-fill) state until the broadcast actually goes live —
+so the toggles are set-it-and-forget-it and the commit button never
+flips them.
 
 **Composition note.** The 2026-06-03 plan proposed building the two
 affordances from `SegmentedToggle`; the chosen go-live-record mock uses
@@ -2481,13 +2496,14 @@ tint + label + knob copy:
 A full countdown ring overlay was scoped out for v1 — the mono caption
 carries the seconds and the live-state pulse covers the dramatic tone.
 
-**Clips-initiative resolution (shipped 2026-06-03 · C2):** the record
-intent is split into a sibling control rather than new GoBar variants —
-the **ArmButton** pair (Go Live · Record) at the top of the screen owns
-the two intents, and GoBar stays the single docked commit. GoBar gained
+**Clips-initiative resolution (shipped 2026-06-03 · C2):** GoBar gained
 optional `label` / `knobLabel` overrides so the same `armed` bar can read
-"START RECORDING" / "REC" for the record-only commit. See the 2026-06-03
-decision-log entry and the `ArmButton` entry below.
+"START RECORDING" / "REC" for a record-only commit. **Single-button
+update (2026-06-03, same day):** the Dashboard consolidated to a single
+docked GoBar — the per-source Air/Rec toggles are the source of truth
+(armed → live via the Toggle `armed` state) and one button commits
+whatever they say. The `ArmButton` pair is no longer used on the
+Dashboard (kept as a feature for any future dual-intent surface).
 
 ---
 
@@ -2497,8 +2513,8 @@ decision-log entry and the `ArmButton` entry below.
 - **Location:** `src/components/features/broadcast/ArmButton.tsx`
 - **Variants:** Go Live (passes `iconName`) · Record (omits `iconName` → renders a filled accent dot)
 - **States:** `idle` (neutral surface, hollow dot), `armed` (accent.surface + accent.border, accent state label), `active` (accent fill + cream content — committed/live/recording)
-- **Used in:** `DashboardScreen` (top arming pair) — 2026-06-03
-- **Tweak impact:** Go Live & Record arming screen
+- **Used in:** none currently (Dashboard consolidated to a single GoBar 2026-06-03; kept for future dual-intent surfaces)
+- **Tweak impact:** dual-intent arming surfaces
 - **Shipped:** 2026-06-03 (clips initiative · C2)
 
 **Mock says (A1):** Two tall arming cards at the top — Go Live (left)
@@ -3252,7 +3268,7 @@ primitives/features/sections in sub-phase 12.6.
 | `app/(auth)/login.tsx`                | `LoginScreen.tsx`                    | Clerk sign-in — BrandMark + Text variants + Button                              | 2026-05-31 |
 | `app/(auth)/signup.tsx`                | `SignupScreen.tsx`                    | Clerk sign-up + verify — adds PasswordStrengthMeter                             | 2026-05-31 |
 | `app/(app)/globe.tsx`                  | `GlobeScreen.tsx`                     | Globe (mounts `EarthScene`) — overlay layer composes StreamStateBanner + DiscoveryHandoffCard + Pill (LIVE count) | 2026-05-31 |
-| `app/(app)/dashboard.tsx`              | `DashboardScreen.tsx`                 | Go Live & Record arming — **rewritten 2026-06-03 (clips C2)** to the two-affordance capture model: ArmButton pair + gap-separated FeedRow cards (Air/Rec) for the full source suite + RecordConsentSheet + location precision ceiling + Identity row (Attributed/Anon) + GoBar. Cam/audio Air wired end-to-end; rec/identity/precision carried forward. Suite: cam/audio/location armable; screen/gyro/compass `disabled` (capture pending); speed/torch/temp/motion `disabled` (v0.3+) | 2026-05-31 · 2026-06-03 |
+| `app/(app)/dashboard.tsx`              | `DashboardScreen.tsx`                 | Go Live & Record arming — **rewritten 2026-06-03 (clips C2)** to the two-affordance capture model. **Sticky title (top) + single sticky GoBar (bottom)**, source suite scrolls between. Per-source Air/Rec toggles are the source of truth (armed→live via Toggle `armed`); one button commits. All 11 sources interactive (Divider-grouped: identity/location · cam/audio/screen · compass/gyro/motion/speed/temp · torch) + RecordConsentSheet + location precision ceiling + Identity row. Only cam/audio Air streams today; rec/identity/precision/extra sensors carried forward (backend follow-up) | 2026-05-31 · 2026-06-03 |
 | `app/(app)/stream/[id].tsx`            | `StreamScreen.tsx`                    | Broadcaster (id=new) / viewer (id=room) — ChatOverlay + ReactionLayer retire in favor of ChatMessage/Composer + ReactionRail | 2026-05-31 |
 | `app/(app)/me.tsx`                     | `MeScreen.tsx`                        | Own profile / account settings — AvatarPicker + PursesCard dual + Input prefix '@' | 2026-05-31 |
 | `app/(app)/profile/[handle].tsx`       | `ProfileScreen.tsx`                   | Public profile + follow — Avatar xl + MetaStrip 'Joined ...' + Text-variant stats; PassportCard deferred until PublicUser shape grows | 2026-05-31 |

@@ -5,6 +5,16 @@
 // when on; thumb is warm-ink when off, cream when on; spring-animated
 // thumb translation; no chrome iOS green.
 //
+// Three appearances (added `armed` 2026-06-03 for the clips capture
+// model — see DESIGN.md decision-log entry):
+//   off   (value false)         — warm-line track, warm-ink thumb
+//   armed (value true + armed)   — "cued" on-position: dark track + accent
+//                                  outline, light thumb + accent outline
+//                                  (set, but not yet live)
+//   on    (value true)           — accent-filled track, cream thumb (live)
+// The thumb sits in the on-position for both armed and on; armed signals
+// "configured, not yet committed" via outline-not-fill.
+//
 // Single canonical size (44 × 26 track, 22 × 22 thumb). Variants and
 // sizes intentionally absent — toggles should feel the same everywhere
 // they appear (consent rows, settings, layer filters, Clip Edit).
@@ -18,17 +28,21 @@ const TRACK_W = 44
 const TRACK_H = 26
 const THUMB = 22
 const PAD = 2
-const TRANSLATE = TRACK_W - THUMB - 2 * PAD
+const BORDER = 1.5
+// A transparent border is reserved in every state so thumb travel is
+// identical whether or not the armed outline is showing.
+const TRANSLATE = TRACK_W - 2 * BORDER - 2 * PAD - THUMB
 
 type Props = {
   value: boolean
   onValueChange: (next: boolean) => void
+  armed?: boolean
   disabled?: boolean
   accessibilityLabel?: string
   style?: StyleProp<ViewStyle>
 }
 
-export function Toggle({ value, onValueChange, disabled, accessibilityLabel, style }: Props) {
+export function Toggle({ value, onValueChange, armed, disabled, accessibilityLabel, style }: Props) {
   const thumbX = useRef(new Animated.Value(value ? TRANSLATE : 0)).current
 
   useEffect(() => {
@@ -41,6 +55,18 @@ export function Toggle({ value, onValueChange, disabled, accessibilityLabel, sty
     }).start()
   }, [value, thumbX])
 
+  const isArmed = value && !!armed
+  const trackBg = !value
+    ? theme.colors.border.strong
+    : isArmed
+      ? theme.colors.text.primary
+      : theme.colors.accent.default
+  const thumbBg = !value
+    ? theme.colors.text.primary
+    : isArmed
+      ? theme.colors.bg.panelHi
+      : theme.colors.text.inverse
+
   return (
     <Pressable
       variant="none"
@@ -52,9 +78,8 @@ export function Toggle({ value, onValueChange, disabled, accessibilityLabel, sty
       style={[
         styles.track,
         {
-          backgroundColor: value
-            ? theme.colors.accent.default
-            : theme.colors.border.strong,
+          backgroundColor: trackBg,
+          borderColor: isArmed ? theme.colors.accent.default : 'transparent',
         },
         disabled && styles.disabled,
         style,
@@ -64,9 +89,9 @@ export function Toggle({ value, onValueChange, disabled, accessibilityLabel, sty
         style={[
           styles.thumb,
           {
-            backgroundColor: value
-              ? theme.colors.text.inverse
-              : theme.colors.text.primary,
+            backgroundColor: thumbBg,
+            borderWidth: isArmed ? BORDER : 0,
+            borderColor: isArmed ? theme.colors.accent.default : 'transparent',
             transform: [{ translateX: thumbX }],
           },
         ]}
@@ -80,6 +105,7 @@ const styles = StyleSheet.create({
     width: TRACK_W,
     height: TRACK_H,
     borderRadius: TRACK_H / 2,
+    borderWidth: BORDER,
     padding: PAD,
     justifyContent: 'center',
   },
