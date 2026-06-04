@@ -64,19 +64,8 @@ function RootNavigator() {
     }
   }, [isLoaded, isSignedIn])
 
-  // Poll /auth/me every 10s while signed in so suspension status, tier, and
-  // balances update in near-real-time without any user interaction.
-  useEffect(() => {
-    if (!isSignedIn) return
-    const refresh = () => {
-      apiClient
-        .get<{ user: User }>('/auth/me')
-        .then((res) => setWrldUser(res.data.user))
-        .catch(() => {})
-    }
-    const interval = setInterval(refresh, 30_000)
-    return () => clearInterval(interval)
-  }, [isSignedIn])
+  // No polling — useUserSocket pushes user_updated for balances, suspension,
+  // and tier changes. The initial fetch above covers sign-in state.
 
   // Register Expo push token when signed in
   useRegisterPushToken(!!isSignedIn)

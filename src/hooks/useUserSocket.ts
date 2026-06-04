@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { useAuth } from '@clerk/clerk-expo'
 import { useQueryClient } from '@tanstack/react-query'
 import { env } from '@/lib/env'
+import { useAuthStore } from '@/stores/authStore'
 import type { Recording } from '@/types'
 
 // Convert https://api.wrld.cam → wss://api.wrld.cam/ws
@@ -12,6 +13,7 @@ const MAX_RETRY_MS = 30_000
 export function useUserSocket(enabled: boolean) {
   const { getToken } = useAuth()
   const qc = useQueryClient()
+  const setWrldUser = useAuthStore((s) => s.setWrldUser)
   const wsRef = useRef<WebSocket | null>(null)
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const retryDelayRef = useRef(1_000)
@@ -44,6 +46,11 @@ export function useUserSocket(enabled: boolean) {
 
           if (event.type === 'authenticated') {
             retryDelayRef.current = 1_000 // reset backoff on success
+          }
+
+          if (event.type === 'user_updated') {
+            const current = useAuthStore.getState().wrldUser
+            if (current) setWrldUser({ ...current, ...event.patch })
           }
 
           if (event.type === 'recording_updated') {
