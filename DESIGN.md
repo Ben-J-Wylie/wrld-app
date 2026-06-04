@@ -3527,6 +3527,30 @@ above. The seam is not a separate motion category.
 Append-only. Most recent first. Each entry: date, decision, rationale,
 constraint it imposes downstream.
 
+### 2026-06-04 — Sans weight scale dialled down one step
+
+Immediately after bundling the real fonts (entry below), the app read heavier
+everywhere — because the previously-unloaded families had all fallen back to
+system *regular*, so `bodyEmphasized`/`heading`/`display` (chips, cards,
+pressable labels, …) had been silently rendering at ~400 instead of their
+specified 600. Bundling made them their real SemiBold, which looked "bolder."
+
+**Decision (Ben):** keep the real fonts but **lighten the sans scale one step**
+so it reads close to the look the app was developed against — hierarchy now
+leans on size, not weight:
+
+| Variant | Was | Now |
+|---|---|---|
+| `display`, `heading` | InterTight_600SemiBold | **InterTight_500Medium** |
+| `bodyEmphasized` | InterTight_600SemiBold | **InterTight_500Medium** |
+| `body`, `caption` | InterTight_500Medium | **InterTight_400Regular** |
+
+**Constraints:** added `InterTight_400Regular` to the bundle (now 5 faces).
+`InterTight_600SemiBold` stays bundled — still used directly by `AmountInput`.
+**Mono is unchanged** (monoLabel/Caption/Value at 500; the TimeScrubber clock
+keeps its 500 neighbours + 700 bold centre) — mono wasn't part of the heavy
+read. Tunable per-variant in `theme.ts` if any spot wants more/less weight.
+
 ### 2026-06-04 — Design fonts actually bundled (Inter Tight + IBM Plex Mono)
 
 The design-system fonts were never loaded — `theme.typography.*` names families

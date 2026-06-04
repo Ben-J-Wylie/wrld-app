@@ -125,28 +125,31 @@ export const theme = {
   },
 
   typography: {
+    // Sans weight scale dialled down one step (2026-06-04) so the real
+    // bundled fonts don't read heavier than the system-fallback look the app
+    // was developed against. Hierarchy now leans on size; weight stays light.
     display: {
-      fontFamily: 'InterTight_600SemiBold',
+      fontFamily: 'InterTight_500Medium',
       fontSize: 28,
       lineHeight: 32,
     },
     heading: {
-      fontFamily: 'InterTight_600SemiBold',
+      fontFamily: 'InterTight_500Medium',
       fontSize: 20,
       lineHeight: 24,
     },
     body: {
-      fontFamily: 'InterTight_500Medium',
+      fontFamily: 'InterTight_400Regular',
       fontSize: 14,
       lineHeight: 20,
     },
     bodyEmphasized: {
-      fontFamily: 'InterTight_600SemiBold',
+      fontFamily: 'InterTight_500Medium',
       fontSize: 14,
       lineHeight: 20,
     },
     caption: {
-      fontFamily: 'InterTight_500Medium',
+      fontFamily: 'InterTight_400Regular',
       fontSize: 11,
       lineHeight: 16,
     },

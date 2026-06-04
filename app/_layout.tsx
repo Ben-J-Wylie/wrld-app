@@ -162,6 +162,7 @@ export default function RootLayout() {
   // `theme.typography.*` resolves to the real faces. A load error falls
   // through to the system fallback rather than bricking startup.
   const [fontsLoaded, fontError] = useFonts({
+    InterTight_400Regular: require('../assets/fonts/InterTight_400Regular.ttf'),
     InterTight_500Medium: require('../assets/fonts/InterTight_500Medium.ttf'),
     InterTight_600SemiBold: require('../assets/fonts/InterTight_600SemiBold.ttf'),
     IBMPlexMono_500Medium: require('../assets/fonts/IBMPlexMono_500Medium.ttf'),
