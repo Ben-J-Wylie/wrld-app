@@ -230,6 +230,8 @@ export function DashboardScreen() {
         lng: coords!.longitude,
         sources: broadcastSources,
         subscribersOnly,
+        // Dashboard vocab 'private' maps to the backend's 'off'.
+        locationPrecision: precision === 'private' ? 'off' : precision,
       })
       await startBroadcasting(broadcastSources)
       setIsLive(true)
