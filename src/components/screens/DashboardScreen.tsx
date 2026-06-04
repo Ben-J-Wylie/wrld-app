@@ -124,6 +124,7 @@ export function DashboardScreen() {
           title: active.title,
           sources: active.sources,
           subscribersOnly: active.subscribersOnly ?? 'false',
+          air: active.air ?? '',
           record: active.record ?? '',
           identity: active.identity ?? 'attributed',
           precision: active.precision ?? 'city',
@@ -159,8 +160,15 @@ export function DashboardScreen() {
     setConsentTarget(null)
   }
 
+  // The media subset that actually streams today (camera/audio).
   const broadcastSources = useMemo<SourceType[]>(
     () => SOURCE_GROUPS.flat().filter((s) => s.broadcastSource && air[s.kind]).map((s) => s.broadcastSource!),
+    [air],
+  )
+  // Every aired source kind (incl. location / telemetry / torch) — any of
+  // these counts as a live broadcast even with no camera/audio.
+  const airedKinds = useMemo(
+    () => SOURCE_GROUPS.flat().filter((s) => !s.identityRow && air[s.kind]).map((s) => s.kind),
     [air],
   )
   const recordKinds = useMemo(
@@ -168,8 +176,13 @@ export function DashboardScreen() {
     [rec],
   )
 
+  const anyAir = airedKinds.length > 0
+  const anyRec = recordKinds.length > 0
+  // Any armed source — Air or Rec, any kind — is enough to go live. A
+  // location-only share, a telemetry feed, a torch channel, or a private
+  // record-only session are all valid broadcasts.
   const canGoLive =
-    isSignedIn && !!title.trim() && !!coords && !locationLoading && broadcastSources.length > 0
+    isSignedIn && !!title.trim() && !!coords && !locationLoading && (anyAir || anyRec)
 
   function handleGoLive() {
     if (!canGoLive) return
@@ -183,6 +196,7 @@ export function DashboardScreen() {
       lat: String(coords!.latitude),
       lng: String(coords!.longitude),
       subscribersOnly: String(subscribersOnly),
+      air: airedKinds.join(','),
       record: recordKinds.join(','),
       identity,
       precision,
@@ -225,7 +239,9 @@ export function DashboardScreen() {
     { label: 'LON', value: coords ? coords.longitude.toFixed(4) : locationError ? '—' : '...', pending: !coords && !locationError },
   ]
 
-  const anyAir = broadcastSources.length > 0
+  // No camera/audio aired → the commit is a record-only / data-only
+  // session; the bar reads "START RECORDING" instead of "GO LIVE".
+  const recordOnly = !anyAir && anyRec
 
   function renderSource(src: SourceDescriptor) {
     if (src.identityRow) {
@@ -319,9 +335,14 @@ export function DashboardScreen() {
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + theme.spacing.md }]}>
-        <GoBar variant={canGoLive ? 'armed' : 'disabled'} onPress={handleGoLive} />
-        {!anyAir && (
-          <HelpText style={styles.hint}>ARM A CAMERA OR AUDIO SOURCE TO GO LIVE</HelpText>
+        <GoBar
+          variant={canGoLive ? 'armed' : 'disabled'}
+          label={recordOnly ? 'START RECORDING' : undefined}
+          knobLabel={recordOnly ? 'REC' : undefined}
+          onPress={handleGoLive}
+        />
+        {!anyAir && !anyRec && (
+          <HelpText style={styles.hint}>ARM ANY SOURCE TO GO LIVE OR RECORD</HelpText>
         )}
       </View>
 

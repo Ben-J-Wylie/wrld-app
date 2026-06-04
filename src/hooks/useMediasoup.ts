@@ -50,20 +50,30 @@ export function useMediasoup() {
     try {
       const device = await buildDevice()
 
-      const stream = (await mediaDevices.getUserMedia({
-        video: sources.includes('camera')
-          ? { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
-          : false,
-        audio: sources.includes('audio'),
-      })) as unknown as MediaStream
-      localStreamRef.current = stream
-      setLocalStream(stream)
+      // Data-only broadcasts (location / telemetry / torch — no camera or
+      // audio armed) skip getUserMedia entirely: calling it with both
+      // video:false + audio:false throws. The room still exists and the
+      // stream is live; it just produces no AV tracks. Carrying the
+      // non-AV layers as real producers is a backend/media follow-up.
+      const wantsCamera = sources.includes('camera')
+      const wantsAudio = sources.includes('audio')
+      let stream: MediaStream | null = null
+      if (wantsCamera || wantsAudio) {
+        stream = (await mediaDevices.getUserMedia({
+          video: wantsCamera
+            ? { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+            : false,
+          audio: wantsAudio,
+        })) as unknown as MediaStream
+        localStreamRef.current = stream
+        setLocalStream(stream)
 
-      if (sources.includes('camera')) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const vt = (stream as any).getVideoTracks()[0]
-        const s = vt?.getSettings?.() ?? {}
-        setVideoIsLandscape(typeof s.width === 'number' && typeof s.height === 'number' && s.width > s.height)
+        if (wantsCamera) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const vt = (stream as any).getVideoTracks()[0]
+          const s = vt?.getSettings?.() ?? {}
+          setVideoIsLandscape(typeof s.width === 'number' && typeof s.height === 'number' && s.width > s.height)
+        }
       }
 
       const params = await signalingClient.createTransport('send')
@@ -81,9 +91,11 @@ export function useMediasoup() {
           .catch(errback)
       })
 
-      const tracks = (stream as unknown as { getTracks(): MediaStreamTrack[] }).getTracks()
-      for (const track of tracks) {
-        await transport.produce({ track: track as never })
+      if (stream) {
+        const tracks = (stream as unknown as { getTracks(): MediaStreamTrack[] }).getTracks()
+        for (const track of tracks) {
+          await transport.produce({ track: track as never })
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start broadcast')
