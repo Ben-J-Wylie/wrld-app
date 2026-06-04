@@ -42,18 +42,18 @@ const MONTH_ABBR = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP
 // Fixed per-field widths so a value change never reflows the row.
 // Sized for monoLabel (IBM Plex Mono caps, ~10px + letter-spacing).
 const FIELD_W: Record<FieldKey, number> = {
-  year: 36,
-  month: 30,
-  day: 22,
-  hour: 22,
-  minute: 22,
-  second: 22,
+  year: 34,
+  month: 28,
+  day: 20,
+  hour: 20,
+  minute: 20,
+  second: 20,
 }
 
-const ROW_H = 36 // band height = one increment row
+const ROW_H = 28 // band height = one increment row (tightened top/bottom)
 const COLLAPSED_H = ROW_H // blurred: only the band row shows
 const EXPANDED_H = ROW_H * 5 // focused: centre + 2 above + 2 below
-const STEP_PX = 30 // vertical drag distance per one unit step
+const STEP_PX = ROW_H // vertical drag distance per one unit step
 // Window of cells rendered per field — wider than what's visible so the
 // one-row slide animation always has a neighbour to scroll in.
 const WINDOW = [3, 2, 1, 0, -1, -2, -3] // newer (top) → older (bottom)
@@ -326,7 +326,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   gap: {
-    width: theme.spacing.lg,
+    width: theme.spacing.xl,
     alignItems: 'center',
     justifyContent: 'center',
   },
