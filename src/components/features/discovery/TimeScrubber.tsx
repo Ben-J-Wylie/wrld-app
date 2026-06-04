@@ -38,11 +38,13 @@ type FieldKey = 'year' | 'month' | 'day' | 'hour' | 'minute' | 'second'
 
 const MONTH_ABBR = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
 
-// Fixed per-field widths so a value change never reflows the row.
-// Sized for monoLabel (IBM Plex Mono caps, ~10px + letter-spacing).
+// Fixed per-field widths so a value change never reflows the row. Sized for
+// monoLabel (~10px + letter-spacing) at the BOLD focused weight — the centre
+// value goes bold, which is wider, so the month must fit "MAR"/"MAY" bold
+// without wrapping. (Cells also clamp to one line as a backstop.)
 const FIELD_W: Record<FieldKey, number> = {
-  year: 34,
-  month: 28,
+  year: 36,
+  month: 36,
   day: 20,
   hour: 20,
   minute: 20,
@@ -384,6 +386,7 @@ function Field({
             <View key={delta} style={styles.cell}>
               <Text
                 variant="monoLabel"
+                numberOfLines={1}
                 color={isFuture ? theme.colors.text.subtle : theme.colors.text.primary}
                 style={[{ opacity }, bold && styles.boldCentre]}
               >

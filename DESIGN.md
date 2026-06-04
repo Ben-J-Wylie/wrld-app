@@ -1670,7 +1670,10 @@ colons sit centred *inside* the hour-minute and minute-second gaps (a
 year-month gap. The whole content is centred (`justifyContent: 'center'`)
 so the margin left-of-year equals the margin right-of-status. **Fixed
 per-field widths** (`FIELD_W`) + a fixed-width status slot mean a value
-change (e.g. JUL→AUG, or the live/NOW swap) never reflows the row.
+change (e.g. JUL→AUG, or the live/NOW swap) never reflows the row. The
+widths are sized for the **bold focused weight** (the centre value goes
+bold, which is wider — month/year must fit e.g. bold "MAR"/"2026"), and
+every cell is `numberOfLines={1}` so a value can never wrap to two rows.
 
 **Animated tick / dial slide.** Every value change — a live tick or a
 scrub step — animates the field's cell column by one row: newer scrolls
