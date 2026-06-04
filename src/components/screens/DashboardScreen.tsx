@@ -67,20 +67,31 @@ type SourceDescriptor = {
   identityRow?: boolean
 }
 
-const SOURCES: SourceDescriptor[] = [
-  { kind: 'cam', label: 'Camera', detail: 'Media · rear · 1080p', sensitivity: 'sensitive', availability: 'available', broadcastSource: 'camera' },
-  { kind: 'audio', label: 'Audio', detail: 'Media · mic · 48 kHz', sensitivity: 'sensitive', availability: 'available', broadcastSource: 'audio' },
-  { kind: 'loc', label: 'Location', detail: 'Telemetry · gated by precision setting', sensitivity: 'sensitive', availability: 'available' },
-  { kind: 'screen', label: 'Screen', detail: 'Media · whole-screen · capture pending', sensitivity: 'sensitive', availability: 'disabled' },
-  { kind: 'gyro', label: 'Gyro', detail: 'Telemetry · accelerometer + gyro · ~60 Hz · capture pending', sensitivity: 'benign', availability: 'disabled' },
-  { kind: 'compass', label: 'Compass', detail: 'Telemetry · heading · true north · capture pending', sensitivity: 'benign', availability: 'disabled' },
-  { kind: 'profile', label: 'Identity', detail: 'Off = anonymous · a flag, not a track', availability: 'available', identityRow: true },
-  { kind: 'speed', label: 'Speed', detail: 'Telemetry · derived from GPS · v0.3+', sensitivity: 'benign', availability: 'disabled' },
-  { kind: 'torch', label: 'Torch', detail: 'Device state · on / off · v0.3+', sensitivity: 'benign', availability: 'disabled' },
-  { kind: 'temp', label: 'Ambient temp', detail: 'Telemetry · ambient temperature · v0.3+', sensitivity: 'benign', availability: 'disabled' },
-  { kind: 'motion', label: 'Motion intensity', detail: 'Telemetry · motion intensity · v0.3+', sensitivity: 'benign', availability: 'disabled' },
+// Sources are grouped by category; groups render with a larger break
+// between them (identity/place · media · telemetry · device).
+const SOURCE_GROUPS: SourceDescriptor[][] = [
+  [
+    { kind: 'profile', label: 'Identity', detail: 'Off = anonymous · a flag, not a track', availability: 'available', identityRow: true },
+    { kind: 'loc', label: 'Location', detail: 'Telemetry · gated by precision setting', sensitivity: 'sensitive', availability: 'available' },
+  ],
+  [
+    { kind: 'cam', label: 'Camera', detail: 'Media · rear · 1080p', sensitivity: 'sensitive', availability: 'available', broadcastSource: 'camera' },
+    { kind: 'audio', label: 'Audio', detail: 'Media · mic · 48 kHz', sensitivity: 'sensitive', availability: 'available', broadcastSource: 'audio' },
+    { kind: 'screen', label: 'Screen', detail: 'Media · whole-screen · capture pending', sensitivity: 'sensitive', availability: 'disabled' },
+  ],
+  [
+    { kind: 'compass', label: 'Compass', detail: 'Telemetry · heading · true north · capture pending', sensitivity: 'benign', availability: 'disabled' },
+    { kind: 'gyro', label: 'Gyro', detail: 'Telemetry · orientation · ~60 Hz · capture pending', sensitivity: 'benign', availability: 'disabled' },
+    { kind: 'motion', label: 'Motion intensity', detail: 'Telemetry · derived from accelerometer · v0.3+', sensitivity: 'benign', availability: 'disabled' },
+    { kind: 'speed', label: 'Speed', detail: 'Telemetry · derived from GPS · v0.3+', sensitivity: 'benign', availability: 'disabled' },
+    { kind: 'temp', label: 'Ambient temp', detail: 'Telemetry · ambient temperature · v0.3+', sensitivity: 'benign', availability: 'disabled' },
+  ],
+  [
+    { kind: 'torch', label: 'Torch', detail: 'Device state · on / off · v0.3+', sensitivity: 'benign', availability: 'disabled' },
+  ],
 ]
 
+const SOURCES: SourceDescriptor[] = SOURCE_GROUPS.flat()
 const CAMERA_SOURCE = SOURCES.find((s) => s.kind === 'cam')!
 
 type PrecisionCeiling = 'bluedot' | 'city' | 'country' | 'private'
@@ -226,6 +237,48 @@ export function DashboardScreen() {
   const anyAir = broadcastSources.length > 0
   const anyRec = recordKinds.length > 0
 
+  function renderSource(src: SourceDescriptor) {
+    if (src.identityRow) {
+      return (
+        <FeedRow
+          key={src.kind}
+          kind={src.kind}
+          label={src.label}
+          detail={src.detail}
+          availability={src.availability}
+          trailing={
+            <View style={styles.identityControl}>
+              <SegmentedToggle options={IDENTITY_OPTIONS} value={identity} onChange={setIdentity} />
+            </View>
+          }
+        />
+      )
+    }
+    return (
+      <FeedRow
+        key={src.kind}
+        kind={src.kind}
+        label={src.label}
+        detail={src.detail}
+        sensitivity={src.sensitivity}
+        availability={src.availability}
+        air={!!air[src.kind]}
+        onAirChange={(v) => setAirFor(src.kind, v)}
+        rec={!!rec[src.kind]}
+        onRecChange={(v) => requestRec(src, v)}
+        recNeedsConsent={src.sensitivity === 'sensitive' && !consented.has(src.kind)}
+        footer={
+          src.kind === 'loc' && src.availability === 'available' ? (
+            <View style={styles.precision}>
+              <SegmentedToggle options={PRECISION_OPTIONS} value={precision} onChange={setPrecision} />
+              <HelpText>CAPTURE CEILING · REC CAN'T EXCEED WHAT'S SHARED LIVE</HelpText>
+            </View>
+          ) : undefined
+        }
+      />
+    )
+  }
+
   return (
     <>
       <ScreenScroll contentContainerStyle={styles.scroll}>
@@ -262,45 +315,12 @@ export function DashboardScreen() {
 
         <View style={styles.section}>
           <HelpText>SOURCES · AIR = BROADCAST · REC = SAVE TO DEVICE</HelpText>
-          <View style={styles.sourceList}>
-            {SOURCES.map((src) =>
-              src.identityRow ? (
-                <FeedRow
-                  key={src.kind}
-                  kind={src.kind}
-                  label={src.label}
-                  detail={src.detail}
-                  availability={src.availability}
-                  trailing={
-                    <View style={styles.identityControl}>
-                      <SegmentedToggle options={IDENTITY_OPTIONS} value={identity} onChange={setIdentity} />
-                    </View>
-                  }
-                />
-              ) : (
-                <FeedRow
-                  key={src.kind}
-                  kind={src.kind}
-                  label={src.label}
-                  detail={src.detail}
-                  sensitivity={src.sensitivity}
-                  availability={src.availability}
-                  air={!!air[src.kind]}
-                  onAirChange={(v) => setAirFor(src.kind, v)}
-                  rec={!!rec[src.kind]}
-                  onRecChange={(v) => requestRec(src, v)}
-                  recNeedsConsent={src.sensitivity === 'sensitive' && !consented.has(src.kind)}
-                  footer={
-                    src.kind === 'loc' && src.availability === 'available' ? (
-                      <View style={styles.precision}>
-                        <SegmentedToggle options={PRECISION_OPTIONS} value={precision} onChange={setPrecision} />
-                        <HelpText>CAPTURE CEILING · REC CAN'T EXCEED WHAT'S SHARED LIVE</HelpText>
-                      </View>
-                    ) : undefined
-                  }
-                />
-              ),
-            )}
+          <View style={styles.sourceGroups}>
+            {SOURCE_GROUPS.map((group, gi) => (
+              <View key={gi} style={styles.sourceList}>
+                {group.map(renderSource)}
+              </View>
+            ))}
           </View>
         </View>
 
@@ -359,6 +379,9 @@ const styles = StyleSheet.create({
   armPair: {
     flexDirection: 'row',
     gap: theme.spacing.sm,
+  },
+  sourceGroups: {
+    gap: theme.spacing.lg,
   },
   sourceList: {
     gap: theme.spacing.sm,
