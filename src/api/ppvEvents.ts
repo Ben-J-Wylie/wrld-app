@@ -51,6 +51,10 @@ export const ppvApi = {
     return { refundCount: res.data.refundCount }
   },
 
+  deleteEvent: async (id: string): Promise<void> => {
+    await apiClient.delete(`/ppv-events/${id}`)
+  },
+
   // Public: upcoming events for a creator profile
   getCreatorEvents: async (handle: string): Promise<PpvEvent[]> => {
     const res = await apiClient.get<{ events: PpvEvent[] }>(`/users/${handle}/ppv-events`)

@@ -1,7 +1,7 @@
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native'
-import { useCallback } from 'react'
+import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from 'react-native'
+import { useCallback, useState } from 'react'
 import { router, useFocusEffect } from 'expo-router'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { theme } from '@/tokens/theme'
 import { ScreenScroll } from '@/components/sections/ScreenScroll'
 import { Button } from '@/components/primitives/Button'
@@ -38,9 +38,10 @@ function formatCountdown(iso: string): string {
   return 'starting soon'
 }
 
-function EventCard({ event }: { event: PpvEvent }) {
+function EventCard({ event, onDelete }: { event: PpvEvent; onDelete: (id: string) => void }) {
   const isLive = event.status === 'live'
   const isScheduled = event.status === 'scheduled'
+  const isCancelled = event.status === 'cancelled'
   const countdown = isScheduled ? formatCountdown(event.scheduledAt) : ''
   const feeRate = 0.30
   const netRevenue = event.netRevenueCents ?? Math.round(event.priceUsd * event.purchaseCount * (1 - feeRate))
@@ -48,7 +49,7 @@ function EventCard({ event }: { event: PpvEvent }) {
   return (
     <Pressable
       style={styles.card}
-      onPress={() => router.push({ pathname: '/(app)/ppv/[id]/manage', params: { id: event.id } })}
+      onPress={() => !isCancelled && router.push({ pathname: '/(app)/ppv/[id]/manage', params: { id: event.id } })}
     >
       <View style={styles.cardTop}>
         <Text variant="bodyEmphasized" style={styles.cardTitle}>{event.title}</Text>
@@ -105,17 +106,60 @@ function EventCard({ event }: { event: PpvEvent }) {
           ) : null}
         </View>
       ) : null}
+
+      {isCancelled && (
+        <Pressable
+          style={styles.deleteBtn}
+          onPress={(e) => {
+            e.stopPropagation?.()
+            onDelete(event.id)
+          }}
+          hitSlop={8}
+        >
+          <Text variant="monoCaption" color="#D0233A">DELETE EVENT</Text>
+        </Pressable>
+      )}
     </Pressable>
   )
 }
 
 export function PpvIndexScreen() {
+  const qc = useQueryClient()
+  const [deleting, setDeleting] = useState<string | null>(null)
   const { data: events, isLoading, refetch } = useQuery({
     queryKey: ['my-ppv-events'],
     queryFn: () => ppvApi.listMyEvents(),
   })
 
   useFocusEffect(useCallback(() => { refetch() }, [refetch]))
+
+  function handleDelete(id: string) {
+    const event = events?.find(e => e.id === id)
+    Alert.alert(
+      'Delete event',
+      `Delete "${event?.title ?? 'this event'}"? This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            setDeleting(id)
+            try {
+              await ppvApi.deleteEvent(id)
+              qc.setQueryData<typeof events>(['my-ppv-events'], prev =>
+                prev?.filter(e => e.id !== id) ?? [],
+              )
+            } catch {
+              Alert.alert('Error', 'Could not delete event')
+            } finally {
+              setDeleting(null)
+            }
+          },
+        },
+      ],
+    )
+  }
 
   const upcoming = events?.filter(e => e.status === 'scheduled' || e.status === 'live') ?? []
   const past = events?.filter(e => e.status === 'ended' || e.status === 'cancelled') ?? []
@@ -153,13 +197,13 @@ export function PpvIndexScreen() {
           {upcoming.length > 0 && (
             <View style={styles.section}>
               <Text variant="monoLabel" color={theme.colors.text.muted}>UPCOMING</Text>
-              {upcoming.map(e => <EventCard key={e.id} event={e} />)}
+              {upcoming.map(e => <EventCard key={e.id} event={e} onDelete={handleDelete} />)}
             </View>
           )}
           {past.length > 0 && (
             <View style={styles.section}>
               <Text variant="monoLabel" color={theme.colors.text.muted}>PAST</Text>
-              {past.map(e => <EventCard key={e.id} event={e} />)}
+              {past.map(e => <EventCard key={e.id} event={e} onDelete={handleDelete} />)}
             </View>
           )}
         </>
@@ -243,5 +287,12 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.full,
     borderWidth: 1,
     borderColor: theme.colors.border.subtle,
+  },
+  deleteBtn: {
+    marginTop: theme.spacing.xs,
+    paddingVertical: theme.spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(208,35,58,0.25)',
+    alignItems: 'center',
   },
 })
