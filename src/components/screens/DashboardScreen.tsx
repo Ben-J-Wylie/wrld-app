@@ -25,7 +25,7 @@
 // for the live indicator; backend record-to-disk for the pending/earmarked
 // sources is a follow-up on `main` (Aaron's lane).
 
-import { useMemo, useState, useCallback } from 'react'
+import { Fragment, useMemo, useState, useCallback } from 'react'
 import { Alert, StyleSheet, View } from 'react-native'
 import { Filter as ProfanityFilter } from 'bad-words'
 
@@ -40,6 +40,7 @@ import { HelpText } from '@/components/primitives/HelpText'
 import { Icon } from '@/components/primitives/Icon'
 import { Toggle } from '@/components/primitives/Toggle'
 import { SegmentedToggle } from '@/components/primitives/SegmentedToggle'
+import { Divider } from '@/components/primitives/Divider'
 import { FeedRow, type SourceAvailability, type SourceSensitivity } from '@/components/features/broadcast/FeedRow'
 import { ArmButton } from '@/components/features/broadcast/ArmButton'
 import { RecordConsentSheet } from '@/components/features/broadcast/RecordConsentSheet'
@@ -271,7 +272,7 @@ export function DashboardScreen() {
           src.kind === 'loc' && src.availability === 'available' ? (
             <View style={styles.precision}>
               <SegmentedToggle options={PRECISION_OPTIONS} value={precision} onChange={setPrecision} />
-              <HelpText>CAPTURE CEILING · REC CAN'T EXCEED WHAT'S SHARED LIVE</HelpText>
+              <HelpText>CAPTURE CEILING · REC CAN'T EXCEED LIVE</HelpText>
             </View>
           ) : undefined
         }
@@ -317,9 +318,10 @@ export function DashboardScreen() {
           <HelpText>SOURCES · AIR = BROADCAST · REC = SAVE TO DEVICE</HelpText>
           <View style={styles.sourceGroups}>
             {SOURCE_GROUPS.map((group, gi) => (
-              <View key={gi} style={styles.sourceList}>
-                {group.map(renderSource)}
-              </View>
+              <Fragment key={gi}>
+                {gi > 0 && <Divider tone="strong" />}
+                <View style={styles.sourceList}>{group.map(renderSource)}</View>
+              </Fragment>
             ))}
           </View>
         </View>

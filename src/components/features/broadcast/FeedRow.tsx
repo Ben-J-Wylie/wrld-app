@@ -140,9 +140,6 @@ export function FeedRow({
   )
 }
 
-// Footer indents to align under the meta column (thumb width + row gap).
-const FOOTER_INDENT = 42 + theme.spacing.md
-
 const styles = StyleSheet.create({
   card: {
     paddingVertical: theme.spacing.md,
@@ -198,7 +195,8 @@ const styles = StyleSheet.create({
     gap: theme.spacing.xs,
   },
   footer: {
+    // Full card-content width — symmetric gutters left and right (the
+    // card's own horizontal padding), not indented under the meta column.
     paddingTop: theme.spacing.sm,
-    paddingLeft: FOOTER_INDENT,
   },
 })
