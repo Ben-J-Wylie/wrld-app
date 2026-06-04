@@ -22,7 +22,7 @@
 // screen/gyro/compass and the v0.3+ sources (speed/torch/temp/motion) is
 // a follow-up on `main` (Aaron's lane) — flagged in each row's detail.
 
-import { Fragment, useMemo, useState, useCallback } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { Alert, ScrollView, StyleSheet, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Filter as ProfanityFilter } from 'bad-words'
@@ -45,6 +45,13 @@ import { useAuth } from '@clerk/clerk-expo'
 import { useLocation } from '@/hooks/useLocation'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
 import { activeBroadcast } from '@/lib/activeBroadcast'
+import {
+  loadCaptureConfig,
+  saveCaptureConfig,
+  DEFAULT_CAPTURE_CONFIG,
+  type LocationPrecision,
+  type IdentityFlag,
+} from '@/lib/captureConfig'
 import type { SourceType } from '@/types'
 
 type SourceDescriptor = {
@@ -81,15 +88,13 @@ const SOURCE_GROUPS: SourceDescriptor[][] = [
   ],
 ]
 
-type PrecisionCeiling = 'bluedot' | 'city' | 'country' | 'private'
-const PRECISION_OPTIONS: { value: PrecisionCeiling; label: string }[] = [
+const PRECISION_OPTIONS: { value: LocationPrecision; label: string }[] = [
   { value: 'bluedot', label: 'BLUEDOT' },
   { value: 'city', label: 'CITY' },
   { value: 'country', label: 'COUNTRY' },
   { value: 'private', label: 'PRIVATE' },
 ]
 
-type IdentityFlag = 'public' | 'anon'
 const IDENTITY_OPTIONS: { value: IdentityFlag; label: string }[] = [
   { value: 'public', label: 'PUBLIC' },
   { value: 'anon', label: 'ANON' },
@@ -105,12 +110,41 @@ export function DashboardScreen() {
   const { coords, loading: locationLoading } = useLocation()
   const insets = useSafeAreaInsets()
 
+  // Title ("what's happening") is intentionally per-session — it never
+  // persists. Everything else hydrates from the saved capture config.
   const [title, setTitle] = useState('')
-  const [air, setAir] = useState<Partial<Record<FeedKind, boolean>>>({ cam: true, audio: true })
-  const [rec, setRec] = useState<Partial<Record<FeedKind, boolean>>>({})
-  const [precision, setPrecision] = useState<PrecisionCeiling>('city')
-  const [identity, setIdentity] = useState<IdentityFlag>('public')
-  const [subscribersOnly, setSubscribersOnly] = useState(false)
+  const [air, setAir] = useState<Partial<Record<FeedKind, boolean>>>(DEFAULT_CAPTURE_CONFIG.air)
+  const [rec, setRec] = useState<Partial<Record<FeedKind, boolean>>>(DEFAULT_CAPTURE_CONFIG.rec)
+  const [precision, setPrecision] = useState<LocationPrecision>(DEFAULT_CAPTURE_CONFIG.precision)
+  const [identity, setIdentity] = useState<IdentityFlag>(DEFAULT_CAPTURE_CONFIG.identity)
+  const [subscribersOnly, setSubscribersOnly] = useState(DEFAULT_CAPTURE_CONFIG.subscribersOnly)
+
+  // Hydrate from AsyncStorage on first mount; `hydrated` gates the
+  // auto-save effect so we don't write the defaults back over the saved
+  // config before it loads.
+  const hydratedRef = useRef(false)
+  useEffect(() => {
+    let active = true
+    loadCaptureConfig().then((cfg) => {
+      if (!active) return
+      setAir(cfg.air as Partial<Record<FeedKind, boolean>>)
+      setRec(cfg.rec as Partial<Record<FeedKind, boolean>>)
+      setPrecision(cfg.precision)
+      setIdentity(cfg.identity)
+      setSubscribersOnly(cfg.subscribersOnly)
+      hydratedRef.current = true
+    })
+    return () => {
+      active = false
+    }
+  }, [])
+
+  // Auto-save on any capture-config change (no save button). Title is
+  // excluded by design.
+  useEffect(() => {
+    if (!hydratedRef.current) return
+    saveCaptureConfig({ air, rec, precision, identity, subscribersOnly })
+  }, [air, rec, precision, identity, subscribersOnly])
 
   useFocusEffect(useCallback(() => {
     const active = activeBroadcast.get()
