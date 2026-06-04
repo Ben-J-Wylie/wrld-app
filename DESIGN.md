@@ -1615,6 +1615,48 @@ this feature is the lift target either way.
 
 ---
 
+##### `TimeScrubber`
+
+- **Tier:** feature (composes Pressable + Text + PanResponder + Animated)
+- **Location:** `src/components/features/discovery/TimeScrubber.tsx`
+- **Variants:** `default` (the running WRLD clock / time machine bar)
+- **Sizes:** collapsed (~50 tall) / expanded (~104 tall)
+- **States:** live (offset 0 — ticking, "● LIVE" tag), scrubbed (offset > 0 — playback playhead + accent "● NOW" button); collapsed / expanded (per-field ghosts)
+- **Used in:** `GlobeScreenMapbox` (overlay riding on top of the bottom drawer) — 2026-06-04
+- **Tweak impact:** the globe time-machine bar
+- **Shipped:** 2026-06-04 (Time Machine initiative · UI v1)
+
+**Mock says:** No mock — designed from the brief. A long thin horizontal
+"running clock" above the globe drawer; scrubbing back replays surviving
+clips at that time; six fields (YR · MO · DY · HR · MIN · SEC) each
+spinnable; default reads as a ticking clock, taps to expand with ghosted
+neighbours hinting spinnability.
+
+**Code does (shipped):** Controlled by a single `offsetMs` (0 = live).
+Playhead = `Date.now() - offsetMs`, recomputed every second via an
+interval `setTick`, so it reads as a ticking clock live and as a 1×
+playback playhead when scrubbed. Six `Field` columns, each with a
+`PanResponder` (active only when expanded) that scrubs **absolute from
+gesture start** (captures the playhead on grant, applies the total
+`round(dy / STEP_PX)` delta each move — no drift from stale offset reads).
+`stepDate` uses native `Date` setters so carry/borrow is correct across
+all fields + variable month/year lengths. Clamped to `[0, now-minYear]`
+(no future, floor at `minYear`, default 2026). Expand animates height
+(`motion.patterns.overlay`); ghosts are the ±1 field values at
+`text.subtle`. "● LIVE" tag when live; accent "● NOW" Pressable when
+scrubbed (→ `onOffsetChange(0)`).
+
+**Direction note.** Drag-down = newer, drag-up = older (wheel physics,
+newer above) — a one-line flip if it reads wrong on device.
+
+**Seam (Aaron / backend).** The component only emits `offsetMs`;
+`GlobeScreenMapbox` holds it and carries a commented TIME-MACHINE seam at
+`useDiscoverySocket()` where the live feed swaps to a historical
+"surviving clips near, at playhead" query. Until then the globe stays live
+regardless of the clock. See CLAUDE.md "Time Machine initiative."
+
+---
+
 ##### `StreamStateBanner`
 
 - **Tier:** feature (composes Pressable + Text + Icon + ActivityIndicator)
@@ -3411,6 +3453,34 @@ above. The seam is not a separate motion category.
 
 Append-only. Most recent first. Each entry: date, decision, rationale,
 constraint it imposes downstream.
+
+### 2026-06-04 — Time Machine: running-clock scrubber on the globe (UI v1)
+
+Shipped `TimeScrubber` (Section 3) — a long thin running-WRLD-clock bar above
+the globe drawer — and wired it into `GlobeScreenMapbox`. Kicks off the Time
+Machine initiative (was a v0.3 backlog line).
+
+**Decisions:** a single `offsetMs` behind the present (0 = live); scrubbing
+back gives **real-time playback** (the playhead ticks forward at 1× from the
+scrubbed instant and the globe replays surviving clips as it advances), with a
+**NOW** button to return to live. Six independently-spinnable fields
+(YR/MO/DY/HR/MIN/SEC) carry correctly via native `Date`. Collapsed = ticking
+clock; tap to expand → ghosted neighbours + per-field drag. Accepted caveat:
+the past is built from *surviving clips only*, thinner than live.
+
+**Rationale.** Ben wants time travel to read as a clock you can spin — minimal
+chrome, in-place on the globe, no separate mode/screen.
+
+**Imposes:**
+
+- The component is the UI half only. The historical replay is the backend
+  seam in `GlobeScreenMapbox` (`useDiscoverySocket()` → time-indexed clip
+  query) — Aaron's lane. Until then the globe stays live regardless of the
+  clock; documented in CLAUDE.md "Time Machine initiative."
+- New time-on-globe surfaces should reuse `TimeScrubber` / its `offsetMs`
+  contract rather than a parallel time control.
+- Needs on-device testing (gesture feel + drawer-tracking position). Scrub
+  direction (drag-down = newer) is a one-line flip if it reads wrong.
 
 ### 2026-06-03 (late) — Dashboard goes live in place (headless broadcast)
 

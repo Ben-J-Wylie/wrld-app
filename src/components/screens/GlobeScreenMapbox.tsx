@@ -50,6 +50,7 @@ import { Text } from '@/components/primitives/Text'
 import { Pill } from '@/components/primitives/Pill'
 import { BrandMark } from '@/components/primitives/BrandMark'
 import { StreamStateBanner } from '@/components/features/stream/StreamStateBanner'
+import { TimeScrubber } from '@/components/features/discovery/TimeScrubber'
 import { StreamCard } from '@/components/features/stream/StreamCard'
 import {
   DiscoveryHandoffCard,
@@ -142,8 +143,17 @@ type BannerData =
 
 export function GlobeScreenMapbox() {
   const { coords } = useLocation()
+  // Live discovery feed. TIME MACHINE SEAM (Aaron / backend): when
+  // `timeOffsetMs > 0` the user has scrubbed into the past — the playhead is
+  // `Date.now() - timeOffsetMs`, advancing in real time. Swap this for a
+  // historical "surviving clips near, at playhead" query keyed off the offset
+  // (re-fetching as the playhead advances) so the globe replays that moment.
+  // Until that lands, the globe keeps showing the live feed regardless.
   const streams = useDiscoverySocket()
   const insets = useSafeAreaInsets()
+
+  // 0 = live present; >0 = playback offset behind now (Time Machine).
+  const [timeOffsetMs, setTimeOffsetMs] = useState(0)
 
   const [selectedStream, setSelectedStream] = useState<Stream | null>(null)
   const [selectedClusterStreams, setSelectedClusterStreams] = useState<Stream[] | null>(null)
@@ -785,6 +795,12 @@ export function GlobeScreenMapbox() {
         </View>
       )}
 
+      {/* Time machine — rides right on top of the drawer (its bottom tracks
+          the animated drawer height) so it stays just above it as it slides. */}
+      <Animated.View style={[styles.timeScrubber, { bottom: drawerHeight }]}>
+        <TimeScrubber offsetMs={timeOffsetMs} onOffsetChange={setTimeOffsetMs} />
+      </Animated.View>
+
       {/* Bottom drawer — closed by default, opens to peek when the user
           searches or filters, expands when they tap "See all". */}
       <Animated.View
@@ -932,6 +948,11 @@ const styles = StyleSheet.create({
     position: 'absolute', bottom: DRAWER_PEEK_H, left: 0, right: 0,
     padding: theme.spacing.lg,
     paddingBottom: theme.spacing.md,
+  },
+  timeScrubber: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
   },
   drawer: {
     position: 'absolute',

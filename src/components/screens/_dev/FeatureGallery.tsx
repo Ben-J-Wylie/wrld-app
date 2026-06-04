@@ -22,6 +22,7 @@ import { SettingsRow } from '@/components/features/settings/SettingsRow'
 import { ToastBanner } from '@/components/features/feedback/ToastBanner'
 import { SearchBar } from '@/components/features/discovery/SearchBar'
 import { ScaleBar } from '@/components/features/discovery/ScaleBar'
+import { TimeScrubber } from '@/components/features/discovery/TimeScrubber'
 import { PlaceResult } from '@/components/features/discovery/PlaceResult'
 import { SwapCard } from '@/components/features/identity/SwapCard'
 import { AccountIDPill } from '@/components/features/user/AccountIDPill'
@@ -478,6 +479,12 @@ export function FeatureGallery() {
         </Row>
         <Row label="no clear callback (no X)">
           <SearchBarDemo initial="kai" omitClear />
+        </Row>
+      </Section>
+
+      <Section title="TimeScrubber">
+        <Row label="live (ticking) — tap to expand, drag a field to scrub">
+          <TimeScrubberDemo />
         </Row>
       </Section>
 
@@ -1339,6 +1346,11 @@ function SearchBarDemo({
       onClear={omitClear ? undefined : () => setValue('')}
     />
   )
+}
+
+function TimeScrubberDemo() {
+  const [offsetMs, setOffsetMs] = useState(0)
+  return <TimeScrubber offsetMs={offsetMs} onOffsetChange={setOffsetMs} />
 }
 
 function ToastBannerDemo() {

@@ -531,6 +531,55 @@ The app UI is open ahead of the backend. To make it real:
 
 ---
 
+## Time Machine initiative — model, working split & rollout (June 2026)
+
+The "Time machine" (previously a v0.3 backlog line below) kicked off with a
+first **UI version** on the globe. Ben built the front end; Aaron owns the
+backend replay query. Builds on the clips substrate (surviving recorded clips
+are what the past is made of).
+
+### Model (decided 2026-06-04)
+
+- **A running WRLD clock** sits as a long thin bar (~50px) just above the
+  globe's bottom drawer, riding on top of it as the drawer slides.
+- **Single `offsetMs` behind the present** (0 = live). The playhead =
+  `Date.now() - offsetMs`, re-evaluated every second.
+  - offset 0 → reads as a live ticking clock; the globe is live.
+  - offset > 0 → **real-time playback**: the playhead ticks forward at 1× from
+    the scrubbed instant, and the globe replays the surviving clips/pins alive
+    at the playhead as it advances. A **NOW** button returns to live.
+- **Six independently-spinnable fields** — YR · MO · DY · HR · MIN · SEC. Each
+  ticks/carries correctly (native `Date` arithmetic — spinning MIN past 00
+  rolls the hour, etc.). Collapsed = just the ticking values; tap to expand
+  shows ghosted neighbours above/below and enables per-field vertical drag to
+  scrub. Can't scrub into the future (clamped at now) or before `minYear`.
+- **Accepted caveat:** the past experience is thinner than live — only
+  *surviving clips*, not everything that was aired. That's fine.
+
+### Working split (Ben / Aaron)
+
+- **Ben (`design`) — UI, done (v1).** `TimeScrubber` feature
+  (`src/components/features/discovery/TimeScrubber.tsx`) + gallery entry; wired
+  into `GlobeScreenMapbox` as the overlay above the drawer; globe holds
+  `timeOffsetMs` state and a clearly-commented **TIME MACHINE SEAM** at the
+  discovery data source.
+- **Aaron (`main`) — backend replay.** At the seam: when `timeOffsetMs > 0`,
+  swap the live `useDiscoverySocket()` feed for a historical "surviving clips
+  near, at playhead" query, re-fetching as the playhead advances, so the globe
+  actually replays. Pins/cards then resolve to clips (tap → view clip; channel-
+  hop among clips at the same event/instant). Until that lands the globe keeps
+  showing the live feed regardless of the clock.
+
+### v1 UI notes / open
+
+- Direction: drag-down = newer, drag-up = older (wheel physics, newer above).
+  Trivially flippable if it reads wrong on device.
+- Granularity floor (how far back, retention) and clip-at-instant semantics are
+  Aaron's data calls. `minYear` defaults to 2026 (WRLD launch).
+- **Needs on-device testing** — gesture feel + the drawer-tracking position.
+
+---
+
 ## v0.2 beta milestone — architectural decision (May 2026)
 
 Decided between Phase 7 and Phase 8. This section documents what v0.2 is,
@@ -627,9 +676,11 @@ not a blank page:
 
 **Product features:**
 
-- **Time machine.** Earlier states of a stream or a broadcaster's history —
-  distinct from clips (which v0.2 ships). Built on top of the v0.2 recording
-  infrastructure but with different access semantics.
+- **Time machine.** Earlier states of WRLD — replay the globe at a past
+  instant from surviving clips. **Kicked off June 2026** — see the "Time
+  Machine initiative" section above (UI shipped on `design`; backend replay
+  query is Aaron's seam). Distinct from a single broadcaster's clip history;
+  built on the v0.2 recording substrate with different (time-indexed) access.
 - **Real-money payments layer.** v0.2 ships the wallet UI (Wallet v2 + Top Up
   + Cash Out) but all real-money paths are stubbed:
   - Top Up via Stripe / Apple IAP / Google Pay (real money in).
