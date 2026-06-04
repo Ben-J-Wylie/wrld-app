@@ -148,7 +148,7 @@ const tipStyles = StyleSheet.create({
 })
 
 export function StreamScreen() {
-  const { id, streamId: paramStreamId, title: paramTitle, sources: paramSources, lat: paramLat, lng: paramLng, subscribersOnly: paramSubscribersOnly } = useLocalSearchParams<{
+  const { id, streamId: paramStreamId, title: paramTitle, sources: paramSources, lat: paramLat, lng: paramLng, subscribersOnly: paramSubscribersOnly, precision: paramPrecision } = useLocalSearchParams<{
     id: string
     streamId?: string
     title?: string
@@ -156,6 +156,7 @@ export function StreamScreen() {
     lat?: string
     lng?: string
     subscribersOnly?: string
+    precision?: string
   }>()
   const isNew = id === 'new'
 
@@ -425,36 +426,47 @@ export function StreamScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isNew, status])
 
-  // Poll recording status while recording is active. When the server stops
-  // the recording due to quota, finalize cleanly and alert the broadcaster.
+  // Watch the recordings query cache for server-side status changes on the
+  // active recording. The recording_updated WS push keeps this cache current
+  // so no polling is needed — this effect just reacts when the cache updates.
+  const { data: liveRecordings } = useQuery({
+    queryKey: ['recordings'],
+    queryFn: recordingsApi.list,
+    enabled: isRecording && !!activeRecordingId,
+  })
   useEffect(() => {
-    if (!isRecording || !activeRecordingId) return
-    const id = activeRecordingId
-    const interval = setInterval(async () => {
-      try {
-        const list = await recordingsApi.list()
-        const rec = list.find(r => r.id === id)
-        if (rec && rec.status !== 'recording') {
-          if (!stoppedByUserRef.current) {
-            setIsRecording(false)
-            setActiveRecordingId(null)
-            const message = rec.status === 'failed'
-              ? 'The recording encountered an error and was stopped. Your stream continues.'
-              : 'You\'ve reached your storage limit. Your stream continues.'
-            Alert.alert('Recording stopped', message)
-          }
-          stoppedByUserRef.current = false
-        }
-      } catch {}
-    }, 5_000)
-    return () => clearInterval(interval)
-  }, [isRecording, activeRecordingId])
+    if (!isRecording || !activeRecordingId || !liveRecordings) return
+    const rec = liveRecordings.find(r => r.id === activeRecordingId)
+    if (!rec || rec.status === 'recording') return
+    if (!stoppedByUserRef.current) {
+      setIsRecording(false)
+      setActiveRecordingId(null)
+      Alert.alert(
+        'Recording stopped',
+        rec.status === 'failed'
+          ? 'The recording encountered an error and was stopped. Your stream continues.'
+          : 'You\'ve reached your storage limit. Your stream continues.',
+      )
+    }
+    stoppedByUserRef.current = false
+  }, [liveRecordings, activeRecordingId, isRecording])
 
   async function handleGoLive() {
     setIsRecording(false)
     setActiveRecordingId(null)
     const title = (paramTitle ?? '').trim()
     if (!title || !coords || broadcastSources.length === 0) return
+
+    // Translate app vocab → backend vocab; fall back to activeBroadcast then param
+    const rawPrecision = activeBroadcast.get()?.precision ?? paramPrecision
+    const precisionMap: Record<string, 'exact' | 'city' | 'country' | 'off'> = {
+      bluedot: 'exact',
+      city: 'city',
+      country: 'country',
+      private: 'off',
+    }
+    const locationPrecision = precisionMap[rawPrecision ?? ''] ?? 'exact'
+
     try {
       await connect()
       await createRoom({
@@ -463,6 +475,7 @@ export function StreamScreen() {
         lng: coords.longitude,
         sources: broadcastSources,
         subscribersOnly: (activeBroadcast.get()?.subscribersOnly ?? paramSubscribersOnly) === 'true',
+        locationPrecision,
       })
       await startBroadcasting(broadcastSources)
     } catch (err) {

@@ -12,6 +12,7 @@ import { env } from '@/lib/env'
 import { setClerkTokenGetter } from '@/lib/clerkToken'
 import { useAuthStore } from '@/stores/authStore'
 import { useRegisterPushToken } from '@/hooks/useRegisterPushToken'
+import { useUserSocket } from '@/hooks/useUserSocket'
 import { apiClient } from '@/api/client'
 import type { User } from '@/types'
 
@@ -63,22 +64,14 @@ function RootNavigator() {
     }
   }, [isLoaded, isSignedIn])
 
-  // Poll /auth/me every 10s while signed in so suspension status, tier, and
-  // balances update in near-real-time without any user interaction.
-  useEffect(() => {
-    if (!isSignedIn) return
-    const refresh = () => {
-      apiClient
-        .get<{ user: User }>('/auth/me')
-        .then((res) => setWrldUser(res.data.user))
-        .catch(() => {})
-    }
-    const interval = setInterval(refresh, 30_000)
-    return () => clearInterval(interval)
-  }, [isSignedIn])
+  // No polling — useUserSocket pushes user_updated for balances, suspension,
+  // and tier changes. The initial fetch above covers sign-in state.
 
   // Register Expo push token when signed in
   useRegisterPushToken(!!isSignedIn)
+
+  // Persistent user push channel — receives recording_updated events
+  useUserSocket(!!isSignedIn)
 
   // Notification deep-link: queue until Clerk is loaded and Stack is rendered
   const pendingStreamRef = useRef<{ roomId: string; streamId: string; sources: string } | null>(null)

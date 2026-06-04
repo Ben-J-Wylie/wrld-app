@@ -10,8 +10,10 @@ export function useWallet() {
     queryKey: WALLET_KEY,
     queryFn: usersApi.getWallet,
     enabled: !!isSignedIn,
-    staleTime: 1000 * 15,
-    refetchInterval: 1000 * 15,
+    staleTime: 1000 * 30,
+    // spaceBucks/stardust changes come via user_updated WS patch (which also
+    // updates this cache). 60s fallback covers transactions and WS gap.
+    refetchInterval: 60_000,
   })
 }
 
