@@ -3030,10 +3030,32 @@ column + `chevron-right` icon. Selected swaps the border + bg to
 accent + tints the chevron. Selection state is parent-owned via
 `selected` + `onPress`.
 
+---
+
+##### `PageTabs`
+
+- **Tier:** feature (composes `Pressable` + `Text`)
+- **Location:** `src/components/features/navigation/PageTabs.tsx`
+- **Props:** `tabs` (`{ key, label }[]`, generic over the key union), `value`,
+  `onChange`, `style?`
+- **States:** per-tab active / inactive (active = emphasized label + accent
+  underline)
+- **Used in:** `WalletScreen` (Balance / Top Up / Cash Out), `MonetizeScreen`
+  (Subscriptions / Events) — the hybrid-nav sibling-cluster control
+- **Tweak impact:** in-place tab navigation on any clustered area
+- **Shipped:** 2026-06-05 (hybrid nav)
+
+**Code does:** an underline tab strip — a row of content-sized tabs (gap `lg`,
+bottom hairline border) that swap content **in place** (no route push, no back
+arrow), distinct from `SegmentedToggle` (a pill filter). Active tab gets a
+`bodyEmphasized` label + an accent underline flush on the row border; the host
+owns the active key + the content swap. Generic so callers keep a typed key
+union.
+
 ### Sections (`src/components/sections/`)
 
 Populated from the 12.2 inventory pass. Sections are regional patterns
-that repeat across two or more screens. The 14 entries below all meet
+that repeat across two or more screens. The 16 entries below all meet
 that bar. Several patterns that *don't* meet it stay inline in their
 single home screen — flagged at the end.
 
@@ -3484,6 +3506,26 @@ keep.
   stay so") is resolved by Section 0: it's correctly classified as a
   canvas-tier scene element, even though it's inlined in `EarthScene.tsx`
   for now rather than living in its own file.
+
+---
+
+##### `TopUpPanel` / `CashOutPanel`
+
+- **Tier:** section (compose wallet features — `PursesCard` / `BundleCard`,
+  `AmountInput` / `PresetGrid` / `Chip` — + their own buy/cash-out logic)
+- **Location:** `src/components/sections/TopUpPanel.tsx`, `CashOutPanel.tsx`
+- **Props:** `onDone: () => void` (where Done / post-action goes)
+- **States:** picker (default), submitting, success; `CashOutPanel` also loading
+- **Used in:** the Wallet **Top Up / Cash Out page-tabs** AND the standalone
+  `/topup` `/cashout` routes (now thin `SafeAreaView` + back-arrow wrappers) —
+  one body, two hosts, no duplicated logic
+- **Tweak impact:** the top-up / cash-out flow wherever it appears
+- **Shipped:** 2026-06-05 (hybrid nav — Wallet)
+
+**No inline gallery preview** (same as `ScreenScroll` / `WizardShell`): these are
+host-chrome-less screen bodies that drive real wallet data (`useWallet`,
+`usersApi`) + a docked footer CTA — previewed in-context, not as a card. The
+host provides `SafeAreaView` / header; the panel owns scroll + footer.
 
 ### Screens (`src/components/screens/`)
 

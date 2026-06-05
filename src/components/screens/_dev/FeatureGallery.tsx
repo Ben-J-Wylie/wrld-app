@@ -53,6 +53,7 @@ import { BroadcastStatusIndicator } from '@/components/features/broadcast/Broadc
 import { BufferWindowLabel } from '@/components/features/broadcast/BufferWindowLabel'
 import { SaveClipButton } from '@/components/features/broadcast/SaveClipButton'
 import { RewindLadder } from '@/components/features/broadcast/RewindLadder'
+import { PageTabs } from '@/components/features/navigation/PageTabs'
 import { ClipCard } from '@/components/features/clip/ClipCard'
 import { ClipPreview } from '@/components/features/clip/ClipPreview'
 import { LayerEditorRow } from '@/components/features/clip/LayerEditorRow'
@@ -1369,8 +1370,30 @@ export function FeatureGallery() {
           </View>
         </Row>
       </Section>
+
+      <Section title="PageTabs">
+        {/* Hybrid-nav sibling-cluster control — swaps content in place. */}
+        <Row label="3 tabs (Wallet)">
+          <PageTabsDemo tabs={[
+            { key: 'balance', label: 'Balance' },
+            { key: 'topup', label: 'Top Up' },
+            { key: 'cashout', label: 'Cash Out' },
+          ]} />
+        </Row>
+        <Row label="2 tabs (Monetize)">
+          <PageTabsDemo tabs={[
+            { key: 'subs', label: 'Subscriptions' },
+            { key: 'events', label: 'Events' },
+          ]} />
+        </Row>
+      </Section>
     </ScreenScroll>
   )
+}
+
+function PageTabsDemo({ tabs }: { tabs: { key: string; label: string }[] }) {
+  const [value, setValue] = useState(tabs[0]!.key)
+  return <PageTabs tabs={tabs} value={value} onChange={setValue} />
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
