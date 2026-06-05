@@ -9,6 +9,7 @@ import { Card } from '@/components/primitives/Card'
 import { ScreenScroll } from '@/components/sections/ScreenScroll'
 import { ScreenHeader } from '@/components/sections/ScreenHeader'
 import { useRecordings } from '@/hooks/useRecordings'
+import { useCurrentUser } from '@/hooks/useCurrentUser'
 import { useAuthStore } from '@/stores/authStore'
 import { recordingsApi } from '@/api/recordings'
 import type { Recording } from '@/types'
@@ -120,15 +121,19 @@ export const LibraryScreen = () => {
   const { isSignedIn } = useAuth()
   const wrldUser = useAuthStore(s => s.wrldUser)
   const { data: recordings, isLoading, isError, isRefetchError, refetch } = useRecordings(!!isSignedIn)
+  // Storage figures come from the live /auth/me query (refetched on focus + 60s, and
+  // patched instantly by user_updated WS events) so the bar tracks real usage. Fall
+  // back to the store only before the first fetch resolves.
+  const { data: me, refetch: refetchMe } = useCurrentUser()
   const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set())
 
-  const usedBytes = wrldUser?.usedStorageBytes ?? 0
-  const quotaBytes = wrldUser?.storageQuotaBytes ?? 0
+  const usedBytes = me?.usedStorageBytes ?? wrldUser?.usedStorageBytes ?? 0
+  const quotaBytes = me?.storageQuotaBytes ?? wrldUser?.storageQuotaBytes ?? 0
   const pct = quotaBytes > 0 ? Math.min(100, Math.round((usedBytes / quotaBytes) * 100)) : 0
   const quotaGb = quotaBytes > 0 ? parseFloat((quotaBytes / 1024 ** 3).toFixed(1)).toString() : null
 
   useFocusEffect(useCallback(() => {
-    if (isSignedIn) refetch()
+    if (isSignedIn) { refetch(); refetchMe() }
   }, [isSignedIn]))
 
   function handleDelete(id: string) {

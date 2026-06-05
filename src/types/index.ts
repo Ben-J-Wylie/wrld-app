@@ -18,8 +18,14 @@ export type User = {
   dateOfBirth?: string
   locationPrecision?: 'exact' | 'city' | 'country' | 'off'
   creatorReady: boolean
+  // saved-clip pool
   usedStorageBytes: number
   storageQuotaBytes: number
+  // rolling-buffer pool (R2 dual-pool) — present on /auth/me; optional for resilience
+  bufferUsedBytes?: number
+  bufferByteCapBytes?: number
+  bufferWindowHours?: number
+  bufferEarliestAt?: string | null
   subscriptionEnabled: boolean
   subscriptionPriceUsd: number | null
 }
