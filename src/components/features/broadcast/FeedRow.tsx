@@ -50,6 +50,13 @@ type Props = {
   // arms Air only, so it sets showRec={false}. The gallery keeps it true
   // to document the two-affordance capability.
   showRec?: boolean
+  // Whether to render the Air toggle. Rows whose on/off is governed by a
+  // footer control (e.g. Location — its precision multistate has a
+  // PRIVATE = off option) set showAir={false} so there's no redundant toggle.
+  showAir?: boolean
+  // Replaces the FeedThumb in the leading slot (e.g. a state-dependent icon
+  // tile for Location precision / Identity).
+  leading?: ReactNode
   // While the broadcast hasn't gone live, on-toggles render in the
   // "armed" (cued, outline-not-fill) state; once live they fill accent.
   live?: boolean
@@ -70,6 +77,8 @@ export function FeedRow({
   rec = false,
   onRecChange,
   showRec = true,
+  showAir = true,
+  leading,
   live = false,
   trailing,
   footer,
@@ -85,7 +94,7 @@ export function FeedRow({
   return (
     <View style={[styles.card, locked && styles.dimmed, style]}>
       <View style={styles.row}>
-        <FeedThumb kind={kind} active={thumbActive} />
+        {leading ?? <FeedThumb kind={kind} active={thumbActive} />}
         <View style={styles.col}>
           <Text variant="bodyEmphasized" numberOfLines={1}>
             {label}
@@ -97,14 +106,16 @@ export function FeedRow({
             </Text>
           )}
         </View>
-        {trailing ?? (
+        {trailing ?? ((showAir || showRec) ? (
           <View style={styles.affs}>
-            <View style={styles.aff}>
-              <Text variant="monoLabel" color={air ? theme.colors.accent.default : theme.colors.text.subtle}>
-                AIR
-              </Text>
-              <Toggle value={air} armed={!live} onValueChange={onAirChange ?? (() => {})} disabled={locked} accessibilityLabel={`${label} broadcast`} />
-            </View>
+            {showAir && (
+              <View style={styles.aff}>
+                <Text variant="monoLabel" color={air ? theme.colors.accent.default : theme.colors.text.subtle}>
+                  AIR
+                </Text>
+                <Toggle value={air} armed={!live} onValueChange={onAirChange ?? (() => {})} disabled={locked} accessibilityLabel={`${label} broadcast`} />
+              </View>
+            )}
             {showRec && (
               <View style={styles.aff}>
                 <Text variant="monoLabel" color={rec ? theme.colors.accent.default : theme.colors.text.subtle}>
@@ -114,7 +125,7 @@ export function FeedRow({
               </View>
             )}
           </View>
-        )}
+        ) : null)}
       </View>
       {footer && <View style={styles.footer}>{footer}</View>}
     </View>

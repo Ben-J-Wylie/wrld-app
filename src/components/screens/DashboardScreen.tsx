@@ -26,7 +26,7 @@
 // screen/gyro/compass and the v0.3+ sources (speed/torch/temp/motion) is
 // a follow-up on `main` (Aaron's lane) — flagged in each row's detail.
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from 'react'
 import { Alert, ScrollView, StyleSheet, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Filter as ProfanityFilter } from 'bad-words'
@@ -119,6 +119,34 @@ const IDENTITY_OPTIONS: { value: IdentityFlag; label: string }[] = [
   { value: 'public', label: 'PUBLIC' },
   { value: 'anon', label: 'ANON' },
 ]
+
+type IconName = ComponentProps<typeof Icon>['name']
+
+// Location row: icon + subtitle reflect the chosen precision (the precision
+// multistate is the single source of truth — PRIVATE = off, no separate Air
+// toggle). Content adapted from the Settings LocationGranularityPicker.
+const LOC_META: Record<LocationPrecision, { icon: IconName; detail: string; muted?: boolean }> = {
+  exact: { icon: 'map-pin', detail: 'Your exact spot is shown on the globe' },
+  city: { icon: 'map', detail: 'A fuzzy circle around your city' },
+  country: { icon: 'globe', detail: 'Only the country you’re in' },
+  private: { icon: 'eye-off', detail: 'Location hidden — not shared', muted: true },
+}
+
+// Identity row: two icons + subtitles for the public / anon flag.
+const IDENTITY_META: Record<IdentityFlag, { icon: IconName; detail: string }> = {
+  public: { icon: 'user', detail: 'Shown as your @handle with your avatar' },
+  anon: { icon: 'user-x', detail: 'Anonymous — no handle or avatar shown' },
+}
+
+// Leading icon tile for the Location / Identity rows (replaces FeedThumb),
+// sized to match the thumb so the rows line up.
+function StateIcon({ name, muted }: { name: IconName; muted?: boolean }) {
+  return (
+    <View style={styles.stateIcon}>
+      <Icon name={name} size="lg" color={muted ? theme.colors.text.muted : theme.colors.accent.default} />
+    </View>
+  )
+}
 
 // Drops the footer shelf (and the Go Live button with it) lower toward the
 // screen bottom by trimming the bottom inset gap.
@@ -223,11 +251,15 @@ export function DashboardScreen() {
   }
 
   // Every aired source kind (incl. location / telemetry / torch) — any of
-  // these counts as a live broadcast even with no camera/audio.
-  const airedKinds = useMemo(
-    () => SOURCE_GROUPS.flat().filter((s) => !s.identityRow && air[s.kind]).map((s) => s.kind),
-    [air],
-  )
+  // these counts as a live broadcast even with no camera/audio. Location is
+  // governed by its precision (PRIVATE = off), not an Air toggle, so it's
+  // included when precision isn't private.
+  const airedKinds = useMemo(() => {
+    const toggled = SOURCE_GROUPS.flat()
+      .filter((s) => !s.identityRow && s.kind !== 'loc' && air[s.kind])
+      .map((s) => s.kind)
+    return precision !== 'private' ? [...toggled, 'loc' as FeedKind] : toggled
+  }, [air, precision])
 
   const anyAir = airedKinds.length > 0
   // Any aired source — any kind — is enough to go live. A location-only
@@ -309,19 +341,40 @@ export function DashboardScreen() {
   }
 
   function renderSource(src: SourceDescriptor) {
+    // Identity: no Air toggle (it's a flag). Icon + subtitle reflect the
+    // public/anon choice; the multistate sits in the footer (full-width,
+    // same layout as Location).
     if (src.identityRow) {
+      const meta = IDENTITY_META[identity]
       return (
         <FeedRow
           key={src.kind}
           kind={src.kind}
           label={src.label}
-          detail={src.detail}
           availability={src.availability}
-          trailing={
-            <View style={styles.identityControl}>
-              <SegmentedToggle options={IDENTITY_OPTIONS} value={identity} onChange={setIdentity} />
-            </View>
-          }
+          leading={<StateIcon name={meta.icon} />}
+          detail={meta.detail}
+          showAir={false}
+          showRec={false}
+          footer={<SegmentedToggle options={IDENTITY_OPTIONS} value={identity} onChange={setIdentity} />}
+        />
+      )
+    }
+    // Location: no Air toggle — the precision multistate (PRIVATE = off) is
+    // the single source of truth. Icon + subtitle reflect the chosen precision.
+    if (src.kind === 'loc') {
+      const meta = LOC_META[precision]
+      return (
+        <FeedRow
+          key={src.kind}
+          kind={src.kind}
+          label={src.label}
+          availability={src.availability}
+          leading={<StateIcon name={meta.icon} muted={meta.muted} />}
+          detail={meta.detail}
+          showAir={false}
+          showRec={false}
+          footer={<SegmentedToggle options={PRECISION_OPTIONS} value={precision} onChange={setPrecision} />}
         />
       )
     }
@@ -341,13 +394,6 @@ export function DashboardScreen() {
         // Recording is no longer armed on the dashboard — a single Record
         // button on the stream view records the aired set.
         showRec={false}
-        footer={
-          src.kind === 'loc' ? (
-            <View style={styles.precision}>
-              <SegmentedToggle options={PRECISION_OPTIONS} value={precision} onChange={setPrecision} />
-            </View>
-          ) : undefined
-        }
       />
     )
   }
@@ -486,11 +532,17 @@ const styles = StyleSheet.create({
   sourceList: {
     gap: theme.spacing.sm,
   },
-  identityControl: {
-    width: 172,
-  },
-  precision: {
-    gap: theme.spacing.xs,
+  // Leading icon tile for Location / Identity rows — matches FeedThumb md
+  // (76×60) so the rows align with the other source rows.
+  stateIcon: {
+    width: 76,
+    height: 60,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.colors.bg.panel,
+    borderWidth: 1,
+    borderColor: theme.colors.border.subtle,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   subscribersOnlyRow: {
     flexDirection: 'row',

@@ -64,9 +64,10 @@ import { DOBWheel } from '@/components/features/onboarding/DOBWheel'
 import { LocationGranularityPicker } from '@/components/features/onboarding/LocationGranularityPicker'
 import { Toggle } from '@/components/primitives/Toggle'
 import { Button } from '@/components/primitives/Button'
+import { Icon } from '@/components/primitives/Icon'
 import { SegmentedToggle } from '@/components/primitives/SegmentedToggle'
 import { BroadcasterRow } from '@/components/features/user/BroadcasterRow'
-import { useState } from 'react'
+import { useState, type ComponentProps } from 'react'
 import { theme } from '@/tokens/theme'
 
 export function FeatureGallery() {
@@ -915,6 +916,11 @@ export function FeatureGallery() {
             <IdentityRowDemo />
           </View>
         </Row>
+        <Row label="leading icon + footer segment, no Air toggle (Location / Identity on the dashboard)">
+          <View style={styles.sourceStack}>
+            <StatePickerRowDemo />
+          </View>
+        </Row>
         <Row label="denied / disabled">
           <View style={styles.sourceStack}>
             <FeedRowDemo kind="screen" label="Screen" detail="Media · whole-screen · capture pending" availability="disabled" />
@@ -1579,6 +1585,45 @@ function IdentityRowDemo() {
   )
 }
 
+// Location/Identity dashboard style: leading icon tile (updates with the
+// chosen state) + footer SegmentedToggle, no Air toggle (showAir={false}).
+function StatePickerRowDemo() {
+  const [precision, setPrecision] = useState<'exact' | 'city' | 'country' | 'private'>('city')
+  const meta: Record<typeof precision, { icon: ComponentProps<typeof Icon>['name']; detail: string; muted?: boolean }> = {
+    exact: { icon: 'map-pin', detail: 'Your exact spot is shown on the globe' },
+    city: { icon: 'map', detail: 'A fuzzy circle around your city' },
+    country: { icon: 'globe', detail: 'Only the country you’re in' },
+    private: { icon: 'eye-off', detail: 'Location hidden — not shared', muted: true },
+  }
+  const m = meta[precision]
+  return (
+    <FeedRow
+      kind="loc"
+      label="Location"
+      detail={m.detail}
+      showAir={false}
+      showRec={false}
+      leading={
+        <View style={styles.stateIconTile}>
+          <Icon name={m.icon} size="lg" color={m.muted ? theme.colors.text.muted : theme.colors.accent.default} />
+        </View>
+      }
+      footer={
+        <SegmentedToggle
+          options={[
+            { value: 'exact', label: 'EXACT' },
+            { value: 'city', label: 'CITY' },
+            { value: 'country', label: 'COUNTRY' },
+            { value: 'private', label: 'PRIVATE' },
+          ]}
+          value={precision}
+          onChange={setPrecision}
+        />
+      }
+    />
+  )
+}
+
 function RecordConsentSheetDemo() {
   const [visible, setVisible] = useState(false)
   return (
@@ -1734,6 +1779,16 @@ const styles = StyleSheet.create({
   sourceStack: {
     alignSelf: 'stretch',
     gap: theme.spacing.sm,
+  },
+  stateIconTile: {
+    width: 76,
+    height: 60,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.colors.bg.panel,
+    borderWidth: 1,
+    borderColor: theme.colors.border.subtle,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   darkStage: {
     alignSelf: 'stretch',

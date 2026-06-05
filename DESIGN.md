@@ -2525,9 +2525,14 @@ itself is v0.3.
 - **Variants:** one per layer (`cam`, `audio`, `screen`, `loc`, `gyro`, `compass`)
 - **Sizes:** md
 - **States:** per-affordance air on/off + rec on/off (all four combinations valid); availability `available` / `denied` ("PERMISSION DENIED ·" prefix) / `disabled` (dimmed 0.55, toggles locked — the detail text carries the status, e.g. "capture pending" / "v0.3+")
-- **Used in:** `DashboardScreen` (Go Live & Record arming — full source suite + Identity row) — 2026-06-03
-- **Tweak impact:** Go Live & Record arming screen
-- **Shipped:** 2026-05-31 (sub-phase 12.5). **Redesigned 2026-06-03** to the two-affordance capture model (clips initiative · C2). **Sensitivity badges + record-consent lock-hint removed 2026-06-03** (see decision log).
+- **Slots/props:** `showRec` / `showAir` (hide either affordance); `leading`
+  (replace FeedThumb with a custom icon tile); `trailing` (replace the
+  affordances entirely); `footer` (full-width sub-control under the row)
+- **Used in:** `DashboardScreen` (Go Live arming — full source suite; the
+  Location + Identity rows use `leading` icon tile + `footer` segment with
+  `showAir={false}`) — 2026-06-05
+- **Tweak impact:** Go Live arming screen
+- **Shipped:** 2026-05-31 (sub-phase 12.5). **Redesigned 2026-06-03** to the two-affordance capture model (clips initiative · C2). **Sensitivity badges + record-consent lock-hint removed 2026-06-03** (see decision log). **`showAir` + `leading` added 2026-06-05** (Location/Identity no-Air-toggle layout).
 
 **Mock says:** Row: thumb + meta (label + detail) + TWO affordances per
 source — **Air** (broadcast live) and **Rec** (save to device). Location
@@ -3567,6 +3572,26 @@ above. The seam is not a separate motion category.
 
 Append-only. Most recent first. Each entry: date, decision, rationale,
 constraint it imposes downstream.
+
+### 2026-06-05 — Dashboard Location/Identity rows: state-driven icon + subtitle, no Air toggle
+
+- **Location Air toggle removed.** It was redundant — the precision multistate
+  (EXACT / CITY / COUNTRY / **PRIVATE = off**) is the single source of truth, and
+  the actual sharing is governed by `locationPrecision`, not `air.loc`. The row
+  now has no Air toggle (`showAir={false}`); "location aired" is derived from
+  `precision !== private` (so location-only go-live still works).
+- **Location icon + subtitle track the precision** — `map-pin` / `map` / `globe`
+  / `eye-off` (muted) with a matching one-line subtitle, content adapted from the
+  `LocationGranularityPicker`.
+- **Settings privacy section removed.** Location precision is chosen on the
+  dashboard now, so the Settings PRIVACY block (the `LocationGranularityPicker`)
+  is gone. The picker component stays (still used in creator onboarding + gallery).
+- **Identity row restyled to match Location** — the Public/Anon multistate moved
+  from the `trailing` slot to the full-width `footer`; the row gained a
+  state-driven leading icon (`user` / `user-x`) and clearer subtitles ("Shown as
+  your @handle with your avatar" / "Anonymous — no handle or avatar shown").
+- **FeedRow** gained `showAir` (hide the Air toggle) and `leading` (replace the
+  FeedThumb with a custom icon tile); both documented in the gallery.
 
 ### 2026-06-04 — Broadcaster live view: cleaner overlay layout + circular record
 
