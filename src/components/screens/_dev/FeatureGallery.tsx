@@ -46,6 +46,7 @@ import { BankCard } from '@/components/features/wallet/BankCard'
 import { FeedThumb } from '@/components/features/broadcast/FeedThumb'
 import { FeedRow } from '@/components/features/broadcast/FeedRow'
 import { GoBar } from '@/components/features/broadcast/GoBar'
+import { GoLiveRecordBar } from '@/components/features/broadcast/GoLiveRecordBar'
 import { ArmButton } from '@/components/features/broadcast/ArmButton'
 import { RecordConsentSheet } from '@/components/features/broadcast/RecordConsentSheet'
 import { BroadcastStatusIndicator } from '@/components/features/broadcast/BroadcastStatusIndicator'
@@ -958,6 +959,24 @@ export function FeatureGallery() {
         </Row>
       </Section>
 
+      <Section title="GoLiveRecordBar">
+        <Row label="idle (Go Live · Record)">
+          <GoLiveRecordBar isLive={false} isRecording={false} onLivePress={() => {}} onRecordPress={() => {}} />
+        </Row>
+        <Row label="live (End Stream · Record)">
+          <GoLiveRecordBar isLive isRecording={false} onLivePress={() => {}} onRecordPress={() => {}} />
+        </Row>
+        <Row label="live + recording (End Stream · Stop Recording)">
+          <GoLiveRecordBar isLive isRecording onLivePress={() => {}} onRecordPress={() => {}} />
+        </Row>
+        <Row label="disabled (can't go live yet)">
+          <GoLiveRecordBar isLive={false} isRecording={false} liveDisabled recordDisabled onLivePress={() => {}} onRecordPress={() => {}} />
+        </Row>
+        <Row label="interactive">
+          <GoLiveRecordBarDemo />
+        </Row>
+      </Section>
+
       <Section title="RecordConsentSheet">
         <Row label="opens a sheet (sensitive-source record consent)">
           <RecordConsentSheetDemo />
@@ -1529,6 +1548,35 @@ function FeedRowDemo({
       onAirChange={setAir}
       rec={rec}
       onRecChange={setRec}
+    />
+  )
+}
+
+// Mirrors the real control's state machine: Go Live → End Stream, and
+// Record (goes live too) → Stop Recording; End Stream clears both.
+function GoLiveRecordBarDemo() {
+  const [isLive, setIsLive] = useState(false)
+  const [isRecording, setIsRecording] = useState(false)
+  return (
+    <GoLiveRecordBar
+      isLive={isLive}
+      isRecording={isRecording}
+      onLivePress={() => {
+        if (isLive) {
+          setIsLive(false)
+          setIsRecording(false)
+        } else {
+          setIsLive(true)
+        }
+      }}
+      onRecordPress={() => {
+        if (isRecording) {
+          setIsRecording(false)
+        } else {
+          setIsLive(true)
+          setIsRecording(true)
+        }
+      }}
     />
   )
 }

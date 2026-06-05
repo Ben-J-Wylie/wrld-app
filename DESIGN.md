@@ -2636,6 +2636,35 @@ docked GoBar — the per-source Air/Rec toggles are the source of truth
 whatever they say. The `ArmButton` pair is no longer used on the
 Dashboard (kept as a feature for any future dual-intent surface).
 
+**Superseded on the Dashboard (2026-06-04):** the single GoBar was replaced
+by `GoLiveRecordBar` (two matched buttons: Go Live + Record). GoBar stays in
+the library + gallery for any future single-CTA surface.
+
+---
+
+##### `GoLiveRecordBar`
+
+- **Tier:** feature (composes two `Button` primitives in a flex row)
+- **Location:** `src/components/features/broadcast/GoLiveRecordBar.tsx`
+- **Props:** `isLive`, `isRecording`, `liveDisabled?`, `recordDisabled?`,
+  `onLivePress`, `onRecordPress`, `style?`
+- **States:** label/role driven by `isLive` / `isRecording` — Live button
+  **Go Live → End Stream**, Record button **Record → Stop Recording**
+- **Used in:** `DashboardScreen` (docked footer) + `StreamScreen` (preview +
+  live), with shared state from `broadcastStore` so both read identically
+- **Tweak impact:** the shared broadcast control on both surfaces
+- **Shipped:** 2026-06-04
+
+**Code does:** two equal-width buttons side by side (each wrapped in a
+`flex:1` View — the Button primitive applies `style` to an inner view, so the
+flex must sit on a wrapper to split the row). Both `variant="primary"` so the
+pair reads as one matched control. Semantics are wired by the consumer:
+Go Live = stream only · Record = stream + record · Stop Recording = record off
+(stream stays) · End Stream = both off. State is the global `broadcastStore`
+(`isLive` / `isRecording`), so the dashboard and the stream view never
+disagree; when live, the dashboard's presses act on the mounted StreamScreen
+via the store `command`. See the 2026-06-04 decision-log entry.
+
 ---
 
 ##### `ArmButton`
