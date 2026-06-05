@@ -334,6 +334,59 @@ the `react-native-view-shot` Metro stub and install view-shot for real.
 
 ---
 
+## Rolling Buffer (Always-On Rewind) initiative — June 2026
+
+> **Rolling-buffer lane — Ben / `design` (capture surface).** Read this before
+> touching capture UI. The full model lives in the brief below + the
+> per-repo lane notes in wrld-backend/CLAUDE.md and wrld-mediasoup/CLAUDE.md.
+>
+> **Your stage:** R4 only — retire the Record verb (`RecordCircle` + the
+> GoLiveRecordBar Record affordance); add "save a clip" (retroactive, scrubs the
+> buffer); buffer-window display ("rewind reaches back to ~Tuesday 3pm" — a
+> timestamp, not a duration); subscription-screen rewind + resolution ladder
+> (24h/720p · 72h/1080p · 7d/1440p); per-tier `getUserMedia` cap from
+> `wrldUser.tier` (G4 = cap-produce, decided R0); retire the already-disabled
+> SENSITIVE/BENIGN + `RecordConsentSheet` (or keep `RecordConsentSheet` parked).
+> R4 runs parallel to Aaron's whole spine and integrates at R5.
+>
+> **Not your lane — do not edit:** `screens/`, `hooks/`, `api/` (Aaron's). Build
+> R4 against a stubbed/mock buffer — do NOT wait on the real substrate.
+>
+> **Seam — Record-button removal:** you retire `RecordCircle` + the design-side
+> states here; Aaron removes the button and rewires the verb in `StreamScreen`
+> after the merge. (You do NOT edit `StreamScreen`.)
+>
+> **Merge protocol (unchanged):** pull `main` HEAD into `design` first,
+> theme-codemod any of Aaron's net-new code, push `design → main` only on your
+> explicit sign-off. Land R4 merged-ready EARLY so R5 isn't waiting on you.
+>
+> **Done-bar (on device):** the Record verb is gone, "save a clip" works against
+> the stubbed buffer, the buffer-window display + subscription ladder render, and
+> it's merged-ready before Aaron reaches R5.
+
+Builds on the clips manifest model. Going live = continuously buffering the
+stream into a self-overwriting rolling store; no Record button. The durable
+verb is "Save a clip" (retroactive over the buffer). See the rolling-buffer
+brief above + the per-repo lane notes for the full cross-repo model + R0–R5 rollout.
+
+DECIDED: ring buffer; time-contract / byte-backstop; two pools (rolling buffer
++ curated GB saved-clip quota, permanent-until-deleted); per-tier caps Free
+24h/720p · Plus 72h/1080p · Pro 7d/1440p; capture ⊆ broadcast (no record-
+without-broadcast); shipping in v0.2.
+R0 RESOLVED (Aaron + Ben, 2026-06-05): G4 = cap produce → app sets getUserMedia
+constraints from wrldUser.tier (Free streams 720p live + rewind; no server
+transcode). G5 = generous budget → byte caps sized to worst-case-plus-cushion
+(~Free 61 GB · Plus 330 GB · Pro 1.5 TB); Aaron pins the exact per-resolution
+bitrate ladder into RemoteConfig. R1 unblocked.
+
+App-side (Ben, `design`, R4): retire the Record verb (RecordCircle); "Save a
+clip" scrubs the buffer; ClipEditScreen edits the resulting manifest; buffer-
+window display; per-tier getUserMedia cap; subscription ladder copy; retire the
+already-disabled SENSITIVE/BENIGN + RecordConsentSheet. Supersedes the
+2026-06-04 "single Record button on the stream view" model.
+
+---
+
 ## Clips initiative — model, working split & rollout (June 2026)
 
 The v0.2 recording/clips scope (re-baselined 2026-05-29) now has a decided
