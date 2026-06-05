@@ -776,6 +776,13 @@ tracked internally via the native focus/blur events. `prefix` prop
 applies to the outer wrapper (layout/positioning); the inner TextInput
 draws from theme typography directly.
 
+**`leading` slot added 2026-06-05.** An optional `leading?: ReactNode` rendered
+inside the field before the text — the symmetric counterpart to the right
+affordance. This is what lets `SearchBar` compose `Input` (leading = 🔍, right
+= clear-X) instead of re-implementing the field, so the search box and the
+"What's happening" title field now share one look. See the decision-log entry
+"Search ↔ title field harmonised; shared ScreenHeader".
+
 **Focus-driven shadow removed 2026-05-30** (see decision-log entry
 "CALayer reconfiguration on focus-driven shadows"). The original spec
 called for `theme.elevation.glow.accent` to appear on focus (and on
@@ -1571,26 +1578,26 @@ a section — single variant passes `stream.layers` directly into
 
 ##### `SearchBar`
 
-- **Tier:** feature (composes Icon + TextInput + Pressable)
+- **Tier:** feature (composes the `Input` primitive)
 - **Location:** `src/components/features/discovery/SearchBar.tsx`
-- **Variants:** `default` (pill on `bg.panel`, subtle border; focus swaps to `accent.default`)
-- **Sizes:** md (40-tall pill)
 - **States:** default, focused, with-clear (when `onClear` is set and value is non-empty)
-- **Used in:** populated in 12.6 (globe overlay + SearchScreen migration)
+- **Used in:** Globe overlay search slot; any future search surface
 - **Tweak impact:** Globe overlay search slot; any future search surface
 - **Shipped:** 2026-05-31 (sub-phase 12.5)
-- **Last reviewed:** 2026-05-31
+- **Last reviewed:** 2026-06-05
 
-**Mock says (C3=A):** Glass pill (radius:full, panel bg, line border,
-backdrop-blur) with leading mag-glass Icon + Input. Placeholder
-"Search handle, title, or city". Sits below the WRLD + LIVE header,
-above the CategoryChipRow.
+**Mock says (C3=A):** leading mag-glass Icon + field, placeholder, optional
+clear. Sits below the WRLD + LIVE header, above the CategoryChipRow.
 
-**Code does (shipped):** 40-tall pill — leading `search` icon, bare
-`TextInput`, optional clear-X (shown when value is non-empty AND
-`onClear` is provided). Focus is tracked locally; the border swaps
-from `border.subtle` to `accent.default` on focus. **No focus-driven
-shadow** per the 2026-05-30 CALayer fix on Input.
+**Rebuilt on `Input` 2026-06-05.** Was a bespoke 40-tall glass pill (radius:full,
+`bg.panel`) with its own bare `TextInput` — it diverged from `Input` only
+because `Input` lacked a leading-icon slot and the pill geometry differed. With
+the new `Input.leading` slot, `SearchBar` now **composes `Input`**
+(`leading`=🔍, `rightAffordance`=clear-X, `returnKeyType='search'` + `onSubmit`)
+and inherits the title field's exact look (rectangle, `radius.md`, h:52,
+`bg.elevated`, 16px). The search box and the "What's happening" title field are
+now one source of truth. Same public API — existing callers are unchanged, they
+just render as the rectangle field now.
 
 **Composition note.** Built with a bare `TextInput` rather than
 wrapping the Input primitive — Input has no leading-icon slot, and
@@ -2670,10 +2677,70 @@ State is the global `broadcastStore` (`isLive`), so the dashboard and the
 stream view never disagree; when live, the dashboard's press acts on the
 mounted StreamScreen via the store `command`.
 
-**Record button removed for now (2026-06-04).** Originally two matched buttons
-(Go Live + Record). The Record button was pulled to simplify the surface; the
-record *functionality* (start/stop/command/pendingRecord in StreamScreen) is
-untouched and the record props remain so the second button can return cheaply.
+**Record verb retired (Rolling Buffer, 2026-06-05).** Originally two matched
+buttons (Go Live + Record), then the Record button was pulled (2026-06-04). The
+rolling-buffer model makes that permanent: going live *is* recording (into the
+buffer), so there is no Record button by design — the durable verb is "Save a
+clip" (`SaveClipButton`). The `isRecording?` / `recordDisabled?` / `onRecordPress?`
+props are now a vestigial compat shim, ignored by the component; they keep the
+Dashboard / StreamScreen consumers type-checking until Aaron removes the wiring
+there (the design→main seam).
+
+---
+
+##### `BufferWindowLabel`
+
+- **Tier:** feature (composes `Icon` + `Text`)
+- **Location:** `src/components/features/broadcast/BufferWindowLabel.tsx`
+- **Props:** `reachesBack` (Date | epoch ms), `floorHours?`, `now?`, `style?`
+- **States:** reach-only, or reach + a quiet max-quality floor caption
+- **Used in:** clip editor / profile (Aaron, R5) — shows how far back the live
+  rewind currently reaches as a concrete timestamp, not a bare duration
+- **Tweak impact:** the rolling-buffer reach readout
+- **Shipped:** 2026-06-05 (Rolling Buffer · R4)
+
+**Code does:** cream-palette card — accent-tint icon tile (`rotate-ccw`) + a
+mono `REWIND AVAILABLE` eyebrow, `Reaches back to ~Tue 3:00 PM` (today/yesterday/
+weekday + 12h time, formatted from `reachesBack` vs `now`), and an optional
+`At least ~Nh even at max quality` caption from `floorHours`. Presentational;
+the host supplies the backend's earliest-available instant.
+
+---
+
+##### `SaveClipButton`
+
+- **Tier:** feature (composes `Pressable` + `Icon` + `Text`)
+- **Location:** `src/components/features/broadcast/SaveClipButton.tsx`
+- **Props:** `onPress`, `disabled?`, `label?` (default "Save a clip"), `hint?`, `style?`
+- **States:** default, with-hint (second line), disabled
+- **Used in:** stream view / library (Aaron, R5) — the durable capture verb that
+  replaces the retired Record button / `RecordCircle`
+- **Tweak impact:** the only capture CTA under the rolling-buffer model
+- **Shipped:** 2026-06-05 (Rolling Buffer · R4)
+
+**Code does:** sibling of `GoLiveRecordBar`'s idle button — `accent.surface`
+fill + `accent.border` + `accent.default` label (built from `Pressable` + `Text`,
+not Button, for the accent-label-on-accent-tint look) with a `scissors` icon and
+optional `hint` caption.
+
+---
+
+##### `RewindLadder`
+
+- **Tier:** feature (composes `Icon` + `Text`; reads `@/lib/tierCaps`)
+- **Location:** `src/components/features/broadcast/RewindLadder.tsx`
+- **Props:** `currentTier?` (`'free' | 'plus' | 'pro'`), `style?`
+- **States:** per-tier rows; the current tier gets accent surface/border + a
+  `Current` mono tag
+- **Used in:** `SubscriptionScreen` (Aaron) — the rewind window + capture
+  resolution ladder (Free 24h/720p · Plus 3 days/1080p · Pro 7 days/1440p)
+- **Tweak impact:** the subscription rewind/resolution comparison
+- **Shipped:** 2026-06-05 (Rolling Buffer · R4)
+
+**Code does:** maps `TIER_LADDER` from `@/lib/tierCaps` (the single source of
+truth Aaron's `getUserMedia` cap also reads) to a column of bordered rows —
+tier label on the left, `rotate-ccw` window + `video` resolution mono values on
+the right. No tier numbers live in the component.
 
 ---
 
@@ -2701,7 +2768,14 @@ arm/disarm of its intent's defaults.
 
 ---
 
-##### `RecordConsentSheet`
+##### `RecordConsentSheet` — PARKED (retired by rolling buffer, 2026-06-05)
+
+**Retired (Rolling Buffer · R4).** Under capture ⊆ broadcast there is no
+record-without-broadcast path, so the record-consent step has nothing to gate
+("nothing you didn't broadcast is ever kept"). The component is kept **parked**
+(not deleted) for a possible future non-friends-and-family return; it is wired
+into no screen and shown in the gallery as parked. The SENSITIVE/BENIGN tiering
+it depended on is likewise retired. Original spec below.
 
 - **Tier:** feature (composes BottomSheet + Icon + Text + Button)
 - **Location:** `src/components/features/broadcast/RecordConsentSheet.tsx`
@@ -2959,9 +3033,30 @@ accent + tints the chevron. Selection state is parent-owned via
 ### Sections (`src/components/sections/`)
 
 Populated from the 12.2 inventory pass. Sections are regional patterns
-that repeat across two or more screens. The 13 entries below all meet
+that repeat across two or more screens. The 14 entries below all meet
 that bar. Several patterns that *don't* meet it stay inline in their
 single home screen — flagged at the end.
+
+##### `ScreenHeader`
+
+- **Tier:** section (composes `BrandMark` + `Text`; optional Pill via `right`)
+- **Location:** `src/components/sections/ScreenHeader.tsx`
+- **Props:** `title?` (right-justified page name), `right?` (custom right slot,
+  e.g. the globe LIVE Pill — takes precedence over `title`), `pointerEvents?`
+  (the globe overlays it on the map and passes `box-none`), `style?`
+- **States:** brand-only, brand + page-name, brand + custom right
+- **Used in:** Globe (right = LIVE pill), Dashboard (title = "Dashboard"),
+  Stream preview (title = "Go Live") — rolls out to the remaining screens next
+- **Tweak impact:** the top header on every screen
+- **Shipped:** 2026-06-05
+
+**Code does:** logo + WRLD wordmark left, right slot right, in a row with
+`paddingHorizontal: lg` and a pinned `minHeight: 32` (the brand-row height) so
+the header is the SAME height regardless of the right slot. Each screen renders
+its field (search / "What's happening") in a `paddingTop: sm` row directly
+below, and since all three headers start at `safe-area-top + sm`, the field
+lands at an identical Y — it doesn't jump on tab switch. See the decision-log
+entry "Search ↔ title field harmonised; shared ScreenHeader".
 
 ##### `ScreenScroll`
 
@@ -3572,6 +3667,74 @@ above. The seam is not a separate motion category.
 
 Append-only. Most recent first. Each entry: date, decision, rationale,
 constraint it imposes downstream.
+
+### 2026-06-05 — Search ↔ title field harmonised; shared ScreenHeader
+
+Three coupled changes so the globe, dashboard, and stream-preview tops read as
+one system and the field below doesn't jump when switching tabs.
+
+- **`Input.leading` slot.** Added an optional leading slot to the `Input`
+  primitive (symmetric to the right affordance). Removes the reason `SearchBar`
+  was a separate component.
+- **`SearchBar` rebuilt on `Input`.** Was a bespoke 40-tall glass pill with its
+  own `TextInput`; now composes `Input` (leading 🔍 + clear-X + search keyboard)
+  and inherits the "What's happening" title field's exact look (rectangle,
+  `radius.md`, h:52, `bg.elevated`, 16px). One source of truth for the field.
+  Same public API — callers unchanged. The globe's pill aesthetic becomes a
+  solid field (chosen).
+- **`ScreenHeader` section.** New shared top header — logo + WRLD left, right
+  slot right (globe = LIVE pill; every other page = the page name, right-
+  justified). Pinned `minHeight: 32` + each screen putting its field in a
+  `paddingTop: sm` row below means the search / title field lands at an
+  identical Y on every screen (all headers start at `safe-area-top + sm`).
+
+**Scope this pass:** Globe, Dashboard, and the Stream **preview** (the live
+over-camera view is untouched — its floating LivePill / identity / viewer-count
+cluster stays). Roll `ScreenHeader` out to the remaining ~12 screens next.
+
+**Imposes:** new screens use `ScreenHeader` at the top + a `paddingTop: sm`
+field row to stay aligned; `SearchBar`'s look now changes wherever `Input`'s
+field styling changes.
+
+### 2026-06-05 — Rolling buffer (always-on rewind): going live = buffering
+
+Adopts the rolling-buffer recording model. Going live continuously records the
+stream into a self-overwriting buffer; there is no Record button (recording is
+implicit while live). The only durable verb is "Save a clip," retroactive over
+the buffer (writes a manifest per the existing clips model + promotes segments).
+
+**Decided:** ring-buffer model; time is the user-facing contract, bytes the
+enforced backstop (cap sized for all-sources-max-quality so the window can only
+under-spend); two pools (rolling buffer auto-managed + saved clips as a curated
+GB quota, permanent-until-deleted); per-tier resolution caps now load-bearing —
+Free 24h/720p, Plus 72h/1080p, Pro 7d/1440p (the 1440p Pro cap differentiates the
+paid tiers on resolution as well as window); **capture ⊆ broadcast** (no record-
+without-broadcast); scheduled **into v0.2**. Dollar viability confirmed on Hetzner.
+
+**R0 resolved (Aaron, 2026-06-05):** G4 = **cap produce** (cap on the phone —
+the app sets `getUserMedia` height from `wrldUser.tier`; sidecar stays
+`-c:v copy`, no server transcode). G5 = ladder numbers unchanged (Free 24h/720p ·
+Plus 72h/1080p · Pro 7d/1440p hold); per-tier byte caps live in backend
+RemoteConfig (Aaron's lane).
+
+**Shipped on `design` (R4 — component lane):**
+- `src/lib/tierCaps.ts` — single source of truth for the rewind/resolution
+  ladder + `maxCaptureHeight(tier)` (the seam Aaron's `getUserMedia` cap reads).
+- `BufferWindowLabel` (feature) — rewind reach as a concrete timestamp
+  ("Reaches back to ~Tue 3:00 PM") + optional max-quality floor.
+- `SaveClipButton` (feature) — the durable "Save a clip" verb replacing Record.
+- `RewindLadder` (feature) — the subscription-screen window + resolution ladder.
+- `GoLiveRecordBar` — Record verb retired permanently (recording implicit); the
+  optional record props are now a vestigial compat shim pending Aaron's
+  Dashboard / StreamScreen rewire (the seam — Ben does NOT edit those screens).
+- `RecordConsentSheet` + SENSITIVE/BENIGN — parked/retired (capture ⊆ broadcast
+  removes the record-without-broadcast path the consent step guarded).
+
+**Imposes:** Aaron (`main`) removes the `RecordCircle` button + rewires the
+"save a clip" verb in `StreamScreen` after the merge, and reads
+`maxCaptureHeight` in `useMediasoup` (G4 = cap produce). Cross-repo model in
+the Rolling Buffer initiative in CLAUDE.md. Supersedes the 2026-06-04 "Record button on the
+stream view" model.
 
 ### 2026-06-05 — Dashboard Location/Identity rows: state-driven icon + subtitle, no Air toggle
 

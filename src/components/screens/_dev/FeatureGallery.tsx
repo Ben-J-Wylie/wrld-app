@@ -50,6 +50,9 @@ import { GoLiveRecordBar } from '@/components/features/broadcast/GoLiveRecordBar
 import { ArmButton } from '@/components/features/broadcast/ArmButton'
 import { RecordConsentSheet } from '@/components/features/broadcast/RecordConsentSheet'
 import { BroadcastStatusIndicator } from '@/components/features/broadcast/BroadcastStatusIndicator'
+import { BufferWindowLabel } from '@/components/features/broadcast/BufferWindowLabel'
+import { SaveClipButton } from '@/components/features/broadcast/SaveClipButton'
+import { RewindLadder } from '@/components/features/broadcast/RewindLadder'
 import { ClipCard } from '@/components/features/clip/ClipCard'
 import { ClipPreview } from '@/components/features/clip/ClipPreview'
 import { LayerEditorRow } from '@/components/features/clip/LayerEditorRow'
@@ -981,7 +984,44 @@ export function FeatureGallery() {
         </Row>
       </Section>
 
-      <Section title="RecordConsentSheet">
+      <Section title="BufferWindowLabel">
+        {/* Rolling buffer: how far back the live rewind currently reaches. */}
+        <Row label="reach + max-quality floor">
+          <BufferWindowLabel reachesBack={new Date(Date.now() - 23 * 3600_000)} floorHours={24} />
+        </Row>
+        <Row label="reach only">
+          <BufferWindowLabel reachesBack={new Date(Date.now() - 2.5 * 3600_000)} />
+        </Row>
+      </Section>
+
+      <Section title="SaveClipButton">
+        {/* The durable capture verb — replaces the retired Record button. */}
+        <Row label="default">
+          <SaveClipButton onPress={() => {}} />
+        </Row>
+        <Row label="with reach hint">
+          <SaveClipButton onPress={() => {}} hint="Pick any moment from the last 24h" />
+        </Row>
+        <Row label="disabled (nothing buffered yet)">
+          <SaveClipButton onPress={() => {}} disabled />
+        </Row>
+      </Section>
+
+      <Section title="RewindLadder">
+        {/* Subscription ladder — rewind window + capture resolution per tier. */}
+        <Row label="current = free">
+          <RewindLadder currentTier="free" />
+        </Row>
+        <Row label="current = pro">
+          <RewindLadder currentTier="pro" />
+        </Row>
+        <Row label="no current tier">
+          <RewindLadder />
+        </Row>
+      </Section>
+
+      <Section title="RecordConsentSheet (parked — retired by rolling buffer)">
+        {/* Capture ⊆ broadcast retired the record-consent step; kept parked. */}
         <Row label="opens a sheet (sensitive-source record consent)">
           <RecordConsentSheetDemo />
         </Row>

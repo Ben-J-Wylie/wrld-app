@@ -8,10 +8,14 @@
 //   not live → "Go Live"   · light accent-tint fill + accent border/label
 //   live     → "End Stream" · solid accent (red) fill + cream label
 //
-// The Record button is removed from the UI for now (2026-06-04). The record
-// *functionality* is untouched in StreamScreen (start/stop/command/pending);
-// the props below stay optional so the second button can be reinstated
-// without touching consumers.
+// The Record verb is retired (Rolling Buffer initiative, June 2026): going
+// live IS recording — the stream continuously fills a rolling buffer, so there
+// is no Record button by design. The durable capture verb is now "Save a clip"
+// (see SaveClipButton), retroactive over the buffer. The optional record props
+// below are a vestigial compat shim so existing consumers
+// (Dashboard / StreamScreen) keep type-checking until Aaron rewires the verb
+// in those screens (the design→main seam); this component renders Go Live /
+// End Stream only and ignores them.
 
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
 import { Pressable } from '@/components/primitives/Pressable'
@@ -22,7 +26,9 @@ type Props = {
   isLive: boolean
   liveDisabled?: boolean
   onLivePress: () => void
-  // Record affordance — kept for when the button returns; currently unused.
+  // Record affordance — vestigial compat shim (recording is implicit while
+  // live under the rolling-buffer model); ignored. Remove with the Dashboard /
+  // StreamScreen rewire.
   isRecording?: boolean
   recordDisabled?: boolean
   onRecordPress?: () => void

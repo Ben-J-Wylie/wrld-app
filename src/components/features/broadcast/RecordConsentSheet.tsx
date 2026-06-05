@@ -1,5 +1,15 @@
 // src/components/features/broadcast/RecordConsentSheet.tsx
 //
+// PARKED (Rolling Buffer initiative, June 2026). The record-consent step is
+// retired: under the rolling-buffer model capture ⊆ broadcast — nothing is
+// ever recorded that wasn't broadcast, so there is no record-without-broadcast
+// path to consent to ("nothing you didn't broadcast is ever kept"). This
+// component is kept parked (not deleted) for a possible future
+// non-friends-and-family return; it is no longer wired into any screen and is
+// shown in the gallery as parked. The SENSITIVE/BENIGN tiering it depended on
+// is likewise retired. See the Rolling Buffer initiative in CLAUDE.md + DESIGN.md decision log.
+//
+// Original purpose ↓
 // Consent step shown when Record is enabled for a SENSITIVE source on
 // the Go Live & Record screen (clips initiative, 2026-06-03 decision-log
 // entry). The capture guardrail is "nothing recorded silently" — a
