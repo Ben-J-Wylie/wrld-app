@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '@clerk/clerk-expo'
 import { theme } from '@/tokens/theme'
 import { ScreenScroll } from '@/components/sections/ScreenScroll'
+import { ScreenHeader } from '@/components/sections/ScreenHeader'
 import { Text } from '@/components/primitives/Text'
 import { Button } from '@/components/primitives/Button'
 import { ppvApi } from '@/api/ppvEvents'
@@ -164,6 +165,7 @@ export function PpvIndexScreen() {
 
   return (
     <ScreenScroll
+      header={<ScreenHeader title="Events" />}
       contentContainerStyle={styles.content}
       refreshControl={
         <RefreshControl
@@ -173,7 +175,6 @@ export function PpvIndexScreen() {
         />
       }
     >
-      <Text variant="heading">Events</Text>
 
       {isLoading ? (
         <View style={styles.center}>

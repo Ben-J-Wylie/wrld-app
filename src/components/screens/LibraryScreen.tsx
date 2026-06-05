@@ -7,6 +7,7 @@ import { Text } from '@/components/primitives/Text'
 import { Pill } from '@/components/primitives/Pill'
 import { Card } from '@/components/primitives/Card'
 import { ScreenScroll } from '@/components/sections/ScreenScroll'
+import { ScreenHeader } from '@/components/sections/ScreenHeader'
 import { useRecordings } from '@/hooks/useRecordings'
 import { useAuthStore } from '@/stores/authStore'
 import { recordingsApi } from '@/api/recordings'
@@ -138,7 +139,7 @@ export const LibraryScreen = () => {
 
   if (!isSignedIn) {
     return (
-      <ScreenScroll contentContainerStyle={styles.centeredContent}>
+      <ScreenScroll header={<ScreenHeader title="Library" />} contentContainerStyle={styles.centeredContent}>
         <Text variant="body" color={theme.colors.text.muted} style={styles.centeredText}>
           Sign in to see your recordings.
         </Text>
@@ -148,7 +149,7 @@ export const LibraryScreen = () => {
 
   if (isLoading) {
     return (
-      <ScreenScroll contentContainerStyle={styles.centeredContent}>
+      <ScreenScroll header={<ScreenHeader title="Library" />} contentContainerStyle={styles.centeredContent}>
         <ActivityIndicator color={theme.colors.accent.default} />
       </ScreenScroll>
     )
@@ -156,7 +157,7 @@ export const LibraryScreen = () => {
 
   if (isError || isRefetchError) {
     return (
-      <ScreenScroll contentContainerStyle={styles.centeredContent}>
+      <ScreenScroll header={<ScreenHeader title="Library" />} contentContainerStyle={styles.centeredContent}>
         <Text variant="body" color={theme.colors.text.primary} style={styles.centeredText}>
           No connection
         </Text>
@@ -176,15 +177,14 @@ export const LibraryScreen = () => {
   }
 
   return (
-    <ScreenScroll>
-      <View style={styles.header}>
-        <Text variant="heading">Library</Text>
-        {quotaGb !== null && (
+    <ScreenScroll header={<ScreenHeader title="Library" />}>
+      {quotaGb !== null && (
+        <View style={styles.quotaRow}>
           <Text variant="caption" color={pct >= 90 ? '#E5534B' : theme.colors.text.muted}>
             {pct}% of {quotaGb} GB used
           </Text>
-        )}
-      </View>
+        </View>
+      )}
       {!visibleRecordings.length ? (
         <View style={styles.centeredContent}>
           <Text variant="body" color={theme.colors.text.muted} style={styles.centeredText}>
@@ -205,11 +205,10 @@ export const LibraryScreen = () => {
 }
 
 const styles = StyleSheet.create({
-  header: {
+  quotaRow: {
     paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.lg,
+    paddingTop: theme.spacing.sm,
     paddingBottom: theme.spacing.md,
-    gap: 2,
   },
   list: {
     paddingHorizontal: theme.spacing.lg,

@@ -26,6 +26,7 @@ import { Input } from '@/components/primitives/Input'
 import { Text } from '@/components/primitives/Text'
 import { HelpText } from '@/components/primitives/HelpText'
 import { ScreenScroll } from '@/components/sections/ScreenScroll'
+import { ScreenHeader } from '@/components/sections/ScreenHeader'
 import { AvatarPicker } from '@/components/features/user/AvatarPicker'
 import { PursesCard } from '@/components/features/wallet/PursesCard'
 import { usersApi } from '@/api/users'
@@ -153,7 +154,7 @@ export function MeScreen() {
 
   if (!isSignedIn) {
     return (
-      <ScreenScroll contentContainerStyle={styles.center}>
+      <ScreenScroll header={<ScreenHeader title="Me" />} contentContainerStyle={styles.center}>
         <Text variant="body" color={theme.colors.text.muted}>
           Sign in to access your profile
         </Text>
@@ -164,14 +165,14 @@ export function MeScreen() {
 
   if (isLoading || !user) {
     return (
-      <ScreenScroll contentContainerStyle={styles.center}>
+      <ScreenScroll header={<ScreenHeader title="Me" />} contentContainerStyle={styles.center}>
         <ActivityIndicator color={theme.colors.accent.default} />
       </ScreenScroll>
     )
   }
 
   return (
-    <ScreenScroll contentContainerStyle={styles.content}>
+    <ScreenScroll header={<ScreenHeader title="Me" />} contentContainerStyle={styles.content}>
       <AvatarPicker
         avatarUrl={
           user.avatarUrl && avatarVersion > 0

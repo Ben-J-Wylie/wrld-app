@@ -3068,7 +3068,13 @@ entry "Search ↔ title field harmonised; shared ScreenHeader".
 - **Used in:** `ComponentGallery` (first migrant, 2026-05-30); rest populate as form-bearing screens migrate in 12.6
 - **Tweak impact:** every scrollable screen with focusable inputs — Gallery, Onboarding, Dashboard, Settings, Wallet, Profile editing, Report, Change Handle, AuthModal contents, etc.
 - **Shipped:** 2026-05-30 (sub-phase 12.5 — first section)
-- **Last reviewed:** 2026-05-30
+- **Last reviewed:** 2026-06-05
+
+**`header` slot added 2026-06-05.** Optional `header?: ReactNode` rendered
+**fixed** inside the SafeAreaView, above the scroll, at `safe-area-top + sm` (so
+it doesn't scroll and lands at the same Y as the globe/dashboard headers). Pass
+a `ScreenHeader` here — it's how page-level screens (Me, Library, Events) get the
+shared header in one prop without restructuring. Body content scrolls beneath it.
 
 **Mock says:** Implicit — every form-bearing screen needs the keyboard
 to lift over content rather than crop the focused input, **without
@@ -3690,7 +3696,17 @@ one system and the field below doesn't jump when switching tabs.
 
 **Scope this pass:** Globe, Dashboard, and the Stream **preview** (the live
 over-camera view is untouched — its floating LivePill / identity / viewer-count
-cluster stays). Roll `ScreenHeader` out to the remaining ~12 screens next.
+cluster stays). Roll `ScreenHeader` out to the remaining screens next.
+
+**Rollout — page-level screens (2026-06-05).** `ScreenHeader` now also on **Me ·
+Events · Library · Wallet** (all back-arrow-free), via a new fixed `header` slot
+on `ScreenScroll` (Wallet renders it above its FlatList directly). The 9
+detail/stack screens (Settings, Subscription, Monetize, Cash Out, Top Up,
+Profile, PPV Create/Manage/EventDetail) are **pending a navigation decision** —
+they currently use `router.back()` (history-based) back arrows, and the chosen
+direction is a **hybrid: page-tabs for sibling clusters (Wallet→Balance/Top
+Up/Cash Out, Monetize→Subscriptions/PPV) + a header up-affordance for the linear
+drill-downs**. Auth/onboarding flows are out of scope for now.
 
 **Imposes:** new screens use `ScreenHeader` at the top + a `paddingTop: sm`
 field row to stay aligned; `SearchBar`'s look now changes wherever `Input`'s

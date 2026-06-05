@@ -19,6 +19,7 @@
 import { useState } from 'react'
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { ScreenHeader } from '@/components/sections/ScreenHeader'
 import { router } from 'expo-router'
 import { useAuth } from '@clerk/clerk-expo'
 import { theme } from '@/tokens/theme'
@@ -120,6 +121,7 @@ export function WalletScreen() {
   if (!isSignedIn) {
     return (
       <SafeAreaView style={styles.container}>
+        <ScreenHeader title="Wallet" style={styles.walletHeaderPad} />
         <View style={styles.center}>
           <Text variant="body" color={theme.colors.text.muted}>
             Sign in to view your wallet
@@ -133,6 +135,7 @@ export function WalletScreen() {
   if (isError) {
     return (
       <SafeAreaView style={styles.container}>
+        <ScreenHeader title="Wallet" style={styles.walletHeaderPad} />
         <View style={styles.center}>
           <Text variant="body" color={theme.colors.text.primary}>No connection</Text>
           <Text variant="caption" color={theme.colors.text.muted} style={styles.centerText}>
@@ -149,6 +152,7 @@ export function WalletScreen() {
   if (isLoading || !data) {
     return (
       <SafeAreaView style={styles.container}>
+        <ScreenHeader title="Wallet" style={styles.walletHeaderPad} />
         <View style={styles.center}>
           <ActivityIndicator color={theme.colors.accent.default} />
         </View>
@@ -162,8 +166,6 @@ export function WalletScreen() {
 
   const header = (
     <View style={styles.headerStack}>
-      <Text variant="display">Wallet</Text>
-
       <PursesCard spaceBucks={data.spaceBucks} starDust={data.stardust} />
 
       <ActionTilesRow
@@ -197,6 +199,7 @@ export function WalletScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <ScreenHeader title="Wallet" style={styles.walletHeaderPad} />
       <FlatList
         data={transactions}
         keyExtractor={(t) => t.id}
@@ -231,6 +234,8 @@ export function WalletScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.bg.primary },
+  // Fixed brand header offset — matches the globe / dashboard (safe-area-top + sm).
+  walletHeaderPad: { paddingTop: theme.spacing.sm },
   center: {
     flex: 1,
     alignItems: 'center',

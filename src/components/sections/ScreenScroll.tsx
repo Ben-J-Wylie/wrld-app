@@ -26,7 +26,7 @@
 // wired in app/_layout.tsx).
 
 import React from 'react'
-import { StyleSheet, type StyleProp, type ViewStyle } from 'react-native'
+import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller'
 import type { ReactNode } from 'react'
@@ -34,6 +34,10 @@ import { theme } from '@/tokens/theme'
 
 type Props = {
   children: ReactNode
+  // Fixed header rendered above the scroll (inside the safe area, so it sits at
+  // safe-area-top + sm and stays put while the body scrolls). Pass a
+  // `ScreenHeader` here for the shared top header.
+  header?: ReactNode
   contentContainerStyle?: StyleProp<ViewStyle>
   style?: StyleProp<ViewStyle>
   bottomOffset?: number
@@ -43,6 +47,7 @@ type Props = {
 
 export function ScreenScroll({
   children,
+  header,
   contentContainerStyle,
   style,
   bottomOffset,
@@ -51,6 +56,7 @@ export function ScreenScroll({
 }: Props) {
   return (
     <SafeAreaView style={[styles.root, style]}>
+      {header != null && <View style={styles.header}>{header}</View>}
       <KeyboardAwareScrollView
         contentContainerStyle={contentContainerStyle}
         keyboardShouldPersistTaps="handled"
@@ -68,5 +74,10 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: theme.colors.bg.primary,
+  },
+  // Matches the globe / dashboard header offset (safe-area-top + sm) so the
+  // header sits at the same Y on every screen.
+  header: {
+    paddingTop: theme.spacing.sm,
   },
 })
