@@ -1,75 +1,75 @@
 // src/components/features/broadcast/GoLiveRecordBar.tsx
 //
-// The shared broadcast control: two matched, side-by-side buttons used
-// identically on the dashboard and the stream view. State is driven by the
-// global broadcastStore so both surfaces always read the same labels.
+// The shared broadcast control, used identically on the dashboard and the
+// stream view. State is driven by the global broadcastStore so both surfaces
+// always read the same thing as you navigate between them.
 //
-//   Live button:   "Go Live"  (idle)  →  "End Stream"  (live)
-//   Record button: "Record"   (idle)  →  "Stop Recording" (recording)
+// Single full-width button, two visual states:
+//   not live → "Go Live"   · light accent-tint fill + accent border/label
+//   live     → "End Stream" · solid accent (red) fill + cream label
 //
-// Semantics (wired by the consumer):
-//   • Go Live      — start the stream, no recording.
-//   • Record       — start the stream (if needed) AND start recording.
-//   • Stop Recording — stop recording only; the stream keeps running.
-//   • End Stream   — stop recording (if any) AND the stream.
-//
-// Both buttons share one style (equal width, same height/variant) so the
-// pair reads as a single control.
+// The Record button is removed from the UI for now (2026-06-04). The record
+// *functionality* is untouched in StreamScreen (start/stop/command/pending);
+// the props below stay optional so the second button can be reinstated
+// without touching consumers.
 
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
-import { Button } from '@/components/primitives/Button'
+import { Pressable } from '@/components/primitives/Pressable'
+import { Text } from '@/components/primitives/Text'
 import { theme } from '@/tokens/theme'
 
 type Props = {
   isLive: boolean
-  isRecording: boolean
   liveDisabled?: boolean
-  recordDisabled?: boolean
   onLivePress: () => void
-  onRecordPress: () => void
+  // Record affordance — kept for when the button returns; currently unused.
+  isRecording?: boolean
+  recordDisabled?: boolean
+  onRecordPress?: () => void
   style?: StyleProp<ViewStyle>
 }
 
-export function GoLiveRecordBar({
-  isLive,
-  isRecording,
-  liveDisabled,
-  recordDisabled,
-  onLivePress,
-  onRecordPress,
-  style,
-}: Props) {
+export function GoLiveRecordBar({ isLive, liveDisabled, onLivePress, style }: Props) {
   return (
     <View style={[styles.row, style]}>
-      {/* The Button primitive applies `style` to an inner view, so `flex:1`
-          on the Button itself doesn't split the row — wrap each in a flex
-          View instead. */}
-      <View style={styles.btnWrap}>
-        <Button
-          label={isLive ? 'End Stream' : 'Go Live'}
-          variant="primary"
-          onPress={onLivePress}
-          disabled={liveDisabled}
-        />
-      </View>
-      <View style={styles.btnWrap}>
-        <Button
-          label={isRecording ? 'Stop Recording' : 'Record'}
-          variant="primary"
-          onPress={onRecordPress}
-          disabled={recordDisabled}
-        />
-      </View>
+      <Pressable
+        variant="default"
+        onPress={onLivePress}
+        disabled={liveDisabled}
+        accessibilityRole="button"
+        accessibilityLabel={isLive ? 'End stream' : 'Go live'}
+        style={[styles.btn, isLive ? styles.btnLive : styles.btnIdle]}
+      >
+        <Text
+          variant="bodyEmphasized"
+          color={isLive ? theme.colors.text.inverse : theme.colors.accent.default}
+        >
+          {isLive ? 'End Stream' : 'Go Live'}
+        </Text>
+      </Pressable>
     </View>
   )
 }
 
 const styles = StyleSheet.create({
   row: {
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
+    width: '100%',
   },
-  btnWrap: {
-    flex: 1,
+  btn: {
+    height: 54,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // Not live: light red tint fill + accent border/label.
+  btnIdle: {
+    backgroundColor: theme.colors.accent.surface,
+    borderColor: theme.colors.accent.border,
+  },
+  // Live: solid red fill.
+  btnLive: {
+    backgroundColor: theme.colors.accent.default,
+    borderColor: theme.colors.accent.default,
   },
 })

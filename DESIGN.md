@@ -2644,26 +2644,31 @@ the library + gallery for any future single-CTA surface.
 
 ##### `GoLiveRecordBar`
 
-- **Tier:** feature (composes two `Button` primitives in a flex row)
+- **Tier:** feature (composes `Pressable` + `Text`)
 - **Location:** `src/components/features/broadcast/GoLiveRecordBar.tsx`
-- **Props:** `isLive`, `isRecording`, `liveDisabled?`, `recordDisabled?`,
-  `onLivePress`, `onRecordPress`, `style?`
-- **States:** label/role driven by `isLive` / `isRecording` — Live button
-  **Go Live → End Stream**, Record button **Record → Stop Recording**
+- **Props:** `isLive`, `liveDisabled?`, `onLivePress`, `style?`; plus
+  `isRecording?` / `recordDisabled?` / `onRecordPress?` kept optional for when
+  the Record button returns (currently unused)
+- **States:** single full-width button, two looks driven by `isLive` —
+  **Go Live** (light accent-tint fill + accent border/label) → **End Stream**
+  (solid accent/red fill + cream label)
 - **Used in:** `DashboardScreen` (docked footer) + `StreamScreen` (preview +
   live), with shared state from `broadcastStore` so both read identically
 - **Tweak impact:** the shared broadcast control on both surfaces
 - **Shipped:** 2026-06-04
 
-**Code does:** two equal-width buttons side by side (each wrapped in a
-`flex:1` View — the Button primitive applies `style` to an inner view, so the
-flex must sit on a wrapper to split the row). Both `variant="primary"` so the
-pair reads as one matched control. Semantics are wired by the consumer:
-Go Live = stream only · Record = stream + record · Stop Recording = record off
-(stream stays) · End Stream = both off. State is the global `broadcastStore`
-(`isLive` / `isRecording`), so the dashboard and the stream view never
-disagree; when live, the dashboard's presses act on the mounted StreamScreen
-via the store `command`. See the 2026-06-04 decision-log entry.
+**Code does:** one full-width button built from `Pressable` + `Text` (not the
+Button primitive — it needs accent-tint fill *with* an accent label, which
+Button doesn't expose). Not-live = `accent.surface` fill + `accent.border` +
+`accent.default` label; live = `accent.default` fill + `text.inverse` label.
+State is the global `broadcastStore` (`isLive`), so the dashboard and the
+stream view never disagree; when live, the dashboard's press acts on the
+mounted StreamScreen via the store `command`.
+
+**Record button removed for now (2026-06-04).** Originally two matched buttons
+(Go Live + Record). The Record button was pulled to simplify the surface; the
+record *functionality* (start/stop/command/pendingRecord in StreamScreen) is
+untouched and the record props remain so the second button can return cheaply.
 
 ---
 
@@ -3562,6 +3567,22 @@ above. The seam is not a separate motion category.
 
 Append-only. Most recent first. Each entry: date, decision, rationale,
 constraint it imposes downstream.
+
+### 2026-06-04 — Go Live button: Record removed for now; full-width two-state
+
+Trimming the shared control (entry below) back to a **single full-width Go Live
+button** for now — the Record button is removed. The record *functionality*
+(start/stop, the store `command`, `pendingRecord` in StreamScreen) is untouched;
+only the button is gone, and `GoLiveRecordBar`'s record props stay optional so
+it can return cheaply.
+
+The button now has **two visual states** driven by the shared
+`broadcastStore.isLive`: **not live = light accent-tint fill** (`accent.surface`
++ `accent.border` + `accent.default` label) so it reads as ready/on without
+shouting; **live = solid red** (`accent.default` fill + cream label) as before.
+Built from `Pressable` + `Text` rather than the Button primitive, which can't do
+a tint fill with an accent label. Because the state is shared, the button shows
+the same thing on the dashboard and the stream view as you move between them.
 
 ### 2026-06-04 — Shared Go Live / Record control; separate live + recording lifecycles
 

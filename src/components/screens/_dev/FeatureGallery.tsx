@@ -960,17 +960,15 @@ export function FeatureGallery() {
       </Section>
 
       <Section title="GoLiveRecordBar">
-        <Row label="idle (Go Live · Record)">
-          <GoLiveRecordBar isLive={false} isRecording={false} onLivePress={() => {}} onRecordPress={() => {}} />
+        {/* Record button removed for now — single full-width two-state button. */}
+        <Row label="not live (Go Live — accent tint)">
+          <GoLiveRecordBar isLive={false} onLivePress={() => {}} />
         </Row>
-        <Row label="live (End Stream · Record)">
-          <GoLiveRecordBar isLive isRecording={false} onLivePress={() => {}} onRecordPress={() => {}} />
-        </Row>
-        <Row label="live + recording (End Stream · Stop Recording)">
-          <GoLiveRecordBar isLive isRecording onLivePress={() => {}} onRecordPress={() => {}} />
+        <Row label="live (End Stream — solid red)">
+          <GoLiveRecordBar isLive onLivePress={() => {}} />
         </Row>
         <Row label="disabled (can't go live yet)">
-          <GoLiveRecordBar isLive={false} isRecording={false} liveDisabled recordDisabled onLivePress={() => {}} onRecordPress={() => {}} />
+          <GoLiveRecordBar isLive={false} liveDisabled onLivePress={() => {}} />
         </Row>
         <Row label="interactive">
           <GoLiveRecordBarDemo />
@@ -1552,33 +1550,10 @@ function FeedRowDemo({
   )
 }
 
-// Mirrors the real control's state machine: Go Live → End Stream, and
-// Record (goes live too) → Stop Recording; End Stream clears both.
+// Tap to toggle Go Live ↔ End Stream (the two visual states).
 function GoLiveRecordBarDemo() {
   const [isLive, setIsLive] = useState(false)
-  const [isRecording, setIsRecording] = useState(false)
-  return (
-    <GoLiveRecordBar
-      isLive={isLive}
-      isRecording={isRecording}
-      onLivePress={() => {
-        if (isLive) {
-          setIsLive(false)
-          setIsRecording(false)
-        } else {
-          setIsLive(true)
-        }
-      }}
-      onRecordPress={() => {
-        if (isRecording) {
-          setIsRecording(false)
-        } else {
-          setIsLive(true)
-          setIsRecording(true)
-        }
-      }}
-    />
-  )
+  return <GoLiveRecordBar isLive={isLive} onLivePress={() => setIsLive((v) => !v)} />
 }
 
 function IdentityRowDemo() {
