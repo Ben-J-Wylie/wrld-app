@@ -3586,10 +3586,13 @@ the camera (no boxes):
   white stop square. Wires to the existing `startRecording`/`stopRecording`.
 - **Reaction rail moved higher** on the right (`bottom: '38%'`) so it clears the
   bottom controls.
-- **End Stream button aligned to the dashboard's Go Live button** — same
-  screen-bottom offset (`Math.max(spacing.sm, insets.bottom + spacing.md - 30)`,
-  the shared `FOOTER_DROP`) so the shared control doesn't jump when navigating
-  between the dashboard and the stream view.
+- **Both broadcaster buttons docked at the dashboard's Go Live offset** — the
+  live End Stream button *and* the preview (not-live) Go Live button use the
+  same screen-bottom offset (`Math.max(spacing.sm, insets.bottom + spacing.md -
+  30)`, the shared `FOOTER_DROP`) so the shared control doesn't jump when
+  navigating between the dashboard and the stream view in either state.
+- **Preview armed-source pills removed** too — the not-live preview is just the
+  title field + camera, with the docked Go Live button.
 
 **Constraint / follow-up:** `RecordCircle` is inline in StreamScreen for now —
 promote to a `features/broadcast/` component + gallery entry if it sticks. The

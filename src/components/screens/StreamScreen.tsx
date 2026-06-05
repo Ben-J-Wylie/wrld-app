@@ -53,7 +53,6 @@ import { useAuth } from '@clerk/clerk-expo'
 import { Button } from '@/components/primitives/Button'
 import { Input } from '@/components/primitives/Input'
 import { Text } from '@/components/primitives/Text'
-import { Pill } from '@/components/primitives/Pill'
 import { Icon } from '@/components/primitives/Icon'
 import { IconButton } from '@/components/primitives/IconButton'
 import { HelpText } from '@/components/primitives/HelpText'
@@ -1025,42 +1024,22 @@ export function StreamScreen() {
               </View>
             ) : (
               <View style={styles.previewControls}>
-                <View style={styles.previewTop}>
-                  <Input
-                    placeholder="What's happening?"
-                    value={cfg?.title ?? ''}
-                    onChangeText={updatePreviewTitle}
-                    autoCorrect={false}
-                  />
-                </View>
-                <View style={styles.previewBottom}>
-                  {armedAVSources.length > 0 && (
-                    <View style={styles.sourceRow}>
-                      {armedAVSources.map((s) => (
-                        <Pill key={s} size="sm" variant="accent" label={SOURCE_LABELS[s].toUpperCase()} />
-                      ))}
-                    </View>
-                  )}
-                  {!anyAirArmed && (
-                    <Text variant="caption" color={theme.colors.text.muted} style={styles.center}>
-                      Arm a source on the dashboard to go live
-                    </Text>
-                  )}
-                  {locationLoading && !coords && (
-                    <Text variant="caption" color={theme.colors.text.muted} style={styles.center}>
-                      Detecting location…
-                    </Text>
-                  )}
-                  <GoLiveRecordBar
-                    style={styles.fullWidth}
-                    isLive={false}
-                    isRecording={false}
-                    liveDisabled={!canGoLivePreview}
-                    recordDisabled={!canGoLivePreview}
-                    onLivePress={() => handleGoLive()}
-                    onRecordPress={handleGoLiveThenRecord}
-                  />
-                </View>
+                <Input
+                  placeholder="What's happening?"
+                  value={cfg?.title ?? ''}
+                  onChangeText={updatePreviewTitle}
+                  autoCorrect={false}
+                />
+                {!anyAirArmed && (
+                  <Text variant="caption" color={theme.colors.text.muted} style={styles.center}>
+                    Arm a source on the dashboard to go live
+                  </Text>
+                )}
+                {locationLoading && !coords && (
+                  <Text variant="caption" color={theme.colors.text.muted} style={styles.center}>
+                    Detecting location…
+                  </Text>
+                )}
               </View>
             )
           )}
@@ -1256,6 +1235,26 @@ export function StreamScreen() {
         </View>
       )}
 
+      {/* Broadcaster preview — Go Live button docked at the SAME screen-bottom
+          offset as the dashboard's Go Live button, so it doesn't jump when
+          moving between the two pages while not live. */}
+      {isNew && status === 'idle' && isSignedIn && (
+        <View
+          style={[
+            styles.broadcasterFooter,
+            { paddingBottom: Math.max(theme.spacing.sm, insets.bottom + theme.spacing.md - FOOTER_DROP) },
+          ]}
+          pointerEvents="box-none"
+        >
+          <GoLiveRecordBar
+            style={styles.fullWidth}
+            isLive={false}
+            liveDisabled={!canGoLivePreview}
+            onLivePress={() => handleGoLive()}
+          />
+        </View>
+      )}
+
       {/* Broadcaster live controls — record circle above the full-width End
           Stream button. The End Stream button sits at the same screen-bottom
           offset as the dashboard's Go Live button so it doesn't jump when
@@ -1448,11 +1447,9 @@ const styles = StyleSheet.create({
   liveRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
   actions: { width: '100%', gap: theme.spacing.sm, alignItems: 'center' },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
-  // Center-tab preview: title pinned near the top, Go Live + armed pills
-  // near the bottom, the camera feed (if armed) filling behind.
-  previewControls: { flex: 1, width: '100%', justifyContent: 'space-between' },
-  previewTop: { width: '100%' },
-  previewBottom: { width: '100%', alignItems: 'center', gap: theme.spacing.sm },
+  // Center-tab preview: title + hints near the top, camera feed (if armed)
+  // behind; the Go Live button is docked separately (broadcasterFooter).
+  previewControls: { flex: 1, width: '100%', gap: theme.spacing.sm },
   fullWidth: { width: '100%' },
   roomInfo: { width: '100%', alignItems: 'center', gap: theme.spacing.lg },
   roomInfoOverlay: {
