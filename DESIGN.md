@@ -1628,8 +1628,8 @@ this feature is the lift target either way.
 - **Location:** `src/components/features/discovery/TimeScrubber.tsx`
 - **Variants:** `default` (the running WRLD clock / time machine bar)
 - **Sizes:** collapsed (~50 tall) / expanded (~104 tall)
-- **States:** live (offset 0 — ticking, "● LIVE" tag), scrubbed (offset > 0 — playback playhead + accent "● NOW" button); collapsed / expanded (per-field ghosts)
-- **Used in:** `GlobeScreenMapbox` (overlay riding on top of the bottom drawer) — 2026-06-04
+- **States:** live (offset 0 — ticking, "● NOW" tag), scrubbed (offset > 0 — playback playhead + muted tappable "● THEN" button); collapsed (transparent band-only over the globe) / expanded (solid `bg.glassPanel` + per-field ghosts)
+- **Used in:** `GlobeScreenMapbox` (pinned at the bottom above the tab bar; the drawer rides flush on top of it) — 2026-06-04, repositioned 2026-06-05
 - **Tweak impact:** the globe time-machine bar
 - **Shipped:** 2026-06-04 (Time Machine initiative · UI v1)
 
@@ -3717,6 +3717,33 @@ above. The seam is not a separate motion category.
 
 Append-only. Most recent first. Each entry: date, decision, rationale,
 constraint it imposes downstream.
+
+### 2026-06-05 — Globe time-machine clock: below the drawer, solid panel, independent
+
+Reworks the `TimeScrubber` ↔ drawer ↔ planet coupling on the globe.
+
+- **Swapped positions.** The clock is now pinned at the very bottom (above the
+  tab bar); the **drawer rides on top of it** — the drawer's `bottom` tracks the
+  clock's animated height, mirroring the old drawer→clock coupling. (`TimeScrubber`
+  exports `CLOCK_COLLAPSED_H` / `CLOCK_EXPANDED_H` + an `onExpandedChange` callback
+  the globe uses to animate the drawer + planet.)
+- **Expanded = solid panel.** The bar was transparent (band only). Expanded it
+  now gets a solid `bg.glassPanel` (new token — paper80 / `panel` at the drawer's
+  0.82 opacity, a step darker than `glass`). The panel stays on through the whole
+  collapse animation (dropped only once fully collapsed) so the band's lighter
+  paper can't flicker through mid-collapse.
+- **Independent of the drawer.** Touching the drawer no longer collapses the
+  clock (it now behaves like the globe); only other UI (search / chips / cards)
+  collapses it. So the clock and drawer expand/collapse independently.
+- **Four planet positions.** Because the two are independent, the planet
+  `translateY` is now `Animated.add(drawerContribution, clockContribution)` —
+  distinct positions for each (clock × drawer) collapsed/expanded combo. The
+  clock's frac-shift (`GLOBE_FRAC_CLOCK_SHIFT` ≈ 0.07) is proportional to its
+  growth vs the drawer's (same shift-per-pixel of bottom-UI growth).
+- **Relabelled** the status tag LIVE / PAST → **NOW / THEN**.
+
+Supersedes the 2026-06-04 "clock rides above the drawer / band-only, no
+background" model. Cross-repo (Aaron's backend replay seam) unchanged.
 
 ### 2026-06-05 — Search ↔ title field harmonised; shared ScreenHeader
 

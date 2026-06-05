@@ -52,8 +52,12 @@ const FIELD_W: Record<FieldKey, number> = {
 }
 
 const ROW_H = 28 // band height = one increment row (tightened top/bottom)
-const COLLAPSED_H = ROW_H // blurred: only the band row shows
-const EXPANDED_H = ROW_H * 5 // focused: centre + 2 above + 2 below
+// Exported so the host (globe) can position the drawer flush above the clock
+// and animate it in sync as the clock collapses/expands.
+export const CLOCK_COLLAPSED_H = ROW_H // blurred: only the band row shows
+export const CLOCK_EXPANDED_H = ROW_H * 5 // focused: centre + 2 above + 2 below
+const COLLAPSED_H = CLOCK_COLLAPSED_H
+const EXPANDED_H = CLOCK_EXPANDED_H
 const STEP_PX = ROW_H // vertical drag distance per one unit step
 // Window of cells rendered per field — wider than what's visible so the
 // one-row slide animation always has a neighbour to scroll in.
@@ -106,6 +110,9 @@ type Props = {
   // Bump this (a monotonically-increasing counter) to force the dial to
   // blur + collapse — the host fires it when any *other* UI is touched.
   collapseSignal?: number
+  // Fired when the dial expands/collapses, so the host can slide the drawer
+  // up/down to stay flush above the clock (CLOCK_COLLAPSED_H ↔ CLOCK_EXPANDED_H).
+  onExpandedChange?: (expanded: boolean) => void
   style?: StyleProp<ViewStyle>
 }
 
@@ -119,9 +126,19 @@ export function TimeScrubber({
   onOffsetChange,
   minYear = DEFAULT_MIN_YEAR,
   collapseSignal = 0,
+  onExpandedChange,
   style,
 }: Props) {
   const [expanded, setExpanded] = useState(false)
+
+  // Notify the host whenever the dial expands/collapses (it slides the drawer
+  // to stay flush above the clock). Ref-routed so a changing callback identity
+  // doesn't re-fire the effect.
+  const onExpandedChangeRef = useRef(onExpandedChange)
+  onExpandedChangeRef.current = onExpandedChange
+  useEffect(() => {
+    onExpandedChangeRef.current?.(expanded)
+  }, [expanded])
 
   // Collapse when the host signals an outside interaction (skip the first
   // run so mounting doesn't count as one).
@@ -140,14 +157,25 @@ export function TimeScrubber({
     return () => clearInterval(id)
   }, [])
 
+  // The solid panel background stays on through the WHOLE collapse animation
+  // and is only removed once fully collapsed — otherwise it vanishes the instant
+  // `expanded` flips false and the band's lighter paper flickers through mid-
+  // animation. Goes true immediately on expand.
+  const [panelVisible, setPanelVisible] = useState(false)
+
   const height = useRef(new Animated.Value(COLLAPSED_H)).current
   useEffect(() => {
+    if (expanded) setPanelVisible(true)
     Animated.timing(height, {
       toValue: expanded ? EXPANDED_H : COLLAPSED_H,
       duration: theme.motion.patterns.overlay.duration,
       easing: theme.motion.patterns.overlay.easing,
       useNativeDriver: false,
-    }).start()
+    }).start(({ finished }) => {
+      // Drop the panel only after a real collapse finishes (not when an
+      // interrupting expand cancels this run).
+      if (finished && !expanded) setPanelVisible(false)
+    })
   }, [expanded, height])
 
   // Playback pause: after a scrub lands in the past, hold the clock still for
@@ -231,7 +259,7 @@ export function TimeScrubber({
   }
 
   return (
-    <Animated.View style={[styles.bar, { height }, style]}>
+    <Animated.View style={[styles.bar, { height }, panelVisible && styles.barExpanded, style]}>
       {/* Selection band — the only filled surface, identical blurred/focused. */}
       <View style={styles.bandWrap} pointerEvents="none">
         <View style={styles.band} />
@@ -256,7 +284,7 @@ export function TimeScrubber({
             <View style={styles.statusTag}>
               <View style={[styles.statusDot, { backgroundColor: theme.colors.accent.default }]} />
               <Text variant="monoLabel" color={theme.colors.accent.default}>
-                LIVE
+                NOW
               </Text>
             </View>
           ) : (
@@ -269,7 +297,7 @@ export function TimeScrubber({
             >
               <View style={[styles.statusDot, { backgroundColor: theme.colors.text.muted }]} />
               <Text variant="monoLabel" color={theme.colors.text.muted}>
-                PAST
+                THEN
               </Text>
             </Pressable>
           )}
@@ -410,7 +438,13 @@ const HIT_SLOP = { top: 18, bottom: 18, left: 12, right: 12 }
 const styles = StyleSheet.create({
   bar: {
     overflow: 'hidden',
-    // No background — the selection band (below) is the only filled surface.
+    // Collapsed: no background — the selection band (below) is the only filled
+    // surface, so the clock floats over the globe.
+  },
+  barExpanded: {
+    // Expanded: a solid panel (darker glass at the drawer's opacity) so the
+    // ghost dial values read clearly. No longer a gradient.
+    backgroundColor: theme.colors.bg.glassPanel,
   },
   bandWrap: {
     ...StyleSheet.absoluteFillObject,

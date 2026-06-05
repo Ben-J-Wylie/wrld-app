@@ -614,15 +614,30 @@ are what the past is made of).
 
 ### Model (decided 2026-06-04)
 
-- **A running WRLD clock** sits as a long thin bar (~50px) just above the
-  globe's bottom drawer, riding on top of it as the drawer slides.
+- **A running WRLD clock** sits as a long thin bar (~50px) at the very bottom,
+  just above the tab bar; the bottom **drawer rides on top of it** (the drawer's
+  bottom tracks the clock's animated height, so the drawer slides up to stay
+  flush above the clock when it expands). *(2026-06-05: clock + drawer positions
+  swapped — the clock used to ride above the drawer.)*
 - **Single `offsetMs` behind the present** (0 = live). The playhead =
   `Date.now() - offsetMs`, re-evaluated every second.
   - offset 0 → reads as a live ticking clock; the globe is live.
   - offset > 0 → **real-time playback**: the playhead ticks forward at 1× from
     the scrubbed instant, and the globe replays the surviving clips/pins alive
-    at the playhead as it advances. A muted, tappable **PAST** status (which
-    replaces the **LIVE** tag when scrubbed) jumps back to live.
+    at the playhead as it advances. A muted, tappable **THEN** status (which
+    replaces the **NOW** tag when scrubbed) jumps back to live. *(2026-06-05:
+    relabelled from LIVE/PAST → NOW/THEN.)*
+- **Collapsed = transparent bar over the globe (band only); expanded = a solid
+  panel** (`theme.colors.bg.glassPanel` — paper80 at the drawer's 0.82 opacity)
+  so the ghost dial values read clearly. The panel persists through the whole
+  collapse animation (dropped only once fully collapsed) so the band's lighter
+  paper doesn't flicker through mid-collapse. *(2026-06-05.)*
+- **Independent of the drawer.** Interacting with the drawer no longer collapses
+  the clock (like the globe) — only other UI (search / chips / cards) does. The
+  clock and drawer expand/collapse independently, which gives **four planet
+  positions** (clock × drawer, each collapsed/expanded): the planet's vertical
+  shift is `drawer-contribution + clock-contribution`, the clock's shift
+  proportional to its growth vs the drawer's. *(2026-06-05.)*
 - **Six spinnable fields** — YR · MO · DY · HR · MIN · SEC. Each
   ticks/carries correctly (native `Date` arithmetic — spinning MIN past 00
   rolls the hour, month past JAN rolls to DEC + drops the year, etc.). **The

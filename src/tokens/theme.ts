@@ -84,6 +84,10 @@ export const theme = {
       // Glass overlay: opt-in for surfaces over the globe (dynamic
       // GL scene). Not the default panel treatment.
       glass: 'rgba(236,230,214,0.82)',
+      // Darker glass — `panel` paper (paper80) at the same 0.82 opacity as
+      // `glass`. Used for the expanded time-machine clock panel so it reads as
+      // a solid surface clearly deeper than the drawer's `glass`.
+      glassPanel: 'rgba(219,207,182,0.82)',
       // Modal scrim — warm-tinted dark
       overlay: 'rgba(26,22,18,0.45)',
     },

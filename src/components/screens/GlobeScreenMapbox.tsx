@@ -52,7 +52,11 @@ import { Text } from '@/components/primitives/Text'
 import { Pill } from '@/components/primitives/Pill'
 import { ScreenHeader } from '@/components/sections/ScreenHeader'
 import { StreamStateBanner } from '@/components/features/stream/StreamStateBanner'
-import { TimeScrubber } from '@/components/features/discovery/TimeScrubber'
+import {
+  TimeScrubber,
+  CLOCK_COLLAPSED_H,
+  CLOCK_EXPANDED_H,
+} from '@/components/features/discovery/TimeScrubber'
 import { StreamCard } from '@/components/features/stream/StreamCard'
 import {
   DiscoveryHandoffCard,
@@ -109,6 +113,14 @@ const COMMIT_DRAG_DISTANCE       = 60   // px past TAP_DRAG_TOLERANCE before a d
 // — the globe stays put while the drawer slides between them.
 const GLOBE_FRAC_CLOSED = 0.59
 const GLOBE_FRAC_OPEN   = 0.48
+// The clock also pushes the planet up when it expands (it grows from the bottom
+// like the drawer). Its frac shift is proportional to its growth vs the
+// drawer's — the same shift-per-pixel of bottom-UI growth — so the four
+// (clock × drawer) collapsed/expanded states each land the planet at a distinct
+// height. Added on top of the drawer's shift; both clamp.
+const GLOBE_FRAC_CLOCK_SHIFT =
+  (GLOBE_FRAC_CLOSED - GLOBE_FRAC_OPEN) *
+  ((CLOCK_EXPANDED_H - CLOCK_COLLAPSED_H) / (DRAWER_PEEK_H - DRAWER_CLOSED_H))
 
 type DrawerState = 'closed' | 'peek' | 'expanded'
 
@@ -504,6 +516,22 @@ export function GlobeScreenMapbox() {
 
   const drawerHeight = useRef(new Animated.Value(DRAWER_CLOSED_H)).current
 
+  // The time-machine clock now sits at the very bottom (above the tab bar); the
+  // drawer rides flush on top of it. `clockHeight` tracks the clock's
+  // collapsed/expanded height so the drawer slides up/down to stay above it
+  // (the mirror of the drawer→clock coupling this used to have).
+  const clockHeight = useRef(new Animated.Value(CLOCK_COLLAPSED_H)).current
+  const handleClockExpandedChange = useCallback(
+    (expanded: boolean) => {
+      Animated.timing(clockHeight, {
+        toValue: expanded ? CLOCK_EXPANDED_H : CLOCK_COLLAPSED_H,
+        ...theme.motion.patterns.overlay,
+        useNativeDriver: false,
+      }).start()
+    },
+    [clockHeight],
+  )
+
   // Globe sphere on-screen y-offset is derived directly from
   // drawerHeight so the sphere glides in sync with the drawer during
   // drag — no separate timing animation needed. Below the closed
@@ -511,18 +539,25 @@ export function GlobeScreenMapbox() {
   // it sits at GLOBE_FRAC_OPEN. Between PEEK and EXPANDED the value
   // clamps, so the sphere stays put while the drawer keeps growing
   // upward into its vertical scroll state.
-  const globeTranslateY = useMemo(
-    () =>
-      drawerHeight.interpolate({
-        inputRange: [DRAWER_CLOSED_H, DRAWER_PEEK_H],
-        outputRange: [
-          containerH * (GLOBE_FRAC_CLOSED - 0.5),
-          containerH * (GLOBE_FRAC_OPEN - 0.5),
-        ],
-        extrapolate: 'clamp',
-      }),
-    [drawerHeight, containerH],
-  )
+  const globeTranslateY = useMemo(() => {
+    // Drawer contribution: GLOBE_FRAC_CLOSED → GLOBE_FRAC_OPEN as it opens.
+    const drawerT = drawerHeight.interpolate({
+      inputRange: [DRAWER_CLOSED_H, DRAWER_PEEK_H],
+      outputRange: [
+        containerH * (GLOBE_FRAC_CLOSED - 0.5),
+        containerH * (GLOBE_FRAC_OPEN - 0.5),
+      ],
+      extrapolate: 'clamp',
+    })
+    // Clock contribution: 0 collapsed → a further proportional up-shift expanded.
+    // Added to the drawer's so the four (clock × drawer) states are distinct.
+    const clockT = clockHeight.interpolate({
+      inputRange: [CLOCK_COLLAPSED_H, CLOCK_EXPANDED_H],
+      outputRange: [0, -containerH * GLOBE_FRAC_CLOCK_SHIFT],
+      extrapolate: 'clamp',
+    })
+    return Animated.add(drawerT, clockT)
+  }, [drawerHeight, clockHeight, containerH])
 
   // Refs used by the PanResponder so its long-lived closure reads
   // current values, not the ones captured at mount.
@@ -838,24 +873,26 @@ export function GlobeScreenMapbox() {
         </View>
       )}
 
-      {/* Time machine — rides right on top of the drawer (its bottom tracks
-          the animated drawer height) so it stays just above it as it slides. */}
-      <Animated.View style={[styles.timeScrubber, { bottom: drawerHeight }]}>
+      {/* Time machine — pinned at the very bottom (above the tab bar). The
+          drawer rides on top of it (its bottom tracks the clock height). */}
+      <Animated.View style={styles.timeScrubber}>
         <TimeScrubber
           offsetMs={timeOffsetMs}
           onOffsetChange={setTimeOffsetMs}
           collapseSignal={clockCollapseSignal}
+          onExpandedChange={handleClockExpandedChange}
         />
       </Animated.View>
 
-      {/* Bottom drawer — closed by default, opens to peek when the user
-          searches or filters, expands when they tap "See all". */}
+      {/* Bottom drawer — sits flush above the clock; closed by default, opens
+          to peek when the user searches or filters, expands on "See all".
+          Interacting with the drawer does NOT collapse the clock (like the
+          globe) — the two operate independently; only other UI collapses it. */}
       <Animated.View
         style={[
           styles.drawer,
-          { height: drawerHeight },
+          { height: drawerHeight, bottom: clockHeight },
         ]}
-        onTouchStart={collapseClock}
       >
         <View
           {...gripPanResponder.panHandlers}
@@ -999,12 +1036,14 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
+    bottom: 0,
   },
   drawer: {
     position: 'absolute',
     left: 0,
     right: 0,
-    bottom: 0,
+    // `bottom` is set inline to the animated clock height so the drawer rides
+    // flush above the clock.
     overflow: 'hidden',
     backgroundColor: theme.colors.bg.glass,
     borderTopLeftRadius: theme.radius.md,
