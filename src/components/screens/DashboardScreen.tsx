@@ -332,8 +332,12 @@ export function DashboardScreen() {
         label={src.label}
         detail={src.detail}
         availability={src.availability}
+        // While live, on-toggles render filled (on) rather than the cued
+        // "armed" outline, and the armed set is locked (sources can't change
+        // mid-stream). isLive is the shared broadcast state.
+        live={isLive}
         air={!!air[src.kind]}
-        onAirChange={(v) => setAirFor(src.kind, v)}
+        onAirChange={(v) => !isLive && setAirFor(src.kind, v)}
         // Recording is no longer armed on the dashboard — a single Record
         // button on the stream view records the aired set.
         showRec={false}
