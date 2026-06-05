@@ -32,8 +32,10 @@ import {
   TransactionRow,
   type TransactionKind,
 } from '@/components/features/wallet/TransactionRow'
-import { ActionTilesRow } from '@/components/sections/ActionTilesRow'
 import { CategoryChipRow } from '@/components/sections/CategoryChipRow'
+import { PageTabs } from '@/components/features/navigation/PageTabs'
+import { TopUpPanel } from '@/components/sections/TopUpPanel'
+import { CashOutPanel } from '@/components/sections/CashOutPanel'
 import type { WalletTransaction } from '@/types'
 
 type FilterKey = WalletTransaction['type']
@@ -117,6 +119,9 @@ export function WalletScreen() {
   const { isSignedIn } = useAuth()
   const { data, isLoading, isError, refetch } = useWallet()
   const [filter, setFilter] = useState<string | null>(null)
+  // Hybrid-nav prototype: Balance / Top Up / Cash Out as in-place page-tabs
+  // instead of separate routes with back arrows.
+  const [tab, setTab] = useState<'balance' | 'topup' | 'cashout'>('balance')
 
   if (!isSignedIn) {
     return (
@@ -168,27 +173,6 @@ export function WalletScreen() {
     <View style={styles.headerStack}>
       <PursesCard spaceBucks={data.spaceBucks} starDust={data.stardust} />
 
-      <ActionTilesRow
-        cols={2}
-        tiles={[
-          {
-            id: 'topup',
-            iconName: 'plus-circle',
-            title: 'Top up',
-            descriptor: 'Buy Space Bucks',
-            onPress: () => router.push('/(app)/topup'),
-            primary: true,
-          },
-          {
-            id: 'cashout',
-            iconName: 'arrow-down-circle',
-            title: 'Cash out',
-            descriptor: 'Stardust → cash',
-            onPress: () => router.push('/(app)/cashout'),
-          },
-        ]}
-      />
-
       <CategoryChipRow
         categories={FILTER_CATEGORIES}
         value={filter}
@@ -200,34 +184,49 @@ export function WalletScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <ScreenHeader title="Wallet" style={styles.walletHeaderPad} />
-      <FlatList
-        data={transactions}
-        keyExtractor={(t) => t.id}
-        renderItem={({ item }) => {
-          const props = mapWalletTx(item)
-          return <TransactionRow {...props} />
-        }}
-        ListHeaderComponent={header}
-        ListEmptyComponent={
-          <View style={styles.empty}>
-            <View style={styles.emptyIconFrame}>
-              <Icon name="credit-card" size="lg" color={theme.colors.accent.default} />
-            </View>
-            <Text variant="heading" style={styles.center}>
-              No transactions yet
-            </Text>
-            <Text
-              variant="body"
-              color={theme.colors.text.muted}
-              style={styles.center}
-            >
-              Top up or tip a streamer to get started
-            </Text>
-          </View>
-        }
-        contentContainerStyle={styles.listContent}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
+      <PageTabs
+        tabs={[
+          { key: 'balance', label: 'Balance' },
+          { key: 'topup', label: 'Top Up' },
+          { key: 'cashout', label: 'Cash Out' },
+        ]}
+        value={tab}
+        onChange={setTab}
       />
+
+      {tab === 'balance' && (
+        <FlatList
+          data={transactions}
+          keyExtractor={(t) => t.id}
+          renderItem={({ item }) => {
+            const props = mapWalletTx(item)
+            return <TransactionRow {...props} />
+          }}
+          ListHeaderComponent={header}
+          ListEmptyComponent={
+            <View style={styles.empty}>
+              <View style={styles.emptyIconFrame}>
+                <Icon name="credit-card" size="lg" color={theme.colors.accent.default} />
+              </View>
+              <Text variant="heading" style={styles.center}>
+                No transactions yet
+              </Text>
+              <Text
+                variant="body"
+                color={theme.colors.text.muted}
+                style={styles.center}
+              >
+                Top up or tip a streamer to get started
+              </Text>
+            </View>
+          }
+          contentContainerStyle={styles.listContent}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+        />
+      )}
+
+      {tab === 'topup' && <TopUpPanel onDone={() => setTab('balance')} />}
+      {tab === 'cashout' && <CashOutPanel onDone={() => setTab('balance')} />}
     </SafeAreaView>
   )
 }
