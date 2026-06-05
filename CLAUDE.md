@@ -2123,3 +2123,27 @@ record off, stream stays · End Stream = both off.
 `GoLiveRecordBar` isn't in the feature gallery / Section 3 register yet. Also
 needs an on-device pass: button parity across screens, go-live-and-record
 timing, End-Stream-stays-on-page, and the dashboard commanding a live stream.
+
+---
+
+## Updates — June 2026 (Broadcaster live view: overlay layout + circular record)
+
+DESIGN.md decision log (2026-06-04) is canonical. The broadcaster's live
+`StreamScreen` now floats its UI over the camera (no boxes):
+
+- **Top-left cluster** (in the header, replacing the back button): `LivePill` +
+  identity chip + tappable viewer count. The translucent black box
+  (`roomInfoOverlay`) is **viewer-only** now.
+- **No back button** for the broadcaster (leave via the tab bar / End Stream).
+- **Camera/audio pills + `BroadcastStatusIndicator` removed** from the live view.
+- **`RecordCircle`** (inline component) above the End Stream button: off = light
+  accent-tint circle + red dot (ghosted), recording = solid red + white stop
+  square; wires to the existing `startRecording`/`stopRecording`.
+- **Reaction rail** moved higher on the right (`bottom: '38%'`).
+- **End Stream button** sits at the dashboard Go Live button's screen-bottom
+  offset (shared `FOOTER_DROP = 30`) so it doesn't jump between pages.
+
+The earlier "GoLiveRecordBar not in gallery" follow-up is **done** (it was added,
+then trimmed to the single two-state button). `RecordCircle` is inline for now —
+promote to `features/broadcast/` + gallery if it sticks. Needs an on-device pass
+(over-camera contrast, record circle, button alignment between pages).

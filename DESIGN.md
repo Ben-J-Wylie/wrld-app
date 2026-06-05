@@ -3568,6 +3568,35 @@ above. The seam is not a separate motion category.
 Append-only. Most recent first. Each entry: date, decision, rationale,
 constraint it imposes downstream.
 
+### 2026-06-04 — Broadcaster live view: cleaner overlay layout + circular record
+
+The broadcaster's live `StreamScreen` is restyled to float its UI directly over
+the camera (no boxes):
+
+- **Top-left cluster** (in the header, where the back button was): `LivePill` +
+  identity chip (`BroadcasterRow`) + tappable viewer count. The old translucent
+  black box (`roomInfoOverlay`) is **viewer-only** now.
+- **No back button** for the broadcaster — they leave via the tab bar or End
+  Stream (in-app nav keeps the broadcast alive anyway).
+- **Camera/audio "BROADCASTING" pills removed.** The `BroadcastStatusIndicator`
+  is dropped from the live view (the record circle conveys recording).
+- **Circular record button** (`RecordCircle`, inline in StreamScreen) docked
+  above the End Stream button. Two states mirroring the Go Live button: off =
+  light accent-tint circle + red dot (ghosted); recording = solid red circle +
+  white stop square. Wires to the existing `startRecording`/`stopRecording`.
+- **Reaction rail moved higher** on the right (`bottom: '38%'`) so it clears the
+  bottom controls.
+- **End Stream button aligned to the dashboard's Go Live button** — same
+  screen-bottom offset (`Math.max(spacing.sm, insets.bottom + spacing.md - 30)`,
+  the shared `FOOTER_DROP`) so the shared control doesn't jump when navigating
+  between the dashboard and the stream view.
+
+**Constraint / follow-up:** `RecordCircle` is inline in StreamScreen for now —
+promote to a `features/broadcast/` component + gallery entry if it sticks. The
+viewer live view is unchanged (keeps its box + back button + Leave). **Needs an
+on-device pass** (over-camera contrast of the top-left chip/text, the record
+circle, and the button alignment between pages).
+
 ### 2026-06-04 — Go Live button: Record removed for now; full-width two-state
 
 Trimming the shared control (entry below) back to a **single full-width Go Live

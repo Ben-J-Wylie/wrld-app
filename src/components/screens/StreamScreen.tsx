@@ -47,7 +47,7 @@ import { Filter as ProfanityFilter } from 'bad-words'
 
 const profanityFilter = new ProfanityFilter()
 import { useLocalSearchParams, router, useFocusEffect } from 'expo-router'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { RTCView } from 'react-native-webrtc'
 import { useAuth } from '@clerk/clerk-expo'
 import { Button } from '@/components/primitives/Button'
@@ -58,7 +58,6 @@ import { Icon } from '@/components/primitives/Icon'
 import { IconButton } from '@/components/primitives/IconButton'
 import { HelpText } from '@/components/primitives/HelpText'
 import { LivePill } from '@/components/features/stream/LivePill'
-import { BroadcastStatusIndicator } from '@/components/features/broadcast/BroadcastStatusIndicator'
 import { GoLiveRecordBar } from '@/components/features/broadcast/GoLiveRecordBar'
 import { BroadcasterRow } from '@/components/features/user/BroadcasterRow'
 import {
@@ -99,6 +98,40 @@ import type { TipEvent } from '@/hooks/useSignaling'
 const SOURCE_LABELS: Record<SourceType, string> = {
   camera: 'Camera',
   audio: 'Audio',
+}
+
+// Keep the broadcaster's End Stream button at the same screen-bottom offset
+// as the dashboard's Go Live button (same value), so the shared control
+// doesn't jump when navigating between the two pages.
+const FOOTER_DROP = 30
+
+// Circular record button on the broadcaster live view. Two states mirroring
+// the Go Live button: off = light accent-tint circle + red dot (ghosted);
+// recording = solid red circle + white stop square. Wires to start/stopRecording.
+function RecordCircle({
+  recording,
+  disabled,
+  onPress,
+}: {
+  recording: boolean
+  disabled?: boolean
+  onPress: () => void
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={recording ? 'Stop recording' : 'Start recording'}
+      style={[
+        styles.recordCircle,
+        recording ? styles.recordCircleOn : styles.recordCircleOff,
+        disabled && styles.recordCircleDisabled,
+      ]}
+    >
+      <View style={recording ? styles.recordStop : styles.recordDot} />
+    </Pressable>
+  )
 }
 
 // The AV subset of the armed capture config that actually streams today
@@ -236,6 +269,7 @@ export function StreamScreen() {
     startPreview, startBroadcasting, startViewing, switchCamera, cleanup,
   } = useMediasoup()
   const { isSignedIn } = useAuth()
+  const insets = useSafeAreaInsets()
   const { coords: liveCoords, loading: locationLoading } = useLocation()
   // Prefer coords captured on the Dashboard (passed as params) over re-acquiring
   const coords = (isNew && paramLat && paramLng)
@@ -912,13 +946,38 @@ export function StreamScreen() {
       )}
 
       <View style={[styles.header, styles.headerRow]}>
-        <IconButton
-          name="arrow-left"
-          variant={showOverlay ? 'surface' : 'ghost'}
-          size="md"
-          onPress={handleBack}
-          accessibilityLabel="Back"
-        />
+        {isNew ? (
+          // Broadcaster: no back button (leave via the tab bar / End Stream).
+          // While live, the live pill + identity + viewer count sit top-left.
+          status === 'in-room' && !streamEnded ? (
+            <View style={styles.broadcasterTopLeft}>
+              <LivePill />
+              {broadcaster && (
+                <BroadcasterRow
+                  variant="chip"
+                  avatarUrl={broadcaster.avatarUrl}
+                  displayName={broadcaster.displayName}
+                  handle={broadcaster.handle}
+                />
+              )}
+              <Pressable onPress={openViewerList} hitSlop={8}>
+                <Text variant="caption" color={theme.colors.text.inverse}>
+                  {viewerCount} {viewerCount === 1 ? 'viewer' : 'viewers'}
+                </Text>
+              </Pressable>
+            </View>
+          ) : (
+            <View />
+          )
+        ) : (
+          <IconButton
+            name="arrow-left"
+            variant={showOverlay ? 'surface' : 'ghost'}
+            size="md"
+            onPress={handleBack}
+            accessibilityLabel="Back"
+          />
+        )}
         {status === 'in-room' && !streamEnded && (
           <View style={styles.headerActions}>
             {!isNew && (
@@ -1043,8 +1102,11 @@ export function StreamScreen() {
             </View>
           )}
 
-          {/* ── In room ──────────────────────────────────────────── */}
-          {status === 'in-room' && !streamEnded && (!!remoteStream || isNew) && (
+          {/* ── In room (viewer) ─────────────────────────────────── */}
+          {/* Broadcaster live UI is rendered as overlays outside `content`
+              (top-left cluster in the header + bottom record/End-Stream
+              footer); this box is viewer-only now. */}
+          {!isNew && status === 'in-room' && !streamEnded && !!remoteStream && (
             <View style={[styles.roomInfo, showOverlay && styles.roomInfoOverlay]}>
               <View style={styles.liveRow}>
                 <LivePill />
@@ -1055,7 +1117,7 @@ export function StreamScreen() {
                 )}
               </View>
 
-              {broadcaster && !isNew && (
+              {broadcaster && (
                 <View style={styles.broadcasterWrap}>
                   <BroadcasterRow
                     avatarUrl={broadcaster.avatarUrl}
@@ -1071,63 +1133,8 @@ export function StreamScreen() {
                   )}
                 </View>
               )}
-              {broadcaster && isNew && (
-                <BroadcasterRow
-                  variant="chip"
-                  avatarUrl={broadcaster.avatarUrl}
-                  displayName={broadcaster.displayName}
-                  handle={broadcaster.handle}
-                />
-              )}
 
-              {/* On-air-vs-recording indicator (clips initiative). The
-                  shipped backend records the aired set as a whole, so the
-                  faithful state today is "everything on air is also saved";
-                  per-source record asymmetry lands when backend supports
-                  it (Aaron's lane). Shown only while actually recording. */}
-              {isNew && isRecording && broadcastSources.length > 0 && (
-                <BroadcastStatusIndicator
-                  style={styles.recIndicator}
-                  sources={broadcastSources.map((s) => ({
-                    label: SOURCE_LABELS[s],
-                    iconName: s === 'camera' ? 'video' : 'mic',
-                    air: true,
-                    rec: true,
-                  }))}
-                />
-              )}
-
-              {isNew && (
-                <View style={styles.section}>
-                  {!showOverlay && <HelpText>BROADCASTING</HelpText>}
-                  <View style={styles.sourceRow}>
-                    {broadcastSources.map((s) => (
-                      <Pill
-                        key={s}
-                        size="sm"
-                        variant="accent"
-                        label={SOURCE_LABELS[s].toUpperCase()}
-                      />
-                    ))}
-                    {cfg?.subscribersOnly && (
-                      <View style={styles.lockBadge}>
-                        <Icon name="lock" size="sm" color={theme.colors.accent.default} />
-                        <Text variant="monoCaption" color={theme.colors.accent.default}>LOCKED</Text>
-                      </View>
-                    )}
-                  </View>
-                  <Pressable onPress={openViewerList} hitSlop={8}>
-                    <Text
-                      variant="body"
-                      color={showOverlay ? theme.colors.text.inverse : theme.colors.text.muted}
-                    >
-                      {viewerCount} {viewerCount === 1 ? 'viewer' : 'viewers'}
-                    </Text>
-                  </Pressable>
-                </View>
-              )}
-
-              {!isNew && broadcastSources.length > 0 && (
+              {broadcastSources.length > 0 && (
                 <View style={styles.section}>
                   {!showOverlay && <HelpText>SOURCES</HelpText>}
                   <View style={styles.sourceRow}>
@@ -1159,18 +1166,7 @@ export function StreamScreen() {
                 </View>
               )}
 
-              {isNew ? (
-                <GoLiveRecordBar
-                  style={styles.fullWidth}
-                  isLive
-                  isRecording={isRecording}
-                  recordDisabled={!streamId}
-                  onLivePress={handleEndStream}
-                  onRecordPress={isRecording ? stopRecording : startRecording}
-                />
-              ) : (
-                <Button label="Leave" onPress={handleLeave} variant="primary" />
-              )}
+              <Button label="Leave" onPress={handleLeave} variant="primary" />
             </View>
           )}
 
@@ -1257,6 +1253,31 @@ export function StreamScreen() {
               />
             </View>
           )}
+        </View>
+      )}
+
+      {/* Broadcaster live controls — record circle above the full-width End
+          Stream button. The End Stream button sits at the same screen-bottom
+          offset as the dashboard's Go Live button so it doesn't jump when
+          moving between the two pages. */}
+      {isNew && status === 'in-room' && !streamEnded && (
+        <View
+          style={[
+            styles.broadcasterFooter,
+            { paddingBottom: Math.max(theme.spacing.sm, insets.bottom + theme.spacing.md - FOOTER_DROP) },
+          ]}
+          pointerEvents="box-none"
+        >
+          <RecordCircle
+            recording={isRecording}
+            disabled={!streamId}
+            onPress={isRecording ? stopRecording : startRecording}
+          />
+          <GoLiveRecordBar
+            style={styles.fullWidth}
+            isLive
+            onLivePress={handleEndStream}
+          />
         </View>
       )}
 
@@ -1417,12 +1438,14 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.sm },
   headerRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
   },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
+  // Broadcaster live: live pill + identity + viewer count stacked top-left,
+  // directly over the camera (no box).
+  broadcasterTopLeft: { alignItems: 'flex-start', gap: theme.spacing.xs },
   liveRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
-  recIndicator: { width: '100%' },
   actions: { width: '100%', gap: theme.spacing.sm, alignItems: 'center' },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
   // Center-tab preview: title pinned near the top, Go Live + armed pills
@@ -1448,10 +1471,44 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     justifyContent: 'center',
   },
-  lockBadge: {
-    flexDirection: 'row',
+  // Broadcaster live: record circle above the full-width End Stream button,
+  // docked at the bottom over the camera (no box).
+  broadcasterFooter: {
+    position: 'absolute',
+    left: theme.spacing.lg,
+    right: theme.spacing.lg,
+    bottom: 0,
     alignItems: 'center',
-    gap: 4,
+    gap: theme.spacing.md,
+  },
+  recordCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  recordCircleOff: {
+    backgroundColor: theme.colors.accent.surface,
+    borderColor: theme.colors.accent.border,
+  },
+  recordCircleOn: {
+    backgroundColor: theme.colors.accent.default,
+    borderColor: theme.colors.accent.default,
+  },
+  recordCircleDisabled: { opacity: 0.4 },
+  recordDot: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: theme.colors.accent.default,
+  },
+  recordStop: {
+    width: 22,
+    height: 22,
+    borderRadius: 5,
+    backgroundColor: theme.colors.text.inverse,
   },
   sourceSwitchBtn: {
     borderRadius: theme.radius.full,
@@ -1496,7 +1553,9 @@ const styles = StyleSheet.create({
   reactionRailWrap: {
     position: 'absolute',
     right: theme.spacing.sm,
-    bottom: theme.spacing.lg,
+    // Higher up the right edge (was bottom: lg) so it clears the bottom
+    // broadcast controls.
+    bottom: '38%',
   },
 
   flipBtn: {
