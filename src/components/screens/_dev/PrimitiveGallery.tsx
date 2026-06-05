@@ -290,6 +290,14 @@ export function PrimitiveGallery() {
           <Row label="prefix (handle)">
             <Input variant="prefix" prefix="@" value={inputHandle} onChangeText={setInputHandle} autoCapitalize="none" />
           </Row>
+          <Row label="leading slot (icon) — what SearchBar composes">
+            <Input
+              leading={<Icon name="search" size="md" color={theme.colors.text.muted} />}
+              placeholder="Search streams, places, or people"
+              value={inputDefault}
+              onChangeText={setInputDefault}
+            />
+          </Row>
           <Row label="valid state">
             <Input value={inputValid} onChangeText={setInputValid} state="valid" autoCapitalize="none" />
           </Row>

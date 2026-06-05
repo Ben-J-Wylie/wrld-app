@@ -50,7 +50,7 @@ import { useLocation } from '@/hooks/useLocation'
 import { useDiscoverySocket } from '@/hooks/useDiscoverySocket'
 import { Text } from '@/components/primitives/Text'
 import { Pill } from '@/components/primitives/Pill'
-import { BrandMark } from '@/components/primitives/BrandMark'
+import { ScreenHeader } from '@/components/sections/ScreenHeader'
 import { StreamStateBanner } from '@/components/features/stream/StreamStateBanner'
 import { TimeScrubber } from '@/components/features/discovery/TimeScrubber'
 import { StreamCard } from '@/components/features/stream/StreamCard'
@@ -770,15 +770,15 @@ export function GlobeScreenMapbox() {
       {/* Top stack — header, search, chips, scale */}
       <View style={StyleSheet.absoluteFill} pointerEvents="box-none" onTouchStart={collapseClock}>
         <SafeAreaView edges={['top']} pointerEvents="box-none">
-          <View style={styles.header} pointerEvents="box-none">
-            <View style={styles.wordmark}>
-              <BrandMark size="hero" />
-              <Text variant="display">WRLD</Text>
-            </View>
-            {liveCount > 0 && (
-              <Pill size="sm" variant="accent" label={`${liveCount} LIVE`} />
-            )}
-          </View>
+          <ScreenHeader
+            style={styles.headerPad}
+            pointerEvents="box-none"
+            right={
+              liveCount > 0 ? (
+                <Pill size="sm" variant="accent" label={`${liveCount} LIVE`} />
+              ) : undefined
+            }
+          />
 
           <View style={styles.searchRow}>
             <SearchBar
@@ -969,16 +969,14 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: theme.spacing.lg,
+  // The shared header sits at safe-area-top + sm; the search field below at
+  // +sm. Dashboard / stream preview mirror this exactly so the field doesn't
+  // jump between tabs.
+  headerPad: {
     paddingTop: theme.spacing.sm,
   },
-  wordmark: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
   searchRow: {
-    paddingHorizontal: theme.spacing.md,
+    paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.sm,
   },
   chipRow: {

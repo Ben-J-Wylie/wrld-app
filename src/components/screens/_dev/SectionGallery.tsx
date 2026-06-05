@@ -15,6 +15,8 @@
 import { useState } from 'react'
 import { View, StyleSheet } from 'react-native'
 import { ScreenScroll } from '@/components/sections/ScreenScroll'
+import { ScreenHeader } from '@/components/sections/ScreenHeader'
+import { Pill } from '@/components/primitives/Pill'
 import { TrendingRail } from '@/components/sections/TrendingRail'
 import { CategoryChipRow } from '@/components/sections/CategoryChipRow'
 import { StreamStrip } from '@/components/sections/StreamStrip'
@@ -47,6 +49,17 @@ export function SectionGallery() {
           form-bearing screen on `main`) wraps in a `ScreenScroll`. There's
           no "inline" preview because the section IS the scroll viewport.
         </Text>
+      </Section>
+
+      <Section title="ScreenHeader">
+        <Text variant="caption" color={theme.colors.text.muted}>
+          Shared top header: logo + WRLD left, right slot right. Globe passes a
+          LIVE pill; every other page passes a `title` (page name). Fixed height
+          so the field below lands at the same Y on every screen.
+        </Text>
+        <ScreenHeader title="Dashboard" />
+        <ScreenHeader title="Settings" />
+        <ScreenHeader right={<Pill size="sm" variant="accent" label="12 LIVE" />} />
       </Section>
 
       <Section title="TrendingRail">

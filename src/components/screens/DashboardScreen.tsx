@@ -38,6 +38,7 @@ import { theme } from '@/tokens/theme'
 import { ScreenScroll } from '@/components/sections/ScreenScroll'
 import { Button } from '@/components/primitives/Button'
 import { Input } from '@/components/primitives/Input'
+import { ScreenHeader } from '@/components/sections/ScreenHeader'
 import { Text } from '@/components/primitives/Text'
 import { Icon } from '@/components/primitives/Icon'
 import { Toggle } from '@/components/primitives/Toggle'
@@ -401,8 +402,10 @@ export function DashboardScreen() {
   return (
     <View style={styles.screen}>
       <View style={[styles.header, { paddingTop: insets.top + theme.spacing.sm }]}>
-        <Text variant="heading">Go Live</Text>
-        <Input placeholder="What's happening?" value={title} onChangeText={setTitle} autoCorrect={false} />
+        <ScreenHeader title="Dashboard" />
+        <View style={styles.titleRow}>
+          <Input placeholder="What's happening?" value={title} onChangeText={setTitle} autoCorrect={false} />
+        </View>
       </View>
 
       <ScrollView
@@ -496,12 +499,16 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.bg.primary,
   },
   header: {
-    paddingHorizontal: theme.spacing.lg,
     paddingBottom: theme.spacing.sm,
-    gap: theme.spacing.sm,
     backgroundColor: theme.colors.bg.primary,
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border.subtle,
+  },
+  // "What's happening" field — sits at header-bottom + sm, matching the globe
+  // search row and the stream preview so the field doesn't jump between tabs.
+  titleRow: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.sm,
   },
   scrollArea: {
     flex: 1,

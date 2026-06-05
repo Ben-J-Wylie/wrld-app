@@ -52,6 +52,7 @@ import { RTCView } from 'react-native-webrtc'
 import { useAuth } from '@clerk/clerk-expo'
 import { Button } from '@/components/primitives/Button'
 import { Input } from '@/components/primitives/Input'
+import { ScreenHeader } from '@/components/sections/ScreenHeader'
 import { Text } from '@/components/primitives/Text'
 import { Icon } from '@/components/primitives/Icon'
 import { IconButton } from '@/components/primitives/IconButton'
@@ -944,7 +945,12 @@ export function StreamScreen() {
         <Pressable style={StyleSheet.absoluteFill} onPress={handleTap} />
       )}
 
-      <View style={[styles.header, styles.headerRow]}>
+      {isNew && status !== 'in-room' && !streamEnded ? (
+        // Broadcaster, pre-live: the shared brand header (page = "Go Live"),
+        // matching the dashboard / globe so the title field below lines up.
+        <ScreenHeader title="Go Live" style={styles.previewHeaderPad} />
+      ) : (
+        <View style={[styles.header, styles.headerRow]}>
         {isNew ? (
           // Broadcaster: no back button (leave via the tab bar / End Stream).
           // While live, the live pill + identity + viewer count sit top-left.
@@ -1004,44 +1010,46 @@ export function StreamScreen() {
             />
           </View>
         )}
-      </View>
+        </View>
+      )}
+
+      {/* Pre-live: the "What's happening" field sits directly under the brand
+          header, at the same Y as the globe search / dashboard title so it
+          doesn't jump when switching tabs. */}
+      {isNew && status === 'idle' && !streamEnded && isSignedIn && (
+        <View style={styles.previewTop}>
+          <Input
+            placeholder="What's happening?"
+            value={cfg?.title ?? ''}
+            onChangeText={updatePreviewTitle}
+            autoCorrect={false}
+          />
+          {!anyAirArmed && (
+            <Text variant="caption" color={theme.colors.text.muted} style={styles.center}>
+              Arm a source on the dashboard to go live
+            </Text>
+          )}
+          {locationLoading && !coords && (
+            <Text variant="caption" color={theme.colors.text.muted} style={styles.center}>
+              Detecting location…
+            </Text>
+          )}
+        </View>
+      )}
 
       {showControls && (
         <View style={styles.content}>
-          {!showOverlay && isNew && <Text variant="display">Go Live</Text>}
-
-          {/* ── Broadcaster idle: armed preview + Go Live / Record ── */}
-          {/* No "Start stream" step — the camera preview shows pre-live. The
-              dashboard's go=1 autostart flashes through this for one frame
-              before the connecting state takes over. */}
-          {status === 'idle' && isNew && (
-            !isSignedIn ? (
-              <View style={styles.actions}>
-                <Text variant="body" color={theme.colors.text.muted}>
-                  Sign in to go live
-                </Text>
-                <Button label="Back" onPress={() => router.navigate('/(app)/globe')} variant="secondary" />
-              </View>
-            ) : (
-              <View style={styles.previewControls}>
-                <Input
-                  placeholder="What's happening?"
-                  value={cfg?.title ?? ''}
-                  onChangeText={updatePreviewTitle}
-                  autoCorrect={false}
-                />
-                {!anyAirArmed && (
-                  <Text variant="caption" color={theme.colors.text.muted} style={styles.center}>
-                    Arm a source on the dashboard to go live
-                  </Text>
-                )}
-                {locationLoading && !coords && (
-                  <Text variant="caption" color={theme.colors.text.muted} style={styles.center}>
-                    Detecting location…
-                  </Text>
-                )}
-              </View>
-            )
+          {/* ── Broadcaster idle, signed out: prompt to sign in ── */}
+          {/* (Signed-in pre-live title field is the top block above; the
+              camera preview shows behind. The dashboard's go=1 autostart
+              flashes through this for one frame before connecting.) */}
+          {status === 'idle' && isNew && !isSignedIn && (
+            <View style={styles.actions}>
+              <Text variant="body" color={theme.colors.text.muted}>
+                Sign in to go live
+              </Text>
+              <Button label="Back" onPress={() => router.navigate('/(app)/globe')} variant="secondary" />
+            </View>
           )}
 
           {/* ── Connecting ───────────────────────────────────────── */}
@@ -1435,6 +1443,15 @@ const styles = StyleSheet.create({
   },
   center: { textAlign: 'center' },
   header: { paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.sm },
+  // Pre-live brand header + title field. paddingTop sm above the header and sm
+  // above the field mirror the globe / dashboard so the field lands at the
+  // same Y on every screen.
+  previewHeaderPad: { paddingTop: theme.spacing.sm },
+  previewTop: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.sm,
+    gap: theme.spacing.sm,
+  },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',

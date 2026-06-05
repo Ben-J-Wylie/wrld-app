@@ -24,6 +24,12 @@
 // Right affordance is auto-derived from `state` but can be overridden
 // via the `rightAffordance` prop for cases like a clear-X button.
 //
+// `leading` is an optional slot rendered inside the field, before the text
+// (e.g. a search magnifier). It's the symmetric counterpart to the right
+// affordance and is what lets `SearchBar` compose this primitive instead of
+// re-implementing the field — so the search box and the title field share one
+// look (2026-06-05 harmonisation).
+//
 // `style` applies to the outer wrapper (controls layout/positioning).
 // HelpText sits BELOW the Input — it's a separate primitive composed by
 // the consumer, not built into this one.
@@ -53,6 +59,7 @@ type Props = Omit<TextInputProps, 'style'> & {
   size?: Size
   state?: State
   prefix?: string
+  leading?: ReactNode
   rightAffordance?: ReactNode
   disabled?: boolean
   style?: StyleProp<ViewStyle>
@@ -63,6 +70,7 @@ export function Input({
   size = 'md',
   state = 'default',
   prefix,
+  leading,
   rightAffordance,
   disabled,
   style,
@@ -90,6 +98,7 @@ export function Input({
         style,
       ]}
     >
+      {leading && <View style={styles.leading}>{leading}</View>}
       {variant === 'prefix' && prefix && (
         <Text variant="body" color={theme.colors.text.muted} style={styles.prefix}>
           {prefix}
@@ -149,6 +158,11 @@ const styles = StyleSheet.create({
   },
   prefix: {
     alignSelf: 'center',
+  },
+  leading: {
+    alignSelf: 'center',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   affordance: {
     minWidth: 20,
