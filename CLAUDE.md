@@ -2021,3 +2021,105 @@ Auto-go-live timing, re-entry after a connection drop, the background→dashboar
 navigation, the live-return bar (visual stacking above the tab bar, return nav
 restoring the camera preview), and the globe self-pin (black render + tap-to-
 return + drawer exclusion) all need an on-device pass.
+
+---
+
+## Updates — June 2026 (5-item footer + center Stream tab with live preview)
+
+Restructures the footer to 5 items and turns the stream view into a
+center-tab destination with a true pre-live camera preview. Supersedes the
+tab-bar live-return bar from the section above (it's removed). The DESIGN.md
+decision log (2026-06-04) is canonical.
+
+### Footer (`app/(app)/_layout.tsx`)
+
+Replaced the descriptor-driven `BottomTabBar` with a **fully custom 5-item
+bar** (`AppTabBar`): **Globe · Dashboard · [Stream] · Me · Events**. It
+navigates via the imperative `router` and highlights from `usePathname`.
+Library + Wallet moved off the footer (`href:null`, reached from Me).
+
+- **Center "Stream" item** (`StreamTabIcon`): an accent dot — **static when
+  idle, two concentric rings pulsing outward while live** (`isLive` from
+  `useBroadcastStore`; opacity/scale only, native driver). Tapping it calls
+  `returnToActiveBroadcast()` → `stream/new` (the armed preview, or the live
+  view if already broadcasting).
+- The **live-return bar was removed** — the animated center icon replaces it.
+
+### Stream view = preview + go-live (`StreamScreen`)
+
+The broadcaster path now has two entry modes, distinguished by a `go` param:
+- **Center tab (no `go`)** → **preview**: `useMediasoup.startPreview(av)` shows
+  the armed camera feed **without going live**, with a shared title input and a
+  **GO LIVE** button (`showCameraPreview` no longer requires `in-room`). On
+  blur, the preview camera is stopped (a live broadcast keeps running).
+- **Dashboard Go Live (`go=1`)** → **auto-goes-live** on arrival.
+
+Both paths funnel through one `handleGoLive(configOverride?)` that reads arming
+from **captureConfig** + coords + `activeBroadcast.ppvEventId`.
+`startBroadcasting` **reuses the preview stream** (no re-prompt). The live
+source set is held in `useBroadcastStore` so re-entering the tab keeps the live
+view intact.
+
+### Shared title + capture config
+
+- `captureConfig` gained a persisted **`title`** field — now the single source
+  of truth for arming **and** title, shared by the dashboard and the preview.
+- `DashboardScreen`: title binds to captureConfig (loads on **focus** so it
+  reflects preview edits; auto-saves with the rest). Go Live persists config,
+  sets `activeBroadcast` (just `ppvEventId`), and navigates to `stream/new?go=1`.
+- `activeBroadcast` trimmed to `{ ppvEventId }`; `returnToActiveBroadcast()`
+  just opens `stream/new`. `useBroadcastStore` now holds `{ isLive, sources }`.
+- `MeScreen` gained **Wallet** + **Library** buttons.
+
+### Not yet tested on device (this change)
+
+Center-tab preview (camera feed pre-live, title input, Go Live reusing the
+preview stream), the animated center dot/rings, dashboard `go=1` auto-go-live,
+library/wallet via Me, and whether the footer crowds the dashboard GoBar or the
+live stream's bottom overlays.
+
+---
+
+## Updates — June 2026 (Shared Go Live / Record control; live + recording lifecycles)
+
+The DESIGN.md decision log (2026-06-04) is canonical. Go Live and Record are now
+a **single shared control** — same buttons, same state, on the dashboard and the
+stream view.
+
+### `GoLiveRecordBar` (`src/components/features/broadcast/GoLiveRecordBar.tsx`)
+
+Two matched side-by-side buttons; state from `broadcastStore`:
+- **Go Live** (idle) → **End Stream** (live)
+- **Record** (idle) → **Stop Recording** (recording)
+
+Semantics: Go Live = stream only · Record = stream + record · Stop Recording =
+record off, stream stays · End Stream = both off.
+
+### Lifecycle
+
+- **Room is created on Go Live** (`createRoom` in `handleGoLive`), never on
+  navigation — the center tab only starts a local preview.
+- **End Stream stays on the page** — stops the broadcast and drops back to the
+  armed preview (`handleEndStream`, no navigation). The header back arrow leaves
+  to the globe but keeps a live broadcast running; only End Stream / background /
+  close stop it (`handleBack` no longer tears down for the broadcaster).
+
+### State + cross-screen control
+
+- `broadcastStore` gained `isRecording` + a one-shot `command`
+  (`endStream` / `startRecording` / `stopRecording` + nonce). The dashboard's
+  buttons act on the **mounted** StreamScreen's running broadcast via `command`
+  when live, or navigate (`stream/new?go=1`, `&rec=1` for Record) when idle.
+- `StreamScreen`: `handleToggleRecording` split into `startRecording` /
+  `stopRecording`; a `pendingRecord` ref starts recording once `streamId`
+  resolves after a go-live-and-record; a `command` effect executes dashboard
+  commands; `isFocusedRef` prevents End-Stream-from-dashboard from turning the
+  preview camera on in the background.
+- `DashboardScreen`: `GoBar` → `GoLiveRecordBar`; reads `isLive`/`isRecording`
+  from the store; `startBroadcast(record)` navigates with `go`/`rec`.
+
+### Follow-up
+
+`GoLiveRecordBar` isn't in the feature gallery / Section 3 register yet. Also
+needs an on-device pass: button parity across screens, go-live-and-record
+timing, End-Stream-stays-on-page, and the dashboard commanding a live stream.

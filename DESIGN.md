@@ -3534,6 +3534,82 @@ above. The seam is not a separate motion category.
 Append-only. Most recent first. Each entry: date, decision, rationale,
 constraint it imposes downstream.
 
+### 2026-06-04 — Shared Go Live / Record control; separate live + recording lifecycles
+
+The Go Live and Record actions are now a **single shared control** —
+`GoLiveRecordBar` (feature, `features/broadcast/`): two matched side-by-side
+buttons rendered identically on the **dashboard** and the **stream view**, with
+state driven by the global `broadcastStore` so they never disagree (previously
+the dashboard said "Go Live" while the stream view said "Leave"). Same shared-
+state pattern as the "what's happening" title.
+
+**Labels / semantics.** Live button: **Go Live** (idle) → **End Stream** (live).
+Record button: **Record** (idle) → **Stop Recording** (recording).
+- **Go Live** — start the stream, no recording.
+- **Record** — start the stream (if needed) **and** start recording.
+- **Stop Recording** — stop recording only; the stream keeps running.
+- **End Stream** — stop recording (if any) **and** the stream.
+
+**The room is created on Go Live, not on navigation.** Opening the stream view
+(center tab) only starts a local preview; `createRoom` happens in `handleGoLive`.
+
+**Leave no longer kicks you off the page.** Pressing **End Stream** stops the
+broadcast but **stays on the stream view** (drops back to the armed preview).
+The header back arrow leaves to the globe but **keeps a live broadcast running**
+(in-app nav never ends it); only End Stream / background / close stop it.
+
+**Constraints / wiring.**
+- `broadcastStore` gained `isRecording` + a one-shot `command`
+  (`endStream` / `startRecording` / `stopRecording`, with a nonce). The
+  dashboard's buttons act on the **mounted** StreamScreen's running broadcast
+  via `command` when already live, or start a new broadcast by navigating
+  (`stream/new?go=1`, `&rec=1` for Record) when idle. StreamScreen consumes the
+  command; recording start/stop is split into `startRecording` / `stopRecording`
+  and a `pendingRecord` ref starts recording once `streamId` resolves after a
+  go-live-and-record.
+- End-Stream-from-dashboard is guarded by an `isFocusedRef` so it doesn't turn
+  the preview camera on in the background.
+- `GoBar` is retired from the dashboard (still in the library). **Follow-up:**
+  add `GoLiveRecordBar` to the feature gallery + Section 3 register.
+- **Needs on-device testing** (button parity across screens, go-live-and-record
+  timing, End-Stream-stays-on-page, dashboard commanding a live stream).
+
+### 2026-06-04 — 5-item footer + center Stream tab with a live preview
+
+The footer is restructured to **5 items** with the stream view in the centre:
+**Globe · Dashboard · [Stream] · Me · Events**. Library + Wallet leave the
+footer (reached from the Me screen). The footer is a **fully custom bar**
+(`AppTabBar` in `app/(app)/_layout.tsx`, not React Navigation's
+`BottomTabBar`) so we control exactly five slots; it navigates via the
+imperative `router` and highlights from `usePathname`.
+
+**Center "Stream" icon.** An accent **dot** — static when idle, **two
+concentric rings pulsing outward while live** (radar ping; `isLive` from
+`useBroadcastStore`, opacity/scale only so it stays on the native driver and
+off CALayer-affecting properties per the focus-shadow rule). Tapping it opens
+the broadcaster's own stream view (`stream/new`).
+
+**Stream view becomes preview + go-live.** Tapping the centre tab shows a
+**live preview of the armed sources without going live** — if camera is armed
+you see your own feed (`useMediasoup.startPreview` acquires getUserMedia with
+no transport/produce; `startBroadcasting` later reuses that same stream). The
+preview has a shared **title input** and a **GO LIVE** button. You can go live
+from **either** the dashboard (navigates `stream/new?go=1`, auto-goes-live) or
+the preview's button — both funnel through one `handleGoLive`.
+
+**Shared title.** Per the title decision (shared input on both), `captureConfig`
+gained a persisted **`title`** and is now the single source of truth for arming
++ title; the dashboard reloads it on focus so the two surfaces stay in sync.
+
+**Replaces the live-return bar** (entry below) — the animated centre icon is the
+way back to a running broadcast now. In-app navigation still keeps the broadcast
+alive (the stream tab never unmounts); background/close still end it.
+`useBroadcastStore` now carries `{ isLive, sources }` (live source set read by
+the live view so tab re-entry doesn't depend on route params).
+`activeBroadcast` is trimmed to `{ ppvEventId }`. **Needs on-device testing**
+(preview feel, the dot/rings animation, footer vs. dashboard GoBar / stream
+overlays).
+
 ### 2026-06-04 — Record moves off the dashboard to the stream view; headless broadcast reversed
 
 The dashboard's **per-source Air/Rec two-affordance model is reversed**. The
