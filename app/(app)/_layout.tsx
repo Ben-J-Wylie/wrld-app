@@ -1,23 +1,27 @@
 // app/(app)/_layout.tsx
 //
-// Tabs scaffold. Hosts a top-level SuspensionBanner that surfaces
-// account suspension info on every signed-in screen (poll source:
-// app/_layout.tsx /auth/me poll — Phase 17).
+// Tabs scaffold with a custom 5-item footer:
+//   Globe · Dashboard · [Stream] · Me · Events
+// The center "Stream" item is the broadcaster's own stream view — an accent
+// dot that's static when idle and pulses concentric rings while live (read
+// from useBroadcastStore). Tapping it opens stream/new (the armed preview,
+// or the live view if already broadcasting). Library + Wallet moved off the
+// footer; they're reached from the Me screen now.
 //
-// SuspensionBanner is an inline component (single-use surface; doesn't
-// earn a feature-tier entry). Token-clean: warn-tinted background via
-// the inline amber rgba pattern already used by ToastBanner's warn
-// variant; warn-tinted text via theme.colors.warn.
+// The footer is a fully custom bar (not BottomTabBar) so we control exactly
+// five slots regardless of how many href:null routes exist; it navigates via
+// the imperative router and highlights from usePathname.
+//
+// Also hosts a top-level SuspensionBanner (poll source: app/_layout.tsx
+// /auth/me poll — Phase 17).
 
-import { Fragment } from 'react'
-import { Pressable, StyleSheet, View } from 'react-native'
-import { Tabs, usePathname } from 'expo-router'
-import { BottomTabBar } from '@react-navigation/bottom-tabs'
+import { useEffect, useRef } from 'react'
+import { Animated, Pressable, StyleSheet, View } from 'react-native'
+import { Tabs, usePathname, router } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { theme } from '@/tokens/theme'
 import { Text } from '@/components/primitives/Text'
 import { Icon } from '@/components/primitives/Icon'
-import { LivePill } from '@/components/features/stream/LivePill'
 import { useAuthStore } from '@/stores/authStore'
 import { useBroadcastStore } from '@/stores/broadcastStore'
 import { returnToActiveBroadcast } from '@/lib/activeBroadcast'
@@ -51,30 +55,95 @@ function SuspensionBanner() {
   )
 }
 
-// Persistent "you're live" link that sits directly above the tab bar
-// while the user has an active outgoing broadcast. The broadcast keeps
-// running when you navigate to another page in-app (the stream tab never
-// unmounts), so this is the way back to it. Hidden while already on the
-// stream view.
-function LiveReturnBar() {
-  const isLive = useBroadcastStore((s) => s.isLive)
-  const pathname = usePathname()
-  if (!isLive) return null
-  if (pathname.startsWith('/stream/')) return null
+// Center stream icon: accent dot; while live, two concentric rings pulse
+// outward (radar ping). Opacity/scale only → native driver, no layout cost.
+function StreamTabIcon({ live }: { live: boolean }) {
+  const r1 = useRef(new Animated.Value(0)).current
+  const r2 = useRef(new Animated.Value(0)).current
+
+  useEffect(() => {
+    if (!live) {
+      r1.setValue(0)
+      r2.setValue(0)
+      return
+    }
+    const make = (v: Animated.Value, delay: number) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(delay),
+          Animated.timing(v, {
+            toValue: 1,
+            duration: 1800,
+            easing: theme.motion.patterns.pulse.easing,
+            useNativeDriver: true,
+          }),
+        ]),
+      )
+    const a = make(r1, 0)
+    const b = make(r2, 900)
+    a.start()
+    b.start()
+    return () => {
+      a.stop()
+      b.stop()
+    }
+  }, [live, r1, r2])
+
+  const ringStyle = (v: Animated.Value) => ({
+    transform: [{ scale: v.interpolate({ inputRange: [0, 1], outputRange: [0.7, 2.4] }) }],
+    opacity: v.interpolate({ inputRange: [0, 1], outputRange: [0.5, 0] }),
+  })
 
   return (
-    <Pressable
-      onPress={returnToActiveBroadcast}
-      style={styles.liveBar}
-      accessibilityRole="button"
-      accessibilityLabel="Return to your live stream"
-    >
-      <LivePill size="sm" />
-      <Text variant="bodyEmphasized" style={styles.liveBarLabel} numberOfLines={1}>
-        Return to your stream
+    <View style={styles.streamIconWrap}>
+      {live && <Animated.View style={[styles.streamRing, ringStyle(r1)]} />}
+      {live && <Animated.View style={[styles.streamRing, ringStyle(r2)]} />}
+      <View style={styles.streamDot} />
+    </View>
+  )
+}
+
+function TabButton({
+  icon,
+  label,
+  active,
+  onPress,
+}: {
+  icon: React.ComponentProps<typeof Icon>['name']
+  label: string
+  active: boolean
+  onPress: () => void
+}) {
+  const color = active ? theme.colors.accent.default : theme.colors.text.muted
+  return (
+    <Pressable style={styles.tabItem} onPress={onPress} accessibilityRole="button" accessibilityLabel={label}>
+      <Icon name={icon} size="md" color={color} />
+      <Text variant="monoCaption" color={color}>
+        {label}
       </Text>
-      <Icon name="chevron-right" size="md" color={theme.colors.text.muted} />
     </Pressable>
+  )
+}
+
+function AppTabBar() {
+  const pathname = usePathname()
+  const isLive = useBroadcastStore((s) => s.isLive)
+  const insets = useSafeAreaInsets()
+  const streamActive = pathname.startsWith('/stream')
+
+  return (
+    <View style={[styles.tabBar, { paddingBottom: insets.bottom }]}>
+      <TabButton icon="globe" label="Globe" active={pathname.startsWith('/globe')} onPress={() => router.navigate('/(app)/globe')} />
+      <TabButton icon="sliders" label="Dashboard" active={pathname.startsWith('/dashboard')} onPress={() => router.navigate('/(app)/dashboard')} />
+      <Pressable style={styles.tabItem} onPress={returnToActiveBroadcast} accessibilityRole="button" accessibilityLabel="Your stream">
+        <StreamTabIcon live={isLive} />
+        <Text variant="monoCaption" color={isLive || streamActive ? theme.colors.accent.default : theme.colors.text.muted}>
+          {isLive ? 'Live' : 'Stream'}
+        </Text>
+      </Pressable>
+      <TabButton icon="user" label="Me" active={pathname.startsWith('/me')} onPress={() => router.navigate('/(app)/me')} />
+      <TabButton icon="calendar" label="Events" active={pathname.startsWith('/ppv')} onPress={() => router.navigate('/(app)/ppv')} />
+    </View>
   )
 }
 
@@ -83,28 +152,17 @@ export default function AppLayout() {
     <View style={styles.root}>
       <SuspensionBanner />
       <Tabs
-        tabBar={(props) => (
-          <Fragment>
-            <LiveReturnBar />
-            <BottomTabBar {...props} />
-          </Fragment>
-        )}
-        screenOptions={{
-          headerShown: false,
-          tabBarStyle: {
-            backgroundColor: theme.colors.bg.elevated,
-            borderTopColor: theme.colors.border.subtle,
-          },
-          tabBarActiveTintColor: theme.colors.accent.default,
-          tabBarInactiveTintColor: theme.colors.text.muted,
-        }}
+        tabBar={() => <AppTabBar />}
+        screenOptions={{ headerShown: false }}
       >
         <Tabs.Screen name="globe" options={{ title: 'Globe' }} />
         <Tabs.Screen name="dashboard" options={{ title: 'Dashboard' }} />
-        <Tabs.Screen name="library" options={{ title: 'Library' }} />
-        <Tabs.Screen name="wallet" options={{ title: 'Wallet' }} />
         <Tabs.Screen name="me" options={{ title: 'Me' }} />
         <Tabs.Screen name="ppv" options={{ title: 'Events' }} />
+        {/* Off the footer — reached from Me. */}
+        <Tabs.Screen name="library" options={{ href: null }} />
+        <Tabs.Screen name="wallet" options={{ href: null }} />
+        {/* Non-tab routes. */}
         <Tabs.Screen name="creator-onboarding" options={{ href: null }} />
         <Tabs.Screen name="broadcaster-onboarding" options={{ href: null }} />
         <Tabs.Screen name="cashout" options={{ href: null }} />
@@ -134,17 +192,38 @@ const styles = StyleSheet.create({
   bannerText: {
     textAlign: 'center',
   },
-  liveBar: {
+  tabBar: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.sm,
     backgroundColor: theme.colors.bg.elevated,
     borderTopWidth: 1,
     borderTopColor: theme.colors.border.subtle,
+    paddingTop: theme.spacing.xs,
   },
-  liveBarLabel: {
+  tabItem: {
     flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+    paddingVertical: theme.spacing.xs,
+  },
+  streamIconWrap: {
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  streamDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: theme.colors.accent.default,
+  },
+  streamRing: {
+    position: 'absolute',
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 1.5,
+    borderColor: theme.colors.accent.default,
   },
 })

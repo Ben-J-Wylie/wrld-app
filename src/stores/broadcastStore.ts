@@ -1,20 +1,43 @@
 import { create } from 'zustand'
+import type { SourceType } from '@/types'
 
-// Tracks whether the current user has an active outgoing broadcast, so a
-// persistent "return to your live stream" affordance can live in the tab
-// bar regardless of which screen is focused.
+// Global broadcast state shared across screens so the Go Live / Record
+// controls look and read the same on the dashboard and the stream view
+// (same pattern as the shared title in captureConfig).
 //
-// The broadcast itself lives in StreamScreen's signaling / media hooks,
-// which stay mounted (the stream tab never unmounts), so navigating to a
-// different page in-app does NOT end it. Backgrounding / closing / the
-// explicit Leave still end it as usual; this flag just mirrors the
-// in-room state so the rest of the app can offer a way back.
+// The broadcast itself lives in StreamScreen's signaling / media hooks
+// (the stream tab never unmounts, so in-app navigation doesn't end it).
+// This store mirrors `isLive` / `isRecording` / live `sources` for any
+// screen to render, and carries a one-shot `command` so a control on the
+// dashboard (where the hooks don't live) can ask the mounted StreamScreen
+// to act on the running broadcast.
+type Command = 'endStream' | 'startRecording' | 'stopRecording'
+
 type BroadcastState = {
   isLive: boolean
-  setLive: (isLive: boolean) => void
+  isRecording: boolean
+  sources: SourceType[]
+  // One-shot command from a remote control surface (e.g. the dashboard);
+  // StreamScreen executes it and calls consumeCommand(). The nonce makes
+  // repeated identical commands re-fire.
+  command: Command | null
+  commandNonce: number
+  setLive: (sources: SourceType[]) => void
+  setRecording: (isRecording: boolean) => void
+  clear: () => void
+  sendCommand: (command: Command) => void
+  consumeCommand: () => void
 }
 
 export const useBroadcastStore = create<BroadcastState>((set) => ({
   isLive: false,
-  setLive: (isLive) => set({ isLive }),
+  isRecording: false,
+  sources: [],
+  command: null,
+  commandNonce: 0,
+  setLive: (sources) => set({ isLive: true, sources }),
+  setRecording: (isRecording) => set({ isRecording }),
+  clear: () => set({ isLive: false, isRecording: false, sources: [] }),
+  sendCommand: (command) => set((s) => ({ command, commandNonce: s.commandNonce + 1 })),
+  consumeCommand: () => set({ command: null }),
 }))

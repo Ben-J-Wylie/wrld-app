@@ -40,7 +40,7 @@ import {
   StyleSheet,
   View,
 } from 'react-native'
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { captureScreen } from 'react-native-view-shot'
 import { Filter as ProfanityFilter } from 'bad-words'
@@ -51,6 +51,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { RTCView } from 'react-native-webrtc'
 import { useAuth } from '@clerk/clerk-expo'
 import { Button } from '@/components/primitives/Button'
+import { Input } from '@/components/primitives/Input'
 import { Text } from '@/components/primitives/Text'
 import { Pill } from '@/components/primitives/Pill'
 import { Icon } from '@/components/primitives/Icon'
@@ -58,6 +59,7 @@ import { IconButton } from '@/components/primitives/IconButton'
 import { HelpText } from '@/components/primitives/HelpText'
 import { LivePill } from '@/components/features/stream/LivePill'
 import { BroadcastStatusIndicator } from '@/components/features/broadcast/BroadcastStatusIndicator'
+import { GoLiveRecordBar } from '@/components/features/broadcast/GoLiveRecordBar'
 import { BroadcasterRow } from '@/components/features/user/BroadcasterRow'
 import {
   ChatMessage as ChatMessageRow,
@@ -81,6 +83,7 @@ import { signalStreamDisconnected, signalStreamEnded, signalKicked } from '@/lib
 import { signalingClient } from '@/lib/mediasoupSignaling'
 import { activeBroadcast } from '@/lib/activeBroadcast'
 import { useBroadcastStore } from '@/stores/broadcastStore'
+import { loadCaptureConfig, saveCaptureConfig, DEFAULT_CAPTURE_CONFIG, type CaptureConfig } from '@/lib/captureConfig'
 import { streamsApi } from '@/api/streams'
 import { recordingsApi } from '@/api/recordings'
 import { usersApi } from '@/api/users'
@@ -96,6 +99,16 @@ import type { TipEvent } from '@/hooks/useSignaling'
 const SOURCE_LABELS: Record<SourceType, string> = {
   camera: 'Camera',
   audio: 'Audio',
+}
+
+// The AV subset of the armed capture config that actually streams today
+// (camera/audio). `cam` / `audio` are the FeedKind keys the dashboard uses.
+function avSourcesFromConfig(cfg: CaptureConfig | null): SourceType[] {
+  if (!cfg) return []
+  const out: SourceType[] = []
+  if (cfg.air?.cam) out.push('camera')
+  if (cfg.air?.audio) out.push('audio')
+  return out
 }
 
 const REACTION_CONFIGS: ReactionConfig[] = [
@@ -147,21 +160,38 @@ const tipStyles = StyleSheet.create({
 })
 
 export function StreamScreen() {
-  const { id, streamId: paramStreamId, title: paramTitle, sources: paramSources, lat: paramLat, lng: paramLng, subscribersOnly: paramSubscribersOnly, precision: paramPrecision } = useLocalSearchParams<{
+  const { id, streamId: paramStreamId, sources: paramSources, lat: paramLat, lng: paramLng, go: paramGo, rec: paramRec } = useLocalSearchParams<{
     id: string
     streamId?: string
-    title?: string
     sources?: string
     lat?: string
     lng?: string
-    subscribersOnly?: string
-    precision?: string
+    // go=1 means "go live immediately on arrival" (dashboard Go Live). The
+    // center stream tab navigates here WITHOUT go, landing on the preview.
+    // rec=1 (with go=1) means "go live AND start recording" (dashboard Record).
+    go?: string
+    rec?: string
   }>()
   const isNew = id === 'new'
 
   // When arriving via a deep-link notification without full params, look up by room ID
   const { data: streamByRoom } = useStreamByRoom(!paramStreamId && !isNew ? id : null)
-  const broadcastSources: SourceType[] = paramSources
+
+  // Broadcaster arming comes from captureConfig (the shared source of truth),
+  // not route params: the title, the AV source set to broadcast/preview, the
+  // location precision and subscribers-only flag. Loaded on focus.
+  const [cfg, setCfg] = useState<CaptureConfig | null>(null)
+  const cfgRef = useRef<CaptureConfig | null>(null)
+  cfgRef.current = cfg
+  const armedAVSources = useMemo<SourceType[]>(() => avSourcesFromConfig(cfg), [cfg])
+  const anyAirArmed = !!cfg && Object.values(cfg.air ?? {}).some(Boolean)
+
+  // The AV sources we're actually broadcasting (set at Go Live) — read from
+  // the store so re-entering the tab without route params keeps the live view
+  // intact. Falls back to the armed set while previewing.
+  const liveSources = useBroadcastStore((s) => s.sources)
+
+  const viewerSources: SourceType[] = paramSources
     ? (paramSources.split(',').filter(Boolean) as SourceType[])
     : ((streamByRoom?.sources ?? []) as SourceType[])
 
@@ -178,6 +208,14 @@ export function StreamScreen() {
     sendLocationUpdate,
     sendBroadcasterPaused, sendBroadcasterResumed, sendBroadcasterOrientation,
   } = useSignaling()
+  // Broadcaster: while live, the source set comes from the store (stable
+  // across tab re-entry); while previewing, from the armed config. Viewers
+  // use the sources passed by the globe / looked up by room.
+  const broadcastSources: SourceType[] = !isNew
+    ? viewerSources
+    : status === 'in-room'
+      ? liveSources
+      : armedAVSources
   // Broadcaster: look up the DB stream once in-room so we have streamId for recording.
   // roomId is only available after useSignaling, so this query lives here.
   // gcTime: 0 prevents a stale cache entry from a previous session's room with the same
@@ -195,7 +233,7 @@ export function StreamScreen() {
   const invalidateWallet = useInvalidateWallet()
   const {
     localStream, remoteStream, error: mediaError, facingMode, videoIsLandscape,
-    startBroadcasting, startViewing, switchCamera, cleanup,
+    startPreview, startBroadcasting, startViewing, switchCamera, cleanup,
   } = useMediasoup()
   const { isSignedIn } = useAuth()
   const { coords: liveCoords, loading: locationLoading } = useLocation()
@@ -232,6 +270,7 @@ export function StreamScreen() {
     }
     setIsRecording(false)
     setActiveRecordingId(null)
+    useBroadcastStore.getState().setRecording(false)
   }
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const tipToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -245,11 +284,26 @@ export function StreamScreen() {
   statusRef.current = status
   // Assigned below render — handleGoLive is a hoisted function declaration,
   // so it's already defined at this point in the render body.
-  const handleGoLiveRef = useRef<() => void>(() => {})
+  const handleGoLiveRef = useRef<(c?: CaptureConfig) => void>(() => {})
   handleGoLiveRef.current = handleGoLive
+  // paramGo/paramRec read via ref so the [id]-memoized focus effect sees the
+  // current navigation's values (id is always 'new', so the callback isn't recreated).
+  const paramGoRef = useRef(paramGo)
+  paramGoRef.current = paramGo
+  const paramRecRef = useRef(paramRec)
+  paramRecRef.current = paramRec
+  // Set when "Record" is pressed before the stream id is ready — the
+  // pendingRecord effect starts recording once we're live + have a streamId.
+  const pendingRecordRef = useRef(false)
+  // Whether this screen is currently focused — so a command from the
+  // dashboard (which leaves this screen blurred) doesn't turn the preview
+  // camera on in the background after End Stream.
+  const isFocusedRef = useRef(false)
 
   const isCameraArmed = broadcastSources.includes('camera')
-  const showCameraPreview = isNew && status === 'in-room' && !!localStream && isCameraArmed
+  // Shows the broadcaster's own camera both while LIVE and while PREVIEWING
+  // (center-tab, not yet live) — localStream is set by startPreview too.
+  const showCameraPreview = isNew && !!localStream && isCameraArmed
   const showRemoteVideo = !isNew && status === 'in-room' && !!remoteStream && broadcastSources.includes('camera')
   const showOverlay = showCameraPreview || showRemoteVideo
   const showControls = isNew || !showOverlay || controlsVisible
@@ -373,24 +427,42 @@ export function StreamScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      isFocusedRef.current = true
       if (isNew) {
         setAdminEnded(false)
-        // Auto-go-live on arrival — there's no intermediate "Start stream"
-        // step anymore. Fire on focus unless we're already live or mid-
-        // connect, so: a fresh navigation from the dashboard starts the
-        // stream; re-entering after a drop/error starts a fresh one; but
-        // simply returning to this tab while live does NOT restart it.
         const s = statusRef.current
-        if (s !== 'in-room' && s !== 'connecting' && s !== 'connected' && s !== 'authenticated') {
-          cleanup()
-          handleGoLiveRef.current()
+        // Already live or mid-connect → just show it; don't re-init.
+        if (s === 'in-room' || s === 'connecting' || s === 'connected' || s === 'authenticated') {
+          return () => { isFocusedRef.current = false } // keep the live broadcast running
         }
-        return
+        // Load the latest arming, then either go live immediately (dashboard
+        // Go Live, go=1) or start the camera preview (center stream tab).
+        if (paramGoRef.current === '1') {
+          if (s !== 'idle') cleanup() // reset a stale dropped/errored session
+          // rec=1 (dashboard Record) → also start recording once live.
+          pendingRecordRef.current = paramRecRef.current === '1'
+          loadCaptureConfig().then((c) => {
+            setCfg(c)
+            handleGoLiveRef.current(c)
+          })
+        } else if (s === 'idle') {
+          loadCaptureConfig().then((c) => {
+            setCfg(c)
+            startPreview(avSourcesFromConfig(c))
+          })
+        }
+        // On blur: stop the preview camera if we never went live; keep a live
+        // broadcast running (the tab stays mounted, so in-app nav doesn't end it).
+        return () => {
+          isFocusedRef.current = false
+          if (statusRef.current !== 'in-room') cleanup()
+        }
       }
       navigatingRef.current = false
       cleanup()
       handleJoin()
       return () => {
+        isFocusedRef.current = false
         cleanup()
         disconnect()
       }
@@ -403,14 +475,39 @@ export function StreamScreen() {
     Alert.alert('Account suspended', suspensionError, [{ text: 'OK', onPress: clearSuspensionError }])
   }, [suspensionError])
 
-  // Mirror the broadcaster's in-room state into the global store so the tab
-  // bar can show a "return to your stream" link while the broadcast keeps
-  // running in the background (the stream tab never unmounts). Cleared the
-  // moment the broadcast leaves the room (Leave, drop, admin-end, etc.).
+  // Clear the global broadcast flag on terminal states (idle before/after a
+  // session, or a drop). `handleGoLive` sets it (with the live sources) once
+  // connected — we don't set it here so the connect transitions
+  // (connecting/connected/authenticated) don't fight the explicit setLive.
+  // The center stream tab reads isLive from this store to animate.
   useEffect(() => {
     if (!isNew) return
-    useBroadcastStore.getState().setLive(status === 'in-room')
+    if (status === 'idle' || status === 'dropped') useBroadcastStore.getState().clear()
   }, [isNew, status])
+
+  // Pending-record: "Record" (preview button or dashboard rec=1) goes live
+  // first; once we're in-room and the streamId has resolved, start recording.
+  useEffect(() => {
+    if (!isNew || !pendingRecordRef.current) return
+    if (status === 'in-room' && streamId && !isRecording) {
+      pendingRecordRef.current = false
+      startRecording()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isNew, status, streamId, isRecording])
+
+  // Remote commands from another control surface (the dashboard's buttons act
+  // on this mounted screen's running broadcast via the store).
+  const command = useBroadcastStore((s) => s.command)
+  const commandNonce = useBroadcastStore((s) => s.commandNonce)
+  useEffect(() => {
+    if (!isNew || !command) return
+    if (command === 'endStream') handleEndStream()
+    else if (command === 'startRecording') startRecording()
+    else if (command === 'stopRecording') stopRecording()
+    useBroadcastStore.getState().consumeCommand()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [command, commandNonce])
 
   useEffect(() => {
     if (!isNew || status !== 'in-room' || !localStream) return
@@ -482,39 +579,51 @@ export function StreamScreen() {
     stoppedByUserRef.current = false
   }, [liveRecordings, activeRecordingId, isRecording])
 
-  async function handleGoLive() {
+  async function handleGoLive(configOverride?: CaptureConfig) {
+    // Arming + title come from captureConfig (the shared source of truth), so
+    // going live works identically from the dashboard (go=1, passes the
+    // freshly-loaded config) and from the stream-view preview's Go Live
+    // button (uses the live cfg state, which reflects the typed title).
+    const c = configOverride ?? cfgRef.current ?? (await loadCaptureConfig())
+    const title = c.title.trim()
+    // Data-only broadcasts (location/telemetry only, no camera/audio) are
+    // valid — av may be empty; startBroadcasting skips getUserMedia then.
+    // Only a title + coords are required.
+    if (!title || !coords) return
+    if (profanityFilter.isProfane(title)) {
+      Alert.alert('Title not allowed', 'Your stream title contains prohibited content. Please choose a different title.')
+      return
+    }
+    const av = avSourcesFromConfig(c)
+
     setIsRecording(false)
     setActiveRecordingId(null)
-    const title = (paramTitle ?? '').trim()
-    // Data-only broadcasts (location/telemetry only, no camera/audio) are
-    // valid — broadcastSources may be empty; startBroadcasting skips
-    // getUserMedia in that case. Only title + coords are required.
-    if (!title || !coords) return
 
-    // Translate app vocab → backend vocab; fall back to activeBroadcast then param
-    const rawPrecision = activeBroadcast.get()?.precision ?? paramPrecision
     const precisionMap: Record<string, 'exact' | 'city' | 'country' | 'off'> = {
-      bluedot: 'exact',
       exact: 'exact',
       city: 'city',
       country: 'country',
       private: 'off',
     }
-    const locationPrecision = precisionMap[rawPrecision ?? ''] ?? 'exact'
+    const locationPrecision = precisionMap[c.precision] ?? 'exact'
 
     try {
       await connect()
+      // Set the live source set before the room flips to in-room so the live
+      // view + center tab read it immediately (cleared in catch on failure).
+      useBroadcastStore.getState().setLive(av)
       await createRoom({
         title,
         lat: coords.latitude,
         lng: coords.longitude,
-        sources: broadcastSources,
-        subscribersOnly: (activeBroadcast.get()?.subscribersOnly ?? paramSubscribersOnly) === 'true',
+        sources: av,
+        subscribersOnly: c.subscribersOnly,
         locationPrecision,
         ppvEventId: activeBroadcast.get()?.ppvEventId,
       })
-      await startBroadcasting(broadcastSources)
+      await startBroadcasting(av)
     } catch (err) {
+      useBroadcastStore.getState().clear()
       const msg = err instanceof Error ? err.message : 'Failed to go live'
       if (msg.toLowerCase().includes('suspended')) {
         // suspensionError useEffect will show the Alert; navigate back cleanly
@@ -543,41 +652,64 @@ export function StreamScreen() {
   }
 
   function handleStartNew() {
-    useBroadcastStore.getState().setLive(false)
+    useBroadcastStore.getState().clear()
     activeBroadcast.clear()
     cleanup()
     disconnect()
     router.navigate('/(app)/dashboard')
   }
 
-  async function handleToggleRecording() {
-    if (isRecording) {
-      if (!activeRecordingId) return
-      try {
-        await recordingsApi.stop(activeRecordingId)
-        setIsRecording(false)
-        setActiveRecordingId(null)
-      } catch (err) {
-        Alert.alert('Error', err instanceof Error ? err.message : 'Could not stop recording')
-      }
-    } else {
-      if (!streamId) return
-      try {
-        const { recordingId } = await recordingsApi.start(streamId)
-        setActiveRecordingId(recordingId)
-        setIsRecording(true)
-      } catch (err: unknown) {
-        const serverMsg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
-        const msg = serverMsg ?? 'Could not start recording'
-        Alert.alert('Storage full', msg)
-      }
+  async function startRecording() {
+    if (!streamId || isRecording) return
+    try {
+      const { recordingId } = await recordingsApi.start(streamId)
+      setActiveRecordingId(recordingId)
+      setIsRecording(true)
+      useBroadcastStore.getState().setRecording(true)
+    } catch (err: unknown) {
+      const serverMsg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
+      Alert.alert('Storage full', serverMsg ?? 'Could not start recording')
     }
   }
 
-  function handleLeave() {
-    useBroadcastStore.getState().setLive(false)
+  async function stopRecording() {
+    if (!isRecording || !activeRecordingId) return
+    try {
+      await recordingsApi.stop(activeRecordingId)
+    } catch (err) {
+      Alert.alert('Error', err instanceof Error ? err.message : 'Could not stop recording')
+      return
+    }
+    setIsRecording(false)
+    setActiveRecordingId(null)
+    useBroadcastStore.getState().setRecording(false)
+  }
+
+  // Record from the preview: go live first, then start recording once the
+  // stream id resolves (see the pendingRecord effect below).
+  function handleGoLiveThenRecord() {
+    pendingRecordRef.current = true
+    handleGoLive()
+  }
+
+  // End Stream — stop recording (if any) AND the stream, but STAY on this
+  // page (no navigation): drop back to the armed preview so the broadcaster
+  // can go live again without leaving. (The header back arrow leaves to the
+  // globe but keeps a live broadcast running; only End Stream stops it.)
+  function handleEndStream() {
+    pendingRecordRef.current = false
     stopActiveRecording()
+    useBroadcastStore.getState().clear()
     activeBroadcast.clear()
+    cleanup()
+    disconnect()
+    // Restore the camera preview only if the user is actually on this screen
+    // (End Stream can be commanded from the dashboard, leaving it blurred).
+    if (isFocusedRef.current) startPreview(avSourcesFromConfig(cfgRef.current))
+  }
+
+  // Viewer-only "Leave" → back to the globe.
+  function handleLeave() {
     cleanup()
     disconnect()
     router.navigate('/(app)/globe')
@@ -607,7 +739,10 @@ export function StreamScreen() {
   }
 
   function handleBack() {
-    if (status === 'in-room' || status === 'dropped') {
+    // Viewer: leaving tears down the connection. Broadcaster: leave the page
+    // but keep a live broadcast running (in-app nav doesn't end it — the blur
+    // cleanup stops a non-live preview; only End Stream stops a live one).
+    if (!isNew && (status === 'in-room' || status === 'dropped')) {
       cleanup()
       disconnect()
     }
@@ -695,6 +830,15 @@ export function StreamScreen() {
 
   const displayError = signalingError ?? mediaError
   const burst = reactions.map((r) => ({ id: r.id, kind: r.kind }))
+
+  // Preview (center-tab) Go Live gating + shared-title editing. Editing the
+  // title here persists to captureConfig so the dashboard shows the same value.
+  const canGoLivePreview = !!cfg?.title.trim() && !!coords && anyAirArmed
+  function updatePreviewTitle(t: string) {
+    const next = { ...(cfgRef.current ?? DEFAULT_CAPTURE_CONFIG), title: t }
+    setCfg(next)
+    saveCaptureConfig(next)
+  }
 
   function chatRoleFor(from: string): ChatRole {
     if (broadcaster && from === broadcaster.handle) return 'host'
@@ -808,41 +952,58 @@ export function StreamScreen() {
         <View style={styles.content}>
           {!showOverlay && isNew && <Text variant="display">Go Live</Text>}
 
-          {/* ── Going live (broadcaster only) ─────────────────────── */}
-          {/* No intermediate "Start stream" step — the screen auto-goes-live
-              on arrival (see the focus effect). This is the brief idle frame
-              before the connecting status takes over. */}
+          {/* ── Broadcaster idle: armed preview + Go Live / Record ── */}
+          {/* No "Start stream" step — the camera preview shows pre-live. The
+              dashboard's go=1 autostart flashes through this for one frame
+              before the connecting state takes over. */}
           {status === 'idle' && isNew && (
-            <View style={styles.actions}>
-              {isSignedIn ? (
-                <>
-                  {locationLoading && !paramLat ? (
-                    <View style={styles.statusRow}>
-                      <ActivityIndicator color={theme.colors.accent.default} size="small" />
-                      <Text variant="body" color={theme.colors.text.muted}>
-                        Detecting location…
-                      </Text>
-                    </View>
-                  ) : (
-                    <View style={styles.statusRow}>
-                      <ActivityIndicator color={theme.colors.accent.default} />
-                      <Text variant="body" color={theme.colors.text.muted}>
-                        Going live…
-                      </Text>
-                    </View>
-                  )}
-                </>
-              ) : (
+            !isSignedIn ? (
+              <View style={styles.actions}>
                 <Text variant="body" color={theme.colors.text.muted}>
                   Sign in to go live
                 </Text>
-              )}
-              <Button
-                label="Back"
-                onPress={() => router.navigate('/(app)/globe')}
-                variant="secondary"
-              />
-            </View>
+                <Button label="Back" onPress={() => router.navigate('/(app)/globe')} variant="secondary" />
+              </View>
+            ) : (
+              <View style={styles.previewControls}>
+                <View style={styles.previewTop}>
+                  <Input
+                    placeholder="What's happening?"
+                    value={cfg?.title ?? ''}
+                    onChangeText={updatePreviewTitle}
+                    autoCorrect={false}
+                  />
+                </View>
+                <View style={styles.previewBottom}>
+                  {armedAVSources.length > 0 && (
+                    <View style={styles.sourceRow}>
+                      {armedAVSources.map((s) => (
+                        <Pill key={s} size="sm" variant="accent" label={SOURCE_LABELS[s].toUpperCase()} />
+                      ))}
+                    </View>
+                  )}
+                  {!anyAirArmed && (
+                    <Text variant="caption" color={theme.colors.text.muted} style={styles.center}>
+                      Arm a source on the dashboard to go live
+                    </Text>
+                  )}
+                  {locationLoading && !coords && (
+                    <Text variant="caption" color={theme.colors.text.muted} style={styles.center}>
+                      Detecting location…
+                    </Text>
+                  )}
+                  <GoLiveRecordBar
+                    style={styles.fullWidth}
+                    isLive={false}
+                    isRecording={false}
+                    liveDisabled={!canGoLivePreview}
+                    recordDisabled={!canGoLivePreview}
+                    onLivePress={() => handleGoLive()}
+                    onRecordPress={handleGoLiveThenRecord}
+                  />
+                </View>
+              </View>
+            )
           )}
 
           {/* ── Connecting ───────────────────────────────────────── */}
@@ -948,7 +1109,7 @@ export function StreamScreen() {
                         label={SOURCE_LABELS[s].toUpperCase()}
                       />
                     ))}
-                    {(activeBroadcast.get()?.subscribersOnly ?? paramSubscribersOnly) === 'true' && (
+                    {cfg?.subscribersOnly && (
                       <View style={styles.lockBadge}>
                         <Icon name="lock" size="sm" color={theme.colors.accent.default} />
                         <Text variant="monoCaption" color={theme.colors.accent.default}>LOCKED</Text>
@@ -961,20 +1122,6 @@ export function StreamScreen() {
                       color={showOverlay ? theme.colors.text.inverse : theme.colors.text.muted}
                     >
                       {viewerCount} {viewerCount === 1 ? 'viewer' : 'viewers'}
-                    </Text>
-                  </Pressable>
-                  <Pressable
-                    onPress={handleToggleRecording}
-                    disabled={!streamId}
-                    style={[styles.recordBtn, isRecording && styles.recordBtnActive]}
-                    hitSlop={8}
-                  >
-                    <View style={[styles.recordDot, isRecording && styles.recordDotActive]} />
-                    <Text
-                      variant="monoLabel"
-                      color={isRecording ? theme.colors.text.inverse : theme.colors.text.primary}
-                    >
-                      {isRecording ? 'STOP REC' : 'REC'}
                     </Text>
                   </Pressable>
                 </View>
@@ -1012,7 +1159,18 @@ export function StreamScreen() {
                 </View>
               )}
 
-              <Button label="Leave" onPress={handleLeave} variant="primary" />
+              {isNew ? (
+                <GoLiveRecordBar
+                  style={styles.fullWidth}
+                  isLive
+                  isRecording={isRecording}
+                  recordDisabled={!streamId}
+                  onLivePress={handleEndStream}
+                  onRecordPress={isRecording ? stopRecording : startRecording}
+                />
+              ) : (
+                <Button label="Leave" onPress={handleLeave} variant="primary" />
+              )}
             </View>
           )}
 
@@ -1267,6 +1425,12 @@ const styles = StyleSheet.create({
   recIndicator: { width: '100%' },
   actions: { width: '100%', gap: theme.spacing.sm, alignItems: 'center' },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
+  // Center-tab preview: title pinned near the top, Go Live + armed pills
+  // near the bottom, the camera feed (if armed) filling behind.
+  previewControls: { flex: 1, width: '100%', justifyContent: 'space-between' },
+  previewTop: { width: '100%' },
+  previewBottom: { width: '100%', alignItems: 'center', gap: theme.spacing.sm },
+  fullWidth: { width: '100%' },
   roomInfo: { width: '100%', alignItems: 'center', gap: theme.spacing.lg },
   roomInfoOverlay: {
     position: 'absolute',
@@ -1374,30 +1538,6 @@ const styles = StyleSheet.create({
     zIndex: 20,
   },
 
-  recordBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-    borderRadius: theme.radius.full,
-    borderWidth: 1,
-    borderColor: theme.colors.border.subtle,
-    backgroundColor: theme.colors.bg.elevated,
-  },
-  recordBtnActive: {
-    backgroundColor: '#D0233A',
-    borderColor: '#D0233A',
-  },
-  recordDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#D0233A',
-  },
-  recordDotActive: {
-    backgroundColor: theme.colors.text.inverse,
-  },
   adminEndedContainer: {
     backgroundColor: theme.colors.bg.primary,
     justifyContent: 'center',

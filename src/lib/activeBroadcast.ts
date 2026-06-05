@@ -1,20 +1,12 @@
 import { router } from 'expo-router'
 
+// Per-go-live intent that isn't part of the persisted capture config.
+// Arming (title / sources / precision / identity / subscribers-only) now
+// lives in captureConfig — the single source of truth the dashboard and the
+// stream-view preview share. The only thing carried here is the optional PPV
+// event the dashboard links a broadcast to at Go Live time (it's computed
+// from scheduled events, not a persisted setting).
 type BroadcastParams = {
-  title: string
-  sources: string
-  subscribersOnly?: string
-  // Clips initiative: capture intent carried alongside the broadcast set.
-  // `air` is a comma list of all aired source kinds (the media subset that
-  // actually streams lives in `sources`); `identity` flags an anonymous
-  // broadcast; `precision` is the location capture ceiling. Recording is
-  // no longer armed on the dashboard — a single Record button on the
-  // stream view records the aired set (2026-06-04), so there is no
-  // separate `record` set here anymore.
-  air?: string
-  identity?: string
-  precision?: string
-  // Optional PPV event this broadcast is linked to (forwarded to createRoom).
   ppvEventId?: string
 }
 
@@ -26,20 +18,10 @@ export const activeBroadcast = {
   clear() { _active = null },
 }
 
-// Navigate (back) to the broadcaster's own live stream view, carrying the
-// arming config forward as params. Used by the tab-bar live-return bar and
-// by tapping one's own (black) pin on the globe. The stream stays in-room,
-// so StreamScreen's focus effect re-enters without restarting it.
+// Open the broadcaster's own stream view (`stream/new`). If a broadcast is
+// already live the view shows it (StreamScreen sees it still in-room); if
+// not, it shows the armed preview. Used by the center stream tab and by
+// tapping one's own (black) pin on the globe.
 export function returnToActiveBroadcast() {
-  const a = _active
-  router.navigate({
-    pathname: '/(app)/stream/[id]',
-    params: {
-      id: 'new',
-      title: a?.title ?? '',
-      sources: a?.sources ?? '',
-      subscribersOnly: a?.subscribersOnly ?? 'false',
-      precision: a?.precision ?? 'exact',
-    },
-  })
+  router.navigate({ pathname: '/(app)/stream/[id]', params: { id: 'new' } })
 }

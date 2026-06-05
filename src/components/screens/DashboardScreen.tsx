@@ -26,13 +26,13 @@
 // screen/gyro/compass and the v0.3+ sources (speed/torch/temp/motion) is
 // a follow-up on `main` (Aaron's lane) — flagged in each row's detail.
 
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, ScrollView, StyleSheet, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Filter as ProfanityFilter } from 'bad-words'
 
 const profanityFilter = new ProfanityFilter()
-import { router } from 'expo-router'
+import { router, useFocusEffect } from 'expo-router'
 import { useQuery } from '@tanstack/react-query'
 import { theme } from '@/tokens/theme'
 import { ScreenScroll } from '@/components/sections/ScreenScroll'
@@ -45,7 +45,8 @@ import { SegmentedToggle } from '@/components/primitives/SegmentedToggle'
 import { Divider } from '@/components/primitives/Divider'
 import { FeedRow, type SourceAvailability } from '@/components/features/broadcast/FeedRow'
 import { type FeedKind } from '@/components/features/broadcast/FeedThumb'
-import { GoBar } from '@/components/features/broadcast/GoBar'
+import { GoLiveRecordBar } from '@/components/features/broadcast/GoLiveRecordBar'
+import { useBroadcastStore } from '@/stores/broadcastStore'
 import { useAuth } from '@clerk/clerk-expo'
 import { useLocation } from '@/hooks/useLocation'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
@@ -179,49 +180,48 @@ export function DashboardScreen() {
   const ppvEventId: string | null = enforcedEvent ? enforcedEvent.id : manualPpvEventId
   const ppvEventLocked = !!enforcedEvent
 
-  // Title ("what's happening") is intentionally per-session — it never
-  // persists. Everything else hydrates from the saved capture config.
+  // Title ("what's happening") is persisted/shared via captureConfig now,
+  // so the stream-view preview can go live with the same title. It hydrates
+  // and auto-saves alongside the rest of the config.
   const [title, setTitle] = useState('')
   const [air, setAir] = useState<Partial<Record<FeedKind, boolean>>>(DEFAULT_CAPTURE_CONFIG.air)
   const [precision, setPrecision] = useState<LocationPrecision>(DEFAULT_CAPTURE_CONFIG.precision)
   const [identity, setIdentity] = useState<IdentityFlag>(DEFAULT_CAPTURE_CONFIG.identity)
   const [subscribersOnly, setSubscribersOnly] = useState(DEFAULT_CAPTURE_CONFIG.subscribersOnly)
 
-  // Hydrate from AsyncStorage on first mount; `hydrated` gates the
-  // auto-save effect so we don't write the defaults back over the saved
-  // config before it loads.
+  // Hydrate from AsyncStorage on focus (not just mount) so the dashboard
+  // reflects title/arming edits made on the stream-view preview — captureConfig
+  // is the shared source of truth. `hydrated` gates the auto-save effect so we
+  // don't write defaults over the saved config before it loads.
   const hydratedRef = useRef(false)
-  useEffect(() => {
-    let active = true
-    loadCaptureConfig().then((cfg) => {
-      if (!active) return
-      setAir(cfg.air as Partial<Record<FeedKind, boolean>>)
-      setPrecision(cfg.precision)
-      setIdentity(cfg.identity)
-      setSubscribersOnly(cfg.subscribersOnly)
-      hydratedRef.current = true
-    })
-    return () => {
-      active = false
-    }
-  }, [])
+  useFocusEffect(
+    useCallback(() => {
+      let active = true
+      loadCaptureConfig().then((cfg) => {
+        if (!active) return
+        setTitle(cfg.title)
+        setAir(cfg.air as Partial<Record<FeedKind, boolean>>)
+        setPrecision(cfg.precision)
+        setIdentity(cfg.identity)
+        setSubscribersOnly(cfg.subscribersOnly)
+        hydratedRef.current = true
+      })
+      return () => {
+        active = false
+      }
+    }, []),
+  )
 
-  // Auto-save on any capture-config change (no save button). Title is
-  // excluded by design.
+  // Auto-save on any capture-config change (no save button) — title included.
   useEffect(() => {
     if (!hydratedRef.current) return
-    saveCaptureConfig({ air, precision, identity, subscribersOnly })
-  }, [air, precision, identity, subscribersOnly])
+    saveCaptureConfig({ title, air, precision, identity, subscribersOnly })
+  }, [title, air, precision, identity, subscribersOnly])
 
   function setAirFor(kind: FeedKind, v: boolean) {
     setAir((prev) => ({ ...prev, [kind]: v }))
   }
 
-  // The media subset that actually streams today (camera/audio).
-  const broadcastSources = useMemo<SourceType[]>(
-    () => SOURCE_GROUPS.flat().filter((s) => s.broadcastSource && air[s.kind]).map((s) => s.broadcastSource!),
-    [air],
-  )
   // Every aired source kind (incl. location / telemetry / torch) — any of
   // these counts as a live broadcast even with no camera/audio.
   const airedKinds = useMemo(
@@ -236,40 +236,47 @@ export function DashboardScreen() {
   const canGoLive =
     isSignedIn && !!title.trim() && !!coords && !locationLoading && anyAir
 
-  // Go Live navigates to the stream view (stream/new), which goes live on
-  // arrival. The dashboard only collects the arming config; createRoom +
-  // startBroadcasting + recording all live on the stream view now. The
-  // capture intent is stashed in activeBroadcast (durable across the
-  // navigation params, which a later recovery nav can overwrite) and also
-  // passed as route params.
-  function handleGoLive() {
+  // Shared broadcast state (so the buttons read the same as the stream view).
+  const isLive = useBroadcastStore((s) => s.isLive)
+  const isRecording = useBroadcastStore((s) => s.isRecording)
+
+  // Starting a broadcast navigates to the stream view (stream/new) with go=1
+  // (and rec=1 for Record), which goes live on arrival. The stream view reads
+  // the arming (title, sources, precision, identity, subscribers-only) from
+  // captureConfig — the shared source of truth — so we persist it first to
+  // avoid a read race, then carry only the per-go-live PPV link
+  // (activeBroadcast) + coords + the autostart flags.
+  async function startBroadcast(record: boolean) {
     if (!canGoLive) return
     if (profanityFilter.isProfane(title.trim())) {
       Alert.alert('Title not allowed', 'Your stream title contains prohibited content. Please choose a different title.')
       return
     }
-    const sourcesParam = broadcastSources.join(',')
-    activeBroadcast.set({
-      title: title.trim(),
-      sources: sourcesParam,
-      subscribersOnly: String(subscribersOnly),
-      air: airedKinds.join(','),
-      identity,
-      precision,
-      ppvEventId: ppvEventId ?? undefined,
-    })
+    await saveCaptureConfig({ title: title.trim(), air, precision, identity, subscribersOnly })
+    activeBroadcast.set({ ppvEventId: ppvEventId ?? undefined })
     router.push({
       pathname: '/(app)/stream/[id]',
       params: {
         id: 'new',
-        title: title.trim(),
-        sources: sourcesParam,
+        go: '1',
+        ...(record ? { rec: '1' } : null),
         lat: String(coords!.latitude),
         lng: String(coords!.longitude),
-        subscribersOnly: String(subscribersOnly),
-        precision,
       },
     })
+  }
+
+  // The control surface acts on the running broadcast (which lives in the
+  // mounted StreamScreen) via the store command when already live, or starts
+  // a new one by navigating when idle. Mirrors the stream view exactly.
+  function handleLivePress() {
+    if (isLive) useBroadcastStore.getState().sendCommand('endStream')
+    else startBroadcast(false)
+  }
+  function handleRecordPress() {
+    if (isRecording) useBroadcastStore.getState().sendCommand('stopRecording')
+    else if (isLive) useBroadcastStore.getState().sendCommand('startRecording')
+    else startBroadcast(true)
   }
 
   if (!isSignedIn) {
@@ -420,9 +427,13 @@ export function DashboardScreen() {
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: Math.max(theme.spacing.sm, insets.bottom + theme.spacing.md - FOOTER_DROP) }]}>
-        <GoBar
-          variant={canGoLive ? 'armed' : 'disabled'}
-          onPress={handleGoLive}
+        <GoLiveRecordBar
+          isLive={isLive}
+          isRecording={isRecording}
+          liveDisabled={!isLive && !canGoLive}
+          recordDisabled={!isRecording && !isLive && !canGoLive}
+          onLivePress={handleLivePress}
+          onRecordPress={handleRecordPress}
         />
       </View>
     </View>

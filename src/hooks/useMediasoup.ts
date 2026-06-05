@@ -44,9 +44,60 @@ export function useMediasoup() {
     setTimeout(() => { switchingCamera.current = false }, 1_000)
   }, [])
 
+  // Acquire local camera/audio for an on-screen PREVIEW without going live
+  // (no transport, no produce). The stream-view center tab uses this so the
+  // broadcaster sees their armed camera feed before pressing Go Live; a
+  // subsequent startBroadcasting() reuses this same stream (no re-prompt,
+  // no flicker). Re-acquires only if the armed AV set changed.
+  const previewSourcesRef = useRef<string>('')
+  const startPreview = useCallback(async (sources: SourceType[]) => {
+    setError(null)
+    const wantsCamera = sources.includes('camera')
+    const wantsAudio = sources.includes('audio')
+    const key = `${wantsCamera ? 'c' : ''}${wantsAudio ? 'a' : ''}`
+    // No AV armed → nothing to preview.
+    if (!wantsCamera && !wantsAudio) {
+      if (localStreamRef.current) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        localStreamRef.current.getTracks().forEach((t: any) => t.stop())
+        localStreamRef.current = null
+        setLocalStream(null)
+      }
+      previewSourcesRef.current = ''
+      return
+    }
+    // Already previewing the same AV set → keep the live stream as-is.
+    if (localStreamRef.current && previewSourcesRef.current === key) return
+    // Different set → stop the old preview tracks first.
+    if (localStreamRef.current) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      localStreamRef.current.getTracks().forEach((t: any) => t.stop())
+      localStreamRef.current = null
+    }
+    setFacingMode('environment')
+    try {
+      const stream = (await mediaDevices.getUserMedia({
+        video: wantsCamera
+          ? { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+          : false,
+        audio: wantsAudio,
+      })) as unknown as MediaStream
+      localStreamRef.current = stream
+      previewSourcesRef.current = key
+      setLocalStream(stream)
+      if (wantsCamera) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const vt = (stream as any).getVideoTracks()[0]
+        const s = vt?.getSettings?.() ?? {}
+        setVideoIsLandscape(typeof s.width === 'number' && typeof s.height === 'number' && s.width > s.height)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not access camera')
+    }
+  }, [])
+
   const startBroadcasting = useCallback(async (sources: SourceType[]) => {
     setError(null)
-    setFacingMode('environment')
     try {
       const device = await buildDevice()
 
@@ -57,8 +108,12 @@ export function useMediasoup() {
       // non-AV layers as real producers is a backend/media follow-up.
       const wantsCamera = sources.includes('camera')
       const wantsAudio = sources.includes('audio')
-      let stream: MediaStream | null = null
-      if (wantsCamera || wantsAudio) {
+      // Reuse the preview stream if one is already acquired (center-tab
+      // preview → Go Live) so we don't re-prompt or drop the feed; otherwise
+      // acquire now (dashboard Go Live with no preview).
+      let stream: MediaStream | null = localStreamRef.current
+      if (!stream && (wantsCamera || wantsAudio)) {
+        setFacingMode('environment')
         stream = (await mediaDevices.getUserMedia({
           video: wantsCamera
             ? { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
@@ -135,6 +190,7 @@ export function useMediasoup() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     localStreamRef.current?.getTracks().forEach((t: any) => t.stop())
     localStreamRef.current = null
+    previewSourcesRef.current = ''
     setLocalStream(null)
     setRemoteStream(null)
     setError(null)
@@ -142,5 +198,5 @@ export function useMediasoup() {
     setVideoIsLandscape(false)
   }, [])
 
-  return { localStream, remoteStream, error, facingMode, videoIsLandscape, startBroadcasting, startViewing, switchCamera, cleanup }
+  return { localStream, remoteStream, error, facingMode, videoIsLandscape, startPreview, startBroadcasting, startViewing, switchCamera, cleanup }
 }
