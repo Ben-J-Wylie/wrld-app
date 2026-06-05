@@ -191,7 +191,23 @@ export function TimeScrubber({
     [],
   )
 
-  const playMs = paused ? frozenRef.current : Date.now() - offsetMs
+  // Returning to live (offset 0 — via the NOW tap, or dialling forward past the
+  // present) must always resume ticking. Clear the paused freeze AND any pending
+  // hold-timer, so the clock can't stay stuck at `frozenRef` and the timer can't
+  // later rebase the offset back into the past.
+  useEffect(() => {
+    if (offsetMs <= 0) {
+      if (holdTimer.current) {
+        clearTimeout(holdTimer.current)
+        holdTimer.current = null
+      }
+      setPaused(false)
+    }
+  }, [offsetMs])
+
+  // `paused` only freezes the playhead while actually in the past — when live
+  // (offset 0) the clock must always tick, even if a stale `paused` lingers.
+  const playMs = paused && offsetMs > 0 ? frozenRef.current : Date.now() - offsetMs
   const playhead = new Date(playMs)
   const live = offsetMs <= 0
 
