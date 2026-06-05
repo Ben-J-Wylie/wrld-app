@@ -17,6 +17,7 @@ import { Text } from '@/components/primitives/Text'
 import { HelpText } from '@/components/primitives/HelpText'
 import { Toggle } from '@/components/primitives/Toggle'
 import { ScreenHeader } from '@/components/sections/ScreenHeader'
+import { PageTabs } from '@/components/features/navigation/PageTabs'
 import { Input } from '@/components/primitives/Input'
 import { usersApi } from '@/api/users'
 import { ppvApi } from '@/api/ppvEvents'
@@ -36,6 +37,8 @@ export function MonetizeScreen() {
 
   const [priceInput, setPriceInput] = useState('')
   const [saving, setSaving] = useState(false)
+  // Hybrid-nav: Subscriptions / Events as in-place page-tabs.
+  const [tab, setTab] = useState<'subs' | 'events'>('subs')
 
   const priceDollars = priceInput ? parseFloat(priceInput) : null
   const priceCents = priceDollars ? Math.round(priceDollars * 100) : null
@@ -87,11 +90,24 @@ export function MonetizeScreen() {
 
   return (
     <ScreenScroll
-      header={<ScreenHeader title="Monetize" onBack={() => router.back()} />}
+      header={
+        <View>
+          <ScreenHeader title="Monetize" onBack={() => router.back()} />
+          <PageTabs
+            tabs={[
+              { key: 'subs', label: 'Subscriptions' },
+              { key: 'events', label: 'Events' },
+            ]}
+            value={tab}
+            onChange={setTab}
+          />
+        </View>
+      }
       contentContainerStyle={styles.scroll}
     >
 
-      {isLoading ? null : !settings?.onboardingComplete ? (
+      {tab === 'subs' &&
+        (isLoading ? null : !settings?.onboardingComplete ? (
         <>
           <Text variant="body" color={theme.colors.text.muted}>
             Connect a Stripe account to receive subscription payments. Stripe handles billing,
@@ -177,10 +193,11 @@ export function MonetizeScreen() {
             <Button label="Open Stripe dashboard" variant="secondary" onPress={handleDashboard} />
           </View>
         </>
-      )}
+      ))}
 
       {/* ── PPV Events ──────────────────────────────────────── */}
-      <View style={styles.section}>
+      {tab === 'events' && (
+        <View style={styles.section}>
         <View style={styles.ppvHeader}>
           <HelpText>PAY-PER-VIEW EVENTS</HelpText>
           <Button
@@ -224,7 +241,8 @@ export function MonetizeScreen() {
             No events scheduled yet. Create a PPV event to sell tickets to your next stream.
           </Text>
         )}
-      </View>
+        </View>
+      )}
     </ScreenScroll>
   )
 }

@@ -4,6 +4,7 @@ import { router, useLocalSearchParams } from 'expo-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { theme } from '@/tokens/theme'
 import { ScreenScroll } from '@/components/sections/ScreenScroll'
+import { ScreenHeader } from '@/components/sections/ScreenHeader'
 import { Button } from '@/components/primitives/Button'
 import { Text } from '@/components/primitives/Text'
 import { Input } from '@/components/primitives/Input'
@@ -254,8 +255,15 @@ export function PpvCreateScreen() {
   }
 
   return (
-    <ScreenScroll contentContainerStyle={styles.content}>
-      <Text variant="heading">{isEdit ? 'Edit event' : 'Schedule PPV event'}</Text>
+    <ScreenScroll
+      header={
+        <ScreenHeader
+          title={isEdit ? 'Edit event' : 'Schedule event'}
+          onBack={() => router.back()}
+        />
+      }
+      contentContainerStyle={styles.content}
+    >
 
       <View style={styles.field}>
         <Text variant="monoLabel">Title</Text>

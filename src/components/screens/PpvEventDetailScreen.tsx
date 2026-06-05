@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '@clerk/clerk-expo'
 import { theme } from '@/tokens/theme'
 import { ScreenScroll } from '@/components/sections/ScreenScroll'
+import { ScreenHeader } from '@/components/sections/ScreenHeader'
 import { Button } from '@/components/primitives/Button'
 import { Text } from '@/components/primitives/Text'
 import { HelpText } from '@/components/primitives/HelpText'
@@ -143,28 +144,35 @@ export function PpvEventDetailScreen() {
 
   if (isLoading && !event) {
     return (
-      <ScreenScroll contentContainerStyle={styles.content}>
+      <ScreenScroll
+        header={<ScreenHeader title="Event" onBack={() => router.back()} />}
+        contentContainerStyle={styles.content}
+      >
         <View style={styles.loadingWrap}>
           <ActivityIndicator color={theme.colors.accent.default} />
         </View>
-        <Button label="Back" variant="secondary" onPress={() => router.back()} />
       </ScreenScroll>
     )
   }
 
   if (!event) {
     return (
-      <ScreenScroll contentContainerStyle={styles.content}>
+      <ScreenScroll
+        header={<ScreenHeader title="Event" onBack={() => router.back()} />}
+        contentContainerStyle={styles.content}
+      >
         <Text variant="body" color={theme.colors.text.muted} style={styles.center}>
           Event not found.
         </Text>
-        <Button label="Back" variant="secondary" onPress={() => router.back()} />
       </ScreenScroll>
     )
   }
 
   return (
-    <ScreenScroll contentContainerStyle={styles.content}>
+    <ScreenScroll
+      header={<ScreenHeader title="Event" onBack={() => router.back()} />}
+      contentContainerStyle={styles.content}
+    >
       {/* ── Header ──────────────────────────────────────────── */}
       <View style={styles.titleRow}>
         <Text variant="heading" style={styles.flex}>{event.title}</Text>
@@ -266,7 +274,6 @@ export function PpvEventDetailScreen() {
         </View>
       )}
 
-      <Button label="Back" variant="secondary" onPress={() => router.back()} />
     </ScreenScroll>
   )
 }

@@ -3704,18 +3704,20 @@ cluster stays). Roll `ScreenHeader` out to the remaining screens next.
 Events · Library · Wallet** (all back-arrow-free), via a new fixed `header` slot
 on `ScreenScroll` (Wallet renders it above its FlatList directly).
 
-**Hybrid nav rollout (2026-06-05).** The chosen direction — **page-tabs for
-sibling clusters + a header up-affordance for linear drill-downs** — is landing:
-- **Page-tabs (`PageTabs` feature):** **Wallet** ✅ → Balance / Top Up / Cash Out
-  in-place tabs (no route push, no back arrow); Top Up / Cash Out bodies live in
-  the `TopUpPanel` / `CashOutPanel` sections so the `/topup` `/cashout` routes
-  (now thin wrappers) still work without duplicated logic. **Monetize → Subscriptions
-  / Events** is the next cluster (same pattern).
+**Hybrid nav rollout (2026-06-05) — complete across all 9 detail screens.** The
+chosen direction — **page-tabs for sibling clusters + a header up-affordance for
+linear drill-downs**:
+- **Page-tabs (`PageTabs` feature):** **Wallet** → Balance / Top Up / Cash Out and
+  **Monetize** → Subscriptions / Events — in-place tabs (no route push, no back
+  arrow). Wallet's Top Up / Cash Out bodies live in the `TopUpPanel` /
+  `CashOutPanel` sections so the `/topup` `/cashout` routes (now thin wrappers)
+  still work without duplicated logic.
 - **Up-affordance (`ScreenHeader.onBack`):** **Settings, Subscription ("Plans"),
-  Profile, Monetize** ✅ — bespoke back-arrow headers replaced by the unified
-  header with a back chevron (still `router.back()` under the hood).
-- **Pending:** Monetize page-tabs; the PPV stack (Create/Manage/EventDetail, which
-  use inline "Back" buttons). Auth/onboarding flows remain out of scope.
+  Profile, Monetize, PPV Create/Manage/EventDetail** — bespoke back-arrow headers
+  (and inline "Back" buttons on the PPV screens) replaced by the unified header
+  with a back chevron (still `router.back()` under the hood).
+- **Remaining:** formal `PageTabs` / panel register entries + gallery page (a docs
+  pass). Auth/onboarding flows remain out of scope.
 
 **Imposes:** new screens use `ScreenHeader` at the top + a `paddingTop: sm`
 field row to stay aligned; `SearchBar`'s look now changes wherever `Input`'s

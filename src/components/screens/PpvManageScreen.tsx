@@ -4,6 +4,7 @@ import { router, useLocalSearchParams, useFocusEffect } from 'expo-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { theme } from '@/tokens/theme'
 import { ScreenScroll } from '@/components/sections/ScreenScroll'
+import { ScreenHeader } from '@/components/sections/ScreenHeader'
 import { Button } from '@/components/primitives/Button'
 import { Text } from '@/components/primitives/Text'
 import { HelpText } from '@/components/primitives/HelpText'
@@ -88,13 +89,13 @@ export function PpvManageScreen() {
 
   if (!event) {
     return (
-      <ScreenScroll contentContainerStyle={styles.content}>
+      <ScreenScroll
+        header={<ScreenHeader title="Manage" onBack={() => router.back()} />}
+        contentContainerStyle={styles.content}
+      >
         <Text variant="body" color={theme.colors.text.muted}>
           {isLoading ? 'Loading…' : 'Event not found.'}
         </Text>
-        {!isLoading && (
-          <Button label="Back" variant="secondary" onPress={() => router.back()} />
-        )}
       </ScreenScroll>
     )
   }
@@ -107,7 +108,10 @@ export function PpvManageScreen() {
   const grossRevenue = event.grossRevenueCents ?? 0
 
   return (
-    <ScreenScroll contentContainerStyle={styles.content}>
+    <ScreenScroll
+      header={<ScreenHeader title="Manage" onBack={() => router.back()} />}
+      contentContainerStyle={styles.content}
+    >
       {/* ── Header ─────────────────────────────────────────── */}
       <View style={styles.header}>
         <Text variant="heading">{event.title}</Text>
