@@ -19,7 +19,7 @@ import { AccountIDPill } from '@/components/features/user/AccountIDPill'
 import { Button } from '@/components/primitives/Button'
 import { Toggle } from '@/components/primitives/Toggle'
 import { Text } from '@/components/primitives/Text'
-import { IconButton } from '@/components/primitives/IconButton'
+import { ScreenHeader } from '@/components/sections/ScreenHeader'
 import { useAuthStore } from '@/stores/authStore'
 import { usersApi } from '@/api/users'
 import { theme } from '@/tokens/theme'
@@ -87,16 +87,10 @@ export function SettingsScreen() {
     wrldUser?.tier === 'plus' ? 'Plus' : wrldUser?.tier === 'pro' ? 'Pro' : 'Free'
 
   return (
-    <ScreenScroll contentContainerStyle={styles.scroll}>
-      <View style={styles.header}>
-        <IconButton
-          name="arrow-left"
-          variant="ghost"
-          onPress={() => router.back()}
-          accessibilityLabel="Back"
-        />
-        <Text variant="heading">Settings</Text>
-      </View>
+    <ScreenScroll
+      header={<ScreenHeader title="Settings" onBack={() => router.back()} />}
+      contentContainerStyle={styles.scroll}
+    >
 
       {wrldUser && (
         <SettingsGroup title="IDENTITY">

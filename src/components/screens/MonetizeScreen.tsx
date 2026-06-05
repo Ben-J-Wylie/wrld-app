@@ -16,7 +16,7 @@ import { Button } from '@/components/primitives/Button'
 import { Text } from '@/components/primitives/Text'
 import { HelpText } from '@/components/primitives/HelpText'
 import { Toggle } from '@/components/primitives/Toggle'
-import { IconButton } from '@/components/primitives/IconButton'
+import { ScreenHeader } from '@/components/sections/ScreenHeader'
 import { Input } from '@/components/primitives/Input'
 import { usersApi } from '@/api/users'
 import { ppvApi } from '@/api/ppvEvents'
@@ -86,11 +86,10 @@ export function MonetizeScreen() {
   }
 
   return (
-    <ScreenScroll contentContainerStyle={styles.scroll}>
-      <View style={styles.header}>
-        <IconButton name="arrow-left" onPress={() => router.back()} accessibilityLabel="Back" />
-        <Text variant="heading">Monetize</Text>
-      </View>
+    <ScreenScroll
+      header={<ScreenHeader title="Monetize" onBack={() => router.back()} />}
+      contentContainerStyle={styles.scroll}
+    >
 
       {isLoading ? null : !settings?.onboardingComplete ? (
         <>

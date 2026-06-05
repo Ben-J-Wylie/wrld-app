@@ -19,7 +19,7 @@ import { useAuth } from '@clerk/clerk-expo'
 import { theme } from '@/tokens/theme'
 import { ScreenScroll } from '@/components/sections/ScreenScroll'
 import { Button } from '@/components/primitives/Button'
-import { IconButton } from '@/components/primitives/IconButton'
+import { ScreenHeader } from '@/components/sections/ScreenHeader'
 import { Avatar } from '@/components/primitives/Avatar'
 import { Text } from '@/components/primitives/Text'
 import { FollowButton } from '@/components/features/user/FollowButton'
@@ -97,15 +97,10 @@ export function ProfileScreen() {
 
   if (error || !profile) {
     return (
-      <ScreenScroll contentContainerStyle={styles.content}>
-        <View style={styles.headerRow}>
-          <IconButton
-            name="arrow-left"
-            variant="ghost"
-            onPress={() => router.back()}
-            accessibilityLabel="Back"
-          />
-        </View>
+      <ScreenScroll
+        header={<ScreenHeader onBack={() => router.back()} />}
+        contentContainerStyle={styles.content}
+      >
         <View style={styles.notFound}>
           <Text variant="body" color={theme.colors.text.muted}>
             User not found
@@ -118,16 +113,10 @@ export function ProfileScreen() {
   const joinedLine = formatJoined(profile.createdAt)
 
   return (
-    <ScreenScroll contentContainerStyle={styles.content}>
-      <View style={styles.headerRow}>
-        <IconButton
-          name="arrow-left"
-          variant="ghost"
-          onPress={() => router.back()}
-          accessibilityLabel="Back"
-        />
-      </View>
-
+    <ScreenScroll
+      header={<ScreenHeader onBack={() => router.back()} />}
+      contentContainerStyle={styles.content}
+    >
       <View style={styles.identity}>
         <Avatar
           avatarUrl={profile.avatarUrl}

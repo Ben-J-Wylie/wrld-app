@@ -3042,11 +3042,13 @@ single home screen — flagged at the end.
 - **Tier:** section (composes `BrandMark` + `Text`; optional Pill via `right`)
 - **Location:** `src/components/sections/ScreenHeader.tsx`
 - **Props:** `title?` (right-justified page name), `right?` (custom right slot,
-  e.g. the globe LIVE Pill — takes precedence over `title`), `pointerEvents?`
-  (the globe overlays it on the map and passes `box-none`), `style?`
-- **States:** brand-only, brand + page-name, brand + custom right
-- **Used in:** Globe (right = LIVE pill), Dashboard (title = "Dashboard"),
-  Stream preview (title = "Go Live") — rolls out to the remaining screens next
+  e.g. the globe LIVE Pill — takes precedence over `title`), `onBack?` (renders a
+  compact back chevron left of the wordmark — the up-affordance for drill-down
+  screens), `pointerEvents?` (the globe overlays it on the map and passes
+  `box-none`), `style?`
+- **States:** brand-only, brand + page-name, brand + custom right, ± back chevron
+- **Used in:** Globe (LIVE pill), Dashboard/Stream/Me/Library/Events/Wallet
+  (page name), Settings/Subscription/Profile/Monetize (page name + `onBack`)
 - **Tweak impact:** the top header on every screen
 - **Shipped:** 2026-06-05
 
@@ -3700,13 +3702,20 @@ cluster stays). Roll `ScreenHeader` out to the remaining screens next.
 
 **Rollout — page-level screens (2026-06-05).** `ScreenHeader` now also on **Me ·
 Events · Library · Wallet** (all back-arrow-free), via a new fixed `header` slot
-on `ScreenScroll` (Wallet renders it above its FlatList directly). The 9
-detail/stack screens (Settings, Subscription, Monetize, Cash Out, Top Up,
-Profile, PPV Create/Manage/EventDetail) are **pending a navigation decision** —
-they currently use `router.back()` (history-based) back arrows, and the chosen
-direction is a **hybrid: page-tabs for sibling clusters (Wallet→Balance/Top
-Up/Cash Out, Monetize→Subscriptions/PPV) + a header up-affordance for the linear
-drill-downs**. Auth/onboarding flows are out of scope for now.
+on `ScreenScroll` (Wallet renders it above its FlatList directly).
+
+**Hybrid nav rollout (2026-06-05).** The chosen direction — **page-tabs for
+sibling clusters + a header up-affordance for linear drill-downs** — is landing:
+- **Page-tabs (`PageTabs` feature):** **Wallet** ✅ → Balance / Top Up / Cash Out
+  in-place tabs (no route push, no back arrow); Top Up / Cash Out bodies live in
+  the `TopUpPanel` / `CashOutPanel` sections so the `/topup` `/cashout` routes
+  (now thin wrappers) still work without duplicated logic. **Monetize → Subscriptions
+  / Events** is the next cluster (same pattern).
+- **Up-affordance (`ScreenHeader.onBack`):** **Settings, Subscription ("Plans"),
+  Profile, Monetize** ✅ — bespoke back-arrow headers replaced by the unified
+  header with a back chevron (still `router.back()` under the hood).
+- **Pending:** Monetize page-tabs; the PPV stack (Create/Manage/EventDetail, which
+  use inline "Back" buttons). Auth/onboarding flows remain out of scope.
 
 **Imposes:** new screens use `ScreenHeader` at the top + a `paddingTop: sm`
 field row to stay aligned; `SearchBar`'s look now changes wherever `Input`'s

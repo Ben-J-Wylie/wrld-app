@@ -29,7 +29,7 @@ import { Pill } from '@/components/primitives/Pill'
 import { Text } from '@/components/primitives/Text'
 import { HelpText } from '@/components/primitives/HelpText'
 import { Icon } from '@/components/primitives/Icon'
-import { IconButton } from '@/components/primitives/IconButton'
+import { ScreenHeader } from '@/components/sections/ScreenHeader'
 import { SegmentedToggle } from '@/components/primitives/SegmentedToggle'
 import { useAuthStore } from '@/stores/authStore'
 
@@ -132,18 +132,13 @@ export function SubscriptionScreen() {
   const pro = price('pro')
 
   return (
-    <ScreenScroll contentContainerStyle={styles.scroll}>
-      <View style={styles.headerRow}>
-        <View style={styles.headerCol}>
-          <HelpText tone="ok">WELCOME TO WRLD</HelpText>
-          <Text variant="display">Choose your WRLD</Text>
-        </View>
-        <IconButton
-          name="arrow-left"
-          variant="ghost"
-          onPress={() => router.back()}
-          accessibilityLabel="Back"
-        />
+    <ScreenScroll
+      header={<ScreenHeader title="Plans" onBack={() => router.back()} />}
+      contentContainerStyle={styles.scroll}
+    >
+      <View style={styles.headerCol}>
+        <HelpText tone="ok">WELCOME TO WRLD</HelpText>
+        <Text variant="display">Choose your WRLD</Text>
       </View>
       <Text variant="body" color={theme.colors.text.muted}>
         Start free and upgrade whenever you want more reach, more cameras, and more ways to earn.

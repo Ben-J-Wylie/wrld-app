@@ -15,6 +15,7 @@
 
 import { type ReactNode } from 'react'
 import {
+  Pressable,
   StyleSheet,
   View,
   type StyleProp,
@@ -22,6 +23,7 @@ import {
   type ViewStyle,
 } from 'react-native'
 import { BrandMark } from '@/components/primitives/BrandMark'
+import { Icon } from '@/components/primitives/Icon'
 import { Text } from '@/components/primitives/Text'
 import { theme } from '@/tokens/theme'
 
@@ -30,21 +32,39 @@ type Props = {
   title?: string
   // Custom right slot (e.g. the globe's LIVE Pill). Takes precedence over `title`.
   right?: ReactNode
+  // When set, a compact back chevron renders left of the wordmark — the
+  // "up-affordance" for linear drill-down screens (the hybrid-nav replacement
+  // for bespoke back arrows). Sized to fit the 32-tall row so the header height
+  // stays constant whether or not a screen has it.
+  onBack?: () => void
   // Forwarded to the root View — the globe overlays this on the map and needs
   // `box-none` so drags pass through to the globe under it.
   pointerEvents?: ViewProps['pointerEvents']
   style?: StyleProp<ViewStyle>
 }
 
-export function ScreenHeader({ title, right, pointerEvents, style }: Props) {
+export function ScreenHeader({ title, right, onBack, pointerEvents, style }: Props) {
   const rightContent =
     right ?? (title ? <Text variant="heading">{title}</Text> : null)
 
   return (
     <View style={[styles.row, style]} pointerEvents={pointerEvents}>
-      <View style={styles.brand}>
-        <BrandMark size="hero" />
-        <Text variant="display">WRLD</Text>
+      <View style={styles.left}>
+        {onBack && (
+          <Pressable
+            onPress={onBack}
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+            hitSlop={12}
+            style={styles.back}
+          >
+            <Icon name="arrow-left" size="md" color={theme.colors.text.primary} />
+          </Pressable>
+        )}
+        <View style={styles.brand}>
+          <BrandMark size="hero" />
+          <Text variant="display">WRLD</Text>
+        </View>
       </View>
       {rightContent}
     </View>
@@ -61,6 +81,15 @@ const styles = StyleSheet.create({
     // a shorter right slot (page name / LIVE pill) can't change the header
     // height — keeps the field below at a constant Y across screens.
     minHeight: 32,
+  },
+  left: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+  },
+  back: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   brand: {
     flexDirection: 'row',
