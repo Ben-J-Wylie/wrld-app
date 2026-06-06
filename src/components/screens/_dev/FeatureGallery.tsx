@@ -58,6 +58,14 @@ import { ClipCard } from '@/components/features/clip/ClipCard'
 import { ClipPreview } from '@/components/features/clip/ClipPreview'
 import { LayerEditorRow } from '@/components/features/clip/LayerEditorRow'
 import { Timeline } from '@/components/features/clip/Timeline'
+import { GapMarker } from '@/components/features/clip/GapMarker'
+import { SavedClipRegion } from '@/components/features/clip/SavedClipRegion'
+import { ClipBracket } from '@/components/features/clip/ClipBracket'
+import { BufferTimeline } from '@/components/features/clip/BufferTimeline'
+import { BufferScrubField } from '@/components/features/clip/BufferScrubField'
+import { ClipSourcesDrawer, type ClipSource } from '@/components/features/clip/ClipSourcesDrawer'
+import { SavedClipRow } from '@/components/features/clip/SavedClipRow'
+import { TimelineZoomControl } from '@/components/primitives/TimelineZoomControl'
 import { DiscoveryHandoffCard } from '@/components/features/stream/DiscoveryHandoffCard'
 import { LegalAcceptanceCard } from '@/components/features/onboarding/LegalAcceptanceCard'
 import { ContextStrip } from '@/components/features/report/ContextStrip'
@@ -70,6 +78,7 @@ import { Toggle } from '@/components/primitives/Toggle'
 import { Button } from '@/components/primitives/Button'
 import { Icon } from '@/components/primitives/Icon'
 import { SegmentedToggle } from '@/components/primitives/SegmentedToggle'
+import { Pressable } from '@/components/primitives/Pressable'
 import { BroadcasterRow } from '@/components/features/user/BroadcasterRow'
 import { useState, type ComponentProps } from 'react'
 import { theme } from '@/tokens/theme'
@@ -1241,6 +1250,86 @@ export function FeatureGallery() {
         </Row>
       </Section>
 
+      <Section title="BufferTimeline">
+        <Row label="scrub + bracket + saved region (zoomable)">
+          <BufferTimelineDemo />
+        </Row>
+      </Section>
+
+      <Section title="BufferScrubField">
+        <Row label="camera">
+          <BufferScrubFieldDemo variant="camera" />
+        </Row>
+        <Row label="audio-only">
+          <BufferScrubFieldDemo variant="audio-only" />
+        </Row>
+      </Section>
+
+      <Section title="GapMarker">
+        <Row label="collapsed gaps">
+          <View style={galleryStyles.gapStrip}>
+            <GapMarker skippedMs={45_000} />
+            <GapMarker skippedMs={40 * 60_000} />
+            <GapMarker skippedMs={3 * 3_600_000} />
+            <GapMarker skippedMs={2 * 86_400_000} />
+          </View>
+        </Row>
+      </Section>
+
+      <Section title="SavedClipRegion">
+        <Row label="read-only taken span">
+          <View style={galleryStyles.trackMock}>
+            <SavedClipRegion style={galleryStyles.savedMock} />
+          </View>
+        </Row>
+      </Section>
+
+      <Section title="ClipBracket">
+        <Row label="active">
+          <View style={galleryStyles.trackMock}>
+            <ClipBracket leftPx={60} widthPx={150} durationLabel="0:18" rangeLabel="14:22 → 14:40" />
+          </View>
+        </Row>
+        <Row label="blocked (clamped at saved region)">
+          <View style={galleryStyles.trackMock}>
+            <ClipBracket leftPx={60} widthPx={150} durationLabel="0:18" rangeLabel="14:22 → 14:40" blocked />
+          </View>
+        </Row>
+      </Section>
+
+      <Section title="ClipSourcesDrawer">
+        <Row label="bottom drawer of recorded sources">
+          <ClipSourcesDrawerDemo />
+        </Row>
+      </Section>
+
+      <Section title="SavedClipRow">
+        <Row label="draft (collapsed → tap to expand)">
+          <SavedClipRowDemo />
+        </Row>
+        <Row label="public">
+          <SavedClipRow
+            name="Main hour"
+            capturedAt="18:03 · APR 18"
+            durationSec={74}
+            sourcesLabel="Cam · Aud · Loc"
+            visibility="public"
+            onToggleExpand={() => {}}
+          />
+        </Row>
+        <Row label="anon (audio-only)">
+          <SavedClipRow
+            name="Late set"
+            capturedAt="02:14 · APR 19"
+            durationSec={11}
+            variant="audio-only"
+            sourcesLabel="Aud"
+            visibility="anon"
+            onToggleExpand={() => {}}
+          />
+        </Row>
+      </Section>
+
       <Section title="DiscoveryHandoffCard">
         <Row label="single">
           <DiscoveryHandoffCard
@@ -1512,6 +1601,136 @@ function TimelineDemo({ trim }: { trim: boolean }) {
     />
   )
 }
+
+function BufferTimelineDemo() {
+  const [zoom, setZoom] = useState<'all' | 'hours' | 'min' | 'sec'>('all')
+  const [model] = useState(() => {
+    const now = Date.now()
+    const H = 3_600_000
+    const segments = [
+      { id: 's1', startMs: now - 8 * H, endMs: now - 5 * H },
+      { id: 's2', startMs: now - 4 * H, endMs: now - 0.5 * H },
+      { id: 's3', startMs: now - 0.3 * H, endMs: now },
+    ]
+    const savedRegions = [{ id: 'r1', startMs: now - 3 * H, endMs: now - 2.5 * H }]
+    return {
+      segments,
+      savedRegions,
+      bracket0: { inMs: now - 2 * H, outMs: now - 1.7 * H },
+      playhead0: now - 1.85 * H,
+    }
+  })
+  const [playhead, setPlayhead] = useState(model.playhead0)
+  const [bracket, setBracket] = useState<{ inMs: number; outMs: number } | null>(model.bracket0)
+  return (
+    <View style={{ gap: theme.spacing.sm }}>
+      <TimelineZoomControl value={zoom} onChange={setZoom} />
+      <BufferTimeline
+        segments={model.segments}
+        savedRegions={model.savedRegions}
+        playheadMs={playhead}
+        zoom={zoom}
+        bracket={bracket}
+        onScrub={setPlayhead}
+        onBracketChange={setBracket}
+      />
+    </View>
+  )
+}
+
+function BufferScrubFieldDemo({ variant }: { variant: 'camera' | 'audio-only' }) {
+  return (
+    <View style={{ width: 200 }}>
+      <BufferScrubField
+        variant={variant}
+        timestampLabel="14:22:06 · APR 21"
+        reachLabel="Buffer · 72h"
+        onScrub={() => {}}
+      />
+    </View>
+  )
+}
+
+function ClipSourcesDrawerDemo() {
+  const [open, setOpen] = useState(false)
+  const [sources, setSources] = useState<ClipSource[]>([
+    { key: 'cam', iconName: 'video', label: 'CAMERA', value: '1080P', active: true },
+    { key: 'aud', iconName: 'mic', label: 'AUDIO', value: '48 KHZ', active: true },
+    { key: 'loc', iconName: 'map-pin', label: 'LOCATION', value: 'GPS', active: true },
+    { key: 'comp', iconName: 'compass', label: 'COMPASS', value: '192°', active: true },
+    { key: 'gyro', iconName: 'navigation', label: 'GYRO', value: 'OFF', active: false },
+  ])
+  return (
+    <>
+      <Pressable variant="default" onPress={() => setOpen(true)} style={galleryStyles.openBtn}>
+        <Text variant="bodyEmphasized">Open sources drawer</Text>
+      </Pressable>
+      <ClipSourcesDrawer
+        visible={open}
+        sources={sources}
+        onToggleSource={(k) =>
+          setSources((s) => s.map((x) => (x.key === k ? { ...x, active: !x.active } : x)))
+        }
+        onDismiss={() => setOpen(false)}
+      />
+    </>
+  )
+}
+
+function SavedClipRowDemo() {
+  const [expanded, setExpanded] = useState(false)
+  return (
+    <SavedClipRow
+      name="Rooftop sunset"
+      capturedAt="14:22 · APR 21"
+      durationSec={18}
+      sourcesLabel="Cam · Aud · Loc"
+      visibility="draft"
+      expanded={expanded}
+      onToggleExpand={() => setExpanded((v) => !v)}
+      onShare={() => {}}
+      onPublish={() => {}}
+      onDelete={() => {}}
+    />
+  )
+}
+
+const galleryStyles = StyleSheet.create({
+  gapStrip: {
+    flexDirection: 'row',
+    height: 78,
+    alignItems: 'stretch',
+    gap: theme.spacing.sm,
+    backgroundColor: theme.colors.bg.panelHi,
+    borderRadius: theme.radius.md,
+    overflow: 'hidden',
+  },
+  trackMock: {
+    position: 'relative',
+    height: 78,
+    backgroundColor: theme.colors.bg.panel,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: theme.colors.border.strong,
+    overflow: 'hidden',
+  },
+  savedMock: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 80,
+    width: 120,
+  },
+  openBtn: {
+    height: 46,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border.strong,
+    backgroundColor: theme.colors.bg.elevated,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+})
 
 function LocationGranularityPickerDemo({
   initial,

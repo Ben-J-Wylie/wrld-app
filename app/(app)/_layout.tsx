@@ -162,6 +162,7 @@ export default function AppLayout() {
         {/* Off the footer — reached from Me. */}
         <Tabs.Screen name="library" options={{ href: null }} />
         <Tabs.Screen name="wallet" options={{ href: null }} />
+        <Tabs.Screen name="clip-editor" options={{ href: null }} />
         {/* Non-tab routes. */}
         <Tabs.Screen name="creator-onboarding" options={{ href: null }} />
         <Tabs.Screen name="broadcaster-onboarding" options={{ href: null }} />

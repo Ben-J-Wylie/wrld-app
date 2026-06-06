@@ -250,6 +250,11 @@ export function MeScreen() {
         variant="secondary"
       />
       <Button
+        label="Clip editor"
+        onPress={() => router.push('/(app)/clip-editor')}
+        variant="secondary"
+      />
+      <Button
         label="Settings"
         onPress={() => router.push('/(app)/settings')}
         variant="secondary"

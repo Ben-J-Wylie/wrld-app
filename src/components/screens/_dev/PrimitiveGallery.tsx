@@ -35,6 +35,7 @@ import { Spinner } from '@/components/primitives/Spinner'
 import { BottomSheet } from '@/components/primitives/BottomSheet'
 import { Slider } from '@/components/primitives/Slider'
 import { SegmentedToggle } from '@/components/primitives/SegmentedToggle'
+import { TimelineZoomControl } from '@/components/primitives/TimelineZoomControl'
 import { Divider } from '@/components/primitives/Divider'
 import { BrandMark } from '@/components/primitives/BrandMark'
 import { theme } from '@/tokens/theme'
@@ -56,6 +57,7 @@ export function PrimitiveGallery() {
   const [sliderB, setSliderB] = useState(2)
   const [sliderC, setSliderC] = useState(60)
   const [segVis, setSegVis] = useState<'all' | 'public' | 'anon'>('all')
+  const [zoom, setZoom] = useState<'all' | 'hours' | 'min' | 'sec'>('all')
   const [segMode, setSegMode] = useState<'day' | 'week' | 'month' | 'year'>('week')
   const toggleMulti = (k: string) => {
     setChipMulti((prev) => {
@@ -489,6 +491,12 @@ export function PrimitiveGallery() {
               onChange={() => {}}
               disabled
             />
+          </Row>
+        </Section>
+
+        <Section title="TimelineZoomControl">
+          <Row label="All / Hours / Min / Sec (BufferTimeline preset)">
+            <TimelineZoomControl value={zoom} onChange={setZoom} />
           </Row>
         </Section>
 

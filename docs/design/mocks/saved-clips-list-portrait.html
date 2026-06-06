@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>WRLD — Saved Clips (Library)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#ece6d6; --panel:#dbcfb6; --panelHi:#d3c4a8; --elevated:#e5dcc8;
+    --ink:#1a1612; --muted:rgba(26,22,18,0.62); --subtle:rgba(26,22,18,0.38);
+    --line:rgba(26,22,18,0.10); --line-2:rgba(26,22,18,0.20);
+    --accent:#d92e3a; --accent-bright:#ff5060; --accent-surface:rgba(217,46,58,0.08); --accent-line:rgba(217,46,58,0.32);
+    --warn:#c8861e; --overlay:rgba(26,22,18,0.45);
+    --sans:"Inter Tight", ui-sans-serif, system-ui, sans-serif;
+    --mono:"IBM Plex Mono", ui-monospace, monospace;
+    --r:4px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:#c8bda4;font-family:var(--sans);color:var(--ink);-webkit-font-smoothing:antialiased}
+  body{padding:46px 30px 80px}
+
+  .pageh{ max-width:1400px; margin:0 auto 30px }
+  .pageh .kick{ font:600 10px var(--mono); letter-spacing:0.18em; color:var(--accent); text-transform:uppercase; margin-bottom:12px }
+  .pageh h1{ font:500 30px/1.06 var(--sans); letter-spacing:-0.02em; margin:0 0 8px }
+  .pageh p{ font:400 13px/1.6 var(--sans); color:var(--muted); max-width:760px; margin:0 }
+  .pageh .lineage{ display:inline-block; margin-top:12px; font:500 10px var(--mono); letter-spacing:0.1em;
+    color:var(--muted); border:1px solid var(--line-2); border-radius:var(--r); padding:5px 9px; text-transform:uppercase }
+
+  .canvas{ max-width:1400px; margin:0 auto; display:flex; flex-wrap:wrap; gap:42px 26px; align-items:flex-start }
+  .frame{ display:flex; flex-direction:column; gap:12px; flex:none }
+  .frame .cap{ max-width:390px }
+  .frame .cap .id{ font:600 11px var(--mono); letter-spacing:0.12em; color:var(--accent); text-transform:uppercase }
+  .frame .cap .nm{ font:600 14px var(--sans); letter-spacing:-0.01em; margin-top:2px }
+  .frame .cap .ds{ font:400 11px/1.5 var(--sans); color:var(--muted); margin-top:4px; text-wrap:pretty }
+
+  .phone{ width:390px; height:844px; border-radius:30px; position:relative; overflow:hidden;
+    background:var(--bg); border:1px solid var(--line-2); box-shadow:0 24px 50px rgba(60,50,35,0.28) }
+  .home{ position:absolute; bottom:8px; left:50%; transform:translateX(-50%); z-index:40;
+    width:134px; height:5px; border-radius:100px; background:var(--ink); opacity:0.22 }
+  .scr{ position:absolute; inset:0; display:flex; flex-direction:column }
+
+  .schead{ height:64px; flex:none; display:flex; align-items:center; gap:9px; padding:22px 18px 0 }
+  .brand{ width:30px; height:30px; border-radius:7px; background:var(--accent); display:grid; place-items:center; flex:none }
+  .brand svg{ width:17px; height:17px; color:var(--bg) }
+  .brand-wm{ font:600 15px var(--sans); letter-spacing:0.04em }
+  .schead .title{ margin-left:auto; font:500 11px var(--mono); letter-spacing:0.14em; text-transform:uppercase; color:var(--muted) }
+
+  /* paged switch between Editor and Library */
+  .pager{ display:flex; gap:0; margin:8px 14px 0; border:1px solid var(--line-2); border-radius:var(--r); overflow:hidden; flex:none }
+  .pager button{ flex:1; border:0; border-left:1px solid var(--line-2); background:transparent; padding:9px 0; cursor:pointer;
+    font-family:var(--sans); font:500 10px var(--mono); letter-spacing:0.1em; text-transform:uppercase; color:var(--muted) }
+  .pager button:first-child{ border-left:0 }
+  .pager button[data-on="true"]{ background:var(--ink); color:var(--bg) }
+
+  .meta-bar{ display:flex; align-items:baseline; justify-content:space-between; padding:14px 18px 6px; flex:none }
+  .meta-bar .h{ font:500 18px var(--sans); letter-spacing:-0.015em }
+  .meta-bar .q{ font:500 9px var(--mono); letter-spacing:0.1em; text-transform:uppercase; color:var(--muted) }
+  .meta-bar .q b{ color:var(--ink); font-weight:500 }
+
+  .list{ flex:1; min-height:0; overflow-y:auto; scrollbar-width:none; padding:6px 14px 16px; display:flex; flex-direction:column; gap:10px }
+  .list::-webkit-scrollbar{ display:none }
+
+  /* SavedClipRow — collapsed */
+  .row{ border:1px solid var(--line-2); border-radius:var(--r); background:var(--elevated); overflow:hidden }
+  .row .head{ display:flex; gap:12px; padding:10px; align-items:center; cursor:pointer }
+  .row .poster{ width:104px; height:62px; border-radius:3px; flex:none; position:relative; overflow:hidden; border:1px solid var(--line) }
+  .p1{ background:linear-gradient(150deg,#2b2520,#5e3c30 55%,#241f1b) }
+  .p2{ background:linear-gradient(150deg,#26282a,#3a4654 60%,#1e2226) }
+  .p3{ background:linear-gradient(150deg,#2d2622,#6e3b34 55%,#231f1b) }
+  .p4{ background:linear-gradient(150deg,#262a26,#3f5a3f 60%,#1e221e) }
+  .paud{ background:var(--panel); display:grid; place-items:center }
+  .paud .wf{ display:flex; gap:2px; align-items:center; height:26px }
+  .paud .wf i{ width:2px; background:var(--subtle); border-radius:1px }
+  .poster .dur{ position:absolute; right:5px; bottom:5px; font:500 9px var(--mono); letter-spacing:0.02em; font-variant-numeric:tabular-nums;
+    color:#f4eede; background:rgba(20,16,13,0.6); border-radius:2px; padding:2px 5px }
+  .poster .ply{ position:absolute; inset:0; display:grid; place-items:center }
+  .poster .ply span{ width:26px; height:26px; border-radius:50%; background:rgba(20,16,13,0.5); display:grid; place-items:center }
+  .poster .ply svg{ width:12px; height:12px; color:#f4eede; margin-left:1px }
+  .row .info{ flex:1; min-width:0; display:flex; flex-direction:column; gap:4px }
+  .row .nm{ font:500 15px var(--sans); letter-spacing:-0.01em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+  .row .sub{ font:500 10px var(--mono); letter-spacing:0.06em; color:var(--muted); font-variant-numeric:tabular-nums; text-transform:uppercase }
+  .row .pills{ display:flex; gap:5px; margin-top:1px }
+  .pill{ font:500 8px var(--mono); letter-spacing:0.12em; text-transform:uppercase; padding:3px 6px; border-radius:100px; border:1px solid var(--line-2); color:var(--muted) }
+  .pill.draft{ color:var(--warn); border-color:rgba(200,134,30,0.4); background:rgba(200,134,30,0.08) }
+  .pill.anon{ color:var(--muted) }
+  .pill.public{ color:var(--accent); border-color:var(--accent-line); background:var(--accent-surface) }
+  .row .kebab{ flex:none; width:30px; height:30px; border-radius:var(--r); display:grid; place-items:center; color:var(--subtle) }
+  .row .kebab svg{ width:16px; height:16px }
+
+  /* expanded */
+  .row.exp{ border-color:var(--accent-line) }
+  .row .player{ display:none; border-top:1px solid var(--line); }
+  .row.exp .player{ display:block }
+  .row.exp .head .poster .ply span{ background:var(--accent) }
+  .player .stage{ aspect-ratio:16/9; position:relative; background:linear-gradient(150deg,#2b2520,#5e3c30 55%,#241f1b) }
+  .player .stage.aud{ background:var(--panel); display:grid; place-items:center }
+  .player .stage.aud .wf{ display:flex; gap:3px; align-items:center; height:50px } .player .stage.aud .wf i{ width:3px; background:var(--subtle); border-radius:2px }
+  .player .stage .pl{ position:absolute; left:0; right:0; bottom:0; height:30px; display:flex; align-items:center; gap:9px; padding:0 10px; background:rgba(20,16,13,0.45) }
+  .player .stage .pl .pp{ width:20px; height:20px; border-radius:50%; background:rgba(236,230,214,0.92); display:grid; place-items:center }
+  .player .stage .pl .pp svg{ width:9px; height:9px; color:#1a1612 }
+  .player .stage .pl .bar{ flex:1; height:3px; border-radius:2px; background:rgba(236,230,214,0.3); position:relative }
+  .player .stage .pl .bar::before{ content:""; position:absolute; left:0; top:0; bottom:0; width:38%; background:var(--accent-bright); border-radius:2px }
+  .player .stage .pl .t{ font:500 9px var(--mono); color:#f4eede; font-variant-numeric:tabular-nums; letter-spacing:0.02em }
+  .player .acts{ display:flex; gap:8px; padding:10px }
+  .player .acts button{ height:38px; border-radius:var(--r); border:1px solid var(--line-2); background:var(--bg); color:var(--ink); cursor:pointer; font-family:var(--sans);
+    font:500 11px var(--sans); display:inline-flex; align-items:center; justify-content:center; gap:6px; flex:1 }
+  .player .acts button svg{ width:14px; height:14px; color:var(--muted) }
+  .player .acts button.publish{ background:var(--accent); color:var(--bg); border:0 } .player .acts button.publish svg{ color:var(--bg) }
+  .player .acts button.del{ flex:none; width:42px } .player .acts button.del svg{ color:var(--accent) }
+
+  /* empty */
+  .empty{ flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; padding:0 40px; text-align:center }
+  .empty .ic{ width:60px; height:60px; border-radius:var(--r); border:1px dashed var(--line-2); display:grid; place-items:center; color:var(--subtle) }
+  .empty .ic svg{ width:26px; height:26px }
+  .empty .t{ font:500 17px var(--sans); letter-spacing:-0.01em }
+  .empty .d{ font:400 12.5px/1.5 var(--sans); color:var(--muted); max-width:240px }
+  .empty .cta{ margin-top:6px; height:44px; padding:0 18px; border-radius:var(--r); border:1px solid var(--accent-line); background:var(--accent-surface); color:var(--accent);
+    font:500 12px var(--sans); display:inline-flex; align-items:center; gap:8px; cursor:pointer }
+  .empty .cta svg{ width:15px; height:15px }
+</style>
+</head>
+<body>
+
+<div class="pageh">
+  <div class="kick">Clips initiative · Buffer-trim model · Screen 2</div>
+  <h1>Saved Clips — the Library</h1>
+  <p>Standalone Library surface (off-footer, reached from Me / after a save — not profile-as-library). Vertical list of horizontal row cards; tap a row to inline-expand and play without leaving the list. New clips arrive as private drafts. Frames: populated · row expanded · empty.</p>
+  <span class="lineage">NEW: SavedClipRow (collapsed + expanded inline player) · extends ClipCard owner variant · LibraryScreen</span>
+</div>
+
+<div class="canvas">
+
+  <!-- ════ Frame 1 — Populated list ════ -->
+  <div class="frame">
+    <div class="cap"><div class="id">State · populated</div><div class="nm">Library list</div>
+      <div class="ds">Row cards: poster, name, duration + capture timestamp (mono tabular), state pill. Pager switches back to the editor. New saves land here as drafts.</div></div>
+    <div class="phone"><div class="home"></div><div class="scr">
+      <div class="schead"><span class="brand"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 4h4l3 13 3-13h2l3 13 3-13h0M3 4l4 16h2l3-12 3 12h2L21 4"/></svg></span><span class="brand-wm">WRLD</span><span class="title">Library</span></div>
+      <div class="pager"><button>Editor</button><button data-on="true">Saved clips</button></div>
+      <div class="meta-bar"><span class="h">Your clips</span><span class="q"><b>8</b> clips · <b>2.4 / 5 GB</b></span></div>
+      <div class="list">
+        <div class="row"><div class="head">
+          <div class="poster p1"><span class="dur">0:18</span><div class="ply"><span><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></span></div></div>
+          <div class="info"><span class="nm">Rooftop sunset</span><span class="sub">14:22 · APR 21</span><div class="pills"><span class="pill draft">Draft</span><span class="pill">Cam · Aud · Loc</span></div></div>
+          <span class="kebab"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg></span>
+        </div></div>
+        <div class="row"><div class="head">
+          <div class="poster p2"><span class="dur">0:42</span><div class="ply"><span><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></span></div></div>
+          <div class="info"><span class="nm">Soundcheck</span><span class="sub">21:10 · APR 20</span><div class="pills"><span class="pill draft">Draft</span><span class="pill">Cam · Aud</span></div></div>
+          <span class="kebab"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg></span>
+        </div></div>
+        <div class="row"><div class="head">
+          <div class="poster paud"><div class="wf"><i style="height:30%"></i><i style="height:70%"></i><i style="height:45%"></i><i style="height:88%"></i><i style="height:55%"></i><i style="height:75%"></i><i style="height:38%"></i><i style="height:64%"></i></div><span class="dur">0:11</span></div>
+          <div class="info"><span class="nm">Late set</span><span class="sub">02:14 · APR 19</span><div class="pills"><span class="pill anon">Anon · only you</span><span class="pill">Aud</span></div></div>
+          <span class="kebab"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg></span>
+        </div></div>
+        <div class="row"><div class="head">
+          <div class="poster p3"><span class="dur">1:14</span><div class="ply"><span><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></span></div></div>
+          <div class="info"><span class="nm">Main hour</span><span class="sub">18:03 · APR 18</span><div class="pills"><span class="pill public">Public</span><span class="pill">Cam · Aud · Loc</span></div></div>
+          <span class="kebab"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg></span>
+        </div></div>
+        <div class="row"><div class="head">
+          <div class="poster p4"><span class="dur">0:28</span><div class="ply"><span><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></span></div></div>
+          <div class="info"><span class="nm">Bridge walk</span><span class="sub">19:40 · APR 14</span><div class="pills"><span class="pill public">Public</span><span class="pill">Cam</span></div></div>
+          <span class="kebab"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg></span>
+        </div></div>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- ════ Frame 2 — Row expanded ════ -->
+  <div class="frame">
+    <div class="cap"><div class="id">State · expanded</div><div class="nm">Inline player</div>
+      <div class="ds">Tap a row → it expands in place to play; no full-screen nav. Expanded shows the player (ClipPreview play variant) + actions: share, publish, delete. Draft → publish affordance.</div></div>
+    <div class="phone"><div class="home"></div><div class="scr">
+      <div class="schead"><span class="brand"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 4h4l3 13 3-13h2l3 13 3-13h0M3 4l4 16h2l3-12 3 12h2L21 4"/></svg></span><span class="brand-wm">WRLD</span><span class="title">Library</span></div>
+      <div class="pager"><button>Editor</button><button data-on="true">Saved clips</button></div>
+      <div class="meta-bar"><span class="h">Your clips</span><span class="q"><b>8</b> clips · <b>2.4 / 5 GB</b></span></div>
+      <div class="list">
+        <div class="row exp"><div class="head">
+          <div class="poster p1"><span class="dur">0:18</span><div class="ply"><span><svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg></span></div></div>
+          <div class="info"><span class="nm">Rooftop sunset</span><span class="sub">14:22 · APR 21</span><div class="pills"><span class="pill draft">Draft</span><span class="pill">Cam · Aud · Loc</span></div></div>
+          <span class="kebab"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg></span>
+        </div>
+        <div class="player">
+          <div class="stage"><div class="pl"><span class="pp"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg></span><span class="bar"></span><span class="t">0:07 / 0:18</span></div></div>
+          <div class="acts">
+            <button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8h16v-8M16 6l-4-4-4 4M12 2v13"/></svg>Share</button>
+            <button class="publish"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>Publish</button>
+            <button class="del"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg></button>
+          </div>
+        </div></div>
+        <div class="row"><div class="head">
+          <div class="poster p2"><span class="dur">0:42</span><div class="ply"><span><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></span></div></div>
+          <div class="info"><span class="nm">Soundcheck</span><span class="sub">21:10 · APR 20</span><div class="pills"><span class="pill draft">Draft</span><span class="pill">Cam · Aud</span></div></div>
+          <span class="kebab"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg></span>
+        </div></div>
+        <div class="row"><div class="head">
+          <div class="poster paud"><div class="wf"><i style="height:30%"></i><i style="height:70%"></i><i style="height:45%"></i><i style="height:88%"></i><i style="height:55%"></i><i style="height:75%"></i><i style="height:38%"></i><i style="height:64%"></i></div><span class="dur">0:11</span></div>
+          <div class="info"><span class="nm">Late set</span><span class="sub">02:14 · APR 19</span><div class="pills"><span class="pill anon">Anon · only you</span><span class="pill">Aud</span></div></div>
+          <span class="kebab"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg></span>
+        </div></div>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- ════ Frame 3 — Empty ════ -->
+  <div class="frame">
+    <div class="cap"><div class="id">State · empty</div><div class="nm">No clips yet</div>
+      <div class="ds">First-run. Points back to the editor to make the first clip from the buffer.</div></div>
+    <div class="phone"><div class="home"></div><div class="scr">
+      <div class="schead"><span class="brand"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 4h4l3 13 3-13h2l3 13 3-13h0M3 4l4 16h2l3-12 3 12h2L21 4"/></svg></span><span class="brand-wm">WRLD</span><span class="title">Library</span></div>
+      <div class="pager"><button>Editor</button><button data-on="true">Saved clips</button></div>
+      <div class="empty">
+        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4L8.5 15.5M14.5 14.5L20 20M8.5 8.5L11 11"/></svg></span>
+        <span class="t">No clips yet</span>
+        <span class="d">Clips you cut from your buffer land here as private drafts. Open the editor to make your first.</span>
+        <button class="cta"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>New clip</button>
+      </div>
+    </div></div>
+  </div>
+
+</div>
+</body>
+</html>

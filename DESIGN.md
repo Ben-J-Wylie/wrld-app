@@ -2992,6 +2992,256 @@ transition. See the 2026-06-03 decision-log entry.
 
 ---
 
+##### Buffer-trim clip editor (proposed · clips initiative · C2 · Ben / `design`)
+
+The eight elements below are the **buffer-trim clip editor** (Aaron's 2026-06-06
+handoff brief). **Status: built on `design` 2026-06-06 (C2)** against mock /
+stubbed buffer data + gallery entries (Feature gallery; `TimelineZoomControl` in
+the Primitive gallery). Screen wiring (`ClipEditScreen` / `LibraryScreen`) is
+Aaron's later step. Mocks:
+[`clip-editor-buffer-trim-portrait.html`](docs/design/mocks/clip-editor-buffer-trim-portrait.html)
+(screen 1, 6 frames) +
+[`saved-clips-list-portrait.html`](docs/design/mocks/saved-clips-list-portrait.html)
+(screen 2, 3 frames). They **supersede** the single-track `Timeline` trimmer
+(above) for the clip-from-rolling-buffer flow — `Timeline` stays as the conceptual
+ancestor for non-buffer / future video-edit surfaces. Reused unchanged:
+`ClipPreview`, `VideoPreviewTile`, `FeedThumb`, `StreamTile`, `BottomSheet`,
+`BufferWindowLabel`, `SaveClipButton`, `Input`, `Button`, `Toggle`, `Pill`,
+`IconButton`, `Divider`.
+
+**Build notes (v1 deferrals):** zoom is the controlled `TimelineZoomControl`
+level — **continuous pinch is deferred** (needs `react-native-gesture-handler`;
+the model is built for it). The centered / edge-released playhead is a derived
+`translateX` on the content layer (no ScrollView, so scrub + bracket gestures
+never fight a scroll). Saved-region hatch is a flat accent fill (same RN-pattern
+deferral as `Timeline`'s `trimOverlay`). Scrub direction (drag-right = earlier) is
+trivially flippable. `ClipBracket` is presentational — `BufferTimeline` owns all
+time math and supplies its three PanResponder handler sets.
+
+##### `BufferTimeline`
+
+- **Tier:** feature (composes Text + `GapMarker` + `ClipBracket` + `SavedClipRegion` + PanResponder)
+- **Location:** `src/components/features/clip/BufferTimeline.tsx` *(built 2026-06-06 · C2)*
+- **Variants:** `default`
+- **Sizes:** md (h:96 — 18 axis row + 78 track)
+- **States:** zoom = `all` / `hours` / `min` / `sec`; playhead = centered-scroll · edge-released · free-fit
+- **Proposed props:** `segments` (recorded spans), `gaps` (per-gap skipped duration), `savedRegions`, `playheadMs`, `zoom`, `bracket?`, `minTimeMs`, `onScrub`, `onZoom`, `onBracketChange`
+
+**Mock says (Frames 1–4):** Horizontal full-bleed timeline of the buffer with
+**collapsed gaps** — segments scale with zoom, every real-time gap is a fixed
+50px `GapMarker`. Axis relabels per zoom (days → hours → min → sec), all
+`monoValue` tabular. Default (All) spans oldest → NOW. Saved clips appear as
+read-only hatched bands.
+
+**Proposed behavior:** Owns the shared playhead with `BufferScrubField` (one
+current-time drives both). When zoomed wider than the screen the playhead stays
+**centered** and content scrolls under it; when an end reaches the screen edge
+the playhead **releases** and travels off-center (can't scroll past the ends);
+when the whole timeline fits, the playhead moves **freely**. Pinch = continuous
+zoom; `TimelineZoomControl` = discrete levels. Brackets stay pinned to in/out
+**times** (not pixels), so they stretch/contract with zoom.
+
+---
+
+##### `GapMarker`
+
+- **Tier:** feature (composes Text) — *candidate for promotion to primitive on a 2nd use*
+- **Location:** `src/components/features/clip/GapMarker.tsx` *(built 2026-06-06 · C2)*
+- **Variants:** `default`
+- **Sizes:** fixed 50px wide × full track height
+- **States:** static (presentational, no gesture)
+- **Proposed props:** `skippedMs`
+
+**Mock says:** 50px divider with a break glyph (`⋮`) over the skipped-duration
+label (e.g. "3h", "40m"), `bg.primary` fill bracketed by `border.strong` rules.
+Makes collapsed time legible — the user must see that time was skipped.
+
+**Proposed behavior:** Width is constant across zoom (gaps never scale — only
+segments do). Pure render.
+
+---
+
+##### `ClipBracket`
+
+- **Tier:** feature (composes Text + PanResponder; rendered as a `BufferTimeline` overlay)
+- **Location:** `src/components/features/clip/ClipBracket.tsx` *(built 2026-06-06 · C2)*
+- **Variants:** `default`
+- **Sizes:** spans the track height (top:18 → bottom)
+- **States:** active (dragging an edge) · moving (center drag) · `blocked` (clamped at a saved region — warn-tinted edge)
+- **Proposed props:** `inMs`, `outMs`, `pxPerMs`, `onChangeIn`, `onChangeOut`, `onMove`, `blocked?`
+
+**Mock says (Frames 2–4):** 2px accent frame with accent-tinted fill; left edge =
+in-point, right edge = out-point, both with large finger-friendly grip handles. A
+readout pill (ink bg, accent duration) shows live duration + in/out timecodes in
+`monoValue`.
+
+**Proposed behavior:** Drag a handle to set in/out; press-drag the center zone
+moves the whole selection **without** changing duration. Clamps at saved-region
+boundaries with a resist/blocked affordance (warn tint, "Blocked · saved
+region"). One active pending bracket at a time. "New clip" drops it centered on
+the playhead at a default width.
+
+---
+
+##### `SavedClipRegion`
+
+- **Tier:** feature (or a `BufferTimeline` sub-part) (composes Text)
+- **Location:** `src/components/features/clip/SavedClipRegion.tsx` *(built 2026-06-06 · C2)*
+- **Variants:** `default`
+- **Sizes:** spans the track height; width = the saved span at current zoom
+- **States:** static, read-only
+- **Proposed props:** `startMs`, `endMs`, `label?`
+
+**Mock says (Frame 3):** Read-only band over a taken span — diagonal
+`accent.surface` hatch + a 3px `accent` top band + a "SAVED" mono micro-label.
+Reads clearly as "this region is taken; brackets won't enter it".
+
+**Proposed behavior:** One band per already-saved clip. New brackets clamp at its
+edges (no overlap). Deleting that clip (screen 2) removes the band, freeing the
+span for reuse.
+
+---
+
+##### `TimelineZoomControl`
+
+- **Tier:** primitive *(thin — likely a `SegmentedToggle` preset rather than a new component; see note)*
+- **Location:** `src/components/primitives/TimelineZoomControl.tsx` *(built 2026-06-06 · C2)*
+- **Variants:** `default`
+- **Sizes:** sm (h:~30, mono labels)
+- **States:** per-segment selected / unselected (selected = `ink` fill, `bg` text)
+- **Proposed props:** `value: 'all' | 'hours' | 'min' | 'sec'`, `onChange`
+
+**Mock says:** Segmented control — All / Hours / Min / Sec — `border.strong`
+outline, `monoLabel` caps, selected segment inverts to ink. Pinch is the
+continuous gesture; this is the discrete level switch.
+
+**Composition note:** This is `SegmentedToggle` with mono labels and four fixed
+options. **Recommendation:** ship as a *preset usage of `SegmentedToggle`*, not a
+new primitive — promote to a standalone primitive only if the timeline grows
+zoom-specific affordances.
+
+---
+
+##### `BufferScrubField`
+
+- **Tier:** feature (composes `ClipPreview` + Text + PanResponder)
+- **Location:** `src/components/features/clip/BufferScrubField.tsx` *(built 2026-06-06 · C2)*
+- **Variants:** `camera` (ClipPreview camera) · `audio-only` (ClipPreview audio) · `map-only` (ClipPreview map)
+- **Sizes:** lg (≈9:11 portrait, near-full-bleed hero)
+- **States:** scrubbing (frame re-renders under playhead) · idle
+- **Proposed props:** `playheadMs`, `variant`, `bufferReachMs?`, `onScrub`
+
+**Mock says (Frames 1, 6):** Portrait near-full-bleed video field — the dominant
+upper element. Center accent `playline`, a `monoValue` capture-timestamp readout
+(bottom-left), an optional buffer-reach hint (top-right, `BufferWindowLabel`-
+style). An audio-only span falls back to the ClipPreview audio waveform variant.
+
+**Proposed behavior:** Owns the swipe-to-scrub gesture — swiping left/right
+anywhere on the field moves the shared playhead (and `BufferTimeline`'s playhead)
+and re-renders the frame at that moment. Smooth, low-friction — the page's
+primary interaction.
+
+---
+
+##### `SavedClipRow`
+
+- **Tier:** feature (composes `ClipPreview` + Pill + IconButton + Button + Text)
+- **Location:** `src/components/features/clip/SavedClipRow.tsx` *(proposed — not built; alternative: a `row` + `expanded` variant on `ClipCard`)*
+- **Variants:** `collapsed` · `expanded` (inline player)
+- **Sizes:** full-width row; collapsed ≈82 tall (104×62 poster), expanded adds a 16:9 player + action strip
+- **States:** collapsed · expanded-playing; pill state `draft` (default) · `anon` · `public`
+- **Props (built):** consumer-flat — `name`, `capturedAt`, `durationSec`, `thumbnailUrl?`, `variant?`, `sourcesLabel?`, `visibility?` (`draft`/`anon`/`public`), `expanded?`, `playing?`, `progressPct?`, `onToggleExpand?`, `onTogglePlay?`, `onShare?`, `onPublish?`, `onDelete?`, plus three escape hatches added when `LibraryScreen` adopted it for recordings: `tags?` (override the visibility+sources tag row with explicit `{label,tone}[]`), `onKebabPress?` (makes the kebab a real button — recordings delete menu), `showPlayGlyph?` (hide the poster play affordance where playback isn't wired)
+
+**Mock says (saved-clips Frames 1–2):** Horizontal row card (dashboard `FeedRow`
+proportions, `ClipCard` content): poster thumb (duration overlay + play
+affordance) + name + capture timestamp (`monoValue`) + state/source pills +
+kebab. Tap → **expands in place** to an inline player (`ClipPreview` play
+variant) + actions (Share · Publish · Delete) — no full-screen nav.
+
+**Proposed behavior:** Owner-only treatments carry over from `ClipCard`; new
+clips arrive as **private drafts**, so the `Draft` pill is the default with a
+Publish affordance. Delete removes the clip (and frees its `SavedClipRegion` on
+screen 1).
+
+**Recommendation:** Build as a **new `SavedClipRow`** rather than overloading
+`ClipCard` — the inline-expand player + owner action strip diverge enough from
+`ClipCard`'s `trending` / `preview` / `compact` card variants that a
+`row` + `expanded` variant would bloat `ClipCard`'s API. Reuse `ClipCard`'s
+pill / meta sub-styling where practical.
+
+---
+
+##### `ClipSourcesDrawer`
+
+- **Tier:** feature (thin assembly — composes `BottomSheet` + `StreamTile` grid + Text)
+- **Location:** `src/components/features/clip/ClipSourcesDrawer.tsx` *(built 2026-06-06 · C2)*
+- **Variants:** `default`
+- **Sizes:** bottom drawer (the `NearbyStreamsDrawer` / `BottomSheet` pattern)
+- **States:** open / dismissed; per-tile active / inactive (reuses `StreamTile` states)
+- **Proposed props:** `visible`, `sources` (recorded layers + active flags), `onToggleSource`, `onDismiss`
+
+**Mock says (Frame 5):** Slide-up drawer (globe `NearbyStreamsDrawer` pattern) of
+the **recorded-source** `StreamTile`s (CAM 1080p, AUDIO 48 kHz, LOC GPS, COMPASS
+192°, GYRO …) in a wrapped grid. Tap a tile to toggle it active/inactive for the
+clip — reuses `StreamTile`'s active (2px accent) vs inactive (subtle border, 0.45
+opacity) states. Header "Sources in this clip · N of M active"; "Done" dismisses.
+
+**Proposed behavior:** Replaces the inline `LayerPanel` / `LayerEditorRow` for
+this editor. Selection is **reversible active/inactive only** —
+**delete-permanently is NOT in this drawer** (out of scope here). Choices persist
+into the saved clip. **No new primitive** — assembly of two existing ones.
+
+---
+
+**Screen assemblies (screens tier — not Section-3 component rows):**
+
+- **`ClipEditScreen`** *(built 2026-06-06 · route `app/(app)/clip-editor.tsx`,
+  reached from **Me → Clip editor**)*: `ScreenHeader` ("Clip editor", back
+  chevron) + `ScreenScroll` + a `PageTabs` pager (**Editor ↔ Saved clips**).
+  Editor page = `BufferScrubField` + `TimelineZoomControl` + `BufferTimeline`
+  (+ `ClipBracket` / `SavedClipRegion` / `GapMarker`) + New-clip/Reset + Sources
+  buttons + name `Input` + `SaveClipButton` + `ClipSourcesDrawer`; Saved page =
+  `SavedClipRow` list with empty state. Save = private draft, appends a
+  `SavedClipRegion` + auto-advances to the Saved page. **Runs on mock buffer data**
+  (a clearly-marked `MOCK SEAM` / `useMockBuffer` — Aaron's C1 substrate swaps in
+  there).
+- **`LibraryScreen`** *(reskinned 2026-06-06 · existing route, Me → Library)*:
+  the real recordings list (`useRecordings` / `recordingsApi`, unchanged) now
+  renders each `Recording` as a `SavedClipRow` (date→title, status→tags, meta line,
+  delete via the kebab; collapsed-only, no play glyph since recording playback
+  isn't wired). Loading / error+offline / storage-quota / signed-out / empty
+  states + optimistic delete all preserved.
+
+---
+
+##### Interaction notes — buffer-trim editor
+
+Gesture/motion behaviors the static frames can't fully convey (deliverable 3 of
+the handoff):
+
+- **Shared playhead.** One current-time drives both `BufferScrubField` and
+  `BufferTimeline`; scrubbing either moves the other. Re-evaluated continuously;
+  the field frame re-renders to the moment under the playhead.
+- **Playhead centering / edge-release.** Zoomed wider than the screen → playhead
+  **centered**, content scrolls under it. An end reaches its screen edge →
+  playhead **released**, travels off-center toward that edge (no scrolling past
+  the ends). Whole timeline fits → playhead moves **freely** left/right.
+- **Bracket drag — edge vs center.** Edge handle = set in/out (duration changes);
+  center press-drag = move the whole selection (duration fixed). Live duration +
+  timecodes update in `monoValue` tabular throughout.
+- **Zoom coupling.** Pinch (continuous) + `TimelineZoomControl` levels both
+  relabel the axis (days → hours → min → sec). Brackets are pinned to in/out
+  **times**, so they stretch/contract with the timeline during pinch — continuous,
+  never pixel-locked.
+- **No-overlap clamp.** Brackets cannot enter a `SavedClipRegion`; the moving edge
+  resists at the boundary with a warn-tinted blocked affordance. Only one pending
+  bracket at a time; saved clips coexist as read-only regions. Deleting a saved
+  clip frees its span.
+- **Motion tokens.** Drawer = `overlay` (250ms easeOutQuad) slide-up + swipe-down
+  dismiss; button/handle presses = `press` (180ms). No decorative motion.
+
+---
+
 #### Trust / Safety
 
 ##### `ContextStrip`
@@ -3722,6 +3972,84 @@ above. The seam is not a separate motion category.
 
 Append-only. Most recent first. Each entry: date, decision, rationale,
 constraint it imposes downstream.
+
+### 2026-06-06 — Buffer-trim clip editor: screens built (ClipEditScreen + Library reskin)
+
+Follows the same-day C2 component build. At Ben's direction, the two screens were
+built too — crossing into `screens/` (normally Aaron's lane) so the gestures are
+testable on a real page, not just the gallery. **Coordinate the `design → main`
+merge** since this edits files in Aaron's lane.
+
+- **`ClipEditScreen`** — new route `app/(app)/clip-editor.tsx`, reached from
+  **Me → Clip editor**. `PageTabs` pager (Editor ↔ Saved clips) composing all the
+  C2 components. **Mock buffer data** behind a clearly-marked `MOCK SEAM`
+  (`useMockBuffer`) — Aaron's C1 substrate (per-source record-to-disk + the
+  segments / saved-regions / recorded-layers contract) swaps in there; component
+  props are already shaped for it.
+- **`LibraryScreen` reskinned** — the existing real recordings list
+  (`useRecordings` / `recordingsApi`, untouched) now renders each `Recording` as a
+  `SavedClipRow`. Recordings ≠ clips, so: date→title, status→tags, meta line,
+  delete via the kebab, collapsed-only, no play glyph (playback not wired). All
+  prior states (loading / error+offline / quota / signed-out / empty / optimistic
+  delete) preserved.
+- **`SavedClipRow` gained three backward-compatible escape hatches** so it serves
+  both the clip Library and the recordings Library: `tags?` (override the tag row),
+  `onKebabPress?` (real kebab button), `showPlayGlyph?`.
+- **Me** gained a "Clip editor" button (per Ben's call to surface it there, not in
+  Settings/DEV).
+
+**Verification:** tsc-clean (the only 4 errors are the pre-existing
+`stream/${string}` typed-route baseline in `app/_layout.tsx` +
+`GlobeScreenMapbox.tsx`). **Not yet exercised on device.**
+
+**Imposes:** Aaron swaps the `ClipEditScreen` mock seam for the real substrate and
+wires real save/delete/publish; the `LibraryScreen` data path is unchanged so it
+keeps working as-is. Merge needs Aaron-coordination (screens lane).
+
+### 2026-06-06 — Buffer-trim clip editor: two-zone editor + standalone Library
+
+Adopts the buffer-trim model for the clip editor (Aaron's handoff brief). A clip
+is a non-destructive manifest cut out of the rolling buffer; this editor picks the
+in/out. Two screens, mocks shipped on `design`:
+[`clip-editor-buffer-trim-portrait.html`](docs/design/mocks/clip-editor-buffer-trim-portrait.html)
+(6 frames) +
+[`saved-clips-list-portrait.html`](docs/design/mocks/saved-clips-list-portrait.html)
+(3 frames).
+
+**Decided:**
+- **Two-zone editor** — a full-bleed swipe-to-scrub `BufferScrubField` over a
+  collapsed-gap, zoomable `BufferTimeline` with drag `ClipBracket`s. Supersedes
+  the single-waveform `Timeline` trimmer (`clip-editor-portrait.html`) for the
+  buffer flow; `Timeline` stays as the ancestor for non-buffer surfaces.
+- **Collapsed gaps** — real-time gaps render as fixed 50px `GapMarker`s (segments
+  scale with zoom, gaps don't) so skipped time stays legible.
+- **No overlap** — already-saved spans are read-only `SavedClipRegion` bands;
+  brackets clamp at their edges. Deleting a clip frees its span.
+- **Per-source layers = bottom `ClipSourcesDrawer`** (the `NearbyStreamsDrawer`
+  pattern + `StreamTile` grid), reversible active/inactive only — no inline
+  LayerPanel here, no delete-permanently in this editor.
+- **Save = private draft** — new clips land in the Library as drafts (publish is a
+  separate affordance).
+- **Library, not profile-as-library** — screen 2 is a standalone off-footer
+  Library (reached from Me / after save). Resolves the open clips-initiative
+  "profile vs library" question in favour of a standalone Library.
+
+**Components (Section 3 → Clip Editor — built on `design` 2026-06-06, C2 · Ben):**
+`BufferTimeline`, `GapMarker`, `ClipBracket`, `SavedClipRegion`,
+`BufferScrubField`, `SavedClipRow`, `ClipSourcesDrawer` (features under
+`features/clip/`) + `TimelineZoomControl` (a `SegmentedToggle` preset, primitive).
+All token-clean, in the galleries, tsc-clean. v1 deferrals: continuous pinch-zoom
+(gesture-handler follow-up), saved-region hatch (flat fill per the `Timeline`
+deferral). `ClipEditScreen` / `LibraryScreen` assemblies + screen wiring are
+Aaron's later step. Interaction notes (shared playhead, centering/edge-release,
+bracket edge-vs-center, zoom coupling, no-overlap clamp) live with those rows.
+
+**Imposes:** the components are built against a stubbed/mock buffer; Aaron's
+substrate + the backend contract for buffer segments / saved regions / per-source
+recorded layers lands separately, then the screens compose these. `LibraryScreen`
+extends the existing screen; the profile screens no longer need a library surface.
+Not yet exercised on device (gesture feel — scrub, bracket drag, the
+centered/edge-released playhead — needs an on-device pass).
 
 ### 2026-06-05 — Globe time-machine clock: below the drawer, solid panel, independent
 

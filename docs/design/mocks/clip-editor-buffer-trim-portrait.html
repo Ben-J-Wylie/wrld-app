@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>WRLD — Buffer Clip Editor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#ece6d6; --panel:#dbcfb6; --panelHi:#d3c4a8; --elevated:#e5dcc8;
+    --ink:#1a1612; --muted:rgba(26,22,18,0.62); --subtle:rgba(26,22,18,0.38);
+    --line:rgba(26,22,18,0.10); --line-2:rgba(26,22,18,0.20);
+    --accent:#d92e3a; --accent-bright:#ff5060; --accent-surface:rgba(217,46,58,0.08); --accent-line:rgba(217,46,58,0.32);
+    --warn:#c8861e; --overlay:rgba(26,22,18,0.45);
+    --sans:"Inter Tight", ui-sans-serif, system-ui, sans-serif;
+    --mono:"IBM Plex Mono", ui-monospace, monospace;
+    --r:4px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:#c8bda4;font-family:var(--sans);color:var(--ink);-webkit-font-smoothing:antialiased}
+  body{padding:46px 30px 80px}
+
+  .pageh{ max-width:1700px; margin:0 auto 30px }
+  .pageh .kick{ font:600 10px var(--mono); letter-spacing:0.18em; color:var(--accent); text-transform:uppercase; margin-bottom:12px }
+  .pageh h1{ font:500 30px/1.06 var(--sans); letter-spacing:-0.02em; margin:0 0 8px }
+  .pageh p{ font:400 13px/1.6 var(--sans); color:var(--muted); max-width:760px; margin:0 }
+  .pageh .lineage{ display:inline-block; margin-top:12px; font:500 10px var(--mono); letter-spacing:0.1em;
+    color:var(--muted); border:1px solid var(--line-2); border-radius:var(--r); padding:5px 9px; text-transform:uppercase }
+
+  .canvas{ max-width:1700px; margin:0 auto; display:flex; flex-wrap:wrap; gap:42px 26px; align-items:flex-start }
+  .frame{ display:flex; flex-direction:column; gap:12px; flex:none }
+  .frame .cap{ max-width:390px }
+  .frame .cap .id{ font:600 11px var(--mono); letter-spacing:0.12em; color:var(--accent); text-transform:uppercase }
+  .frame .cap .nm{ font:600 14px var(--sans); letter-spacing:-0.01em; margin-top:2px }
+  .frame .cap .ds{ font:400 11px/1.5 var(--sans); color:var(--muted); margin-top:4px; text-wrap:pretty }
+
+  .phone{ width:390px; height:844px; border-radius:30px; position:relative; overflow:hidden;
+    background:var(--bg); border:1px solid var(--line-2); box-shadow:0 24px 50px rgba(60,50,35,0.28) }
+  .home{ position:absolute; bottom:8px; left:50%; transform:translateX(-50%); z-index:40;
+    width:134px; height:5px; border-radius:100px; background:var(--ink); opacity:0.22 }
+  .scr{ position:absolute; inset:0; display:flex; flex-direction:column }
+
+  /* ScreenHeader */
+  .schead{ height:64px; flex:none; display:flex; align-items:center; gap:9px; padding:22px 18px 0; }
+  .brand{ width:30px; height:30px; border-radius:7px; background:var(--accent); display:grid; place-items:center; flex:none }
+  .brand svg{ width:17px; height:17px; color:var(--bg) }
+  .brand-wm{ font:600 15px var(--sans); letter-spacing:0.04em }
+  .schead .title{ margin-left:auto; font:500 11px var(--mono); letter-spacing:0.14em; text-transform:uppercase; color:var(--muted) }
+
+  /* 4a buffer scrub field */
+  .field{ position:relative; margin:6px 14px 0; border-radius:var(--r); overflow:hidden;
+    aspect-ratio:9/11; border:1px solid var(--line-2); background:#1c1814 }
+  .field.short{ aspect-ratio:9/8 }
+  .fcam{ position:absolute; inset:0; background:linear-gradient(160deg,#2b2520,#5e3c30 55%,#241f1b) }
+  .faud{ position:absolute; inset:0; background:var(--panel); display:grid; place-items:center }
+  .faud .wf{ display:flex; gap:4px; align-items:center; height:120px }
+  .faud .wf i{ width:4px; background:var(--subtle); border-radius:2px }
+  .field .scrub-hint{ position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); z-index:3;
+    display:flex; align-items:center; gap:10px; color:rgba(236,230,214,0.78); font:500 9px var(--mono); letter-spacing:0.16em; text-transform:uppercase }
+  .field .scrub-hint.dark{ color:var(--muted) }
+  .field .scrub-hint svg{ width:15px; height:15px; opacity:0.7 }
+  .field .ts{ position:absolute; left:10px; bottom:10px; z-index:3; font:500 11px var(--mono); letter-spacing:0.04em;
+    font-variant-numeric:tabular-nums; color:#f4eede; background:rgba(20,16,13,0.55); border-radius:3px; padding:4px 7px }
+  .faud .ts, .field.audio .ts{ color:var(--ink); background:var(--elevated); border:1px solid var(--line) }
+  .field .buf{ position:absolute; right:10px; top:10px; z-index:3; font:500 9px var(--mono); letter-spacing:0.1em; text-transform:uppercase;
+    color:rgba(236,230,214,0.8); background:rgba(20,16,13,0.5); border-radius:3px; padding:4px 7px }
+  .field .playline{ position:absolute; top:0; bottom:0; left:50%; width:2px; background:var(--accent-bright); z-index:4; box-shadow:0 0 8px var(--accent) }
+  .field .playline::before{ content:""; position:absolute; top:0; left:50%; transform:translateX(-50%); width:9px; height:9px; border-radius:50%; background:var(--accent-bright) }
+
+  /* 4b BufferTimeline */
+  .twrap{ margin:12px 0 0; flex:none }
+  .zoomctl{ display:flex; gap:0; margin:0 14px 9px; border:1px solid var(--line-2); border-radius:var(--r); overflow:hidden; width:max-content }
+  .zoomctl button{ border:0; border-left:1px solid var(--line-2); background:transparent; padding:7px 13px; cursor:pointer;
+    font-family:var(--sans); font:500 9px var(--mono); letter-spacing:0.1em; text-transform:uppercase; color:var(--muted) }
+  .zoomctl button:first-child{ border-left:0 }
+  .zoomctl button[data-on="true"]{ background:var(--ink); color:var(--bg) }
+
+  .timeline{ position:relative; height:96px; background:var(--panel); border-top:1px solid var(--line-2); border-bottom:1px solid var(--line-2); overflow:hidden }
+  .axis{ position:absolute; top:0; left:0; right:0; height:18px; display:flex; align-items:center; border-bottom:1px solid var(--line) }
+  .axis .tick{ position:absolute; font:500 9px var(--mono); letter-spacing:0.04em; font-variant-numeric:tabular-nums; color:var(--subtle); transform:translateX(-50%); top:4px }
+  .axis .tick::before{ content:""; position:absolute; left:50%; top:-4px; width:1px; height:4px; background:var(--line-2) }
+  .track{ position:absolute; top:18px; bottom:0; left:0; right:0; display:flex; align-items:stretch }
+  .seg{ position:relative; background:repeating-linear-gradient(90deg, rgba(26,22,18,0.05) 0 2px, transparent 2px 6px), var(--panelHi);
+    border-right:1px solid var(--line) }
+  .seg .wf{ position:absolute; inset:14px 0 18px; display:flex; align-items:center; gap:2px; padding:0 4px; opacity:0.5 }
+  .seg .wf i{ flex:1; background:var(--ink); border-radius:1px }
+  .gap{ width:50px; flex:none; background:var(--bg); display:grid; place-items:center; border-right:1px solid var(--line-2); border-left:1px solid var(--line-2) }
+  .gap .pill{ font:500 8px var(--mono); letter-spacing:0.06em; color:var(--muted); display:flex; flex-direction:column; align-items:center; gap:3px }
+  .gap .pill .gly{ font-size:11px; line-height:0.7; letter-spacing:0 }
+  /* saved region */
+  .saved{ position:relative; background:repeating-linear-gradient(45deg, var(--accent-surface) 0 5px, transparent 5px 10px); border-right:1px solid var(--accent-line) }
+  .saved::after{ content:"SAVED"; position:absolute; top:4px; left:5px; font:500 7px var(--mono); letter-spacing:0.12em; color:var(--accent) }
+  .saved .bandtop{ position:absolute; top:0; left:0; right:0; height:3px; background:var(--accent); opacity:0.6 }
+  /* playhead (timeline) */
+  .ph{ position:absolute; top:0; bottom:0; width:2px; background:var(--accent-bright); z-index:6 }
+  .ph::before{ content:""; position:absolute; top:-1px; left:50%; transform:translateX(-50%); width:9px; height:9px; border-radius:50%; background:var(--accent-bright) }
+
+  /* 4c ClipBracket */
+  .bracket{ position:absolute; top:18px; bottom:0; z-index:5; border:2px solid var(--accent); background:rgba(217,46,58,0.10) }
+  .bracket .h{ position:absolute; top:0; bottom:0; width:14px; background:var(--accent); display:grid; place-items:center; cursor:ew-resize }
+  .bracket .h.l{ left:-2px; border-radius:var(--r) 0 0 var(--r) } .bracket .h.r{ right:-2px; border-radius:0 var(--r) var(--r) 0 }
+  .bracket .h .grip{ width:2px; height:20px; background:rgba(236,230,214,0.7); box-shadow:3px 0 0 rgba(236,230,214,0.4), -3px 0 0 rgba(236,230,214,0.4) }
+  .bracket .center{ position:absolute; inset:0 14px; cursor:grab; display:grid; place-items:center }
+  .bracket .center .move{ display:flex; gap:3px; opacity:0.5 }
+  .bracket .center .move i{ width:2px; height:14px; background:var(--accent); border-radius:1px }
+  .bracket.blocked .h.l{ background:var(--warn) }
+  /* selection readout */
+  .selread{ position:absolute; z-index:7; background:var(--ink); color:var(--bg); border-radius:var(--r); padding:5px 8px;
+    font:500 10px var(--mono); letter-spacing:0.04em; font-variant-numeric:tabular-nums; white-space:nowrap; display:flex; gap:8px; align-items:center }
+  .selread b{ color:var(--accent-bright); font-weight:500 }
+  .selread .x{ color:rgba(236,230,214,0.5) }
+
+  /* below-timeline controls */
+  .tbtns{ display:flex; gap:9px; padding:12px 14px 0 }
+  .newclip{ height:42px; padding:0 16px; border-radius:var(--r); border:1px solid var(--accent-line); background:var(--accent-surface); color:var(--accent);
+    font:500 12px var(--sans); display:inline-flex; align-items:center; gap:8px; cursor:pointer; font-family:var(--sans) }
+  .newclip svg{ width:15px; height:15px }
+  .srcbtn{ height:42px; padding:0 14px; border-radius:var(--r); border:1px solid var(--line-2); background:var(--elevated); color:var(--ink);
+    font:500 12px var(--sans); display:inline-flex; align-items:center; gap:8px; cursor:pointer; margin-left:auto; font-family:var(--sans) }
+  .srcbtn svg{ width:15px; height:15px; color:var(--muted) }
+  .srcbtn .n{ font:500 9px var(--mono); color:var(--muted); letter-spacing:0.08em }
+
+  /* 4e name + save */
+  .namearea{ padding:14px 14px 0; display:flex; flex-direction:column; gap:10px; flex:1; min-height:0 }
+  .ninput{ height:48px; border-radius:var(--r); border:1px solid var(--line-2); background:var(--elevated); padding:0 14px;
+    display:flex; align-items:center; font:400 15px var(--sans); color:var(--ink) }
+  .ninput .ph-txt{ color:var(--subtle) }
+  .ninput .cursor{ width:2px; height:20px; background:var(--accent); margin-left:1px; animation:blink 1s steps(1) infinite }
+  @keyframes blink{ 50%{opacity:0} }
+  .savebtn{ height:52px; border-radius:var(--r); border:0; background:var(--accent); color:var(--bg);
+    font:500 14px var(--sans); display:flex; align-items:center; justify-content:center; gap:9px; cursor:pointer; font-family:var(--sans) }
+  .savebtn svg{ width:17px; height:17px }
+  .savebtn[data-dis="true"]{ background:var(--panelHi); color:var(--subtle); border:1px solid var(--line-2) }
+  .savehint{ font:500 9px var(--mono); letter-spacing:0.1em; text-transform:uppercase; color:var(--subtle); text-align:center }
+
+  /* 4d sources drawer */
+  .scrim{ position:absolute; inset:0; background:var(--overlay); z-index:30 }
+  .drawer{ position:absolute; left:0; right:0; bottom:0; z-index:31; background:var(--bg); border-top-left-radius:18px; border-top-right-radius:18px;
+    border-top:1px solid var(--line-2); padding:10px 16px 30px; box-shadow:0 -16px 40px rgba(40,32,20,0.25) }
+  .drawer .grab{ width:38px; height:4px; border-radius:2px; background:var(--line-2); margin:2px auto 14px }
+  .drawer .dh{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:14px }
+  .drawer .dh .t{ font:500 16px var(--sans); letter-spacing:-0.01em }
+  .drawer .dh .s{ font:500 9px var(--mono); letter-spacing:0.12em; text-transform:uppercase; color:var(--muted) }
+  .tiles{ display:flex; flex-wrap:wrap; gap:9px }
+  .tile{ width:84px; height:80px; border-radius:var(--r); background:var(--elevated); border:1px solid var(--line-2); padding:10px 8px;
+    display:flex; flex-direction:column; align-items:flex-start; justify-content:space-between; cursor:pointer; opacity:0.45 }
+  .tile[data-on="true"]{ opacity:1; border:2px solid var(--accent); background:var(--accent-surface) }
+  .tile .ic{ color:var(--muted) } .tile[data-on="true"] .ic{ color:var(--accent) }
+  .tile .ic svg{ width:20px; height:20px }
+  .tile .nm{ font:500 11px var(--sans); color:var(--ink) }
+  .tile .mv{ font:500 8px var(--mono); letter-spacing:0.06em; color:var(--muted); text-transform:uppercase }
+  .drawer .ddone{ margin-top:16px; height:46px; border-radius:var(--r); border:1px solid var(--line-2); background:var(--elevated);
+    display:flex; align-items:center; justify-content:center; font:500 13px var(--sans); cursor:pointer }
+</style>
+</head>
+<body>
+
+<div class="pageh">
+  <div class="kick">Clips initiative · Buffer-trim model · Screen 1</div>
+  <h1>Buffer Clip Editor</h1>
+  <p>A clip is a non-destructive cut out of the rolling buffer. Two-zone editor: a full-bleed swipe-to-scrub buffer field over a collapsed-gap, zoomable BufferTimeline with drag brackets. Frames below show the key states. Supersedes the single-waveform Timeline trimmer.</p>
+  <span class="lineage">SUPERSEDES: clip-editor-portrait (single-track Timeline) · NEW: BufferTimeline · GapMarker · ClipBracket · SavedClipRegion · ClipSourcesDrawer</span>
+</div>
+
+<div class="canvas">
+
+  <!-- ════ Frame 1 — Empty / New clip prompt ════ -->
+  <div class="frame">
+    <div class="cap"><div class="id">State · empty</div><div class="nm">No bracket yet</div>
+      <div class="ds">Default landing. Buffer field scrubs by swipe; timeline fully zoomed out (All) showing the whole buffer with collapsed gaps. "New clip" drops a bracket.</div></div>
+    <div class="phone"><div class="home"></div><div class="scr">
+      <div class="schead"><span class="brand"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 4h4l3 13 3-13h2l3 13 3-13h0M3 4l4 16h2l3-12 3 12h2L21 4"/></svg></span><span class="brand-wm">WRLD</span><span class="title">Edit clip</span></div>
+      <div class="field">
+        <div class="fcam"></div>
+        <div class="playline"></div>
+        <div class="scrub-hint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 7l-4 5 4 5M16 7l4 5-4 5"/></svg>Swipe to scrub</div>
+        <span class="ts">14:22:06 · APR 21</span>
+        <span class="buf">Buffer · 72h</span>
+      </div>
+      <div class="twrap">
+        <div class="zoomctl"><button data-on="true">All</button><button>Hours</button><button>Min</button><button>Sec</button></div>
+        <div class="timeline">
+          <div class="axis"><span class="tick" style="left:12%">APR 18</span><span class="tick" style="left:42%">APR 19</span><span class="tick" style="left:72%">APR 20</span><span class="tick" style="left:95%">NOW</span></div>
+          <div class="track">
+            <div class="seg" style="flex:3"><div class="wf"><i style="height:30%"></i><i style="height:60%"></i><i style="height:45%"></i><i style="height:75%"></i><i style="height:50%"></i><i style="height:40%"></i><i style="height:65%"></i></div></div>
+            <div class="gap"><span class="pill"><span class="gly">⋮</span>3h</span></div>
+            <div class="seg" style="flex:5"><div class="wf"><i style="height:50%"></i><i style="height:80%"></i><i style="height:35%"></i><i style="height:62%"></i><i style="height:90%"></i><i style="height:48%"></i><i style="height:70%"></i><i style="height:55%"></i><i style="height:40%"></i></div></div>
+            <div class="gap"><span class="pill"><span class="gly">⋮</span>40m</span></div>
+            <div class="seg" style="flex:4"><div class="wf"><i style="height:60%"></i><i style="height:42%"></i><i style="height:78%"></i><i style="height:55%"></i><i style="height:85%"></i><i style="height:50%"></i></div></div>
+          </div>
+          <div class="ph" style="left:88%"></div>
+        </div>
+      </div>
+      <div class="tbtns">
+        <button class="newclip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>New clip</button>
+        <button class="srcbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="7" height="7" rx="1"/><rect x="14" y="4" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Sources<span class="n">5</span></button>
+      </div>
+      <div class="namearea">
+        <div class="ninput"><span class="ph-txt">Name this clip</span></div>
+        <button class="savebtn" data-dis="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4L8.5 15.5M14.5 14.5L20 20M8.5 8.5L11 11"/></svg>Save clip</button>
+        <span class="savehint">Drop a clip to enable save</span>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- ════ Frame 2 — Active bracket ════ -->
+  <div class="frame">
+    <div class="cap"><div class="id">State · active bracket</div><div class="nm">Dragging the out-point</div>
+      <div class="ds">Bracket dropped centered on playhead. Drag an edge to set in/out; press-drag center to move the whole selection. Live duration + timecodes in mono tabular.</div></div>
+    <div class="phone"><div class="home"></div><div class="scr">
+      <div class="schead"><span class="brand"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 4h4l3 13 3-13h2l3 13 3-13h0M3 4l4 16h2l3-12 3 12h2L21 4"/></svg></span><span class="brand-wm">WRLD</span><span class="title">Edit clip</span></div>
+      <div class="field">
+        <div class="fcam"></div>
+        <div class="playline"></div>
+        <span class="ts">14:22:41 · APR 21</span>
+        <span class="buf">Buffer · 72h</span>
+      </div>
+      <div class="twrap">
+        <div class="zoomctl"><button>All</button><button data-on="true">Hours</button><button>Min</button><button>Sec</button></div>
+        <div class="timeline">
+          <div class="axis"><span class="tick" style="left:12%">13:00</span><span class="tick" style="left:40%">14:00</span><span class="tick" style="left:68%">15:00</span><span class="tick" style="left:93%">16:00</span></div>
+          <div class="track">
+            <div class="seg" style="flex:1"><div class="wf"><i style="height:50%"></i><i style="height:80%"></i><i style="height:35%"></i><i style="height:62%"></i><i style="height:90%"></i><i style="height:48%"></i><i style="height:70%"></i><i style="height:55%"></i><i style="height:40%"></i><i style="height:66%"></i><i style="height:52%"></i><i style="height:78%"></i></div></div>
+          </div>
+          <div class="bracket" style="left:38%; right:34%">
+            <div class="h l"><span class="grip"></span></div>
+            <div class="center"><span class="move"><i></i><i></i></span></div>
+            <div class="h r"><span class="grip"></span></div>
+          </div>
+          <div class="selread" style="left:38%; top:24px"><span><b>0:18</b></span><span class="x">·</span><span>14:22 → 14:40</span></div>
+          <div class="ph" style="left:62%"></div>
+        </div>
+      </div>
+      <div class="tbtns">
+        <button class="newclip" style="border-color:var(--line-2); background:var(--elevated); color:var(--muted)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>Reset</button>
+        <button class="srcbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="7" height="7" rx="1"/><rect x="14" y="4" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Sources<span class="n">4/5</span></button>
+      </div>
+      <div class="namearea">
+        <div class="ninput"><span>Rooftop sunset</span><span class="cursor"></span></div>
+        <button class="savebtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4L8.5 15.5M14.5 14.5L20 20M8.5 8.5L11 11"/></svg>Save clip · 0:18</button>
+        <span class="savehint">Saves as a private draft</span>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- ════ Frame 3 — Clamped against saved region ════ -->
+  <div class="frame">
+    <div class="cap"><div class="id">State · clamped</div><div class="nm">Blocked by a saved clip</div>
+      <div class="ds">Saved spans are read-only hatched bands. A new bracket can't enter one — the in-edge resists at the boundary (warn tint). No overlap allowed.</div></div>
+    <div class="phone"><div class="home"></div><div class="scr">
+      <div class="schead"><span class="brand"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 4h4l3 13 3-13h2l3 13 3-13h0M3 4l4 16h2l3-12 3 12h2L21 4"/></svg></span><span class="brand-wm">WRLD</span><span class="title">Edit clip</span></div>
+      <div class="field">
+        <div class="fcam"></div>
+        <div class="playline"></div>
+        <span class="ts">14:20:55 · APR 21</span>
+        <span class="buf">Buffer · 72h</span>
+      </div>
+      <div class="twrap">
+        <div class="zoomctl"><button>All</button><button data-on="true">Hours</button><button>Min</button><button>Sec</button></div>
+        <div class="timeline">
+          <div class="axis"><span class="tick" style="left:14%">14:00</span><span class="tick" style="left:50%">14:30</span><span class="tick" style="left:86%">15:00</span></div>
+          <div class="track">
+            <div class="seg" style="flex:5"><div class="wf"><i style="height:50%"></i><i style="height:80%"></i><i style="height:35%"></i><i style="height:62%"></i><i style="height:90%"></i><i style="height:48%"></i><i style="height:70%"></i></div></div>
+            <div class="saved" style="flex:3"><span class="bandtop"></span></div>
+            <div class="seg" style="flex:3"><div class="wf"><i style="height:60%"></i><i style="height:42%"></i><i style="height:78%"></i><i style="height:55%"></i></div></div>
+          </div>
+          <div class="bracket blocked" style="left:30%; right:50%">
+            <div class="h l"><span class="grip"></span></div>
+            <div class="center"><span class="move"><i></i><i></i></span></div>
+            <div class="h r"><span class="grip"></span></div>
+          </div>
+          <div class="selread" style="left:18%; top:24px; background:var(--warn)"><span>Blocked · saved region</span></div>
+          <div class="ph" style="left:42%"></div>
+        </div>
+      </div>
+      <div class="tbtns">
+        <button class="newclip" style="border-color:var(--line-2); background:var(--elevated); color:var(--muted)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>Reset</button>
+        <button class="srcbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="7" height="7" rx="1"/><rect x="14" y="4" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Sources<span class="n">5</span></button>
+      </div>
+      <div class="namearea">
+        <div class="ninput"><span class="ph-txt">Name this clip</span></div>
+        <button class="savebtn" data-dis="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4L8.5 15.5M14.5 14.5L20 20M8.5 8.5L11 11"/></svg>Save clip</button>
+        <span class="savehint" style="color:var(--warn)">Selection overlaps a saved clip</span>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- ════ Frame 4 — Zoomed seconds ════ -->
+  <div class="frame">
+    <div class="cap"><div class="id">State · zoomed (Sec)</div><div class="nm">Frame-accurate trim</div>
+      <div class="ds">Pinch / Sec level. Axis relabels to seconds; brackets stay pinned to their in/out times and stretch with the timeline. Playhead centered, content scrolls under it.</div></div>
+    <div class="phone"><div class="home"></div><div class="scr">
+      <div class="schead"><span class="brand"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 4h4l3 13 3-13h2l3 13 3-13h0M3 4l4 16h2l3-12 3 12h2L21 4"/></svg></span><span class="brand-wm">WRLD</span><span class="title">Edit clip</span></div>
+      <div class="field">
+        <div class="fcam"></div>
+        <div class="playline"></div>
+        <span class="ts">14:22:31.04 · APR 21</span>
+        <span class="buf">Buffer · 72h</span>
+      </div>
+      <div class="twrap">
+        <div class="zoomctl"><button>All</button><button>Hours</button><button>Min</button><button data-on="true">Sec</button></div>
+        <div class="timeline">
+          <div class="axis"><span class="tick" style="left:10%">22:20</span><span class="tick" style="left:37%">22:25</span><span class="tick" style="left:63%">22:30</span><span class="tick" style="left:90%">22:35</span></div>
+          <div class="track">
+            <div class="seg" style="flex:1"><div class="wf"><i style="height:40%"></i><i style="height:88%"></i><i style="height:30%"></i><i style="height:70%"></i><i style="height:95%"></i><i style="height:44%"></i><i style="height:60%"></i><i style="height:80%"></i><i style="height:35%"></i><i style="height:72%"></i><i style="height:50%"></i><i style="height:90%"></i><i style="height:42%"></i><i style="height:66%"></i><i style="height:55%"></i><i style="height:78%"></i></div></div>
+          </div>
+          <div class="bracket" style="left:24%; right:22%">
+            <div class="h l"><span class="grip"></span></div>
+            <div class="center"><span class="move"><i></i><i></i></span></div>
+            <div class="h r"><span class="grip"></span></div>
+          </div>
+          <div class="selread" style="left:24%; top:24px"><span><b>0:18.6</b></span><span class="x">·</span><span>22:22.4 → 22:41.0</span></div>
+          <div class="ph" style="left:50%"></div>
+        </div>
+      </div>
+      <div class="tbtns">
+        <button class="newclip" style="border-color:var(--line-2); background:var(--elevated); color:var(--muted)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>Reset</button>
+        <button class="srcbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="7" height="7" rx="1"/><rect x="14" y="4" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Sources<span class="n">4/5</span></button>
+      </div>
+      <div class="namearea">
+        <div class="ninput"><span>Rooftop sunset</span></div>
+        <button class="savebtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4L8.5 15.5M14.5 14.5L20 20M8.5 8.5L11 11"/></svg>Save clip · 0:18.6</button>
+        <span class="savehint">Saves as a private draft</span>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- ════ Frame 5 — Sources drawer open ════ -->
+  <div class="frame">
+    <div class="cap"><div class="id">State · sources drawer</div><div class="nm">Per-source layer selection</div>
+      <div class="ds">Bottom drawer (the globe NearbyStreamsDrawer pattern) of recorded-source StreamTiles. Tap to set active/inactive for the clip. Replaces the inline LayerPanel.</div></div>
+    <div class="phone"><div class="home"></div><div class="scr" style="filter:saturate(0.96)">
+      <div class="schead"><span class="brand"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 4h4l3 13 3-13h2l3 13 3-13h0M3 4l4 16h2l3-12 3 12h2L21 4"/></svg></span><span class="brand-wm">WRLD</span><span class="title">Edit clip</span></div>
+      <div class="field">
+        <div class="fcam"></div>
+        <div class="playline"></div>
+        <span class="ts">14:22:41 · APR 21</span>
+        <span class="buf">Buffer · 72h</span>
+      </div>
+      <div class="twrap">
+        <div class="zoomctl"><button>All</button><button data-on="true">Hours</button><button>Min</button><button>Sec</button></div>
+        <div class="timeline">
+          <div class="axis"><span class="tick" style="left:12%">13:00</span><span class="tick" style="left:40%">14:00</span><span class="tick" style="left:68%">15:00</span></div>
+          <div class="track"><div class="seg" style="flex:1"><div class="wf"><i style="height:50%"></i><i style="height:80%"></i><i style="height:35%"></i><i style="height:62%"></i><i style="height:90%"></i><i style="height:48%"></i><i style="height:70%"></i></div></div></div>
+          <div class="bracket" style="left:38%; right:34%"><div class="h l"><span class="grip"></span></div><div class="center"><span class="move"><i></i><i></i></span></div><div class="h r"><span class="grip"></span></div></div>
+          <div class="ph" style="left:62%"></div>
+        </div>
+      </div>
+    </div>
+    <div class="scrim"></div>
+    <div class="drawer">
+      <div class="grab"></div>
+      <div class="dh"><span class="t">Sources in this clip</span><span class="s">4 of 5 active</span></div>
+      <div class="tiles">
+        <div class="tile" data-on="true"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h4l2-2h6l2 2h4v12H3z"/><circle cx="12" cy="13" r="3.5"/></svg></span><span class="nm">Camera</span><span class="mv">1080P</span></div>
+        <div class="tile" data-on="true"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></span><span class="nm">Audio</span><span class="mv">48 KHZ</span></div>
+        <div class="tile" data-on="true"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-7-7-12a7 7 0 0 1 14 0c0 5-7 12-7 12z"/><circle cx="12" cy="9" r="2.4"/></svg></span><span class="nm">Location</span><span class="mv">GPS</span></div>
+        <div class="tile" data-on="true"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M14.5 9.5L13 13l-3.5 1.5L11 11z" fill="currentColor"/></svg></span><span class="nm">Compass</span><span class="mv">192°</span></div>
+        <div class="tile"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="14" height="14" rx="2"/><path d="M5 9h14M9 5v14"/></svg></span><span class="nm">Gyro</span><span class="mv">OFF</span></div>
+      </div>
+      <div class="ddone">Done</div>
+    </div>
+    </div>
+  </div>
+
+  <!-- ════ Frame 6 — Audio-only buffer ════ -->
+  <div class="frame">
+    <div class="cap"><div class="id">State · audio-only</div><div class="nm">No camera in this span</div>
+      <div class="ds">When the buffer span has no recorded camera, the field falls back to the ClipPreview audio variant (FeedThumb audio, lg). Everything else identical.</div></div>
+    <div class="phone"><div class="home"></div><div class="scr">
+      <div class="schead"><span class="brand"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 4h4l3 13 3-13h2l3 13 3-13h0M3 4l4 16h2l3-12 3 12h2L21 4"/></svg></span><span class="brand-wm">WRLD</span><span class="title">Edit clip</span></div>
+      <div class="field audio">
+        <div class="faud"><div class="wf"><i style="height:24%"></i><i style="height:60%"></i><i style="height:40%"></i><i style="height:82%"></i><i style="height:50%"></i><i style="height:70%"></i><i style="height:34%"></i><i style="height:90%"></i><i style="height:46%"></i><i style="height:64%"></i><i style="height:38%"></i><i style="height:76%"></i><i style="height:52%"></i></div></div>
+        <div class="playline"></div>
+        <div class="scrub-hint dark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 7l-4 5 4 5M16 7l4 5-4 5"/></svg>Swipe to scrub</div>
+        <span class="ts">02:14:09 · APR 19</span>
+        <span class="buf" style="color:var(--muted); background:var(--elevated); border:1px solid var(--line)">Audio only</span>
+      </div>
+      <div class="twrap">
+        <div class="zoomctl"><button>All</button><button>Hours</button><button data-on="true">Min</button><button>Sec</button></div>
+        <div class="timeline">
+          <div class="axis"><span class="tick" style="left:14%">02:00</span><span class="tick" style="left:50%">02:15</span><span class="tick" style="left:86%">02:30</span></div>
+          <div class="track"><div class="seg" style="flex:1"><div class="wf"><i style="height:30%"></i><i style="height:55%"></i><i style="height:42%"></i><i style="height:70%"></i><i style="height:38%"></i><i style="height:60%"></i><i style="height:48%"></i><i style="height:66%"></i></div></div></div>
+          <div class="bracket" style="left:42%; right:36%"><div class="h l"><span class="grip"></span></div><div class="center"><span class="move"><i></i><i></i></span></div><div class="h r"><span class="grip"></span></div></div>
+          <div class="selread" style="left:30%; top:24px"><span><b>0:09</b></span><span class="x">·</span><span>02:14 → 02:23</span></div>
+          <div class="ph" style="left:58%"></div>
+        </div>
+      </div>
+      <div class="tbtns">
+        <button class="newclip" style="border-color:var(--line-2); background:var(--elevated); color:var(--muted)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>Reset</button>
+        <button class="srcbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="7" height="7" rx="1"/><rect x="14" y="4" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Sources<span class="n">2</span></button>
+      </div>
+      <div class="namearea">
+        <div class="ninput"><span>Late set</span></div>
+        <button class="savebtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4L8.5 15.5M14.5 14.5L20 20M8.5 8.5L11 11"/></svg>Save clip · 0:09</button>
+        <span class="savehint">Saves as a private draft</span>
+      </div>
+    </div></div>
+  </div>
+
+</div>
+</body>
+</html>

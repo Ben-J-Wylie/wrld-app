@@ -1,11 +1,10 @@
-import { StyleSheet, View, FlatList, ActivityIndicator, Image, Pressable, Alert } from 'react-native'
+import { StyleSheet, View, FlatList, ActivityIndicator, Pressable, Alert } from 'react-native'
 import { useCallback, useState } from 'react'
 import { useFocusEffect } from 'expo-router'
 import { useAuth } from '@clerk/clerk-expo'
 import { theme } from '@/tokens/theme'
 import { Text } from '@/components/primitives/Text'
-import { Pill } from '@/components/primitives/Pill'
-import { Card } from '@/components/primitives/Card'
+import { SavedClipRow } from '@/components/features/clip/SavedClipRow'
 import { ScreenScroll } from '@/components/sections/ScreenScroll'
 import { ScreenHeader } from '@/components/sections/ScreenHeader'
 import { useRecordings } from '@/hooks/useRecordings'
@@ -36,11 +35,15 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
+// A Recording reskinned as a SavedClipRow. Recordings aren't clips (no name /
+// visibility / wired inline playback here), so we map date→title, fold the meta
+// into the capturedAt line, surface status via the row's tag override, and route
+// delete through the kebab. Collapsed-only (no inline player) + no play glyph,
+// since recording playback isn't wired in this surface.
 function RecordingRow({ recording, onDelete }: { recording: Recording; onDelete: (id: string) => void }) {
-  const isUnedited = recording._count.clips === 0
   const isReady = recording.status === 'ready'
   const isInProgress = recording.status === 'recording'
-  const [deleting, setDeleting] = useState(false)
+  const isUnedited = recording._count.clips === 0
 
   function handleDelete() {
     Alert.alert(
@@ -52,12 +55,10 @@ function RecordingRow({ recording, onDelete }: { recording: Recording; onDelete:
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
-            setDeleting(true)
             try {
               await recordingsApi.delete(recording.id)
               onDelete(recording.id)
             } catch {
-              setDeleting(false)
               Alert.alert('Error', 'Could not delete recording. Please try again.')
             }
           },
@@ -66,54 +67,31 @@ function RecordingRow({ recording, onDelete }: { recording: Recording; onDelete:
     )
   }
 
+  const tags: { label: string; tone: 'warn' | 'accent' | 'muted' }[] = []
+  if (isInProgress) tags.push({ label: 'Recording', tone: 'accent' })
+  else if (recording.status === 'failed') tags.push({ label: 'Failed', tone: 'warn' })
+  else if (recording.status === 'expired') tags.push({ label: 'Expired', tone: 'muted' })
+  else if (isUnedited) tags.push({ label: 'Unedited', tone: 'muted' })
+  if (recording.expiresAt) tags.push({ label: `Exp ${formatDate(recording.expiresAt)}`, tone: 'muted' })
+
+  const meta = [
+    formatTime(recording.startedAt),
+    isReady && recording.durationSec !== null ? formatDuration(recording.durationSec) : null,
+    isReady && recording.sizeBytes > 0 ? formatSize(recording.sizeBytes) : null,
+  ]
+    .filter(Boolean)
+    .join('  ·  ')
+
   return (
-    <Card variant="panel" style={styles.row}>
-      <View style={styles.rowInner}>
-        {recording.thumbnailUrl ? (
-          <Image
-            source={{ uri: recording.thumbnailUrl }}
-            style={styles.thumb}
-            resizeMode="cover"
-          />
-        ) : (
-          <View style={[styles.thumb, styles.thumbPlaceholder]} />
-        )}
-        <View style={styles.rowBody}>
-          <View style={styles.rowHeader}>
-            <Text variant="bodyEmphasized" color={theme.colors.text.primary}>
-              {formatDate(recording.startedAt)}
-            </Text>
-            <View style={styles.rowBadges}>
-              {isInProgress && <Pill size="sm" variant="accent" label="RECORDING" />}
-              {isReady && isUnedited && <Pill size="sm" label="UNEDITED" />}
-              {recording.status === 'failed' && <Pill size="sm" label="FAILED" />}
-            </View>
-          </View>
-          <Text variant="caption" color={theme.colors.text.muted}>
-            {formatTime(recording.startedAt)}
-            {isReady && recording.durationSec !== null ? `  ·  ${formatDuration(recording.durationSec)}` : ''}
-            {isReady && recording.sizeBytes > 0 ? `  ·  ${formatSize(recording.sizeBytes)}` : ''}
-          </Text>
-          {recording.expiresAt ? (
-            <Text variant="caption" color={theme.colors.text.muted} style={styles.expiry}>
-              Expires {formatDate(recording.expiresAt)}
-            </Text>
-          ) : null}
-          {!isInProgress && (
-            <Pressable
-              onPress={handleDelete}
-              disabled={deleting}
-              style={styles.deleteBtn}
-              hitSlop={8}
-            >
-              <Text variant="caption" color={deleting ? theme.colors.text.subtle : '#E5534B'}>
-                {deleting ? 'Deleting…' : 'Delete'}
-              </Text>
-            </Pressable>
-          )}
-        </View>
-      </View>
-    </Card>
+    <SavedClipRow
+      name={formatDate(recording.startedAt)}
+      capturedAt={meta}
+      durationSec={recording.durationSec ?? 0}
+      thumbnailUrl={recording.thumbnailUrl}
+      tags={tags}
+      showPlayGlyph={false}
+      onKebabPress={isInProgress ? undefined : handleDelete}
+    />
   )
 }
 
@@ -219,46 +197,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.lg,
     paddingBottom: theme.spacing.xl,
     gap: theme.spacing.sm,
-  },
-  row: {
-    padding: 0,
-    overflow: 'hidden',
-  },
-  rowInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  thumb: {
-    width: 80,
-    height: 60,
-    borderTopLeftRadius: theme.radius.md,
-    borderBottomLeftRadius: theme.radius.md,
-  },
-  thumbPlaceholder: {
-    backgroundColor: theme.colors.bg.elevated,
-  },
-  rowBody: {
-    flex: 1,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-    gap: theme.spacing.xs,
-  },
-  rowHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: theme.spacing.sm,
-  },
-  rowBadges: {
-    flexDirection: 'row',
-    gap: theme.spacing.xs,
-  },
-  expiry: {
-    marginTop: 2,
-  },
-  deleteBtn: {
-    marginTop: theme.spacing.xs,
-    alignSelf: 'flex-start',
   },
   centeredContent: {
     flex: 1,
