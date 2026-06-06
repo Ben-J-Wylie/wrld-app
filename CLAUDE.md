@@ -332,6 +332,15 @@ a fresh build. Run `eas build --profile development --platform android`
 when that happens. The dev client rebuild is also a good time to drop
 the `react-native-view-shot` Metro stub and install view-shot for real.
 
+**Pulling main after 2026-06-06 (commit `111597c`):** the clip-editor work
+added two native modules — **`expo-video`** (`~3.0.16`, Aaron's buffer HLS in
+the scrub field) and **`react-native-gesture-handler`** (`~2.28`, the timeline
+gestures; `GestureHandlerRootView` is now at the app root). **Any dev client
+without these will red-screen on launch** (`Cannot find native module …`). A
+fresh build is required for the app to run at all — `eas build --profile
+development --platform all`. (A `development` build of `111597c` for both
+platforms was kicked off 2026-06-06.)
+
 ---
 
 ## Rolling Buffer (Always-On Rewind) initiative — June 2026
