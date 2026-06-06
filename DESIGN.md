@@ -3124,22 +3124,25 @@ zoom-specific affordances.
 
 ##### `BufferScrubField`
 
-- **Tier:** feature (composes `ClipPreview` + Text + PanResponder)
+- **Tier:** feature (composes Image / `FeedThumb` + Text + Icon + PanResponder)
 - **Location:** `src/components/features/clip/BufferScrubField.tsx` *(built 2026-06-06 · C2)*
-- **Variants:** `camera` (ClipPreview camera) · `audio-only` (ClipPreview audio) · `map-only` (ClipPreview map)
+- **Variants:** `camera` (thumbnail/placeholder) · `audio-only` (`FeedThumb.audio`) · `map-only` (`FeedThumb.loc`)
 - **Sizes:** lg (≈9:11 portrait, near-full-bleed hero)
 - **States:** scrubbing (frame re-renders under playhead) · idle
-- **Proposed props:** `playheadMs`, `variant`, `bufferReachMs?`, `onScrub`
+- **Props (built):** `variant?`, `thumbnailUrl?`, `reachLabel?`, `showScrubHint?`, `onScrub?`
 
-**Mock says (Frames 1, 6):** Portrait near-full-bleed video field — the dominant
-upper element. Center accent `playline`, a `monoValue` capture-timestamp readout
-(bottom-left), an optional buffer-reach hint (top-right, `BufferWindowLabel`-
-style). An audio-only span falls back to the ClipPreview audio waveform variant.
+**Code does (built):** Portrait near-full-bleed field — **just the frame + the swipe
+gesture** (2026-06-06). No on-field playhead line and **no on-field clock**: the
+timeline carries the playhead marker, and the editor overlays the time-machine
+`TimeScrubber` at the field's bottom as the buffer clock (expand to spin-scrub). The
+field keeps an optional buffer-reach hint (top-right) + a centered "Swipe to scrub"
+hint. Audio/map spans fall back to `FeedThumb` (lg).
 
-**Proposed behavior:** Owns the swipe-to-scrub gesture — swiping left/right
-anywhere on the field moves the shared playhead (and `BufferTimeline`'s playhead)
-and re-renders the frame at that moment. Smooth, low-friction — the page's
-primary interaction.
+**Behavior:** Owns the swipe-to-scrub gesture — swiping left/right emits incremental
+px deltas via `onScrub`; the parent maps px → ms against the current zoom and
+advances the shared playhead (which also drives `BufferTimeline` and the
+`TimeScrubber` clock — one current-time for all three). The field is time-agnostic
+(no time math of its own). Direction (drag-right = earlier) is flippable.
 
 ---
 
@@ -3201,8 +3204,13 @@ into the saved clip. **No new primitive** — assembly of two existing ones.
   Editor page = `BufferScrubField` + `TimelineZoomControl` + `BufferTimeline`
   (+ `ClipBracket` / `SavedClipRegion` / `GapMarker`) + New-clip/Reset + Sources
   buttons + name `Input` + `SaveClipButton` + `ClipSourcesDrawer`; Saved page =
-  `SavedClipRow` list with empty state. Save = private draft, appends a
-  `SavedClipRegion` + auto-advances to the Saved page. **Runs on mock buffer data**
+  `SavedClipRow` list with empty state. The **time-machine `TimeScrubber` is
+  overlaid at the field's bottom as the buffer clock** — expand it to spin-scrub the
+  buffer; the field swipe and the timeline scrub drive the same value. All three
+  share one `offsetMs` (0 = live head; a 1s tick keeps the timeline playhead in
+  lockstep with the clock). Field + timeline are full-bleed so the clock's six
+  wheels fit. Save = private draft, appends a `SavedClipRegion` + auto-advances to
+  the Saved page. **Runs on mock buffer data**
   (a clearly-marked `MOCK SEAM` / `useMockBuffer` — Aaron's C1 substrate swaps in
   there).
 - **`LibraryScreen`** *(reskinned 2026-06-06 · existing route, Me → Library)*:
@@ -3973,6 +3981,19 @@ above. The seam is not a separate motion category.
 Append-only. Most recent first. Each entry: date, decision, rationale,
 constraint it imposes downstream.
 
+### 2026-06-06 — Buffer-trim clip editor: app side done, handed to Aaron
+
+Milestone marker (details in the three entries below). The buffer-trim clip editor
+is built and merged to `main`: the C2 component library, `ClipEditScreen` (on a mock
+buffer seam) with the `TimeScrubber` overlaid as the buffer clock, and the
+`LibraryScreen` reskin. **C1 (substrate) was already Aaron's and is done;** what
+remains is backend wiring — swap `ClipEditScreen`'s `useMockBuffer` seam for real
+data, the manifest `Clip` model, the R2 `/auth/me` dual-pool, R3/R5. Full handoff
+checklist lives in CLAUDE.md ("Buffer-trim clip editor BUILT — handoff to Aaron").
+Design-system follow-up still in Ben's lane: an optional `TimeScrubber`
+`playback`/hold-position prop if a frozen scrub reads better for picking a clip.
+Nothing here is device-tested yet.
+
 ### 2026-06-06 — Buffer-trim clip editor: screens built (ClipEditScreen + Library reskin)
 
 Follows the same-day C2 component build. At Ben's direction, the two screens were
@@ -3997,6 +4018,14 @@ merge** since this edits files in Aaron's lane.
   `onKebabPress?` (real kebab button), `showPlayGlyph?`.
 - **Me** gained a "Clip editor" button (per Ben's call to surface it there, not in
   Settings/DEV).
+- **Buffer clock = the time-machine `TimeScrubber`** (refinement, same day). The
+  field's static bottom clock + on-field playhead were dropped; `BufferScrubField`
+  is now just frame + swipe. `ClipEditScreen` overlays `TimeScrubber` at the field
+  bottom (expand to spin-scrub the buffer) and unifies the clock + image swipe +
+  timeline scrub on one `offsetMs` (0 = live head; 1s tick). `TimeScrubber` is
+  reused as-is, so its playback-after-scrub behavior carries over — a `playback`/
+  hold-position prop is the follow-up if a frozen scrub reads better in the editor.
+  Field + timeline are full-bleed so the six-wheel clock fits.
 
 **Verification:** tsc-clean (the only 4 errors are the pre-existing
 `stream/${string}` typed-route baseline in `app/_layout.tsx` +

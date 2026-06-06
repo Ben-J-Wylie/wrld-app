@@ -454,15 +454,17 @@ Timeline, LayerEditorRow, FeedRow/FeedThumb). Storage usage is already available
 `GET /auth/me` returns `usedStorageBytes` + `storageQuotaBytes` — surface it in the
 editor / profile.
 
-### Open decisions (not settled — resolve before C3/C4)
+### Open decisions
 
-- **Profile vs Library** — where editable material lives: a separate **Library
-  page** (Aaron's lean) vs **profile-as-library** + preview-public-view toggle
-  (Ben's lean). Pending the Claude Design comparison mocks. The mock brief and the
-  app handoff currently *assume* profile-as-library, but it is **not decided** —
-  settle before C5.
+- **Profile vs Library — ✅ RESOLVED (2026-06-06): standalone Library**, not
+  profile-as-library. The buffer-trim brief settled it; the saved-clips list is a
+  standalone Library surface (off-footer, Me → Library), and the existing
+  `LibraryScreen` was reskinned to `SavedClipRow`. The profile screens no longer
+  need a library surface.
 - **Screen source tier** — sensitive (consent-gated record) or benign. Mocked as
-  sensitive; confirm.
+  sensitive; still to confirm (low-stakes now — the consent step is parked).
+- **Record-set payload shape** — effectively **moot** under the rolling-buffer model
+  (capture ⊆ broadcast; no separate record set / Record verb). Confirm it's dropped.
 
 *(Resolved at C0: per-track `recordingReady` ✅ Aaron June 2026; existing-data
 migration ✅ delete June 2026 — all legacy recordings purged from production.)*
@@ -493,12 +495,12 @@ migration ✅ delete June 2026 — all legacy recordings purged from production.
 | Stage | Owner | Branch / repo | What | Depends on |
 |---|---|---|---|---|
 | **C0** | Ben + Aaron | — | Decisions & contracts. ✅ Model decided; ✅ per-track `recordingReady` Aaron June 2026; ✅ existing-data delete Aaron June 2026. Still open: **record-set payload shape** (only blocks C3 — C1 can proceed with provisional shape); **screen-tier** (blocks C2); **profile/library** (blocks C5). | — |
-| **C1** | Aaron | mediasoup + backend | Per-track recording substrate (per-source tracks + `.jsonl` telemetry; per-track `recordingReady`), landed in lockstep across both repos. Provisional record-set shape is sufficient — final shape confirmed before C3. **Can start now.** | C0 model ✅ |
-| **C2** | Ben | `design` | Component-library additions (FeedRow two-dimension control, LayerEditorRow not-captured, during-broadcast indicator, loc-precision sub-control) + DESIGN.md inventory + galleries. | C0 screen-tier decision |
+| **C1** | Aaron | mediasoup + backend | **✅ DONE (R1b-final).** Per-source recording substrate + always-on rolling buffer landed in both repos: `UserBuffer`/`BufferSession`/`BufferTrack`, fMP4 per-source tracks (`-c:v copy`), wall-clock-chunked `.jsonl` telemetry, per-track `recordingReady`, `bufferService.reapBuffers()` (window + byte-cap), tier caps in RemoteConfig, `GET /clips/discover`. | C0 model ✅ |
+| **C2** | Ben | `design` | **✅ DONE (2026-06-06).** Buffer-trim component library: `BufferTimeline` · `GapMarker` · `ClipBracket` · `SavedClipRegion` · `BufferScrubField` · `SavedClipRow` · `ClipSourcesDrawer` · `TimelineZoomControl` (+ galleries + DESIGN.md Section 3). Supersedes the single-track `Timeline` trimmer for the buffer flow. | C0 ✅ |
 | **C3** | Aaron | `main` | Go Live / Record assembly on `DashboardScreen` (two buttons, per-source two-toggle arming, defaults, consent flow, payload, indicator wiring) + shared types. | C2 + record-set payload shape finalised |
-| **C4** | Aaron | `main` | Clip editor — build `ClipEditScreen` (trim + per-source on/off/delete + reveal + attribution + visibility/publish), wired to the manifest. | C1, C2 |
-| **C5** | Aaron | `main` | Profile / library surface + storage display. **Blocked on the profile/library decision.** | C4 + profile/library decision |
-| **C6** | Aaron | `main` | Telemetry tracks playback (loc/gyro/compass overlays). | C1 |
+| **C4** | Aaron (+ Ben scaffold) | `main` | **🔶 App scaffold built (Ben, 2026-06-06):** `ClipEditScreen` (route `app/(app)/clip-editor.tsx`, Me → Clip editor) composing the C2 components on a **MOCK SEAM** (`useMockBuffer`); Editor↔Saved pager; TimeScrubber overlaid as the buffer clock. **Remaining (Aaron):** wire the mock seam to real data (buffer segments / saved regions / recorded layers), the non-destructive **manifest** `Clip` model (replace baked `processClip`), real save/delete/publish. | C1 ✅, C2 ✅ |
+| **C5** | Aaron (+ Ben scaffold) | `main` | **✅ profile/library decided → standalone Library** (not profile-as-library). Ben **reskinned the existing `LibraryScreen`** to `SavedClipRow` over real recordings (2026-06-06). **Remaining (Aaron):** storage display = the **R2** `GET /auth/me` dual-pool (`usedStorageBytes` + `bufferSizeBytes` + `bufferEarliestAt`); reconcile the editor's mock "Saved clips" list with the real Library (clips vs recordings). | C4 |
+| **C6** | Aaron | `main` | Telemetry tracks playback (loc/gyro/compass overlays). | C1 ✅ |
 
 **Parallelism.** C1 (Aaron) and C2 (Ben) run in parallel after C0. C3/C4 consume
 Ben's C2 components — Aaron builds against the current mock-state versions and
@@ -2215,3 +2217,65 @@ The earlier "GoLiveRecordBar not in gallery" follow-up is **done** (it was added
 then trimmed to the single two-state button). `RecordCircle` is inline for now —
 promote to `features/broadcast/` + gallery if it sticks. Needs an on-device pass
 (over-camera contrast, record circle, button alignment between pages).
+
+---
+
+## Updates — June 2026 (Buffer-trim clip editor BUILT — handoff to Aaron)
+
+The app-side buffer-trim clip editor is built and merged to `main`. This is the
+clean handoff point: **C1 (substrate) is Aaron's and already done; C2 (components)
++ the app scaffold are Ben's and now done.** What remains is backend wiring.
+
+### Built (Ben, `design` → `main`, 2026-06-06)
+
+**C2 component library** (`src/components/features/clip/` + one primitive), all
+token-clean, in the galleries, in DESIGN.md Section 3:
+- `BufferTimeline` — collapsed-gap, zoomable timeline (scrub + bracket drag +
+  saved-region no-overlap clamp; derived-translateX centered/edge-released playhead)
+- `GapMarker` · `SavedClipRegion` · `ClipBracket` (overlay; parent owns time math)
+- `BufferScrubField` — full-bleed swipe-to-scrub field (no on-field clock/playhead)
+- `SavedClipRow` — Library row, collapsed → inline-expand player + actions; gained
+  `tags?` / `onKebabPress?` / `showPlayGlyph?` so it also serves the recordings Library
+- `ClipSourcesDrawer` — BottomSheet + StreamTile grid (active/inactive per source)
+- `TimelineZoomControl` (primitive) — a `SegmentedToggle` preset (All/Hours/Min/Sec)
+
+**Screens:**
+- **`ClipEditScreen`** — new route `app/(app)/clip-editor.tsx`, reached from
+  **Me → Clip editor**. `PageTabs` pager (Editor ↔ Saved clips). The time-machine
+  **`TimeScrubber` is overlaid at the field bottom as the buffer clock** — expand to
+  spin-scrub the buffer; the field swipe and the timeline scrub drive the **same
+  `offsetMs`** (0 = live head, 1s tick). Field + timeline are full-bleed.
+- **`LibraryScreen` reskinned** to `SavedClipRow` over the real recordings list
+  (`useRecordings` / `recordingsApi` **unchanged**); all prior states preserved.
+
+**⚠️ Runs on a MOCK SEAM.** `ClipEditScreen`'s `useMockBuffer()` is local stub state
+(segments / saved regions / sources); save/delete/publish are in-memory. The
+component props are already shaped for the real data.
+
+### Remaining — Aaron's lane (backend + screens/hooks/api)
+
+1. **Wire the `ClipEditScreen` MOCK SEAM to real data** — replace `useMockBuffer`
+   with real hooks (buffer segments, saved-clip regions, recorded source layers);
+   real save (write the non-destructive manifest), delete, publish.
+2. **Manifest `Clip` model** — replace the legacy baked `processClip` with the
+   decided non-destructive manifest over recording/buffer tracks (the C4 backend).
+3. **R2 — `GET /auth/me` dual-pool** (`usedStorageBytes` + `bufferSizeBytes` +
+   `bufferEarliestAt`) → feeds the field's reach hint + `BufferWindowLabel` + the
+   Library storage display.
+4. **R3 promote-on-publish** + **R5 read-time `index.m3u8` stitch + buffer playback
+   access control** (per wrld-backend CLAUDE.md).
+5. **Reconcile** the editor's mock "Saved clips" pager page with the real Library
+   (does saving route into the real Library; does the Library list clips vs
+   recordings?).
+6. **Gyro/compass** `*Update` handlers in mediasoup (when the app emits them).
+
+### Open / follow-ups
+- **`TimeScrubber` playback vs hold (app-side, Ben).** The clock is reused as-is, so
+  its time-machine playback-after-scrub carries into the editor. If a frozen scrub
+  reads better for *picking* a clip, add a `playback={false}` / hold-position prop.
+- **Not yet device-tested** — the whole editor (gesture feel, the six-wheel clock
+  fitting full-bleed, playback-after-scrub) needs an on-device pass.
+- The **seam discipline holds going forward**: Ben owns `primitives/`/`features/`/
+  `sections/` + DESIGN.md; Aaron owns `screens/`/`hooks/`/`api/`. The 2026-06-06
+  scaffold crossed into screens at Ben's direction for testability — Aaron owns it
+  from here.

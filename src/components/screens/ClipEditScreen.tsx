@@ -15,12 +15,13 @@
 // bracket drag, zoom, no-overlap clamp) are testable on a real page, not just the
 // gallery.
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { router } from 'expo-router'
 import { StyleSheet, View } from 'react-native'
 import { ScreenScroll } from '@/components/sections/ScreenScroll'
 import { ScreenHeader } from '@/components/sections/ScreenHeader'
 import { PageTabs } from '@/components/features/navigation/PageTabs'
+import { TimeScrubber } from '@/components/features/discovery/TimeScrubber'
 import { Text } from '@/components/primitives/Text'
 import { Input } from '@/components/primitives/Input'
 import { Pressable } from '@/components/primitives/Pressable'
@@ -80,7 +81,18 @@ export const ClipEditScreen = () => {
 
   const [page, setPage] = useState<Page>('editor')
   const [zoom, setZoom] = useState<TimelineZoom>('all')
-  const [playheadMs, setPlayheadMs] = useState(now - 1.85 * H)
+  // The buffer playhead is an offset behind the live head (0 = now) — the same model
+  // the time-machine TimeScrubber uses, so the clock, the timeline, and the image
+  // swipe all drive one value. A 1s tick keeps the live head fresh (and keeps the
+  // timeline playhead in lockstep with the clock during playback).
+  const [offsetMs, setOffsetMs] = useState(2 * H)
+  const [, setClockTick] = useState(0)
+  useEffect(() => {
+    const id = setInterval(() => setClockTick((t) => (t + 1) % 60), 1000)
+    return () => clearInterval(id)
+  }, [])
+  const playheadMs = Date.now() - offsetMs
+  const clampOffset = (v: number) => clamp(v, 0, Math.max(0, Date.now() - bufferStartMs))
   const [bracket, setBracket] = useState<BufferBracket | null>(null)
   const [name, setName] = useState('')
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -111,9 +123,10 @@ export const ClipEditScreen = () => {
   const activeCount = sources.filter((s) => s.active).length
 
   function handleFieldScrub(deltaPx: number) {
-    setPlayheadMs((prev) =>
-      clamp(prev - deltaPx * FIELD_MS_PER_PX[zoom], bufferStartMs, bufferEndMs),
-    )
+    // Drag right (dx>0) → earlier → larger offset. Functional update so the
+    // incremental per-move deltas accumulate within a single gesture.
+    const max = Math.max(0, Date.now() - bufferStartMs)
+    setOffsetMs((o) => clamp(o + deltaPx * FIELD_MS_PER_PX[zoom], 0, max))
   }
 
   function newClip() {
@@ -173,23 +186,32 @@ export const ClipEditScreen = () => {
 
       {page === 'editor' ? (
         <View style={styles.editor}>
-          <BufferScrubField
-            variant={sources.find((s) => s.key === 'cam')?.active ? 'camera' : 'audio-only'}
-            timestampLabel={fmtFieldStamp(playheadMs)}
-            reachLabel="Buffer · 72h"
-            onScrub={handleFieldScrub}
-          />
+          {/* Field (image swipe-to-scrub) with the time-machine clock overlaid at
+              its bottom — expand it to spin-scrub the buffer. Both drive offsetMs. */}
+          <View style={[styles.fieldWrap, styles.fullBleed]}>
+            <BufferScrubField
+              variant={sources.find((s) => s.key === 'cam')?.active ? 'camera' : 'audio-only'}
+              reachLabel="Buffer · 72h"
+              onScrub={handleFieldScrub}
+            />
+            <TimeScrubber
+              offsetMs={offsetMs}
+              onOffsetChange={(v) => setOffsetMs(clampOffset(v))}
+              style={styles.clockOverlay}
+            />
+          </View>
 
           <View style={styles.tlBlock}>
-            <TimelineZoomControl value={zoom} onChange={setZoom} style={styles.zoom} />
+            <TimelineZoomControl value={zoom} onChange={setZoom} />
             <BufferTimeline
               segments={segments}
               savedRegions={savedRegions}
               playheadMs={playheadMs}
               zoom={zoom}
               bracket={bracket}
-              onScrub={setPlayheadMs}
+              onScrub={(ms) => setOffsetMs(clampOffset(Date.now() - ms))}
               onBracketChange={setBracket}
+              style={styles.fullBleed}
             />
           </View>
 
@@ -315,10 +337,6 @@ const MON = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT
 function pad(n: number): string {
   return String(n).padStart(2, '0')
 }
-function fmtFieldStamp(ms: number): string {
-  const d = new Date(ms)
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())} · ${MON[d.getMonth()]} ${d.getDate()}`
-}
 function fmtClipStamp(ms: number): string {
   const d = new Date(ms)
   return `${pad(d.getHours())}:${pad(d.getMinutes())} · ${MON[d.getMonth()]} ${d.getDate()}`
@@ -344,11 +362,23 @@ const styles = StyleSheet.create({
     padding: theme.spacing.lg,
     gap: theme.spacing.md,
   },
+  // Field + clock and the timeline go edge-to-edge (cancel the editor's lg
+  // padding) — the field is the hero, and the full width gives the time-machine
+  // clock room to lay out its six wheels + status without overflowing.
+  fullBleed: {
+    marginHorizontal: -theme.spacing.lg,
+  },
+  fieldWrap: {
+    position: 'relative',
+  },
+  clockOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
   tlBlock: {
     gap: theme.spacing.sm,
-  },
-  zoom: {
-    alignSelf: 'flex-start',
   },
   btnRow: {
     flexDirection: 'row',

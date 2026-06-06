@@ -1641,12 +1641,7 @@ function BufferTimelineDemo() {
 function BufferScrubFieldDemo({ variant }: { variant: 'camera' | 'audio-only' }) {
   return (
     <View style={{ width: 200 }}>
-      <BufferScrubField
-        variant={variant}
-        timestampLabel="14:22:06 · APR 21"
-        reachLabel="Buffer · 72h"
-        onScrub={() => {}}
-      />
+      <BufferScrubField variant={variant} reachLabel="Buffer · 72h" onScrub={() => {}} />
     </View>
   )
 }

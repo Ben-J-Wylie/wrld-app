@@ -1,16 +1,21 @@
 // src/components/features/clip/BufferScrubField.tsx
 //
 // Buffer-trim clip editor (clips initiative · C2). The full-bleed portrait field at
-// the top of the editor — the dominant element and the page's primary interaction.
-// Swiping left/right anywhere on it scrubs the buffer; the frame under the centered
-// playline is the moment at the shared playhead (driven by the parent, which also
-// owns the BufferTimeline playhead — one current-time for both).
+// the top of the editor — the dominant element and a primary way to move through the
+// buffer: swiping left/right anywhere on it scrubs. The frame shown is the moment at
+// the shared playhead (owned by the parent, which also drives the BufferTimeline
+// playhead and the TimeScrubber clock — one current-time for all three).
 //
-// Shares ClipPreview's visual vocabulary but owns scrub, not playback, so it has no
-// play/progress controls: camera → thumbnail/placeholder, audio-only / map-only →
-// FeedThumb fallback (matching ClipPreview's variants). The swipe emits incremental
-// pixel deltas via `onScrub`; the parent maps px → ms against the current zoom (the
-// field itself is time-agnostic). Direction (drag right = earlier) is flippable.
+// The field itself carries NO clock and NO playhead line (2026-06-06): the editor
+// overlays the time-machine `TimeScrubber` at the field's bottom as the buffer clock
+// (expand to spin-scrub the buffer), and the timeline carries the playhead marker.
+// The field is purely the frame + the swipe gesture + a couple of hints.
+//
+// Shares ClipPreview's visual vocabulary but owns scrub, not playback (no
+// play/progress controls): camera → thumbnail/placeholder, audio-only / map-only →
+// FeedThumb fallback. The swipe emits incremental pixel deltas via `onScrub`; the
+// parent maps px → ms against the current zoom (the field is time-agnostic).
+// Direction (drag right = earlier) is flippable.
 //
 // See DESIGN.md Section 3 (Buffer-trim clip editor) + the 2026-06-06 decision log.
 
@@ -34,9 +39,6 @@ type Variant = 'camera' | 'audio-only' | 'map-only'
 type Props = {
   variant?: Variant
   thumbnailUrl?: string | null
-  // Capture-time at the playhead, preformatted by the consumer (mono tabular),
-  // e.g. "14:22:06 · APR 21".
-  timestampLabel: string
   // Optional how-far-back hint shown top-right, e.g. "Buffer · 72h".
   reachLabel?: string
   showScrubHint?: boolean
@@ -49,13 +51,14 @@ type Props = {
 export function BufferScrubField({
   variant = 'camera',
   thumbnailUrl,
-  timestampLabel,
   reachLabel,
   showScrubHint = true,
   onScrub,
   style,
 }: Props) {
   const lastDx = useRef(0)
+  const onScrubRef = useRef(onScrub)
+  onScrubRef.current = onScrub
   const pan = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -70,8 +73,6 @@ export function BufferScrubField({
       },
     }),
   ).current
-  const onScrubRef = useRef(onScrub)
-  onScrubRef.current = onScrub
 
   const dark = variant === 'camera'
 
@@ -90,10 +91,6 @@ export function BufferScrubField({
           <FeedThumb kind={variant === 'audio-only' ? 'audio' : 'loc'} size="lg" />
         </View>
       )}
-
-      <View style={styles.playline} pointerEvents="none">
-        <View style={styles.playlineKnob} />
-      </View>
 
       {showScrubHint && (
         <View style={styles.scrubHint} pointerEvents="none">
@@ -116,14 +113,8 @@ export function BufferScrubField({
         </View>
       )}
 
-      <View style={[styles.tsPill, dark ? styles.tsPillDark : styles.tsPillLight]} pointerEvents="none">
-        <Text variant="monoValue" color={dark ? theme.colors.text.inverse : theme.colors.text.primary}>
-          {timestampLabel}
-        </Text>
-      </View>
-
       {reachLabel != null && (
-        <View style={[styles.reachPill, dark ? styles.tsPillDark : styles.tsPillLight]} pointerEvents="none">
+        <View style={[styles.reachPill, dark ? styles.pillDark : styles.pillLight]} pointerEvents="none">
           <Text variant="monoLabel" color={dark ? theme.colors.text.inverse : theme.colors.text.muted}>
             {reachLabel}
           </Text>
@@ -155,24 +146,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  playline: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    left: '50%',
-    width: 2,
-    marginLeft: -1,
-    backgroundColor: theme.colors.accent.bright,
-  },
-  playlineKnob: {
-    position: 'absolute',
-    top: 0,
-    left: -3.5,
-    width: 9,
-    height: 9,
-    borderRadius: 4.5,
-    backgroundColor: theme.colors.accent.bright,
-  },
   scrubHint: {
     position: 'absolute',
     top: '50%',
@@ -184,14 +157,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: theme.spacing.sm,
   },
-  tsPill: {
-    position: 'absolute',
-    left: theme.spacing.sm,
-    bottom: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
-    borderRadius: theme.radius.md,
-  },
   reachPill: {
     position: 'absolute',
     right: theme.spacing.sm,
@@ -200,10 +165,10 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.xs,
     borderRadius: theme.radius.md,
   },
-  tsPillDark: {
+  pillDark: {
     backgroundColor: 'rgba(20,16,13,0.55)',
   },
-  tsPillLight: {
+  pillLight: {
     backgroundColor: theme.colors.bg.elevated,
     borderWidth: 1,
     borderColor: theme.colors.border.subtle,
