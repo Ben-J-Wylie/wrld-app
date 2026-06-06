@@ -142,37 +142,69 @@ export const ClipEditScreen = () => {
   const sessionAtPlayhead =
     sessions.find((s) => playheadMs >= sessionStartMs(s) && playheadMs <= sessionEndMs(s)) ?? null
   const fieldThumb = sessionAtPlayhead?.thumbnailUrl ?? null
-  const fieldVariant: 'camera' | 'audio-only' | 'map-only' = sessionAtPlayhead?.kinds.includes('camera')
+
+  // The whole camera buffer is "snapped together" into one concatenated VOD
+  // (allManifestUrl, gaps collapsed). The field plays that single stream; the
+  // wall-clock playhead maps to a continuous MEDIA time = cumulative camera
+  // session durations + intra-session offset, so scrubbing the timeline/clock
+  // moves smoothly across every session.
+  const allManifestUrl = buffer?.allManifestUrl ?? null
+  const camCum = (() => {
+    let acc = 0
+    return sessions
+      .filter((s) => s.kinds.includes('camera'))
+      .map((s) => {
+        const mediaStart = acc
+        acc += Math.max(0, s.durationSec)
+        return { s, mediaStart, mediaEnd: acc }
+      })
+  })()
+  const totalCamSec = camCum.length ? camCum[camCum.length - 1]!.mediaEnd : 0
+
+  // wall-clock playhead → media seconds in the concatenated stream (snap gaps to
+  // the nearest camera boundary).
+  function playheadToMediaSec(): number {
+    if (!camCum.length) return 0
+    for (const c of camCum) {
+      const st = sessionStartMs(c.s)
+      const en = sessionEndMs(c.s)
+      if (playheadMs >= st && playheadMs <= en) {
+        return c.mediaStart + Math.min(Math.max(0, c.s.durationSec), Math.max(0, (playheadMs - st) / 1000))
+      }
+    }
+    if (playheadMs <= sessionStartMs(camCum[0]!.s)) return 0
+    let best = totalCamSec
+    for (const c of camCum) if (sessionEndMs(c.s) <= playheadMs) best = c.mediaEnd
+    return Math.max(0, Math.min(totalCamSec, best) - 0.05)
+  }
+
+  // The field shows camera video whenever any camera footage exists.
+  const fieldVariant: 'camera' | 'audio-only' | 'map-only' = allManifestUrl
     ? 'camera'
     : sessionAtPlayhead?.kinds.includes('audio')
       ? 'audio-only'
       : 'map-only'
 
-  // Live video frame layer for the scrub field — the camera session under the
-  // playhead, played paused and seeked to the scrub position (the tokenized HLS
-  // authorizes itself; no Clerk header needed). Audio-only/map-only → no video,
-  // the field shows its fallback.
-  const camSession = sessionAtPlayhead?.kinds.includes('camera') ? sessionAtPlayhead : null
-  const camManifestUrl = camSession?.manifestUrl ?? null
   const player = useVideoPlayer(null, (p) => {
     p.muted = true
     p.pause()
   })
   useEffect(() => {
-    if (!camManifestUrl) return
-    player.replace({ uri: camManifestUrl, contentType: 'hls' })
+    if (!allManifestUrl) return
+    player.replace({ uri: allManifestUrl, contentType: 'hls' })
     player.pause()
-  }, [camManifestUrl, player])
+  }, [allManifestUrl, player])
   useEffect(() => {
-    if (!camSession) return
-    const offsetSec = Math.max(0, (playheadMs - sessionStartMs(camSession)) / 1000)
+    if (!allManifestUrl) return
+    const target = playheadToMediaSec()
     const id = setTimeout(() => {
       try {
-        player.currentTime = offsetSec
+        player.currentTime = target
       } catch {}
     }, 40)
     return () => clearTimeout(id)
-  }, [playheadMs, camSession, player])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playheadMs, allManifestUrl, player])
 
   function handleFieldScrub(deltaPx: number) {
     // Drag right (dx>0) → earlier → larger offset. Functional update so the
@@ -254,7 +286,7 @@ export const ClipEditScreen = () => {
                 variant={fieldVariant}
                 thumbnailUrl={fieldThumb}
                 frameSlot={
-                  camManifestUrl ? (
+                  allManifestUrl ? (
                     <VideoView
                       player={player}
                       style={StyleSheet.absoluteFill}

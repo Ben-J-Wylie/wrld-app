@@ -21,6 +21,9 @@ export type BufferDescriptor = {
   earliestAt: string | null
   latestAt: string
   windowHours: number
+  // Whole camera buffer concatenated into one VOD HLS playlist (all sessions
+  // back-to-back, real-time gaps collapsed) so the field scrubs continuously.
+  allManifestUrl: string | null
   sessions: BufferSession[]  // chronological (oldest → newest)
 }
 
