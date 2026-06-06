@@ -36,6 +36,7 @@ import { TimelineZoomControl, type TimelineZoom } from '@/components/primitives/
 import { ClipSourcesDrawer, type ClipSource } from '@/components/features/clip/ClipSourcesDrawer'
 import { SavedClipRow } from '@/components/features/clip/SavedClipRow'
 import { useAuth } from '@clerk/clerk-expo'
+import { useVideoPlayer, VideoView } from 'expo-video'
 import { useBuffer } from '@/hooks/useBuffer'
 import type { BufferSession, BufferTrackKind } from '@/api/buffer'
 import { theme } from '@/tokens/theme'
@@ -146,6 +147,32 @@ export const ClipEditScreen = () => {
       ? 'audio-only'
       : 'map-only'
 
+  // Live video frame layer for the scrub field — the camera session under the
+  // playhead, played paused and seeked to the scrub position (the tokenized HLS
+  // authorizes itself; no Clerk header needed). Audio-only/map-only → no video,
+  // the field shows its fallback.
+  const camSession = sessionAtPlayhead?.kinds.includes('camera') ? sessionAtPlayhead : null
+  const camManifestUrl = camSession?.manifestUrl ?? null
+  const player = useVideoPlayer(null, (p) => {
+    p.muted = true
+    p.pause()
+  })
+  useEffect(() => {
+    if (!camManifestUrl) return
+    player.replace({ uri: camManifestUrl, contentType: 'hls' })
+    player.pause()
+  }, [camManifestUrl, player])
+  useEffect(() => {
+    if (!camSession) return
+    const offsetSec = Math.max(0, (playheadMs - sessionStartMs(camSession)) / 1000)
+    const id = setTimeout(() => {
+      try {
+        player.currentTime = offsetSec
+      } catch {}
+    }, 40)
+    return () => clearTimeout(id)
+  }, [playheadMs, camSession, player])
+
   function handleFieldScrub(deltaPx: number) {
     // Drag right (dx>0) → earlier → larger offset. Functional update so the
     // incremental per-move deltas accumulate within a single gesture.
@@ -216,6 +243,16 @@ export const ClipEditScreen = () => {
             <BufferScrubField
               variant={fieldVariant}
               thumbnailUrl={fieldThumb}
+              frameSlot={
+                camManifestUrl ? (
+                  <VideoView
+                    player={player}
+                    style={StyleSheet.absoluteFill}
+                    nativeControls={false}
+                    contentFit="cover"
+                  />
+                ) : undefined
+              }
               reachLabel={`Buffer · ${buffer?.windowHours ?? 72}h`}
               onScrub={handleFieldScrub}
             />
