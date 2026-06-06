@@ -49,6 +49,7 @@ const profanityFilter = new ProfanityFilter()
 import { useLocalSearchParams, router, useFocusEffect } from 'expo-router'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { RTCView } from 'react-native-webrtc'
+import { LinearGradient } from 'expo-linear-gradient'
 import { useAuth } from '@clerk/clerk-expo'
 import { Button } from '@/components/primitives/Button'
 import { Input } from '@/components/primitives/Input'
@@ -104,35 +105,6 @@ const SOURCE_LABELS: Record<SourceType, string> = {
 // as the dashboard's Go Live button (same value), so the shared control
 // doesn't jump when navigating between the two pages.
 const FOOTER_DROP = 30
-
-// Circular record button on the broadcaster live view. Two states mirroring
-// the Go Live button: off = light accent-tint circle + red dot (ghosted);
-// recording = solid red circle + white stop square. Wires to start/stopRecording.
-function RecordCircle({
-  recording,
-  disabled,
-  onPress,
-}: {
-  recording: boolean
-  disabled?: boolean
-  onPress: () => void
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      disabled={disabled}
-      accessibilityRole="button"
-      accessibilityLabel={recording ? 'Stop recording' : 'Start recording'}
-      style={[
-        styles.recordCircle,
-        recording ? styles.recordCircleOn : styles.recordCircleOff,
-        disabled && styles.recordCircleDisabled,
-      ]}
-    >
-      <View style={recording ? styles.recordStop : styles.recordDot} />
-    </Pressable>
-  )
-}
 
 // The AV subset of the armed capture config that actually streams today
 // (camera/audio). `cam` / `audio` are the FeedKind keys the dashboard uses.
@@ -293,6 +265,16 @@ export function StreamScreen() {
   const [viewers, setViewers] = useState<{ peerId: string; handle: string | null }[]>([])
   const [broadcasterTipToast, setBroadcasterTipToast] = useState<string | null>(null)
   const [keyboardHeight, setKeyboardHeight] = useState(0)
+  // Measured BOTTOM edge of the header row (back/close-X for viewers · the live
+  // pill · identity · viewer count · chat-close cluster for broadcasters), in the
+  // SafeAreaView's border-box frame — i.e. layout.y (the safe-area top inset the
+  // SafeAreaView adds as padding) + layout.height. The chat panel is absolutely
+  // positioned and its `top` is measured from that same border-box top, so we
+  // need the header's offset included or the panel lands an inset too high (the
+  // top crop would sit at the top of the close-X instead of below it). Pins the
+  // chat panel's top crop a footerPad below the close-X, fixed regardless of the
+  // keyboard (only the panel's height tracks the keyboard, not its top).
+  const [headerBottom, setHeaderBottom] = useState(0)
   const [isRecording, setIsRecording] = useState(false)
   const [activeRecordingId, setActiveRecordingId] = useState<string | null>(null)
   const stoppedByUserRef = useRef(false)
@@ -312,6 +294,8 @@ export function StreamScreen() {
   // (e.g. broadcasterLeft WS message + viewer WS close in the same render cycle).
   const navigatingRef = useRef(false)
   const pendingSnapshotUri = useRef<string | null>(null)
+  // Keeps the newest chat message pinned to the bottom (hugging the composer).
+  const chatScrollRef = useRef<ScrollView>(null)
   // Latest-value refs so the focus effect (memoized on [id]) can auto-go-live
   // with the current status + params without re-subscribing on every change.
   const statusRef = useRef(status)
@@ -341,6 +325,29 @@ export function StreamScreen() {
   const showRemoteVideo = !isNew && status === 'in-room' && !!remoteStream && broadcastSources.includes('camera')
   const showOverlay = showCameraPreview || showRemoteVideo
   const showControls = isNew || !showOverlay || controlsVisible
+
+  // Docked-footer bottom padding (Go Live / End Stream), and the shared offset
+  // for things that float just ABOVE that 54-tall button — the preview
+  // camera-flip button and the live chat composer both sit here so they clear it.
+  const footerPad = Math.max(theme.spacing.sm, insets.bottom + theme.spacing.md - FOOTER_DROP)
+  // Components (chat input · send · flip) sit so the gap ABOVE the End Stream
+  // button equals the gap BELOW it (footerPad) — symmetric around the 54-tall
+  // button. EndStream top = footerPad + 54; we want the components a further
+  // footerPad up. They render `sm` above composerBottom, so subtract that sm.
+  const floatAboveFooter = footerPad + 54 + footerPad - theme.spacing.sm
+
+  // Shared bottom anchor for the chat composer AND the camera-flip button, so
+  // input · send · flip sit on one line and travel together. Keyboard up → hug
+  // the top of the keyboard: `bottom:` is measured from the SafeAreaView's
+  // (inset) bottom, but `endCoordinates.height` is measured from the real screen
+  // bottom, so subtract insets.bottom or the row floats a safe-inset too high.
+  // Keyboard down → the broadcaster's float-above-footer slot (viewers bottom).
+  const composerBottom =
+    keyboardHeight > 0
+      ? Math.max(0, keyboardHeight - insets.bottom)
+      : isNew
+        ? floatAboveFooter
+        : 0
 
   function scheduleHide() {
     if (hideTimerRef.current) clearTimeout(hideTimerRef.current)
@@ -901,6 +908,17 @@ export function StreamScreen() {
         />
       )}
 
+      {/* Top scrim behind the header — same cream gradient as the globe's top
+          stack (paper100 → transparent). Rendered right after the video so it
+          sits ABOVE the camera but BELOW the header UI + flip button (which
+          render later) — otherwise it paints over the flip button while live. */}
+      <LinearGradient
+        pointerEvents="none"
+        colors={['rgba(236,230,214,1)', 'rgba(236,230,214,0.85)', 'rgba(236,230,214,0)']}
+        locations={[0, 0.6, 1]}
+        style={[styles.headerScrim, { height: insets.top + 100 }]}
+      />
+
       {isNew && !!adminWarning && (
         <View style={styles.adminWarningWrap}>
           <ToastBanner
@@ -929,8 +947,12 @@ export function StreamScreen() {
         </View>
       )}
 
+      {/* Camera flip — shares the chat composer's bottom anchor so it sits on the
+          exact same line as the chat input + send button (all three 44-tall, both
+          travel with the keyboard). `+ sm` matches the composer's paddingBottom.
+          Sits in the right margin the chat panel leaves open. */}
       {showCameraPreview && (
-        <View style={styles.flipBtn}>
+        <View style={[styles.flipBtn, { bottom: composerBottom + theme.spacing.sm }]}>
           <IconButton
             name="repeat"
             variant="surface"
@@ -950,7 +972,12 @@ export function StreamScreen() {
         // matching the dashboard / globe so the title field below lines up.
         <ScreenHeader title="Go Live" style={styles.previewHeaderPad} />
       ) : (
-        <View style={[styles.header, styles.headerRow]}>
+        <View
+          style={[styles.header, styles.headerRow]}
+          onLayout={(e) =>
+            setHeaderBottom(e.nativeEvent.layout.y + e.nativeEvent.layout.height)
+          }
+        >
         {isNew ? (
           // Broadcaster: no back button (leave via the tab bar / End Stream).
           // While live, the live pill + identity + viewer count sit top-left.
@@ -970,6 +997,15 @@ export function StreamScreen() {
                   {viewerCount} {viewerCount === 1 ? 'viewer' : 'viewers'}
                 </Text>
               </Pressable>
+              {/* Chat toggle/close — on the left beneath the viewer count (for
+                  now). Surface + lg to match the send / camera-flip buttons. */}
+              <IconButton
+                name={chatOpen ? 'x' : 'message-circle'}
+                variant="surface"
+                size="lg"
+                onPress={() => setChatOpen((o) => !o)}
+                accessibilityLabel={chatOpen ? 'Close chat' : 'Open chat'}
+              />
             </View>
           ) : (
             <View />
@@ -983,24 +1019,20 @@ export function StreamScreen() {
             accessibilityLabel="Back"
           />
         )}
-        {status === 'in-room' && !streamEnded && (
+        {!isNew && status === 'in-room' && !streamEnded && (
           <View style={styles.headerActions}>
-            {!isNew && (
-              <>
-                <Pressable onPress={handleTipPress} style={styles.tipHeaderBtn} hitSlop={8}>
-                  <Text variant="monoLabel" color={theme.colors.accent.default}>
-                    🚀 TIP
-                  </Text>
-                </Pressable>
-                <IconButton
-                  name="flag"
-                  variant={showOverlay ? 'surface' : 'ghost'}
-                  size="md"
-                  onPress={handleReportPress}
-                  accessibilityLabel="Report stream"
-                />
-              </>
-            )}
+            <Pressable onPress={handleTipPress} style={styles.tipHeaderBtn} hitSlop={8}>
+              <Text variant="monoLabel" color={theme.colors.accent.default}>
+                🚀 TIP
+              </Text>
+            </Pressable>
+            <IconButton
+              name="flag"
+              variant={showOverlay ? 'surface' : 'ghost'}
+              size="md"
+              onPress={handleReportPress}
+              accessibilityLabel="Report stream"
+            />
             <IconButton
               name={chatOpen ? 'x' : 'message-circle'}
               variant={showOverlay ? 'surface' : 'ghost'}
@@ -1248,10 +1280,7 @@ export function StreamScreen() {
           moving between the two pages while not live. */}
       {isNew && status === 'idle' && isSignedIn && (
         <View
-          style={[
-            styles.broadcasterFooter,
-            { paddingBottom: Math.max(theme.spacing.sm, insets.bottom + theme.spacing.md - FOOTER_DROP) },
-          ]}
+          style={[styles.broadcasterFooter, { paddingBottom: footerPad }]}
           pointerEvents="box-none"
         >
           <GoLiveRecordBar
@@ -1263,23 +1292,15 @@ export function StreamScreen() {
         </View>
       )}
 
-      {/* Broadcaster live controls — record circle above the full-width End
-          Stream button. The End Stream button sits at the same screen-bottom
-          offset as the dashboard's Go Live button so it doesn't jump when
-          moving between the two pages. */}
+      {/* Broadcaster live controls — full-width End Stream button, docked at the
+          same screen-bottom offset as the dashboard's Go Live button so it
+          doesn't jump when moving between the two pages. (Record button retired —
+          recording is implicit under the rolling-buffer model.) */}
       {isNew && status === 'in-room' && !streamEnded && (
         <View
-          style={[
-            styles.broadcasterFooter,
-            { paddingBottom: Math.max(theme.spacing.sm, insets.bottom + theme.spacing.md - FOOTER_DROP) },
-          ]}
+          style={[styles.broadcasterFooter, { paddingBottom: footerPad }]}
           pointerEvents="box-none"
         >
-          <RecordCircle
-            recording={isRecording}
-            disabled={!streamId}
-            onPress={isRecording ? stopRecording : startRecording}
-          />
           <GoLiveRecordBar
             style={styles.fullWidth}
             isLive
@@ -1298,10 +1319,26 @@ export function StreamScreen() {
 
       {/* Chat panel — ChatMessage rows in a scroll + ChatComposer at the bottom */}
       {chatOpen && status === 'in-room' && !streamEnded && (
-        <View style={[styles.chatPanel, { bottom: keyboardHeight }]}>
+        <View
+          style={[
+            styles.chatPanel,
+            // Stretch from just below the header's close-X down to the composer
+            // (top + bottom, NO height) so the panel HEIGHT — not its top — tracks
+            // the keyboard. The top crop sits a footerPad below the header's bottom
+            // edge (the close-X), matching the footerPad gap below the composer's
+            // input — so the top crop stays in the exact same spot whether the
+            // keyboard is present or not. Never set top+bottom+height together
+            // (Yoga drops `bottom`, the composer would float).
+            headerBottom > 0
+              ? { top: headerBottom + footerPad, bottom: composerBottom }
+              : { height: 320, bottom: composerBottom },
+          ]}
+        >
           <ScrollView
+            ref={chatScrollRef}
             style={styles.chatScroll}
             contentContainerStyle={styles.chatScrollContent}
+            onContentSizeChange={() => chatScrollRef.current?.scrollToEnd({ animated: true })}
           >
             {chatMessages.map((m, i) => (
               <ChatMessageRow
@@ -1312,7 +1349,8 @@ export function StreamScreen() {
               />
             ))}
           </ScrollView>
-          <View style={styles.composerWrap}>
+          {/* Bottom crop = footerPad — the same gap as below the End Stream button. */}
+          <View style={[styles.composerWrap, { paddingTop: footerPad }]}>
             <ChatComposer
               value={chatInput}
               onChangeText={setChatInput}
@@ -1495,35 +1533,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.md,
   },
-  recordCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  recordCircleOff: {
-    backgroundColor: theme.colors.accent.surface,
-    borderColor: theme.colors.accent.border,
-  },
-  recordCircleOn: {
-    backgroundColor: theme.colors.accent.default,
-    borderColor: theme.colors.accent.default,
-  },
-  recordCircleDisabled: { opacity: 0.4 },
-  recordDot: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: theme.colors.accent.default,
-  },
-  recordStop: {
-    width: 22,
-    height: 22,
-    borderRadius: 5,
-    backgroundColor: theme.colors.text.inverse,
-  },
   sourceSwitchBtn: {
     borderRadius: theme.radius.full,
     paddingHorizontal: theme.spacing.md,
@@ -1555,14 +1564,25 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 90,
-    bottom: 0,
-    height: 320,
     zIndex: 10,
-    paddingHorizontal: theme.spacing.md,
+    // `top`/`bottom`/`height` are set inline per-case (see render) so we never
+    // combine top+bottom+height. lg so the chat input + messages share the End
+    // Stream button's left edge (same as the live-pill / viewer-count cluster).
+    paddingHorizontal: theme.spacing.lg,
   },
-  chatScroll: { flex: 1 },
-  chatScrollContent: { paddingVertical: theme.spacing.sm, gap: 2 },
-  composerWrap: { paddingTop: theme.spacing.sm, paddingBottom: theme.spacing.sm },
+  // Right-inset the message list by the send button (44) + its gap (sm) so the
+  // messages' right boundary lines up with the chat input field's right edge,
+  // not the send button's. The composer row below keeps the full panel width.
+  chatScroll: { flex: 1, marginRight: 44 + theme.spacing.sm },
+  // Bottom-anchored: a few messages sit just above the composer (newest hugs
+  // it); a full thread auto-scrolls to the newest. The crops are the viewport
+  // edges — top pinned below the cluster, bottom = footerPad via composerWrap.
+  chatScrollContent: {
+    flexGrow: 1,
+    justifyContent: 'flex-end',
+    gap: 2,
+  },
+  composerWrap: { paddingBottom: theme.spacing.sm },
 
   reactionRailWrap: {
     position: 'absolute',
@@ -1572,10 +1592,17 @@ const styles = StyleSheet.create({
     bottom: '38%',
   },
 
+  // Camera flip — docked bottom-right above the bottom button; `bottom` is set
+  // inline to the shared float-above-footer offset (same as the chat composer).
   flipBtn: {
     position: 'absolute',
-    top: 60,
     right: theme.spacing.lg,
+  },
+  headerScrim: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
   },
 
   pausedBanner: {

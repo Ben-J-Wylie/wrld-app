@@ -1,8 +1,9 @@
 // src/components/features/chat/ChatComposer.tsx
 //
-// Round-pill chat input + circular accent send button. The composer
-// is a controlled feature — value/onChangeText/onSubmit are passed in.
-// State derives from `sending` + content + `authenticated`.
+// Rectangle chat input (radius.md, bg.elevated — same as the search / title
+// fields) + circular accent send button. The composer is a controlled feature
+// — value/onChangeText/onSubmit are passed in. State derives from `sending` +
+// content + `authenticated`.
 //
 // States:
 //   empty     — Send disabled (greyed via IconButton disabled).
@@ -12,9 +13,9 @@
 //               tapping anywhere fires `onAuthRequest` so the screen
 //               can present its sign-up modal (Phase 10 pattern).
 //
-// The 999-radius pill shape + 40-tall override is applied via the
-// `style` prop on Input so the existing Input primitive stays the same
-// (no new variant — see DESIGN.md Section 3 Input note).
+// Only the compact height is overridden via the `style` prop on Input; the
+// radius / background / border come straight from the primitive (no new
+// variant — see DESIGN.md Section 3 Input note).
 
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
 import { Pressable } from '@/components/primitives/Pressable'
@@ -104,7 +105,8 @@ export function ChatComposer({
   )
 }
 
-const PILL_HEIGHT = 40
+// Field height matches the round send/flip buttons so all three line up.
+const FIELD_HEIGHT = 44
 const SEND_DIM = 44
 
 const styles = StyleSheet.create({
@@ -115,9 +117,9 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    height: PILL_HEIGHT,
-    borderRadius: theme.radius.full,
-    paddingHorizontal: theme.spacing.lg,
+    height: FIELD_HEIGHT,
+    // radius.md + bg.elevated + border come from the Input primitive — a
+    // rectangle field matching the search / title fields (no pill override).
   },
   spinnerSlot: {
     width: SEND_DIM,

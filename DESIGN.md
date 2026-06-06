@@ -2863,7 +2863,7 @@ the section that wraps it (12.6 ChatOverlay refactor).
 - **Tier:** feature (composes Input + IconButton + Spinner)
 - **Location:** `src/components/features/chat/ChatComposer.tsx`
 - **Variants:** `default`
-- **Sizes:** md (h:40 pill Input + 44-circle send button)
+- **Sizes:** 44-tall rectangle Input + 44-circle send button (on one line with the live camera-flip + chat-close buttons)
 - **States:** empty (send disabled), has-text (send enabled), sending (input non-editable, send swaps to spinner-in-accent-disc), unauthenticated (input shows "Sign in to chat" placeholder, whole row is a Pressable that fires `onAuthRequest`)
 - **Used in:** populated in 12.6 (ChatOverlay refactor)
 - **Tweak impact:** Broadcast Live composer, ChatOverlay refactor
@@ -2873,12 +2873,17 @@ the section that wraps it (12.6 ChatOverlay refactor).
 **Mock says:** Round 999-radius Input + circular accent send button. The
 input has a placeholder. Send disabled when empty.
 
+**Restyled to the rectangle field 2026-06-05.** The pill was retired so the
+chat input matches the harmonised search / title fields: it now inherits the
+Input primitive's `radius.md` + `bg.elevated` + border, with only a compact
+44-tall height overridden via `style` (no new variant). On the live stream this
+sits on one line with the circular `accent` send button and the `surface`
+camera-flip + chat-close buttons (all 44px), per the "rectangle field + round
+buttons" decision.
+
 **Code does (shipped):** Controlled feature — `value`, `onChangeText`,
-`onSubmit` passed in. The 999-radius pill + 40-tall height are applied
-via the `style` prop on the existing Input primitive (no new variant
-added; the style override is the cheaper composition). Send is an
-IconButton variant `accent` size `lg` (44px). Spinner replaces the
-send button while `sending`. Unauth mode wraps the row in a Pressable
+`onSubmit` passed in. Send is an IconButton variant `accent` size `lg` (44px).
+Spinner replaces the send button while `sending`. Unauth mode wraps the row in a Pressable
 that calls `onAuthRequest`, so the screen can present the Phase 10
 AuthModal at the point of attempt.
 
