@@ -47,48 +47,21 @@ import { Icon } from '@/components/primitives/Icon'
 import { AvatarPicker } from '@/components/features/user/AvatarPicker'
 import { RulesChecklist, type Rule } from '@/components/features/onboarding/RulesChecklist'
 import { DOBWheel } from '@/components/features/onboarding/DOBWheel'
-import {
-  LocationGranularityPicker,
-  type LocationGranularity,
-} from '@/components/features/onboarding/LocationGranularityPicker'
 import { PermissionPrePromptCard } from '@/components/features/permissions/PermissionPrePromptCard'
 import { ConsentRow } from '@/components/features/onboarding/ConsentRow'
 import { LegalLinkList } from '@/components/sections/LegalLinkList'
 
-type LocationPrecision = 'exact' | 'city' | 'country' | 'off'
 type PermStatus = 'idle' | 'granted' | 'denied'
 type StepName =
   | 'overview'
   | 'handle'
   | 'age'
   | 'avatar'
-  | 'precision'
   | 'location'
   | 'notif'
   | 'camera'
   | 'tos'
   | 'done'
-
-const PRECISION_TO_GRANULARITY: Record<LocationPrecision, LocationGranularity> = {
-  exact: 'bluedot',
-  city: 'city',
-  country: 'country',
-  off: 'private',
-}
-
-const GRANULARITY_TO_PRECISION: Record<LocationGranularity, LocationPrecision> = {
-  bluedot: 'exact',
-  city: 'city',
-  country: 'country',
-  private: 'off',
-}
-
-const PRECISION_SUMMARY: Record<LocationPrecision, string> = {
-  exact: 'exact — blue dot',
-  city: 'city precision',
-  country: 'country precision',
-  off: 'off — share by link',
-}
 
 const HANDLE_RE = /^[a-z0-9_]+$/
 
@@ -147,7 +120,6 @@ export function CreatorOnboardingScreen() {
         ...(needsHandle ? ['handle' as StepName] : []),
         'age',
         'avatar',
-        'precision',
         'location',
         'notif',
         'camera',
@@ -171,9 +143,6 @@ export function CreatorOnboardingScreen() {
   // Cache buster — see MeScreen for the rationale (deterministic
   // /media/avatars/<userId>.<ext> path + RN Image cache by URL).
   const [avatarVersion, setAvatarVersion] = useState(0)
-
-  // Precision step
-  const [precision, setPrecision] = useState<LocationPrecision>('city')
 
   // Permission steps
   const [locationStatus, setLocationStatus] = useState<PermStatus>('idle')
@@ -300,7 +269,6 @@ export function CreatorOnboardingScreen() {
     try {
       const updated = await usersApi.saveCreatorOnboarding({
         dateOfBirth: dob.toISOString(),
-        locationPrecision: precision,
         complete: true,
       })
       setCurrentUser(updated)
@@ -434,24 +402,6 @@ export function CreatorOnboardingScreen() {
           uploading={uploading}
           onTake={() => pickImage(true)}
           onPick={() => pickImage(false)}
-        />
-      </WizardShell>
-    )
-  }
-
-  if (currentStep === 'precision') {
-    return (
-      <WizardShell
-        total={total}
-        current={currentIndexForProgress}
-        heading="How precise should your pin be?"
-        body="Pick what viewers see on the globe. You can change this anytime in Settings."
-        ctaLabel="Continue"
-        onCta={advance}
-      >
-        <LocationGranularityPicker
-          value={PRECISION_TO_GRANULARITY[precision]}
-          onChange={(g) => setPrecision(GRANULARITY_TO_PRECISION[g])}
         />
       </WizardShell>
     )
@@ -596,7 +546,7 @@ export function CreatorOnboardingScreen() {
   // ── Done ──
   const locationSummary =
     locationStatus === 'granted'
-      ? PRECISION_SUMMARY[precision]
+      ? 'on'
       : locationStatus === 'denied'
         ? 'off — share by link'
         : 'skipped'

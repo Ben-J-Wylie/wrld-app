@@ -16,7 +16,6 @@ export type User = {
   suspendedUntil: string | null
   suspendedReason: string | null
   dateOfBirth?: string
-  locationPrecision?: 'exact' | 'city' | 'country' | 'off'
   creatorReady: boolean
   // saved-clip pool
   usedStorageBytes: number

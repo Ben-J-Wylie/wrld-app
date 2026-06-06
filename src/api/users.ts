@@ -14,13 +14,6 @@ export const usersApi = {
     return res.data.user
   },
 
-  updateLocationPrecision: async (
-    precision: 'exact' | 'city' | 'country' | 'off',
-  ): Promise<User> => {
-    const res = await apiClient.patch<{ user: User }>('/users/me', { locationPrecision: precision })
-    return res.data.user
-  },
-
   uploadAvatar: async (uri: string, mimeType: string): Promise<User> => {
     const ext = mimeType.split('/')[1] ?? 'jpg'
     const formData = new FormData()
@@ -90,7 +83,6 @@ export const usersApi = {
 
   saveCreatorOnboarding: async (data: {
     dateOfBirth?: string
-    locationPrecision?: string
     complete?: boolean
   }): Promise<User> => {
     const res = await apiClient.patch<{ user: User }>('/users/me/creator-onboarding', data)
