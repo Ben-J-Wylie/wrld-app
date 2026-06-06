@@ -2327,3 +2327,32 @@ screen still composes Ben's C2 components.
 **Still owed:** EAS dev-client rebuild (expo-video); an on-device pass (real video
 scrub feel, tokenized HLS/poster through Caddy, the timeline against a live growing
 session); and **R3** so clips actually persist.
+
+---
+
+## Updates — June 2026 (Location precision is now per-stream only)
+
+**Supersedes the account-level location precision** described in the "June 2026
+(Location precision: settings + globe rendering)" section above. Precision is now
+chosen **per go-live in the dashboard** (`captureConfig.precision` → `createRoom` →
+`Stream.locationPrecision`); there is no user-level default.
+
+- **CreatorOnboardingScreen** — removed the `precision` step (the
+  `LocationGranularityPicker` granularity picker) and its `'bluedot'/'private'`↔
+  backend mapping. The onboarding steps are now overview · (handle) · age · avatar ·
+  location-permission · notif · camera · tos · done. (This also fixes the old bug
+  where onboarding sent `'bluedot'`/`'private'` and silently failed backend Zod
+  validation.)
+- **`src/api/users.ts`** — removed the dead `usersApi.updateLocationPrecision`
+  (the Settings PRIVACY section that called it was already gone) and the
+  `locationPrecision` field on `saveCreatorOnboarding`.
+- **`src/types/index.ts`** — removed `User.locationPrecision`. The per-stream
+  `Stream.locationPrecision` type is unchanged.
+- **Unchanged (per-stream):** `DashboardScreen` EXACT/CITY/COUNTRY/PRIVATE selector,
+  `StreamScreen` go-live, `captureConfig.precision`, `mediasoupSignaling.createRoom`,
+  and globe pin rendering by `stream.locationPrecision`.
+- `LocationGranularityPicker` remains a library component (used by the dev
+  FeatureGallery) but no longer drives any user-level setting.
+
+Backend dropped `User.locationPrecision` in the same change — see
+`wrld-backend/CLAUDE.md` "Location precision is now per-stream only".
