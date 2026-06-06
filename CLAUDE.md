@@ -2279,3 +2279,36 @@ component props are already shaped for the real data.
   `sections/` + DESIGN.md; Aaron owns `screens/`/`hooks/`/`api/`. The 2026-06-06
   scaffold crossed into screens at Ben's direction for testability — Aaron owns it
   from here.
+
+---
+
+## Updates — June 2026 (Clip editor wired to the real buffer — R5 app seam)
+
+Aaron took the `ClipEditScreen` **MOCK SEAM** (the `useMockBuffer` stub Ben left for
+the C1/C4 lane) and wired it to the **real rolling buffer**. The screen's UI is
+unchanged — it still composes Ben's C2 components and keeps the **thumbnail-based**
+`BufferScrubField` (no video player; an earlier `expo-video` attempt was dropped, so
+**no EAS rebuild is needed** — pure JS).
+
+- **New `src/api/buffer.ts`** — `bufferApi.getMine()` → `GET /buffer/me` (owner-gated
+  rolling buffer; see `wrld-backend` R5 update). Returns `{ earliestAt, latestAt,
+  windowHours, sessions[] }`; each session has `kinds`, `playableKind`,
+  `manifestUrl`, `thumbnailUrl` (all tokenized). `bufferApi.saveClip()` →
+  `POST /buffer/me/clips` (R3 — backend returns **501** for now).
+- **New `src/hooks/useBuffer.ts`** — TanStack query `['buffer','me']`, stale 30s.
+- **`ClipEditScreen` seam swap (the only screen change):** `useBuffer()` drives
+  - the **timeline segments + collapsed gaps** (sessions → `{id,startMs,endMs}`; the
+    live session's `endMs` tracks the live head via the existing 1s tick),
+  - the **scrub field poster** — the `thumbnailUrl` of the session under the playhead
+    (+ `variant` camera/audio-only/map-only from that session's `kinds`),
+  - the **recorded-source list** — seeded once from the union of captured `kinds`
+    (`KIND_META`/`KIND_ORDER`, defaults cam/aud/loc on); user toggles preserved,
+  - `reachLabel` from `windowHours`.
+- **Saved-clip persistence is still R3.** `savedRegions`/`savedClips` start empty and
+  saving stays **in-session** (local) until the promote-on-publish backend route
+  lands — the Save button calls `bufferApi.saveClip` which 501s today.
+- Entry point unchanged (Me → Clip editor; route `app/(app)/clip-editor.tsx`).
+
+**Status:** committed `1d10fab`, pushed to `main`. **Still owed:** an on-device pass
+(real scrub feel, the tokenized poster loading through Caddy, the timeline against a
+live growing session) + **R3** so clips actually persist.
