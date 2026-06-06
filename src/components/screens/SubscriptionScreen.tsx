@@ -32,13 +32,15 @@ import { Icon } from '@/components/primitives/Icon'
 import { ScreenHeader } from '@/components/sections/ScreenHeader'
 import { SegmentedToggle } from '@/components/primitives/SegmentedToggle'
 import { useAuthStore } from '@/stores/authStore'
+import { usePublicConfig, configNumber } from '@/hooks/usePublicConfig'
 
 type BillingCycle = 'monthly' | 'annual'
 type Tier = 'free' | 'plus' | 'pro'
 
-const PRICING = {
-  plus: { mo: 5, yr: 48 },
-  pro: { mo: 20, yr: 192 },
+// Format integer cents as a price string: whole dollars drop the decimals
+// ($10), otherwise two decimals ($9.99).
+function fmtCents(cents: number): string {
+  return cents % 100 === 0 ? `$${cents / 100}` : `$${(cents / 100).toFixed(2)}`
 }
 
 const PERKS: Record<Tier, string[]> = {
@@ -108,15 +110,35 @@ export function SubscriptionScreen() {
   const [compareOpen, setCompareOpen] = useState(false)
   const annual = billing === 'annual'
 
+  // Tier prices come from the backend (RemoteConfig, admin-editable) in cents.
+  const { config } = usePublicConfig()
+  const PRICING = {
+    plus: {
+      mo: configNumber(config, 'TIER_PRICE_USD_PLUS', 1000),
+      yr: configNumber(config, 'TIER_PRICE_USD_PLUS_ANNUAL', 9600),
+    },
+    pro: {
+      mo: configNumber(config, 'TIER_PRICE_USD_PRO', 3000),
+      yr: configNumber(config, 'TIER_PRICE_USD_PRO_ANNUAL', 28800),
+    },
+  }
+
+  // Annual savings vs 12× monthly, computed from the live prices so the badge
+  // stays accurate if an admin changes them. Derived from the Plus tier.
+  const annualSavingsPct =
+    PRICING.plus.mo > 0
+      ? Math.round(((PRICING.plus.mo * 12 - PRICING.plus.yr) / (PRICING.plus.mo * 12)) * 100)
+      : 0
+
   function price(tier: 'plus' | 'pro') {
     const p = PRICING[tier]
     if (annual)
       return {
-        amt: `$${p.yr}`,
+        amt: fmtCents(p.yr),
         per: '/year',
-        eq: `$${(p.yr / 12).toFixed(0)}/mo billed yearly`,
+        eq: `${fmtCents(Math.round(p.yr / 12))}/mo billed yearly`,
       }
-    return { amt: `$${p.mo}`, per: '/month', eq: '' }
+    return { amt: fmtCents(p.mo), per: '/month', eq: '' }
   }
 
   function handlePaidTierPress(tier: 'plus' | 'pro') {
@@ -148,14 +170,17 @@ export function SubscriptionScreen() {
         <SegmentedToggle<BillingCycle>
           options={[
             { value: 'monthly', label: 'Monthly' },
-            { value: 'annual', label: 'Annual · SAVE 20%' },
+            {
+              value: 'annual',
+              label: annualSavingsPct > 0 ? `Annual · SAVE ${annualSavingsPct}%` : 'Annual',
+            },
           ]}
           value={billing}
           onChange={setBilling}
         />
-        {annual && (
+        {annual && annualSavingsPct > 0 && (
           <HelpText tone="ok" style={styles.billingNote}>
-            TWO MONTHS FREE WHEN YOU PAY YEARLY
+            SAVE {annualSavingsPct}% WHEN YOU PAY YEARLY
           </HelpText>
         )}
       </View>
