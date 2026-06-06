@@ -1,37 +1,29 @@
 // src/components/features/clip/BufferTimeline.tsx
 //
 // Buffer-trim clip editor (clips initiative · C2). The collapsed-gap timeline of the
-// rolling buffer. Recorded segments scale with a continuous zoom; every real-time gap
-// collapses to a fixed-width GapMarker. Already-saved spans render as read-only
-// SavedClipRegion bands; an optional ClipBracket overlay defines the pending clip.
+// rolling buffer. Recorded segments render as a repeating filmstrip; gaps collapse to
+// thin 10px markers; saved spans are read-only bands; an optional ClipBracket defines
+// the pending clip's in/out.
 //
-// Interaction model (2026-06-06 rework):
-//   • TAP — the playhead snaps to wherever you tap (emits onScrub(absoluteMs)).
-//   • PAN — a one-finger horizontal drag scrolls the timeline (when zoomed past the
-//     viewport). The playhead does NOT move on scroll — it stays pinned to its time
-//     and can travel off-screen.
-//   • PINCH — a two-finger horizontal pinch zooms continuously, anchored on the
-//     pinch midpoint.
-//   • A thin TimelineScrollbar (below the track) shows the whole buffer: thumb length
-//     = visible fraction (zoom), thumb position = scroll; drag it to pan. (Replaced
-//     the discrete zoom toggle.)
+// Gesture model (2026-06-06 — react-native-gesture-handler + reanimated):
+//   • TAP — the playhead snaps to where you tap.
+//   • PAN (horizontal-only: `activeOffsetX` + `failOffsetY`) — scrubs the PLAYHEAD to
+//     the finger; vertical drags fall through to the page scroll. (Scrolling the
+//     timeline itself is the scrollbar's job, not pan.)
+//   • PINCH — continuous horizontal zoom on the UI thread (reanimated shared
+//     values), committed to `pxPerMs` + offset on release.
+//   • The bracket handles are their own RNGH Pan gestures (block the timeline pan),
+//     so dragging an edge resizes the clip instead of scrubbing.
 //
 // View state (zoom `pxPerMs` + `scrollOffset`) is local; data (playhead, bracket,
-// segments, savedRegions) is from props. Gestures use PanResponder multitouch — no
-// gesture-handler dependency. Bracket handles keep their own responders (parent owns
-// the time math; saved-region no-overlap clamp).
+// segments, savedRegions, nowMs/streaming) is from props.
 //
 // See DESIGN.md Section 3 (Buffer-trim clip editor) + the 2026-06-06 decision log.
 
-import { useMemo, useRef, useState } from 'react'
-import {
-  PanResponder,
-  StyleSheet,
-  View,
-  type LayoutChangeEvent,
-  type StyleProp,
-  type ViewStyle,
-} from 'react-native'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { StyleSheet, View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from 'react-native'
+import Animated, { useAnimatedStyle, useSharedValue, runOnJS } from 'react-native-reanimated'
+import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import { theme } from '@/tokens/theme'
 import { GapMarker, GAP_MARKER_WIDTH } from './GapMarker'
 import { SavedClipRegion } from './SavedClipRegion'
@@ -46,17 +38,19 @@ type Props = {
   segments: BufferSegment[]
   savedRegions?: BufferSavedRegion[]
   playheadMs: number
+  nowMs?: number
+  streaming?: boolean
   bracket?: BufferBracket | null
   onScrub: (ms: number) => void
   onBracketChange?: (next: BufferBracket) => void
   style?: StyleProp<ViewStyle>
 }
 
-const TRACK_H = 52 // matches the Input `md` "What's happening" field
+const TRACK_H = 52
 const MIN_BRACKET_MS = 500
 const GAP_THRESHOLD_MS = 500
-const ZOOM_MAX_FACTOR = 12 // can zoom in up to 12× the fit (whole-buffer) scale
-const TAP_SLOP = 4
+const ZOOM_MAX_FACTOR = 12
+const FILM_CELL_W = 24
 
 type SegBlock = { kind: 'seg'; seg: BufferSegment; leftPx: number; widthPx: number }
 type GapBlock = { kind: 'gap'; leftPx: number; skippedMs: number }
@@ -66,6 +60,8 @@ export function BufferTimeline({
   segments,
   savedRegions = [],
   playheadMs,
+  nowMs,
+  streaming,
   bracket,
   onScrub,
   onBracketChange,
@@ -79,7 +75,6 @@ export function BufferTimeline({
   const bufferStartMs = segments.length > 0 ? segments[0]!.startMs : 0
   const bufferEndMs = segments.length > 0 ? segments[segments.length - 1]!.endMs : 0
 
-  // Fit scale = pxPerMs that makes the whole buffer exactly fill the viewport.
   const { totalSegMs, gapsPx } = useMemo(() => measure(segments), [segments])
   const fit = totalSegMs > 0 && width > 0 ? Math.max(0, (width - gapsPx) / totalSegMs) : 0
   const minPx = fit
@@ -87,17 +82,56 @@ export function BufferTimeline({
   const px = pxPerMs > 0 ? pxPerMs : fit
 
   const { blocks, segBlocks, contentWidth } = useMemo(() => layout(segments, px), [segments, px])
-  const maxScroll = Math.max(0, contentWidth - width)
+  const lastEnd = segments.length > 0 ? segments[segments.length - 1]!.endMs : 0
+  const hasTrailingGap = !streaming && nowMs != null && segments.length > 0 && nowMs > lastEnd + GAP_THRESHOLD_MS
+  const effContentWidth = contentWidth + (hasTrailingGap ? GAP_MARKER_WIDTH : 0)
+  const maxScroll = Math.max(0, effContentWidth - width)
   const offset = clamp(scrollOffset, 0, maxScroll)
-  const playheadX = timeToX(playheadMs, segBlocks, px)
+  let playheadX = timeToX(playheadMs, segBlocks, px)
+  if (hasTrailingGap && playheadMs > lastEnd) {
+    const f = clamp((playheadMs - lastEnd) / Math.max(1, (nowMs as number) - lastEnd), 0, 1)
+    playheadX = contentWidth + GAP_MARKER_WIDTH * f
+  }
 
-  // ── refs for the gesture closures ─────────────────────────────────────────
+  // ── reanimated transform (UI thread) ──────────────────────────────────────
+  const sx = useSharedValue(1)
+  const tx = useSharedValue(-offset)
+  const contentStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: tx.value }, { scaleX: sx.value }],
+  }))
+  useEffect(() => {
+    tx.value = -offset
+  }, [offset, tx])
+
+  // Shared mirrors the pinch worklet reads (set from JS each render).
+  const sPx = useSharedValue(px)
+  const sOffset = useSharedValue(offset)
+  const sCW = useSharedValue(effContentWidth)
+  const sWidth = useSharedValue(width)
+  const sMinPx = useSharedValue(minPx)
+  const sMaxPx = useSharedValue(maxPx)
+  useEffect(() => {
+    sPx.value = px
+    sOffset.value = offset
+    sCW.value = effContentWidth
+    sWidth.value = width
+    sMinPx.value = minPx
+    sMaxPx.value = maxPx
+  }, [px, offset, effContentWidth, width, minPx, maxPx, sPx, sOffset, sCW, sWidth, sMinPx, sMaxPx])
+
+  // Pinch gesture state (shared, set in worklets, read by the JS commit).
+  const pStartPx = useSharedValue(0)
+  const pAnchorContentX = useSharedValue(0)
+  const pCW = useSharedValue(0)
+  const pLastScale = useSharedValue(1)
+  const pLastFocal = useSharedValue(0)
+
+  // ── refs for the JS gesture handlers ──────────────────────────────────────
   const widthRef = useRef(width)
   const pxRef = useRef(px)
   const offsetRef = useRef(offset)
   const segmentsRef = useRef(segments)
   const segBlocksRef = useRef(segBlocks)
-  const contentWidthRef = useRef(contentWidth)
   const minPxRef = useRef(minPx)
   const maxPxRef = useRef(maxPx)
   const onScrubRef = useRef(onScrub)
@@ -111,7 +145,6 @@ export function BufferTimeline({
   offsetRef.current = offset
   segmentsRef.current = segments
   segBlocksRef.current = segBlocks
-  contentWidthRef.current = contentWidth
   minPxRef.current = minPx
   maxPxRef.current = maxPx
   onScrubRef.current = onScrub
@@ -121,63 +154,90 @@ export function BufferTimeline({
   bufferStartRef.current = bufferStartMs
   bufferEndRef.current = bufferEndMs
 
-  // ── main gesture: tap (set playhead) / pan (scroll) / pinch (zoom) ─────────
-  const g = useRef({ offset: 0, startX: 0, lastDx: 0, moved: false, pinchDist: 0, pinchPx: 0, anchorMs: 0 })
-  const mainPan = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_e, gs) => Math.abs(gs.dx) > TAP_SLOP || gs.numberActiveTouches === 2,
-      onPanResponderGrant: (e) => {
-        g.current = {
-          offset: offsetRef.current,
-          startX: e.nativeEvent.locationX ?? 0,
-          lastDx: 0,
-          moved: false,
-          pinchDist: 0,
-          pinchPx: pxRef.current,
-          anchorMs: 0,
-        }
-      },
-      onPanResponderMove: (e, gs) => {
-        const touches = e.nativeEvent.touches
-        const W = widthRef.current
-        if (touches.length >= 2) {
-          const x0 = touches[0]!.locationX ?? 0
-          const x1 = touches[1]!.locationX ?? 0
-          const dist = Math.max(1, Math.abs(x0 - x1)) // horizontal pinch
-          const mid = (x0 + x1) / 2
-          if (g.current.pinchDist === 0) {
-            g.current.pinchDist = dist
-            g.current.pinchPx = pxRef.current
-            g.current.anchorMs = xToTime(mid + g.current.offset, segBlocksRef.current, pxRef.current)
-          }
-          g.current.moved = true
-          const np = clamp(g.current.pinchPx * (dist / g.current.pinchDist), minPxRef.current, maxPxRef.current)
-          const nl = layout(segmentsRef.current, np)
-          const no = clamp(timeToX(g.current.anchorMs, nl.segBlocks, np) - mid, 0, Math.max(0, nl.contentWidth - W))
-          g.current.offset = no
-          setPxPerMs(np)
-          setScrollOffset(no)
-        } else {
-          if (Math.abs(gs.dx) > TAP_SLOP) g.current.moved = true
-          g.current.pinchDist = 0
-          const delta = gs.dx - g.current.lastDx
-          g.current.lastDx = gs.dx
-          const maxS = Math.max(0, contentWidthRef.current - W)
-          g.current.offset = clamp(g.current.offset - delta, 0, maxS)
-          setScrollOffset(g.current.offset)
-        }
-      },
-      onPanResponderRelease: () => {
-        if (!g.current.moved) {
-          const contentX = g.current.startX + g.current.offset
-          onScrubRef.current(xToTime(contentX, segBlocksRef.current, pxRef.current))
-        }
-      },
-    }),
-  ).current
+  const gesturingRef = useRef(false)
+  function setGesturing(v: boolean) {
+    gesturingRef.current = v
+  }
 
-  // ── bracket gestures (in edge / out edge / center move) ───────────────────
+  // Tap / pan → place the playhead at the touch (content x → time).
+  function scrubAtX(x: number) {
+    const contentX = x + offsetRef.current
+    onScrubRef.current(xToTime(contentX, segBlocksRef.current, pxRef.current))
+  }
+  // Pinch end → commit the live scale into pxPerMs + offset (one re-layout).
+  function commitPinch(s: number, focal: number) {
+    const startPx = pStartPx.value || pxRef.current
+    const newPx = clamp(startPx * s, minPxRef.current, maxPxRef.current)
+    const nl = layout(segmentsRef.current, newPx)
+    const anchorMs = xToTime(pAnchorContentX.value, segBlocksRef.current, startPx)
+    const no = clamp(timeToX(anchorMs, nl.segBlocks, newPx) - focal, 0, Math.max(0, nl.contentWidth - widthRef.current))
+    sx.value = 1
+    tx.value = -no
+    setPxPerMs(newPx)
+    setScrollOffset(no)
+    gesturingRef.current = false
+  }
+
+  // ── gestures ──────────────────────────────────────────────────────────────
+  const panRef = useRef(undefined as unknown)
+
+  const tap = Gesture.Tap()
+    .maxDistance(12)
+    .onEnd((e, success) => {
+      'worklet'
+      if (success) runOnJS(scrubAtX)(e.x)
+    })
+
+  const pan = Gesture.Pan()
+    .withRef(panRef as never)
+    .activeOffsetX([-8, 8])
+    .failOffsetY([-12, 12])
+    .onBegin(() => {
+      'worklet'
+      runOnJS(setGesturing)(true)
+    })
+    .onUpdate((e) => {
+      'worklet'
+      runOnJS(scrubAtX)(e.x)
+    })
+    .onFinalize(() => {
+      'worklet'
+      runOnJS(setGesturing)(false)
+    })
+
+  const pinch = Gesture.Pinch()
+    .onBegin(() => {
+      'worklet'
+      runOnJS(setGesturing)(true)
+    })
+    .onStart((e) => {
+      'worklet'
+      pStartPx.value = sPx.value
+      pAnchorContentX.value = e.focalX + sOffset.value
+      pCW.value = sCW.value
+    })
+    .onUpdate((e) => {
+      'worklet'
+      const startPx = pStartPx.value
+      const newPx = Math.max(sMinPx.value, Math.min(sMaxPx.value, startPx * e.scale))
+      const s = startPx > 0 ? newPx / startPx : e.scale
+      pLastScale.value = s
+      pLastFocal.value = e.focalX
+      sx.value = s
+      tx.value = e.focalX - pAnchorContentX.value * s - ((1 - s) * pCW.value) / 2
+    })
+    .onEnd(() => {
+      'worklet'
+      runOnJS(commitPinch)(pLastScale.value, pLastFocal.value)
+    })
+    .onFinalize(() => {
+      'worklet'
+      runOnJS(setGesturing)(false)
+    })
+
+  const composed = Gesture.Race(pinch, pan, tap)
+
+  // ── bracket gestures (RNGH; block the timeline pan so an edge drag resizes) ──
   const startBracket = useRef<BufferBracket>({ inMs: 0, outMs: 0 })
   function corridor(centerMs: number): { lo: number; hi: number } {
     let lo = bufferStartRef.current
@@ -188,43 +248,62 @@ export function BufferTimeline({
     }
     return { lo, hi }
   }
-  function makeBracketPan(mode: 'in' | 'out' | 'move') {
-    return PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: () => {
-        startBracket.current = bracketRef.current ?? { inMs: 0, outMs: 0 }
-        setBlocked(false)
-      },
-      onPanResponderMove: (_e, gs) => {
-        const cb = onBracketChangeRef.current
-        if (!cb || pxRef.current <= 0) return
-        const dms = gs.dx / pxRef.current
-        const { inMs, outMs } = startBracket.current
-        const { lo, hi } = corridor((inMs + outMs) / 2)
-        if (mode === 'in') {
-          const desired = inMs + dms
-          setBlocked(desired < lo)
-          cb({ inMs: clamp(desired, lo, outMs - MIN_BRACKET_MS), outMs })
-        } else if (mode === 'out') {
-          const desired = outMs + dms
-          setBlocked(desired > hi)
-          cb({ inMs, outMs: clamp(desired, inMs + MIN_BRACKET_MS, hi) })
-        } else {
-          const dur = outMs - inMs
-          const desired = inMs + dms
-          setBlocked(desired < lo || desired > hi - dur)
-          const nextIn = clamp(desired, lo, hi - dur)
-          cb({ inMs: nextIn, outMs: nextIn + dur })
-        }
-      },
-      onPanResponderRelease: () => setBlocked(false),
-      onPanResponderTerminate: () => setBlocked(false),
-    })
+  function bracketBegin() {
+    startBracket.current = bracketRef.current ?? { inMs: 0, outMs: 0 }
+    setBlocked(false)
   }
-  const inPan = useRef(makeBracketPan('in')).current
-  const outPan = useRef(makeBracketPan('out')).current
-  const movePan = useRef(makeBracketPan('move')).current
+  function bracketMove(mode: 'in' | 'out' | 'move', dxPx: number) {
+    const cb = onBracketChangeRef.current
+    if (!cb || pxRef.current <= 0) return
+    const dms = dxPx / pxRef.current
+    const { inMs, outMs } = startBracket.current
+    const { lo, hi } = corridor((inMs + outMs) / 2)
+    if (mode === 'in') {
+      const desired = inMs + dms
+      setBlocked(desired < lo)
+      cb({ inMs: clamp(desired, lo, outMs - MIN_BRACKET_MS), outMs })
+    } else if (mode === 'out') {
+      const desired = outMs + dms
+      setBlocked(desired > hi)
+      cb({ inMs, outMs: clamp(desired, inMs + MIN_BRACKET_MS, hi) })
+    } else {
+      const dur = outMs - inMs
+      const desired = inMs + dms
+      setBlocked(desired < lo || desired > hi - dur)
+      const nextIn = clamp(desired, lo, hi - dur)
+      cb({ inMs: nextIn, outMs: nextIn + dur })
+    }
+  }
+  function makeBracketGesture(mode: 'in' | 'out' | 'move') {
+    return Gesture.Pan()
+      .blocksExternalGesture(panRef as never)
+      .onBegin(() => {
+        'worklet'
+        runOnJS(bracketBegin)()
+      })
+      .onUpdate((e) => {
+        'worklet'
+        runOnJS(bracketMove)(mode, e.translationX)
+      })
+      .onFinalize(() => {
+        'worklet'
+        runOnJS(setBlocked)(false)
+      })
+  }
+  const inGesture = makeBracketGesture('in')
+  const outGesture = makeBracketGesture('out')
+  const moveGesture = makeBracketGesture('move')
+
+  // Auto-follow the live edge when the playhead is at now and not gesturing.
+  useEffect(() => {
+    if (gesturingRef.current) return
+    const live = nowMs ?? bufferEndMs
+    if (playheadMs < live - 1500) return
+    const end = Math.max(0, effContentWidth - width)
+    if (end <= 0) return
+    setScrollOffset(end)
+    tx.value = -end
+  }, [playheadMs, effContentWidth, width, nowMs, bufferEndMs, tx])
 
   function onLayout(e: LayoutChangeEvent) {
     setWidth(e.nativeEvent.layout.width)
@@ -232,68 +311,84 @@ export function BufferTimeline({
 
   return (
     <View style={[styles.wrap, style]}>
-      <View style={styles.timeline} onLayout={onLayout} {...mainPan.panHandlers}>
-        <View
-          style={[
-            styles.content,
-            { width: contentWidth > 0 ? contentWidth : '100%', transform: [{ translateX: -offset }] },
-          ]}
-        >
-          {blocks.map((b, i) =>
-            b.kind === 'seg' ? (
-              <View key={`seg-${b.seg.id}`} style={[styles.seg, { left: b.leftPx, width: b.widthPx }]}>
-                <Waveform peaks={b.seg.peaks} />
+      <GestureDetector gesture={composed}>
+        <View style={styles.timeline} onLayout={onLayout}>
+          <Animated.View
+            style={[
+              styles.content,
+              { width: effContentWidth > 0 ? effContentWidth : '100%' },
+              contentStyle,
+            ]}
+          >
+            {blocks.map((b, i) =>
+              b.kind === 'seg' ? (
+                <View key={`seg-${b.seg.id}`} style={[styles.seg, { left: b.leftPx, width: b.widthPx }]}>
+                  <FilmstripFill widthPx={b.widthPx} />
+                </View>
+              ) : (
+                <View key={`gap-${i}`} style={[styles.gapHolder, { left: b.leftPx }]}>
+                  <GapMarker style={styles.gapFill} />
+                </View>
+              ),
+            )}
+
+            {hasTrailingGap && (
+              <View style={[styles.gapHolder, { left: contentWidth }]}>
+                <GapMarker style={styles.gapFill} />
               </View>
-            ) : (
-              <View key={`gap-${i}`} style={[styles.gapHolder, { left: b.leftPx }]}>
-                <GapMarker skippedMs={b.skippedMs} style={styles.gapFill} />
-              </View>
-            ),
-          )}
+            )}
 
-          {savedRegions.map((r) => {
-            const left = timeToX(r.startMs, segBlocks, px)
-            const w = Math.max(2, timeToX(r.endMs, segBlocks, px) - left)
-            return (
-              <SavedClipRegion key={`saved-${r.id}`} label={r.label} style={[styles.saved, { left, width: w }]} />
-            )
-          })}
+            {savedRegions.map((r) => {
+              const left = timeToX(r.startMs, segBlocks, px)
+              const w = Math.max(2, timeToX(r.endMs, segBlocks, px) - left)
+              return (
+                <SavedClipRegion key={`saved-${r.id}`} label={r.label} style={[styles.saved, { left, width: w }]} />
+              )
+            })}
 
-          {bracket && (
-            <ClipBracket
-              leftPx={timeToX(bracket.inMs, segBlocks, px)}
-              widthPx={Math.max(0, timeToX(bracket.outMs, segBlocks, px) - timeToX(bracket.inMs, segBlocks, px))}
-              durationLabel={formatDuration(bracket.outMs - bracket.inMs)}
-              rangeLabel={`${formatClock(bracket.inMs)} → ${formatClock(bracket.outMs)}`}
-              blocked={blocked}
-              inHandlers={inPan.panHandlers}
-              outHandlers={outPan.panHandlers}
-              centerHandlers={movePan.panHandlers}
-            />
-          )}
+            {bracket && (
+              <ClipBracket
+                leftPx={timeToX(bracket.inMs, segBlocks, px)}
+                widthPx={Math.max(0, timeToX(bracket.outMs, segBlocks, px) - timeToX(bracket.inMs, segBlocks, px))}
+                durationLabel={formatDuration(bracket.outMs - bracket.inMs)}
+                rangeLabel={`${formatClock(bracket.inMs)} → ${formatClock(bracket.outMs)}`}
+                blocked={blocked}
+                inGesture={inGesture}
+                outGesture={outGesture}
+                centerGesture={moveGesture}
+              />
+            )}
 
-          <View style={[styles.playhead, { left: playheadX - 1 }]} pointerEvents="none">
-            <View style={styles.playheadKnob} />
-          </View>
+            <View style={[styles.playhead, { left: playheadX - 1 }]} pointerEvents="none">
+              <View style={styles.playheadKnob} />
+            </View>
+          </Animated.View>
         </View>
-      </View>
+      </GestureDetector>
 
       <TimelineScrollbar
-        contentWidth={contentWidth}
+        contentWidth={effContentWidth}
         viewport={width}
         scrollOffset={offset}
-        onScrollTo={(o) => setScrollOffset(clamp(o, 0, maxScroll))}
+        onScrollTo={(o) => {
+          const no = clamp(o, 0, maxScroll)
+          tx.value = -no
+          setScrollOffset(no)
+        }}
       />
     </View>
   )
 }
 
-function Waveform({ peaks }: { peaks?: number[] }) {
-  const data = peaks ?? DEFAULT_PEAKS
+function FilmstripFill({ widthPx }: { widthPx: number }) {
+  const n = Math.max(1, Math.min(160, Math.ceil(widthPx / FILM_CELL_W)))
   return (
-    <View style={styles.wf} pointerEvents="none">
-      {data.map((h, i) => (
-        <View key={i} style={[styles.wfBar, { height: `${Math.round(20 + h * 70)}%` }]} />
+    <View style={styles.film} pointerEvents="none">
+      {Array.from({ length: n }).map((_, i) => (
+        <View key={i} style={styles.filmCell}>
+          <View style={styles.filmHole} />
+          <View style={styles.filmHole} />
+        </View>
       ))}
     </View>
   )
@@ -356,8 +451,6 @@ function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v))
 }
 
-const DEFAULT_PEAKS = [0.5, 0.8, 0.35, 0.62, 0.9, 0.48, 0.7, 0.55, 0.4, 0.66]
-
 function formatClock(ms: number): string {
   const d = new Date(ms)
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
@@ -390,24 +483,26 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     backgroundColor: theme.colors.bg.panelHi,
-    borderRightWidth: 1,
-    borderRightColor: theme.colors.border.subtle,
+    overflow: 'hidden',
   },
-  wf: {
-    position: 'absolute',
-    left: 4,
-    right: 4,
-    top: 10,
-    bottom: 10,
+  film: {
+    ...StyleSheet.absoluteFillObject,
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-    opacity: 0.5,
   },
-  wfBar: {
-    flex: 1,
+  filmCell: {
+    width: FILM_CELL_W,
+    height: '100%',
+    borderRightWidth: 1,
+    borderRightColor: 'rgba(26,22,18,0.12)',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 5,
+  },
+  filmHole: {
+    width: 10,
+    height: 3,
     borderRadius: 1,
-    backgroundColor: theme.colors.text.primary,
+    backgroundColor: 'rgba(26,22,18,0.22)',
   },
   gapHolder: {
     position: 'absolute',

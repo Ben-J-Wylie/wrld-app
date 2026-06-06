@@ -1,29 +1,20 @@
 // src/components/features/clip/ClipBracket.tsx
 //
 // Buffer-trim clip editor (clips initiative · C2). The in/out selection drawn over
-// the BufferTimeline track: an accent frame with a left (in-point) and right
-// (out-point) grip handle, a center move-zone, and a live readout pill (duration +
-// in→out timecodes) above it.
+// the BufferTimeline track: an accent frame with a left (in-point) + right (out-point)
+// grip handle, a center move-zone, and a live readout pill above it.
 //
-// Presentational. The parent (BufferTimeline) owns all time math — it positions the
-// frame in pixels (leftPx / widthPx), formats the readout strings, and supplies the
-// three PanResponder handler sets (one per zone). Edge drag = set in/out (duration
-// changes); center drag = move the whole selection (duration fixed). When the parent
-// clamps the selection at a SavedClipRegion boundary it passes `blocked`, which
-// recolors the in-edge + readout to the warn tone.
-//
-// Lives inside the track container (position: relative, overflow: hidden); the frame
-// fills the track height (top/bottom 0), the readout floats near the track top.
+// Presentational. The parent (BufferTimeline) owns all time math + creates the three
+// RNGH Pan gestures (in / out / center) — each blocks the timeline pan so an edge drag
+// resizes the clip instead of scrubbing. This component just positions the frame in
+// pixels, renders the readout, and wraps each zone in a GestureDetector. When the
+// parent clamps at a SavedClipRegion boundary it passes `blocked` (warn tint).
 //
 // See DESIGN.md Section 3 (Buffer-trim clip editor) + the 2026-06-06 decision log.
 
-import {
-  StyleSheet,
-  View,
-  type GestureResponderHandlers,
-  type StyleProp,
-  type ViewStyle,
-} from 'react-native'
+import type { ReactElement } from 'react'
+import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
+import { GestureDetector, type GestureType } from 'react-native-gesture-handler'
 import { Text } from '@/components/primitives/Text'
 import { theme } from '@/tokens/theme'
 
@@ -35,10 +26,16 @@ type Props = {
   durationLabel: string
   rangeLabel: string
   blocked?: boolean
-  inHandlers?: GestureResponderHandlers
-  outHandlers?: GestureResponderHandlers
-  centerHandlers?: GestureResponderHandlers
+  // RNGH gestures created by BufferTimeline (each blocks the timeline pan). Optional
+  // so the gallery can render a static, non-interactive bracket.
+  inGesture?: GestureType
+  outGesture?: GestureType
+  centerGesture?: GestureType
   style?: StyleProp<ViewStyle>
+}
+
+function withGesture(g: GestureType | undefined, node: ReactElement): ReactElement {
+  return g ? <GestureDetector gesture={g}>{node}</GestureDetector> : node
 }
 
 export function ClipBracket({
@@ -47,32 +44,36 @@ export function ClipBracket({
   durationLabel,
   rangeLabel,
   blocked,
-  inHandlers,
-  outHandlers,
-  centerHandlers,
+  inGesture,
+  outGesture,
+  centerGesture,
   style,
 }: Props) {
   const width = Math.max(HANDLE_W * 2, widthPx)
   return (
     <>
-      <View
-        style={[styles.frame, { left: leftPx, width }, blocked && styles.frameBlocked, style]}
-      >
-        <View
-          {...inHandlers}
-          style={[styles.handle, styles.handleL, blocked && styles.handleBlocked]}
-        >
-          <View style={styles.grip} />
-        </View>
-        <View {...centerHandlers} style={styles.center}>
-          <View style={styles.moveDots}>
-            <View style={styles.moveDot} />
-            <View style={styles.moveDot} />
-          </View>
-        </View>
-        <View {...outHandlers} style={[styles.handle, styles.handleR]}>
-          <View style={styles.grip} />
-        </View>
+      <View style={[styles.frame, { left: leftPx, width }, blocked && styles.frameBlocked, style]}>
+        {withGesture(
+          inGesture,
+          <View style={[styles.handle, styles.handleL, blocked && styles.handleBlocked]}>
+            <View style={styles.grip} />
+          </View>,
+        )}
+        {withGesture(
+          centerGesture,
+          <View style={styles.center}>
+            <View style={styles.moveDots}>
+              <View style={styles.moveDot} />
+              <View style={styles.moveDot} />
+            </View>
+          </View>,
+        )}
+        {withGesture(
+          outGesture,
+          <View style={[styles.handle, styles.handleR]}>
+            <View style={styles.grip} />
+          </View>,
+        )}
       </View>
       <View style={[styles.readout, { left: leftPx }, blocked && styles.readoutBlocked]} pointerEvents="none">
         {blocked ? (

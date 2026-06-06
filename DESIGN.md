@@ -3027,8 +3027,10 @@ PanResponder multitouch (no `react-native-gesture-handler` dep). The discrete
 - **Props (built):** `segments` (recorded spans), `savedRegions?`, `playheadMs`, `bracket?`, `onScrub`, `onBracketChange?` (zoom/pan are internal view state)
 
 **Mock says (Frames 1–4):** Horizontal full-bleed timeline of the buffer with
-**collapsed gaps** — segments scale with zoom, every real-time gap is a fixed
-50px `GapMarker`. Saved clips appear as read-only hatched bands. No date/axis row
+**collapsed gaps** — recorded segments render as a repeating **filmstrip** (a fixed
+24px film cell tiled across the segment, longer segment → more cells, last cell
+cropped); every real-time gap is a thin fixed **10px** `GapMarker` (no label). Saved
+clips appear as read-only hatched bands. No date/axis row
 (the overlaid `TimeScrubber` clock carries absolute time).
 
 **Code does — interaction model (2026-06-06 rework):**
@@ -3039,8 +3041,20 @@ PanResponder multitouch (no `react-native-gesture-handler` dep). The discrete
   `-scrollOffset`).
 - **Two-finger horizontal pinch** → continuous zoom (`pxPerMs`), anchored on the
   pinch midpoint. Clamp `[fit, fit×12]` (can't zoom out past the whole buffer).
+  **The live pinch (and pan) drive `Animated` `scaleX`/`translateX` on the native
+  thread — no React re-render per move (2026-06-06 smoothness fix); the real
+  `pxPerMs` + offset are committed once on release (a single re-layout).** scaleX is
+  about the view centre, so `translateX` compensates to keep the midpoint put; the
+  brief during-gesture scale of gaps/handles snaps correct on release.
 - A thin **`TimelineScrollbar`** below the track shows the whole buffer (thumb
   length = visible fraction = zoom; position = scroll; drag to pan).
+- **Recorded content renders as a repeating filmstrip** (24px cell, cropped at the
+  segment edge); gaps are thin **10px** `GapMarker`s (no label).
+- **Trailing gap + auto-follow (2026-06-06):** `nowMs` + `streaming` props. Not
+  streaming + now past the last segment → a trailing 10px gap (last-recorded → now);
+  the playhead at now sits in it. When the playhead is at the live head and the user
+  isn't gesturing, the timeline **auto-follows the leading edge** (pins scroll to the
+  end), so live filmstrip growth reveals at the edge.
 - Gestures via PanResponder multitouch (no gesture-handler dep). Brackets keep
   their own handles (parent owns time math); pinned to in/out **times**, so they
   stretch/contract with zoom + pan. Saved-region no-overlap clamp unchanged.
@@ -3049,19 +3063,18 @@ PanResponder multitouch (no `react-native-gesture-handler` dep). The discrete
 
 ##### `GapMarker`
 
-- **Tier:** feature (composes Text) — *candidate for promotion to primitive on a 2nd use*
+- **Tier:** feature (View only)
 - **Location:** `src/components/features/clip/GapMarker.tsx` *(built 2026-06-06 · C2)*
 - **Variants:** `default`
-- **Sizes:** fixed 50px wide × full track height
+- **Sizes:** fixed **10px** wide × full track height (`GAP_MARKER_WIDTH`)
 - **States:** static (presentational, no gesture)
-- **Proposed props:** `skippedMs`
+- **Props (built):** `style?` only
 
-**Mock says:** 50px divider with a break glyph (`⋮`) over the skipped-duration
-label (e.g. "3h", "40m"), `bg.primary` fill bracketed by `border.strong` rules.
-Makes collapsed time legible — the user must see that time was skipped.
-
-**Proposed behavior:** Width is constant across zoom (gaps never scale — only
-segments do). Pure render.
+**Code does (built):** A thin **10px** break between recorded filmstrip segments —
+`bg.primary` fill bracketed by `border.strong` rules. **No duration label**
+(2026-06-06): the gap's duration is surfaced in the scrub field's **gap card** while
+the playhead crosses it, not on the timeline. Width is constant across zoom (gaps
+never scale — only the filmstrip segments do).
 
 ---
 
@@ -3136,7 +3149,7 @@ Presentational + gesture-emitting; `BufferTimeline` owns the geometry.
 - **Variants:** `camera` (thumbnail/placeholder) · `audio-only` (`FeedThumb.audio`) · `map-only` (`FeedThumb.loc`)
 - **Sizes:** lg (≈9:11 portrait, near-full-bleed hero)
 - **States:** scrubbing (frame re-renders under playhead) · idle
-- **Props (built):** `variant?`, `thumbnailUrl?`, `reachLabel?`, `showScrubHint?`, `onScrub?`
+- **Props (built):** `variant?`, `thumbnailUrl?`, `frameSlot?` (the live `VideoView`), `reachLabel?`, `card?` (`{title,detail}` — shown over a gap instead of video: static gap duration, running "since last broadcast", or "footage clears in"), `showScrubHint?`, `onScrub?`
 
 **Code does (built):** Portrait near-full-bleed field — **just the frame + the swipe
 gesture** (2026-06-06). No on-field playhead line and **no on-field clock**: the
@@ -3998,6 +4011,34 @@ above. The seam is not a separate motion category.
 
 Append-only. Most recent first. Each entry: date, decision, rationale,
 constraint it imposes downstream.
+
+### 2026-06-06 — Timeline gestures → react-native-gesture-handler; drag=scrub; playhead holds
+
+Adopts **`react-native-gesture-handler`** (`~2.28`, + the already-installed reanimated)
+for the clip-editor timeline, replacing the PanResponder approach that kept fighting
+us (flaky pinch, unreliable tap, no clean horizontal-only). **Native module → needs an
+EAS rebuild** (rides Aaron's pending `expo-video` rebuild). `GestureHandlerRootView`
+added at the app root.
+
+- **`BufferTimeline`** gestures are now RNGH: **`Tap`** (playhead lands where you tap),
+  **`Pan`** `.activeOffsetX([-8,8]).failOffsetY([-12,12])` (**horizontal-only** — scrubs
+  the PLAYHEAD; vertical falls through to the page scroll → "lock vertical during the
+  gesture" for free), **`Pinch`** (continuous zoom on the UI thread via reanimated
+  shared values `sx`/`tx` + `useAnimatedStyle`, committed to `pxPerMs`/offset on end).
+  `Gesture.Race(pinch, pan, tap)`.
+- **Drag = scrub the playhead** (decision 2026-06-06), NOT scroll. Scrolling the
+  timeline is the `TimelineScrollbar`'s job; pinch zooms.
+- **Bracket handles** are RNGH `Pan` gestures too (built in `BufferTimeline`, passed to
+  `ClipBracket` which wraps each zone in a `GestureDetector`); each
+  `.blocksExternalGesture(panRef)` so an edge drag resizes instead of scrubbing. (No
+  PanResponder↔RNGH interop.)
+- **Playhead holds, except at 'now'.** `ClipEditScreen`'s playhead is now an **absolute
+  held instant** (no drift) + a `following` flag; the 1s tick only advances it when at
+  the live edge. `TimeScrubber` gained **`playback?: boolean`** — `false` (editor) =
+  controlled hold (no internal freeze/resume); `true` (globe) unchanged.
+
+**Imposes:** EAS dev-client rebuild before the timeline works on device (RNGH native).
+Not yet device-tested. Globe `TimeScrubber` keeps `playback` default true (no change).
 
 ### 2026-06-06 — BufferTimeline interaction rework: pan / pinch / tap + scrollbar
 

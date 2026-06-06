@@ -1,5 +1,6 @@
 import '@/lib/polyfills'
 import { Stack, router, usePathname } from 'expo-router'
+import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { KeyboardProvider } from 'react-native-keyboard-controller'
 import { StatusBar } from 'expo-status-bar'
@@ -172,15 +173,17 @@ export default function RootLayout() {
   if (!fontsLoaded && !fontError) return null
 
   return (
-    <ClerkProvider publishableKey={env.clerkPublishableKey} tokenCache={tokenCache}>
-      <QueryClientProvider client={queryClient}>
-        <SafeAreaProvider>
-          <KeyboardProvider>
-            <StatusBar style="light" />
-            <RootNavigator />
-          </KeyboardProvider>
-        </SafeAreaProvider>
-      </QueryClientProvider>
-    </ClerkProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ClerkProvider publishableKey={env.clerkPublishableKey} tokenCache={tokenCache}>
+        <QueryClientProvider client={queryClient}>
+          <SafeAreaProvider>
+            <KeyboardProvider>
+              <StatusBar style="light" />
+              <RootNavigator />
+            </KeyboardProvider>
+          </SafeAreaProvider>
+        </QueryClientProvider>
+      </ClerkProvider>
+    </GestureHandlerRootView>
   )
 }

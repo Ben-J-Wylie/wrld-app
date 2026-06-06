@@ -2272,9 +2272,28 @@ component props are already shaped for the real data.
 6. **Gyro/compass** `*Update` handlers in mediasoup (when the app emits them).
 
 ### Open / follow-ups
-- **`TimeScrubber` playback vs hold (app-side, Ben).** The clock is reused as-is, so
-  its time-machine playback-after-scrub carries into the editor. If a frozen scrub
-  reads better for *picking* a clip, add a `playback={false}` / hold-position prop.
+- **Buffer video records sideways — CAPTURE fix, NOT app-side (Aaron, mediasoup).**
+  The scrub-field video plays rotated 90° in the portrait app because the recording
+  is encoded landscape (WebRTC CVO orientation isn't baked by the sidecar's
+  `-c:v copy`). The field + player are correct — **do NOT rotate in
+  `BufferScrubField` / the `VideoView`** (would double-rotate once capture is fixed).
+  Handoff note + fix in `wrld-mediasoup/CLAUDE.md` (2026-06-06).
+- **Scrub-field video playback (step 1, done 2026-06-06).** `ClipEditScreen` has a
+  scrub-aware throttled seek controller (pause + coalesced seeks while scrubbing,
+  play forward on settle; 1s tick no longer drives seeks). Tunables
+  `SEEK_THROTTLE_MS` / `SCRUB_IDLE_MS` want an on-device pass.
+- **Timeline gestures → react-native-gesture-handler (2026-06-06). ⚠️ NEEDS AN EAS
+  REBUILD** (RNGH `~2.28` is a native module — rides Aaron's pending `expo-video`
+  rebuild). `GestureHandlerRootView` added at the app root. `BufferTimeline` now uses
+  RNGH `Tap` (place playhead) + `Pan` (`activeOffsetX`/`failOffsetY` → horizontal-only
+  scrub, vertical → page scroll) + `Pinch` (UI-thread zoom via reanimated shared
+  values); bracket handles are RNGH `Pan` (`.blocksExternalGesture`). **Drag = scrub
+  the playhead** (not scroll — scroll is the scrollbar). Replaced the PanResponder
+  approach (flaky pinch / unreliable tap). Not device-tested.
+- **Playhead holds, except at 'now' (2026-06-06).** `ClipEditScreen` playhead is an
+  absolute held instant + `following` flag (advances only at the live edge); fixes the
+  "playhead drifts/jumps after placing" behavior. `TimeScrubber` gained
+  `playback?: boolean` — editor passes `false` (controlled hold); globe keeps `true`.
 - **Not yet device-tested** — the whole editor (gesture feel, the six-wheel clock
   fitting full-bleed, playback-after-scrub) needs an on-device pass.
 - The **seam discipline holds going forward**: Ben owns `primitives/`/`features/`/

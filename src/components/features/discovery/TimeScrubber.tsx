@@ -113,6 +113,12 @@ type Props = {
   // Fired when the dial expands/collapses, so the host can slide the drawer
   // up/down to stay flush above the clock (CLOCK_COLLAPSED_H ↔ CLOCK_EXPANDED_H).
   onExpandedChange?: (expanded: boolean) => void
+  // Playback after a past-scrub. true (default, globe): scrub into the past, hold a
+  // beat, then resume real-time playback. false (clip editor): controlled HOLD — no
+  // internal freeze/resume; the displayed instant is exactly `Date.now() - offsetMs`,
+  // and the host owns whether the playhead advances (it keeps offsetMs tracking a
+  // held absolute instant). The live tick at offset 0 still ticks in both modes.
+  playback?: boolean
   style?: StyleProp<ViewStyle>
 }
 
@@ -127,6 +133,7 @@ export function TimeScrubber({
   minYear = DEFAULT_MIN_YEAR,
   collapseSignal = 0,
   onExpandedChange,
+  playback = true,
   style,
 }: Props) {
   const [expanded, setExpanded] = useState(false)
@@ -207,7 +214,7 @@ export function TimeScrubber({
 
   // `paused` only freezes the playhead while actually in the past — when live
   // (offset 0) the clock must always tick, even if a stale `paused` lingers.
-  const playMs = paused && offsetMs > 0 ? frozenRef.current : Date.now() - offsetMs
+  const playMs = playback && paused && offsetMs > 0 ? frozenRef.current : Date.now() - offsetMs
   const playhead = new Date(playMs)
   const live = offsetMs <= 0
 
@@ -239,6 +246,7 @@ export function TimeScrubber({
     if (newOffset < 0) newOffset = 0
     if (newOffset > maxOffset) newOffset = maxOffset
     onChangeRef.current(newOffset)
+    if (!playback) return // hold mode: host owns playback; no internal freeze/resume
     if (newOffset <= 0) {
       setPaused(false) // reached live → tick real time, even mid-drag
     } else {
@@ -250,6 +258,7 @@ export function TimeScrubber({
   // Finger lifted after a scrub. In the past, hold ~1s, then rebase the offset
   // so playback resumes from exactly where it was held (no time jump).
   function scrubEnd() {
+    if (!playback) return // hold mode: no resume — the host holds the instant
     if (offsetRef.current <= 0) {
       setPaused(false)
       return

@@ -1272,12 +1272,13 @@ export function FeatureGallery() {
       </Section>
 
       <Section title="GapMarker">
-        <Row label="collapsed gaps">
+        <Row label="10px collapsed-gap break (no label)">
           <View style={galleryStyles.gapStrip}>
-            <GapMarker skippedMs={45_000} />
-            <GapMarker skippedMs={40 * 60_000} />
-            <GapMarker skippedMs={3 * 3_600_000} />
-            <GapMarker skippedMs={2 * 86_400_000} />
+            <View style={galleryStyles.gapSeg} />
+            <GapMarker />
+            <View style={galleryStyles.gapSeg} />
+            <GapMarker />
+            <View style={galleryStyles.gapSeg} />
           </View>
         </Row>
       </Section>
@@ -1711,12 +1712,15 @@ function SavedClipRowDemo() {
 }
 
 const galleryStyles = StyleSheet.create({
+  gapSeg: {
+    flex: 1,
+    backgroundColor: theme.colors.bg.panelHi,
+  },
   gapStrip: {
     flexDirection: 'row',
     height: 54,
     alignItems: 'stretch',
-    gap: theme.spacing.sm,
-    backgroundColor: theme.colors.bg.panelHi,
+    backgroundColor: theme.colors.bg.primary,
     borderRadius: theme.radius.md,
     overflow: 'hidden',
   },

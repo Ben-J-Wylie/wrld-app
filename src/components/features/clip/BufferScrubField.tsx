@@ -45,6 +45,10 @@ type Props = {
   frameSlot?: ReactNode
   // Optional how-far-back hint shown top-right, e.g. "Buffer · 72h".
   reachLabel?: string
+  // When the playhead is over a gap (no recorded content), the parent passes a card
+  // to show instead of video — a static gap duration, a running "since last
+  // broadcast" clock, or a "footage clears in" countdown. Overrides the frame.
+  card?: { title: string; detail: string }
   showScrubHint?: boolean
   // Incremental horizontal pixel delta since the previous move event. The parent
   // converts to a time delta against the current zoom and advances the playhead.
@@ -57,6 +61,7 @@ export function BufferScrubField({
   thumbnailUrl,
   frameSlot,
   reachLabel,
+  card,
   showScrubHint = true,
   onScrub,
   style,
@@ -83,7 +88,19 @@ export function BufferScrubField({
 
   return (
     <View style={[styles.field, style]} {...pan.panHandlers}>
-      {variant === 'camera' ? (
+      {card ? (
+        <View style={[styles.fill, styles.cardWrap]}>
+          <View style={styles.card}>
+            <Icon name="clock" size="lg" color={theme.colors.text.muted} />
+            <Text variant="monoLabel" color={theme.colors.text.subtle}>
+              {card.title}
+            </Text>
+            <Text variant="monoValue" color={theme.colors.text.primary} style={styles.cardDetail}>
+              {card.detail}
+            </Text>
+          </View>
+        </View>
+      ) : variant === 'camera' ? (
         frameSlot ? (
           <View style={styles.fill}>{frameSlot}</View>
         ) : thumbnailUrl ? (
@@ -99,7 +116,7 @@ export function BufferScrubField({
         </View>
       )}
 
-      {showScrubHint && (
+      {!card && showScrubHint && (
         <View style={styles.scrubHint} pointerEvents="none">
           <Icon
             name="chevrons-left"
@@ -143,6 +160,25 @@ const styles = StyleSheet.create({
   },
   fill: {
     ...StyleSheet.absoluteFillObject,
+  },
+  cardWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.bg.panel,
+  },
+  card: {
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    paddingVertical: theme.spacing.xl,
+    paddingHorizontal: theme.spacing.xxl,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border.subtle,
+    backgroundColor: theme.colors.bg.elevated,
+  },
+  cardDetail: {
+    fontSize: 24,
+    lineHeight: 30,
   },
   camPlaceholder: {
     backgroundColor: theme.colors.bg.panelHi,

@@ -13,7 +13,7 @@
 // (promote-on-publish) — saving stays in-session (local) until that backend
 // route lands; the Saved tab + saved-regions reflect this session's saves only.
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { router } from 'expo-router'
 import { StyleSheet, View } from 'react-native'
 import { ScreenScroll } from '@/components/sections/ScreenScroll'
@@ -91,18 +91,35 @@ export const ClipEditScreen = () => {
   const bufferEndMs = Date.now()
 
   const [page, setPage] = useState<Page>('editor')
-  // The buffer playhead is an offset behind the live head (0 = now) — the same model
-  // the time-machine TimeScrubber uses, so the clock, the timeline, and the image
-  // swipe all drive one value. A 1s tick keeps the live head fresh (and keeps the
-  // timeline playhead in lockstep with the clock during playback).
-  const [offsetMs, setOffsetMs] = useState(2 * H)
+  // The playhead is an ABSOLUTE instant that HOLDS where you place it (tap / drag /
+  // clock) — it does not drift. The only exception is the live head: when `following`
+  // (placed at ~now), the 1s tick advances it to now so the clock + timeline auto-
+  // follow the live edge. The clock (TimeScrubber) runs in controlled `playback=false`
+  // mode and derives its offset from this absolute instant.
+  const [playheadMs, setPlayheadMs] = useState(() => Date.now() - 2 * H)
+  const [following, setFollowing] = useState(false)
+  const playheadRef = useRef(playheadMs)
+  playheadRef.current = playheadMs
+  const followingRef = useRef(following)
+  followingRef.current = following
   const [, setClockTick] = useState(0)
   useEffect(() => {
-    const id = setInterval(() => setClockTick((t) => (t + 1) % 60), 1000)
+    const id = setInterval(() => {
+      setClockTick((t) => (t + 1) % 60)
+      if (followingRef.current) setPlayheadMs(Date.now())
+    }, 1000)
     return () => clearInterval(id)
   }, [])
-  const playheadMs = Date.now() - offsetMs
-  const clampOffset = (v: number) => clamp(v, 0, Math.max(0, Date.now() - bufferStartMs))
+  const clampPlayhead = (ms: number) => clamp(ms, bufferStartMs, Date.now())
+  // Place the playhead at an absolute instant (held); start following only if it
+  // lands at the live edge.
+  function placePlayhead(ms: number) {
+    const m = clampPlayhead(ms)
+    playheadRef.current = m
+    setPlayheadMs(m)
+    setFollowing(m >= Date.now() - 1500)
+  }
+  const offsetForClock = Math.max(0, Date.now() - playheadMs)
   // While the TimeScrubber clock is expanded, lock the screen scroll so vertical
   // wheel drags aren't stolen by the ScrollView. Touching anything that isn't the
   // clock bumps collapseSignal → the clock collapses → scroll restores.
@@ -142,6 +159,23 @@ export const ClipEditScreen = () => {
   const sessionAtPlayhead =
     sessions.find((s) => playheadMs >= sessionStartMs(s) && playheadMs <= sessionEndMs(s)) ?? null
   const fieldThumb = sessionAtPlayhead?.thumbnailUrl ?? null
+
+  // Streaming iff the latest buffer session is still open (endedAt === null).
+  const streaming = sessions.length > 0 && sessions[sessions.length - 1]!.endedAt === null
+
+  // When the playhead is in a gap (no session under it), the field shows a card
+  // instead of video: a static duration for an inter-session gap, or a running
+  // "since last broadcast" clock for the trailing gap (not streaming). Recomputed
+  // each render — the 1s tick keeps the running clock live. (Leading-edge "footage
+  // clears in" countdown is increment 2 — needs a buffer at-capacity signal.)
+  const gapCard: { title: string; detail: string } | undefined = (() => {
+    if (sessionAtPlayhead) return undefined
+    const prev = [...sessions].reverse().find((s) => sessionEndMs(s) <= playheadMs)
+    const next = sessions.find((s) => sessionStartMs(s) > playheadMs)
+    if (prev && next) return { title: 'GAP', detail: fmtGap(sessionStartMs(next) - sessionEndMs(prev)) }
+    if (prev && !next) return { title: 'SINCE LAST BROADCAST', detail: fmtGap(Date.now() - sessionEndMs(prev)) }
+    return undefined
+  })()
 
   // The whole camera buffer is "snapped together" into one concatenated VOD
   // (allManifestUrl, gaps collapsed). The field plays that single stream; the
@@ -185,32 +219,114 @@ export const ClipEditScreen = () => {
       ? 'audio-only'
       : 'map-only'
 
+  // ── Scrub-aware video controller (step 1) ─────────────────────────────────
+  // The field plays the concatenated buffer VOD. We do NOT seek on every render
+  // (that thrashes the HLS decoder + never plays). Instead: while the user is
+  // actively scrubbing (field swipe / timeline tap-pan / clock spin) we pause and
+  // seek to the latest target — THROTTLED + coalesced (HLS can't service a seek
+  // per move); when scrubbing settles we seek to the exact spot and play forward.
+  // The 1s clock tick still advances the playhead display but no longer drives seeks.
+  const SEEK_THROTTLE_MS = 120
+  const SCRUB_IDLE_MS = 180
+
   const player = useVideoPlayer(null, (p) => {
     p.muted = true
     p.pause()
   })
+
+  const targetSec = playheadToMediaSec()
+  const targetSecRef = useRef(targetSec)
+  targetSecRef.current = targetSec
+
+  const [scrubbing, setScrubbing] = useState(false)
+  const scrubbingRef = useRef(false)
+  const hasScrubbedRef = useRef(false)
+  const scrubEndTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const seekTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastSeekAt = useRef(0)
+  const pendingSeek = useRef<number | null>(null)
+
+  function flushSeek() {
+    if (seekTimer.current) {
+      clearTimeout(seekTimer.current)
+      seekTimer.current = null
+    }
+    if (pendingSeek.current == null) return
+    lastSeekAt.current = Date.now()
+    const sec = pendingSeek.current
+    pendingSeek.current = null
+    try {
+      player.currentTime = sec
+    } catch {}
+  }
+  // Coalesce rapid scrub targets into ~one seek per SEEK_THROTTLE_MS, always with
+  // a trailing flush so the final landing position is applied.
+  function scheduleSeek(sec: number) {
+    pendingSeek.current = sec
+    const since = Date.now() - lastSeekAt.current
+    if (since >= SEEK_THROTTLE_MS) flushSeek()
+    else if (!seekTimer.current) seekTimer.current = setTimeout(flushSeek, SEEK_THROTTLE_MS - since)
+  }
+
+  // Any user gesture that moves the playhead marks "scrubbing" + resets the idle
+  // timer; ~SCRUB_IDLE_MS after the last move we leave scrubbing.
+  function markScrubbing() {
+    hasScrubbedRef.current = true
+    if (!scrubbingRef.current) {
+      scrubbingRef.current = true
+      setScrubbing(true)
+    }
+    if (scrubEndTimer.current) clearTimeout(scrubEndTimer.current)
+    scrubEndTimer.current = setTimeout(() => {
+      scrubbingRef.current = false
+      setScrubbing(false)
+    }, SCRUB_IDLE_MS)
+  }
+
+  // Load the concatenated source.
   useEffect(() => {
     if (!allManifestUrl) return
     player.replace({ uri: allManifestUrl, contentType: 'hls' })
     player.pause()
   }, [allManifestUrl, player])
+
+  // While scrubbing, push throttled seeks toward the latest target.
+  useEffect(() => {
+    if (!allManifestUrl || !scrubbing) return
+    scheduleSeek(targetSec)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playheadMs, scrubbing, allManifestUrl])
+
+  // Pause while scrubbing; on settle, seek to the exact spot and play forward
+  // (only once the user has actually scrubbed — stay paused on the poster at first).
   useEffect(() => {
     if (!allManifestUrl) return
-    const target = playheadToMediaSec()
-    const id = setTimeout(() => {
+    if (scrubbing) {
+      player.pause()
+    } else if (hasScrubbedRef.current) {
+      flushSeek()
       try {
-        player.currentTime = target
+        player.currentTime = targetSecRef.current
       } catch {}
-    }, 40)
-    return () => clearTimeout(id)
+      player.play()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playheadMs, allManifestUrl, player])
+  }, [scrubbing, allManifestUrl, player])
+
+  // Cleanup timers.
+  useEffect(
+    () => () => {
+      if (scrubEndTimer.current) clearTimeout(scrubEndTimer.current)
+      if (seekTimer.current) clearTimeout(seekTimer.current)
+    },
+    [],
+  )
 
   function handleFieldScrub(deltaPx: number) {
-    // Drag right (dx>0) → earlier → larger offset. Functional update so the
+    // Drag right (dx>0) → earlier → playhead moves back. Uses playheadRef so the
     // incremental per-move deltas accumulate within a single gesture.
-    const max = Math.max(0, Date.now() - bufferStartMs)
-    setOffsetMs((o) => clamp(o + deltaPx * FIELD_MS_PER_PX, 0, max))
+    markScrubbing()
+    placePlayhead(playheadRef.current - deltaPx * FIELD_MS_PER_PX)
   }
 
   function newClip() {
@@ -275,7 +391,7 @@ export const ClipEditScreen = () => {
       {page === 'editor' ? (
         <View style={styles.editor}>
           {/* Field (image swipe-to-scrub) with the time-machine clock overlaid at
-              its bottom — expand it to spin-scrub the buffer. Both drive offsetMs.
+              its bottom — expand it to spin-scrub the buffer. Both place the playhead.
               While the clock is expanded the screen scroll is locked; touching the
               image (wrapped here) or anything below collapses it and restores scroll.
               The clock is a sibling of the field-touch wrapper (not a child), so
@@ -296,14 +412,19 @@ export const ClipEditScreen = () => {
                   ) : undefined
                 }
                 reachLabel={`Buffer · ${buffer?.windowHours ?? 72}h`}
+                card={gapCard}
                 onScrub={handleFieldScrub}
               />
             </View>
             <TimeScrubber
-              offsetMs={offsetMs}
-              onOffsetChange={(v) => setOffsetMs(clampOffset(v))}
+              offsetMs={offsetForClock}
+              onOffsetChange={(v) => {
+                markScrubbing()
+                placePlayhead(Date.now() - v)
+              }}
               onExpandedChange={setClockExpanded}
               collapseSignal={collapseSignal}
+              playback={false}
               style={styles.clockOverlay}
             />
           </View>
@@ -313,8 +434,13 @@ export const ClipEditScreen = () => {
               segments={segments}
               savedRegions={savedRegions}
               playheadMs={playheadMs}
+              nowMs={bufferEndMs}
+              streaming={streaming}
               bracket={bracket}
-              onScrub={(ms) => setOffsetMs(clampOffset(Date.now() - ms))}
+              onScrub={(ms) => {
+                markScrubbing()
+                placePlayhead(ms)
+              }}
               onBracketChange={setBracket}
               style={styles.fullBleed}
             />
@@ -454,6 +580,18 @@ function fmtDur(sec: number): string {
 }
 function titleCase(s: string): string {
   return s.charAt(0) + s.slice(1).toLowerCase()
+}
+// Coarse gap / running-clock duration: "2d 4h" / "3h 12m" / "12m 05s" / "45s".
+function fmtGap(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000))
+  const d = Math.floor(total / 86400)
+  const h = Math.floor((total % 86400) / 3600)
+  const m = Math.floor((total % 3600) / 60)
+  const s = total % 60
+  if (d > 0) return `${d}d ${h}h`
+  if (h > 0) return `${h}h ${pad(m)}m`
+  if (m > 0) return `${m}m ${pad(s)}s`
+  return `${s}s`
 }
 
 const styles = StyleSheet.create({
