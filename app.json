@@ -43,6 +43,7 @@
       "expo-router",
       "expo-web-browser",
       "expo-image-picker",
+      "expo-video",
       [
         "expo-notifications",
         {

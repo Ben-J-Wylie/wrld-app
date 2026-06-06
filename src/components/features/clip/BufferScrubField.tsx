@@ -19,7 +19,7 @@
 //
 // See DESIGN.md Section 3 (Buffer-trim clip editor) + the 2026-06-06 decision log.
 
-import { useRef } from 'react'
+import { useRef, type ReactNode } from 'react'
 import {
   Image,
   PanResponder,
@@ -39,6 +39,10 @@ type Variant = 'camera' | 'audio-only' | 'map-only'
 type Props = {
   variant?: Variant
   thumbnailUrl?: string | null
+  // Optional frame layer (e.g. a video player) rendered full-bleed behind the
+  // chrome instead of the static thumbnail — for camera variant only. The parent
+  // owns it (keeps this design component free of any player dependency).
+  frameSlot?: ReactNode
   // Optional how-far-back hint shown top-right, e.g. "Buffer · 72h".
   reachLabel?: string
   showScrubHint?: boolean
@@ -51,6 +55,7 @@ type Props = {
 export function BufferScrubField({
   variant = 'camera',
   thumbnailUrl,
+  frameSlot,
   reachLabel,
   showScrubHint = true,
   onScrub,
@@ -79,7 +84,9 @@ export function BufferScrubField({
   return (
     <View style={[styles.field, style]} {...pan.panHandlers}>
       {variant === 'camera' ? (
-        thumbnailUrl ? (
+        frameSlot ? (
+          <View style={styles.fill}>{frameSlot}</View>
+        ) : thumbnailUrl ? (
           <Image source={{ uri: thumbnailUrl }} style={styles.fill as ImageStyle} resizeMode="cover" />
         ) : (
           <View style={[styles.fill, styles.camPlaceholder]}>

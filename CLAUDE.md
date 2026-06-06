@@ -2281,3 +2281,49 @@ component props are already shaped for the real data.
   `sections/` + DESIGN.md; Aaron owns `screens/`/`hooks/`/`api/`. The 2026-06-06
   scaffold crossed into screens at Ben's direction for testability — Aaron owns it
   from here.
+
+---
+
+## Updates — June 2026 (Clip editor wired to the real buffer — R5 app seam)
+
+Aaron took the `ClipEditScreen` **MOCK SEAM** (the `useMockBuffer` stub Ben left for
+the C1/C4 lane) and wired it to the **real rolling buffer**, then pivoted the scrub
+field from a still poster to **live HLS video** (Aaron's call, 2026-06-06). The
+screen still composes Ben's C2 components.
+
+- **New `src/api/buffer.ts`** — `bufferApi.getMine()` → `GET /buffer/me` (owner-gated
+  rolling buffer; see `wrld-backend` R5 update). Returns `{ earliestAt, latestAt,
+  windowHours, sessions[] }`; each session has `kinds`, `playableKind`,
+  `manifestUrl`, `thumbnailUrl` (all tokenized). `bufferApi.saveClip()` →
+  `POST /buffer/me/clips` (R3 — backend returns **501** for now).
+- **New `src/hooks/useBuffer.ts`** — TanStack query `['buffer','me']`, stale 30s.
+- **`ClipEditScreen` seam swap:** `useBuffer()` drives
+  - the **timeline segments + collapsed gaps** (sessions → `{id,startMs,endMs}`; the
+    live session's `endMs` tracks the live head via the existing 1s tick),
+  - the **scrub field frame** — see the video note below (poster `thumbnailUrl` is
+    the fallback; `variant` camera/audio-only/map-only from the session's `kinds`),
+  - the **recorded-source list** — seeded once from the union of captured `kinds`
+    (`KIND_META`/`KIND_ORDER`, defaults cam/aud/loc on); user toggles preserved,
+  - `reachLabel` from `windowHours`.
+- **Live video in the scrub field (supersedes the thumbnail-only field).**
+  `BufferScrubField` gained an optional **`frameSlot`** (a full-bleed frame layer
+  rendered behind its chrome — the design component stays player-free). The screen
+  passes an **`expo-video` `VideoView`** there, bound to a `useVideoPlayer` that
+  `replace()`s to the camera session under the playhead and is **paused + seeked**
+  to the scrub position (the tokenized HLS authorizes itself — no Clerk header on
+  segment fetches). Audio-only/map-only → no `frameSlot`, the field shows its
+  fallback. **`expo-video` is a native module → an EAS dev-client rebuild is
+  required** (`app.json` plugins gained `"expo-video"`). Until the rebuild lands the
+  field falls back to the poster/placeholder.
+- **Owner-only by construction.** `GET /buffer/me` is Clerk-gated to the caller, so
+  the editor only ever shows the signed-in user's footage; tokens encode the userId
+  and paths are namespaced `buffers/<userId>/`.
+- **Saved-clip persistence is still R3.** `savedRegions`/`savedClips` start empty and
+  saving stays **in-session** (local) until the promote-on-publish backend route
+  lands — the Save button calls `bufferApi.saveClip` which 501s today.
+- Entry point unchanged (Me → Clip editor; route `app/(app)/clip-editor.tsx`).
+
+**Status:** seam wiring `1d10fab` + live-video pivot `4f71974`, pushed to `main`.
+**Still owed:** EAS dev-client rebuild (expo-video); an on-device pass (real video
+scrub feel, tokenized HLS/poster through Caddy, the timeline against a live growing
+session); and **R3** so clips actually persist.
