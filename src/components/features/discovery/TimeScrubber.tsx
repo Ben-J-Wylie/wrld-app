@@ -372,7 +372,13 @@ function Field({
       },
       onPanResponderMove: (_, g) => {
         if (Math.abs(g.dy) > 4) moved.current = true
-        if (expandedRef.current) {
+        // Only scrub once it's a real drag. A bare tap (to toggle expand /
+        // collapse) registers a 1–2px wobble on Android; without the `moved`
+        // gate that wobble fired a delta-0 `scrub` which set `paused` true — and
+        // because a tap releases via `onToggle`, not `onScrubEnd`, nothing
+        // cleared it and the clock froze in the past (THEN). iOS taps report 0
+        // movement, so this only bit Android.
+        if (expandedRef.current && moved.current) {
           // Drag down (dy>0) → newer (+); drag up → older (−). The scrub
           // itself clamps at the present, so you can't dial into the future.
           const delta = Math.round(g.dy / STEP_PX)
