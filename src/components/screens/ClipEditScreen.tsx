@@ -4,7 +4,7 @@
 // PageTabs pager: "Editor" (scrub the buffer + set a clip's in/out + name + save) and
 // "Saved clips" (the Library list of SavedClipRows). Composes the C2 components:
 // BufferScrubField + BufferTimeline (+ ClipBracket / SavedClipRegion / GapMarker /
-// TimelineZoomControl) + ClipSourcesDrawer + SaveClipButton + SavedClipRow.
+// TimelineScrollbar) + ClipSourcesDrawer + SaveClipButton + SavedClipRow.
 //
 // ⚠️ MOCK DATA. The buffer substrate (per-source rolling-buffer record-to-disk +
 // the segments / saved-regions / recorded-layers contract) is Aaron's C1 lane and
@@ -33,7 +33,6 @@ import {
   type BufferSavedRegion,
   type BufferBracket,
 } from '@/components/features/clip/BufferTimeline'
-import { TimelineZoomControl, type TimelineZoom } from '@/components/primitives/TimelineZoomControl'
 import { ClipSourcesDrawer, type ClipSource } from '@/components/features/clip/ClipSourcesDrawer'
 import { SavedClipRow } from '@/components/features/clip/SavedClipRow'
 import { theme } from '@/tokens/theme'
@@ -53,14 +52,9 @@ type SavedClip = {
 const H = 3_600_000
 const DEFAULT_CLIP_MS = 120_000 // 2 min default bracket on "New clip"
 const MIN_BRACKET_MS = 500
-// Coarse field-swipe sensitivity (ms moved per px) per zoom — the timeline track
-// gives precise scrub; the field is the fast pass.
-const FIELD_MS_PER_PX: Record<TimelineZoom, number> = {
-  all: 120_000,
-  hours: 60_000,
-  min: 5_000,
-  sec: 500,
-}
+// Coarse image-swipe scrub sensitivity (ms per px) — the field is the fast pass;
+// the timeline (tap / pan / pinch) is where precise positioning happens.
+const FIELD_MS_PER_PX = 60_000
 
 // ─────────────────────────── MOCK SEAM (Aaron C1/C4) ───────────────────────────
 // Replace this block with the real buffer substrate. Shapes match the component
@@ -80,7 +74,6 @@ export const ClipEditScreen = () => {
   const { now, segments, bufferStartMs, bufferEndMs } = useMockBuffer()
 
   const [page, setPage] = useState<Page>('editor')
-  const [zoom, setZoom] = useState<TimelineZoom>('all')
   // The buffer playhead is an offset behind the live head (0 = now) — the same model
   // the time-machine TimeScrubber uses, so the clock, the timeline, and the image
   // swipe all drive one value. A 1s tick keeps the live head fresh (and keeps the
@@ -93,6 +86,14 @@ export const ClipEditScreen = () => {
   }, [])
   const playheadMs = Date.now() - offsetMs
   const clampOffset = (v: number) => clamp(v, 0, Math.max(0, Date.now() - bufferStartMs))
+  // While the TimeScrubber clock is expanded, lock the screen scroll so vertical
+  // wheel drags aren't stolen by the ScrollView. Touching anything that isn't the
+  // clock bumps collapseSignal → the clock collapses → scroll restores.
+  const [clockExpanded, setClockExpanded] = useState(false)
+  const [collapseSignal, setCollapseSignal] = useState(0)
+  const collapseClock = () => {
+    if (clockExpanded) setCollapseSignal((s) => s + 1)
+  }
   const [bracket, setBracket] = useState<BufferBracket | null>(null)
   const [name, setName] = useState('')
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -126,7 +127,7 @@ export const ClipEditScreen = () => {
     // Drag right (dx>0) → earlier → larger offset. Functional update so the
     // incremental per-move deltas accumulate within a single gesture.
     const max = Math.max(0, Date.now() - bufferStartMs)
-    setOffsetMs((o) => clamp(o + deltaPx * FIELD_MS_PER_PX[zoom], 0, max))
+    setOffsetMs((o) => clamp(o + deltaPx * FIELD_MS_PER_PX, 0, max))
   }
 
   function newClip() {
@@ -173,6 +174,7 @@ export const ClipEditScreen = () => {
     <ScreenScroll
       header={<ScreenHeader title="Clip editor" onBack={() => router.back()} />}
       contentContainerStyle={styles.content}
+      scrollEnabled={!clockExpanded}
     >
       <PageTabs
         tabs={[
@@ -180,64 +182,73 @@ export const ClipEditScreen = () => {
           { key: 'saved', label: `Saved clips${savedClips.length ? ` · ${savedClips.length}` : ''}` },
         ]}
         value={page}
-        onChange={setPage}
+        onChange={(p) => {
+          setClockExpanded(false) // leaving the editor unmounts the clock — restore scroll
+          setPage(p)
+        }}
         style={styles.pager}
       />
 
       {page === 'editor' ? (
         <View style={styles.editor}>
           {/* Field (image swipe-to-scrub) with the time-machine clock overlaid at
-              its bottom — expand it to spin-scrub the buffer. Both drive offsetMs. */}
+              its bottom — expand it to spin-scrub the buffer. Both drive offsetMs.
+              While the clock is expanded the screen scroll is locked; touching the
+              image (wrapped here) or anything below collapses it and restores scroll.
+              The clock is a sibling of the field-touch wrapper (not a child), so
+              touching the clock itself doesn't trigger collapse. */}
           <View style={[styles.fieldWrap, styles.fullBleed]}>
-            <BufferScrubField
-              variant={sources.find((s) => s.key === 'cam')?.active ? 'camera' : 'audio-only'}
-              reachLabel="Buffer · 72h"
-              onScrub={handleFieldScrub}
-            />
+            <View onTouchStart={collapseClock}>
+              <BufferScrubField
+                variant={sources.find((s) => s.key === 'cam')?.active ? 'camera' : 'audio-only'}
+                reachLabel="Buffer · 72h"
+                onScrub={handleFieldScrub}
+              />
+            </View>
             <TimeScrubber
               offsetMs={offsetMs}
               onOffsetChange={(v) => setOffsetMs(clampOffset(v))}
+              onExpandedChange={setClockExpanded}
+              collapseSignal={collapseSignal}
               style={styles.clockOverlay}
             />
           </View>
 
-          <View style={styles.tlBlock}>
-            <TimelineZoomControl value={zoom} onChange={setZoom} />
+          <View style={styles.belowField} onTouchStart={collapseClock}>
             <BufferTimeline
               segments={segments}
               savedRegions={savedRegions}
               playheadMs={playheadMs}
-              zoom={zoom}
               bracket={bracket}
               onScrub={(ms) => setOffsetMs(clampOffset(Date.now() - ms))}
               onBracketChange={setBracket}
               style={styles.fullBleed}
             />
-          </View>
 
-          <View style={styles.btnRow}>
-            {bracket ? (
-              <TbBtn icon="rotate-ccw" label="Reset" onPress={() => setBracket(null)} muted />
-            ) : (
-              <TbBtn icon="plus" label="New clip" onPress={newClip} accent />
-            )}
-            <TbBtn
-              icon="grid"
-              label="Sources"
-              trailing={`${activeCount}/${sources.length}`}
-              onPress={() => setDrawerOpen(true)}
-              muted
+            <View style={styles.btnRow}>
+              {bracket ? (
+                <TbBtn icon="rotate-ccw" label="Reset" onPress={() => setBracket(null)} muted />
+              ) : (
+                <TbBtn icon="plus" label="New clip" onPress={newClip} accent />
+              )}
+              <TbBtn
+                icon="grid"
+                label="Sources"
+                trailing={`${activeCount}/${sources.length}`}
+                onPress={() => setDrawerOpen(true)}
+                muted
+              />
+            </View>
+
+            <Input value={name} onChangeText={setName} placeholder="Name this clip" />
+
+            <SaveClipButton
+              label={canSave ? `Save clip · ${fmtDur((bracket!.outMs - bracket!.inMs) / 1000)}` : 'Save clip'}
+              hint={canSave ? 'Saves as a private draft' : 'Drop a clip to enable save'}
+              disabled={!canSave}
+              onPress={saveClip}
             />
           </View>
-
-          <Input value={name} onChangeText={setName} placeholder="Name this clip" />
-
-          <SaveClipButton
-            label={canSave ? `Save clip · ${fmtDur((bracket!.outMs - bracket!.inMs) / 1000)}` : 'Save clip'}
-            hint={canSave ? 'Saves as a private draft' : 'Drop a clip to enable save'}
-            disabled={!canSave}
-            onPress={saveClip}
-          />
         </View>
       ) : (
         <View style={styles.saved}>
@@ -371,14 +382,14 @@ const styles = StyleSheet.create({
   fieldWrap: {
     position: 'relative',
   },
+  belowField: {
+    gap: theme.spacing.md,
+  },
   clockOverlay: {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
-  },
-  tlBlock: {
-    gap: theme.spacing.sm,
   },
   btnRow: {
     flexDirection: 'row',

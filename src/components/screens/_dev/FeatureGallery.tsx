@@ -65,7 +65,7 @@ import { BufferTimeline } from '@/components/features/clip/BufferTimeline'
 import { BufferScrubField } from '@/components/features/clip/BufferScrubField'
 import { ClipSourcesDrawer, type ClipSource } from '@/components/features/clip/ClipSourcesDrawer'
 import { SavedClipRow } from '@/components/features/clip/SavedClipRow'
-import { TimelineZoomControl } from '@/components/primitives/TimelineZoomControl'
+import { TimelineScrollbar } from '@/components/features/clip/TimelineScrollbar'
 import { DiscoveryHandoffCard } from '@/components/features/stream/DiscoveryHandoffCard'
 import { LegalAcceptanceCard } from '@/components/features/onboarding/LegalAcceptanceCard'
 import { ContextStrip } from '@/components/features/report/ContextStrip'
@@ -1251,8 +1251,14 @@ export function FeatureGallery() {
       </Section>
 
       <Section title="BufferTimeline">
-        <Row label="scrub + bracket + saved region (zoomable)">
+        <Row label="tap-to-position · pan · pinch-zoom · scrollbar">
           <BufferTimelineDemo />
+        </Row>
+      </Section>
+
+      <Section title="TimelineScrollbar">
+        <Row label="thumb length = zoom · drag to pan">
+          <TimelineScrollbarDemo />
         </Row>
       </Section>
 
@@ -1603,7 +1609,6 @@ function TimelineDemo({ trim }: { trim: boolean }) {
 }
 
 function BufferTimelineDemo() {
-  const [zoom, setZoom] = useState<'all' | 'hours' | 'min' | 'sec'>('all')
   const [model] = useState(() => {
     const now = Date.now()
     const H = 3_600_000
@@ -1622,17 +1627,32 @@ function BufferTimelineDemo() {
   })
   const [playhead, setPlayhead] = useState(model.playhead0)
   const [bracket, setBracket] = useState<{ inMs: number; outMs: number } | null>(model.bracket0)
+  // Tap to position the playhead · one-finger drag to pan · two-finger pinch to
+  // zoom · drag the scrollbar (below the track) to pan.
   return (
-    <View style={{ gap: theme.spacing.sm }}>
-      <TimelineZoomControl value={zoom} onChange={setZoom} />
-      <BufferTimeline
-        segments={model.segments}
-        savedRegions={model.savedRegions}
-        playheadMs={playhead}
-        zoom={zoom}
-        bracket={bracket}
-        onScrub={setPlayhead}
-        onBracketChange={setBracket}
+    <BufferTimeline
+      segments={model.segments}
+      savedRegions={model.savedRegions}
+      playheadMs={playhead}
+      bracket={bracket}
+      onScrub={setPlayhead}
+      onBracketChange={setBracket}
+    />
+  )
+}
+
+function TimelineScrollbarDemo() {
+  // Mock geometry: content 3× the viewport → thumb ≈ 1/3 width, draggable.
+  const viewport = 300
+  const contentWidth = 900
+  const [offset, setOffset] = useState(300)
+  return (
+    <View style={{ width: viewport }}>
+      <TimelineScrollbar
+        contentWidth={contentWidth}
+        viewport={viewport}
+        scrollOffset={offset}
+        onScrollTo={setOffset}
       />
     </View>
   )
@@ -1693,7 +1713,7 @@ function SavedClipRowDemo() {
 const galleryStyles = StyleSheet.create({
   gapStrip: {
     flexDirection: 'row',
-    height: 78,
+    height: 54,
     alignItems: 'stretch',
     gap: theme.spacing.sm,
     backgroundColor: theme.colors.bg.panelHi,
@@ -1702,7 +1722,7 @@ const galleryStyles = StyleSheet.create({
   },
   trackMock: {
     position: 'relative',
-    height: 78,
+    height: 54,
     backgroundColor: theme.colors.bg.panel,
     borderTopWidth: 1,
     borderBottomWidth: 1,

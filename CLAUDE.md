@@ -496,7 +496,7 @@ migration ✅ delete June 2026 — all legacy recordings purged from production.
 |---|---|---|---|---|
 | **C0** | Ben + Aaron | — | Decisions & contracts. ✅ Model decided; ✅ per-track `recordingReady` Aaron June 2026; ✅ existing-data delete Aaron June 2026. Still open: **record-set payload shape** (only blocks C3 — C1 can proceed with provisional shape); **screen-tier** (blocks C2); **profile/library** (blocks C5). | — |
 | **C1** | Aaron | mediasoup + backend | **✅ DONE (R1b-final).** Per-source recording substrate + always-on rolling buffer landed in both repos: `UserBuffer`/`BufferSession`/`BufferTrack`, fMP4 per-source tracks (`-c:v copy`), wall-clock-chunked `.jsonl` telemetry, per-track `recordingReady`, `bufferService.reapBuffers()` (window + byte-cap), tier caps in RemoteConfig, `GET /clips/discover`. | C0 model ✅ |
-| **C2** | Ben | `design` | **✅ DONE (2026-06-06).** Buffer-trim component library: `BufferTimeline` · `GapMarker` · `ClipBracket` · `SavedClipRegion` · `BufferScrubField` · `SavedClipRow` · `ClipSourcesDrawer` · `TimelineZoomControl` (+ galleries + DESIGN.md Section 3). Supersedes the single-track `Timeline` trimmer for the buffer flow. | C0 ✅ |
+| **C2** | Ben | `design` | **✅ DONE (2026-06-06).** Buffer-trim component library: `BufferTimeline` (tap/pan/pinch) · `GapMarker` · `ClipBracket` · `SavedClipRegion` · `BufferScrubField` · `SavedClipRow` · `ClipSourcesDrawer` · `TimelineScrollbar` (+ galleries + DESIGN.md Section 3). Supersedes the single-track `Timeline` trimmer for the buffer flow. | C0 ✅ |
 | **C3** | Aaron | `main` | Go Live / Record assembly on `DashboardScreen` (two buttons, per-source two-toggle arming, defaults, consent flow, payload, indicator wiring) + shared types. | C2 + record-set payload shape finalised |
 | **C4** | Aaron (+ Ben scaffold) | `main` | **🔶 App scaffold built (Ben, 2026-06-06):** `ClipEditScreen` (route `app/(app)/clip-editor.tsx`, Me → Clip editor) composing the C2 components on a **MOCK SEAM** (`useMockBuffer`); Editor↔Saved pager; TimeScrubber overlaid as the buffer clock. **Remaining (Aaron):** wire the mock seam to real data (buffer segments / saved regions / recorded layers), the non-destructive **manifest** `Clip` model (replace baked `processClip`), real save/delete/publish. | C1 ✅, C2 ✅ |
 | **C5** | Aaron (+ Ben scaffold) | `main` | **✅ profile/library decided → standalone Library** (not profile-as-library). Ben **reskinned the existing `LibraryScreen`** to `SavedClipRow` over real recordings (2026-06-06). **Remaining (Aaron):** storage display = the **R2** `GET /auth/me` dual-pool (`usedStorageBytes` + `bufferSizeBytes` + `bufferEarliestAt`); reconcile the editor's mock "Saved clips" list with the real Library (clips vs recordings). | C4 |
@@ -2230,14 +2230,16 @@ clean handoff point: **C1 (substrate) is Aaron's and already done; C2 (component
 
 **C2 component library** (`src/components/features/clip/` + one primitive), all
 token-clean, in the galleries, in DESIGN.md Section 3:
-- `BufferTimeline` — collapsed-gap, zoomable timeline (scrub + bracket drag +
-  saved-region no-overlap clamp; derived-translateX centered/edge-released playhead)
+- `BufferTimeline` — collapsed-gap timeline; **tap-to-position playhead · one-finger
+  pan · two-finger pinch-zoom (continuous) · off-screen-capable playhead** (no axis
+  row); bracket drag + saved-region no-overlap clamp. PanResponder multitouch.
 - `GapMarker` · `SavedClipRegion` · `ClipBracket` (overlay; parent owns time math)
 - `BufferScrubField` — full-bleed swipe-to-scrub field (no on-field clock/playhead)
 - `SavedClipRow` — Library row, collapsed → inline-expand player + actions; gained
   `tags?` / `onKebabPress?` / `showPlayGlyph?` so it also serves the recordings Library
 - `ClipSourcesDrawer` — BottomSheet + StreamTile grid (active/inactive per source)
-- `TimelineZoomControl` (primitive) — a `SegmentedToggle` preset (All/Hours/Min/Sec)
+- `TimelineScrollbar` — thin scrollbar under the timeline (thumb length = zoom, drag
+  to pan); **replaced the `TimelineZoomControl` toggle**, which was removed.
 
 **Screens:**
 - **`ClipEditScreen`** — new route `app/(app)/clip-editor.tsx`, reached from

@@ -2996,9 +2996,8 @@ transition. See the 2026-06-03 decision-log entry.
 
 The eight elements below are the **buffer-trim clip editor** (Aaron's 2026-06-06
 handoff brief). **Status: built on `design` 2026-06-06 (C2)** against mock /
-stubbed buffer data + gallery entries (Feature gallery; `TimelineZoomControl` in
-the Primitive gallery). Screen wiring (`ClipEditScreen` / `LibraryScreen`) is
-Aaron's later step. Mocks:
+stubbed buffer data + gallery entries (Feature gallery). Screen wiring
+(`ClipEditScreen` / `LibraryScreen`) is Aaron's later step. Mocks:
 [`clip-editor-buffer-trim-portrait.html`](docs/design/mocks/clip-editor-buffer-trim-portrait.html)
 (screen 1, 6 frames) +
 [`saved-clips-list-portrait.html`](docs/design/mocks/saved-clips-list-portrait.html)
@@ -3009,37 +3008,42 @@ ancestor for non-buffer / future video-edit surfaces. Reused unchanged:
 `BufferWindowLabel`, `SaveClipButton`, `Input`, `Button`, `Toggle`, `Pill`,
 `IconButton`, `Divider`.
 
-**Build notes (v1 deferrals):** zoom is the controlled `TimelineZoomControl`
-level — **continuous pinch is deferred** (needs `react-native-gesture-handler`;
-the model is built for it). The centered / edge-released playhead is a derived
-`translateX` on the content layer (no ScrollView, so scrub + bracket gestures
-never fight a scroll). Saved-region hatch is a flat accent fill (same RN-pattern
-deferral as `Timeline`'s `trimOverlay`). Scrub direction (drag-right = earlier) is
-trivially flippable. `ClipBracket` is presentational — `BufferTimeline` owns all
-time math and supplies its three PanResponder handler sets.
+**Build notes:** the timeline interaction was reworked 2026-06-06 (see the
+`BufferTimeline` row) — continuous two-finger pinch-zoom + one-finger pan + tap-to-
+position + an off-screen-capable playhead + a `TimelineScrollbar`, all via
+PanResponder multitouch (no `react-native-gesture-handler` dep). The discrete
+`TimelineZoomControl` toggle was removed. Saved-region hatch is a flat accent fill
+(same RN-pattern deferral as `Timeline`'s `trimOverlay`). Field-swipe direction
+(drag-right = earlier) is trivially flippable. `ClipBracket` is presentational —
+`BufferTimeline` owns all time math and supplies its three PanResponder handler sets.
 
 ##### `BufferTimeline`
 
-- **Tier:** feature (composes Text + `GapMarker` + `ClipBracket` + `SavedClipRegion` + PanResponder)
+- **Tier:** feature (composes `GapMarker` + `ClipBracket` + `SavedClipRegion` + `TimelineScrollbar` + PanResponder)
 - **Location:** `src/components/features/clip/BufferTimeline.tsx` *(built 2026-06-06 · C2)*
 - **Variants:** `default`
-- **Sizes:** md (h:96 — 18 axis row + 78 track)
-- **States:** zoom = `all` / `hours` / `min` / `sec`; playhead = centered-scroll · edge-released · free-fit
-- **Proposed props:** `segments` (recorded spans), `gaps` (per-gap skipped duration), `savedRegions`, `playheadMs`, `zoom`, `bracket?`, `minTimeMs`, `onScrub`, `onZoom`, `onBracketChange`
+- **Sizes:** md (track h:52 — single track, **no axis/date row**; matches the Input `md` "What's happening" field — + the scrollbar below)
+- **States:** zoom = continuous `pxPerMs` (fit … fit×12); pan = `scrollOffset`; playhead may be on- or off-screen
+- **Props (built):** `segments` (recorded spans), `savedRegions?`, `playheadMs`, `bracket?`, `onScrub`, `onBracketChange?` (zoom/pan are internal view state)
 
 **Mock says (Frames 1–4):** Horizontal full-bleed timeline of the buffer with
 **collapsed gaps** — segments scale with zoom, every real-time gap is a fixed
-50px `GapMarker`. Axis relabels per zoom (days → hours → min → sec), all
-`monoValue` tabular. Default (All) spans oldest → NOW. Saved clips appear as
-read-only hatched bands.
+50px `GapMarker`. Saved clips appear as read-only hatched bands. No date/axis row
+(the overlaid `TimeScrubber` clock carries absolute time).
 
-**Proposed behavior:** Owns the shared playhead with `BufferScrubField` (one
-current-time drives both). When zoomed wider than the screen the playhead stays
-**centered** and content scrolls under it; when an end reaches the screen edge
-the playhead **releases** and travels off-center (can't scroll past the ends);
-when the whole timeline fits, the playhead moves **freely**. Pinch = continuous
-zoom; `TimelineZoomControl` = discrete levels. Brackets stay pinned to in/out
-**times** (not pixels), so they stretch/contract with zoom.
+**Code does — interaction model (2026-06-06 rework):**
+- **Tap** → the playhead snaps to where you tap (`onScrub(absoluteMs)`).
+- **One-finger drag** → pans the timeline (`scrollOffset`) when zoomed past the
+  viewport. The playhead does **not** move on scroll — it stays pinned to its time
+  and may travel **off-screen** (content is `overflow:hidden`, translated by
+  `-scrollOffset`).
+- **Two-finger horizontal pinch** → continuous zoom (`pxPerMs`), anchored on the
+  pinch midpoint. Clamp `[fit, fit×12]` (can't zoom out past the whole buffer).
+- A thin **`TimelineScrollbar`** below the track shows the whole buffer (thumb
+  length = visible fraction = zoom; position = scroll; drag to pan).
+- Gestures via PanResponder multitouch (no gesture-handler dep). Brackets keep
+  their own handles (parent owns time math); pinned to in/out **times**, so they
+  stretch/contract with zoom + pan. Saved-region no-overlap clamp unchanged.
 
 ---
 
@@ -3102,23 +3106,26 @@ span for reuse.
 
 ---
 
-##### `TimelineZoomControl`
+##### `TimelineScrollbar`
 
-- **Tier:** primitive *(thin — likely a `SegmentedToggle` preset rather than a new component; see note)*
-- **Location:** `src/components/primitives/TimelineZoomControl.tsx` *(built 2026-06-06 · C2)*
+- **Tier:** feature (composes View + PanResponder)
+- **Location:** `src/components/features/clip/TimelineScrollbar.tsx` *(built 2026-06-06 · C2)*
 - **Variants:** `default`
-- **Sizes:** sm (h:~30, mono labels)
-- **States:** per-segment selected / unselected (selected = `ink` fill, `bg` text)
-- **Proposed props:** `value: 'all' | 'hours' | 'min' | 'sec'`, `onChange`
+- **Sizes:** thin (track h:22 touch area, 4px rail, 8px thumb)
+- **States:** scrollable (draggable thumb) / inactive (fully zoomed out → full-width thumb, quieter)
+- **Props (built):** `contentWidth`, `viewport`, `scrollOffset`, `onScrollTo`
 
-**Mock says:** Segmented control — All / Hours / Min / Sec — `border.strong`
-outline, `monoLabel` caps, selected segment inverts to ink. Pinch is the
-continuous gesture; this is the discrete level switch.
+**Code does (built):** The thin scrollbar under the `BufferTimeline` that **replaced
+the discrete zoom toggle** (2026-06-06). Represents the whole buffer: the thumb
+**length is the visible fraction** (viewport / content) so a short thumb = zoomed
+in, a full thumb = fully zoomed out; thumb **position** is the scroll offset.
+Dragging the thumb pans the timeline (`onScrollTo`). Flat hairline styling — rail
+`border.subtle`, thumb `text.muted` (no accent; it's a control, not a "look here").
+Presentational + gesture-emitting; `BufferTimeline` owns the geometry.
 
-**Composition note:** This is `SegmentedToggle` with mono labels and four fixed
-options. **Recommendation:** ship as a *preset usage of `SegmentedToggle`*, not a
-new primitive — promote to a standalone primitive only if the timeline grows
-zoom-specific affordances.
+> **Note (2026-06-06):** the earlier `TimelineZoomControl` (a `SegmentedToggle`
+> All/Hours/Min/Sec preset) was **removed** — the timeline zoom is now continuous
+> pinch + this scrollbar.
 
 ---
 
@@ -3201,16 +3208,20 @@ into the saved clip. **No new primitive** — assembly of two existing ones.
 - **`ClipEditScreen`** *(built 2026-06-06 · route `app/(app)/clip-editor.tsx`,
   reached from **Me → Clip editor**)*: `ScreenHeader` ("Clip editor", back
   chevron) + `ScreenScroll` + a `PageTabs` pager (**Editor ↔ Saved clips**).
-  Editor page = `BufferScrubField` + `TimelineZoomControl` + `BufferTimeline`
-  (+ `ClipBracket` / `SavedClipRegion` / `GapMarker`) + New-clip/Reset + Sources
-  buttons + name `Input` + `SaveClipButton` + `ClipSourcesDrawer`; Saved page =
+  Editor page = `BufferScrubField` + `BufferTimeline`
+  (+ `ClipBracket` / `SavedClipRegion` / `GapMarker` / `TimelineScrollbar`) +
+  New-clip/Reset + Sources buttons + name `Input` + `SaveClipButton`
+  + `ClipSourcesDrawer`; Saved page =
   `SavedClipRow` list with empty state. The **time-machine `TimeScrubber` is
   overlaid at the field's bottom as the buffer clock** — expand it to spin-scrub the
   buffer; the field swipe and the timeline scrub drive the same value. All three
   share one `offsetMs` (0 = live head; a 1s tick keeps the timeline playhead in
   lockstep with the clock). Field + timeline are full-bleed so the clock's six
-  wheels fit. Save = private draft, appends a `SavedClipRegion` + auto-advances to
-  the Saved page. **Runs on mock buffer data**
+  wheels fit. **While the clock is expanded the screen scroll is locked** (so the
+  wheels spin without the page scrolling — via `ScreenScroll`'s `scrollEnabled`);
+  touching the image or anything below the clock collapses it (`collapseSignal`) and
+  restores scroll. Save = private draft, appends a `SavedClipRegion` + auto-advances
+  to the Saved page. **Runs on mock buffer data**
   (a clearly-marked `MOCK SEAM` / `useMockBuffer` — Aaron's C1 substrate swaps in
   there).
 - **`LibraryScreen`** *(reskinned 2026-06-06 · existing route, Me → Library)*:
@@ -3230,17 +3241,18 @@ the handoff):
 - **Shared playhead.** One current-time drives both `BufferScrubField` and
   `BufferTimeline`; scrubbing either moves the other. Re-evaluated continuously;
   the field frame re-renders to the moment under the playhead.
-- **Playhead centering / edge-release.** Zoomed wider than the screen → playhead
-  **centered**, content scrolls under it. An end reaches its screen edge →
-  playhead **released**, travels off-center toward that edge (no scrolling past
-  the ends). Whole timeline fits → playhead moves **freely** left/right.
+- **Playhead — tap to position, off-screen-capable.** Tapping the timeline snaps
+  the playhead there. **Panning (scroll) does NOT move the playhead** — it stays
+  pinned to its time and can travel off-screen (content `overflow:hidden`,
+  translated by `-scrollOffset`).
 - **Bracket drag — edge vs center.** Edge handle = set in/out (duration changes);
   center press-drag = move the whole selection (duration fixed). Live duration +
   timecodes update in `monoValue` tabular throughout.
-- **Zoom coupling.** Pinch (continuous) + `TimelineZoomControl` levels both
-  relabel the axis (days → hours → min → sec). Brackets are pinned to in/out
-  **times**, so they stretch/contract with the timeline during pinch — continuous,
-  never pixel-locked.
+- **Pan + zoom.** One-finger horizontal drag pans (when zoomed past the viewport);
+  two-finger horizontal pinch zooms continuously, anchored on the pinch midpoint
+  (clamp `[fit, fit×12]`); the `TimelineScrollbar` thumb (length = zoom) also pans.
+  Brackets are pinned to in/out **times**, so they stretch/contract with zoom + pan
+  — never pixel-locked.
 - **No-overlap clamp.** Brackets cannot enter a `SavedClipRegion`; the moving edge
   resists at the boundary with a warn-tinted blocked affordance. Only one pending
   bracket at a time; saved clips coexist as read-only regions. Deleting a saved
@@ -3362,6 +3374,12 @@ entry "Search ↔ title field harmonised; shared ScreenHeader".
 it doesn't scroll and lands at the same Y as the globe/dashboard headers). Pass
 a `ScreenHeader` here — it's how page-level screens (Me, Library, Events) get the
 shared header in one prop without restructuring. Body content scrolls beneath it.
+
+**`scrollEnabled` passthrough added 2026-06-06.** Optional `scrollEnabled?: boolean`
+forwarded to the `KeyboardAwareScrollView` — an opt-in scroll lock for screens with
+a vertical-drag control that would otherwise lose its gesture to the scroll view.
+`ClipEditScreen` sets `scrollEnabled={!clockExpanded}` so the expanded `TimeScrubber`
+wheels spin without the page scrolling.
 
 **Mock says:** Implicit — every form-bearing screen needs the keyboard
 to lift over content rather than crop the focused input, **without
@@ -3981,6 +3999,30 @@ above. The seam is not a separate motion category.
 Append-only. Most recent first. Each entry: date, decision, rationale,
 constraint it imposes downstream.
 
+### 2026-06-06 — BufferTimeline interaction rework: pan / pinch / tap + scrollbar
+
+Replaced the timeline's interaction model. **Before:** discrete zoom toggle
+(`TimelineZoomControl`), playhead kept centered/edge-released (content scrolled
+under a fixed playhead), a date/axis row. **Now:**
+- **Tap to position** the playhead (snaps to the tapped time).
+- **One-finger drag pans** the timeline; the **playhead no longer moves on scroll**
+  — it stays pinned to its time and may go **off-screen**.
+- **Two-finger horizontal pinch** = continuous zoom (anchored on the midpoint,
+  clamp `[fit, fit×12]`).
+- New **`TimelineScrollbar`** (thin; thumb length = visible fraction = zoom; drag to
+  pan) **replaces the `TimelineZoomControl` toggle**, which is **deleted** (file +
+  galleries + row).
+
+**Rationale:** a standard pannable/zoomable editor timeline reads more naturally
+than a fixed-centered playhead + discrete zoom steps; the scrollbar doubles as the
+zoom indicator. Gestures use PanResponder multitouch — **no
+`react-native-gesture-handler` dependency** (none installed; FD/dep budget).
+
+**Imposes:** zoom/pan are now `BufferTimeline`-internal view state (no `zoom` prop);
+`ClipEditScreen` dropped its zoom state + the toggle; the field-swipe scrub uses a
+fixed coarse sensitivity (no longer zoom-keyed). Not yet device-tested — the
+multitouch pinch + tap-vs-pan disambiguation want a real-hardware pass.
+
 ### 2026-06-06 — Buffer-trim clip editor: app side done, handed to Aaron
 
 Milestone marker (details in the three entries below). The buffer-trim clip editor
@@ -4065,13 +4107,12 @@ in/out. Two screens, mocks shipped on `design`:
 
 **Components (Section 3 → Clip Editor — built on `design` 2026-06-06, C2 · Ben):**
 `BufferTimeline`, `GapMarker`, `ClipBracket`, `SavedClipRegion`,
-`BufferScrubField`, `SavedClipRow`, `ClipSourcesDrawer` (features under
-`features/clip/`) + `TimelineZoomControl` (a `SegmentedToggle` preset, primitive).
-All token-clean, in the galleries, tsc-clean. v1 deferrals: continuous pinch-zoom
-(gesture-handler follow-up), saved-region hatch (flat fill per the `Timeline`
-deferral). `ClipEditScreen` / `LibraryScreen` assemblies + screen wiring are
-Aaron's later step. Interaction notes (shared playhead, centering/edge-release,
-bracket edge-vs-center, zoom coupling, no-overlap clamp) live with those rows.
+`BufferScrubField`, `SavedClipRow`, `ClipSourcesDrawer`, `TimelineScrollbar`
+(features under `features/clip/`). All token-clean, in the galleries, tsc-clean.
+`ClipEditScreen` / `LibraryScreen` assemblies + screen wiring are Aaron's later
+step. *(The `TimelineZoomControl` toggle from the first cut + the
+centered/edge-release playhead were superseded by the 2026-06-06 timeline-gesture
+rework — see that decision-log entry.)*
 
 **Imposes:** the components are built against a stubbed/mock buffer; Aaron's
 substrate + the backend contract for buffer segments / saved regions / per-source

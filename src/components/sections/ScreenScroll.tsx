@@ -43,6 +43,9 @@ type Props = {
   bottomOffset?: number
   keyboardDismissMode?: 'none' | 'on-drag' | 'interactive'
   refreshControl?: React.ReactElement<any>
+  // Opt-in scroll lock — e.g. while a vertical-drag control (the clip editor's
+  // TimeScrubber wheels) is active, so its gesture isn't stolen by the scroll view.
+  scrollEnabled?: boolean
 }
 
 export function ScreenScroll({
@@ -53,6 +56,7 @@ export function ScreenScroll({
   bottomOffset,
   keyboardDismissMode,
   refreshControl,
+  scrollEnabled,
 }: Props) {
   return (
     <SafeAreaView style={[styles.root, style]}>
@@ -63,6 +67,7 @@ export function ScreenScroll({
         bottomOffset={bottomOffset}
         keyboardDismissMode={keyboardDismissMode}
         refreshControl={refreshControl}
+        scrollEnabled={scrollEnabled}
       >
         {children}
       </KeyboardAwareScrollView>

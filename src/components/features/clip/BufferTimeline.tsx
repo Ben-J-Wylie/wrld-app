@@ -1,25 +1,25 @@
 // src/components/features/clip/BufferTimeline.tsx
 //
-// Buffer-trim clip editor (clips initiative · C2). The collapsed-gap, zoomable
-// timeline of the rolling buffer. Recorded segments scale with the zoom level;
-// every real-time gap between them collapses to a fixed-width GapMarker. Already
-// saved spans render as read-only SavedClipRegion bands. An optional ClipBracket
-// overlay defines the pending clip's in/out.
+// Buffer-trim clip editor (clips initiative · C2). The collapsed-gap timeline of the
+// rolling buffer. Recorded segments scale with a continuous zoom; every real-time gap
+// collapses to a fixed-width GapMarker. Already-saved spans render as read-only
+// SavedClipRegion bands; an optional ClipBracket overlay defines the pending clip.
 //
-// Playhead behavior (shared with BufferScrubField via the controlled `playheadMs`):
-//   • content narrower than the viewport → content left-aligned, playhead moves
-//     freely (free-fit)
-//   • content wider than the viewport → content translates to keep the playhead
-//     centered…
-//   • …until an end reaches the screen edge, where the translate clamps and the
-//     playhead travels off-center toward that edge (no scrolling past the ends).
-// This is implemented as a derived translateX on the content layer (no ScrollView),
-// so the scrub + bracket PanResponders never fight a scroll gesture.
+// Interaction model (2026-06-06 rework):
+//   • TAP — the playhead snaps to wherever you tap (emits onScrub(absoluteMs)).
+//   • PAN — a one-finger horizontal drag scrolls the timeline (when zoomed past the
+//     viewport). The playhead does NOT move on scroll — it stays pinned to its time
+//     and can travel off-screen.
+//   • PINCH — a two-finger horizontal pinch zooms continuously, anchored on the
+//     pinch midpoint.
+//   • A thin TimelineScrollbar (below the track) shows the whole buffer: thumb length
+//     = visible fraction (zoom), thumb position = scroll; drag it to pan. (Replaced
+//     the discrete zoom toggle.)
 //
-// Time math lives entirely here. The bracket is positioned in pixels and clamped so
-// it can't cross a SavedClipRegion (emits `blocked` to the ClipBracket while it
-// resists). Pinch-to-zoom is the consumer's gesture-handler concern; `zoom` is a
-// controlled prop driven by TimelineZoomControl.
+// View state (zoom `pxPerMs` + `scrollOffset`) is local; data (playhead, bracket,
+// segments, savedRegions) is from props. Gestures use PanResponder multitouch — no
+// gesture-handler dependency. Bracket handles keep their own responders (parent owns
+// the time math; saved-region no-overlap clamp).
 //
 // See DESIGN.md Section 3 (Buffer-trim clip editor) + the 2026-06-06 decision log.
 
@@ -32,12 +32,11 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native'
-import { Text } from '@/components/primitives/Text'
 import { theme } from '@/tokens/theme'
-import type { TimelineZoom } from '@/components/primitives/TimelineZoomControl'
 import { GapMarker, GAP_MARKER_WIDTH } from './GapMarker'
 import { SavedClipRegion } from './SavedClipRegion'
 import { ClipBracket } from './ClipBracket'
+import { TimelineScrollbar } from './TimelineScrollbar'
 
 export type BufferSegment = { id: string; startMs: number; endMs: number; peaks?: number[] }
 export type BufferSavedRegion = { id: string; startMs: number; endMs: number; label?: string }
@@ -47,120 +46,139 @@ type Props = {
   segments: BufferSegment[]
   savedRegions?: BufferSavedRegion[]
   playheadMs: number
-  zoom: TimelineZoom
   bracket?: BufferBracket | null
   onScrub: (ms: number) => void
   onBracketChange?: (next: BufferBracket) => void
   style?: StyleProp<ViewStyle>
 }
 
-const AXIS_H = 18
-const TRACK_H = 78
-const HEIGHT = AXIS_H + TRACK_H
+const TRACK_H = 52 // matches the Input `md` "What's happening" field
 const MIN_BRACKET_MS = 500
 const GAP_THRESHOLD_MS = 500
-
-// px-per-ms by zoom level. 'all' fits the whole buffer; the rest are fixed scales
-// floored at the fit value so zooming only ever enlarges (never shrinks past 'all').
-const ZOOM_PX_PER_MS: Record<Exclude<TimelineZoom, 'all'>, number> = {
-  hours: 0.00002, // ~0.072 px/s → ~259 px/hour
-  min: 0.0005, // 0.5 px/s → 30 px/min
-  sec: 0.006, // 6 px/s
-}
+const ZOOM_MAX_FACTOR = 12 // can zoom in up to 12× the fit (whole-buffer) scale
+const TAP_SLOP = 4
 
 type SegBlock = { kind: 'seg'; seg: BufferSegment; leftPx: number; widthPx: number }
 type GapBlock = { kind: 'gap'; leftPx: number; skippedMs: number }
+type Layout = { blocks: (SegBlock | GapBlock)[]; segBlocks: SegBlock[]; contentWidth: number }
 
 export function BufferTimeline({
   segments,
   savedRegions = [],
   playheadMs,
-  zoom,
   bracket,
   onScrub,
   onBracketChange,
   style,
 }: Props) {
   const [width, setWidth] = useState(0)
+  const [pxPerMs, setPxPerMs] = useState(0) // 0 → use the fit scale (whole buffer)
+  const [scrollOffset, setScrollOffset] = useState(0)
   const [blocked, setBlocked] = useState(false)
 
   const bufferStartMs = segments.length > 0 ? segments[0]!.startMs : 0
   const bufferEndMs = segments.length > 0 ? segments[segments.length - 1]!.endMs : 0
 
-  const { blocks, contentWidth, pxPerMs } = useMemo(
-    () => layout(segments, zoom, width),
-    [segments, zoom, width],
-  )
-  const segBlocks = useMemo(
-    () => blocks.filter((b): b is SegBlock => b.kind === 'seg'),
-    [blocks],
-  )
+  // Fit scale = pxPerMs that makes the whole buffer exactly fill the viewport.
+  const { totalSegMs, gapsPx } = useMemo(() => measure(segments), [segments])
+  const fit = totalSegMs > 0 && width > 0 ? Math.max(0, (width - gapsPx) / totalSegMs) : 0
+  const minPx = fit
+  const maxPx = fit > 0 ? fit * ZOOM_MAX_FACTOR : 0
+  const px = pxPerMs > 0 ? pxPerMs : fit
 
-  function timeToX(ms: number): number {
-    if (segBlocks.length === 0) return 0
-    for (const b of segBlocks) {
-      if (ms < b.seg.startMs) return b.leftPx
-      if (ms <= b.seg.endMs) return b.leftPx + (ms - b.seg.startMs) * pxPerMs
-    }
-    const last = segBlocks[segBlocks.length - 1]!
-    return last.leftPx + last.widthPx
-  }
+  const { blocks, segBlocks, contentWidth } = useMemo(() => layout(segments, px), [segments, px])
+  const maxScroll = Math.max(0, contentWidth - width)
+  const offset = clamp(scrollOffset, 0, maxScroll)
+  const playheadX = timeToX(playheadMs, segBlocks, px)
 
-  function xToTime(x: number): number {
-    if (segBlocks.length === 0) return 0
-    for (const b of segBlocks) {
-      if (x < b.leftPx) return b.seg.startMs
-      if (x <= b.leftPx + b.widthPx) return b.seg.startMs + (x - b.leftPx) / pxPerMs
-    }
-    return segBlocks[segBlocks.length - 1]!.seg.endMs
-  }
-
-  // Derived content offset for the centered / edge-released playhead.
-  const playheadX = timeToX(playheadMs)
-  const translateX =
-    width > 0 && contentWidth > width
-      ? clamp(width / 2 - playheadX, width - contentWidth, 0)
-      : 0
-
-  // Refs mirror the latest props/derived values so the once-created PanResponders
-  // (below) always read fresh values inside their gesture closures.
-  const playheadMsRef = useRef(playheadMs)
-  const pxPerMsRef = useRef(pxPerMs)
-  const bufferStartRef = useRef(bufferStartMs)
-  const bufferEndRef = useRef(bufferEndMs)
-  const bracketRef = useRef(bracket)
-  const savedRegionsRef = useRef(savedRegions)
+  // ── refs for the gesture closures ─────────────────────────────────────────
+  const widthRef = useRef(width)
+  const pxRef = useRef(px)
+  const offsetRef = useRef(offset)
+  const segmentsRef = useRef(segments)
+  const segBlocksRef = useRef(segBlocks)
+  const contentWidthRef = useRef(contentWidth)
+  const minPxRef = useRef(minPx)
+  const maxPxRef = useRef(maxPx)
   const onScrubRef = useRef(onScrub)
   const onBracketChangeRef = useRef(onBracketChange)
-  const startScrubMs = useRef(playheadMs)
-  const startBracket = useRef<BufferBracket>({ inMs: 0, outMs: 0 })
-  playheadMsRef.current = playheadMs
-  pxPerMsRef.current = pxPerMs
-  bufferStartRef.current = bufferStartMs
-  bufferEndRef.current = bufferEndMs
-  bracketRef.current = bracket
-  savedRegionsRef.current = savedRegions
+  const bracketRef = useRef(bracket)
+  const savedRegionsRef = useRef(savedRegions)
+  const bufferStartRef = useRef(bufferStartMs)
+  const bufferEndRef = useRef(bufferEndMs)
+  widthRef.current = width
+  pxRef.current = px
+  offsetRef.current = offset
+  segmentsRef.current = segments
+  segBlocksRef.current = segBlocks
+  contentWidthRef.current = contentWidth
+  minPxRef.current = minPx
+  maxPxRef.current = maxPx
   onScrubRef.current = onScrub
   onBracketChangeRef.current = onBracketChange
+  bracketRef.current = bracket
+  savedRegionsRef.current = savedRegions
+  bufferStartRef.current = bufferStartMs
+  bufferEndRef.current = bufferEndMs
 
-  // ── Scrub (drag the empty track) ──────────────────────────────────────────
-  const scrubPan = useRef(
+  // ── main gesture: tap (set playhead) / pan (scroll) / pinch (zoom) ─────────
+  const g = useRef({ offset: 0, startX: 0, lastDx: 0, moved: false, pinchDist: 0, pinchPx: 0, anchorMs: 0 })
+  const mainPan = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_e, g) => Math.abs(g.dx) > 2,
-      onPanResponderGrant: () => {
-        startScrubMs.current = playheadMsRef.current
+      onMoveShouldSetPanResponder: (_e, gs) => Math.abs(gs.dx) > TAP_SLOP || gs.numberActiveTouches === 2,
+      onPanResponderGrant: (e) => {
+        g.current = {
+          offset: offsetRef.current,
+          startX: e.nativeEvent.locationX ?? 0,
+          lastDx: 0,
+          moved: false,
+          pinchDist: 0,
+          pinchPx: pxRef.current,
+          anchorMs: 0,
+        }
       },
-      onPanResponderMove: (_e, g) => {
-        if (pxPerMsRef.current <= 0) return
-        // Content-scroll feel: drag right → earlier; drag left → later.
-        const next = startScrubMs.current - g.dx / pxPerMsRef.current
-        onScrubRef.current(clamp(next, bufferStartRef.current, bufferEndRef.current))
+      onPanResponderMove: (e, gs) => {
+        const touches = e.nativeEvent.touches
+        const W = widthRef.current
+        if (touches.length >= 2) {
+          const x0 = touches[0]!.locationX ?? 0
+          const x1 = touches[1]!.locationX ?? 0
+          const dist = Math.max(1, Math.abs(x0 - x1)) // horizontal pinch
+          const mid = (x0 + x1) / 2
+          if (g.current.pinchDist === 0) {
+            g.current.pinchDist = dist
+            g.current.pinchPx = pxRef.current
+            g.current.anchorMs = xToTime(mid + g.current.offset, segBlocksRef.current, pxRef.current)
+          }
+          g.current.moved = true
+          const np = clamp(g.current.pinchPx * (dist / g.current.pinchDist), minPxRef.current, maxPxRef.current)
+          const nl = layout(segmentsRef.current, np)
+          const no = clamp(timeToX(g.current.anchorMs, nl.segBlocks, np) - mid, 0, Math.max(0, nl.contentWidth - W))
+          g.current.offset = no
+          setPxPerMs(np)
+          setScrollOffset(no)
+        } else {
+          if (Math.abs(gs.dx) > TAP_SLOP) g.current.moved = true
+          g.current.pinchDist = 0
+          const delta = gs.dx - g.current.lastDx
+          g.current.lastDx = gs.dx
+          const maxS = Math.max(0, contentWidthRef.current - W)
+          g.current.offset = clamp(g.current.offset - delta, 0, maxS)
+          setScrollOffset(g.current.offset)
+        }
+      },
+      onPanResponderRelease: () => {
+        if (!g.current.moved) {
+          const contentX = g.current.startX + g.current.offset
+          onScrubRef.current(xToTime(contentX, segBlocksRef.current, pxRef.current))
+        }
       },
     }),
   ).current
 
-  // ── Bracket gestures (in edge / out edge / center move) ───────────────────
+  // ── bracket gestures (in edge / out edge / center move) ───────────────────
+  const startBracket = useRef<BufferBracket>({ inMs: 0, outMs: 0 })
   function corridor(centerMs: number): { lo: number; hi: number } {
     let lo = bufferStartRef.current
     let hi = bufferEndRef.current
@@ -170,7 +188,6 @@ export function BufferTimeline({
     }
     return { lo, hi }
   }
-
   function makeBracketPan(mode: 'in' | 'out' | 'move') {
     return PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -179,27 +196,25 @@ export function BufferTimeline({
         startBracket.current = bracketRef.current ?? { inMs: 0, outMs: 0 }
         setBlocked(false)
       },
-      onPanResponderMove: (_e, g) => {
+      onPanResponderMove: (_e, gs) => {
         const cb = onBracketChangeRef.current
-        if (!cb || pxPerMsRef.current <= 0) return
-        const dms = g.dx / pxPerMsRef.current
+        if (!cb || pxRef.current <= 0) return
+        const dms = gs.dx / pxRef.current
         const { inMs, outMs } = startBracket.current
         const { lo, hi } = corridor((inMs + outMs) / 2)
         if (mode === 'in') {
           const desired = inMs + dms
-          const next = clamp(desired, lo, outMs - MIN_BRACKET_MS)
           setBlocked(desired < lo)
-          cb({ inMs: next, outMs })
+          cb({ inMs: clamp(desired, lo, outMs - MIN_BRACKET_MS), outMs })
         } else if (mode === 'out') {
           const desired = outMs + dms
-          const next = clamp(desired, inMs + MIN_BRACKET_MS, hi)
           setBlocked(desired > hi)
-          cb({ inMs, outMs: next })
+          cb({ inMs, outMs: clamp(desired, inMs + MIN_BRACKET_MS, hi) })
         } else {
           const dur = outMs - inMs
           const desired = inMs + dms
-          const nextIn = clamp(desired, lo, hi - dur)
           setBlocked(desired < lo || desired > hi - dur)
+          const nextIn = clamp(desired, lo, hi - dur)
           cb({ inMs: nextIn, outMs: nextIn + dur })
         }
       },
@@ -207,7 +222,6 @@ export function BufferTimeline({
       onPanResponderTerminate: () => setBlocked(false),
     })
   }
-
   const inPan = useRef(makeBracketPan('in')).current
   const outPan = useRef(makeBracketPan('out')).current
   const movePan = useRef(makeBracketPan('move')).current
@@ -217,44 +231,17 @@ export function BufferTimeline({
   }
 
   return (
-    <View style={[styles.timeline, style]} onLayout={onLayout} {...scrubPan.panHandlers}>
-      <View
-        style={[
-          styles.content,
-          { width: contentWidth > 0 ? contentWidth : '100%', transform: [{ translateX }] },
-        ]}
-      >
-        <View style={styles.axis}>
-          {segBlocks.map((b) => (
-            <Text
-              key={`tick-${b.seg.id}`}
-              variant="monoValue"
-              color={theme.colors.text.subtle}
-              style={[styles.tick, { left: b.leftPx }]}
-              numberOfLines={1}
-            >
-              {formatTick(b.seg.startMs, zoom)}
-            </Text>
-          ))}
-          {segBlocks.length > 0 && (
-            <Text
-              variant="monoValue"
-              color={theme.colors.text.subtle}
-              style={[styles.tick, { left: contentWidth - 2 }]}
-              numberOfLines={1}
-            >
-              NOW
-            </Text>
-          )}
-        </View>
-
-        <View style={styles.track}>
+    <View style={[styles.wrap, style]}>
+      <View style={styles.timeline} onLayout={onLayout} {...mainPan.panHandlers}>
+        <View
+          style={[
+            styles.content,
+            { width: contentWidth > 0 ? contentWidth : '100%', transform: [{ translateX: -offset }] },
+          ]}
+        >
           {blocks.map((b, i) =>
             b.kind === 'seg' ? (
-              <View
-                key={`seg-${b.seg.id}`}
-                style={[styles.seg, { left: b.leftPx, width: b.widthPx }]}
-              >
+              <View key={`seg-${b.seg.id}`} style={[styles.seg, { left: b.leftPx, width: b.widthPx }]}>
                 <Waveform peaks={b.seg.peaks} />
               </View>
             ) : (
@@ -265,21 +252,17 @@ export function BufferTimeline({
           )}
 
           {savedRegions.map((r) => {
-            const left = timeToX(r.startMs)
-            const w = Math.max(2, timeToX(r.endMs) - left)
+            const left = timeToX(r.startMs, segBlocks, px)
+            const w = Math.max(2, timeToX(r.endMs, segBlocks, px) - left)
             return (
-              <SavedClipRegion
-                key={`saved-${r.id}`}
-                label={r.label}
-                style={[styles.saved, { left, width: w }]}
-              />
+              <SavedClipRegion key={`saved-${r.id}`} label={r.label} style={[styles.saved, { left, width: w }]} />
             )
           })}
 
           {bracket && (
             <ClipBracket
-              leftPx={timeToX(bracket.inMs)}
-              widthPx={Math.max(0, timeToX(bracket.outMs) - timeToX(bracket.inMs))}
+              leftPx={timeToX(bracket.inMs, segBlocks, px)}
+              widthPx={Math.max(0, timeToX(bracket.outMs, segBlocks, px) - timeToX(bracket.inMs, segBlocks, px))}
               durationLabel={formatDuration(bracket.outMs - bracket.inMs)}
               rangeLabel={`${formatClock(bracket.inMs)} → ${formatClock(bracket.outMs)}`}
               blocked={blocked}
@@ -294,6 +277,13 @@ export function BufferTimeline({
           </View>
         </View>
       </View>
+
+      <TimelineScrollbar
+        contentWidth={contentWidth}
+        viewport={width}
+        scrollOffset={offset}
+        onScrollTo={(o) => setScrollOffset(clamp(o, 0, maxScroll))}
+      />
     </View>
   )
 }
@@ -311,24 +301,19 @@ function Waveform({ peaks }: { peaks?: number[] }) {
 
 // ── layout + helpers ─────────────────────────────────────────────────────────
 
-function layout(
-  segments: BufferSegment[],
-  zoom: TimelineZoom,
-  width: number,
-): { blocks: (SegBlock | GapBlock)[]; contentWidth: number; pxPerMs: number } {
-  if (segments.length === 0 || width <= 0) return { blocks: [], contentWidth: 0, pxPerMs: 0 }
-
-  let gapCount = 0
+function measure(segments: BufferSegment[]): { totalSegMs: number; gapsPx: number } {
   let totalSegMs = 0
+  let gapCount = 0
   for (let i = 0; i < segments.length; i++) {
     totalSegMs += Math.max(0, segments[i]!.endMs - segments[i]!.startMs)
     if (i > 0 && segments[i]!.startMs - segments[i - 1]!.endMs > GAP_THRESHOLD_MS) gapCount++
   }
-  const gapsPx = gapCount * GAP_MARKER_WIDTH
-  const fit = totalSegMs > 0 ? Math.max(0, (width - gapsPx) / totalSegMs) : 0
-  const pxPerMs = zoom === 'all' ? fit : Math.max(fit, ZOOM_PX_PER_MS[zoom])
+  return { totalSegMs, gapsPx: gapCount * GAP_MARKER_WIDTH }
+}
 
+function layout(segments: BufferSegment[], px: number): Layout {
   const blocks: (SegBlock | GapBlock)[] = []
+  const segBlocks: SegBlock[] = []
   let cursor = 0
   for (let i = 0; i < segments.length; i++) {
     const seg = segments[i]!
@@ -339,11 +324,32 @@ function layout(
         cursor += GAP_MARKER_WIDTH
       }
     }
-    const w = Math.max(1, (seg.endMs - seg.startMs) * pxPerMs)
-    blocks.push({ kind: 'seg', seg, leftPx: cursor, widthPx: w })
+    const w = Math.max(1, (seg.endMs - seg.startMs) * px)
+    const block: SegBlock = { kind: 'seg', seg, leftPx: cursor, widthPx: w }
+    blocks.push(block)
+    segBlocks.push(block)
     cursor += w
   }
-  return { blocks, contentWidth: cursor, pxPerMs }
+  return { blocks, segBlocks, contentWidth: cursor }
+}
+
+function timeToX(ms: number, segBlocks: SegBlock[], px: number): number {
+  if (segBlocks.length === 0) return 0
+  for (const b of segBlocks) {
+    if (ms < b.seg.startMs) return b.leftPx
+    if (ms <= b.seg.endMs) return b.leftPx + (ms - b.seg.startMs) * px
+  }
+  const last = segBlocks[segBlocks.length - 1]!
+  return last.leftPx + last.widthPx
+}
+
+function xToTime(x: number, segBlocks: SegBlock[], px: number): number {
+  if (segBlocks.length === 0) return 0
+  for (const b of segBlocks) {
+    if (x < b.leftPx) return b.seg.startMs
+    if (x <= b.leftPx + b.widthPx) return b.seg.startMs + (px > 0 ? (x - b.leftPx) / px : 0)
+  }
+  return segBlocks[segBlocks.length - 1]!.seg.endMs
 }
 
 function clamp(v: number, lo: number, hi: number): number {
@@ -351,20 +357,6 @@ function clamp(v: number, lo: number, hi: number): number {
 }
 
 const DEFAULT_PEAKS = [0.5, 0.8, 0.35, 0.62, 0.9, 0.48, 0.7, 0.55, 0.4, 0.66]
-
-function formatTick(ms: number, zoom: TimelineZoom): string {
-  const d = new Date(ms)
-  const hh = String(d.getHours()).padStart(2, '0')
-  const mm = String(d.getMinutes()).padStart(2, '0')
-  const ss = String(d.getSeconds()).padStart(2, '0')
-  if (zoom === 'all' || zoom === 'hours') {
-    if (zoom === 'hours') return `${hh}:00`
-    const MON = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
-    return `${MON[d.getMonth()]} ${d.getDate()}`
-  }
-  if (zoom === 'min') return `${hh}:${mm}`
-  return `${mm}:${ss}`
-}
 
 function formatClock(ms: number): string {
   const d = new Date(ms)
@@ -379,8 +371,11 @@ function formatDuration(ms: number): string {
 }
 
 const styles = StyleSheet.create({
+  wrap: {
+    gap: theme.spacing.sm,
+  },
   timeline: {
-    height: HEIGHT,
+    height: TRACK_H,
     backgroundColor: theme.colors.bg.panel,
     borderTopWidth: 1,
     borderBottomWidth: 1,
@@ -388,23 +383,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   content: {
-    height: HEIGHT,
-  },
-  axis: {
-    height: AXIS_H,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border.subtle,
-  },
-  tick: {
-    position: 'absolute',
-    top: 3,
-  },
-  track: {
-    position: 'absolute',
-    top: AXIS_H,
-    left: 0,
-    right: 0,
-    bottom: 0,
     height: TRACK_H,
   },
   seg: {
@@ -419,8 +397,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 4,
     right: 4,
-    top: 12,
-    bottom: 12,
+    top: 10,
+    bottom: 10,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 2,
@@ -446,7 +424,7 @@ const styles = StyleSheet.create({
   },
   playhead: {
     position: 'absolute',
-    top: -AXIS_H,
+    top: 0,
     bottom: 0,
     width: 2,
     backgroundColor: theme.colors.accent.bright,
