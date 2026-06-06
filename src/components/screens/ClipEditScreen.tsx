@@ -6,14 +6,12 @@
 // BufferScrubField + BufferTimeline (+ ClipBracket / SavedClipRegion / GapMarker /
 // TimelineZoomControl) + ClipSourcesDrawer + SaveClipButton + SavedClipRow.
 //
-// ⚠️ MOCK DATA. The buffer substrate (per-source rolling-buffer record-to-disk +
-// the segments / saved-regions / recorded-layers contract) is Aaron's C1 lane and
-// isn't built yet. Everything below the MOCK SEAM is local stub state; saving a clip
-// just appends to in-memory lists. When the substrate lands, swap the seam for the
-// real hooks (e.g. useBufferSegments / useSavedClips) — the component props are
-// already shaped for it. This screen exists now so the gesture surfaces (scrub,
-// bracket drag, zoom, no-overlap clamp) are testable on a real page, not just the
-// gallery.
+// Buffer substrate wired to the real rolling buffer (R5): `useBuffer()` → the
+// owner's sessions (GET /buffer/me, owner-gated tokenized HLS + poster thumbs).
+// Sessions drive the timeline segments + collapsed gaps, the field's poster
+// thumbnail, and the recorded-source list. Saved-clip PERSISTENCE is still R3
+// (promote-on-publish) — saving stays in-session (local) until that backend
+// route lands; the Saved tab + saved-regions reflect this session's saves only.
 
 import { useEffect, useState } from 'react'
 import { router } from 'expo-router'
@@ -30,12 +28,16 @@ import { SaveClipButton } from '@/components/features/broadcast/SaveClipButton'
 import { BufferScrubField } from '@/components/features/clip/BufferScrubField'
 import {
   BufferTimeline,
+  type BufferSegment,
   type BufferSavedRegion,
   type BufferBracket,
 } from '@/components/features/clip/BufferTimeline'
 import { TimelineZoomControl, type TimelineZoom } from '@/components/primitives/TimelineZoomControl'
 import { ClipSourcesDrawer, type ClipSource } from '@/components/features/clip/ClipSourcesDrawer'
 import { SavedClipRow } from '@/components/features/clip/SavedClipRow'
+import { useAuth } from '@clerk/clerk-expo'
+import { useBuffer } from '@/hooks/useBuffer'
+import type { BufferSession, BufferTrackKind } from '@/api/buffer'
 import { theme } from '@/tokens/theme'
 
 type Page = 'editor' | 'saved'
@@ -62,22 +64,36 @@ const FIELD_MS_PER_PX: Record<TimelineZoom, number> = {
   sec: 500,
 }
 
-// ─────────────────────────── MOCK SEAM (Aaron C1/C4) ───────────────────────────
-// Replace this block with the real buffer substrate. Shapes match the component
-// props so the swap is local to this screen.
-function useMockBuffer() {
-  const [now] = useState(() => Date.now())
-  const segments = [
-    { id: 's1', startMs: now - 8 * H, endMs: now - 5 * H },
-    { id: 's2', startMs: now - 4 * H, endMs: now - 0.5 * H },
-    { id: 's3', startMs: now - 0.3 * H, endMs: now },
-  ]
-  return { now, segments, bufferStartMs: segments[0]!.startMs, bufferEndMs: now }
+// Recorded-source kind → ClipSource row metadata (icon/label/value). Only the
+// kinds the buffer actually captured are shown; unknown kinds are skipped.
+const KIND_META: Record<string, { key: string; iconName: ClipSource['iconName']; label: string; value: string }> = {
+  camera: { key: 'cam', iconName: 'video', label: 'CAMERA', value: 'VIDEO' },
+  audio: { key: 'aud', iconName: 'mic', label: 'AUDIO', value: '48 KHZ' },
+  location: { key: 'loc', iconName: 'map-pin', label: 'LOCATION', value: 'GPS' },
+  compass: { key: 'comp', iconName: 'compass', label: 'COMPASS', value: 'DEG' },
+  gyro: { key: 'gyro', iconName: 'navigation', label: 'GYRO', value: 'AXIS' },
 }
-// ────────────────────────────────────────────────────────────────────────────────
+const KIND_ORDER: BufferTrackKind[] = ['camera', 'audio', 'location', 'compass', 'gyro']
+const SOURCE_DEFAULT_ON = new Set<BufferTrackKind>(['camera', 'audio', 'location'])
+const EMPTY_SESSIONS: BufferSession[] = []
+
+const sessionStartMs = (s: BufferSession) => Date.parse(s.startedAt)
+const sessionEndMs = (s: BufferSession) => (s.endedAt ? Date.parse(s.endedAt) : Date.now())
 
 export const ClipEditScreen = () => {
-  const { now, segments, bufferStartMs, bufferEndMs } = useMockBuffer()
+  const { isSignedIn } = useAuth()
+  const { data: buffer } = useBuffer(!!isSignedIn)
+  const sessions = buffer?.sessions ?? EMPTY_SESSIONS
+
+  // Sessions → timeline segments; live session's end tracks the live head (the
+  // 1s tick below re-renders so it stays fresh).
+  const segments: BufferSegment[] = sessions.map((s) => ({
+    id: s.id,
+    startMs: sessionStartMs(s),
+    endMs: sessionEndMs(s),
+  }))
+  const bufferStartMs = sessions.length ? sessionStartMs(sessions[0]!) : Date.now()
+  const bufferEndMs = Date.now()
 
   const [page, setPage] = useState<Page>('editor')
   const [zoom, setZoom] = useState<TimelineZoom>('all')
@@ -97,30 +113,38 @@ export const ClipEditScreen = () => {
   const [name, setName] = useState('')
   const [drawerOpen, setDrawerOpen] = useState(false)
 
-  const [savedRegions, setSavedRegions] = useState<BufferSavedRegion[]>([
-    { id: 'r1', startMs: now - 3 * H, endMs: now - 2.5 * H, label: 'SAVED' },
-  ])
-  const [savedClips, setSavedClips] = useState<SavedClip[]>([
-    {
-      id: 'r1',
-      name: 'Soundcheck',
-      capturedAt: fmtClipStamp(now - 3 * H),
-      durationSec: 1800,
-      variant: 'camera',
-      sourcesLabel: 'Cam · Aud',
-      visibility: 'public',
-    },
-  ])
+  // Saved-clip persistence is R3 — these stay in-session (local) until the
+  // promote-on-publish backend route lands.
+  const [savedRegions, setSavedRegions] = useState<BufferSavedRegion[]>([])
+  const [savedClips, setSavedClips] = useState<SavedClip[]>([])
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
-  const [sources, setSources] = useState<ClipSource[]>([
-    { key: 'cam', iconName: 'video', label: 'CAMERA', value: '1080P', active: true },
-    { key: 'aud', iconName: 'mic', label: 'AUDIO', value: '48 KHZ', active: true },
-    { key: 'loc', iconName: 'map-pin', label: 'LOCATION', value: 'GPS', active: true },
-    { key: 'comp', iconName: 'compass', label: 'COMPASS', value: '192°', active: false },
-    { key: 'gyro', iconName: 'navigation', label: 'GYRO', value: 'OFF', active: false },
-  ])
+  // Recorded-source list seeded from the kinds the buffer actually captured.
+  // Seeded once when sessions first arrive; user toggles are preserved after.
+  const [sources, setSources] = useState<ClipSource[]>([])
+  useEffect(() => {
+    if (!sessions.length) return
+    setSources((prev) => {
+      if (prev.length) return prev
+      const captured = new Set<string>()
+      sessions.forEach((s) => s.kinds.forEach((k) => captured.add(k)))
+      return KIND_ORDER.filter((k) => captured.has(k)).map((k) => ({
+        ...KIND_META[k]!,
+        active: SOURCE_DEFAULT_ON.has(k),
+      }))
+    })
+  }, [sessions])
   const activeCount = sources.filter((s) => s.active).length
+
+  // Field poster + variant follow the session under the playhead.
+  const sessionAtPlayhead =
+    sessions.find((s) => playheadMs >= sessionStartMs(s) && playheadMs <= sessionEndMs(s)) ?? null
+  const fieldThumb = sessionAtPlayhead?.thumbnailUrl ?? null
+  const fieldVariant: 'camera' | 'audio-only' | 'map-only' = sessionAtPlayhead?.kinds.includes('camera')
+    ? 'camera'
+    : sessionAtPlayhead?.kinds.includes('audio')
+      ? 'audio-only'
+      : 'map-only'
 
   function handleFieldScrub(deltaPx: number) {
     // Drag right (dx>0) → earlier → larger offset. Functional update so the
@@ -190,8 +214,9 @@ export const ClipEditScreen = () => {
               its bottom — expand it to spin-scrub the buffer. Both drive offsetMs. */}
           <View style={[styles.fieldWrap, styles.fullBleed]}>
             <BufferScrubField
-              variant={sources.find((s) => s.key === 'cam')?.active ? 'camera' : 'audio-only'}
-              reachLabel="Buffer · 72h"
+              variant={fieldVariant}
+              thumbnailUrl={fieldThumb}
+              reachLabel={`Buffer · ${buffer?.windowHours ?? 72}h`}
               onScrub={handleFieldScrub}
             />
             <TimeScrubber
