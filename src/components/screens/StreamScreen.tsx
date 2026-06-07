@@ -79,11 +79,7 @@ import { TipSheet } from '@/components/features/stream/TipSheet'
 import { FollowButton } from '@/components/features/user/FollowButton'
 import { useInvalidateCurrentUser } from '@/hooks/useCurrentUser'
 import { useInvalidateWallet } from '@/hooks/useWallet'
-import {
-  useDeviceOrientation,
-  PREVIEW_ROTATION_DEG,
-  RECORD_ROTATION_DEG,
-} from '@/hooks/useDeviceOrientation'
+import { useDeviceOrientation, RECORD_ROTATION_DEG } from '@/hooks/useDeviceOrientation'
 import { theme } from '@/tokens/theme'
 import { signalStreamDisconnected, signalStreamEnded, signalKicked } from '@/lib/streamSignals'
 import { signalingClient } from '@/lib/mediasoupSignaling'
@@ -101,13 +97,6 @@ import { useStream, useStreamByRoom } from '@/hooks/useStream'
 import { useAuthStore } from '@/stores/authStore'
 import type { Stream, SourceType } from '@/types'
 import type { TipEvent } from '@/hooks/useSignaling'
-
-// Map a rotation to its shortest signed equivalent in (−180, 180], so a preview
-// rotation animates the short way (270° → −90°) instead of sweeping the long way.
-function shortestDeg(deg: number): number {
-  const d = ((deg % 360) + 360) % 360
-  return d > 180 ? d - 360 : d
-}
 
 const SOURCE_LABELS: Record<SourceType, string> = {
   camera: 'Camera',
@@ -343,40 +332,31 @@ export function StreamScreen() {
   // active while previewing/broadcasting our own camera. Drives the live preview
   // rotation and the recording's baked rotation so a landscape hold yields
   // landscape video instead of a sideways portrait frame.
-  const deviceOrientation = useDeviceOrientation(showCameraPreview)
-  // iOS keeps the camera frame fixed to the (portrait-locked) phone, so the
-  // preview rotates with the device — we counter-rotate it. CRUCIAL: a `transform`
-  // on the RTCView itself is IGNORED on iOS (that's why earlier rotation values
-  // had no effect); it must be applied to a WRAPPER View around the RTCView, which
-  // cascades to the native video layer. Android orients the preview natively, so
-  // it stays 0. Recording is separate (server -c:v copy drops rotation → bake).
-  // Use the shortest signed angle so the iOS layer rotates the short way (e.g. a
-  // portrait→landscape turn animates 90°, not 270° the long way around).
-  const previewRotation = Platform.OS === 'ios' ? shortestDeg(PREVIEW_ROTATION_DEG[deviceOrientation]) : 0
+  const { orientation: deviceOrientation, tiltDeg } = useDeviceOrientation(showCameraPreview)
+  // GIMBAL preview (iOS): counter-rotate the camera by the continuous tilt angle
+  // so it stays upright at any tilt (not just snapping at 90° steps). A `transform`
+  // on the RTCView itself is ignored on iOS, so it rides a WRAPPER View. The
+  // wrapper is a screen-diagonal square, so at ANY rotation it still covers the
+  // screen (no empty corners); the RTCView cover-fills it. Android orients the
+  // preview natively → 0. Recording stays discrete (server -c:v copy → one bake
+  // per go-live), driven by `deviceOrientation`.
+  const previewRotation = Platform.OS === 'ios' ? tiltDeg : 0
   const isLandscapeHold = deviceOrientation === 'landscape-left' || deviceOrientation === 'landscape-right'
-  // A quarter-turn (±90) needs swapped dimensions + centering so the landscape
-  // video still fills the portrait screen (rotate about the screen center).
-  // 0°/180° just fill normally.
-  const isQuarterTurn = Math.abs(previewRotation % 180) === 90
   const previewStyle = (() => {
     const base = { transform: [{ rotate: `${previewRotation}deg` }] }
-    if (isQuarterTurn) {
-      const { width: w, height: h } = Dimensions.get('window')
-      return {
-        position: 'absolute' as const,
-        width: h,
-        height: w,
-        top: (h - w) / 2,
-        left: (w - h) / 2,
-        ...base,
-      }
+    if (Platform.OS !== 'ios') return { ...StyleSheet.absoluteFillObject, ...base }
+    const { width: w, height: h } = Dimensions.get('window')
+    const diag = Math.ceil(Math.hypot(w, h))
+    return {
+      position: 'absolute' as const,
+      width: diag,
+      height: diag,
+      top: (h - diag) / 2,
+      left: (w - diag) / 2,
+      ...base,
     }
-    return { ...StyleSheet.absoluteFillObject, ...base }
   })()
-  // Rotated landscape preview → 'contain' so the aspect is preserved (letterbox)
-  // instead of being stretched to fill the swapped portrait bounds. Upright →
-  // 'cover' fills as before.
-  const previewObjectFit: 'cover' | 'contain' = isQuarterTurn ? 'contain' : 'cover'
+  const previewObjectFit: 'cover' | 'contain' = 'cover'
   const showControls = isNew || !showOverlay || controlsVisible
 
   // Docked-footer bottom padding (Go Live / End Stream), and the shared offset
@@ -971,7 +951,7 @@ export function StreamScreen() {
       {showCameraPreview && (
         <View style={styles.orientationDebug} pointerEvents="none">
           <Text variant="monoLabel" color={theme.colors.text.inverse}>
-            {`${Platform.OS} · hold:${deviceOrientation} · prev:${previewRotation}° · rec:${RECORD_ROTATION_DEG[deviceOrientation]}° · track:${videoIsLandscape ? 'land' : 'port'}`}
+            {`${Platform.OS} · hold:${deviceOrientation} · tilt:${Math.round(previewRotation)}° · rec:${RECORD_ROTATION_DEG[deviceOrientation]}° · track:${videoIsLandscape ? 'land' : 'port'}`}
           </Text>
         </View>
       )}
