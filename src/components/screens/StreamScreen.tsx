@@ -102,6 +102,13 @@ import { useAuthStore } from '@/stores/authStore'
 import type { Stream, SourceType } from '@/types'
 import type { TipEvent } from '@/hooks/useSignaling'
 
+// Map a rotation to its shortest signed equivalent in (−180, 180], so a preview
+// rotation animates the short way (270° → −90°) instead of sweeping the long way.
+function shortestDeg(deg: number): number {
+  const d = ((deg % 360) + 360) % 360
+  return d > 180 ? d - 360 : d
+}
+
 const SOURCE_LABELS: Record<SourceType, string> = {
   camera: 'Camera',
   audio: 'Audio',
@@ -343,14 +350,17 @@ export function StreamScreen() {
   // had no effect); it must be applied to a WRAPPER View around the RTCView, which
   // cascades to the native video layer. Android orients the preview natively, so
   // it stays 0. Recording is separate (server -c:v copy drops rotation → bake).
-  const previewRotation = Platform.OS === 'ios' ? PREVIEW_ROTATION_DEG[deviceOrientation] : 0
+  // Use the shortest signed angle so the iOS layer rotates the short way (e.g. a
+  // portrait→landscape turn animates 90°, not 270° the long way around).
+  const previewRotation = Platform.OS === 'ios' ? shortestDeg(PREVIEW_ROTATION_DEG[deviceOrientation]) : 0
   const isLandscapeHold = deviceOrientation === 'landscape-left' || deviceOrientation === 'landscape-right'
-  // Rotating an absolute-fill preview by 90°/270° needs swapped dimensions +
-  // centering so the landscape video still cover-fills the portrait screen
-  // (rotate about the screen center). 0°/180° just fill normally.
+  // A quarter-turn (±90) needs swapped dimensions + centering so the landscape
+  // video still fills the portrait screen (rotate about the screen center).
+  // 0°/180° just fill normally.
+  const isQuarterTurn = Math.abs(previewRotation % 180) === 90
   const previewStyle = (() => {
     const base = { transform: [{ rotate: `${previewRotation}deg` }] }
-    if (previewRotation === 90 || previewRotation === 270) {
+    if (isQuarterTurn) {
       const { width: w, height: h } = Dimensions.get('window')
       return {
         position: 'absolute' as const,
@@ -366,8 +376,7 @@ export function StreamScreen() {
   // Rotated landscape preview → 'contain' so the aspect is preserved (letterbox)
   // instead of being stretched to fill the swapped portrait bounds. Upright →
   // 'cover' fills as before.
-  const previewObjectFit: 'cover' | 'contain' =
-    previewRotation === 90 || previewRotation === 270 ? 'contain' : 'cover'
+  const previewObjectFit: 'cover' | 'contain' = isQuarterTurn ? 'contain' : 'cover'
   const showControls = isNew || !showOverlay || controlsVisible
 
   // Docked-footer bottom padding (Go Live / End Stream), and the shared offset
