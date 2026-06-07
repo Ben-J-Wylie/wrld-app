@@ -29,7 +29,7 @@ const STABLE_SAMPLES = 4
 // Fast sampling so the gimbal preview tracks smoothly; the angle is low-pass
 // smoothed and only re-rendered when it moves enough to matter.
 const UPDATE_MS = 60
-const SMOOTH = 0.35 // exponential smoothing factor for tiltDeg
+const SMOOTH = 0.6 // exponential smoothing factor for tiltDeg (higher = more responsive)
 const MIN_DELTA_DEG = 0.75 // skip a state update if the angle barely moved
 
 // iOS and Android report opposite accelerometer X/Y signs. Calibrated to Android
