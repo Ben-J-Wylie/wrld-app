@@ -31,6 +31,7 @@ import {
 } from 'react-native'
 import { Text } from '@/components/primitives/Text'
 import { Icon } from '@/components/primitives/Icon'
+import { Pressable } from '@/components/primitives/Pressable'
 import { FeedThumb } from '@/components/features/broadcast/FeedThumb'
 import { theme } from '@/tokens/theme'
 
@@ -49,6 +50,10 @@ type Props = {
   // to show instead of video — a static gap duration, a running "since last
   // broadcast" clock, or a "footage clears in" countdown. Overrides the frame.
   card?: { title: string; detail: string }
+  // Play/pause control (the field is the viewer). When `onTogglePlay` is set, a
+  // centered play/pause button renders; `playing` picks the glyph.
+  playing?: boolean
+  onTogglePlay?: () => void
   showScrubHint?: boolean
   // Incremental horizontal pixel delta since the previous move event. The parent
   // converts to a time delta against the current zoom and advances the playhead.
@@ -62,6 +67,8 @@ export function BufferScrubField({
   frameSlot,
   reachLabel,
   card,
+  playing,
+  onTogglePlay,
   showScrubHint = true,
   onScrub,
   style,
@@ -71,7 +78,9 @@ export function BufferScrubField({
   onScrubRef.current = onScrub
   const pan = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
+      // Don't claim on touch-start — let taps reach the play/pause button. Only a
+      // horizontal drag (below) becomes a scrub.
+      onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (_e, g) => Math.abs(g.dx) > 2,
       onPanResponderGrant: () => {
         lastDx.current = 0
@@ -113,6 +122,21 @@ export function BufferScrubField({
       ) : (
         <View style={[styles.fill, styles.fallback]}>
           <FeedThumb kind={variant === 'audio-only' ? 'audio' : 'loc'} size="lg" />
+        </View>
+      )}
+
+      {onTogglePlay && !card && (
+        <View style={styles.playWrap} pointerEvents="box-none">
+          <Pressable
+            variant="default"
+            onPress={onTogglePlay}
+            accessibilityRole="button"
+            accessibilityLabel={playing ? 'Pause' : 'Play'}
+            hitSlop={12}
+            style={styles.playBtn}
+          >
+            <Icon name={playing ? 'pause' : 'play'} size="lg" color={theme.colors.text.inverse} />
+          </Pressable>
         </View>
       )}
 
@@ -179,6 +203,19 @@ const styles = StyleSheet.create({
   cardDetail: {
     fontSize: 24,
     lineHeight: 30,
+  },
+  playWrap: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  playBtn: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(20,16,13,0.5)',
   },
   camPlaceholder: {
     backgroundColor: theme.colors.bg.panelHi,

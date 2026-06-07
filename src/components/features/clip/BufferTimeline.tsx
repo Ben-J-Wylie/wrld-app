@@ -12,6 +12,8 @@
 //     timeline itself is the scrollbar's job, not pan.)
 //   • PINCH — continuous horizontal zoom on the UI thread (reanimated shared
 //     values), committed to `pxPerMs` + offset on release.
+//   • ZOOM TOGGLE (All · Days · Hours · Min · Sec) below the scrollbar — a
+//     non-pinch way to snap the zoom to a span; centres on the playhead.
 //   • The bracket handles are their own RNGH Pan gestures (block the timeline pan),
 //     so dragging an edge resizes the clip instead of scrubbing.
 //
@@ -25,6 +27,7 @@ import { StyleSheet, View, type LayoutChangeEvent, type StyleProp, type ViewStyl
 import Animated, { useAnimatedStyle, useSharedValue, runOnJS } from 'react-native-reanimated'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import { theme } from '@/tokens/theme'
+import { SegmentedToggle } from '@/components/primitives/SegmentedToggle'
 import { GapMarker, GAP_MARKER_WIDTH } from './GapMarker'
 import { SavedClipRegion } from './SavedClipRegion'
 import { ClipBracket } from './ClipBracket'
@@ -43,6 +46,9 @@ type Props = {
   bracket?: BufferBracket | null
   onScrub: (ms: number) => void
   onBracketChange?: (next: BufferBracket) => void
+  // The live zoom (px per ms), reported on change — the field uses it to scale its
+  // own scrub rate relative to the timeline.
+  onZoomChange?: (pxPerMs: number) => void
   style?: StyleProp<ViewStyle>
 }
 
@@ -51,6 +57,27 @@ const MIN_BRACKET_MS = 500
 const GAP_THRESHOLD_MS = 500
 const ZOOM_MAX_FACTOR = 12
 const FILM_CELL_W = 24
+
+// Zoom-level toggle (an alternative to pinch). Each non-"All" level targets a
+// span that fills the viewport; "All" fits the whole buffer. pxPerMs = width/span,
+// clamped to the live zoom range. maxPx is raised so the finest (Sec) level — and
+// pinch — can reach it even on a wide (multi-day) buffer.
+type ZoomLevel = 'all' | 'days' | 'hours' | 'min' | 'sec'
+const ZOOM_LEVELS: ZoomLevel[] = ['all', 'days', 'hours', 'min', 'sec']
+const ZOOM_OPTS: { value: ZoomLevel; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'days', label: 'Days' },
+  { value: 'hours', label: 'Hours' },
+  { value: 'min', label: 'Min' },
+  { value: 'sec', label: 'Sec' },
+]
+const SEC_SPAN_MS = 20_000
+const LEVEL_SPAN_MS: Record<Exclude<ZoomLevel, 'all'>, number> = {
+  days: 2 * 86_400_000,
+  hours: 3 * 3_600_000,
+  min: 10 * 60_000,
+  sec: SEC_SPAN_MS,
+}
 
 type SegBlock = { kind: 'seg'; seg: BufferSegment; leftPx: number; widthPx: number }
 type GapBlock = { kind: 'gap'; leftPx: number; skippedMs: number }
@@ -65,6 +92,7 @@ export function BufferTimeline({
   bracket,
   onScrub,
   onBracketChange,
+  onZoomChange,
   style,
 }: Props) {
   const [width, setWidth] = useState(0)
@@ -78,7 +106,8 @@ export function BufferTimeline({
   const { totalSegMs, gapsPx } = useMemo(() => measure(segments), [segments])
   const fit = totalSegMs > 0 && width > 0 ? Math.max(0, (width - gapsPx) / totalSegMs) : 0
   const minPx = fit
-  const maxPx = fit > 0 ? fit * ZOOM_MAX_FACTOR : 0
+  const secPx = width > 0 ? width / SEC_SPAN_MS : 0
+  const maxPx = fit > 0 ? Math.max(fit * ZOOM_MAX_FACTOR, secPx) : 0
   const px = pxPerMs > 0 ? pxPerMs : fit
 
   const { blocks, segBlocks, contentWidth } = useMemo(() => layout(segments, px), [segments, px])
@@ -102,6 +131,13 @@ export function BufferTimeline({
   useEffect(() => {
     tx.value = -offset
   }, [offset, tx])
+
+  // Report the live zoom up so the field can scale its scrub rate to the timeline.
+  const onZoomChangeRef = useRef(onZoomChange)
+  onZoomChangeRef.current = onZoomChange
+  useEffect(() => {
+    if (px > 0) onZoomChangeRef.current?.(px)
+  }, [px])
 
   // Shared mirrors the pinch worklet reads (set from JS each render).
   const sPx = useSharedValue(px)
@@ -176,6 +212,42 @@ export function BufferTimeline({
     setPxPerMs(newPx)
     setScrollOffset(no)
     gesturingRef.current = false
+  }
+
+  // ── zoom-level toggle (alternative to pinch) ────────────────────────────────
+  function levelToPx(level: ZoomLevel): number {
+    if (level === 'all' || width <= 0 || fit <= 0) return fit
+    return clamp(width / LEVEL_SPAN_MS[level], minPx, maxPx)
+  }
+  // The segment highlighted = the level whose scale is nearest the current zoom.
+  const currentLevel: ZoomLevel = useMemo(() => {
+    if (px <= 0) return 'all'
+    let best: ZoomLevel = 'all'
+    let bestD = Infinity
+    for (const lv of ZOOM_LEVELS) {
+      const lpx = levelToPx(lv)
+      if (lpx <= 0) continue
+      const d = Math.abs(Math.log(px) - Math.log(lpx))
+      if (d < bestD) {
+        bestD = d
+        best = lv
+      }
+    }
+    return best
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [px, fit, minPx, maxPx, width])
+  // Tap a level → snap the zoom, keeping the playhead centred in the viewport.
+  function applyZoomLevel(level: ZoomLevel) {
+    const newPx = levelToPx(level)
+    if (newPx <= 0) return
+    const nl = layout(segmentsRef.current, newPx)
+    const newCW = nl.contentWidth + (hasTrailingGap ? GAP_MARKER_WIDTH : 0)
+    const phX = timeToX(playheadMs, nl.segBlocks, newPx)
+    const no = clamp(phX - width / 2, 0, Math.max(0, newCW - width))
+    sx.value = 1
+    tx.value = -no
+    setPxPerMs(newPx)
+    setScrollOffset(no)
   }
 
   // ── gestures ──────────────────────────────────────────────────────────────
@@ -376,6 +448,8 @@ export function BufferTimeline({
           setScrollOffset(no)
         }}
       />
+
+      <SegmentedToggle options={ZOOM_OPTS} value={currentLevel} onChange={applyZoomLevel} />
     </View>
   )
 }

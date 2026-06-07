@@ -2384,3 +2384,72 @@ chosen **per go-live in the dashboard** (`captureConfig.precision` → `createRo
 
 Backend dropped `User.locationPrecision` in the same change — see
 `wrld-backend/CLAUDE.md` "Location precision is now per-stream only".
+
+---
+
+## Updates — June 2026 (Buffer viewer: scrub feel, zoom toggle, video seek hardening)
+
+App-side polish + a real robustness fix on the clip editor's buffer viewer, all on
+`design`, all pure JS (no native change — hot-reload, no rebuild). Three files:
+`BufferScrubField`, `BufferTimeline` (features), `ClipEditScreen` (screen).
+
+### Field scrub is now zoom-relative (and slower)
+Dropped the fixed `FIELD_MS_PER_PX`. The field's scrub rate is derived from the
+timeline's live zoom: the timeline scrubs **1:1 with the finger** (1px = `1/pxPerMs`
+ms) and the **field is exactly half that**, so the experience is consistent at every
+zoom — zoom in → the field scrub gets slower/finer; zoom out → coarser. `BufferTimeline`
+reports its zoom up via a new **`onZoomChange(pxPerMs)`** prop; `ClipEditScreen` holds
+it in a ref and applies `0.5 / pxPerMs`.
+
+### Gaps condensed to a quarter-screen
+Scrubbing the field over a gap now traverses the **whole gap in 0.25 × fieldWidth px**
+at any zoom (`msPerPx = gapDuration / quarterScreen`), so you never scrub through the
+full wall-clock value of a gap — the clock spins evenly across it (longer gap → faster).
+`ClipEditScreen.gapAt(ms)` finds the gap; field width comes from an `onLayout` ref.
+
+### Zoom-level toggle re-added (All · Days · Hours · Min · Sec)
+A `SegmentedToggle` below the `TimelineScrollbar`, as a non-pinch way to set zoom. Each
+level snaps `pxPerMs` to a target span and re-centres on the playhead; the highlighted
+segment tracks the current zoom (pinch + toggle stay in sync). `maxPx` was raised so the
+finest (Sec) level — and pinch — is reachable even on a multi-day buffer (the old 12×
+cap was too shallow for a 24h+ buffer).
+
+### NOW catches up the clock
+The clock derived its offset from `Date.now() - playheadMs`, which drifts up to ~1s
+between ticks and read **THEN** even at the live head. When **following**, the clock
+offset is now pinned to exactly `0` (reads NOW + live-ticks). Tapping NOW sets
+`following`, so it catches up — to the live stream if streaming, or the trailing
+"since last broadcast" gap counter if not.
+
+### Play/pause button in the viewer
+`BufferScrubField` gained a centered play/pause button (`playing` / `onTogglePlay`);
+its PanResponder no longer claims touch-start so taps reach the button. Play runs from
+the paused playhead and the playhead follows the video (250ms); any scrub pauses it.
+
+### Video seek hardening (the "viewer stalls after some use" bug) — app lane FIXED
+On-device logs pinned two distinct failures:
+1. **Seek-hang (app bug, FIXED).** Zero-tolerance `player.currentTime = x` precise
+   seeks hang AVPlayer/ExoPlayer in `loading` forever on a `-c:v copy` HLS VOD after a
+   variable number of seeks (saw 20/45). **Fix:** scrub seeks now use tolerant
+   `player.seekBy(delta)` (keyframe) — frame accuracy isn't needed (clip in/out come
+   from the timeline). This alone took it from ~20 to 115+ clean seeks.
+2. **"resource unavailable" after ~minutes (SUBSTRATE — Aaron).** The tokenized
+   concatenated buffer VOD itself goes unavailable; a fresh `GET /buffer/me` token does
+   **not** restore it. Handoff written to `wrld-backend/CLAUDE.md` (stacked-work item 5:
+   token TTL / reaping / live-concat).
+
+**Recovery controller** (`ClipEditScreen`), all in our lane and graceful:
+- Status-gated **backpressure** — only seek when `readyToPlay`, always to the latest
+  target (one in-flight seek; newer targets overwrite the pending one).
+- Preview-play during a scrub burst → single **settle-pause** on the rendered frame
+  (fixes blank-on-tap without per-seek play/pause thrash).
+- `statusChange` watcher: stuck-`loading` watchdog (2.5s) + on error/stuck →
+  **`recoverPlayer()`** = refetch fresh token + **`replaceAsync`** (not the synchronous,
+  UI-freezing `replace`), **capped 4× with exponential backoff**, budget resets on every
+  `readyToPlay`. Exhausted → falls back to the **poster** with **tap-to-retry**.
+- Diagnostics gated behind `__DEV__` (`vlog`) — visible in dev, stripped from prod.
+
+**Still owed:** the substrate fix (Aaron, backend item 5) so the preview doesn't degrade
+after a few minutes; an on-device pass of the new scrub feel (half-rate, quarter-screen
+gap, zoom toggle) and the recovery path. Scrub/timeline/clock/zoom all keep working even
+when the video falls back to the poster.
