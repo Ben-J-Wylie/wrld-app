@@ -32,7 +32,6 @@ import {
   Alert,
   Animated,
   AppState,
-  Dimensions,
   Keyboard,
   Linking,
   Platform,
@@ -342,20 +341,13 @@ export function StreamScreen() {
   // per go-live), driven by `deviceOrientation`.
   const previewRotation = Platform.OS === 'ios' ? tiltDeg : 0
   const isLandscapeHold = deviceOrientation === 'landscape-left' || deviceOrientation === 'landscape-right'
-  // Gimbal: rotate a screen-sized preview by the tilt, scaling up only as much as
-  // the rotation needs to keep the screen covered (scale = 1 at 0°, so no zoom at
-  // rest; grows toward landscape). This replaces the screen-diagonal square, which
-  // over-zoomed at every angle.
-  const previewStyle = (() => {
-    const base = { transform: [{ rotate: `${previewRotation}deg` }] }
-    if (Platform.OS !== 'ios') return { ...StyleSheet.absoluteFillObject, ...base }
-    const { width: w, height: h } = Dimensions.get('window')
-    const rad = (previewRotation * Math.PI) / 180
-    const c = Math.abs(Math.cos(rad))
-    const s = Math.abs(Math.sin(rad))
-    const scale = Math.max((w * c + h * s) / w, (w * s + h * c) / h)
-    return { ...StyleSheet.absoluteFillObject, transform: [...base.transform, { scale }] }
-  })()
+  // Gimbal: counter-rotate the screen-sized preview by the tilt to keep the
+  // subject upright. No scale — rotating without zoom (the trade-off is the
+  // corners aren't filled at large angles; we never zoom in).
+  const previewStyle = {
+    ...StyleSheet.absoluteFillObject,
+    transform: [{ rotate: `${previewRotation}deg` }],
+  }
   const previewObjectFit: 'cover' | 'contain' = 'cover'
   const showControls = isNew || !showOverlay || controlsVisible
 

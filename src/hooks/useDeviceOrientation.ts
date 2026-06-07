@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Platform } from 'react-native'
-import { Accelerometer } from 'expo-sensors'
+import { DeviceMotion } from 'expo-sensors'
 
 // Physical device orientation + continuous tilt, sensed from the accelerometer's
 // gravity vector.
@@ -20,25 +20,31 @@ import { Accelerometer } from 'expo-sensors'
 
 export type DeviceOrientation = 'portrait' | 'portrait-upside-down' | 'landscape-left' | 'landscape-right'
 
-// Below this gravity magnitude in the screen plane the phone is ~flat (face up/
-// down) — keep the last reading rather than flip-flopping.
+// Below this normalised in-plane gravity the phone is ~flat (face up/down) — keep
+// the last reading rather than flip-flopping.
 const FLAT_GUARD = 0.45
 // Hysteresis for the discrete orientation: this many consecutive same samples
 // before committing, so wobble near a 45° boundary doesn't thrash the recording.
 const STABLE_SAMPLES = 4
-// Fast sampling so the gimbal preview tracks smoothly; the angle is low-pass
-// smoothed and only re-rendered when it moves enough to matter.
-const UPDATE_MS = 60
-const SMOOTH = 0.6 // exponential smoothing factor for tiltDeg (higher = more responsive)
-const MIN_DELTA_DEG = 0.75 // skip a state update if the angle barely moved
+// DeviceMotion sampling. Its gravity is gyro-fused (clean during motion), so we
+// can smooth lightly and still track a turn smoothly.
+const UPDATE_MS = 50
+const SMOOTH = 0.5 // exponential smoothing factor for tiltDeg (higher = more responsive)
+const MIN_DELTA_DEG = 0.5 // skip a state update if the angle barely moved
 
-// iOS and Android report opposite accelerometer X/Y signs. Calibrated to Android
-// (held upright-portrait, y reads positive); iOS negates both axes. atan2(x, y)
-// gives the roll angle: 0°=portrait, 180°=upside-down, +90°/−90°=the two
-// landscapes. If a hold is misread on a platform, this sign pair is the place to flip.
-function rollDeg(xRaw: number, yRaw: number): number | null {
-  const x = Platform.OS === 'ios' ? -xRaw : xRaw
-  const y = Platform.OS === 'ios' ? -yRaw : yRaw
+// Roll from the GYRO-FUSED gravity vector (DeviceMotion: accelerationIncluding
+// gravity minus user-acceleration), normalised so it's unit-agnostic. iOS/Android
+// report opposite X/Y signs — iOS negates both. atan2(x, y) gives the roll:
+// 0°=portrait, 180°=upside-down, ±90°=the two landscapes. If a hold is misread on
+// a platform, this sign pair is the place to flip.
+function rollDeg(gx: number, gy: number, gz: number): number | null {
+  const mag = Math.hypot(gx, gy, gz) || 1
+  let x = gx / mag
+  let y = gy / mag
+  if (Platform.OS === 'ios') {
+    x = -x
+    y = -y
+  }
   if (Math.hypot(x, y) < FLAT_GUARD) return null // phone ~flat — undefined roll
   return (Math.atan2(x, y) * 180) / Math.PI // -180..180, 0 = upright portrait
 }
@@ -74,9 +80,14 @@ export function useDeviceOrientation(enabled = true): DeviceTilt {
 
   useEffect(() => {
     if (!enabled) return
-    Accelerometer.setUpdateInterval(UPDATE_MS)
-    const sub = Accelerometer.addListener(({ x, y }) => {
-      const deg = rollDeg(x, y)
+    DeviceMotion.setUpdateInterval(UPDATE_MS)
+    const sub = DeviceMotion.addListener((d) => {
+      const g = d.accelerationIncludingGravity
+      if (!g) return
+      // Subtract user-acceleration to recover clean (gyro-fused) gravity, so the
+      // roll stays stable while the phone is being turned.
+      const u = d.acceleration
+      const deg = rollDeg(g.x - (u?.x ?? 0), g.y - (u?.y ?? 0), g.z - (u?.z ?? 0))
       if (deg == null) return // ~flat — keep the last reading
 
       // Continuous, wrap-safe exponential smoothing for the gimbal preview.
