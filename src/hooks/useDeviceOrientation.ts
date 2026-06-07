@@ -59,8 +59,8 @@ function classify(xRaw: number, yRaw: number): DeviceOrientation | null {
 // if the preview or the recording comes out rotated the wrong way / mirrored.
 export const PREVIEW_ROTATION_DEG: Record<DeviceOrientation, number> = {
   portrait: 0,
-  'landscape-left': 90,
-  'landscape-right': 270,
+  'landscape-left': 270,
+  'landscape-right': 90,
   'portrait-upside-down': 180,
 }
 export const RECORD_ROTATION_DEG: Record<DeviceOrientation, number> = {
