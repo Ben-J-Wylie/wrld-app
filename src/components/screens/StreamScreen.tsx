@@ -345,7 +345,7 @@ export function StreamScreen() {
   // mirror flips the roll handedness, so negate the angle when mirrored.
   // Starting point: counter-rotate (negate tilt); tiltDeg 0=portrait,
   // +90=landscape-left, -90=landscape-right (see useDeviceOrientation).
-  const GIMBAL_SIGN = -1
+  const GIMBAL_SIGN = 1
   const GIMBAL_BASE = 0
   const gimbalMirrorSign = facingMode === 'user' ? -1 : 1
   const previewGimbalDeg = GIMBAL_BASE + GIMBAL_SIGN * gimbalMirrorSign * tiltDeg
