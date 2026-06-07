@@ -326,29 +326,15 @@ export function StreamScreen() {
   const showRemoteVideo = !isNew && status === 'in-room' && !!remoteStream && broadcastSources.includes('camera')
   const showOverlay = showCameraPreview || showRemoteVideo
 
-  // Physical device orientation (sensed via the accelerometer — the app UI is
-  // portrait-locked, so this is the only way to know how the phone is held). Only
-  // active while previewing/broadcasting our own camera. Drives the live preview
-  // rotation and the recording's baked rotation so a landscape hold yields
-  // landscape video instead of a sideways portrait frame.
-  const { orientation: deviceOrientation, tiltDeg } = useDeviceOrientation(showCameraPreview)
-  // GIMBAL preview (iOS): counter-rotate the camera by the continuous tilt angle
-  // so it stays upright at any tilt (not just snapping at 90° steps). A `transform`
-  // on the RTCView itself is ignored on iOS, so it rides a WRAPPER View. The
-  // wrapper is a screen-diagonal square, so at ANY rotation it still covers the
-  // screen (no empty corners); the RTCView cover-fills it. Android orients the
-  // preview natively → 0. Recording stays discrete (server -c:v copy → one bake
-  // per go-live), driven by `deviceOrientation`.
-  const previewRotation = Platform.OS === 'ios' ? tiltDeg : 0
+  // Physical device orientation (sensed via DeviceMotion — the app UI is
+  // portrait-locked, so this is the only way to know how the phone is held). Used
+  // ONLY to bake the recording's orientation (server -c:v copy → one rotation per
+  // go-live). The live preview is NOT leveled: like the native camera, the preview
+  // rides the phone (iOS re-orients the RTCView video to the device under us, and
+  // the native camera's live view rides too); only the saved video comes out
+  // upright.
+  const { orientation: deviceOrientation } = useDeviceOrientation(showCameraPreview)
   const isLandscapeHold = deviceOrientation === 'landscape-left' || deviceOrientation === 'landscape-right'
-  // Gimbal: counter-rotate the screen-sized preview by the tilt to keep the
-  // subject upright. No scale — rotating without zoom (the trade-off is the
-  // corners aren't filled at large angles; we never zoom in).
-  const previewStyle = {
-    ...StyleSheet.absoluteFillObject,
-    transform: [{ rotate: `${previewRotation}deg` }],
-  }
-  const previewObjectFit: 'cover' | 'contain' = 'cover'
   const showControls = isNew || !showOverlay || controlsVisible
 
   // Docked-footer bottom padding (Go Live / End Stream), and the shared offset
@@ -923,27 +909,23 @@ export function StreamScreen() {
   return (
     <SafeAreaView style={styles.container}>
       {showCameraPreview && (
-        // The rotation lives on this WRAPPER View, not the RTCView — a transform
-        // on RTCView is ignored on iOS. The RTCView fills the (possibly rotated +
-        // dimension-swapped) wrapper, so no per-video transform is needed.
-        <View style={previewStyle}>
-          <RTCView
-            streamURL={(localStream as unknown as { toURL(): string }).toURL()}
-            style={StyleSheet.absoluteFill}
-            objectFit={previewObjectFit}
-            mirror={facingMode === 'user'}
-            zOrder={0}
-          />
-        </View>
+        // Native-style live preview: full-screen, rides the phone. The recording
+        // is oriented separately (server-side bake from deviceOrientation).
+        <RTCView
+          streamURL={(localStream as unknown as { toURL(): string }).toURL()}
+          style={StyleSheet.absoluteFill}
+          objectFit="cover"
+          mirror={facingMode === 'user'}
+          zOrder={0}
+        />
       )}
 
-      {/* TEMP orientation debug readout (remove once angles are dialled in).
-          Reports what each platform senses + the track's own orientation, so the
-          per-platform rotation can be set from real data. */}
+      {/* TEMP recording-orientation debug readout (remove once the bake is
+          confirmed). hold = sensed orientation; rec = degrees baked into the clip. */}
       {showCameraPreview && (
         <View style={styles.orientationDebug} pointerEvents="none">
           <Text variant="monoLabel" color={theme.colors.text.inverse}>
-            {`${Platform.OS} · hold:${deviceOrientation} · tilt:${Math.round(previewRotation)}° · rec:${RECORD_ROTATION_DEG[deviceOrientation]}° · track:${videoIsLandscape ? 'land' : 'port'}`}
+            {`${Platform.OS} · hold:${deviceOrientation} · rec:${RECORD_ROTATION_DEG[deviceOrientation]}° · track:${videoIsLandscape ? 'land' : 'port'}`}
           </Text>
         </View>
       )}
