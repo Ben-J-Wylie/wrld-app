@@ -79,7 +79,11 @@ import { TipSheet } from '@/components/features/stream/TipSheet'
 import { FollowButton } from '@/components/features/user/FollowButton'
 import { useInvalidateCurrentUser } from '@/hooks/useCurrentUser'
 import { useInvalidateWallet } from '@/hooks/useWallet'
-import { useDeviceOrientation, RECORD_ROTATION_DEG } from '@/hooks/useDeviceOrientation'
+import {
+  useDeviceOrientation,
+  PREVIEW_ROTATION_DEG,
+  RECORD_ROTATION_DEG,
+} from '@/hooks/useDeviceOrientation'
 import { theme } from '@/tokens/theme'
 import { signalStreamDisconnected, signalStreamEnded, signalKicked } from '@/lib/streamSignals'
 import { signalingClient } from '@/lib/mediasoupSignaling'
@@ -333,13 +337,13 @@ export function StreamScreen() {
   // rotation and the recording's baked rotation so a landscape hold yields
   // landscape video instead of a sideways portrait frame.
   const deviceOrientation = useDeviceOrientation(showCameraPreview)
-  // RTCView already orients the live preview to the physical device on BOTH
-  // platforms (confirmed on device: at 0° applied rotation the preview is upright
-  // for every hold; any manual rotation just knocked it off by exactly that
-  // amount). So we never manually rotate the preview. The recording is separate —
-  // it's -c:v copy server-side, which drops the rotation flag, so RECORD_ROTATION_DEG
-  // is still sent for the baked display matrix.
-  const previewRotation = 0
+  // iOS keeps the camera frame fixed to the (portrait-locked) phone, so the
+  // preview rotates with the device — we counter-rotate it. CRUCIAL: a `transform`
+  // on the RTCView itself is IGNORED on iOS (that's why earlier rotation values
+  // had no effect); it must be applied to a WRAPPER View around the RTCView, which
+  // cascades to the native video layer. Android orients the preview natively, so
+  // it stays 0. Recording is separate (server -c:v copy drops rotation → bake).
+  const previewRotation = Platform.OS === 'ios' ? PREVIEW_ROTATION_DEG[deviceOrientation] : 0
   const isLandscapeHold = deviceOrientation === 'landscape-left' || deviceOrientation === 'landscape-right'
   // Rotating an absolute-fill preview by 90°/270° needs swapped dimensions +
   // centering so the landscape video still cover-fills the portrait screen
@@ -938,13 +942,18 @@ export function StreamScreen() {
   return (
     <SafeAreaView style={styles.container}>
       {showCameraPreview && (
-        <RTCView
-          streamURL={(localStream as unknown as { toURL(): string }).toURL()}
-          style={previewStyle}
-          objectFit={previewObjectFit}
-          mirror={facingMode === 'user'}
-          zOrder={0}
-        />
+        // The rotation lives on this WRAPPER View, not the RTCView — a transform
+        // on RTCView is ignored on iOS. The RTCView fills the (possibly rotated +
+        // dimension-swapped) wrapper, so no per-video transform is needed.
+        <View style={previewStyle}>
+          <RTCView
+            streamURL={(localStream as unknown as { toURL(): string }).toURL()}
+            style={StyleSheet.absoluteFill}
+            objectFit={previewObjectFit}
+            mirror={facingMode === 'user'}
+            zOrder={0}
+          />
+        </View>
       )}
 
       {/* TEMP orientation debug readout (remove once angles are dialled in).
