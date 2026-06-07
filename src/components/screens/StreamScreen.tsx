@@ -91,7 +91,6 @@ import { usersApi } from '@/api/users'
 import { useSignaling } from '@/hooks/useSignaling'
 import { useMediasoup } from '@/hooks/useMediasoup'
 import * as Location from 'expo-location'
-import * as ScreenOrientation from 'expo-screen-orientation'
 import { useLocation } from '@/hooks/useLocation'
 import { useStream, useStreamByRoom } from '@/hooks/useStream'
 import { useAuthStore } from '@/stores/authStore'
@@ -337,18 +336,6 @@ export function StreamScreen() {
   const { orientation: deviceOrientation } = useDeviceOrientation(showCameraPreview)
   const isLandscapeHold = deviceOrientation === 'landscape-left' || deviceOrientation === 'landscape-right'
   const showControls = isNew || !showOverlay || controlsVisible
-
-  // Broadcaster screen: unlock orientation so iOS renders the camera natively
-  // (smooth, correctly oriented at any hold — the portrait lock was what made the
-  // local preview jank). Re-lock the rest of the app to portrait on leave. Only
-  // the broadcaster (isNew) unlocks; viewers stay portrait.
-  useEffect(() => {
-    if (!isNew) return
-    ScreenOrientation.unlockAsync().catch(() => {})
-    return () => {
-      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {})
-    }
-  }, [isNew])
 
   // Docked-footer bottom padding (Go Live / End Stream), and the shared offset
   // for things that float just ABOVE that 54-tall button — the preview
