@@ -334,15 +334,15 @@ export function StreamScreen() {
   const { orientation: deviceOrientation, tiltDeg } = useDeviceOrientation(showCameraPreview)
   const isLandscapeHold = deviceOrientation === 'landscape-left' || deviceOrientation === 'landscape-right'
 
-  // iOS preview: CONTINUOUS gimbal via AVCaptureVideoPreviewLayer (CameraPreview).
-  // We rotate the preview layer by GIMBAL_GAIN * tiltDeg to keep the scene
-  // vertical as the phone rolls (cover-scaled natively so it always fills).
+  // iOS preview via AVCaptureVideoPreviewLayer (CameraPreview).
+  // ON-DEVICE FINDING (2026-06-07): the raw preview layer stays vertical on its
+  // own at every tilt — it's already a continuous gimbal, no rotation needed.
+  // (Confirmed by GIMBAL_GAIN 0; gain ±1 each tilted it the opposite way, which
+  // is how we found the natural zero.) So GIMBAL_GAIN stays 0 → previewGimbalDeg
+  // is always 0, the native side applies no rotation and no cover-zoom.
   //
-  // GIMBAL_GAIN is a hot-reloadable tunable (JS, no rebuild). On-device finding:
-  // gain -1 → preview rides WITH the phone; gain +1 → rides OPPOSITE. Symmetric,
-  // so the upright zero-crossing is BETWEEN them — DIAGNOSTIC: gain 0 = no
-  // rotation (and no zoom) to reveal what the raw AVCaptureVideoPreviewLayer
-  // does on its own, then bisect toward the value that holds vertical.
+  // The rotation knob is kept (cheap, hot-reloadable) in case a future device
+  // does ride the tilt: set GIMBAL_GAIN to counter it (cover-zoom grows with it).
   // tiltDeg: 0=portrait, +90=landscape-left, -90=landscape-right (useDeviceOrientation).
   const GIMBAL_GAIN = 0
   const GIMBAL_BASE = 0
@@ -947,17 +947,6 @@ export function StreamScreen() {
           />
         ))}
 
-      {/* TEMP orientation debug readout (remove once gimbal sign/base + the
-          recording bake are confirmed on device). hold = sensed orientation;
-          gimbal = degrees counter-rotated in the preview; rec = clip bake. */}
-      {showCameraPreview && (
-        <View style={styles.orientationDebug} pointerEvents="none">
-          <Text variant="monoLabel" color={theme.colors.text.inverse}>
-            {`${Platform.OS} · hold:${deviceOrientation} · tilt:${Math.round(tiltDeg)}° · gimbal:${Math.round(previewGimbalDeg)}° · rec:${RECORD_ROTATION_DEG[deviceOrientation]}°`}
-          </Text>
-        </View>
-      )}
-
       {showRemoteVideo && (
         <RTCView
           streamURL={(remoteStream as unknown as { toURL(): string }).toURL()}
@@ -1545,16 +1534,6 @@ const styles = StyleSheet.create({
   // above the field mirror the globe / dashboard so the field lands at the
   // same Y on every screen.
   previewHeaderPad: { paddingTop: theme.spacing.sm },
-  orientationDebug: {
-    position: 'absolute',
-    top: 90,
-    alignSelf: 'center',
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
-    borderRadius: theme.radius.md,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    zIndex: 50,
-  },
   previewTop: {
     paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.sm,

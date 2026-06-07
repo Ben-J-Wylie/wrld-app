@@ -16,9 +16,13 @@ server-side concern (see "Recording" below) and is not what this doc is about.
 ## Current status
 
 - **Android:** continuous-vertical, correct. This is the reference. Untouched.
-- **iOS:** **BUILT (2026-06-07) — the DECIDED `AVCaptureVideoPreviewLayer`
-  continuous-gimbal path.** Not yet device-tested / calibrated (needs an EAS
-  dev-client rebuild — new native files). See "BUILT" below.
+- **iOS:** ✅ **DONE — CONFIRMED ON DEVICE (2026-06-07).** The local preview now
+  renders via `AVCaptureVideoPreviewLayer` (off the WebRTC capturer's shared
+  `AVCaptureSession`) and **stays vertical at every tilt — a continuous gimbal,
+  matching Android.** Key finding: the preview layer is **already upright on its
+  own**, so **no rotation and no cover-zoom are applied** (`GIMBAL_GAIN = 0`).
+  (Earlier theory — incl. this doc's "native iOS Camera / AVCaptureVideoPreviewLayer
+  snaps" claim — was wrong for this session's preview layer; it's continuous.)
 - (Earlier: clean-discrete `RTCMTLVideoView` baseline — superseded; the discrete
   `rotationOverride` patch path is retained as an untouched fallback.)
 
@@ -52,13 +56,17 @@ physical roll (`tiltDeg`) and cover-scaled so it stays vertical at any tilt.
   gimbalMirrorSign * tiltDeg` (constants in-file, hot-reloadable). The TEMP
   debug readout now shows `tilt`/`gimbal`/`rec` (kept until calibrated).
 
-**Still to do (on device, after the EAS rebuild):**
-- Calibrate `GIMBAL_SIGN` / `GIMBAL_BASE` and the front-camera
-  `gimbalMirrorSign` in `StreamScreen.tsx` (sign flips were the recurring pain —
-  all sign logic lives in JS so it's hot-reloadable, no rebuild to flip).
-- Confirm portrait + both landscapes + upside-down stay vertical, the cover-zoom
-  growth feels right, and the front/back mirror is correct.
-- Then remove the TEMP debug readout (see "When this lands").
+**Calibration result (on device, 2026-06-07):** the raw preview layer holds
+vertical at all tilts with **`GIMBAL_GAIN = 0`** (no rotation, no zoom). Trying
+gain ±1 each tilted it the opposite way symmetrically — that symmetry is what
+revealed the natural zero. The rotation/cover-scale knob (`GIMBAL_GAIN` in
+`StreamScreen.tsx`, native cover-scale in `WRLDCameraPreviewView`) is **kept but
+inert** as a hot-reloadable safety valve in case a future device rides the tilt.
+The TEMP debug readout has been removed.
+
+**Remaining (separate task):** the **recording** orientation bake — see
+"Recording orientation" below — still needs its own on-device calibration. It is
+independent of the (now-done) preview gimbal.
 
 ## Why iOS can't do continuous with the current stack (dead-ends — don't repeat)
 
