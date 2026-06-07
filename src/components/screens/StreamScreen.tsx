@@ -337,7 +337,11 @@ export function StreamScreen() {
   // rotation and the recording's baked rotation so a landscape hold yields
   // landscape video instead of a sideways portrait frame.
   const deviceOrientation = useDeviceOrientation(showCameraPreview)
-  const previewRotation = PREVIEW_ROTATION_DEG[deviceOrientation]
+  // Android's RTCView already orients the preview to the device natively (the
+  // capturer follows physical rotation), so a manual rotation just fights it and
+  // squishes landscape into a portrait slot — keep it 0. iOS pins the capture to
+  // the locked portrait interface, so it DOES need a manual counter-rotation.
+  const previewRotation = Platform.OS === 'ios' ? PREVIEW_ROTATION_DEG[deviceOrientation] : 0
   const isLandscapeHold = deviceOrientation === 'landscape-left' || deviceOrientation === 'landscape-right'
   // Rotating an absolute-fill preview by 90°/270° needs swapped dimensions +
   // centering so the landscape video still cover-fills the portrait screen
