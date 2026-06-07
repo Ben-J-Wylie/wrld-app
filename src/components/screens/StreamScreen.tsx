@@ -49,6 +49,7 @@ const profanityFilter = new ProfanityFilter()
 import { useLocalSearchParams, router, useFocusEffect } from 'expo-router'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { RTCView } from 'react-native-webrtc'
+import { CameraPreview } from '@/components/native/CameraPreview'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useAuth } from '@clerk/clerk-expo'
 import { Button } from '@/components/primitives/Button'
@@ -333,15 +334,21 @@ export function StreamScreen() {
   const { orientation: deviceOrientation, tiltDeg } = useDeviceOrientation(showCameraPreview)
   const isLandscapeHold = deviceOrientation === 'landscape-left' || deviceOrientation === 'landscape-right'
 
-  // iOS preview: CLEAN DISCRETE orientation (frame rotation only). RTCMTLVideoView
-  // gives a correct fit only via discrete frame rotation; it snaps at the ~45°
-  // boundary. (Continuous-vertical like Android needs a custom Metal renderer —
-  // out of scope of the patch — so the residual transform is disabled.) The
-  // discrete upright step = nearest 90° of PREVIEW_BASE + tilt.
-  const PREVIEW_BASE = 90
-  const previewStep = Math.round((PREVIEW_BASE + tiltDeg) / 90)
-  const previewRotationOverride = (((previewStep * 90) % 360) + 360) % 360
-  const previewResidualDeg = 0 // continuous residual disabled (see above)
+  // iOS preview: CONTINUOUS gimbal via AVCaptureVideoPreviewLayer (CameraPreview).
+  // The native preview layer rides the WebRTC capturer's AVCaptureSession at a
+  // fixed portrait baseline (tilt 0 = upright); we counter-rotate it by the
+  // physical roll so the scene stays vertical at any tilt, like Android. The
+  // native side cover-scales so the rotated layer always fills.
+  //
+  // Sign/base are calibrated on device (this was the recurring pain) and kept as
+  // single constants here (JS = hot-reloadable, no rebuild). The front-camera
+  // mirror flips the roll handedness, so negate the angle when mirrored.
+  // Starting point: counter-rotate (negate tilt); tiltDeg 0=portrait,
+  // +90=landscape-left, -90=landscape-right (see useDeviceOrientation).
+  const GIMBAL_SIGN = -1
+  const GIMBAL_BASE = 0
+  const gimbalMirrorSign = facingMode === 'user' ? -1 : 1
+  const previewGimbalDeg = GIMBAL_BASE + GIMBAL_SIGN * gimbalMirrorSign * tiltDeg
 
   const showControls = isNew || !showOverlay || controlsVisible
 
@@ -916,31 +923,38 @@ export function StreamScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {showCameraPreview && (
-        // Local preview. iOS ONLY: our react-native-webrtc patch drives a
-        // continuous-vertical preview — a discrete 90° frame rotation
-        // (rotationOverride, correct fit/no-zoom) plus a continuous residual
-        // (transformRotationDeg) so it rotates smoothly and stays vertical at any
-        // tilt, matching Android. `contain` avoids the landscape zoom. Android
-        // already orients correctly on its own — leave it untouched (cover, no
-        // override). The recording is oriented separately (server-side bake).
-        <RTCView
-          streamURL={(localStream as unknown as { toURL(): string }).toURL()}
-          style={StyleSheet.absoluteFill}
-          objectFit={Platform.OS === 'ios' ? 'contain' : 'cover'}
-          mirror={facingMode === 'user'}
-          rotationOverride={Platform.OS === 'ios' ? previewRotationOverride : undefined}
-          transformRotationDeg={Platform.OS === 'ios' ? previewResidualDeg : undefined}
-          zOrder={0}
-        />
-      )}
+      {showCameraPreview &&
+        // Local preview.
+        // iOS: CONTINUOUS gimbal — CameraPreview renders an
+        // AVCaptureVideoPreviewLayer off the WebRTC capturer's AVCaptureSession
+        // and counter-rotates it by the physical roll (cover-scaled) so the
+        // scene stays vertical at any tilt, matching Android.
+        // Android: already orients correctly on its own — keep RTCView (cover,
+        // no override). The recording is oriented separately (server-side bake).
+        (Platform.OS === 'ios' ? (
+          <CameraPreview
+            streamURL={(localStream as unknown as { toURL(): string }).toURL()}
+            style={StyleSheet.absoluteFill}
+            rotationDeg={previewGimbalDeg}
+            mirror={facingMode === 'user'}
+          />
+        ) : (
+          <RTCView
+            streamURL={(localStream as unknown as { toURL(): string }).toURL()}
+            style={StyleSheet.absoluteFill}
+            objectFit="cover"
+            mirror={facingMode === 'user'}
+            zOrder={0}
+          />
+        ))}
 
-      {/* TEMP recording-orientation debug readout (remove once the bake is
-          confirmed). hold = sensed orientation; rec = degrees baked into the clip. */}
+      {/* TEMP orientation debug readout (remove once gimbal sign/base + the
+          recording bake are confirmed on device). hold = sensed orientation;
+          gimbal = degrees counter-rotated in the preview; rec = clip bake. */}
       {showCameraPreview && (
         <View style={styles.orientationDebug} pointerEvents="none">
           <Text variant="monoLabel" color={theme.colors.text.inverse}>
-            {`${Platform.OS} · hold:${deviceOrientation} · tilt:${Math.round(tiltDeg)}° · step:${previewRotationOverride}° res:${Math.round(previewResidualDeg)}° · rec:${RECORD_ROTATION_DEG[deviceOrientation]}°`}
+            {`${Platform.OS} · hold:${deviceOrientation} · tilt:${Math.round(tiltDeg)}° · gimbal:${Math.round(previewGimbalDeg)}° · rec:${RECORD_ROTATION_DEG[deviceOrientation]}°`}
           </Text>
         </View>
       )}

@@ -16,9 +16,49 @@ server-side concern (see "Recording" below) and is not what this doc is about.
 ## Current status
 
 - **Android:** continuous-vertical, correct. This is the reference. Untouched.
-- **iOS:** currently **clean discrete** — correct portrait/landscape, snaps at
-  ~45°, no zoom (`objectFit: contain`). Works, but snaps — **not** the goal.
-- The continuous attempt was reverted to this clean-discrete baseline.
+- **iOS:** **BUILT (2026-06-07) — the DECIDED `AVCaptureVideoPreviewLayer`
+  continuous-gimbal path.** Not yet device-tested / calibrated (needs an EAS
+  dev-client rebuild — new native files). See "BUILT" below.
+- (Earlier: clean-discrete `RTCMTLVideoView` baseline — superseded; the discrete
+  `rotationOverride` patch path is retained as an untouched fallback.)
+
+## BUILT — `AVCaptureVideoPreviewLayer` continuous gimbal (2026-06-07)
+
+Implements the decision below. The local iOS preview now renders the raw camera
+feed via an `AVCaptureVideoPreviewLayer` tapped off the WebRTC capturer's
+existing `AVCaptureSession` (reused, never re-opened), counter-rotated by the
+physical roll (`tiltDeg`) and cover-scaled so it stays vertical at any tilt.
+
+**Native (new files, react-native-webrtc patch — `eas build` required):**
+- `ios/RCTWebRTC/WRLDCameraPreviewView.{h,m}` — the `UIView`. Resolves
+  `streamURL` → first video track → `track.captureController`
+  (`VideoCaptureController`) → `.capturer.captureSession`, attaches a preview
+  layer (`videoGravity = resizeAspectFill`, connection pinned to portrait), and
+  on `rotationDeg`/`mirror`/`layoutSubviews` applies
+  `affineTransform = scale(cover) · rotate(rad) · scale(mirror,1)` with implicit
+  CA animation disabled. Cover-scale = the doc's `max((W·|cos|+H·|sin|)/W, …)`.
+- `ios/RCTWebRTC/WRLDCameraPreviewManager.m` — `RCTViewManager`, exposes the
+  native component **`WRLDCameraPreview`** with props `streamURL` (NSString),
+  `rotationDeg` (number), `mirror` (BOOL). Auto-registered (RCT_EXPORT_MODULE);
+  the podspec globs `ios/**/*.{h,m}` so the new files compile on `pod install`.
+- The existing `rotationOverride` / `transformRotationDeg` RTCView patch is left
+  in place (untouched fallback); the patch was regenerated with `patch-package`.
+
+**JS:**
+- `src/components/native/CameraPreview.tsx` — `requireNativeComponent`
+  wrapper (iOS only; renders null elsewhere).
+- `StreamScreen.tsx` — iOS local preview now renders `<CameraPreview>` (Android
+  keeps `<RTCView>` cover). `previewGimbalDeg = GIMBAL_BASE + GIMBAL_SIGN *
+  gimbalMirrorSign * tiltDeg` (constants in-file, hot-reloadable). The TEMP
+  debug readout now shows `tilt`/`gimbal`/`rec` (kept until calibrated).
+
+**Still to do (on device, after the EAS rebuild):**
+- Calibrate `GIMBAL_SIGN` / `GIMBAL_BASE` and the front-camera
+  `gimbalMirrorSign` in `StreamScreen.tsx` (sign flips were the recurring pain —
+  all sign logic lives in JS so it's hot-reloadable, no rebuild to flip).
+- Confirm portrait + both landscapes + upside-down stay vertical, the cover-zoom
+  growth feels right, and the front/back mirror is correct.
+- Then remove the TEMP debug readout (see "When this lands").
 
 ## Why iOS can't do continuous with the current stack (dead-ends — don't repeat)
 

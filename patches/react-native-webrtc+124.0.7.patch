@@ -206,6 +206,270 @@ index e64005d..5440441 100644
  /**
   * In the fashion of
   * https://www.w3.org/TR/html5/embedded-content-0.html#dom-video-videowidth
+diff --git a/node_modules/react-native-webrtc/ios/RCTWebRTC/WRLDCameraPreviewManager.m b/node_modules/react-native-webrtc/ios/RCTWebRTC/WRLDCameraPreviewManager.m
+new file mode 100644
+index 0000000..3188f1e
+--- /dev/null
++++ b/node_modules/react-native-webrtc/ios/RCTWebRTC/WRLDCameraPreviewManager.m
+@@ -0,0 +1,44 @@
++#if !TARGET_OS_TV
++
++#import <React/RCTViewManager.h>
++
++#import "WRLDCameraPreviewView.h"
++#import "WebRTCModule.h"
++
++/**
++ * WRLD patch: view manager for the iOS continuous-gimbal local camera preview.
++ * Exposes the native component `WRLDCameraPreview` to JS with `streamURL`,
++ * `rotationDeg` and `mirror` props. See WRLDCameraPreviewView for the why.
++ */
++@interface WRLDCameraPreviewManager : RCTViewManager
++@end
++
++@implementation WRLDCameraPreviewManager
++
++RCT_EXPORT_MODULE()
++
++- (UIView *)view {
++    WRLDCameraPreviewView *v = [[WRLDCameraPreviewView alloc] init];
++    v.module = [self.bridge moduleForName:@"WebRTCModule"];
++    return v;
++}
++
++- (dispatch_queue_t)methodQueue {
++    return dispatch_get_main_queue();
++}
++
++RCT_CUSTOM_VIEW_PROPERTY(streamURL, NSString *, WRLDCameraPreviewView) {
++    [view setStreamURL:(json ? [RCTConvert NSString:json] : nil)];
++}
++
++RCT_CUSTOM_VIEW_PROPERTY(rotationDeg, NSNumber *, WRLDCameraPreviewView) {
++    [view setRotationDeg:(json ? [json floatValue] : 0)];
++}
++
++RCT_CUSTOM_VIEW_PROPERTY(mirror, BOOL, WRLDCameraPreviewView) {
++    [view setMirror:(json ? [json boolValue] : NO)];
++}
++
++@end
++
++#endif
+diff --git a/node_modules/react-native-webrtc/ios/RCTWebRTC/WRLDCameraPreviewView.h b/node_modules/react-native-webrtc/ios/RCTWebRTC/WRLDCameraPreviewView.h
+new file mode 100644
+index 0000000..e060742
+--- /dev/null
++++ b/node_modules/react-native-webrtc/ios/RCTWebRTC/WRLDCameraPreviewView.h
+@@ -0,0 +1,33 @@
++#if !TARGET_OS_TV
++
++#import <UIKit/UIKit.h>
++
++@class WebRTCModule;
++
++/**
++ * WRLD patch (iOS continuous-gimbal preview): renders the LOCAL camera preview
++ * with an AVCaptureVideoPreviewLayer tapped off the WebRTC capturer's existing
++ * AVCaptureSession (the raw camera feed, decoupled from the encoded WebRTC
++ * track) and rotates it continuously so the scene stays vertical at any phone
++ * tilt — the Android behaviour the RTCMTLVideoView discrete path can't match.
++ *
++ * The session is REUSED, never re-opened (one camera = one session). WebRTC
++ * keeps capturing + transmitting on the same session; this view only adds a
++ * preview layer to it. Use this for the local preview only (the remote/viewer
++ * path keeps RTCMTLVideoView).
++ */
++@interface WRLDCameraPreviewView : UIView
++
++@property(nonatomic, weak) WebRTCModule *module;
++
++// React tag of the local MediaStream (same value RTCView's `streamURL` takes).
++- (void)setStreamURL:(NSString *)streamURL;
++// Continuous rotation (degrees) applied to the preview layer. JS owns the sign
++// + base calibration; this view just rotates by this value and cover-scales.
++- (void)setRotationDeg:(CGFloat)deg;
++// Horizontal flip for the front camera (natural selfie).
++- (void)setMirror:(BOOL)mirror;
++
++@end
++
++#endif
+diff --git a/node_modules/react-native-webrtc/ios/RCTWebRTC/WRLDCameraPreviewView.m b/node_modules/react-native-webrtc/ios/RCTWebRTC/WRLDCameraPreviewView.m
+new file mode 100644
+index 0000000..00f2b12
+--- /dev/null
++++ b/node_modules/react-native-webrtc/ios/RCTWebRTC/WRLDCameraPreviewView.m
+@@ -0,0 +1,169 @@
++#if !TARGET_OS_TV
++
++#import "WRLDCameraPreviewView.h"
++
++#import <AVFoundation/AVFoundation.h>
++#import <QuartzCore/QuartzCore.h>
++
++#import <WebRTC/RTCCameraVideoCapturer.h>
++#import <WebRTC/RTCMediaStream.h>
++#import <WebRTC/RTCVideoTrack.h>
++
++#import "RTCMediaStreamTrack+React.h"
++#import "VideoCaptureController.h"
++#import "WebRTCModule.h"
++
++@interface WRLDCameraPreviewView ()
++@property(nonatomic, strong) AVCaptureVideoPreviewLayer *previewLayer;
++@property(nonatomic, copy) NSString *currentStreamURL;
++@property(nonatomic, assign) CGFloat rotationDeg;
++@property(nonatomic, assign) BOOL mirror;
++@end
++
++@implementation WRLDCameraPreviewView
++
++- (instancetype)init {
++    if (self = [super init]) {
++        self.backgroundColor = [UIColor blackColor];
++        self.clipsToBounds = YES;
++    }
++    return self;
++}
++
++- (void)dealloc {
++    [self detach];
++}
++
++#pragma mark - Props
++
++- (void)setStreamURL:(NSString *)streamURL {
++    if (streamURL == _currentStreamURL || [_currentStreamURL isEqualToString:streamURL]) {
++        return;
++    }
++    _currentStreamURL = [streamURL copy];
++
++    if (!streamURL) {
++        [self detach];
++        return;
++    }
++
++    // Resolve stream → first video track → its capture controller → the
++    // RTCCameraVideoCapturer's AVCaptureSession, on the module worker queue
++    // (where the streams live), then attach the preview layer on main.
++    WebRTCModule *module = self.module;
++    NSString *tag = [streamURL copy];
++    dispatch_async(module.workerQueue, ^{
++        RTCMediaStream *stream = [module streamForReactTag:tag];
++        RTCVideoTrack *videoTrack = stream.videoTracks.firstObject;
++        VideoCaptureController *cc = nil;
++        if ([videoTrack.captureController isKindOfClass:[VideoCaptureController class]]) {
++            cc = (VideoCaptureController *)videoTrack.captureController;
++        }
++        AVCaptureSession *session = cc.capturer.captureSession;
++        if (!session) {
++            return;
++        }
++        dispatch_async(dispatch_get_main_queue(), ^{
++            // Stale check: streamURL may have changed while we hopped queues.
++            if (![self->_currentStreamURL isEqualToString:tag]) {
++                return;
++            }
++            [self attachSession:session];
++        });
++    });
++}
++
++- (void)setRotationDeg:(CGFloat)deg {
++    if (_rotationDeg == deg) {
++        return;
++    }
++    _rotationDeg = deg;
++    [self applyTransform];
++}
++
++- (void)setMirror:(BOOL)mirror {
++    if (_mirror == mirror) {
++        return;
++    }
++    _mirror = mirror;
++    [self applyTransform];
++}
++
++#pragma mark - Layer lifecycle
++
++- (void)attachSession:(AVCaptureSession *)session {
++    if (_previewLayer.session == session) {
++        return;
++    }
++    [self detach];
++
++    _previewLayer = [AVCaptureVideoPreviewLayer layerWithSession:session];
++    _previewLayer.videoGravity = AVLayerVideoGravityResizeAspectFill;
++    // Deterministic baseline: portrait. tilt 0 ⟹ upright, so the JS gimbal
++    // angle is a pure counter-rotation of the physical roll.
++    if (_previewLayer.connection.isVideoOrientationSupported) {
++        _previewLayer.connection.videoOrientation = AVCaptureVideoOrientationPortrait;
++    }
++    [self.layer addSublayer:_previewLayer];
++    [self applyLayout];
++}
++
++- (void)detach {
++    [_previewLayer removeFromSuperlayer];
++    _previewLayer = nil;
++}
++
++- (void)layoutSubviews {
++    [super layoutSubviews];
++    [self applyLayout];
++}
++
++#pragma mark - Geometry
++
++- (void)applyLayout {
++    if (!_previewLayer) {
++        return;
++    }
++    [CATransaction begin];
++    [CATransaction setDisableActions:YES];
++    // Reset the transform before sizing so bounds/position aren't measured
++    // through the rotation, then re-apply.
++    _previewLayer.affineTransform = CGAffineTransformIdentity;
++    _previewLayer.bounds = self.bounds;
++    _previewLayer.position = CGPointMake(CGRectGetMidX(self.bounds), CGRectGetMidY(self.bounds));
++    [CATransaction commit];
++    [self applyTransform];
++}
++
++- (void)applyTransform {
++    if (!_previewLayer) {
++        return;
++    }
++    CGFloat W = self.bounds.size.width;
++    CGFloat H = self.bounds.size.height;
++    CGFloat rad = _rotationDeg * M_PI / 180.0;
++
++    // Cover-scale: a W×H layer rotated by θ must grow to keep filling the W×H
++    // frame (otherwise it letterboxes). =1 at 0°, grows with tilt — the same
++    // zoom-with-tilt Android's continuous preview has (expected, not a bug).
++    CGFloat scale = 1.0;
++    if (W > 0 && H > 0) {
++        CGFloat c = fabs(cos(rad));
++        CGFloat s = fabs(sin(rad));
++        scale = MAX((W * c + H * s) / W, (W * s + H * c) / H);
++    }
++
++    // Mirror is innermost (flip the image L-R), then rotate, then cover-scale.
++    // Implicit CA animation off so continuous JS updates track 1:1.
++    CGFloat m = _mirror ? -1.0 : 1.0;
++    CGAffineTransform t = CGAffineTransformScale(CGAffineTransformMakeRotation(rad), scale * m, scale);
++
++    [CATransaction begin];
++    [CATransaction setDisableActions:YES];
++    _previewLayer.affineTransform = t;
++    [CATransaction commit];
++}
++
++@end
++
++#endif
 diff --git a/node_modules/react-native-webrtc/lib/typescript/RTCView.d.ts b/node_modules/react-native-webrtc/lib/typescript/RTCView.d.ts
 index e316524..298ed71 100644
 --- a/node_modules/react-native-webrtc/lib/typescript/RTCView.d.ts
