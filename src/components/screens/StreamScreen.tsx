@@ -32,6 +32,7 @@ import {
   Alert,
   Animated,
   AppState,
+  Dimensions,
   Keyboard,
   Linking,
   Platform,
@@ -78,6 +79,11 @@ import { TipSheet } from '@/components/features/stream/TipSheet'
 import { FollowButton } from '@/components/features/user/FollowButton'
 import { useInvalidateCurrentUser } from '@/hooks/useCurrentUser'
 import { useInvalidateWallet } from '@/hooks/useWallet'
+import {
+  useDeviceOrientation,
+  PREVIEW_ROTATION_DEG,
+  RECORD_ROTATION_DEG,
+} from '@/hooks/useDeviceOrientation'
 import { theme } from '@/tokens/theme'
 import { signalStreamDisconnected, signalStreamEnded, signalKicked } from '@/lib/streamSignals'
 import { signalingClient } from '@/lib/mediasoupSignaling'
@@ -324,6 +330,33 @@ export function StreamScreen() {
   const showCameraPreview = isNew && !!localStream && isCameraArmed
   const showRemoteVideo = !isNew && status === 'in-room' && !!remoteStream && broadcastSources.includes('camera')
   const showOverlay = showCameraPreview || showRemoteVideo
+
+  // Physical device orientation (sensed via the accelerometer — the app UI is
+  // portrait-locked, so this is the only way to know how the phone is held). Only
+  // active while previewing/broadcasting our own camera. Drives the live preview
+  // rotation and the recording's baked rotation so a landscape hold yields
+  // landscape video instead of a sideways portrait frame.
+  const deviceOrientation = useDeviceOrientation(showCameraPreview)
+  const previewRotation = PREVIEW_ROTATION_DEG[deviceOrientation]
+  const isLandscapeHold = deviceOrientation === 'landscape-left' || deviceOrientation === 'landscape-right'
+  // Rotating an absolute-fill preview by 90°/270° needs swapped dimensions +
+  // centering so the landscape video still cover-fills the portrait screen
+  // (rotate about the screen center). 0°/180° just fill normally.
+  const previewStyle = (() => {
+    const base = { transform: [{ rotate: `${previewRotation}deg` }] }
+    if (previewRotation === 90 || previewRotation === 270) {
+      const { width: w, height: h } = Dimensions.get('window')
+      return {
+        position: 'absolute' as const,
+        width: h,
+        height: w,
+        top: (h - w) / 2,
+        left: (w - h) / 2,
+        ...base,
+      }
+    }
+    return { ...StyleSheet.absoluteFillObject, ...base }
+  })()
   const showControls = isNew || !showOverlay || controlsVisible
 
   // Docked-footer bottom padding (Go Live / End Stream), and the shared offset
@@ -550,11 +583,20 @@ export function StreamScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [command, commandNonce])
 
+  // Tell the room our orientation: a coarse 'portrait'|'landscape' for the
+  // viewer-side layout hint, plus the precise rotation degrees the recorder bakes
+  // into the fmp4 so the saved video is upright. The recording bakes once at
+  // capture start (it's -c:v copy), so for v1 the recording's orientation is
+  // whatever it is when the buffer chain starts (~go-live); the preview keeps
+  // following the phone live.
   useEffect(() => {
     if (!isNew || status !== 'in-room' || !localStream) return
-    sendBroadcasterOrientation(videoIsLandscape ? 'portrait' : 'landscape')
+    sendBroadcasterOrientation(
+      isLandscapeHold ? 'landscape' : 'portrait',
+      RECORD_ROTATION_DEG[deviceOrientation],
+    )
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isNew, status, localStream, videoIsLandscape])
+  }, [isNew, status, localStream, deviceOrientation])
 
   useEffect(() => {
     if (!isNew || status !== 'in-room') return
@@ -891,7 +933,7 @@ export function StreamScreen() {
       {showCameraPreview && (
         <RTCView
           streamURL={(localStream as unknown as { toURL(): string }).toURL()}
-          style={StyleSheet.absoluteFill}
+          style={previewStyle}
           objectFit="cover"
           mirror={facingMode === 'user'}
           zOrder={0}
