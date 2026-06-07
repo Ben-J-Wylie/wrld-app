@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Platform } from 'react-native'
-import { DeviceMotion } from 'expo-sensors'
+import { Accelerometer, DeviceMotion } from 'expo-sensors'
 
 // Physical device orientation + continuous tilt, sensed from the accelerometer's
 // gravity vector.
@@ -80,14 +80,13 @@ export function useDeviceOrientation(enabled = true): DeviceTilt {
 
   useEffect(() => {
     if (!enabled) return
-    DeviceMotion.setUpdateInterval(UPDATE_MS)
-    const sub = DeviceMotion.addListener((d) => {
-      const g = d.accelerationIncludingGravity
-      if (!g) return
-      // Subtract user-acceleration to recover clean (gyro-fused) gravity, so the
-      // roll stays stable while the phone is being turned.
-      const u = d.acceleration
-      const deg = rollDeg(g.x - (u?.x ?? 0), g.y - (u?.y ?? 0), g.z - (u?.z ?? 0))
+    let cancelled = false
+    let sub: { remove: () => void } | null = null
+
+    // Process one gravity sample → smooth continuous tilt (gimbal) + discrete
+    // orientation (recording). Same for both sensor sources.
+    const process = (gx: number, gy: number, gz: number) => {
+      const deg = rollDeg(gx, gy, gz)
       if (deg == null) return // ~flat — keep the last reading
 
       // Continuous, wrap-safe exponential smoothing for the gimbal preview.
@@ -114,8 +113,41 @@ export function useDeviceOrientation(enabled = true): DeviceTilt {
       if (stableCount.current >= STABLE_SAMPLES) {
         setOrientation((prev) => (prev === candidate.current ? prev : candidate.current))
       }
-    })
-    return () => sub.remove()
+    }
+
+    ;(async () => {
+      // Prefer DeviceMotion (gyro-fused gravity — smooth through a turn), but it
+      // needs a motion-permission grant + availability on iOS. Fall back to the
+      // raw Accelerometer (always fires, just can't track during fast motion) so
+      // the gimbal never silently does nothing.
+      let useDM = false
+      try {
+        if (await DeviceMotion.isAvailableAsync()) {
+          let perm = await DeviceMotion.getPermissionsAsync()
+          if (!perm.granted && perm.canAskAgain) perm = await DeviceMotion.requestPermissionsAsync()
+          useDM = perm.granted
+        }
+      } catch {}
+      if (cancelled) return
+
+      if (useDM) {
+        DeviceMotion.setUpdateInterval(UPDATE_MS)
+        sub = DeviceMotion.addListener((d) => {
+          const g = d.accelerationIncludingGravity
+          if (!g) return
+          const u = d.acceleration // user accel — subtract to recover clean gravity
+          process(g.x - (u?.x ?? 0), g.y - (u?.y ?? 0), g.z - (u?.z ?? 0))
+        })
+      } else {
+        Accelerometer.setUpdateInterval(UPDATE_MS)
+        sub = Accelerometer.addListener(({ x, y, z }) => process(x, y, z ?? 0))
+      }
+    })()
+
+    return () => {
+      cancelled = true
+      sub?.remove()
+    }
   }, [enabled])
 
   return { orientation, tiltDeg }
