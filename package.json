@@ -8,7 +8,8 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "postinstall": "patch-package"
   },
   "dependencies": {
     "@clerk/clerk-expo": "^2.19.31",
@@ -53,6 +54,7 @@
     "@babel/core": "^7.25.2",
     "@types/react": "~19.1.10",
     "@types/react-native": "^0.72.8",
+    "patch-package": "^8.0.1",
     "typescript": "~5.9.2"
   },
   "description": "",

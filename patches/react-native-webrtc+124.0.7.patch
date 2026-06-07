@@ -1,0 +1,182 @@
+diff --git a/node_modules/react-native-webrtc/ios/RCTWebRTC/RTCVideoViewManager.m b/node_modules/react-native-webrtc/ios/RCTWebRTC/RTCVideoViewManager.m
+index e64005d..d29a3b3 100644
+--- a/node_modules/react-native-webrtc/ios/RCTWebRTC/RTCVideoViewManager.m
++++ b/node_modules/react-native-webrtc/ios/RCTWebRTC/RTCVideoViewManager.m
+@@ -13,12 +13,53 @@
+ #endif
+ #import <WebRTC/RTCCVPixelBuffer.h>
+ #import <WebRTC/RTCVideoFrame.h>
++#import <WebRTC/RTCVideoRenderer.h>
+ #import <WebRTC/RTCVideoTrack.h>
+ 
+ #import "PIPController.h"
+ #import "RTCVideoViewManager.h"
+ #import "WebRTCModule.h"
+ 
++/**
++ * WRLD patch (rotationOverride): a renderer proxy that rewrites each frame's
++ * rotation to a fixed value before forwarding to the real renderer. The WebRTC
++ * camera capturer auto-rotates local-preview frames from UIDevice.orientation,
++ * which janks (180°-spin / wrong settle) in an orientation-locked app. Driving
++ * the rotation from JS (our stable device-orientation) via this proxy gives
++ * clean, deliberate portrait/landscape snapping. overrideRotation < 0 = pass
++ * through unchanged. Only 0/90/180/270 are valid RTCVideoRotation values.
++ */
++@interface WRLDRotationRenderer : NSObject <RTCVideoRenderer>
++@property(nonatomic, weak) id<RTCVideoRenderer> target;
++@property(nonatomic, assign) NSInteger overrideRotation;
++@end
++
++@implementation WRLDRotationRenderer
++- (instancetype)initWithTarget:(id<RTCVideoRenderer>)target {
++    if (self = [super init]) {
++        _target = target;
++        _overrideRotation = -1;
++    }
++    return self;
++}
++- (void)setSize:(CGSize)size {
++    [self.target setSize:size];
++}
++- (void)renderFrame:(RTCVideoFrame *)frame {
++    id<RTCVideoRenderer> t = self.target;
++    if (!t) {
++        return;
++    }
++    if (self.overrideRotation >= 0 && frame != nil &&
++        frame.rotation != (RTCVideoRotation)self.overrideRotation) {
++        frame = [[RTCVideoFrame alloc] initWithBuffer:frame.buffer
++                                             rotation:(RTCVideoRotation)self.overrideRotation
++                                          timeStampNs:frame.timeStampNs];
++    }
++    [t renderFrame:frame];
++}
++@end
++
+ /**
+  * Implements an equivalent of {@code HTMLVideoElement} i.e. Web's video
+  * element.
+@@ -68,6 +109,12 @@
+ 
+ @property(nonatomic, copy) RCTDirectEventBlock onDimensionsChange;
+ 
++/**
++ * WRLD patch: the rotation-rewriting proxy actually added to the videoTrack as
++ * its renderer (it forwards to videoView). `rotationOverride` is set from JS.
++ */
++@property(nonatomic, strong) WRLDRotationRenderer *rotationRenderer;
++
+ @end
+ 
+ @implementation RTCVideoView
+@@ -90,11 +137,11 @@
+     if (videoTrack) {
+         if (self.window) {
+             dispatch_async(_module.workerQueue, ^{
+-                [videoTrack addRenderer:self.videoView];
++                [videoTrack addRenderer:self.rotationRenderer];
+             });
+         } else {
+             dispatch_async(_module.workerQueue, ^{
+-                [videoTrack removeRenderer:self.videoView];
++                [videoTrack removeRenderer:self.rotationRenderer];
+             });
+         }
+     }
+@@ -119,11 +166,25 @@
+         _objectFit = RTCVideoViewObjectFitCover;
+         [self addSubview:self.videoView];
+         self.videoView.delegate = self;
++        // WRLD patch: proxy that rewrites frame rotation, forwarding to videoView.
++        _rotationRenderer = [[WRLDRotationRenderer alloc] initWithTarget:_videoView];
+     }
+ 
+     return self;
+ }
+ 
++/**
++ * WRLD patch: JS sets the local-preview rotation (0/90/180/270, or <0 to pass
++ * through). Applied by the proxy renderer per-frame.
++ */
++- (void)setRotationOverride:(NSNumber *)rotation {
++    if (rotation == nil || [rotation isKindOfClass:[NSNull class]]) {
++        self.rotationRenderer.overrideRotation = -1;
++    } else {
++        self.rotationRenderer.overrideRotation = [rotation integerValue];
++    }
++}
++
+ #if TARGET_OS_OSX
+ - (void)layout {
+     [super layout];
+@@ -248,7 +309,7 @@
+     if (oldValue != videoTrack) {
+         if (oldValue) {
+             dispatch_async(_module.workerQueue, ^{
+-                [oldValue removeRenderer:self.videoView];
++                [oldValue removeRenderer:self.rotationRenderer];
+             });
+         }
+ 
+@@ -292,7 +353,7 @@
+         // See "didMoveToWindow" above.
+         if (videoTrack && self.window) {
+             dispatch_async(_module.workerQueue, ^{
+-                [videoTrack addRenderer:self.videoView];
++                [videoTrack addRenderer:self.rotationRenderer];
+             });
+         }
+     }
+@@ -332,6 +393,16 @@ RCT_EXPORT_MODULE()
+ 
+ RCT_EXPORT_VIEW_PROPERTY(mirror, BOOL)
+ 
++/**
++ * WRLD patch: local-preview rotation override (0/90/180/270, or <0/absent to
++ * pass through the capturer's own rotation). Set from JS to give clean,
++ * deliberate portrait/landscape snapping instead of the capturer's janky
++ * UIDevice-driven auto-rotation in an orientation-locked app.
++ */
++RCT_CUSTOM_VIEW_PROPERTY(rotationOverride, NSNumber *, RTCVideoView) {
++    [view setRotationOverride:json];
++}
++
+ /**
+  * In the fashion of
+  * https://www.w3.org/TR/html5/embedded-content-0.html#dom-video-videowidth
+diff --git a/node_modules/react-native-webrtc/lib/typescript/RTCView.d.ts b/node_modules/react-native-webrtc/lib/typescript/RTCView.d.ts
+index e316524..8d487e8 100644
+--- a/node_modules/react-native-webrtc/lib/typescript/RTCView.d.ts
++++ b/node_modules/react-native-webrtc/lib/typescript/RTCView.d.ts
+@@ -14,6 +14,11 @@ export interface RTCVideoViewProps extends ViewProps {
+      * mirror: boolean
+      */
+     mirror?: boolean;
++    /**
++     * WRLD patch: override the local-preview rotation, in degrees (0/90/180/270).
++     * Omit or pass a negative value to use the capturer's own rotation.
++     */
++    rotationOverride?: number;
+     /**
+      * In the fashion of
+      * https://www.w3.org/TR/html5/embedded-content-0.html#dom-video-videowidth
+diff --git a/node_modules/react-native-webrtc/src/RTCView.ts b/node_modules/react-native-webrtc/src/RTCView.ts
+index ea97a43..2303459 100644
+--- a/node_modules/react-native-webrtc/src/RTCView.ts
++++ b/node_modules/react-native-webrtc/src/RTCView.ts
+@@ -16,6 +16,15 @@ export interface RTCVideoViewProps extends ViewProps {
+    */
+   mirror?: boolean;
+ 
++  /**
++   * WRLD patch: override the local-preview rotation, in degrees (0/90/180/270).
++   * Omit or pass a negative value to use the capturer's own rotation. Gives
++   * clean portrait/landscape snapping in an orientation-locked app.
++   *
++   * rotationOverride: number
++   */
++  rotationOverride?: number;
++
+   /**
+    * In the fashion of
+    * https://www.w3.org/TR/html5/embedded-content-0.html#dom-video-videowidth

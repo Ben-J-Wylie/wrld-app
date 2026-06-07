@@ -78,7 +78,11 @@ import { TipSheet } from '@/components/features/stream/TipSheet'
 import { FollowButton } from '@/components/features/user/FollowButton'
 import { useInvalidateCurrentUser } from '@/hooks/useCurrentUser'
 import { useInvalidateWallet } from '@/hooks/useWallet'
-import { useDeviceOrientation, RECORD_ROTATION_DEG } from '@/hooks/useDeviceOrientation'
+import {
+  useDeviceOrientation,
+  RECORD_ROTATION_DEG,
+  PREVIEW_FRAME_ROTATION,
+} from '@/hooks/useDeviceOrientation'
 import { theme } from '@/tokens/theme'
 import { signalStreamDisconnected, signalStreamEnded, signalKicked } from '@/lib/streamSignals'
 import { signalingClient } from '@/lib/mediasoupSignaling'
@@ -909,13 +913,16 @@ export function StreamScreen() {
   return (
     <SafeAreaView style={styles.container}>
       {showCameraPreview && (
-        // Native-style live preview: full-screen, rides the phone. The recording
-        // is oriented separately (server-side bake from deviceOrientation).
+        // Local preview: full-screen, with our react-native-webrtc patch driving
+        // a clean per-orientation frame rotation (rotationOverride) so it snaps
+        // portrait/landscape without the capturer's 180° jank. The recording is
+        // oriented separately (server-side bake from deviceOrientation).
         <RTCView
           streamURL={(localStream as unknown as { toURL(): string }).toURL()}
           style={StyleSheet.absoluteFill}
           objectFit="cover"
           mirror={facingMode === 'user'}
+          rotationOverride={PREVIEW_FRAME_ROTATION[deviceOrientation]}
           zOrder={0}
         />
       )}

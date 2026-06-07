@@ -68,6 +68,18 @@ export const RECORD_ROTATION_DEG: Record<DeviceOrientation, number> = {
   'portrait-upside-down': 90,
 }
 
+// Frame-rotation override for the LOCAL preview (RTCView `rotationOverride`, our
+// react-native-webrtc patch). Must be one of 0/90/180/270 (RTCVideoRotation).
+// Replaces the capturer's janky UIDevice auto-rotation with a clean, deliberate
+// value per orientation so the preview snaps portrait/landscape without the 180°
+// spin. On-device tunable — start equal to the record bake and adjust per hold.
+export const PREVIEW_FRAME_ROTATION: Record<DeviceOrientation, number> = {
+  portrait: 270,
+  'landscape-left': 0,
+  'landscape-right': 180,
+  'portrait-upside-down': 90,
+}
+
 export type DeviceTilt = { orientation: DeviceOrientation; tiltDeg: number }
 
 export function useDeviceOrientation(enabled = true): DeviceTilt {
