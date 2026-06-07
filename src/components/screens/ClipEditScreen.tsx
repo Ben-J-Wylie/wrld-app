@@ -13,9 +13,9 @@
 // (promote-on-publish) — saving stays in-session (local) until that backend
 // route lands; the Saved tab + saved-regions reflect this session's saves only.
 
-import { useEffect, useRef, useState } from 'react'
-import { router } from 'expo-router'
-import { StyleSheet, View } from 'react-native'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { router, useFocusEffect } from 'expo-router'
+import { RefreshControl, StyleSheet, View } from 'react-native'
 import { ScreenScroll } from '@/components/sections/ScreenScroll'
 import { ScreenHeader } from '@/components/sections/ScreenHeader'
 import { PageTabs } from '@/components/features/navigation/PageTabs'
@@ -101,6 +101,29 @@ export const ClipEditScreen = () => {
   const { isSignedIn } = useAuth()
   const { data: buffer, refetch: refetchBuffer } = useBuffer(!!isSignedIn)
   const sessions = buffer?.sessions ?? EMPTY_SESSIONS
+
+  // Pull fresh buffer on every screen focus (ignoring useBuffer's 30s staleTime),
+  // so recordings made elsewhere — e.g. a web go-live — show up when you (re)open
+  // the editor without relaunching the app. Bound via ref so the focus effect
+  // doesn't re-subscribe when refetch's identity changes.
+  const refetchOnFocusRef = useRef(refetchBuffer)
+  refetchOnFocusRef.current = refetchBuffer
+  useFocusEffect(
+    useCallback(() => {
+      refetchOnFocusRef.current()
+    }, []),
+  )
+
+  // Pull-to-refresh.
+  const [refreshing, setRefreshing] = useState(false)
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true)
+    try {
+      await refetchOnFocusRef.current()
+    } finally {
+      setRefreshing(false)
+    }
+  }, [])
 
   // Sessions → timeline segments; live session's end tracks the live head (the
   // 1s tick below re-renders so it stays fresh).
@@ -860,6 +883,14 @@ export const ClipEditScreen = () => {
       header={<ScreenHeader title="Clip editor" onBack={() => router.back()} />}
       contentContainerStyle={styles.content}
       scrollEnabled={!clockExpanded}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor={theme.colors.text.muted}
+          colors={[theme.colors.accent.default]}
+        />
+      }
     >
       <PageTabs
         tabs={[
