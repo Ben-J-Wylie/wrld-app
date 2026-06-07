@@ -79,11 +79,7 @@ import { TipSheet } from '@/components/features/stream/TipSheet'
 import { FollowButton } from '@/components/features/user/FollowButton'
 import { useInvalidateCurrentUser } from '@/hooks/useCurrentUser'
 import { useInvalidateWallet } from '@/hooks/useWallet'
-import {
-  useDeviceOrientation,
-  PREVIEW_ROTATION_DEG,
-  RECORD_ROTATION_DEG,
-} from '@/hooks/useDeviceOrientation'
+import { useDeviceOrientation, RECORD_ROTATION_DEG } from '@/hooks/useDeviceOrientation'
 import { theme } from '@/tokens/theme'
 import { signalStreamDisconnected, signalStreamEnded, signalKicked } from '@/lib/streamSignals'
 import { signalingClient } from '@/lib/mediasoupSignaling'
@@ -337,11 +333,13 @@ export function StreamScreen() {
   // rotation and the recording's baked rotation so a landscape hold yields
   // landscape video instead of a sideways portrait frame.
   const deviceOrientation = useDeviceOrientation(showCameraPreview)
-  // Android's RTCView already orients the preview to the device natively (the
-  // capturer follows physical rotation), so a manual rotation just fights it and
-  // squishes landscape into a portrait slot — keep it 0. iOS pins the capture to
-  // the locked portrait interface, so it DOES need a manual counter-rotation.
-  const previewRotation = Platform.OS === 'ios' ? PREVIEW_ROTATION_DEG[deviceOrientation] : 0
+  // RTCView already orients the live preview to the physical device on BOTH
+  // platforms (confirmed on device: at 0° applied rotation the preview is upright
+  // for every hold; any manual rotation just knocked it off by exactly that
+  // amount). So we never manually rotate the preview. The recording is separate —
+  // it's -c:v copy server-side, which drops the rotation flag, so RECORD_ROTATION_DEG
+  // is still sent for the baked display matrix.
+  const previewRotation = 0
   const isLandscapeHold = deviceOrientation === 'landscape-left' || deviceOrientation === 'landscape-right'
   // Rotating an absolute-fill preview by 90°/270° needs swapped dimensions +
   // centering so the landscape video still cover-fills the portrait screen
