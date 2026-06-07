@@ -1,5 +1,4 @@
 import { useState, useCallback, useRef } from 'react'
-import { Dimensions } from 'react-native'
 import { Device } from 'mediasoup-client'
 import { ReactNative106 } from 'mediasoup-client/handlers/ReactNative106'
 import type { Transport } from 'mediasoup-client/types'
@@ -12,30 +11,17 @@ import type { SourceType } from '@/types'
 registerGlobals()
 
 // Camera capture constraints, capped at the user's tier (G4 = cap-produce). We
-// pin BOTH `ideal` AND `max` (9:16 from the tier height) plus a fixed frameRate
+// pin BOTH `ideal` AND `max` (16:9 from the tier height) plus a fixed frameRate
 // so capture is DETERMINISTIC across go-lives. Without `max`, WebRTC was free to
 // pick a different resolution per session, which made the encoder emit a
 // different H.264 SPS/level each time — and the rolling buffer then stitched
 // codec-incompatible sessions into one VOD that wedged the clip-editor player
 // ("resource unavailable", backend item 5). A stable capture ⟹ a stable SPS ⟹ a
 // single codec-uniform buffer group.
-//
-// ORIENTATION-AWARE: a hardcoded landscape (width>height) request made the
-// native capturer record landscape regardless of how the phone was held — so
-// portrait broadcasts (this app is phone-first, app.json locks portrait) landed
-// sideways in the buffer + clip editor. We now swap width/height to match the
-// device orientation (`Dimensions`), so a portrait phone records portrait. The
-// tier pixel cap (the short edge) is unchanged; only its axis flips. Within an
-// orientation capture stays deterministic; a portrait vs landscape go-live
-// differs by design and the backend's codec-uniform `allGroups` handles it.
 function cameraConstraints() {
   const tier = useAuthStore.getState().wrldUser?.tier
-  const cap = maxCaptureHeight(tier) // short edge (e.g. 720)
-  const longEdge = Math.round((cap * 16) / 9) // e.g. 1280
-  const { width: winW, height: winH } = Dimensions.get('window')
-  const portrait = winH >= winW
-  const width = portrait ? cap : longEdge
-  const height = portrait ? longEdge : cap
+  const height = maxCaptureHeight(tier)
+  const width = Math.round((height * 16) / 9)
   return {
     facingMode: 'environment',
     width: { ideal: width, max: width },
