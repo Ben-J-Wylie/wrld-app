@@ -79,21 +79,55 @@ server-side concern (see "Recording" below) and is not what this doc is about.
   is no zoom-free continuous fill. Cover-scale for screen `W×H` at angle θ:
   `scale = max((W·|cosθ| + H·|sinθ|)/W, (W·|sinθ| + H·|cosθ|)/H)` (= 1 at 0°).
 
-## Path forward — custom Metal renderer
+## Path forward — DECIDED: `AVCaptureVideoPreviewLayer` + continuous transform
 
-Build an `MTKView`-based renderer for the **local preview only** (remote/viewer
-keeps `RTCMTLVideoView`):
+**Decision (owner, 2026-06-07):** go beyond native iOS to Android-continuous,
+using Apple's native preview layer rotated ourselves — try this **before** a
+from-scratch Metal renderer (it's "more native" and likely less work).
 
-1. Add it as an `RTCVideoRenderer` on the local track (same hook point as the
-   proxy) to receive `RTCVideoFrame` / `CVPixelBuffer`.
-2. Draw the texture with an **arbitrary continuous rotation** (counter the
-   physical roll, i.e. driven by `tiltDeg`) **+ cover-scale** so it stays
-   vertical AND fills the screen with no letterbox.
-3. Expose a continuous-angle prop; drive it from JS with `tiltDeg`.
-4. Handle the **front-camera mirror**.
+The native iOS camera renders its preview with **`AVCaptureVideoPreviewLayer`**
+(AVFoundation), not Metal. We can use that same layer for our LOCAL preview and
+apply a **continuous rotation** to it ourselves to get the gimbal Android has.
 
-Wire it into the patch (new native view) or a small native module + a new RN
-component used for the local preview. Expect device-test cycles (native).
+### Plan
+
+1. **Get the camera's `AVCaptureSession`.** It's owned by react-native-webrtc's
+   `RTCCameraVideoCapturer` (created on `getUserMedia`). `VideoCaptureController.m`
+   holds `@property RTCCameraVideoCapturer *capturer`, which exposes
+   `.captureSession`. The main plumbing task is surfacing that session to the
+   preview view (track → capturer → session). The preview is the RAW camera feed
+   (same camera), decoupled from the WebRTC track — exactly how the native Camera
+   app works (preview ≠ the encode path). WebRTC still captures + transmits.
+   ⚠️ One camera = one session; do NOT open a second `AVCaptureSession` (conflict)
+   — reuse WebRTC's.
+2. **Render the local preview via `AVCaptureVideoPreviewLayer`** on that session,
+   `videoGravity = resizeAspectFill` (cover). Use it for the local preview
+   instead of `RTCMTLVideoView` (remote/viewer keeps `RTCMTLVideoView`).
+3. **Rotate it continuously:** apply a `CATransform3D` Z-rotation to the layer
+   driven by `tiltDeg` (counter the physical roll → stays vertical), **plus
+   cover-scale** (formula above) so it always fills as it rotates. Disable
+   implicit CA animation for smooth tracking.
+4. **Handle the front-camera mirror** and follow bounds on `layoutSubviews`.
+5. **Wire from JS:** a continuous-angle prop fed by `tiltDeg`
+   (`useDeviceOrientation`), local preview only.
+
+### Notes / gotchas
+
+- Continuous fill ⟹ cover-zoom that grows with tilt — **expected** (Android does
+  this too; it is not the old "bad zoom", which was discrete cover at 90°).
+- Calibrate the rotation sign + base on device (sign flips were the recurring
+  issue; keep them as single constants).
+- Likely delivered via the existing `patch-package` patch (new native view /
+  prop) or a small native module + RN component. Native ⟹ `eas build` cycles.
+- Fallback if `AVCaptureVideoPreviewLayer` can't be cleanly wired: the custom
+  `MTKView` renderer (receive `RTCVideoFrame`s as an `RTCVideoRenderer`, draw the
+  texture with rotation+scale). Same idea, more code.
+
+### When this lands
+
+- Remove the TEMP debug-readout overlay in `StreamScreen`.
+- The discrete `rotationOverride` path can stay as an Android-untouched / fallback,
+  or be removed for iOS once the continuous layer is in.
 
 ## Workflow
 
