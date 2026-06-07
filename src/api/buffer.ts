@@ -17,13 +17,33 @@ export type BufferSession = {
   thumbnailUrl: string | null // tokenized poster frame (camera sessions only)
 }
 
+// One codec-uniform run of the camera buffer: a contiguous group of sessions
+// that share a decoder config (init/SPS), served as a single HLS VOD with one
+// EXT-X-MAP. Playing per-group (and swapping at boundaries) avoids the native
+// AVPlayer/ExoPlayer wedge that a single mixed-codec stitch causes after a seek
+// (backend item 5 — "resource unavailable"). `startSec` is the group's offset
+// into the whole (gaps-collapsed) camera media timeline.
+export type BufferGroup = {
+  groupIndex: number
+  startSec: number
+  durationSec: number
+  sessionCount: number
+  manifestUrl: string  // tokenized HLS VOD for this group only (…?g=<groupIndex>)
+}
+
 export type BufferDescriptor = {
   earliestAt: string | null
   latestAt: string
   windowHours: number
   // Whole camera buffer concatenated into one VOD HLS playlist (all sessions
-  // back-to-back, real-time gaps collapsed) so the field scrubs continuously.
+  // back-to-back, real-time gaps collapsed). LEGACY: can wedge native players
+  // when sessions differ in codec config — prefer `allGroups`. Kept for
+  // back-compat / fallback.
   allManifestUrl: string | null
+  // Codec-uniform groups of the camera buffer (the AVPlayer-safe way to play
+  // the whole buffer). Empty when there's no camera footage. Older backends
+  // that predate the guard omit this — callers fall back to `allManifestUrl`.
+  allGroups?: BufferGroup[]
   sessions: BufferSession[]  // chronological (oldest → newest)
 }
 

@@ -4,9 +4,31 @@ import { ReactNative106 } from 'mediasoup-client/handlers/ReactNative106'
 import type { Transport } from 'mediasoup-client/types'
 import { mediaDevices, MediaStream, registerGlobals } from 'react-native-webrtc'
 import { signalingClient } from '@/lib/mediasoupSignaling'
+import { maxCaptureHeight } from '@/lib/tierCaps'
+import { useAuthStore } from '@/stores/authStore'
 import type { SourceType } from '@/types'
 
 registerGlobals()
+
+// Camera capture constraints, capped at the user's tier (G4 = cap-produce). We
+// pin BOTH `ideal` AND `max` (16:9 from the tier height) plus a fixed frameRate
+// so capture is DETERMINISTIC across go-lives. Without `max`, WebRTC was free to
+// pick a different resolution per session, which made the encoder emit a
+// different H.264 SPS/level each time — and the rolling buffer then stitched
+// codec-incompatible sessions into one VOD that wedged the clip-editor player
+// ("resource unavailable", backend item 5). A stable capture ⟹ a stable SPS ⟹ a
+// single codec-uniform buffer group.
+function cameraConstraints() {
+  const tier = useAuthStore.getState().wrldUser?.tier
+  const height = maxCaptureHeight(tier)
+  const width = Math.round((height * 16) / 9)
+  return {
+    facingMode: 'environment',
+    width: { ideal: width, max: width },
+    height: { ideal: height, max: height },
+    frameRate: { ideal: 30, max: 30 },
+  }
+}
 
 export function useMediasoup() {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null)
@@ -77,9 +99,7 @@ export function useMediasoup() {
     setFacingMode('environment')
     try {
       const stream = (await mediaDevices.getUserMedia({
-        video: wantsCamera
-          ? { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
-          : false,
+        video: wantsCamera ? cameraConstraints() : false,
         audio: wantsAudio,
       })) as unknown as MediaStream
       localStreamRef.current = stream
@@ -115,9 +135,7 @@ export function useMediasoup() {
       if (!stream && (wantsCamera || wantsAudio)) {
         setFacingMode('environment')
         stream = (await mediaDevices.getUserMedia({
-          video: wantsCamera
-            ? { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
-            : false,
+          video: wantsCamera ? cameraConstraints() : false,
           audio: wantsAudio,
         })) as unknown as MediaStream
         localStreamRef.current = stream
@@ -149,7 +167,15 @@ export function useMediasoup() {
       if (stream) {
         const tracks = (stream as unknown as { getTracks(): MediaStreamTrack[] }).getTracks()
         for (const track of tracks) {
-          await transport.produce({ track: track as never })
+          // Target ~2 Mbps for video. WebRTC's congestion control otherwise
+          // self-limits to ~0.5 Mbps (it starts low and only ramps if told it
+          // can); an explicit maxBitrate + a higher start bitrate lets it climb
+          // to use available bandwidth for a sharp 720p picture.
+          const isVideo = (track as unknown as { kind: string }).kind === 'video'
+          const opts = isVideo
+            ? { track: track as never, encodings: [{ maxBitrate: 2_000_000 }], codecOptions: { videoGoogleStartBitrate: 1000 } }
+            : { track: track as never }
+          await transport.produce(opts as never)
         }
       }
     } catch (err) {

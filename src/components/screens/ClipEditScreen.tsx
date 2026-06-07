@@ -225,6 +225,50 @@ export const ClipEditScreen = () => {
   })()
   const totalCamSec = camCum.length ? camCum[camCum.length - 1]!.mediaEnd : 0
 
+  // ── Codec-uniform groups (backend item 5 fix) ──────────────────────────────
+  // The backend splits the camera buffer into runs that share a decoder config,
+  // each served as its own HLS VOD (a single EXT-X-MAP). Playing per-group and
+  // swapping the source at group boundaries avoids the native-player wedge
+  // ("resource unavailable" after a seek) that one mixed-codec stitch causes.
+  // Fallback (older backend without `allGroups`, or none): treat the legacy
+  // single concatenated stream as one group spanning the whole camera timeline.
+  const playGroups: { groupIndex: number; startSec: number; durationSec: number; manifestUrl: string }[] =
+    buffer?.allGroups?.length
+      ? buffer.allGroups
+      : allManifestUrl
+        ? [{ groupIndex: 0, startSec: 0, durationSec: totalCamSec, manifestUrl: allManifestUrl }]
+        : []
+  const hasCameraVideo = playGroups.length > 0
+  const playGroupsRef = useRef(playGroups)
+  playGroupsRef.current = playGroups
+
+  const [activeGroupIndex, setActiveGroupIndex] = useState(0)
+  const activeGroupIndexRef = useRef(0)
+  activeGroupIndexRef.current = activeGroupIndex
+  const activeGroupUrl = playGroups.length
+    ? playGroups[Math.min(activeGroupIndex, playGroups.length - 1)]!.manifestUrl
+    : null
+
+  // global camera media-sec → the group that contains it (+ its local offset).
+  function groupForMediaSec(globalSec: number): { index: number; localSec: number; url: string } | null {
+    const gs = playGroupsRef.current
+    if (!gs.length) return null
+    for (let i = 0; i < gs.length; i++) {
+      const g = gs[i]!
+      if (globalSec >= g.startSec && globalSec < g.startSec + g.durationSec) {
+        return { index: i, localSec: globalSec - g.startSec, url: g.manifestUrl }
+      }
+    }
+    const last = gs[gs.length - 1]!
+    return { index: gs.length - 1, localSec: Math.max(0, last.durationSec - 0.05), url: last.manifestUrl }
+  }
+  // global media-sec → local sec within the CURRENTLY-LOADED group (clamped).
+  function localForActive(globalSec: number): number {
+    const g = playGroupsRef.current[activeGroupIndexRef.current]
+    if (!g) return 0
+    return clamp(globalSec - g.startSec, 0, Math.max(0, g.durationSec - 0.05))
+  }
+
   // wall-clock playhead → media seconds in the concatenated stream (snap gaps to
   // the nearest camera boundary).
   function playheadToMediaSec(): number {
@@ -243,7 +287,7 @@ export const ClipEditScreen = () => {
   }
 
   // The field shows camera video whenever any camera footage exists.
-  const fieldVariant: 'camera' | 'audio-only' | 'map-only' = allManifestUrl
+  const fieldVariant: 'camera' | 'audio-only' | 'map-only' = hasCameraVideo
     ? 'camera'
     : sessionAtPlayhead?.kinds.includes('audio')
       ? 'audio-only'
@@ -292,8 +336,8 @@ export const ClipEditScreen = () => {
   const healingRef = useRef(false)
   const healTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [playerError, setPlayerError] = useState(false)
-  const allManifestUrlRef = useRef<string | null>(null)
-  allManifestUrlRef.current = allManifestUrl
+  const activeGroupUrlRef = useRef<string | null>(null)
+  activeGroupUrlRef.current = activeGroupUrl
   const refetchBufferRef = useRef(refetchBuffer)
   refetchBufferRef.current = refetchBuffer
 
@@ -301,7 +345,7 @@ export const ClipEditScreen = () => {
   // when exhausted, surface the poster instead of looping. healAttempts resets to 0
   // whenever the player returns to readyToPlay, so a later expiry gets a full budget.
   function recoverPlayer(reason: string) {
-    if (healingRef.current || !allManifestUrlRef.current) return
+    if (healingRef.current || !activeGroupUrlRef.current) return
     if (healAttemptsRef.current >= MAX_HEAL) {
       vlog(`recovery exhausted (${reason}) — showing poster`)
       setPlayerError(true)
@@ -316,11 +360,13 @@ export const ClipEditScreen = () => {
     healTimer.current = setTimeout(async () => {
       healTimer.current = null
       try {
-        const res = await refetchBufferRef.current() // fresh tokenized URL
-        const url = res.data?.allManifestUrl ?? allManifestUrlRef.current
+        const res = await refetchBufferRef.current() // fresh tokenized URLs
+        const idx = activeGroupIndexRef.current
+        const url =
+          res.data?.allGroups?.[idx]?.manifestUrl ?? res.data?.allManifestUrl ?? activeGroupUrlRef.current
         if (url) {
           await player.replaceAsync({ uri: url, contentType: 'hls' })
-          pendingSeek.current = targetSecRef.current
+          pendingSeek.current = localForActive(targetSecRef.current)
         }
       } catch (e) {
         vlog('recover failed', e)
@@ -415,24 +461,39 @@ export const ClipEditScreen = () => {
     if (playingRef.current) setPlaying(false)
   }
 
-  // Load the concatenated source (replaceAsync — replace() loads synchronously on the
-  // iOS main thread and freezes the UI). A fresh URL means a fresh token → reset the
-  // recovery budget + clear any prior error.
+  // Load the ACTIVE GROUP's source (replaceAsync — replace() loads synchronously on
+  // the iOS main thread and freezes the UI). Re-runs when the active group changes
+  // (a boundary crossing) or its token refreshes. A fresh URL means a fresh token →
+  // reset the recovery budget + clear any prior error. After load, seek to the
+  // current target's offset within the group + repaint, so a boundary swap lands on
+  // the scrubbed frame.
   useEffect(() => {
-    if (!allManifestUrl) return
+    if (!activeGroupUrl) return
     healAttemptsRef.current = 0
     setPlayerError(false)
     let cancelled = false
     ;(async () => {
       try {
-        await player.replaceAsync({ uri: allManifestUrl, contentType: 'hls' })
-        if (!cancelled) player.pause()
+        await player.replaceAsync({ uri: activeGroupUrl, contentType: 'hls' })
+        if (cancelled) return
+        const local = localForActive(targetSecRef.current)
+        if (playingRef.current) {
+          try {
+            const d = local - player.currentTime
+            if (Math.abs(d) >= 0.05) player.seekBy(d)
+          } catch {}
+          try {
+            player.play()
+          } catch {}
+        } else {
+          previewSeek(local)
+        }
       } catch {}
     })()
     return () => {
       cancelled = true
     }
-  }, [allManifestUrl, player])
+  }, [activeGroupUrl, player])
 
   // Status watcher: (1) DIAGNOSTIC log of every transition + seek count; (2) on
   // readyToPlay, reset the recovery budget, re-flush the latest pending seek, and
@@ -460,19 +521,24 @@ export const ClipEditScreen = () => {
     })
     return () => sub.remove()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [player, allManifestUrl])
+  }, [player, activeGroupUrl])
 
   // Paused: seek to the playhead frame on every change (preview-play → settle-pause)
   // so the viewer refreshes to that frame. (Fixes blank-on-tap + post-use stalling.)
+  // Group-aware: if the target falls in a different codec-uniform group, switch the
+  // source (the load effect seeks + repaints); otherwise seek within the active group.
   useEffect(() => {
-    if (!allManifestUrl || playing) return
-    previewSeek(targetSec)
+    if (!hasCameraVideo || playing) return
+    const g = groupForMediaSec(targetSec)
+    if (!g) return
+    if (g.index !== activeGroupIndexRef.current) setActiveGroupIndex(g.index)
+    else previewSeek(g.localSec)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playheadMs, playing, allManifestUrl])
+  }, [playheadMs, playing, hasCameraVideo])
 
   // Play / pause — play from the current playhead.
   useEffect(() => {
-    if (!allManifestUrl) return
+    if (!hasCameraVideo) return
     // Tear down any in-flight preview-scrub timers so they can't fight the explicit
     // play/pause.
     if (settleTimer.current) {
@@ -487,28 +553,45 @@ export const ClipEditScreen = () => {
     wantPauseRef.current = false
     if (playing) {
       pendingSeek.current = null
-      try {
-        const delta = targetSecRef.current - player.currentTime
-        if (Math.abs(delta) >= 0.05) player.seekBy(delta) // tolerant — see flushSeek
-      } catch {}
-      player.play()
+      const g = groupForMediaSec(targetSecRef.current)
+      if (g && g.index !== activeGroupIndexRef.current) {
+        setActiveGroupIndex(g.index) // load effect plays on ready (playingRef)
+      } else {
+        try {
+          const delta = localForActive(targetSecRef.current) - player.currentTime
+          if (Math.abs(delta) >= 0.05) player.seekBy(delta) // tolerant — see flushSeek
+        } catch {}
+        player.play()
+      }
     } else {
       player.pause()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playing, allManifestUrl, player])
+  }, [playing, activeGroupUrl, player])
 
   // While playing, advance the playhead to follow the video; stop at the live edge
-  // (or the end of the buffered footage when not currently streaming).
+  // (or the end of the buffered footage when not currently streaming). The player's
+  // currentTime is LOCAL to the active group — convert to global, and when a group
+  // ends, advance to the next codec-uniform group so playback continues across the
+  // boundary (the load effect resumes it).
   useEffect(() => {
     if (!playing) return
     const id = setInterval(() => {
-      const t = player.currentTime
-      if (t >= totalCamSecRef.current - 0.3) {
+      const active = playGroupsRef.current[activeGroupIndexRef.current]
+      if (!active) return
+      const localT = player.currentTime
+      const globalT = active.startSec + localT
+      if (globalT >= totalCamSecRef.current - 0.3) {
         setPlaying(false)
         return
       }
-      const ph = mediaSecToPlayhead(t)
+      if (localT >= active.durationSec - 0.3) {
+        const next = activeGroupIndexRef.current + 1
+        if (next < playGroupsRef.current.length) setActiveGroupIndex(next)
+        else setPlaying(false)
+        return
+      }
+      const ph = mediaSecToPlayhead(globalT)
       if (ph == null) return
       if (ph >= Date.now() - 500) {
         setPlaying(false)
@@ -551,45 +634,55 @@ export const ClipEditScreen = () => {
   const thumbsDisabledRef = useRef(false) // give up after repeated hangs (unsupported source)
 
   // wall-clock ms → media seconds, but only within camera footage (null in gaps).
+  // The thumbnail player holds the ACTIVE group, so this returns the group-LOCAL
+  // second; instants outside the active group return null (their sprockets show).
   function wallToMediaSec(ms: number): number | null {
+    let global: number | null = null
     for (const c of camCumRef.current) {
       const st = sessionStartMs(c.s)
       const en = sessionEndMs(c.s)
       if (ms >= st && ms <= en) {
-        return c.mediaStart + Math.min(Math.max(0, c.s.durationSec), Math.max(0, (ms - st) / 1000))
+        global = c.mediaStart + Math.min(Math.max(0, c.s.durationSec), Math.max(0, (ms - st) / 1000))
+        break
       }
     }
-    return null
+    if (global == null) return null
+    const g = playGroupsRef.current[activeGroupIndexRef.current]
+    if (!g || global < g.startSec || global >= g.startSec + g.durationSec) return null
+    return global - g.startSec
   }
 
-  // Load the dedicated thumbnail source (separate from playback).
+  // Load the dedicated thumbnail source (separate from playback). Tracks the active
+  // group so generated frames stay codec-uniform; the cache is per-group (cleared on
+  // group change), so local second-buckets never collide across groups.
   useEffect(() => {
     thumbCache.current.clear()
     setThumbs([])
-    if (!CLIENT_THUMB_GEN || !allManifestUrl) return
+    if (!CLIENT_THUMB_GEN || !activeGroupUrl) return
     let cancelled = false
     ;(async () => {
       try {
-        await thumbPlayer.replaceAsync({ uri: allManifestUrl, contentType: 'hls' })
+        await thumbPlayer.replaceAsync({ uri: activeGroupUrl, contentType: 'hls' })
         if (!cancelled) thumbPlayer.pause()
       } catch {}
     })()
     return () => {
       cancelled = true
     }
-  }, [allManifestUrl, thumbPlayer])
+  }, [activeGroupUrl, thumbPlayer])
 
   // Generate thumbnails for the current visible window. One generateThumbnailsAsync
   // call per pass for the uncached buckets; serialized (busy/pending) so passes never
   // overlap. Reads everything via refs so the thumb-player's readyToPlay listener can
   // call it with fresh inputs. Gated on the dedicated player being loaded — the key
   // fix for "no thumbnails": the first pass often fires before the player is ready, so
-  // it now retries from the statusChange listener once it loads.
+  // it now retries from the statusChange listener once it loads. (group-aware: the
+  // thumb player tracks the active codec-uniform group.)
   async function runThumbGen() {
     if (!CLIENT_THUMB_GEN || thumbsDisabledRef.current) return
     const range = visibleRangeRef.current
-    if (!range || !allManifestUrlRef.current) {
-      vlog(`thumb gen: no range/url (range=${!!range} url=${!!allManifestUrlRef.current})`)
+    if (!range || !activeGroupUrlRef.current) {
+      vlog(`thumb gen: no range/url (range=${!!range} url=${!!activeGroupUrlRef.current})`)
       return
     }
     if (thumbPlayer.status !== 'readyToPlay') {
@@ -667,7 +760,7 @@ export const ClipEditScreen = () => {
   useEffect(() => {
     runThumbGen()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visibleRange, allManifestUrl])
+  }, [visibleRange, activeGroupUrl])
 
   // Trigger 2: the dedicated thumb player finished loading → (re)generate for the
   // current window. This is what makes the FIRST pass land (it usually fires before
@@ -800,7 +893,7 @@ export const ClipEditScreen = () => {
                 variant={fieldVariant}
                 thumbnailUrl={fieldThumb}
                 frameSlot={
-                  allManifestUrl && !playerError ? (
+                  hasCameraVideo && !playerError ? (
                     <VideoView
                       player={player}
                       style={StyleSheet.absoluteFill}

@@ -2499,3 +2499,58 @@ expo-image render layer + the `thumbnails` prop **stay** — when server thumbna
 the app just feeds their URLs into the same prop (only the source changes, no rework).
 The expo-image dep + the EAS rebuild requirement still stand (the module is imported
 regardless of the flag).
+
+---
+
+## Updates — June 2026 (Buffer "resource unavailable" DIAGNOSED — codec-uniform groups + capture pinning)
+
+Closes out the stacked-work **item 5** ("resource unavailable after a few minutes")
+from the buffer-trim handoff. The 2026-06-06 note routed it to the backend as a
+serving bug (token TTL / reaping / live-concat). **On-box diagnosis 2026-06-07
+falsified all three** — the serving is healthy (manifest 200, all 229 segment/init
+URLs 206, segments intact a day later, 6h token rotated per call). The real cause is
+**the shape of the concatenated VOD**: it stitched sessions with **different H.264
+codec params** (one go-live encoded level 5.2, another 4.1 — same 640×360) across
+`EXT-X-DISCONTINUITY` with separate `EXT-X-MAP` inits. A mid-VOD decoder-config change
+wedges native AVPlayer/ExoPlayer after a seek across the boundary, and reloading the
+same mixed playlist re-wedges identically — which is why a fresh token never restored
+it. Full evidence + the backend guard live in `wrld-backend/CLAUDE.md` item 5.
+
+### App changes (this repo)
+
+- **`src/api/buffer.ts`** — `BufferDescriptor` gains **`allGroups?: BufferGroup[]`**
+  (`{ groupIndex, startSec, durationSec, sessionCount, manifestUrl }`). Each group is
+  one codec-uniform HLS VOD (single `EXT-X-MAP`); `startSec` is its offset into the
+  gaps-collapsed camera media timeline. `allManifestUrl` stays as a legacy fallback.
+- **`src/components/screens/ClipEditScreen.tsx`** — the player is now **group-aware**.
+  It plays the group under the playhead and **swaps the source at group boundaries**
+  instead of relying on the single mixed `allManifestUrl`:
+  - `playGroups` (from `allGroups`, or a one-group fallback over `allManifestUrl` for
+    older backends); `groupForMediaSec(globalSec)` and `localForActive(globalSec)` map
+    the global camera media timeline ↔ the active group's local time.
+  - `activeGroupIndex` state drives the load effect (`replaceAsync` the active group's
+    URL, seek to the local offset + repaint). Scrubbing across a boundary switches the
+    group; playback advances to the next group when one ends.
+  - `pendingSeek` / recovery / thumbnails are all local-to-active-group; the thumbnail
+    generator tracks the active group so its frames stay codec-uniform (out-of-group
+    instants fall back to sprockets — unchanged graceful degrade).
+  - The recovery controller (capped `replaceAsync` + backoff + poster) is unchanged;
+    it now refetches and reloads the **active group's** fresh URL.
+- **`src/hooks/useMediasoup.ts`** — **capture is now pinned** (the root fix for the
+  drift). `getUserMedia` video constraints come from a shared `cameraConstraints()` that
+  reads `maxCaptureHeight(wrldUser.tier)` (`src/lib/tierCaps.ts`, G4 cap-produce) and
+  sends `width`/`height` as **`{ ideal, max }`** (16:9) plus a fixed `frameRate` (30).
+  Pinning `max` (not just `ideal`) makes capture deterministic across go-lives ⟹ a
+  stable SPS/level ⟹ the buffer collapses to a **single group** going forward (so even
+  the legacy stitch is safe). This also wires the long-intended per-tier ladder
+  (720/1080/1440) that `tierCaps.ts` was written for. Disjoint from the in-flight
+  ~2 Mbps produce-encodings tuning in the same file (left untouched).
+
+### Status / not yet device-tested
+
+Pure JS in the app (no new native module) — hot-reloads, **no EAS rebuild** for these
+changes (the separate pending `expo-video` / RNGH / `expo-image` rebuild still stands).
+Needs an on-device pass: group-boundary source swaps (scrub + playback across a
+codec change), the capture-pinning at each tier, and that a freshly-captured buffer
+now reports a single `allGroups` entry. The backend guard must be deployed for
+`allGroups` to be populated (until then the app uses the `allManifestUrl` fallback).
