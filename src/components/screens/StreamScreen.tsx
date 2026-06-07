@@ -333,18 +333,15 @@ export function StreamScreen() {
   const { orientation: deviceOrientation, tiltDeg } = useDeviceOrientation(showCameraPreview)
   const isLandscapeHold = deviceOrientation === 'landscape-left' || deviceOrientation === 'landscape-right'
 
-  // iOS continuous-vertical preview (matches Android). Total upright rotation =
-  // PREVIEW_BASE + tilt; split into a discrete 90° step (frame rotation — correct
-  // fit, no zoom) + a continuous residual (transform on the video view) so the
-  // preview rotates smoothly and stays vertical at any tilt. On-device tunables:
-  // PREVIEW_BASE (per-orientation upright at rest) and PREVIEW_RESIDUAL_SIGN
-  // (flip if the in-between rotates the wrong way).
+  // iOS preview: CLEAN DISCRETE orientation (frame rotation only). RTCMTLVideoView
+  // gives a correct fit only via discrete frame rotation; it snaps at the ~45°
+  // boundary. (Continuous-vertical like Android needs a custom Metal renderer —
+  // out of scope of the patch — so the residual transform is disabled.) The
+  // discrete upright step = nearest 90° of PREVIEW_BASE + tilt.
   const PREVIEW_BASE = 90
-  const PREVIEW_RESIDUAL_SIGN = -1
-  const previewTotal = PREVIEW_BASE + tiltDeg
-  const previewStep = Math.round(previewTotal / 90)
+  const previewStep = Math.round((PREVIEW_BASE + tiltDeg) / 90)
   const previewRotationOverride = (((previewStep * 90) % 360) + 360) % 360
-  const previewResidualDeg = PREVIEW_RESIDUAL_SIGN * (previewTotal - previewStep * 90)
+  const previewResidualDeg = 0 // continuous residual disabled (see above)
 
   const showControls = isNew || !showOverlay || controlsVisible
 
