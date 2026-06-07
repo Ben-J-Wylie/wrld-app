@@ -78,11 +78,7 @@ import { TipSheet } from '@/components/features/stream/TipSheet'
 import { FollowButton } from '@/components/features/user/FollowButton'
 import { useInvalidateCurrentUser } from '@/hooks/useCurrentUser'
 import { useInvalidateWallet } from '@/hooks/useWallet'
-import {
-  useDeviceOrientation,
-  RECORD_ROTATION_DEG,
-  PREVIEW_FRAME_ROTATION,
-} from '@/hooks/useDeviceOrientation'
+import { useDeviceOrientation, RECORD_ROTATION_DEG } from '@/hooks/useDeviceOrientation'
 import { theme } from '@/tokens/theme'
 import { signalStreamDisconnected, signalStreamEnded, signalKicked } from '@/lib/streamSignals'
 import { signalingClient } from '@/lib/mediasoupSignaling'
@@ -331,14 +327,25 @@ export function StreamScreen() {
   const showOverlay = showCameraPreview || showRemoteVideo
 
   // Physical device orientation (sensed via DeviceMotion — the app UI is
-  // portrait-locked, so this is the only way to know how the phone is held). Used
-  // ONLY to bake the recording's orientation (server -c:v copy → one rotation per
-  // go-live). The live preview is NOT leveled: like the native camera, the preview
-  // rides the phone (iOS re-orients the RTCView video to the device under us, and
-  // the native camera's live view rides too); only the saved video comes out
-  // upright.
-  const { orientation: deviceOrientation } = useDeviceOrientation(showCameraPreview)
+  // portrait-locked, so this is the only way to know how the phone is held).
+  // `deviceOrientation` (discrete) bakes the recording orientation; `tiltDeg`
+  // (continuous) drives the iOS gimbal preview.
+  const { orientation: deviceOrientation, tiltDeg } = useDeviceOrientation(showCameraPreview)
   const isLandscapeHold = deviceOrientation === 'landscape-left' || deviceOrientation === 'landscape-right'
+
+  // iOS continuous-vertical preview (matches Android). Total upright rotation =
+  // PREVIEW_BASE + tilt; split into a discrete 90° step (frame rotation — correct
+  // fit, no zoom) + a continuous residual (transform on the video view) so the
+  // preview rotates smoothly and stays vertical at any tilt. On-device tunables:
+  // PREVIEW_BASE (per-orientation upright at rest) and PREVIEW_RESIDUAL_SIGN
+  // (flip if the in-between rotates the wrong way).
+  const PREVIEW_BASE = 90
+  const PREVIEW_RESIDUAL_SIGN = 1
+  const previewTotal = PREVIEW_BASE + tiltDeg
+  const previewStep = Math.round(previewTotal / 90)
+  const previewRotationOverride = (((previewStep * 90) % 360) + 360) % 360
+  const previewResidualDeg = PREVIEW_RESIDUAL_SIGN * (previewTotal - previewStep * 90)
+
   const showControls = isNew || !showOverlay || controlsVisible
 
   // Docked-footer bottom padding (Go Live / End Stream), and the shared offset
@@ -913,19 +920,20 @@ export function StreamScreen() {
   return (
     <SafeAreaView style={styles.container}>
       {showCameraPreview && (
-        // Local preview. iOS ONLY: our react-native-webrtc patch drives a clean
-        // per-orientation frame rotation (rotationOverride) to replace the
-        // capturer's janky auto-rotation. Android already orients the preview
-        // correctly on its own — leave it untouched (no override). The recording
-        // is oriented separately (server-side bake from deviceOrientation).
+        // Local preview. iOS ONLY: our react-native-webrtc patch drives a
+        // continuous-vertical preview — a discrete 90° frame rotation
+        // (rotationOverride, correct fit/no-zoom) plus a continuous residual
+        // (transformRotationDeg) so it rotates smoothly and stays vertical at any
+        // tilt, matching Android. `contain` avoids the landscape zoom. Android
+        // already orients correctly on its own — leave it untouched (cover, no
+        // override). The recording is oriented separately (server-side bake).
         <RTCView
           streamURL={(localStream as unknown as { toURL(): string }).toURL()}
           style={StyleSheet.absoluteFill}
-          objectFit="cover"
+          objectFit={Platform.OS === 'ios' ? 'contain' : 'cover'}
           mirror={facingMode === 'user'}
-          rotationOverride={
-            Platform.OS === 'ios' ? PREVIEW_FRAME_ROTATION[deviceOrientation] : undefined
-          }
+          rotationOverride={Platform.OS === 'ios' ? previewRotationOverride : undefined}
+          transformRotationDeg={Platform.OS === 'ios' ? previewResidualDeg : undefined}
           zOrder={0}
         />
       )}
@@ -935,7 +943,7 @@ export function StreamScreen() {
       {showCameraPreview && (
         <View style={styles.orientationDebug} pointerEvents="none">
           <Text variant="monoLabel" color={theme.colors.text.inverse}>
-            {`${Platform.OS} · hold:${deviceOrientation} · rec:${RECORD_ROTATION_DEG[deviceOrientation]}° · track:${videoIsLandscape ? 'land' : 'port'}`}
+            {`${Platform.OS} · hold:${deviceOrientation} · tilt:${Math.round(tiltDeg)}° · step:${previewRotationOverride}° res:${Math.round(previewResidualDeg)}° · rec:${RECORD_ROTATION_DEG[deviceOrientation]}°`}
           </Text>
         </View>
       )}
