@@ -335,20 +335,19 @@ export function StreamScreen() {
   const isLandscapeHold = deviceOrientation === 'landscape-left' || deviceOrientation === 'landscape-right'
 
   // iOS preview: CONTINUOUS gimbal via AVCaptureVideoPreviewLayer (CameraPreview).
-  // The native preview layer rides the WebRTC capturer's AVCaptureSession at a
-  // fixed portrait baseline (tilt 0 = upright); we counter-rotate it by the
-  // physical roll so the scene stays vertical at any tilt, like Android. The
-  // native side cover-scales so the rotated layer always fills.
+  // We rotate the preview layer by GIMBAL_GAIN * tiltDeg to keep the scene
+  // vertical as the phone rolls (cover-scaled natively so it always fills).
   //
-  // Sign/base are calibrated on device (this was the recurring pain) and kept as
-  // single constants here (JS = hot-reloadable, no rebuild). The front-camera
-  // mirror flips the roll handedness, so negate the angle when mirrored.
-  // Starting point: counter-rotate (negate tilt); tiltDeg 0=portrait,
-  // +90=landscape-left, -90=landscape-right (see useDeviceOrientation).
-  const GIMBAL_SIGN = 1
+  // GIMBAL_GAIN is a hot-reloadable tunable (JS, no rebuild). On-device finding:
+  // gain -1 → preview rides WITH the phone; gain +1 → rides OPPOSITE. Symmetric,
+  // so the upright zero-crossing is BETWEEN them — DIAGNOSTIC: gain 0 = no
+  // rotation (and no zoom) to reveal what the raw AVCaptureVideoPreviewLayer
+  // does on its own, then bisect toward the value that holds vertical.
+  // tiltDeg: 0=portrait, +90=landscape-left, -90=landscape-right (useDeviceOrientation).
+  const GIMBAL_GAIN = 0
   const GIMBAL_BASE = 0
   const gimbalMirrorSign = facingMode === 'user' ? -1 : 1
-  const previewGimbalDeg = GIMBAL_BASE + GIMBAL_SIGN * gimbalMirrorSign * tiltDeg
+  const previewGimbalDeg = GIMBAL_BASE + GIMBAL_GAIN * gimbalMirrorSign * tiltDeg
 
   const showControls = isNew || !showOverlay || controlsVisible
 
