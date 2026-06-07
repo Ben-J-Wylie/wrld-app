@@ -913,16 +913,19 @@ export function StreamScreen() {
   return (
     <SafeAreaView style={styles.container}>
       {showCameraPreview && (
-        // Local preview: full-screen, with our react-native-webrtc patch driving
-        // a clean per-orientation frame rotation (rotationOverride) so it snaps
-        // portrait/landscape without the capturer's 180° jank. The recording is
-        // oriented separately (server-side bake from deviceOrientation).
+        // Local preview. iOS ONLY: our react-native-webrtc patch drives a clean
+        // per-orientation frame rotation (rotationOverride) to replace the
+        // capturer's janky auto-rotation. Android already orients the preview
+        // correctly on its own — leave it untouched (no override). The recording
+        // is oriented separately (server-side bake from deviceOrientation).
         <RTCView
           streamURL={(localStream as unknown as { toURL(): string }).toURL()}
           style={StyleSheet.absoluteFill}
           objectFit="cover"
           mirror={facingMode === 'user'}
-          rotationOverride={PREVIEW_FRAME_ROTATION[deviceOrientation]}
+          rotationOverride={
+            Platform.OS === 'ios' ? PREVIEW_FRAME_ROTATION[deviceOrientation] : undefined
+          }
           zOrder={0}
         />
       )}
