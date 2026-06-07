@@ -2485,5 +2485,17 @@ Installed via `npx expo install expo-image`; `npm ci` verified clean (no `--forc
   props, `TimelineThumb` / `VisibleRange` types); `ClipEditScreen` owns the generator + the
   wall-clock↔media-seconds mapping.
 
-Not yet device-tested (rides the pending expo-image rebuild). `design`-only until the
-rebuild is verified on-device — then `design → main`.
+### ⚠️ Client-side generation CONFIRMED NON-VIABLE (2026-06-06, on-device) — gated OFF
+`generateThumbnailsAsync` **hangs** on the `-c:v copy` HLS buffer VOD — it never
+resolves (logs `thumb gen: N cells in window` then nothing; a 6s timeout guard proves
+it: `thumb gen failed after 6000ms`). Same root cause as the playback seek-hang (exact-
+frame extraction), but thumbnails have **no tolerant API** to dodge it. So the client
+path is gated **off** behind `CLIENT_THUMB_GEN = false` (kept, not deleted — flip true if
+a future source supports it); the timeline shows its **sprocket filmstrip**.
+
+**The real fix is SERVER-generated buffer thumbnails** (sidecar emits interval JPEGs /
+sprite / WebVTT) — Aaron's lane, `wrld-backend/CLAUDE.md` stacked-work **item 6**. The
+expo-image render layer + the `thumbnails` prop **stay** — when server thumbnails land
+the app just feeds their URLs into the same prop (only the source changes, no rework).
+The expo-image dep + the EAS rebuild requirement still stand (the module is imported
+regardless of the flag).

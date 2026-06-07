@@ -57,6 +57,13 @@ type SavedClip = {
 const H = 3_600_000
 const DEFAULT_CLIP_MS = 120_000 // 2 min default bracket on "New clip"
 const MIN_BRACKET_MS = 500
+// Client-side timeline thumbnails via expo-video generateThumbnailsAsync are OFF:
+// confirmed (2026-06-06, on-device) to HANG on the -c:v copy HLS buffer VOD — exact-
+// frame extraction, the same problem tolerant seekBy dodges for playback, and there's
+// no tolerant thumbnail API. The path is kept (flip true if a future source supports
+// it) but the real fix is SERVER-generated buffer thumbnails — see wrld-backend
+// CLAUDE.md stacked-work item 6. Until then the timeline shows its sprocket filmstrip.
+const CLIENT_THUMB_GEN = false
 
 // Recorded-source kind → ClipSource row metadata (icon/label/value). Only the
 // kinds the buffer actually captured are shown; unknown kinds are skipped.
@@ -78,6 +85,16 @@ const sessionEndMs = (s: BufferSession) => (s.endedAt ? Date.parse(s.endedAt) : 
 function vlog(msg: string, extra?: unknown) {
   // eslint-disable-next-line no-console
   if (__DEV__) console.log(`[clip-video] ${msg}`, extra ?? '')
+}
+
+// Reject if a promise doesn't settle in time — generateThumbnailsAsync can hang
+// forever on a -c:v copy HLS VOD (exact-frame extraction), which would otherwise wedge
+// the generator. (The native work may continue, but the JS side recovers.)
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), ms)),
+  ])
 }
 
 export const ClipEditScreen = () => {
@@ -525,7 +542,13 @@ export const ClipEditScreen = () => {
   })
   const [thumbs, setThumbs] = useState<TimelineThumb[]>([])
   const [visibleRange, setVisibleRange] = useState<VisibleRange | null>(null)
+  const visibleRangeRef = useRef<VisibleRange | null>(null)
+  visibleRangeRef.current = visibleRange
   const thumbCache = useRef<Map<number, TimelineThumb>>(new Map())
+  const genBusyRef = useRef(false) // one generateThumbnailsAsync at a time
+  const genPendingRef = useRef(false) // a request arrived mid-generation → re-run after
+  const thumbFailRef = useRef(0) // consecutive gen failures/timeouts
+  const thumbsDisabledRef = useRef(false) // give up after repeated hangs (unsupported source)
 
   // wall-clock ms → media seconds, but only within camera footage (null in gaps).
   function wallToMediaSec(ms: number): number | null {
@@ -543,7 +566,7 @@ export const ClipEditScreen = () => {
   useEffect(() => {
     thumbCache.current.clear()
     setThumbs([])
-    if (!allManifestUrl) return
+    if (!CLIENT_THUMB_GEN || !allManifestUrl) return
     let cancelled = false
     ;(async () => {
       try {
@@ -556,49 +579,107 @@ export const ClipEditScreen = () => {
     }
   }, [allManifestUrl, thumbPlayer])
 
-  // Generate thumbnails for the visible window (already debounced upstream by the
-  // timeline). One generateThumbnailsAsync call per pass for the uncached buckets.
-  useEffect(() => {
-    if (!visibleRange || !allManifestUrl) return
-    const { startMs, endMs, cellMs } = visibleRange
-    if (endMs <= startMs) return
-    const step = Math.max(cellMs, (endMs - startMs) / THUMB_CAP)
-    const wanted: { tMs: number; sec: number; bucket: number }[] = []
-    for (let t = startMs; t <= endMs && wanted.length < THUMB_CAP; t += step) {
-      const sec = wallToMediaSec(t)
-      if (sec == null) continue
-      const bucket = Math.round(sec)
-      if (wanted.some((w) => w.bucket === bucket)) continue
-      wanted.push({ tMs: t, sec, bucket })
-    }
-    if (!wanted.length) {
-      setThumbs([])
+  // Generate thumbnails for the current visible window. One generateThumbnailsAsync
+  // call per pass for the uncached buckets; serialized (busy/pending) so passes never
+  // overlap. Reads everything via refs so the thumb-player's readyToPlay listener can
+  // call it with fresh inputs. Gated on the dedicated player being loaded — the key
+  // fix for "no thumbnails": the first pass often fires before the player is ready, so
+  // it now retries from the statusChange listener once it loads.
+  async function runThumbGen() {
+    if (!CLIENT_THUMB_GEN || thumbsDisabledRef.current) return
+    const range = visibleRangeRef.current
+    if (!range || !allManifestUrlRef.current) {
+      vlog(`thumb gen: no range/url (range=${!!range} url=${!!allManifestUrlRef.current})`)
       return
     }
-    const missing = wanted.filter((w) => !thumbCache.current.has(w.bucket))
-    let cancelled = false
-    ;(async () => {
+    if (thumbPlayer.status !== 'readyToPlay') {
+      vlog(`thumb gen deferred — player ${thumbPlayer.status}`)
+      return
+    }
+    if (genBusyRef.current) {
+      genPendingRef.current = true
+      return
+    }
+    genBusyRef.current = true
+    try {
+      const { startMs, endMs, cellMs } = range
+      if (endMs <= startMs) {
+        vlog(`thumb gen: degenerate range ${startMs}..${endMs}`)
+        return
+      }
+      const step = Math.max(cellMs, (endMs - startMs) / THUMB_CAP)
+      const wanted: { tMs: number; sec: number; bucket: number }[] = []
+      for (let t = startMs; t <= endMs && wanted.length < THUMB_CAP; t += step) {
+        const sec = wallToMediaSec(t)
+        if (sec == null) continue
+        const bucket = Math.round(sec)
+        if (wanted.some((w) => w.bucket === bucket)) continue
+        wanted.push({ tMs: t, sec, bucket })
+      }
+      if (!wanted.length) {
+        const span = Math.round((endMs - startMs) / 1000)
+        vlog(`thumb gen: 0 in-footage cells (span ${span}s, camSessions ${camCumRef.current.length}, totalCam ${Math.round(totalCamSecRef.current)}s)`)
+        setThumbs([])
+        return
+      }
+      vlog(`thumb gen: ${wanted.length} cells in window (cache ${thumbCache.current.size})`)
+      const missing = wanted.filter((w) => !thumbCache.current.has(w.bucket))
       if (missing.length) {
+        const t0 = Date.now()
         try {
-          const imgs = await thumbPlayer.generateThumbnailsAsync(
-            missing.map((m) => m.sec),
-            { maxWidth: 96 },
+          const imgs = await withTimeout(
+            thumbPlayer.generateThumbnailsAsync(
+              missing.map((m) => m.sec),
+              { maxWidth: 96 },
+            ),
+            6000,
           )
           imgs.forEach((img, i) => {
             const m = missing[i]
             if (m) thumbCache.current.set(m.bucket, { tMs: m.tMs, source: img })
           })
           if (thumbCache.current.size > 240) thumbCache.current.clear()
-        } catch {}
+          thumbFailRef.current = 0
+          vlog(`thumb gen +${imgs.length} in ${Date.now() - t0}ms (cache ${thumbCache.current.size})`)
+        } catch (e) {
+          thumbFailRef.current += 1
+          vlog(`thumb gen failed after ${Date.now() - t0}ms (#${thumbFailRef.current})`, e)
+          // Repeated hangs → generateThumbnailsAsync isn't viable on this source
+          // (exact-frame extraction on the -c:v copy HLS VOD). Stop trying; the
+          // timeline keeps its sprocket filmstrip.
+          if (thumbFailRef.current >= 2) {
+            thumbsDisabledRef.current = true
+            vlog('thumbnails disabled — generation unsupported/hanging on this source')
+          }
+        }
       }
-      if (cancelled) return
       setThumbs(wanted.map((w) => thumbCache.current.get(w.bucket)).filter(Boolean) as TimelineThumb[])
-    })()
-    return () => {
-      cancelled = true
+    } finally {
+      genBusyRef.current = false
+      if (genPendingRef.current) {
+        genPendingRef.current = false
+        runThumbGen()
+      }
     }
+  }
+
+  // Trigger 1: the visible window changed (already debounced by the timeline).
+  useEffect(() => {
+    runThumbGen()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visibleRange, allManifestUrl])
+
+  // Trigger 2: the dedicated thumb player finished loading → (re)generate for the
+  // current window. This is what makes the FIRST pass land (it usually fires before
+  // the player is readyToPlay). Reads inputs via refs, so binding once is fine.
+  useEffect(() => {
+    const sub = thumbPlayer.addListener('statusChange', ({ status }) => {
+      vlog(`thumb player → ${status}`)
+      if (status === 'readyToPlay') runThumbGen()
+    })
+    return () => sub.remove()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [thumbPlayer])
 
   // The gap (if any) the given instant falls inside — between the previous session's
   // end and the next session's start (or now, for the trailing gap).
