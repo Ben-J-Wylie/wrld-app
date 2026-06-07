@@ -22,10 +22,11 @@
 //
 // See DESIGN.md Section 3 (Buffer-trim clip editor) + the 2026-06-06 decision log.
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ComponentProps } from 'react'
 import { StyleSheet, View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from 'react-native'
 import Animated, { useAnimatedStyle, useSharedValue, runOnJS } from 'react-native-reanimated'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
+import { Image } from 'expo-image'
 import { theme } from '@/tokens/theme'
 import { SegmentedToggle } from '@/components/primitives/SegmentedToggle'
 import { GapMarker, GAP_MARKER_WIDTH } from './GapMarker'
@@ -36,6 +37,13 @@ import { TimelineScrollbar } from './TimelineScrollbar'
 export type BufferSegment = { id: string; startMs: number; endMs: number; peaks?: number[] }
 export type BufferSavedRegion = { id: string; startMs: number; endMs: number; label?: string }
 export type BufferBracket = { inMs: number; outMs: number }
+// Real frame thumbnails (from expo-video's generateThumbnailsAsync, rendered via
+// expo-image) placed at their wall-clock instant. Optional enhancement layer over the
+// sprocket filmstrip — where a thumb exists it covers the sprockets; gaps/missing →
+// sprockets show through. `source` is whatever expo-image's <Image> accepts (incl. the
+// VideoThumbnail SharedRef the screen passes).
+export type TimelineThumb = { tMs: number; source: ComponentProps<typeof Image>['source'] }
+export type VisibleRange = { startMs: number; endMs: number; cellMs: number }
 
 type Props = {
   segments: BufferSegment[]
@@ -44,11 +52,15 @@ type Props = {
   nowMs?: number
   streaming?: boolean
   bracket?: BufferBracket | null
+  thumbnails?: TimelineThumb[]
   onScrub: (ms: number) => void
   onBracketChange?: (next: BufferBracket) => void
   // The live zoom (px per ms), reported on change — the field uses it to scale its
   // own scrub rate relative to the timeline.
   onZoomChange?: (pxPerMs: number) => void
+  // The visible time window (+ per-cell duration), reported on settle — the screen
+  // generates thumbnails for exactly this range/density.
+  onVisibleRangeChange?: (range: VisibleRange) => void
   style?: StyleProp<ViewStyle>
 }
 
@@ -90,9 +102,11 @@ export function BufferTimeline({
   nowMs,
   streaming,
   bracket,
+  thumbnails,
   onScrub,
   onBracketChange,
   onZoomChange,
+  onVisibleRangeChange,
   style,
 }: Props) {
   const [width, setWidth] = useState(0)
@@ -138,6 +152,27 @@ export function BufferTimeline({
   useEffect(() => {
     if (px > 0) onZoomChangeRef.current?.(px)
   }, [px])
+
+  // Report the visible window (debounced on settle) so the screen generates thumbnails
+  // for exactly what's on screen at the current zoom/density.
+  const onVisibleRangeChangeRef = useRef(onVisibleRangeChange)
+  onVisibleRangeChangeRef.current = onVisibleRangeChange
+  const visRangeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    const cb = onVisibleRangeChangeRef.current
+    if (!cb || px <= 0 || width <= 0 || segBlocks.length === 0) return
+    if (visRangeTimer.current) clearTimeout(visRangeTimer.current)
+    visRangeTimer.current = setTimeout(() => {
+      cb({
+        startMs: xToTime(offset, segBlocks, px),
+        endMs: xToTime(offset + width, segBlocks, px),
+        cellMs: FILM_CELL_W / px,
+      })
+    }, 200)
+    return () => {
+      if (visRangeTimer.current) clearTimeout(visRangeTimer.current)
+    }
+  }, [offset, width, px, segBlocks])
 
   // Shared mirrors the pinch worklet reads (set from JS each render).
   const sPx = useSharedValue(px)
@@ -410,6 +445,17 @@ export function BufferTimeline({
               </View>
             )}
 
+            {/* Real frame thumbnails over the sprocket filmstrip (where available). */}
+            {thumbnails?.map((t) => (
+              <Image
+                key={`thumb-${t.tMs}`}
+                source={t.source}
+                style={[styles.thumbTile, { left: timeToX(t.tMs, segBlocks, px) }]}
+                contentFit="cover"
+                pointerEvents="none"
+              />
+            ))}
+
             {savedRegions.map((r) => {
               const left = timeToX(r.startMs, segBlocks, px)
               const w = Math.max(2, timeToX(r.endMs, segBlocks, px) - left)
@@ -558,6 +604,12 @@ const styles = StyleSheet.create({
     bottom: 0,
     backgroundColor: theme.colors.bg.panelHi,
     overflow: 'hidden',
+  },
+  thumbTile: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: FILM_CELL_W,
   },
   film: {
     ...StyleSheet.absoluteFillObject,

@@ -2453,3 +2453,37 @@ On-device logs pinned two distinct failures:
 after a few minutes; an on-device pass of the new scrub feel (half-rate, quarter-screen
 gap, zoom toggle) and the recovery path. Scrub/timeline/clock/zoom all keep working even
 when the video falls back to the poster.
+
+---
+
+## Updates — June 2026 (Timeline thumbnails — real frames over the filmstrip)
+
+`BufferTimeline` can now show **real frame thumbnails** over the sprocket filmstrip,
+generated with `expo-video`'s `generateThumbnailsAsync` and rendered via **`expo-image`**
+(SharedRef sources). `design` branch.
+
+### ⚠️ Pulling this needs an EAS dev-client rebuild
+**`expo-image` (`~3.0.11`) is a NEW native module.** `BufferTimeline` imports it at
+module scope (and the dev gallery imports `BufferTimeline`), so a client without
+expo-image **red-screens the clip editor + gallery** (`Cannot find native module
+'ExpoImage'`). A `development` build (both platforms) was triggered 2026-06-06 for this.
+Run `eas build --profile development --platform all` if your client predates it.
+Installed via `npx expo install expo-image`; `npm ci` verified clean (no `--force`).
+
+### How it works (seam intact)
+- **Enhancement layer, not a hard dep.** Thumbnails are placed at their wall-clock
+  instant *over* the sprocket cells; where a thumb is missing (loading, off-window,
+  gap, dead token, gallery/mock) the **sprockets show through** — so it degrades cleanly
+  with the same buffer-VOD substrate issue (backend item 5) rather than breaking.
+- **Dedicated generator.** A second `useVideoPlayer` instance (muted, paused) generates
+  thumbnails so it never contends with the playback player's scrub-seeks.
+- **Visible-window only.** `BufferTimeline` reports its visible range + per-cell duration
+  via **`onVisibleRangeChange`** (debounced 200ms); the screen generates for exactly that
+  range/density, **cached by media-second**, capped 28/pass, one `generateThumbnailsAsync`
+  call per pass, `maxWidth: 96`.
+- **Lane:** `BufferTimeline` stays presentational (new `thumbnails` + `onVisibleRangeChange`
+  props, `TimelineThumb` / `VisibleRange` types); `ClipEditScreen` owns the generator + the
+  wall-clock↔media-seconds mapping.
+
+Not yet device-tested (rides the pending expo-image rebuild). `design`-only until the
+rebuild is verified on-device — then `design → main`.

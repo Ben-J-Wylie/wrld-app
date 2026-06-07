@@ -31,6 +31,8 @@ import {
   type BufferSegment,
   type BufferSavedRegion,
   type BufferBracket,
+  type TimelineThumb,
+  type VisibleRange,
 } from '@/components/features/clip/BufferTimeline'
 import { ClipSourcesDrawer, type ClipSource } from '@/components/features/clip/ClipSourcesDrawer'
 import { SavedClipRow } from '@/components/features/clip/SavedClipRow'
@@ -510,6 +512,94 @@ export const ClipEditScreen = () => {
     if (healTimer.current) clearTimeout(healTimer.current)
   }, [])
 
+  // ── Timeline thumbnails (real frames over the sprocket filmstrip) ───────────
+  // A DEDICATED player (so it never contends with playback seeks) generates frame
+  // thumbnails for the timeline's visible window, on demand at the current density.
+  // Cached by media-second; capped per pass; tolerant of failure (the timeline falls
+  // back to sprockets). Hits the same tokenized VOD, so it degrades with the same
+  // substrate issue until that's fixed — hence the graceful fallback, not a hard dep.
+  const THUMB_CAP = 28
+  const thumbPlayer = useVideoPlayer(null, (p) => {
+    p.muted = true
+    p.pause()
+  })
+  const [thumbs, setThumbs] = useState<TimelineThumb[]>([])
+  const [visibleRange, setVisibleRange] = useState<VisibleRange | null>(null)
+  const thumbCache = useRef<Map<number, TimelineThumb>>(new Map())
+
+  // wall-clock ms → media seconds, but only within camera footage (null in gaps).
+  function wallToMediaSec(ms: number): number | null {
+    for (const c of camCumRef.current) {
+      const st = sessionStartMs(c.s)
+      const en = sessionEndMs(c.s)
+      if (ms >= st && ms <= en) {
+        return c.mediaStart + Math.min(Math.max(0, c.s.durationSec), Math.max(0, (ms - st) / 1000))
+      }
+    }
+    return null
+  }
+
+  // Load the dedicated thumbnail source (separate from playback).
+  useEffect(() => {
+    thumbCache.current.clear()
+    setThumbs([])
+    if (!allManifestUrl) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        await thumbPlayer.replaceAsync({ uri: allManifestUrl, contentType: 'hls' })
+        if (!cancelled) thumbPlayer.pause()
+      } catch {}
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [allManifestUrl, thumbPlayer])
+
+  // Generate thumbnails for the visible window (already debounced upstream by the
+  // timeline). One generateThumbnailsAsync call per pass for the uncached buckets.
+  useEffect(() => {
+    if (!visibleRange || !allManifestUrl) return
+    const { startMs, endMs, cellMs } = visibleRange
+    if (endMs <= startMs) return
+    const step = Math.max(cellMs, (endMs - startMs) / THUMB_CAP)
+    const wanted: { tMs: number; sec: number; bucket: number }[] = []
+    for (let t = startMs; t <= endMs && wanted.length < THUMB_CAP; t += step) {
+      const sec = wallToMediaSec(t)
+      if (sec == null) continue
+      const bucket = Math.round(sec)
+      if (wanted.some((w) => w.bucket === bucket)) continue
+      wanted.push({ tMs: t, sec, bucket })
+    }
+    if (!wanted.length) {
+      setThumbs([])
+      return
+    }
+    const missing = wanted.filter((w) => !thumbCache.current.has(w.bucket))
+    let cancelled = false
+    ;(async () => {
+      if (missing.length) {
+        try {
+          const imgs = await thumbPlayer.generateThumbnailsAsync(
+            missing.map((m) => m.sec),
+            { maxWidth: 96 },
+          )
+          imgs.forEach((img, i) => {
+            const m = missing[i]
+            if (m) thumbCache.current.set(m.bucket, { tMs: m.tMs, source: img })
+          })
+          if (thumbCache.current.size > 240) thumbCache.current.clear()
+        } catch {}
+      }
+      if (cancelled) return
+      setThumbs(wanted.map((w) => thumbCache.current.get(w.bucket)).filter(Boolean) as TimelineThumb[])
+    })()
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleRange, allManifestUrl])
+
   // The gap (if any) the given instant falls inside — between the previous session's
   // end and the next session's start (or now, for the trailing gap).
   function gapAt(ms: number): { start: number; end: number } | null {
@@ -677,6 +767,7 @@ export const ClipEditScreen = () => {
               nowMs={bufferEndMs}
               streaming={streaming}
               bracket={bracket}
+              thumbnails={thumbs}
               onScrub={(ms) => {
                 markScrubbing()
                 placePlayhead(ms)
@@ -685,6 +776,7 @@ export const ClipEditScreen = () => {
               onZoomChange={(ppm) => {
                 timelinePxPerMsRef.current = ppm
               }}
+              onVisibleRangeChange={setVisibleRange}
               style={styles.fullBleed}
             />
 
