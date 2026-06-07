@@ -340,7 +340,7 @@ export function StreamScreen() {
   // PREVIEW_BASE (per-orientation upright at rest) and PREVIEW_RESIDUAL_SIGN
   // (flip if the in-between rotates the wrong way).
   const PREVIEW_BASE = 90
-  const PREVIEW_RESIDUAL_SIGN = 1
+  const PREVIEW_RESIDUAL_SIGN = -1
   const previewTotal = PREVIEW_BASE + tiltDeg
   const previewStep = Math.round(previewTotal / 90)
   const previewRotationOverride = (((previewStep * 90) % 360) + 360) % 360
