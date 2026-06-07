@@ -357,6 +357,11 @@ export function StreamScreen() {
     }
     return { ...StyleSheet.absoluteFillObject, ...base }
   })()
+  // Rotated landscape preview → 'contain' so the aspect is preserved (letterbox)
+  // instead of being stretched to fill the swapped portrait bounds. Upright →
+  // 'cover' fills as before.
+  const previewObjectFit: 'cover' | 'contain' =
+    previewRotation === 90 || previewRotation === 270 ? 'contain' : 'cover'
   const showControls = isNew || !showOverlay || controlsVisible
 
   // Docked-footer bottom padding (Go Live / End Stream), and the shared offset
@@ -934,10 +939,21 @@ export function StreamScreen() {
         <RTCView
           streamURL={(localStream as unknown as { toURL(): string }).toURL()}
           style={previewStyle}
-          objectFit="cover"
+          objectFit={previewObjectFit}
           mirror={facingMode === 'user'}
           zOrder={0}
         />
+      )}
+
+      {/* TEMP orientation debug readout (remove once angles are dialled in).
+          Reports what each platform senses + the track's own orientation, so the
+          per-platform rotation can be set from real data. */}
+      {showCameraPreview && (
+        <View style={styles.orientationDebug} pointerEvents="none">
+          <Text variant="monoLabel" color={theme.colors.text.inverse}>
+            {`${Platform.OS} · hold:${deviceOrientation} · prev:${previewRotation}° · rec:${RECORD_ROTATION_DEG[deviceOrientation]}° · track:${videoIsLandscape ? 'land' : 'port'}`}
+          </Text>
+        </View>
       )}
 
       {showRemoteVideo && (
@@ -1527,6 +1543,16 @@ const styles = StyleSheet.create({
   // above the field mirror the globe / dashboard so the field lands at the
   // same Y on every screen.
   previewHeaderPad: { paddingTop: theme.spacing.sm },
+  orientationDebug: {
+    position: 'absolute',
+    top: 90,
+    alignSelf: 'center',
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.radius.md,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    zIndex: 50,
+  },
   previewTop: {
     paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.sm,
