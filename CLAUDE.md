@@ -2752,3 +2752,25 @@ dev-client rebuild) and the RNMapbox `FillLayer` `match`-expression colouring +
 worldview filter. Typecheck passes and the signaling/data shapes match the
 proven web path, but the Skia Canvas and the Mapbox style expression can't be
 exercised in a headless typecheck.
+
+---
+
+## Platform hardening initiative — app slice (PLAN, June 2026)
+
+> Master plan: `wrld-backend/CLAUDE.md` → "Platform hardening initiative (H-series)".
+> The foundation work is backend-heavy; the app slice is **H3 (tests) only**, scoped
+> to pure functions — the high-value correctness lives server-side.
+
+- **`vitest` setup** (jsdom not needed for the pure-util pass). Add a small
+  `src/**/__tests__` covering the **pure helpers** where a silent bug is plausible:
+  - currency / unit formatters (`watchLabel`, `formatBytes`, USD/Space-Bucks/Stardust
+    conversions — the `$0.01/unit` math),
+  - `captureConfig` load/migrate (the `bluedot→exact` migration, defaults),
+  - `tierCaps` / `maxCaptureHeight` resolution + the remote capture-ladder merge,
+  - any pure money/format helper shared with monetisation screens.
+- **Defer** component/integration/RN-render tests — low ROI at this stage and the
+  device-pass workflow already covers the risky native paths (charts, mapbox, WebRTC).
+- **CI:** include `tsc --noEmit` + `vitest` in the shared GitHub Actions gate (H3).
+
+No native rebuild implied. Start only when the backend H-series begins; this slice is
+independent and can land anytime.
