@@ -297,10 +297,10 @@ index 0000000..e060742
 +#endif
 diff --git a/node_modules/react-native-webrtc/ios/RCTWebRTC/WRLDCameraPreviewView.m b/node_modules/react-native-webrtc/ios/RCTWebRTC/WRLDCameraPreviewView.m
 new file mode 100644
-index 0000000..00f2b12
+index 0000000..1c641cc
 --- /dev/null
 +++ b/node_modules/react-native-webrtc/ios/RCTWebRTC/WRLDCameraPreviewView.m
-@@ -0,0 +1,169 @@
+@@ -0,0 +1,220 @@
 +#if !TARGET_OS_TV
 +
 +#import "WRLDCameraPreviewView.h"
@@ -316,11 +316,17 @@ index 0000000..00f2b12
 +#import "VideoCaptureController.h"
 +#import "WebRTCModule.h"
 +
++// Cap on pinch zoom. Device formats report a huge videoMaxZoomFactor (often
++// 100+), but digital zoom past ~8x is unusable mush — clamp to that.
++static const CGFloat kWRLDMaxZoom = 8.0;
++
 +@interface WRLDCameraPreviewView ()
 +@property(nonatomic, strong) AVCaptureVideoPreviewLayer *previewLayer;
 +@property(nonatomic, copy) NSString *currentStreamURL;
 +@property(nonatomic, assign) CGFloat rotationDeg;
 +@property(nonatomic, assign) BOOL mirror;
++// videoZoomFactor of the active device at the start of the current pinch.
++@property(nonatomic, assign) CGFloat zoomBase;
 +@end
 +
 +@implementation WRLDCameraPreviewView
@@ -329,6 +335,11 @@ index 0000000..00f2b12
 +    if (self = [super init]) {
 +        self.backgroundColor = [UIColor blackColor];
 +        self.clipsToBounds = YES;
++        // Pinch → real camera zoom (AVCaptureDevice.videoZoomFactor), so the
++        // broadcast + buffer zoom too (not a preview-only visual scale).
++        UIPinchGestureRecognizer *pinch =
++            [[UIPinchGestureRecognizer alloc] initWithTarget:self action:@selector(handlePinch:)];
++        [self addGestureRecognizer:pinch];
 +    }
 +    return self;
 +}
@@ -414,6 +425,46 @@ index 0000000..00f2b12
 +- (void)detach {
 +    [_previewLayer removeFromSuperlayer];
 +    _previewLayer = nil;
++}
++
++#pragma mark - Pinch zoom
++
++// The active video AVCaptureDevice behind the session (the WebRTC capturer's
++// camera input). videoZoomFactor lives on the device, so zooming it zooms the
++// captured frames → the broadcast/buffer zoom too, not just this preview.
++- (AVCaptureDevice *)currentVideoDevice {
++    AVCaptureSession *session = _previewLayer.session;
++    for (AVCaptureInput *input in session.inputs) {
++        if ([input isKindOfClass:[AVCaptureDeviceInput class]]) {
++            AVCaptureDevice *device = ((AVCaptureDeviceInput *)input).device;
++            if ([device hasMediaType:AVMediaTypeVideo]) {
++                return device;
++            }
++        }
++    }
++    return nil;
++}
++
++- (void)handlePinch:(UIPinchGestureRecognizer *)g {
++    AVCaptureDevice *device = [self currentVideoDevice];
++    if (!device) {
++        return;
++    }
++    if (g.state == UIGestureRecognizerStateBegan) {
++        _zoomBase = device.videoZoomFactor;
++        return;
++    }
++    if (g.state != UIGestureRecognizerStateChanged) {
++        return;
++    }
++    CGFloat minZoom = device.minAvailableVideoZoomFactor;  // usually 1.0
++    CGFloat maxZoom = MIN(device.activeFormat.videoMaxZoomFactor, kWRLDMaxZoom);
++    CGFloat target = MAX(minZoom, MIN(_zoomBase * g.scale, maxZoom));
++    NSError *err = nil;
++    if ([device lockForConfiguration:&err]) {
++        device.videoZoomFactor = target;
++        [device unlockForConfiguration];
++    }
 +}
 +
 +- (void)layoutSubviews {
