@@ -1,11 +1,14 @@
 import { apiClient } from './client'
 import { getClerkToken } from '@/lib/clerkToken'
 import { env } from '@/lib/env'
+import { applyRemoteCaptureLadder, type CaptureLadder } from '@/lib/tierCaps'
 import type { User, PublicUser, WalletData, CashoutRequest } from '@/types'
 
 export const usersApi = {
   getMe: async (): Promise<User> => {
-    const res = await apiClient.get<{ user: User }>('/auth/me')
+    const res = await apiClient.get<{ user: User; captureLadder?: Partial<CaptureLadder> }>('/auth/me')
+    // Cache the admin-tunable capture ladder for offline-resilient go-live caps.
+    void applyRemoteCaptureLadder(res.data.captureLadder)
     return res.data.user
   },
 
