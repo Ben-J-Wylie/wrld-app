@@ -58,13 +58,14 @@ function orientationFromDeg(deg: number): DeviceOrientation {
 
 // ── On-device tunables ───────────────────────────────────────────────────────
 // RECORD_ROTATION_DEG — display-matrix degrees the recorder bakes into the fmp4
-// (sent to mediasoup as `rotationDeg`). Portrait is the confirmed 270; landscape
-// holds offset from there. Confirm on device via a saved clip and flip if wrong.
+// (sent to mediasoup as `rotationDeg`). Portrait = confirmed 270. Both landscape
+// holds were recording upside-down, so each is bumped +180 (landscape-left 0→180,
+// landscape-right 180→0); they stay 180° apart, as the two holds are opposite.
 // (PREVIEW no longer uses a discrete map — it gimbal-levels off `tiltDeg`.)
 export const RECORD_ROTATION_DEG: Record<DeviceOrientation, number> = {
   portrait: 270,
-  'landscape-left': 0,
-  'landscape-right': 180,
+  'landscape-left': 180,
+  'landscape-right': 0,
   'portrait-upside-down': 90,
 }
 
