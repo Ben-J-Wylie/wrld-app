@@ -33,6 +33,13 @@ export type TierCap = {
   resolutionHeight: 720 | 1080 | 1440
   // Display label, e.g. '720p' | '1080p' | '1440p'.
   resolutionLabel: string
+  // WebRTC encoder ceiling in bits/sec (the `produce` encodings `maxBitrate`).
+  // Scales with resolution so higher tiers aren't starved (1080p/1440p need more
+  // bits than 720p for the same sharpness). A ceiling, not a floor — BWE only
+  // reaches it if the uplink allows. This single encoding is forwarded verbatim
+  // to viewers + the admin preview + the on-disk buffer (no server transcode),
+  // so it sets quality system-wide for the tier.
+  maxVideoBitrate: number
 }
 
 export const TIER_CAPS: Record<Tier, TierCap> = {
@@ -44,6 +51,7 @@ export const TIER_CAPS: Record<Tier, TierCap> = {
     windowShort: '24h',
     resolutionHeight: 720,
     resolutionLabel: '720p',
+    maxVideoBitrate: 4_000_000,
   },
   plus: {
     tier: 'plus',
@@ -53,6 +61,7 @@ export const TIER_CAPS: Record<Tier, TierCap> = {
     windowShort: '72h',
     resolutionHeight: 1080,
     resolutionLabel: '1080p',
+    maxVideoBitrate: 6_000_000,
   },
   pro: {
     tier: 'pro',
@@ -62,6 +71,7 @@ export const TIER_CAPS: Record<Tier, TierCap> = {
     windowShort: '7d',
     resolutionHeight: 1440,
     resolutionLabel: '1440p',
+    maxVideoBitrate: 10_000_000,
   },
 }
 
@@ -75,4 +85,12 @@ export const TIER_LADDER: TierCap[] = [TIER_CAPS.free, TIER_CAPS.plus, TIER_CAPS
 // Unknown tier strings fall back to the Free cap (safe minimum).
 export function maxCaptureHeight(tier: Tier | string | null | undefined): TierCap['resolutionHeight'] {
   return (TIER_CAPS as Record<string, TierCap>)[tier ?? 'free']?.resolutionHeight ?? TIER_CAPS.free.resolutionHeight
+}
+
+// The WebRTC encoder bitrate ceiling for a tier (bits/sec). Aaron's
+// `useMediasoup` passes this as the camera `produce` encodings `maxBitrate`.
+// Pairs with `maxCaptureHeight` so each tier's resolution gets a matching bit
+// budget. Unknown tier strings fall back to the Free ceiling (safe minimum).
+export function maxVideoBitrate(tier: Tier | string | null | undefined): number {
+  return (TIER_CAPS as Record<string, TierCap>)[tier ?? 'free']?.maxVideoBitrate ?? TIER_CAPS.free.maxVideoBitrate
 }
