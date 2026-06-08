@@ -94,6 +94,7 @@ import { usersApi } from '@/api/users'
 import { useSignaling } from '@/hooks/useSignaling'
 import { useMediasoup } from '@/hooks/useMediasoup'
 import * as Location from 'expo-location'
+import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake'
 import { useLocation } from '@/hooks/useLocation'
 import { useStream, useStreamByRoom } from '@/hooks/useStream'
 import { useAuthStore } from '@/stores/authStore'
@@ -689,6 +690,20 @@ export function StreamScreen() {
     })
     return () => sub.remove()
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isNew, status])
+
+  // Keep the screen awake while actively broadcasting so the OS idle timer
+  // doesn't auto-lock mid-stream — locking fires AppState 'background', which
+  // tears the broadcast down (see the AppState effect above). Same pattern as
+  // Google Maps during navigation. Scoped to the live broadcaster session and
+  // released on End Stream / leaving the screen so we don't pin the screen on
+  // for viewers or the arming flow. (Note: this only helps an attended,
+  // screen-on stream — true screen-off background broadcasting is a separate,
+  // platform-constrained feature; iOS suspends the camera in the background.)
+  useEffect(() => {
+    if (!isNew || status !== 'in-room') return
+    activateKeepAwakeAsync('wrld-broadcast').catch(() => {})
+    return () => { deactivateKeepAwake('wrld-broadcast').catch(() => {}) }
   }, [isNew, status])
 
   // Live location tracking for broadcasters — updates the stream pin as they move
