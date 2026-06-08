@@ -33,6 +33,9 @@ buffer zoom too (not a preview-only transform). Double-tap resets to 1×, 5× ca
 and a shared `2.4×` indicator pill (`flashZoom` in `StreamScreen`) fades in
 during the gesture. Zoom resets on camera flip (silent). Both need an EAS rebuild.
 
+**Status:** iOS ✅ confirmed on device (2026-06-08). Android ⏳ built, awaiting
+an on-device pass (the reflection path + RNGH gesture on the SurfaceView).
+
 **iOS** — `WRLDCameraPreviewView` handles a `UIPinchGestureRecognizer` (+ a
 2-tap `UITapGestureRecognizer`) that drives the active
 `AVCaptureDevice.videoZoomFactor` (device resolved from the session inputs each
