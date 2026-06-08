@@ -2623,3 +2623,64 @@ decision-log entry).
   scroll/scrub arbitration as the timeline.
 - **Layout** — clock sits above the transport and flush under the field; edge teeth
   finalised at 4 × 5px, 15px edges.
+
+---
+
+## Pro analytics dashboard — port from wrld-web (queued, June 2026)
+
+`wrld-web` shipped a best-in-class **Pro-only** creator analytics dashboard. The
+backend endpoint is **shared and already live**, so the app port is **pure client
+work — no backend or mediasoup changes.**
+
+**Backend contract (done):** `GET /users/me/analytics?range=7d|30d|90d|all&tz=<IANA>`,
+auth required, **gated server-side on `tier === 'pro'` (403 otherwise)** — mirror
+the gate client-side too. Returns: `summary` KPIs (reach, unique/anon split, watch
+time, streams, followers, subscribers, MRR, revenue, Space Bucks purchased, tips
+received, Stardust earned), a daily `timeseries`, `geo` (countries) + `topCities`,
+`topViewers` (watch time), `topSupporters` (tippers), `activity` (viewer joins by
+**local** day×hour — that's what `tz` is for), subscriber health
+(`cancelledSubscribers`/`netSubscribers`), `signedInReach`/`anonymousReach`/
+`signedInRate`, `ppvEvents` (attendees + gross/net), and `topStreams`/`topClips`.
+Full field-by-field shape: `wrld-backend/CLAUDE.md` → "Pro creator analytics +
+audience-geo capture" and its four follow-ups. Audience geo (`ViewerGeo`, anon +
+auth, country + city, **never the IP**) is captured by mediasoup on every join —
+**forward-only, no backfill**.
+
+**Reference implementation to mirror (`wrld-web`):**
+- `src/api/analytics.ts` — typed client + all response types (sends the browser tz)
+- `src/hooks/useAnalytics.ts` — TanStack query (`['analytics', range]`, Pro-gated `enabled`)
+- `src/components/analytics/AnalyticsPage.tsx` — the whole dashboard (gates, range
+  selector + refresh, KPI cards, Plan & storage, Space Bucks/Stardust tiles, top
+  countries/cities, top viewers/supporters, activity heatmap, audience composition
+  + subscriber health, PPV table, line/area/bar charts, top streams/clips)
+- `src/components/analytics/CountryMap.tsx` — the Mapbox choropleth
+
+**Port checklist (app):**
+- `src/api/analytics.ts` + `src/hooks/useAnalytics.ts` — near-verbatim ports.
+- New screen `app/(app)/analytics.tsx` + a Pro-gated entry point (surface from the
+  Me / creator area, near Monetize). Non-Pro → upsell to `/subscription`.
+- Pro gate from `wrldUser.tier` (authStore), same as web.
+
+**RN-specific decisions — surface these before building:**
+1. **Charts — there is NO chart lib in the app yet.** Web used `recharts` (web-only).
+   Pick an RN chart lib: `victory-native` (Skia) or `react-native-gifted-charts` are
+   the strongest; a `react-native-svg` custom build is the lightweight route. This is
+   the main new dependency.
+2. **Choropleth — use `@rnmapbox/maps`** (already a dep; the globe uses it via
+   `ShapeSource`/`CircleLayer`). Add a `VectorSource` on `mapbox.country-boundaries-v1`
+   + a `FillLayer` whose `fillColor` is a **data-driven `match`/`interpolate`
+   expression keyed on `iso_3166_1`**, rebuilt when the geo data changes — RNMapbox
+   has no clean `setFeatureState` like web GL JS, so drive color via the style
+   expression. Apply the single-worldview filter (avoid disputed-boundary dupes),
+   same as web. Mapbox token/provider already configured.
+3. **Activity heatmap** — pure `View` grid (7×24), no lib; direct port of the web logic.
+4. **Timezone** — the API wants an IANA tz. Use
+   `Intl.DateTimeFormat().resolvedOptions().timeZone` (Hermes Intl) or add
+   `expo-localization` (`Localization.timezone`); fall back to `'UTC'`.
+
+**Caveats to preserve in the UI (same as web):** watch-time / unique-viewer /
+top-viewer / top-supporter metrics are **signed-in only** (anonymous viewers have no
+identity); country / city / reach / heatmap include **everyone**. All audience-geo +
+activity data is **forward-only** (accrues from new viewer activity). Storage shown
+is the **saved-clip pool** (`usedStorageBytes` / `storageQuotaBytes` from
+`/auth/me`), not the rolling buffer.
