@@ -2626,7 +2626,11 @@ decision-log entry).
 
 ---
 
-## Pro analytics dashboard — port from wrld-web (queued, June 2026)
+## Pro analytics dashboard — port from wrld-web (DONE, June 2026)
+
+> **Shipped.** The plan below is preserved for context; see "What was built"
+> at the end of this section for the as-built result.
+
 
 `wrld-web` shipped a best-in-class **Pro-only** creator analytics dashboard. The
 backend endpoint is **shared and already live**, so the app port is **pure client
@@ -2684,3 +2688,67 @@ identity); country / city / reach / heatmap include **everyone**. All audience-g
 activity data is **forward-only** (accrues from new viewer activity). Storage shown
 is the **saved-clip pool** (`usedStorageBytes` / `storageQuotaBytes` from
 `/auth/me`), not the rolling buffer.
+
+### What was built (as-shipped)
+
+Pure client port — no backend or mediasoup changes. Typecheck clean.
+
+**Decisions taken (the three RN-specific ones, confirmed with Aaron):**
+1. **Charts → `victory-native` (Victory Native XL, Skia).** Chosen for UX
+   ceiling, not build cost: GPU-accelerated 60fps rendering + native
+   press-to-inspect. Pulls in **`@shopify/react-native-skia`** (reanimated +
+   gesture-handler were already deps). Both are **native modules** → a
+   **dev-client / EAS rebuild is required** before charts render on device
+   (`npx expo run:ios|android` or a new EAS dev build). Until then, JS bundles
+   and typechecks fine; the chart Canvas just won't draw in an old client.
+2. **Choropleth → shipped now** via `@rnmapbox/maps` (already a dep). Light
+   style (`StyleURL.Light`, mercator) to match the app's cream theme;
+   single-worldview filter; `VectorSource(mapbox.country-boundaries-v1)` +
+   `FillLayer`. RNMapbox has no `setFeatureState`, so colour is driven by a
+   **data-driven `match` expression on `['get','iso_3166_1']`** rebuilt
+   (`useMemo`) from the geo data — one (countryCode → ramp colour) pair per
+   country, NO_DATA fallback. Web's hover popup → **tap-to-select** overlay.
+3. **Timezone → `Intl`** (`Intl.DateTimeFormat().resolvedOptions().timeZone`,
+   `'UTC'` fallback). No new dep — Hermes ships full Intl on SDK 54. (No UX
+   delta vs `expo-localization`; same IANA string either way.)
+
+**Design adaptation:** the web dashboard is dark + multi-tint (cyan/violet/…).
+This app's design system is **warm cream paper + single warm-crimson accent**,
+so the port renders through the app's tokens/primitives (Card/Text/Icon/theme),
+neutral icon tiles, and **crimson + amber** for data-viz (choropleth ramp,
+heatmap opacity ramp, chart series, meters, the signed-in split bar). Subscriber
+health uses ink (positive) vs accent-crimson (cancelled/negative) since the
+system has no green/red semantic.
+
+**New files:**
+- `src/api/analytics.ts` — `analyticsApi.get(range)` + full `AnalyticsData`
+  types (near-verbatim from web; sends the device IANA tz).
+- `src/hooks/useAnalytics.ts` — TanStack query `['analytics', range]`,
+  `staleTime 60s`, `enabled = signedIn && isPro`.
+- `src/components/screens/AnalyticsScreen.tsx` — the dashboard. Three gates
+  (signed-out → login; **non-Pro → upsell to `/(app)/subscription`**; Pro →
+  dashboard). Range selector (`SegmentedToggle` 7d/30d/90d/all) + refresh, 8 KPI
+  cards, Plan & storage (meter), Space Bucks/Stardust tiles, country map + top
+  countries bars, top cities, top viewers + top supporters, audience area+line
+  chart, day×hour activity heatmap (pure `View` grid), audience composition +
+  subscriber health, PPV table, follower line + stacked tips/PPV revenue charts,
+  top streams + clips.
+- `src/components/features/analytics/CountryMap.tsx` — the RNMapbox choropleth.
+- `app/(app)/analytics.tsx` — route re-export; registered `href: null` in
+  `app/(app)/_layout.tsx` (Tabs navigator hides non-tab screens this way).
+
+**Entry point:** an **Analytics** `SettingsRow` in SettingsScreen's ACCOUNT
+group, right after Monetize. Shown to **everyone** (the screen enforces the Pro
+gate; the upsell is the Pro marketing surface) — value text adapts for non-Pro.
+
+**Charts note for victory-native XL:** x-axis uses a numeric index `i` (not the
+date string) so the linear scale spaces points evenly; the date is looked up for
+`formatXLabel`. Axis labels need a Skia font, loaded via `useFont` against the
+bundled `IBMPlexMono_500Medium.ttf`. All three charts guard `rows.length === 0`
+with an empty state (Victory can choke on empty `data`).
+
+**Needs a device pass (couldn't verify headlessly):** the Skia charts (after the
+dev-client rebuild) and the RNMapbox `FillLayer` `match`-expression colouring +
+worldview filter. Typecheck passes and the signaling/data shapes match the
+proven web path, but the Skia Canvas and the Mapbox style expression can't be
+exercised in a headless typecheck.

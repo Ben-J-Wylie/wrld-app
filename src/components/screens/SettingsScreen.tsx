@@ -125,6 +125,20 @@ export function SettingsScreen() {
             onPress={() => router.push('/(app)/monetize')}
           />
         )}
+        {/* Analytics — shown to everyone (the screen gates: Pro → dashboard,
+            non-Pro → upsell to /subscription). The upsell is a Pro marketing
+            surface, so we don't hide the row from non-Pro users. */}
+        <SettingsRow
+          iconName="bar-chart-2"
+          title="Analytics"
+          value={
+            wrldUser?.tier === 'pro'
+              ? 'Audience, revenue & geography'
+              : 'Pro · audience, revenue & geography'
+          }
+          arrow
+          onPress={() => router.push('/(app)/analytics')}
+        />
       </SettingsGroup>
 
       <SettingsGroup title="NOTIFICATIONS">
