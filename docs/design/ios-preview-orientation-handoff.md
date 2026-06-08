@@ -28,14 +28,27 @@ server-side concern (see "Recording" below) and is not what this doc is about.
 
 ## Pinch-to-zoom — real camera zoom (2026-06-08)
 
-`WRLDCameraPreviewView` also handles a `UIPinchGestureRecognizer` that drives the
-active `AVCaptureDevice.videoZoomFactor` (resolved from the session inputs each
-pinch, so it follows a camera flip). It's the **real device zoom**, so the
-broadcast + rolling buffer zoom too — not a preview-only transform. Clamped to
-`[minAvailableVideoZoomFactor, min(activeFormat.videoMaxZoomFactor, 8x)]`.
-Native-only (no JS), on the same component, so it works in both the pre-live
-preview and the live broadcast. iOS only (Android `RTCView` has no zoom path).
-Needs an EAS dev-client rebuild.
+Pinch = **real camera zoom** on both platforms, so the broadcast + rolling
+buffer zoom too (not a preview-only transform). Double-tap resets to 1×, 5× cap,
+and a shared `2.4×` indicator pill (`flashZoom` in `StreamScreen`) fades in
+during the gesture. Zoom resets on camera flip (silent). Both need an EAS rebuild.
+
+**iOS** — `WRLDCameraPreviewView` handles a `UIPinchGestureRecognizer` (+ a
+2-tap `UITapGestureRecognizer`) that drives the active
+`AVCaptureDevice.videoZoomFactor` (device resolved from the session inputs each
+pinch, so it follows a flip). Reports the factor up via the `onZoomChange`
+RCTDirectEventBlock for the pill. Cap = `min(activeFormat.videoMaxZoomFactor, 5)`.
+
+**Android** — `RTCView` has no zoom path and the camera is in the prebuilt
+`org.webrtc` capturer, so the pinch is detected in JS (RNGH `Gesture.Pinch` +
+`Gesture.Tap` around the preview) and drives a new
+`WebRTCModule.mediaStreamTrackSetVideoZoom` patch method →
+`GetUserMediaImpl.setVideoZoom` → **`CameraZoomHelper`**, which reaches the live
+Camera2 `CameraCaptureSession` by **reflection (matched by field TYPE, not
+name)** and re-issues the repeating request with `SCALER_CROP_REGION` (true
+sensor crop = crisp), preserving the capturer's fps. **Fail-safe:** any
+reflection failure no-ops (camera never breaks); a future lib bump degrades to
+"zoom stops working", not a crash. Camera1 devices fall through to no-op.
 
 ## BUILT — `AVCaptureVideoPreviewLayer` continuous gimbal (2026-06-07)
 
