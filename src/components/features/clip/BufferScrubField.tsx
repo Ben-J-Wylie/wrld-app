@@ -22,16 +22,16 @@
 import { useRef, type ReactNode } from 'react'
 import {
   Image,
-  PanResponder,
   StyleSheet,
   View,
   type ImageStyle,
   type StyleProp,
   type ViewStyle,
 } from 'react-native'
+import { Gesture, GestureDetector } from 'react-native-gesture-handler'
+import { runOnJS } from 'react-native-reanimated'
 import { Text } from '@/components/primitives/Text'
 import { Icon } from '@/components/primitives/Icon'
-import { Pressable } from '@/components/primitives/Pressable'
 import { FeedThumb } from '@/components/features/broadcast/FeedThumb'
 import { theme } from '@/tokens/theme'
 
@@ -50,14 +50,14 @@ type Props = {
   // to show instead of video — a static gap duration, a running "since last
   // broadcast" clock, or a "footage clears in" countdown. Overrides the frame.
   card?: { title: string; detail: string }
-  // Play/pause control (the field is the viewer). When `onTogglePlay` is set, a
-  // centered play/pause button renders; `playing` picks the glyph.
-  playing?: boolean
-  onTogglePlay?: () => void
   showScrubHint?: boolean
   // Incremental horizontal pixel delta since the previous move event. The parent
   // converts to a time delta against the current zoom and advances the playhead.
   onScrub?: (deltaPx: number) => void
+  // Drag lifecycle (activation / release) so the parent can pause playback while
+  // scrubbing and resume on lift if it was playing.
+  onScrubStart?: () => void
+  onScrubEnd?: () => void
   style?: StyleProp<ViewStyle>
 }
 
@@ -67,36 +67,53 @@ export function BufferScrubField({
   frameSlot,
   reachLabel,
   card,
-  playing,
-  onTogglePlay,
   showScrubHint = true,
   onScrub,
+  onScrubStart,
+  onScrubEnd,
   style,
 }: Props) {
-  const lastDx = useRef(0)
   const onScrubRef = useRef(onScrub)
+  const onScrubStartRef = useRef(onScrubStart)
+  const onScrubEndRef = useRef(onScrubEnd)
   onScrubRef.current = onScrub
-  const pan = useRef(
-    PanResponder.create({
-      // Don't claim on touch-start — let taps reach the play/pause button. Only a
-      // horizontal drag (below) becomes a scrub.
-      onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_e, g) => Math.abs(g.dx) > 2,
-      onPanResponderGrant: () => {
-        lastDx.current = 0
-      },
-      onPanResponderMove: (_e, g) => {
-        const delta = g.dx - lastDx.current
-        lastDx.current = g.dx
-        onScrubRef.current?.(delta)
-      },
-    }),
-  ).current
+  onScrubStartRef.current = onScrubStart
+  onScrubEndRef.current = onScrubEnd
+  function emitScrub(dx: number) {
+    onScrubRef.current?.(dx)
+  }
+  function emitScrubStart() {
+    onScrubStartRef.current?.()
+  }
+  function emitScrubEnd() {
+    onScrubEndRef.current?.()
+  }
+  // Horizontal-only pan (RNGH), matching the timeline so scrub/scroll arbitration is
+  // identical: once you drag sideways past `activeOffsetX`, the page scroll is locked;
+  // a vertical drag fails (`failOffsetY`) and yields to the ScrollView, leaving scrub
+  // locked. `changeX` is the incremental px since the previous event. onStart/onEnd let
+  // the parent pause while dragging and resume on lift (like the clock).
+  const pan = Gesture.Pan()
+    .activeOffsetX([-8, 8])
+    .failOffsetY([-12, 12])
+    .onStart(() => {
+      'worklet'
+      runOnJS(emitScrubStart)()
+    })
+    .onChange((e) => {
+      'worklet'
+      runOnJS(emitScrub)(e.changeX)
+    })
+    .onEnd(() => {
+      'worklet'
+      runOnJS(emitScrubEnd)()
+    })
 
   const dark = variant === 'camera'
 
   return (
-    <View style={[styles.field, style]} {...pan.panHandlers}>
+    <GestureDetector gesture={pan}>
+      <View style={[styles.field, style]}>
       {card ? (
         <View style={[styles.fill, styles.cardWrap]}>
           <View style={styles.card}>
@@ -125,20 +142,6 @@ export function BufferScrubField({
         </View>
       )}
 
-      {onTogglePlay && !card && (
-        <View style={styles.playWrap} pointerEvents="box-none">
-          <Pressable
-            variant="default"
-            onPress={onTogglePlay}
-            accessibilityRole="button"
-            accessibilityLabel={playing ? 'Pause' : 'Play'}
-            hitSlop={12}
-            style={styles.playBtn}
-          >
-            <Icon name={playing ? 'pause' : 'play'} size="lg" color={theme.colors.text.inverse} />
-          </Pressable>
-        </View>
-      )}
 
       {!card && showScrubHint && (
         <View style={styles.scrubHint} pointerEvents="none">
@@ -168,7 +171,8 @@ export function BufferScrubField({
           </Text>
         </View>
       )}
-    </View>
+      </View>
+    </GestureDetector>
   )
 }
 
@@ -203,19 +207,6 @@ const styles = StyleSheet.create({
   cardDetail: {
     fontSize: 24,
     lineHeight: 30,
-  },
-  playWrap: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  playBtn: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(20,16,13,0.5)',
   },
   camPlaceholder: {
     backgroundColor: theme.colors.bg.panelHi,

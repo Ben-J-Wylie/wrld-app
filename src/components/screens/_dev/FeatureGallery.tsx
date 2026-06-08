@@ -63,6 +63,7 @@ import { SavedClipRegion } from '@/components/features/clip/SavedClipRegion'
 import { ClipBracket } from '@/components/features/clip/ClipBracket'
 import { BufferTimeline } from '@/components/features/clip/BufferTimeline'
 import { BufferScrubField } from '@/components/features/clip/BufferScrubField'
+import { BufferTransport } from '@/components/features/clip/BufferTransport'
 import { ClipSourcesDrawer, type ClipSource } from '@/components/features/clip/ClipSourcesDrawer'
 import { SavedClipRow } from '@/components/features/clip/SavedClipRow'
 import { TimelineScrollbar } from '@/components/features/clip/TimelineScrollbar'
@@ -1271,6 +1272,12 @@ export function FeatureGallery() {
         </Row>
       </Section>
 
+      <Section title="BufferTransport">
+        <Row label="buffer-start · prev clip · play/pause · next clip · buffer-end">
+          <BufferTransportDemo />
+        </Row>
+      </Section>
+
       <Section title="GapMarker">
         <Row label="10px collapsed-gap break (no label)">
           <View style={galleryStyles.gapStrip}>
@@ -1663,6 +1670,22 @@ function BufferScrubFieldDemo({ variant }: { variant: 'camera' | 'audio-only' })
   return (
     <View style={{ width: 200 }}>
       <BufferScrubField variant={variant} reachLabel="Buffer · 72h" onScrub={() => {}} />
+    </View>
+  )
+}
+
+function BufferTransportDemo() {
+  const [playing, setPlaying] = useState(false)
+  return (
+    <View style={{ width: 240 }}>
+      <BufferTransport
+        playing={playing}
+        onToStart={() => {}}
+        onPrev={() => {}}
+        onTogglePlay={() => setPlaying((p) => !p)}
+        onNext={() => {}}
+        onToEnd={() => {}}
+      />
     </View>
   )
 }

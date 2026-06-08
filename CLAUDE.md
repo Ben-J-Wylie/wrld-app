@@ -2591,3 +2591,35 @@ All pure JS — hot-reloadable, no native change. Canonical detail in DESIGN.md
 - `__DEV__`-gated `[clip-video]` diagnostics remain (status/recovery + poster/thumb gen) —
   zero prod impact (stripped by the `__DEV__` guard); useful until Aaron's poster endpoint
   + buffer substrate settle.
+
+---
+
+## Updates — June 2026 (Buffer editor: transport, tap-seek, scrub/clock pause-resume)
+
+Second clip-editor round on `design` (`ClipEditScreen` + new `BufferTransport` +
+`BufferTimeline` / `BufferScrubField` / `TimeScrubber`). All pure JS — hot-reloadable.
+Canonical detail in DESIGN.md (Section 3 + the 2026-06-07 "transport, tap-to-seek…"
+decision-log entry).
+
+- **`BufferTransport`** (new feature) — a five-button row under the field, above the
+  clock: beginning of buffer · prev clip · play/pause · next clip · end of buffer.
+  Presentational; `ClipEditScreen` owns the jump targets (clip heads = session starts;
+  beginning = the leading eviction-gap edge when present, else oldest footage; end =
+  live edge). Prev/next disable at the edges. Gallery entry added.
+- **Play/pause removed from `BufferScrubField`** — the transport owns it now. (Poster-
+  retry-on-tap moved onto the transport's play button.)
+- **Tap-to-seek vs drag-scrub** — `BufferTimeline.onSeek` (tap, keeps playing / honours
+  pause) split from `onScrub` (drag).
+- **Scrub + clock pause-on-grab / resume-on-lift** — timeline drag, field drag, and clock
+  spin pause playback while held and resume ~250ms after lift if it was playing (intent
+  carries across a burst of wheel/edge adjustments). New `onScrubStart`/`onScrubEnd` on
+  `BufferTimeline`, `BufferScrubField`, `TimeScrubber` (globe `TimeScrubber` unaffected).
+- **Field scrub collapses gaps** — crosses a whole gap in a small fixed finger distance
+  (`GAP_SCRUB_PX`), no slowdown over long gaps; footage stays zoom-relative.
+- **Smooth playback gap-rush** — the follow loop runs on `requestAnimationFrame`; the gap
+  rush updates the clock every frame over a fixed 3s (`GAP_RUSH_MS`), footage throttled
+  to ~200ms.
+- **`BufferScrubField` → RNGH `Pan`** (was PanResponder) — same horizontal-only
+  scroll/scrub arbitration as the timeline.
+- **Layout** — clock sits above the transport and flush under the field; edge teeth
+  finalised at 4 × 5px, 15px edges.

@@ -119,6 +119,10 @@ type Props = {
   // and the host owns whether the playhead advances (it keeps offsetMs tracking a
   // held absolute instant). The live tick at offset 0 still ticks in both modes.
   playback?: boolean
+  // Wheel-scrub lifecycle (start on the first move, end on lift) — lets a hold-mode host
+  // pause playback while spinning and resume on release. Independent of `playback`.
+  onScrubStart?: () => void
+  onScrubEnd?: () => void
   style?: StyleProp<ViewStyle>
 }
 
@@ -134,9 +138,17 @@ export function TimeScrubber({
   collapseSignal = 0,
   onExpandedChange,
   playback = true,
+  onScrubStart,
+  onScrubEnd,
   style,
 }: Props) {
   const [expanded, setExpanded] = useState(false)
+  const onScrubStartRef = useRef(onScrubStart)
+  const onScrubEndRef = useRef(onScrubEnd)
+  onScrubStartRef.current = onScrubStart
+  onScrubEndRef.current = onScrubEnd
+  // True between the first scrub move and the lift, so onScrubStart fires once per drag.
+  const scrubbingRef = useRef(false)
 
   // Notify the host whenever the dial expands/collapses (it slides the drawer
   // to stay flush above the clock). Ref-routed so a changing callback identity
@@ -241,6 +253,10 @@ export function TimeScrubber({
       clearTimeout(holdTimer.current) // a fresh scrub supersedes a pending resume
       holdTimer.current = null
     }
+    if (!scrubbingRef.current) {
+      scrubbingRef.current = true
+      onScrubStartRef.current?.()
+    }
     const next = stepDate(startPlayhead, key, delta)
     let newOffset = Date.now() - next.getTime()
     if (newOffset < 0) newOffset = 0
@@ -258,6 +274,10 @@ export function TimeScrubber({
   // Finger lifted after a scrub. In the past, hold ~1s, then rebase the offset
   // so playback resumes from exactly where it was held (no time jump).
   function scrubEnd() {
+    if (scrubbingRef.current) {
+      scrubbingRef.current = false
+      onScrubEndRef.current?.()
+    }
     if (!playback) return // hold mode: no resume — the host holds the instant
     if (offsetRef.current <= 0) {
       setPaused(false)

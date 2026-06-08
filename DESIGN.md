@@ -3024,7 +3024,7 @@ PanResponder multitouch (no `react-native-gesture-handler` dep). The discrete
 - **Variants:** `default`
 - **Sizes:** md (track h:52 — single track, **no axis/date row**; matches the Input `md` "What's happening" field — + the scrollbar below)
 - **States:** zoom = continuous `pxPerMs` (fit … fit×max, max raised so Sec is reachable on a multi-day buffer); pan = `scrollOffset`; playhead may be on- or off-screen
-- **Props (built):** `segments` (recorded spans; each may carry a `posterUrl`), `savedRegions?`, `playheadMs`, `nowMs?`, `streaming?`, `leadingGap?` (oldest-edge eviction span), `bracket?`, `thumbnails?` (per-instant frame overlay), `onScrub`, `onBracketChange?`, `onZoomChange?` (px/ms → field scrub rate), `onVisibleRangeChange?` (debounced visible window) (zoom/pan are internal view state)
+- **Props (built):** `segments` (recorded spans; each may carry a `posterUrl`), `savedRegions?`, `playheadMs`, `nowMs?`, `streaming?`, `leadingGap?` (oldest-edge eviction span), `bracket?`, `thumbnails?` (per-instant frame overlay), `onScrub` (continuous drag), `onSeek?` (discrete TAP — host keeps playing from there), `onScrubStart?` / `onScrubEnd?` (drag activate/release — pause-while / resume-on-lift), `onBracketChange?`, `onZoomChange?` (px/ms → field scrub rate), `onVisibleRangeChange?` (debounced visible window) (zoom/pan are internal view state)
 
 **Mock says (Frames 1–4):** Horizontal full-bleed timeline of the buffer with
 **collapsed gaps** — recorded segments render as a repeating **filmstrip** (a fixed
@@ -3168,12 +3168,12 @@ Presentational + gesture-emitting; `BufferTimeline` owns the geometry.
 
 ##### `BufferScrubField`
 
-- **Tier:** feature (composes Image / `FeedThumb` + Text + Icon + PanResponder)
+- **Tier:** feature (composes Image / `FeedThumb` + Text + Icon + RNGH `Gesture.Pan`)
 - **Location:** `src/components/features/clip/BufferScrubField.tsx` *(built 2026-06-06 · C2)*
 - **Variants:** `camera` (thumbnail/placeholder) · `audio-only` (`FeedThumb.audio`) · `map-only` (`FeedThumb.loc`)
 - **Sizes:** lg (≈9:11 portrait, near-full-bleed hero)
 - **States:** scrubbing (frame re-renders under playhead) · idle
-- **Props (built):** `variant?`, `thumbnailUrl?`, `frameSlot?` (the live `VideoView`), `reachLabel?`, `card?` (`{title,detail}` — shown over a gap instead of video: static gap duration, running "since last broadcast", or "footage clears in"), `showScrubHint?`, `onScrub?`
+- **Props (built):** `variant?`, `thumbnailUrl?`, `frameSlot?` (the live `VideoView`), `reachLabel?`, `card?` (`{title,detail}` — shown over a gap instead of video: static gap duration, running "since last broadcast", or "footage clears in"), `showScrubHint?`, `onScrub?`, `onScrubStart?` / `onScrubEnd?` (drag activate/release — lets the host pause while scrubbing and resume on lift). The play/pause button was removed 2026-06-07 (the transport owns it).
 
 **Code does (built):** Portrait near-full-bleed field — **just the frame + the swipe
 gesture** (2026-06-06). No on-field playhead line and **no on-field clock**: the
@@ -3182,11 +3182,31 @@ timeline carries the playhead marker, and the editor overlays the time-machine
 field keeps an optional buffer-reach hint (top-right) + a centered "Swipe to scrub"
 hint. Audio/map spans fall back to `FeedThumb` (lg).
 
-**Behavior:** Owns the swipe-to-scrub gesture — swiping left/right emits incremental
-px deltas via `onScrub`; the parent maps px → ms against the current zoom and
-advances the shared playhead (which also drives `BufferTimeline` and the
-`TimeScrubber` clock — one current-time for all three). The field is time-agnostic
-(no time math of its own). Direction (drag-right = earlier) is flippable.
+**Behavior:** Owns the swipe-to-scrub gesture — an **RNGH horizontal-only `Pan`**
+(`activeOffsetX` / `failOffsetY`, matching `BufferTimeline`) so a sideways drag locks
+the page scroll and scrubs, while a vertical drag yields to the ScrollView. Emits
+incremental px deltas via `onScrub` (`changeX`); the parent maps px → ms against the
+current zoom and advances the shared playhead (which also drives `BufferTimeline` and
+the `TimeScrubber` clock — one current-time for all three). The field is time-agnostic.
+Direction (drag-right = earlier) is flippable. (Was PanResponder pre-2026-06-07.)
+
+---
+
+##### `BufferTransport`
+
+- **Tier:** feature (composes Pressable + Icon)
+- **Location:** `src/components/features/clip/BufferTransport.tsx` *(built 2026-06-07)*
+- **Variants:** `default`
+- **Sizes:** row of five; 44 step buttons + a 52 accent play/pause circle
+- **States:** `playing` (glyph) · prev/next `disabled` at the buffer edges
+- **Props (built):** `playing`, `onToStart`, `onPrev`, `onTogglePlay`, `onNext`, `onToEnd`, `canPrev?`, `canNext?`
+
+**Code does (built):** The transport row beneath the buffer field (above the clock):
+**|◀ beginning of buffer · ‹ previous clip · ▶/❚❚ · next clip › · end of buffer ▶|**.
+Presentational — the host (`ClipEditScreen`) owns where each jump lands (clip heads =
+session starts; beginning = the leading eviction-gap edge when present, else oldest
+footage; end = the live edge) and the play-state. Prev/next disable at the edges; the
+outer two never do. Jumps keep playing across them (the host re-anchors the wall clock).
 
 ---
 
@@ -4035,6 +4055,38 @@ above. The seam is not a separate motion category.
 
 Append-only. Most recent first. Each entry: date, decision, rationale,
 constraint it imposes downstream.
+
+### 2026-06-07 — Buffer editor: transport, tap-to-seek, scrub/clock pause-resume, gap collapse
+
+A second clip-editor round (all on `design`; `ClipEditScreen` + `BufferTransport` (new) +
+`BufferTimeline` / `BufferScrubField` / `TimeScrubber`, pure JS):
+
+- **`BufferTransport`** — a new five-button row under the field (beginning of buffer · prev
+  clip · play/pause · next clip · end of buffer). Presentational; the host owns the jump
+  targets (clip heads = session starts; beginning = the leading eviction-gap edge when
+  present; end = live). *Imposes:* play/pause now lives on the transport, so the field's
+  centered play button was **removed**.
+- **Tap-to-seek vs drag-scrub split.** `BufferTimeline` gained `onSeek` (TAP) distinct
+  from `onScrub` (drag). Tap honours play state (keeps playing / stays paused); drag
+  pauses while held.
+- **Scrub + clock pause-on-grab / resume-on-lift.** Timeline drag, field drag, and clock
+  spin all pause playback while the finger is down and resume ~250ms after lift if it was
+  playing (play-intent carries across a burst of adjustments). Added `onScrubStart` /
+  `onScrubEnd` to `BufferTimeline`, `BufferScrubField`, and `TimeScrubber` (globe usage
+  unaffected — it doesn't pass them).
+- **Field scrub collapses gaps.** The field swipe crosses an entire gap in a small fixed
+  finger distance (`GAP_SCRUB_PX`, ≈ the timeline's collapsed gap at the field's half
+  rate) — no slowdown over long gaps, no skip; footage stays zoom-relative. (Reverses the
+  earlier "plain uniform rate," which dragged over long gaps.)
+- **Smooth playback gap-rush.** The playback follow runs on `requestAnimationFrame`: a gap
+  rush updates the clock every frame (smooth, like the scrub) over a **fixed 3s**
+  (`GAP_RUSH_MS`) — long gap → fast, 3s → ~1×, <3s → slows; footage stays throttled to
+  ~200ms (the video is the visual there).
+- **Field ↔ scroll arbitration.** `BufferScrubField` moved from PanResponder to the same
+  RNGH horizontal-only `Pan` as the timeline (sideways locks page scroll, vertical yields).
+- **Layout:** the `TimeScrubber` clock sits **above** the transport and **flush** under the
+  field (no gap). Edge zigzag teeth finalised at `ZIGZAG_TEETH` 4 × `ZIGZAG_DEPTH` 5px,
+  edges 15px.
 
 ### 2026-06-07 — Buffer-trim editor: smooth gaps, wall-clock playback, eviction edge, real frames
 

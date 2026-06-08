@@ -69,6 +69,13 @@ type Props = {
   bracket?: BufferBracket | null
   thumbnails?: TimelineThumb[]
   onScrub: (ms: number) => void
+  // Discrete seek on TAP (vs the continuous drag `onScrub`) — lets the parent keep
+  // playing from the tapped point instead of pausing. Falls back to `onScrub`.
+  onSeek?: (ms: number) => void
+  // Drag gesture lifecycle (activation / release) so the parent can pause playback
+  // while scrubbing and resume on lift if it was playing.
+  onScrubStart?: () => void
+  onScrubEnd?: () => void
   onBracketChange?: (next: BufferBracket) => void
   // The live zoom (px per ms), reported on change — the field uses it to scale its
   // own scrub rate relative to the timeline.
@@ -126,6 +133,9 @@ export function BufferTimeline({
   bracket,
   thumbnails,
   onScrub,
+  onSeek,
+  onScrubStart,
+  onScrubEnd,
   onBracketChange,
   onZoomChange,
   onVisibleRangeChange,
@@ -252,6 +262,11 @@ export function BufferTimeline({
   const minPxRef = useRef(minPx)
   const maxPxRef = useRef(maxPx)
   const onScrubRef = useRef(onScrub)
+  const onSeekRef = useRef(onSeek)
+  const onScrubStartRef = useRef(onScrubStart)
+  const onScrubEndRef = useRef(onScrubEnd)
+  onScrubStartRef.current = onScrubStart
+  onScrubEndRef.current = onScrubEnd
   const onBracketChangeRef = useRef(onBracketChange)
   const bracketRef = useRef(bracket)
   const savedRegionsRef = useRef(savedRegions)
@@ -273,6 +288,7 @@ export function BufferTimeline({
   minPxRef.current = minPx
   maxPxRef.current = maxPx
   onScrubRef.current = onScrub
+  onSeekRef.current = onSeek
   onBracketChangeRef.current = onBracketChange
   bracketRef.current = bracket
   savedRegionsRef.current = savedRegions
@@ -284,24 +300,37 @@ export function BufferTimeline({
     gesturingRef.current = v
   }
 
-  // Tap / pan → place the playhead at the touch (content x → time). Content x inside
-  // the leading gap maps to its wall-clock span; otherwise to footage/inter-gap time.
-  function scrubAtX(x: number) {
+  // Touch x → playhead time. Content x inside the leading gap maps to its wall-clock
+  // span; inside the trailing gap to [lastEnd, now]; otherwise to footage/inter-gap time.
+  function timeAtX(x: number): number {
     const contentX = x + offsetRef.current
     const lg = leadingGapRef.current
     const lpx = leadingPxRef.current
     if (lg && lpx > 0 && contentX < lpx) {
       const f = clamp(contentX / lpx, 0, 1)
-      onScrubRef.current(lg.startMs + f * (lg.endMs - lg.startMs))
-      return
+      return lg.startMs + f * (lg.endMs - lg.startMs)
     }
     const t = tailRef.current
     if (t.hasGap && contentX > t.contentWidth) {
       const f = clamp((contentX - t.contentWidth) / Math.max(1, t.trailingPx), 0, 1)
-      onScrubRef.current(t.lastEnd + f * (t.nowMs - t.lastEnd))
-      return
+      return t.lastEnd + f * (t.nowMs - t.lastEnd)
     }
-    onScrubRef.current(xToTime(contentX, segBlocksRef.current, pxRef.current))
+    return xToTime(contentX, segBlocksRef.current, pxRef.current)
+  }
+  // Drag (pan) → continuous scrub (parent pauses to hunt the frame).
+  function scrubAtX(x: number) {
+    onScrubRef.current(timeAtX(x))
+  }
+  // Tap → discrete seek (parent keeps playing from there if playing, else holds the
+  // frame). Falls back to onScrub when no onSeek is wired.
+  function seekAtX(x: number) {
+    ;(onSeekRef.current ?? onScrubRef.current)(timeAtX(x))
+  }
+  function emitScrubStart() {
+    onScrubStartRef.current?.()
+  }
+  function emitScrubEnd() {
+    onScrubEndRef.current?.()
   }
   // Pinch end → commit the live scale into pxPerMs + offset (one re-layout).
   function commitPinch(s: number, focal: number) {
@@ -360,7 +389,7 @@ export function BufferTimeline({
     .maxDistance(12)
     .onEnd((e, success) => {
       'worklet'
-      if (success) runOnJS(scrubAtX)(e.x)
+      if (success) runOnJS(seekAtX)(e.x)
     })
 
   const pan = Gesture.Pan()
@@ -371,9 +400,17 @@ export function BufferTimeline({
       'worklet'
       runOnJS(setGesturing)(true)
     })
+    .onStart(() => {
+      'worklet'
+      runOnJS(emitScrubStart)()
+    })
     .onUpdate((e) => {
       'worklet'
       runOnJS(scrubAtX)(e.x)
+    })
+    .onEnd(() => {
+      'worklet'
+      runOnJS(emitScrubEnd)()
     })
     .onFinalize(() => {
       'worklet'
