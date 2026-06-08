@@ -58,9 +58,16 @@ function orientationFromDeg(deg: number): DeviceOrientation {
 
 // ── On-device tunables ───────────────────────────────────────────────────────
 // RECORD_ROTATION_DEG — display-matrix degrees the recorder bakes into the fmp4
-// (sent to mediasoup as `rotationDeg`). Portrait = confirmed 270. Both landscape
-// holds were recording upside-down, so each is bumped +180 (landscape-left 0→180,
-// landscape-right 180→0); they stay 180° apart, as the two holds are opposite.
+// (sent to mediasoup as `rotationDeg`). VERIFIED by inspecting the actual recorded
+// sensor frames off disk (2026-06-08): for each landscape hold, the raw frame
+// (rotationDeg 0 = no matrix) showed whether 0 or 180 yields upright.
+//   • portrait              = 270 (confirmed: raw landscape → 270 = upright)
+//   • landscape-left        = 180 (its raw sensor frame is upside-down → +180)
+//   • landscape-right       = 0   (its raw sensor frame is already upright)
+//   • portrait-upside-down  = 90  (opposite of portrait; not yet device-verified)
+// Note: the recording bakes ONCE ~1s after the first camera frame (it's -c:v
+// copy), so the hold AT GO-LIVE is what the whole session records as — hold the
+// target orientation steady through preview before Go Live.
 // (PREVIEW no longer uses a discrete map — it gimbal-levels off `tiltDeg`.)
 export const RECORD_ROTATION_DEG: Record<DeviceOrientation, number> = {
   portrait: 270,

@@ -4,7 +4,7 @@ import { ReactNative106 } from 'mediasoup-client/handlers/ReactNative106'
 import type { Transport } from 'mediasoup-client/types'
 import { mediaDevices, MediaStream, registerGlobals } from 'react-native-webrtc'
 import { signalingClient } from '@/lib/mediasoupSignaling'
-import { maxCaptureHeight } from '@/lib/tierCaps'
+import { maxCaptureHeight, maxVideoBitrate } from '@/lib/tierCaps'
 import { useAuthStore } from '@/stores/authStore'
 import type { SourceType } from '@/types'
 
@@ -167,13 +167,19 @@ export function useMediasoup() {
       if (stream) {
         const tracks = (stream as unknown as { getTracks(): MediaStreamTrack[] }).getTracks()
         for (const track of tracks) {
-          // Target ~2 Mbps for video. WebRTC's congestion control otherwise
-          // self-limits to ~0.5 Mbps (it starts low and only ramps if told it
-          // can); an explicit maxBitrate + a higher start bitrate lets it climb
-          // to use available bandwidth for a sharp 720p picture.
+          // Per-tier video ceiling (free 4M / plus 6M / pro 10M — see tierCaps).
+          // WebRTC's congestion control otherwise self-limits to ~0.5 Mbps (it
+          // starts low and only ramps if told it can); an explicit maxBitrate +
+          // a higher start bitrate lets it climb to use available bandwidth for a
+          // sharp picture. maxBitrate is a ceiling, not a floor — BWE only reaches
+          // it if the uplink/path allow, and adapts down otherwise. This single
+          // encoding is forwarded verbatim to every viewer, the admin preview, and
+          // the on-disk buffer (no server transcode), so it sets quality
+          // system-wide for the broadcaster's tier.
           const isVideo = (track as unknown as { kind: string }).kind === 'video'
+          const tier = useAuthStore.getState().wrldUser?.tier
           const opts = isVideo
-            ? { track: track as never, encodings: [{ maxBitrate: 2_000_000 }], codecOptions: { videoGoogleStartBitrate: 1000 } }
+            ? { track: track as never, encodings: [{ maxBitrate: maxVideoBitrate(tier) }], codecOptions: { videoGoogleStartBitrate: 1500 } }
             : { track: track as never }
           await transport.produce(opts as never)
         }

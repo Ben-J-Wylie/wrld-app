@@ -664,6 +664,7 @@ export function StreamScreen() {
     sendBroadcasterOrientation(
       isLandscapeHold ? 'landscape' : 'portrait',
       RECORD_ROTATION_DEG[deviceOrientation],
+      deviceOrientation,
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isNew, status, localStream, deviceOrientation])
