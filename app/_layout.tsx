@@ -15,8 +15,8 @@ import { setClerkTokenGetter } from '@/lib/clerkToken'
 import { useAuthStore } from '@/stores/authStore'
 import { useRegisterPushToken } from '@/hooks/useRegisterPushToken'
 import { useUserSocket } from '@/hooks/useUserSocket'
-import { apiClient } from '@/api/client'
-import type { User } from '@/types'
+import { usersApi } from '@/api/users'
+import { hydrateCaptureLadder } from '@/lib/tierCaps'
 
 // Show notifications as banners even when the app is foregrounded
 Notifications.setNotificationHandler({
@@ -51,15 +51,22 @@ function RootNavigator() {
     setClerkTokenGetter(getToken)
   }, [getToken])
 
+  // Hydrate the cached capture ladder once at startup so an offline launch uses
+  // the last admin-tuned caps (not just the baked-in defaults) at go-live.
+  useEffect(() => {
+    hydrateCaptureLadder()
+  }, [])
+
   // Fetch the WRLD user record whenever auth state changes.
   // On sign-out transition, navigate to globe — this is the only reliable
   // place to do it because Clerk's auth state is fully settled here.
+  // usersApi.getMe() also caches the /auth/me captureLadder (admin-tunable caps).
   useEffect(() => {
     if (!isLoaded) return
     if (isSignedIn) {
-      apiClient
-        .get<{ user: User }>('/auth/me')
-        .then((res) => setWrldUser(res.data.user))
+      usersApi
+        .getMe()
+        .then(setWrldUser)
         .catch(console.warn)
     } else {
       clearWrldUser()

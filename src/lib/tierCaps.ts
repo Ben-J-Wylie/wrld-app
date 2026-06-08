@@ -17,6 +17,8 @@
 //
 // See the Rolling Buffer initiative in CLAUDE.md for the full cross-repo model.
 
+import AsyncStorage from '@react-native-async-storage/async-storage'
+
 export type Tier = 'free' | 'plus' | 'pro'
 
 export type TierCap = {
@@ -78,19 +80,93 @@ export const TIER_CAPS: Record<Tier, TierCap> = {
 // Ordered free → pro, for laddered UI.
 export const TIER_LADDER: TierCap[] = [TIER_CAPS.free, TIER_CAPS.plus, TIER_CAPS.pro]
 
+// ─── Remote ladder override (admin-tunable via RemoteConfig → /auth/me) ───────
+// The backend delivers a per-tier { resolutionHeight, maxVideoBitrate } ladder in
+// the /auth/me `captureLadder` field, sourced from RemoteConfig
+// (VIDEO_RESOLUTION_CAP_<TIER>, VIDEO_BITRATE_MBPS_<TIER>). The two capture helpers
+// below resolve in this order: live (this session's /auth/me) → cached (last known,
+// survives an offline launch) → baked-in TIER_CAPS default. The baked-in defaults
+// are NEVER removed — they are the permanent floor for a first-ever offline launch.
+// (Capture values are only consumed at go-live, which needs connectivity anyway, so
+// the offline path is belt-and-suspenders for first launch / flaky-network edges.)
+
+export type CaptureTierValues = { resolutionHeight: number; maxVideoBitrate: number }
+export type CaptureLadder = Record<Tier, CaptureTierValues>
+
+const LADDER_CACHE_KEY = 'wrld-capture-ladder'
+const ALLOWED_HEIGHTS = [720, 1080, 1440]
+const MIN_BITRATE = 500_000
+const MAX_BITRATE = 20_000_000
+
+// Synchronous in-memory override read by the helpers at go-live time. null = none yet.
+let liveLadder: CaptureLadder | null = null
+
+// Clamp remote values to sane bounds so a fat-fingered admin entry can't brick capture.
+function clampTier(v: Partial<CaptureTierValues> | undefined, fallback: CaptureTierValues): CaptureTierValues {
+  const h = v?.resolutionHeight
+  const b = v?.maxVideoBitrate
+  return {
+    resolutionHeight: typeof h === 'number' && ALLOWED_HEIGHTS.includes(h) ? h : fallback.resolutionHeight,
+    maxVideoBitrate:
+      typeof b === 'number' && isFinite(b)
+        ? Math.min(MAX_BITRATE, Math.max(MIN_BITRATE, Math.round(b)))
+        : fallback.maxVideoBitrate,
+  }
+}
+
+function sanitize(ladder: Partial<CaptureLadder> | null | undefined): CaptureLadder | null {
+  if (!ladder || typeof ladder !== 'object') return null
+  return {
+    free: clampTier(ladder.free, TIER_CAPS.free),
+    plus: clampTier(ladder.plus, TIER_CAPS.plus),
+    pro: clampTier(ladder.pro, TIER_CAPS.pro),
+  }
+}
+
+// Apply a ladder from /auth/me: set the in-memory override + cache it for offline
+// launches. Best-effort persistence — a failed write never throws.
+export async function applyRemoteCaptureLadder(ladder: Partial<CaptureLadder> | null | undefined): Promise<void> {
+  const clean = sanitize(ladder)
+  if (!clean) return
+  liveLadder = clean
+  try {
+    await AsyncStorage.setItem(LADDER_CACHE_KEY, JSON.stringify(clean))
+  } catch {
+    // best-effort
+  }
+}
+
+// Hydrate the override from the last cached ladder. Call once at app startup so an
+// offline launch reflects the most recent admin values. Never overwrites a ladder
+// already applied live this session.
+export async function hydrateCaptureLadder(): Promise<void> {
+  if (liveLadder) return
+  try {
+    const raw = await AsyncStorage.getItem(LADDER_CACHE_KEY)
+    if (raw) liveLadder = sanitize(JSON.parse(raw) as Partial<CaptureLadder>)
+  } catch {
+    // fall through to baked-in defaults
+  }
+}
+
+function resolved(tier: Tier | string | null | undefined): CaptureTierValues {
+  const base = (TIER_CAPS as Record<string, TierCap>)[tier ?? 'free'] ?? TIER_CAPS.free
+  const live = liveLadder?.[(tier ?? 'free') as Tier]
+  return live ?? { resolutionHeight: base.resolutionHeight, maxVideoBitrate: base.maxVideoBitrate }
+}
+
 // The capture-height cap for a tier. Aaron's `useMediasoup` passes this as the
 // `getUserMedia` video `height: { ideal, max }` (G4 decided = cap produce, i.e.
 // cap on the phone), which bounds both live quality and the buffer's byte
-// budget without a server-side transcode.
-// Unknown tier strings fall back to the Free cap (safe minimum).
-export function maxCaptureHeight(tier: Tier | string | null | undefined): TierCap['resolutionHeight'] {
-  return (TIER_CAPS as Record<string, TierCap>)[tier ?? 'free']?.resolutionHeight ?? TIER_CAPS.free.resolutionHeight
+// budget without a server-side transcode. Remote-aware: live → cache → default.
+export function maxCaptureHeight(tier: Tier | string | null | undefined): number {
+  return resolved(tier).resolutionHeight
 }
 
 // The WebRTC encoder bitrate ceiling for a tier (bits/sec). Aaron's
 // `useMediasoup` passes this as the camera `produce` encodings `maxBitrate`.
 // Pairs with `maxCaptureHeight` so each tier's resolution gets a matching bit
-// budget. Unknown tier strings fall back to the Free ceiling (safe minimum).
+// budget. Remote-aware: live → cache → default.
 export function maxVideoBitrate(tier: Tier | string | null | undefined): number {
-  return (TIER_CAPS as Record<string, TierCap>)[tier ?? 'free']?.maxVideoBitrate ?? TIER_CAPS.free.maxVideoBitrate
+  return resolved(tier).maxVideoBitrate
 }
