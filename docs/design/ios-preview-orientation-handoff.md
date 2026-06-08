@@ -26,6 +26,17 @@ server-side concern (see "Recording" below) and is not what this doc is about.
 - (Earlier: clean-discrete `RTCMTLVideoView` baseline — superseded; the discrete
   `rotationOverride` patch path is retained as an untouched fallback.)
 
+## Pinch-to-zoom — real camera zoom (2026-06-08)
+
+`WRLDCameraPreviewView` also handles a `UIPinchGestureRecognizer` that drives the
+active `AVCaptureDevice.videoZoomFactor` (resolved from the session inputs each
+pinch, so it follows a camera flip). It's the **real device zoom**, so the
+broadcast + rolling buffer zoom too — not a preview-only transform. Clamped to
+`[minAvailableVideoZoomFactor, min(activeFormat.videoMaxZoomFactor, 8x)]`.
+Native-only (no JS), on the same component, so it works in both the pre-live
+preview and the live broadcast. iOS only (Android `RTCView` has no zoom path).
+Needs an EAS dev-client rebuild.
+
 ## BUILT — `AVCaptureVideoPreviewLayer` continuous gimbal (2026-06-07)
 
 Implements the decision below. The local iOS preview now renders the raw camera
