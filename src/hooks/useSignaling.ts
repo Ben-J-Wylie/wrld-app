@@ -166,7 +166,7 @@ export function useSignaling() {
 
   const sendBroadcasterPaused = useCallback(() => signalingClient.sendBroadcasterPaused(), [])
   const sendBroadcasterResumed = useCallback(() => signalingClient.sendBroadcasterResumed(), [])
-  const sendBroadcasterOrientation = useCallback((orientation: 'portrait' | 'landscape', rotationDeg?: number) => signalingClient.sendBroadcasterOrientation(orientation, rotationDeg), [])
+  const sendBroadcasterOrientation = useCallback((orientation: 'portrait' | 'landscape', rotationDeg?: number, hold?: string) => signalingClient.sendBroadcasterOrientation(orientation, rotationDeg, hold), [])
   const sendLocationUpdate = useCallback((lat: number, lng: number) => signalingClient.sendLocationUpdate(lat, lng), [])
   const sendTip = useCallback((amount: number) => signalingClient.sendTip(amount), [])
 

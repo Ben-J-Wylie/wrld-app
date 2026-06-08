@@ -12,7 +12,7 @@ export type ClientMessage =
   | { type: 'reaction'; kind: string; handle: string }
   | { type: 'broadcasterPaused' }
   | { type: 'broadcasterResumed' }
-  | { type: 'broadcasterOrientation'; orientation: 'portrait' | 'landscape'; rotationDeg?: number }
+  | { type: 'broadcasterOrientation'; orientation: 'portrait' | 'landscape'; rotationDeg?: number; hold?: string }
   | { type: 'locationUpdate'; lat: number; lng: number }
   | { type: 'tip'; amount: number }
 
@@ -213,8 +213,12 @@ class MediasoupSignalingClient {
     this.send({ type: 'broadcasterResumed' })
   }
 
-  sendBroadcasterOrientation(orientation: 'portrait' | 'landscape', rotationDeg?: number): void {
-    this.send({ type: 'broadcasterOrientation', orientation, rotationDeg })
+  sendBroadcasterOrientation(
+    orientation: 'portrait' | 'landscape',
+    rotationDeg?: number,
+    hold?: string,
+  ): void {
+    this.send({ type: 'broadcasterOrientation', orientation, rotationDeg, hold })
   }
 
   sendLocationUpdate(lat: number, lng: number): void {
