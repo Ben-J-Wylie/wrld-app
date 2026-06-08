@@ -34,12 +34,14 @@ import {
   AppState,
   Keyboard,
   Linking,
+  NativeModules,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   View,
 } from 'react-native'
+import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { captureScreen } from 'react-native-view-shot'
@@ -349,15 +351,15 @@ export function StreamScreen() {
   const gimbalMirrorSign = facingMode === 'user' ? -1 : 1
   const previewGimbalDeg = GIMBAL_BASE + GIMBAL_GAIN * gimbalMirrorSign * tiltDeg
 
-  // Pinch-to-zoom indicator: CameraPreview reports the live camera zoom factor
-  // (real videoZoomFactor) while pinching and on double-tap reset; show a "2.4×"
-  // pill that fades in during the gesture and out ~0.9s after it settles.
+  // Pinch-to-zoom indicator: show a "2.4×" pill that fades in during the gesture
+  // and out ~0.9s after it settles. iOS feeds it from CameraPreview's onZoomChange
+  // (native videoZoomFactor); Android feeds it from the JS pinch gesture below.
   const [zoomLabel, setZoomLabel] = useState<string | null>(null)
   const zoomOpacity = useRef(new Animated.Value(0)).current
   const zoomHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const handlePreviewZoom = useCallback(
-    (e: { nativeEvent: { zoom: number } }) => {
-      setZoomLabel(`${e.nativeEvent.zoom.toFixed(1)}×`)
+  const flashZoom = useCallback(
+    (z: number) => {
+      setZoomLabel(`${z.toFixed(1)}×`)
       Animated.timing(zoomOpacity, { toValue: 1, duration: 120, useNativeDriver: true }).start()
       if (zoomHideTimer.current) clearTimeout(zoomHideTimer.current)
       zoomHideTimer.current = setTimeout(() => {
@@ -370,9 +372,60 @@ export function StreamScreen() {
     },
     [zoomOpacity],
   )
+  const handlePreviewZoom = useCallback(
+    (e: { nativeEvent: { zoom: number } }) => flashZoom(e.nativeEvent.zoom),
+    [flashZoom],
+  )
   useEffect(() => () => {
     if (zoomHideTimer.current) clearTimeout(zoomHideTimer.current)
   }, [])
+
+  // Android pinch-to-zoom. iOS handles zoom natively inside CameraPreview; on
+  // Android the local preview is an RTCView, so we detect the pinch in JS and
+  // drive the real camera zoom via the WebRTCModule patch (mediaStreamTrackSet-
+  // VideoZoom → SCALER_CROP_REGION), so the broadcast + buffer zoom too. Double-
+  // tap resets to 1×. Cap 5× to match iOS.
+  const androidVideoTrackId =
+    Platform.OS === 'android'
+      ? ((localStream as unknown as { getVideoTracks?: () => { id: string }[] })?.getVideoTracks?.()?.[0]
+          ?.id ?? null)
+      : null
+  const zoomValueRef = useRef(1)
+  const zoomBaseRef = useRef(1)
+  const applyAndroidZoom = useCallback(
+    (z: number) => {
+      const clamped = Math.max(1, Math.min(z, 5))
+      zoomValueRef.current = clamped
+      if (androidVideoTrackId) {
+        NativeModules.WebRTCModule?.mediaStreamTrackSetVideoZoom?.(androidVideoTrackId, clamped)
+      }
+      flashZoom(clamped)
+    },
+    [androidVideoTrackId, flashZoom],
+  )
+  // New session / camera flip recreates the capture session → zoom resets to 1×
+  // natively; keep our refs in sync (silent — no pill on flip).
+  useEffect(() => {
+    zoomValueRef.current = 1
+    zoomBaseRef.current = 1
+  }, [facingMode, androidVideoTrackId])
+  const androidZoomGesture = useMemo(() => {
+    const pinch = Gesture.Pinch()
+      .onStart(() => {
+        zoomBaseRef.current = zoomValueRef.current
+      })
+      .onUpdate((e) => {
+        applyAndroidZoom(zoomBaseRef.current * e.scale)
+      })
+      .runOnJS(true)
+    const doubleTap = Gesture.Tap()
+      .numberOfTaps(2)
+      .onEnd(() => {
+        applyAndroidZoom(1)
+      })
+      .runOnJS(true)
+    return Gesture.Race(doubleTap, pinch)
+  }, [applyAndroidZoom])
 
   const showControls = isNew || !showOverlay || controlsVisible
 
@@ -964,16 +1017,20 @@ export function StreamScreen() {
             onZoomChange={handlePreviewZoom}
           />
         ) : (
-          <RTCView
-            streamURL={(localStream as unknown as { toURL(): string }).toURL()}
-            style={StyleSheet.absoluteFill}
-            objectFit="cover"
-            mirror={facingMode === 'user'}
-            zOrder={0}
-          />
+          <GestureDetector gesture={androidZoomGesture}>
+            <View style={StyleSheet.absoluteFill} collapsable={false}>
+              <RTCView
+                streamURL={(localStream as unknown as { toURL(): string }).toURL()}
+                style={StyleSheet.absoluteFill}
+                objectFit="cover"
+                mirror={facingMode === 'user'}
+                zOrder={0}
+              />
+            </View>
+          </GestureDetector>
         ))}
 
-      {/* Pinch-to-zoom level indicator (broadcaster preview, iOS). */}
+      {/* Pinch-to-zoom level indicator (broadcaster preview, iOS + Android). */}
       {showCameraPreview && zoomLabel && (
         <Animated.View style={[styles.zoomPill, { opacity: zoomOpacity }]} pointerEvents="none">
           <Text variant="monoLabel" color={theme.colors.text.inverse}>

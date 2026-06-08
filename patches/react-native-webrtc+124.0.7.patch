@@ -1,3 +1,239 @@
+diff --git a/node_modules/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/CameraZoomHelper.java b/node_modules/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/CameraZoomHelper.java
+new file mode 100644
+index 0000000..9f4b4a1
+--- /dev/null
++++ b/node_modules/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/CameraZoomHelper.java
+@@ -0,0 +1,185 @@
++package com.oney.WebRTCModule;
++
++import android.content.Context;
++import android.graphics.Rect;
++import android.hardware.camera2.CameraCaptureSession;
++import android.hardware.camera2.CameraCharacteristics;
++import android.hardware.camera2.CameraDevice;
++import android.hardware.camera2.CameraManager;
++import android.hardware.camera2.CaptureRequest;
++import android.os.Handler;
++import android.util.Log;
++import android.util.Range;
++import android.view.Surface;
++
++import org.webrtc.VideoCapturer;
++
++import java.lang.reflect.Field;
++
++/**
++ * WRLD patch: pinch-to-zoom on Android. react-native-webrtc exposes no camera
++ * zoom, and the camera lives inside the prebuilt org.webrtc Camera2 capturer, so
++ * we reach the live CameraCaptureSession by reflection and re-issue the
++ * repeating request with SCALER_CROP_REGION — true sensor crop (stays crisp),
++ * and it zooms the encoded broadcast + buffer too, matching the iOS
++ * AVCaptureDevice.videoZoomFactor path.
++ *
++ * Fail-safe by design: every reflective step is guarded, and on ANY failure we
++ * no-op (the camera keeps running). So if a future react-native-webrtc /
++ * libwebrtc bump renames internals, zoom silently stops working rather than
++ * breaking the stream. Camera2 only — Camera1Capturer falls through to no-op.
++ */
++class CameraZoomHelper {
++    private static final String TAG = WebRTCModule.TAG;
++
++    // Pure digital zoom and viewers see it — cap low. Matches iOS kWRLDMaxZoom.
++    static final double MAX_ZOOM = 5.0;
++
++    static void setZoom(Context context, VideoCapturer capturer, double zoom) {
++        try {
++            // org.webrtc.Camera2Capturer extends CameraCapturer, which keeps the
++            // active CameraSession in a private "currentSession" field.
++            Object session = getField(findField(capturer.getClass(), "currentSession"), capturer);
++            if (session == null) {
++                return;
++            }
++            // Only Camera2Session carries a CameraCaptureSession we can re-request;
++            // Camera1Session won't have these → null → no-op.
++            CameraCaptureSession captureSession =
++                    (CameraCaptureSession) firstFieldOfType(session, CameraCaptureSession.class);
++            CameraDevice cameraDevice = (CameraDevice) firstFieldOfType(session, CameraDevice.class);
++            Surface surface = (Surface) firstFieldOfType(session, Surface.class);
++            Handler handler = (Handler) firstFieldOfType(session, Handler.class);
++            if (captureSession == null || cameraDevice == null || surface == null) {
++                return;
++            }
++
++            CameraManager cameraManager =
++                    (CameraManager) context.getSystemService(Context.CAMERA_SERVICE);
++            CameraCharacteristics chars = cameraManager.getCameraCharacteristics(cameraDevice.getId());
++            Rect active = chars.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE);
++            if (active == null) {
++                return;
++            }
++            Float maxDigital = chars.get(CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM);
++            double maxZoom = Math.min(MAX_ZOOM, maxDigital != null ? maxDigital : MAX_ZOOM);
++            double z = Math.max(1.0, Math.min(zoom, maxZoom));
++
++            // Center crop of the sensor active array; smaller crop = more zoom.
++            int cropW = (int) Math.round(active.width() / z);
++            int cropH = (int) Math.round(active.height() / z);
++            int cropX = (active.width() - cropW) / 2;
++            int cropY = (active.height() - cropH) / 2;
++            Rect crop = new Rect(cropX, cropY, cropX + cropW, cropY + cropH);
++
++            CaptureRequest.Builder b = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_RECORD);
++            b.set(CaptureRequest.SCALER_CROP_REGION, crop);
++            // Preserve the capturer's frame rate so the zoom request doesn't
++            // disturb fps/exposure (best-effort; org.webrtc CaptureFormat is mfps).
++            Range<Integer> fps = fpsRangeFromSession(session);
++            if (fps != null) {
++                b.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, fps);
++            }
++            b.addTarget(surface);
++
++            final CameraCaptureSession cs = captureSession;
++            final CaptureRequest req = b.build();
++            final Handler h = handler;
++            Runnable apply = () -> {
++                try {
++                    cs.setRepeatingRequest(req, null, h);
++                } catch (Exception e) {
++                    Log.w(TAG, "[CameraZoomHelper] setRepeatingRequest failed: " + e);
++                }
++            };
++            if (h != null) {
++                h.post(apply);
++            } else {
++                apply.run();
++            }
++        } catch (Throwable t) {
++            Log.w(TAG, "[CameraZoomHelper] zoom unavailable (no-op): " + t);
++        }
++    }
++
++    // org.webrtc CaptureFormat.framerate is in thousandths of a frame/sec.
++    private static Range<Integer> fpsRangeFromSession(Object session) {
++        try {
++            Object captureFormat = firstFieldByTypeName(session, "CaptureFormat");
++            if (captureFormat == null) {
++                return null;
++            }
++            Object framerate = getField(findField(captureFormat.getClass(), "framerate"), captureFormat);
++            if (framerate == null) {
++                return null;
++            }
++            int min = (int) getField(findField(framerate.getClass(), "min"), framerate);
++            int max = (int) getField(findField(framerate.getClass(), "max"), framerate);
++            return new Range<>(min / 1000, max / 1000);
++        } catch (Throwable t) {
++            return null;
++        }
++    }
++
++    // ── reflection utils ──────────────────────────────────────────────────────
++    private static Field findField(Class<?> cls, String name) {
++        for (Class<?> c = cls; c != null; c = c.getSuperclass()) {
++            try {
++                Field f = c.getDeclaredField(name);
++                f.setAccessible(true);
++                return f;
++            } catch (NoSuchFieldException ignored) {
++            }
++        }
++        return null;
++    }
++
++    private static Object getField(Field f, Object target) {
++        if (f == null) {
++            return null;
++        }
++        try {
++            return f.get(target);
++        } catch (Throwable t) {
++            return null;
++        }
++    }
++
++    // First non-null field whose type is assignable to `type` (search superclasses
++    // too). Robust to field renames — we match by type, not name.
++    private static Object firstFieldOfType(Object target, Class<?> type) {
++        for (Class<?> c = target.getClass(); c != null; c = c.getSuperclass()) {
++            for (Field f : c.getDeclaredFields()) {
++                if (type.isAssignableFrom(f.getType())) {
++                    f.setAccessible(true);
++                    try {
++                        Object v = f.get(target);
++                        if (v != null) {
++                            return v;
++                        }
++                    } catch (Throwable ignored) {
++                    }
++                }
++            }
++        }
++        return null;
++    }
++
++    private static Object firstFieldByTypeName(Object target, String simpleNameContains) {
++        for (Class<?> c = target.getClass(); c != null; c = c.getSuperclass()) {
++            for (Field f : c.getDeclaredFields()) {
++                if (f.getType().getSimpleName().contains(simpleNameContains)) {
++                    f.setAccessible(true);
++                    try {
++                        Object v = f.get(target);
++                        if (v != null) {
++                            return v;
++                        }
++                    } catch (Throwable ignored) {
++                    }
++                }
++            }
++        }
++        return null;
++    }
++}
+diff --git a/node_modules/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/GetUserMediaImpl.java b/node_modules/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/GetUserMediaImpl.java
+index a9f51cb..512a25a 100644
+--- a/node_modules/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/GetUserMediaImpl.java
++++ b/node_modules/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/GetUserMediaImpl.java
+@@ -451,6 +451,23 @@ class GetUserMediaImpl {
+         }
+     }
+ 
++    /**
++     * WRLD patch: pinch-to-zoom. Applies a camera zoom factor to the camera
++     * behind the given track via SCALER_CROP_REGION (see {@link CameraZoomHelper}).
++     * No-op for non-camera tracks or if the reflection can't reach the session.
++     * @param trackId TrackPrivate id
++     * @param zoom desired zoom factor (1.0 = no zoom)
++     */
++    void setVideoZoom(String trackId, double zoom) {
++        TrackPrivate track = tracks.get(trackId);
++        if (track != null && track.videoCaptureController instanceof CameraCaptureController) {
++            VideoCapturer capturer = track.videoCaptureController.getVideoCapturer();
++            if (capturer != null) {
++                CameraZoomHelper.setZoom(reactContext, capturer, zoom);
++            }
++        }
++    }
++
+     /**
+      * Application/library-specific private members of local
+      * {@code MediaStreamTrack}s created by {@code GetUserMediaImpl}.
+diff --git a/node_modules/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/WebRTCModule.java b/node_modules/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/WebRTCModule.java
+index 996648c..75a0bf9 100644
+--- a/node_modules/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/WebRTCModule.java
++++ b/node_modules/react-native-webrtc/android/src/main/java/com/oney/WebRTCModule/WebRTCModule.java
+@@ -945,6 +945,12 @@ public class WebRTCModule extends ReactContextBaseJavaModule {
+         ThreadUtils.runOnExecutor(() -> { getUserMediaImpl.setVideoEffects(id, names); });
+     }
+ 
++    // WRLD patch: pinch-to-zoom — set the camera zoom factor for a local video track.
++    @ReactMethod
++    public void mediaStreamTrackSetVideoZoom(String id, double zoom) {
++        ThreadUtils.runOnExecutor(() -> { getUserMediaImpl.setVideoZoom(id, zoom); });
++    }
++
+     @ReactMethod
+     public void peerConnectionSetConfiguration(ReadableMap configuration, int id) {
+         ThreadUtils.runOnExecutor(() -> {
 diff --git a/node_modules/react-native-webrtc/ios/RCTWebRTC/RTCVideoViewManager.m b/node_modules/react-native-webrtc/ios/RCTWebRTC/RTCVideoViewManager.m
 index e64005d..5440441 100644
 --- a/node_modules/react-native-webrtc/ios/RCTWebRTC/RTCVideoViewManager.m
