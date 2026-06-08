@@ -34,7 +34,17 @@ import { SavedClipRegion } from './SavedClipRegion'
 import { ClipBracket } from './ClipBracket'
 import { TimelineScrollbar } from './TimelineScrollbar'
 
-export type BufferSegment = { id: string; startMs: number; endMs: number; peaks?: number[] }
+export type BufferSegment = {
+  id: string
+  startMs: number
+  endMs: number
+  peaks?: number[]
+  // Optional poster frame for this recording session — filled across the segment
+  // (cover) as a real broadcast frame. Falls back to the sprocket filmstrip when absent
+  // (audio-only sessions, missing poster). Superseded per-interval by `thumbnails` when
+  // server-generated frames land.
+  posterUrl?: string | null
+}
 export type BufferSavedRegion = { id: string; startMs: number; endMs: number; label?: string }
 export type BufferBracket = { inMs: number; outMs: number }
 // Real frame thumbnails (from expo-video's generateThumbnailsAsync, rendered via
@@ -51,6 +61,11 @@ type Props = {
   playheadMs: number
   nowMs?: number
   streaming?: boolean
+  // The oldest-edge "eviction" gap: a collapsed marker before the first segment whose
+  // wall-clock span [startMs, endMs=earliestFootage] represents headroom until the
+  // oldest footage starts getting deleted. Mirrors the trailing (since-last-broadcast)
+  // gap. The parent shows a countdown card while the playhead is over it.
+  leadingGap?: { startMs: number; endMs: number } | null
   bracket?: BufferBracket | null
   thumbnails?: TimelineThumb[]
   onScrub: (ms: number) => void
@@ -69,6 +84,12 @@ const MIN_BRACKET_MS = 500
 const GAP_THRESHOLD_MS = 500
 const ZOOM_MAX_FACTOR = 12
 const FILM_CELL_W = 24
+// The head/tail buffer-edge indicators are wider than inter-session gaps and carry
+// state: dark (idle), or accent with a footage-facing zigzag (head = evicting oldest,
+// tail = live/growing) — "the buffer eating the footage".
+const EDGE_GAP_WIDTH = 15
+const ZIGZAG_TEETH = 4 // fixed count, evenly spaced over the track height
+const ZIGZAG_DEPTH = 5 // how far the teeth bite into the footage (px)
 
 // Zoom-level toggle (an alternative to pinch). Each non-"All" level targets a
 // span that fills the viewport; "All" fits the whole buffer. pxPerMs = width/span,
@@ -101,6 +122,7 @@ export function BufferTimeline({
   playheadMs,
   nowMs,
   streaming,
+  leadingGap,
   bracket,
   thumbnails,
   onScrub,
@@ -113,27 +135,51 @@ export function BufferTimeline({
   const [pxPerMs, setPxPerMs] = useState(0) // 0 → use the fit scale (whole buffer)
   const [scrollOffset, setScrollOffset] = useState(0)
   const [blocked, setBlocked] = useState(false)
+  // Poster URLs that failed to load (e.g. backend 404) → fall back to sprockets for
+  // those segments instead of a blank fill. Auto-recovers once the server serves them.
+  const [failedPosters, setFailedPosters] = useState<Set<string>>(() => new Set())
 
   const bufferStartMs = segments.length > 0 ? segments[0]!.startMs : 0
   const bufferEndMs = segments.length > 0 ? segments[segments.length - 1]!.endMs : 0
+  const lastEnd = bufferEndMs
 
   const { totalSegMs, gapsPx } = useMemo(() => measure(segments), [segments])
-  const fit = totalSegMs > 0 && width > 0 ? Math.max(0, (width - gapsPx) / totalSegMs) : 0
+  const hasFootage = segments.length > 0
+  // The head + tail edge indicators are ALWAYS present when there's footage (20px each);
+  // their state varies. Head: dark + countdown while there's headroom (`hasLeadingGap`),
+  // else accent + right zigzag (evicting the oldest). Tail: accent + left zigzag while
+  // live (growing), else dark + since-last-broadcast.
+  const hasTrailingGap = !streaming && nowMs != null && hasFootage && nowMs > lastEnd + GAP_THRESHOLD_MS
+  const hasLeadingGap = !!leadingGap && hasFootage && leadingGap.endMs - leadingGap.startMs > GAP_THRESHOLD_MS
+  const headEvicting = hasFootage && !hasLeadingGap
+  const tailLive = hasFootage && !!streaming
+  const leadingPx = hasFootage ? EDGE_GAP_WIDTH : 0
+  const trailingPx = hasFootage ? EDGE_GAP_WIDTH : 0
+  // Fit subtracts ALL fixed-width gap markers (inter-session + leading + trailing) so
+  // "All" shows the whole buffer — footage AND both edge gaps — inside the viewport
+  // (the trailing gap used to spill ~10px past the edge, so "All" wasn't all).
+  const fit =
+    totalSegMs > 0 && width > 0 ? Math.max(0, (width - gapsPx - leadingPx - trailingPx) / totalSegMs) : 0
   const minPx = fit
   const secPx = width > 0 ? width / SEC_SPAN_MS : 0
   const maxPx = fit > 0 ? Math.max(fit * ZOOM_MAX_FACTOR, secPx) : 0
   const px = pxPerMs > 0 ? pxPerMs : fit
 
-  const { blocks, segBlocks, contentWidth } = useMemo(() => layout(segments, px), [segments, px])
-  const lastEnd = segments.length > 0 ? segments[segments.length - 1]!.endMs : 0
-  const hasTrailingGap = !streaming && nowMs != null && segments.length > 0 && nowMs > lastEnd + GAP_THRESHOLD_MS
-  const effContentWidth = contentWidth + (hasTrailingGap ? GAP_MARKER_WIDTH : 0)
+  // Layout starts the cursor at leadingPx so every block is offset past the leading gap.
+  const { blocks, segBlocks, contentWidth } = useMemo(
+    () => layout(segments, px, leadingPx),
+    [segments, px, leadingPx],
+  )
+  const effContentWidth = contentWidth + trailingPx
   const maxScroll = Math.max(0, effContentWidth - width)
   const offset = clamp(scrollOffset, 0, maxScroll)
   let playheadX = timeToX(playheadMs, segBlocks, px)
-  if (hasTrailingGap && playheadMs > lastEnd) {
+  if (hasLeadingGap && leadingGap && playheadMs < bufferStartMs) {
+    const f = clamp((playheadMs - leadingGap.startMs) / Math.max(1, bufferStartMs - leadingGap.startMs), 0, 1)
+    playheadX = leadingPx * f
+  } else if (hasTrailingGap && playheadMs > lastEnd) {
     const f = clamp((playheadMs - lastEnd) / Math.max(1, (nowMs as number) - lastEnd), 0, 1)
-    playheadX = contentWidth + GAP_MARKER_WIDTH * f
+    playheadX = contentWidth + trailingPx * f
   }
 
   // ── reanimated transform (UI thread) ──────────────────────────────────────
@@ -211,6 +257,14 @@ export function BufferTimeline({
   const savedRegionsRef = useRef(savedRegions)
   const bufferStartRef = useRef(bufferStartMs)
   const bufferEndRef = useRef(bufferEndMs)
+  const leadingPxRef = useRef(leadingPx)
+  const leadingGapRef = useRef(leadingGap)
+  leadingPxRef.current = leadingPx
+  leadingGapRef.current = leadingGap
+  // Trailing-gap scrub mapping (so the tail edge scrubs smoothly to [lastEnd, now]
+  // instead of snapping to the last clip's end).
+  const tailRef = useRef({ hasGap: hasTrailingGap, lastEnd, nowMs: nowMs ?? bufferEndMs, contentWidth, trailingPx })
+  tailRef.current = { hasGap: hasTrailingGap, lastEnd, nowMs: nowMs ?? bufferEndMs, contentWidth, trailingPx }
   widthRef.current = width
   pxRef.current = px
   offsetRef.current = offset
@@ -230,16 +284,30 @@ export function BufferTimeline({
     gesturingRef.current = v
   }
 
-  // Tap / pan → place the playhead at the touch (content x → time).
+  // Tap / pan → place the playhead at the touch (content x → time). Content x inside
+  // the leading gap maps to its wall-clock span; otherwise to footage/inter-gap time.
   function scrubAtX(x: number) {
     const contentX = x + offsetRef.current
+    const lg = leadingGapRef.current
+    const lpx = leadingPxRef.current
+    if (lg && lpx > 0 && contentX < lpx) {
+      const f = clamp(contentX / lpx, 0, 1)
+      onScrubRef.current(lg.startMs + f * (lg.endMs - lg.startMs))
+      return
+    }
+    const t = tailRef.current
+    if (t.hasGap && contentX > t.contentWidth) {
+      const f = clamp((contentX - t.contentWidth) / Math.max(1, t.trailingPx), 0, 1)
+      onScrubRef.current(t.lastEnd + f * (t.nowMs - t.lastEnd))
+      return
+    }
     onScrubRef.current(xToTime(contentX, segBlocksRef.current, pxRef.current))
   }
   // Pinch end → commit the live scale into pxPerMs + offset (one re-layout).
   function commitPinch(s: number, focal: number) {
     const startPx = pStartPx.value || pxRef.current
     const newPx = clamp(startPx * s, minPxRef.current, maxPxRef.current)
-    const nl = layout(segmentsRef.current, newPx)
+    const nl = layout(segmentsRef.current, newPx, leadingPxRef.current)
     const anchorMs = xToTime(pAnchorContentX.value, segBlocksRef.current, startPx)
     const no = clamp(timeToX(anchorMs, nl.segBlocks, newPx) - focal, 0, Math.max(0, nl.contentWidth - widthRef.current))
     sx.value = 1
@@ -275,8 +343,8 @@ export function BufferTimeline({
   function applyZoomLevel(level: ZoomLevel) {
     const newPx = levelToPx(level)
     if (newPx <= 0) return
-    const nl = layout(segmentsRef.current, newPx)
-    const newCW = nl.contentWidth + (hasTrailingGap ? GAP_MARKER_WIDTH : 0)
+    const nl = layout(segmentsRef.current, newPx, leadingPx)
+    const newCW = nl.contentWidth + trailingPx
     const phX = timeToX(playheadMs, nl.segBlocks, newPx)
     const no = clamp(phX - width / 2, 0, Math.max(0, newCW - width))
     sx.value = 1
@@ -430,7 +498,29 @@ export function BufferTimeline({
             {blocks.map((b, i) =>
               b.kind === 'seg' ? (
                 <View key={`seg-${b.seg.id}`} style={[styles.seg, { left: b.leftPx, width: b.widthPx }]}>
-                  <FilmstripFill widthPx={b.widthPx} />
+                  {b.seg.posterUrl && !failedPosters.has(b.seg.posterUrl) ? (
+                    <Image
+                      source={{ uri: b.seg.posterUrl }}
+                      style={styles.segPoster}
+                      contentFit="cover"
+                      pointerEvents="none"
+                      transition={120}
+                      onError={() => {
+                        const url = b.seg.posterUrl
+                        if (!url) return
+                        // eslint-disable-next-line no-console
+                        if (__DEV__) console.log('[clip-video] poster 404 → sprockets', url)
+                        setFailedPosters((prev) => {
+                          if (prev.has(url)) return prev
+                          const next = new Set(prev)
+                          next.add(url)
+                          return next
+                        })
+                      }}
+                    />
+                  ) : (
+                    <FilmstripFill widthPx={b.widthPx} />
+                  )}
                 </View>
               ) : (
                 <View key={`gap-${i}`} style={[styles.gapHolder, { left: b.leftPx }]}>
@@ -439,11 +529,9 @@ export function BufferTimeline({
               ),
             )}
 
-            {hasTrailingGap && (
-              <View style={[styles.gapHolder, { left: contentWidth }]}>
-                <GapMarker style={styles.gapFill} />
-              </View>
-            )}
+            {hasFootage && <BufferEdge side="head" leftPx={0} accent={headEvicting} />}
+
+            {hasFootage && <BufferEdge side="tail" leftPx={contentWidth} accent={tailLive} />}
 
             {/* Real frame thumbnails over the sprocket filmstrip (where available). */}
             {thumbnails?.map((t) => (
@@ -500,6 +588,50 @@ export function BufferTimeline({
   )
 }
 
+// The head/tail buffer-edge indicator: a 20px block, dark when idle or accent when
+// "active" (head evicting / tail live). When accent, a zigzag bites into the footage
+// from the footage-facing edge (head → right, tail → left).
+function BufferEdge({ side, leftPx, accent }: { side: 'head' | 'tail'; leftPx: number; accent: boolean }) {
+  const color = accent ? theme.colors.accent.default : theme.colors.text.primary
+  return (
+    <View
+      style={[styles.edge, { left: leftPx, width: EDGE_GAP_WIDTH, backgroundColor: color }]}
+      pointerEvents="none"
+    >
+      {accent && <ZigzagColumn side={side === 'head' ? 'right' : 'left'} color={color} />}
+    </View>
+  )
+}
+
+// A vertical sawtooth of triangles at one edge, teeth pointing outward (toward the
+// footage). Rendered just past the edge so it overlaps the adjacent footage like a bite.
+function ZigzagColumn({ side, color }: { side: 'left' | 'right'; color: string }) {
+  const toothH = TRACK_H / ZIGZAG_TEETH
+  return (
+    <View
+      style={[styles.zig, side === 'right' ? { right: -ZIGZAG_DEPTH } : { left: -ZIGZAG_DEPTH }]}
+      pointerEvents="none"
+    >
+      {Array.from({ length: ZIGZAG_TEETH }).map((_, i) => (
+        <View
+          key={i}
+          style={{
+            width: 0,
+            height: 0,
+            borderTopWidth: toothH / 2,
+            borderBottomWidth: toothH / 2,
+            borderTopColor: 'transparent',
+            borderBottomColor: 'transparent',
+            ...(side === 'right'
+              ? { borderLeftWidth: ZIGZAG_DEPTH, borderLeftColor: color }
+              : { borderRightWidth: ZIGZAG_DEPTH, borderRightColor: color }),
+          }}
+        />
+      ))}
+    </View>
+  )
+}
+
 function FilmstripFill({ widthPx }: { widthPx: number }) {
   const n = Math.max(1, Math.min(160, Math.ceil(widthPx / FILM_CELL_W)))
   return (
@@ -526,10 +658,10 @@ function measure(segments: BufferSegment[]): { totalSegMs: number; gapsPx: numbe
   return { totalSegMs, gapsPx: gapCount * GAP_MARKER_WIDTH }
 }
 
-function layout(segments: BufferSegment[], px: number): Layout {
+function layout(segments: BufferSegment[], px: number, leadingPx = 0): Layout {
   const blocks: (SegBlock | GapBlock)[] = []
   const segBlocks: SegBlock[] = []
-  let cursor = 0
+  let cursor = leadingPx
   for (let i = 0; i < segments.length; i++) {
     const seg = segments[i]!
     if (i > 0) {
@@ -548,20 +680,38 @@ function layout(segments: BufferSegment[], px: number): Layout {
   return { blocks, segBlocks, contentWidth: cursor }
 }
 
+// time → x. Within a collapsed inter-session gap the time maps LINEARLY across the gap
+// marker's pixels (no snapping to the next clip's start), so the playhead glides.
 function timeToX(ms: number, segBlocks: SegBlock[], px: number): number {
   if (segBlocks.length === 0) return 0
-  for (const b of segBlocks) {
-    if (ms < b.seg.startMs) return b.leftPx
+  for (let i = 0; i < segBlocks.length; i++) {
+    const b = segBlocks[i]!
+    if (ms < b.seg.startMs) {
+      const prev = i > 0 ? segBlocks[i - 1]! : null
+      if (!prev) return b.leftPx
+      const gx = prev.leftPx + prev.widthPx
+      const f = clamp((ms - prev.seg.endMs) / Math.max(1, b.seg.startMs - prev.seg.endMs), 0, 1)
+      return gx + f * (b.leftPx - gx)
+    }
     if (ms <= b.seg.endMs) return b.leftPx + (ms - b.seg.startMs) * px
   }
   const last = segBlocks[segBlocks.length - 1]!
   return last.leftPx + last.widthPx
 }
 
+// x → time. Inverse of the above: x inside a gap marker maps linearly to the gap's
+// wall-clock span (smooth scrub across gaps, no snap to clip heads).
 function xToTime(x: number, segBlocks: SegBlock[], px: number): number {
   if (segBlocks.length === 0) return 0
-  for (const b of segBlocks) {
-    if (x < b.leftPx) return b.seg.startMs
+  for (let i = 0; i < segBlocks.length; i++) {
+    const b = segBlocks[i]!
+    if (x < b.leftPx) {
+      const prev = i > 0 ? segBlocks[i - 1]! : null
+      if (!prev) return b.seg.startMs
+      const gx = prev.leftPx + prev.widthPx
+      const f = clamp((x - gx) / Math.max(1, b.leftPx - gx), 0, 1)
+      return prev.seg.endMs + f * (b.seg.startMs - prev.seg.endMs)
+    }
     if (x <= b.leftPx + b.widthPx) return b.seg.startMs + (px > 0 ? (x - b.leftPx) / px : 0)
   }
   return segBlocks[segBlocks.length - 1]!.seg.endMs
@@ -611,6 +761,9 @@ const styles = StyleSheet.create({
     bottom: 0,
     width: FILM_CELL_W,
   },
+  segPoster: {
+    ...StyleSheet.absoluteFillObject,
+  },
   film: {
     ...StyleSheet.absoluteFillObject,
     flexDirection: 'row',
@@ -634,6 +787,17 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     bottom: 0,
+  },
+  edge: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+  },
+  zig: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    overflow: 'hidden',
   },
   gapFill: {
     flex: 1,

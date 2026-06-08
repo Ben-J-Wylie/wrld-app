@@ -57,11 +57,11 @@ type SavedClip = {
 const H = 3_600_000
 const DEFAULT_CLIP_MS = 120_000 // 2 min default bracket on "New clip"
 const MIN_BRACKET_MS = 500
-// Client-side timeline thumbnails via expo-video generateThumbnailsAsync are OFF:
-// confirmed (2026-06-06, on-device) to HANG on the -c:v copy HLS buffer VOD — exact-
-// frame extraction, the same problem tolerant seekBy dodges for playback, and there's
-// no tolerant thumbnail API. The path is kept (flip true if a future source supports
-// it) but the real fix is SERVER-generated buffer thumbnails — see wrld-backend
+// Client-side timeline thumbnails via expo-video generateThumbnailsAsync are OFF —
+// confirmed to HANG (6s timeout) twice now: on the original -c:v copy VOD AND, retested
+// 2026-06-07, on Aaron's codec-uniform groups (the source loads & PLAYS fine, but
+// exact-frame extraction still hangs; there's no tolerant thumbnail API). Path kept
+// behind the flag; the durable fix is SERVER-generated thumbnails — wrld-backend
 // CLAUDE.md stacked-work item 6. Until then the timeline shows its sprocket filmstrip.
 const CLIENT_THUMB_GEN = false
 
@@ -131,9 +131,31 @@ export const ClipEditScreen = () => {
     id: s.id,
     startMs: sessionStartMs(s),
     endMs: sessionEndMs(s),
+    posterUrl: s.thumbnailUrl, // real broadcast frame per session (server filmstrip later)
   }))
   const bufferStartMs = sessions.length ? sessionStartMs(sessions[0]!) : Date.now()
   const bufferEndMs = Date.now()
+
+  // Leading "eviction" edge: the buffer keeps `windowHours` of footage, so the oldest
+  // frame (bufferStartMs) is deleted at bufferStartMs + window. While the oldest footage
+  // is newer than the window's oldest boundary (now - window) there's headroom → a
+  // leading gap whose card counts down to when the oldest footage starts being deleted.
+  const windowMs = (buffer?.windowHours ?? 72) * H
+  const leadStartMs = bufferEndMs - windowMs
+  const hasLeadingGap = sessions.length > 0 && bufferStartMs > leadStartMs + 60_000
+  const leadingGap = hasLeadingGap ? { startMs: leadStartMs, endMs: bufferStartMs } : null
+
+  // DIAGNOSTIC: poster availability + a sample URL (so we can see if thumbnailUrl is
+  // populated and what it looks like).
+  useEffect(() => {
+    const withPoster = sessions.filter((s) => s.thumbnailUrl).length
+    vlog(
+      `posters: ${withPoster}/${sessions.length} have thumbnailUrl; sample=${
+        sessions.find((s) => s.thumbnailUrl)?.thumbnailUrl ?? 'none'
+      }`,
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [buffer])
 
   const [page, setPage] = useState<Page>('editor')
   // The playhead is an ABSOLUTE instant that HOLDS where you place it (tap / drag /
@@ -147,10 +169,8 @@ export const ClipEditScreen = () => {
   playheadRef.current = playheadMs
   const followingRef = useRef(following)
   followingRef.current = following
-  // The timeline's live zoom (px per ms) + the field's measured width — both drive
-  // the field scrub rate (zoom-relative on footage, quarter-screen over a gap).
+  // The timeline's live zoom (px per ms) drives the field's scrub rate (zoom-relative).
   const timelinePxPerMsRef = useRef(0)
-  const fieldWidthRef = useRef(0)
   const [, setClockTick] = useState(0)
   useEffect(() => {
     const id = setInterval(() => {
@@ -159,7 +179,8 @@ export const ClipEditScreen = () => {
     }, 1000)
     return () => clearInterval(id)
   }, [])
-  const clampPlayhead = (ms: number) => clamp(ms, bufferStartMs, Date.now())
+  // Lower bound extends into the leading eviction gap (so you can scrub onto it).
+  const clampPlayhead = (ms: number) => clamp(ms, hasLeadingGap ? leadStartMs : bufferStartMs, Date.now())
   // Place the playhead at an absolute instant (held); start following only if it
   // lands at the live edge.
   function placePlayhead(ms: number) {
@@ -226,7 +247,10 @@ export const ClipEditScreen = () => {
     const prev = [...sessions].reverse().find((s) => sessionEndMs(s) <= playheadMs)
     const next = sessions.find((s) => sessionStartMs(s) > playheadMs)
     if (prev && next) return { title: 'GAP', detail: fmtGap(sessionStartMs(next) - sessionEndMs(prev)) }
-    if (prev && !next) return { title: 'SINCE LAST BROADCAST', detail: fmtGap(Date.now() - sessionEndMs(prev)) }
+    if (prev && !next) return { title: 'SINCE LAST BROADCAST', detail: fmtClock(Date.now() - sessionEndMs(prev)) }
+    if (!prev && next && hasLeadingGap) {
+      return { title: 'FOOTAGE CLEARS IN', detail: fmtClock(Math.max(0, bufferStartMs + windowMs - Date.now())) }
+    }
     return undefined
   })()
 
@@ -338,6 +362,9 @@ export const ClipEditScreen = () => {
   const [playing, setPlaying] = useState(false)
   const playingRef = useRef(false)
   playingRef.current = playing
+  // Wall-clock playback anchor: { wall, ph } captured when play starts; the playhead =
+  // ph + (now - wall), advancing in real-time (across gaps) until the live edge.
+  const playClockRef = useRef<{ wall: number; ph: number } | null>(null)
 
   const seekTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastSeekAt = useRef(0)
@@ -479,6 +506,19 @@ export const ClipEditScreen = () => {
     return sessionEndMs(cc[cc.length - 1]!.s)
   }
 
+  // wall-clock ms → GLOBAL media seconds, ONLY within camera footage (null in gaps) —
+  // lets wall-clock playback decide whether to play the video (footage) or hold (gap).
+  function globalSecForWall(ms: number): number | null {
+    for (const c of camCumRef.current) {
+      const st = sessionStartMs(c.s)
+      const en = sessionEndMs(c.s)
+      if (ms >= st && ms <= en) {
+        return c.mediaStart + Math.min(Math.max(0, c.s.durationSec), Math.max(0, (ms - st) / 1000))
+      }
+    }
+    return null
+  }
+
   // A scrub interaction pauses playback (so the seeked frame holds).
   function markScrubbing() {
     if (playingRef.current) setPlaying(false)
@@ -592,37 +632,48 @@ export const ClipEditScreen = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playing, activeGroupUrl, player])
 
-  // While playing, advance the playhead to follow the video; stop at the live edge
-  // (or the end of the buffered footage when not currently streaming). The player's
-  // currentTime is LOCAL to the active group — convert to global, and when a group
-  // ends, advance to the next codec-uniform group so playback continues across the
-  // boundary (the load effect resumes it).
+  // Playback is WALL-CLOCK driven (real-time), so the playhead advances naturally
+  // across gaps and never stops at the end of a clip — only at the live edge. The
+  // VIDEO follows the playhead: over footage it plays (seeking to the right codec-
+  // uniform group + offset, tolerant drift-correct); over a gap it holds (the field
+  // shows the gap card). (Media time collapses gaps, so a media-driven follow couldn't
+  // traverse them in real-time — hence wall-clock as the driver.)
   useEffect(() => {
-    if (!playing) return
+    if (!playing) {
+      playClockRef.current = null
+      return
+    }
     const id = setInterval(() => {
-      const active = playGroupsRef.current[activeGroupIndexRef.current]
-      if (!active) return
-      const localT = player.currentTime
-      const globalT = active.startSec + localT
-      if (globalT >= totalCamSecRef.current - 0.3) {
+      if (!playClockRef.current) playClockRef.current = { wall: Date.now(), ph: playheadRef.current }
+      const c = playClockRef.current
+      const ph = c.ph + (Date.now() - c.wall)
+      // Reached the live edge → stop playback and go live (follow the head).
+      if (ph >= Date.now() - 300) {
         setPlaying(false)
-        return
-      }
-      if (localT >= active.durationSec - 0.3) {
-        const next = activeGroupIndexRef.current + 1
-        if (next < playGroupsRef.current.length) setActiveGroupIndex(next)
-        else setPlaying(false)
-        return
-      }
-      const ph = mediaSecToPlayhead(globalT)
-      if (ph == null) return
-      if (ph >= Date.now() - 500) {
-        setPlaying(false)
+        setFollowing(true)
         return
       }
       playheadRef.current = ph
       setPlayheadMs(ph)
-    }, 250)
+      // Video follows: footage → play (group + offset, drift-corrected); gap → hold.
+      const sec = globalSecForWall(ph)
+      if (sec == null) {
+        try {
+          player.pause()
+        } catch {}
+        return
+      }
+      const g = groupForMediaSec(sec)
+      if (!g) return
+      if (g.index !== activeGroupIndexRef.current) {
+        setActiveGroupIndex(g.index) // load effect seeks + plays on ready (playingRef)
+        return
+      }
+      try {
+        if (Math.abs(player.currentTime - g.localSec) > 0.75) player.seekBy(g.localSec - player.currentTime)
+        player.play()
+      } catch {}
+    }, 200)
     return () => clearInterval(id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playing, player])
@@ -797,45 +848,15 @@ export const ClipEditScreen = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [thumbPlayer])
 
-  // The gap (if any) the given instant falls inside — between the previous session's
-  // end and the next session's start (or now, for the trailing gap).
-  function gapAt(ms: number): { start: number; end: number } | null {
-    for (const s of sessions) {
-      if (ms >= sessionStartMs(s) && ms <= sessionEndMs(s)) return null
-    }
-    let prevEnd = -Infinity
-    let nextStart = Infinity
-    for (const s of sessions) {
-      const en = sessionEndMs(s)
-      const st = sessionStartMs(s)
-      if (en <= ms) prevEnd = Math.max(prevEnd, en)
-      if (st > ms) nextStart = Math.min(nextStart, st)
-    }
-    if (prevEnd === -Infinity) return null
-    return { start: prevEnd, end: nextStart === Infinity ? Date.now() : nextStart }
-  }
-
   function handleFieldScrub(deltaPx: number) {
-    // Drag right (dx>0) → earlier → playhead moves back. Uses playheadRef so the
-    // incremental per-move deltas accumulate within a single gesture.
+    // Drag right (dx>0) → earlier → playhead moves back. Plain, smooth scrub at the
+    // zoom-relative rate EVERYWHERE — including across gaps (no snapping, no special
+    // gap handling). Half the timeline's 1:1 finger rate, so it feels consistent with
+    // the zoom. The field still shows the gap-duration card while over a gap.
     markScrubbing()
-    const here = playheadRef.current
-    const gap = gapAt(here)
-    let msPerPx: number
-    if (gap) {
-      // A gap is condensed to a quarter-screen of scrub at any zoom: traversing
-      // 0.25 × fieldWidth px spins the clock across the WHOLE gap (longer gap →
-      // faster), so you never scrub through the full wall-clock value of a gap.
-      const quarter = Math.max(1, fieldWidthRef.current * 0.25)
-      msPerPx = Math.max(1, (gap.end - gap.start) / quarter)
-    } else {
-      // Recorded footage: half the timeline's 1:1 finger rate (timeline 1px =
-      // 1/pxPerMs ms; field = half that) so the field feels consistent with the zoom
-      // — the more the timeline is zoomed in, the slower/finer the field scrub.
-      const ppm = timelinePxPerMsRef.current
-      msPerPx = ppm > 0 ? 0.5 / ppm : 30_000
-    }
-    placePlayhead(here - deltaPx * msPerPx)
+    const ppm = timelinePxPerMsRef.current
+    const msPerPx = ppm > 0 ? 0.5 / ppm : 30_000
+    placePlayhead(playheadRef.current - deltaPx * msPerPx)
   }
 
   function newClip() {
@@ -907,62 +928,56 @@ export const ClipEditScreen = () => {
 
       {page === 'editor' ? (
         <View style={styles.editor}>
-          {/* Field (image swipe-to-scrub) with the time-machine clock overlaid at
-              its bottom — expand it to spin-scrub the buffer. Both place the playhead.
-              While the clock is expanded the screen scroll is locked; touching the
-              image (wrapped here) or anything below collapses it and restores scroll.
-              The clock is a sibling of the field-touch wrapper (not a child), so
-              touching the clock itself doesn't trigger collapse. */}
-          <View style={[styles.fieldWrap, styles.fullBleed]}>
-            <View
-              onTouchStart={collapseClock}
-              onLayout={(e) => {
-                fieldWidthRef.current = e.nativeEvent.layout.width
-              }}
-            >
-              <BufferScrubField
-                variant={fieldVariant}
-                thumbnailUrl={fieldThumb}
-                frameSlot={
-                  hasCameraVideo && !playerError ? (
-                    <VideoView
-                      player={player}
-                      style={StyleSheet.absoluteFill}
-                      nativeControls={false}
-                      contentFit="cover"
-                    />
-                  ) : undefined
+          {/* Field (image swipe-to-scrub); the time-machine clock sits directly BELOW
+              it (expand to spin-scrub the buffer). Both place the playhead. While the
+              clock is expanded the screen scroll is locked; touching the field or
+              anything below collapses it and restores scroll — the clock itself is not
+              wrapped in a collapse handler, so touching it doesn't collapse it. The
+              field, clock, and timeline share the editor's lg padding (inline with the
+              "name this clip" input), not full-bleed. */}
+          <View style={styles.fieldWrap} onTouchStart={collapseClock}>
+            <BufferScrubField
+              variant={fieldVariant}
+              thumbnailUrl={fieldThumb}
+              frameSlot={
+                hasCameraVideo && !playerError ? (
+                  <VideoView
+                    player={player}
+                    style={StyleSheet.absoluteFill}
+                    nativeControls={false}
+                    contentFit="cover"
+                  />
+                ) : undefined
+              }
+              reachLabel={`Buffer · ${buffer?.windowHours ?? 72}h`}
+              card={gapCard}
+              playing={playing}
+              onTogglePlay={() => {
+                // After recovery is exhausted the field shows the poster — tapping
+                // play rearms recovery (fresh token attempt) instead of toggling.
+                if (playerError) {
+                  healAttemptsRef.current = 0
+                  setPlayerError(false)
+                  recoverPlayer('manual retry')
+                  return
                 }
-                reachLabel={`Buffer · ${buffer?.windowHours ?? 72}h`}
-                card={gapCard}
-                playing={playing}
-                onTogglePlay={() => {
-                  // After recovery is exhausted the field shows the poster — tapping
-                  // play rearms recovery (fresh token attempt) instead of toggling.
-                  if (playerError) {
-                    healAttemptsRef.current = 0
-                    setPlayerError(false)
-                    recoverPlayer('manual retry')
-                    return
-                  }
-                  setPlaying((p) => !p)
-                }}
-                showScrubHint={false}
-                onScrub={handleFieldScrub}
-              />
-            </View>
-            <TimeScrubber
-              offsetMs={offsetForClock}
-              onOffsetChange={(v) => {
-                markScrubbing()
-                placePlayhead(Date.now() - v)
+                setPlaying((p) => !p)
               }}
-              onExpandedChange={setClockExpanded}
-              collapseSignal={collapseSignal}
-              playback={false}
-              style={styles.clockOverlay}
+              showScrubHint={false}
+              onScrub={handleFieldScrub}
             />
           </View>
+
+          <TimeScrubber
+            offsetMs={offsetForClock}
+            onOffsetChange={(v) => {
+              markScrubbing()
+              placePlayhead(Date.now() - v)
+            }}
+            onExpandedChange={setClockExpanded}
+            collapseSignal={collapseSignal}
+            playback={false}
+          />
 
           <View style={styles.belowField} onTouchStart={collapseClock}>
             <BufferTimeline
@@ -971,6 +986,7 @@ export const ClipEditScreen = () => {
               playheadMs={playheadMs}
               nowMs={bufferEndMs}
               streaming={streaming}
+              leadingGap={leadingGap}
               bracket={bracket}
               thumbnails={thumbs}
               onScrub={(ms) => {
@@ -982,7 +998,6 @@ export const ClipEditScreen = () => {
                 timelinePxPerMsRef.current = ppm
               }}
               onVisibleRangeChange={setVisibleRange}
-              style={styles.fullBleed}
             />
 
             <View style={styles.btnRow}>
@@ -1134,6 +1149,22 @@ function fmtGap(ms: number): string {
   return `${s}s`
 }
 
+// Head/tail counting clocks: always include a seconds counter (days · hours · minutes ·
+// seconds), larger units shown only when non-zero. Ticks every second via the 1s tick.
+function fmtClock(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000))
+  const d = Math.floor(total / 86400)
+  const h = Math.floor((total % 86400) / 3600)
+  const m = Math.floor((total % 3600) / 60)
+  const s = total % 60
+  const parts: string[] = []
+  if (d > 0) parts.push(`${d}d`)
+  if (d > 0 || h > 0) parts.push(`${h}h`)
+  if (d > 0 || h > 0 || m > 0) parts.push(`${m}m`)
+  parts.push(`${pad(s)}s`)
+  return parts.join(' ')
+}
+
 const styles = StyleSheet.create({
   content: {
     paddingBottom: theme.spacing.xxxl,
@@ -1145,23 +1176,11 @@ const styles = StyleSheet.create({
     padding: theme.spacing.lg,
     gap: theme.spacing.md,
   },
-  // Field + clock and the timeline go edge-to-edge (cancel the editor's lg
-  // padding) — the field is the hero, and the full width gives the time-machine
-  // clock room to lay out its six wheels + status without overflowing.
-  fullBleed: {
-    marginHorizontal: -theme.spacing.lg,
-  },
   fieldWrap: {
     position: 'relative',
   },
   belowField: {
     gap: theme.spacing.md,
-  },
-  clockOverlay: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
   },
   btnRow: {
     flexDirection: 'row',

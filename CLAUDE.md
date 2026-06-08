@@ -2554,3 +2554,40 @@ Needs an on-device pass: group-boundary source swaps (scrub + playback across a
 codec change), the capture-pinning at each tier, and that a freshly-captured buffer
 now reports a single `allGroups` entry. The backend guard must be deployed for
 `allGroups` to be populated (until then the app uses the `allManifestUrl` fallback).
+
+---
+
+## Updates — June 2026 (Buffer-trim editor: gaps, wall-clock playback, eviction edge, frames)
+
+Clip-editor refinements on `design` (`BufferTimeline` feature + `ClipEditScreen` screen).
+All pure JS — hot-reloadable, no native change. Canonical detail in DESIGN.md
+(BufferTimeline Section 3 + the 2026-06-07 decision-log entry).
+
+- **Smooth scrub over gaps (no snapping).** `BufferTimeline.timeToX`/`xToTime` now
+  interpolate across the collapsed gap markers (inter-session, leading, trailing) instead
+  of snapping the playhead to a clip head. The field scrub dropped its quarter-screen gap
+  handling for one plain zoom-relative rate (half the timeline's 1:1 finger rate).
+- **Wall-clock playback.** Playback is real-time-driven: the playhead advances by elapsed
+  wall-clock (crossing gaps), the video follows (plays over footage, holds over gaps), and
+  it stops only at the live edge — not at a clip end. Touches only the playback *follow*
+  loop (a `playClockRef` anchor + `globalSecForWall`); Aaron's group load/play-pause/
+  advance effects are untouched. **Needs an on-device pass** (gap-entry blip, in-session
+  drift — there's a 0.75s correct).
+- **Head/tail edge indicators (`BufferEdge`, 15px)** replace the edge `GapMarker`s:
+  darkest token (`text.primary`) when idle, `accent` + a footage-facing **zigzag** when
+  **head-evicting** (buffer full) / **tail-live** (streaming). Teeth = 4 evenly spaced ×
+  5px deep. "All" zoom now fits the whole buffer incl. both edges (fit subtracts them).
+- **Leading eviction gap** with a **"FOOTAGE CLEARS IN" countdown** (from `windowHours` +
+  earliest footage; no `atCapacity` needed). Head/tail counting clocks show **d·h·m·s**
+  (seconds always, ticking).
+- **Real frames over the filmstrip:** per-session `posterUrl` cover-fills each segment
+  (expo-image), **falling back to sprockets on load error**. The advertised
+  `…/camera/thumb.jpg` poster currently **404s** server-side (Aaron — wrld-backend
+  stacked-work item 6). **Client `generateThumbnailsAsync` is gated OFF** — confirmed to
+  hang on the `-c:v copy` HLS VOD even on the codec-uniform groups; server frames will
+  feed the existing `thumbnails` prop.
+- **Layout:** the `TimeScrubber` clock sits **below** the field (not overlaid); field /
+  clock / timeline are inset to align with the "name this clip" input (no full-bleed).
+- `__DEV__`-gated `[clip-video]` diagnostics remain (status/recovery + poster/thumb gen) —
+  zero prod impact (stripped by the `__DEV__` guard); useful until Aaron's poster endpoint
+  + buffer substrate settle.

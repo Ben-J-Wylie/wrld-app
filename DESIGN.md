@@ -3023,8 +3023,8 @@ PanResponder multitouch (no `react-native-gesture-handler` dep). The discrete
 - **Location:** `src/components/features/clip/BufferTimeline.tsx` *(built 2026-06-06 · C2)*
 - **Variants:** `default`
 - **Sizes:** md (track h:52 — single track, **no axis/date row**; matches the Input `md` "What's happening" field — + the scrollbar below)
-- **States:** zoom = continuous `pxPerMs` (fit … fit×12); pan = `scrollOffset`; playhead may be on- or off-screen
-- **Props (built):** `segments` (recorded spans), `savedRegions?`, `playheadMs`, `bracket?`, `onScrub`, `onBracketChange?` (zoom/pan are internal view state)
+- **States:** zoom = continuous `pxPerMs` (fit … fit×max, max raised so Sec is reachable on a multi-day buffer); pan = `scrollOffset`; playhead may be on- or off-screen
+- **Props (built):** `segments` (recorded spans; each may carry a `posterUrl`), `savedRegions?`, `playheadMs`, `nowMs?`, `streaming?`, `leadingGap?` (oldest-edge eviction span), `bracket?`, `thumbnails?` (per-instant frame overlay), `onScrub`, `onBracketChange?`, `onZoomChange?` (px/ms → field scrub rate), `onVisibleRangeChange?` (debounced visible window) (zoom/pan are internal view state)
 
 **Mock says (Frames 1–4):** Horizontal full-bleed timeline of the buffer with
 **collapsed gaps** — recorded segments render as a repeating **filmstrip** (a fixed
@@ -3058,6 +3058,30 @@ clips appear as read-only hatched bands. No date/axis row
 - Gestures via PanResponder multitouch (no gesture-handler dep). Brackets keep
   their own handles (parent owns time math); pinned to in/out **times**, so they
   stretch/contract with zoom + pan. Saved-region no-overlap clamp unchanged.
+
+**Code does — 2026-06-07 refinements:**
+- **Smooth gaps (no snapping).** `timeToX`/`xToTime` now interpolate **linearly across
+  a collapsed gap marker's pixels** ↔ the gap's wall-clock span (inter-session, leading,
+  and trailing). Tapping/dragging glides the playhead through `[prevEnd → nextStart]`
+  instead of snapping to the next clip's head.
+- **Zoom-level toggle** below the scrollbar (`SegmentedToggle`: All · Days · Hours · Min ·
+  Sec) — a non-pinch way to snap the zoom to a span, centred on the playhead; the
+  highlighted segment tracks the live zoom. Reports zoom up via `onZoomChange`.
+- **Stateful edge indicators (`BufferEdge`, 15px) replace the head/tail `GapMarker`s.**
+  Idle → darkest token (`text.primary`); **head evicting** (buffer full) → `accent` with
+  a **right-edge zigzag**; **tail live** (streaming) → `accent` with a **left-edge
+  zigzag** — "the buffer eating the footage." Zigzag = `ZIGZAG_TEETH` (4) evenly spaced ×
+  `ZIGZAG_DEPTH` (5px) biting into the footage. Fit subtracts both edges + inter gaps so
+  **"All" shows the whole buffer** (footage + both edges) within the viewport.
+- **Leading eviction gap.** `leadingGap` (oldest-edge headroom span) renders a scrub-
+  reachable leading marker; the parent shows a **"FOOTAGE CLEARS IN" countdown** while
+  the playhead is over it (no `atCapacity` needed — derived from `windowHours` + earliest
+  footage). When full, the head flips to the accent eviction zigzag.
+- **Real frames over the filmstrip.** Each segment's `posterUrl` (the session poster)
+  cover-fills its segment (expo-image), falling back to sprockets on load error (backend
+  poster currently 404s — graceful, auto-upgrades). `thumbnails` (per-instant frames) is
+  the denser server-filmstrip path; **client-side `generateThumbnailsAsync` is OFF** (it
+  hangs on the `-c:v copy` HLS VOD — see CLAUDE.md / wrld-backend item 6).
 
 ---
 
@@ -4011,6 +4035,39 @@ above. The seam is not a separate motion category.
 
 Append-only. Most recent first. Each entry: date, decision, rationale,
 constraint it imposes downstream.
+
+### 2026-06-07 — Buffer-trim editor: smooth gaps, wall-clock playback, eviction edge, real frames
+
+A round of clip-editor refinements (all on `design`; `BufferTimeline` feature +
+`ClipEditScreen` screen, pure JS):
+
+- **Smooth scrub over gaps (no snapping).** `timeToX`/`xToTime` interpolate across the
+  collapsed gap markers instead of snapping to a clip head; the field scrub dropped its
+  quarter-screen gap handling for one plain zoom-relative rate everywhere. *Rationale:*
+  the snap felt broken; gaps should glide. *Imposes:* gap regions are now scrub-reachable
+  time, not dead pixels.
+- **Wall-clock playback.** Playback drives the playhead by real elapsed time (video
+  follows: plays over footage, holds over gaps), so it crosses gaps in real-time and only
+  stops at the live edge — never at a clip end. *Rationale:* media time collapses gaps, so
+  a media-driven follow couldn't traverse them. *Imposes:* touches the shared playback
+  follow (Aaron's group engine) — only the follow loop, via a wall-clock anchor + a
+  footage/gap helper; his load/play-pause/group-advance effects are untouched.
+- **Head/tail = stateful `BufferEdge` (15px), replacing the edge `GapMarker`s.** Darkest
+  token when idle; `accent` + a footage-facing **zigzag** when head-evicting / tail-live
+  ("buffer eating the footage"). Teeth: `ZIGZAG_TEETH` (4) × `ZIGZAG_DEPTH` (5px). Fit
+  subtracts both edges so **"All" truly fits** (the trailing gap used to spill past the
+  edge). Inter-session gaps stay the 10px `GapMarker`.
+- **Leading eviction gap + "FOOTAGE CLEARS IN" countdown** — derived from `windowHours` +
+  earliest footage (no `atCapacity` needed; that's still the refinement for countdown-vs-
+  consuming). Head/tail counting clocks now show **d · h · m · s** (seconds always).
+- **Real frames:** per-session `posterUrl` cover-fills each segment (expo-image), falling
+  back to sprockets on error. The advertised poster (`…/camera/thumb.jpg`) currently
+  **404s** server-side → handed to Aaron (wrld-backend item 6). **Client `generateThumbnailsAsync`
+  confirmed non-viable** (hangs on the `-c:v copy` HLS VOD, even on codec-uniform groups)
+  → gated off; server frames feed the `thumbnails` prop later.
+- **Layout:** the `TimeScrubber` clock now sits **below** the field (not overlaid), and
+  the field/clock/timeline are inset to line up with the "name this clip" input (no
+  full-bleed).
 
 ### 2026-06-06 — Timeline gestures → react-native-gesture-handler; drag=scrub; playhead holds
 
