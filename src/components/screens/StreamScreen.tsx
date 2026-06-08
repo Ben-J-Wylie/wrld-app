@@ -349,6 +349,31 @@ export function StreamScreen() {
   const gimbalMirrorSign = facingMode === 'user' ? -1 : 1
   const previewGimbalDeg = GIMBAL_BASE + GIMBAL_GAIN * gimbalMirrorSign * tiltDeg
 
+  // Pinch-to-zoom indicator: CameraPreview reports the live camera zoom factor
+  // (real videoZoomFactor) while pinching and on double-tap reset; show a "2.4×"
+  // pill that fades in during the gesture and out ~0.9s after it settles.
+  const [zoomLabel, setZoomLabel] = useState<string | null>(null)
+  const zoomOpacity = useRef(new Animated.Value(0)).current
+  const zoomHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const handlePreviewZoom = useCallback(
+    (e: { nativeEvent: { zoom: number } }) => {
+      setZoomLabel(`${e.nativeEvent.zoom.toFixed(1)}×`)
+      Animated.timing(zoomOpacity, { toValue: 1, duration: 120, useNativeDriver: true }).start()
+      if (zoomHideTimer.current) clearTimeout(zoomHideTimer.current)
+      zoomHideTimer.current = setTimeout(() => {
+        Animated.timing(zoomOpacity, { toValue: 0, duration: 300, useNativeDriver: true }).start(
+          ({ finished }) => {
+            if (finished) setZoomLabel(null)
+          },
+        )
+      }, 900)
+    },
+    [zoomOpacity],
+  )
+  useEffect(() => () => {
+    if (zoomHideTimer.current) clearTimeout(zoomHideTimer.current)
+  }, [])
+
   const showControls = isNew || !showOverlay || controlsVisible
 
   // Docked-footer bottom padding (Go Live / End Stream), and the shared offset
@@ -936,6 +961,7 @@ export function StreamScreen() {
             style={StyleSheet.absoluteFill}
             rotationDeg={previewGimbalDeg}
             mirror={facingMode === 'user'}
+            onZoomChange={handlePreviewZoom}
           />
         ) : (
           <RTCView
@@ -946,6 +972,15 @@ export function StreamScreen() {
             zOrder={0}
           />
         ))}
+
+      {/* Pinch-to-zoom level indicator (broadcaster preview, iOS). */}
+      {showCameraPreview && zoomLabel && (
+        <Animated.View style={[styles.zoomPill, { opacity: zoomOpacity }]} pointerEvents="none">
+          <Text variant="monoLabel" color={theme.colors.text.inverse}>
+            {zoomLabel}
+          </Text>
+        </Animated.View>
+      )}
 
       {showRemoteVideo && (
         <RTCView
@@ -1534,6 +1569,16 @@ const styles = StyleSheet.create({
   // above the field mirror the globe / dashboard so the field lands at the
   // same Y on every screen.
   previewHeaderPad: { paddingTop: theme.spacing.sm },
+  zoomPill: {
+    position: 'absolute',
+    top: '46%',
+    alignSelf: 'center',
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.radius.full,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    zIndex: 50,
+  },
   previewTop: {
     paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.sm,

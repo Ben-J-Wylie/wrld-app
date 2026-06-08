@@ -19,6 +19,9 @@ export type CameraPreviewProps = ViewProps & {
   rotationDeg: number
   // Horizontal flip for the front camera (natural selfie).
   mirror?: boolean
+  // Fires with the current camera zoom factor while pinching and on double-tap
+  // reset (pinch = real videoZoomFactor; affects the broadcast). For an indicator.
+  onZoomChange?: (e: { nativeEvent: { zoom: number } }) => void
 }
 
 const NativeCameraPreview =

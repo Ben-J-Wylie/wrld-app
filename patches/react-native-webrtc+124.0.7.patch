@@ -208,10 +208,10 @@ index e64005d..5440441 100644
   * https://www.w3.org/TR/html5/embedded-content-0.html#dom-video-videowidth
 diff --git a/node_modules/react-native-webrtc/ios/RCTWebRTC/WRLDCameraPreviewManager.m b/node_modules/react-native-webrtc/ios/RCTWebRTC/WRLDCameraPreviewManager.m
 new file mode 100644
-index 0000000..3188f1e
+index 0000000..76f2e87
 --- /dev/null
 +++ b/node_modules/react-native-webrtc/ios/RCTWebRTC/WRLDCameraPreviewManager.m
-@@ -0,0 +1,44 @@
+@@ -0,0 +1,46 @@
 +#if !TARGET_OS_TV
 +
 +#import <React/RCTViewManager.h>
@@ -253,18 +253,21 @@ index 0000000..3188f1e
 +    [view setMirror:(json ? [json boolValue] : NO)];
 +}
 +
++RCT_EXPORT_VIEW_PROPERTY(onZoomChange, RCTDirectEventBlock)
++
 +@end
 +
 +#endif
 diff --git a/node_modules/react-native-webrtc/ios/RCTWebRTC/WRLDCameraPreviewView.h b/node_modules/react-native-webrtc/ios/RCTWebRTC/WRLDCameraPreviewView.h
 new file mode 100644
-index 0000000..e060742
+index 0000000..5f0f4dc
 --- /dev/null
 +++ b/node_modules/react-native-webrtc/ios/RCTWebRTC/WRLDCameraPreviewView.h
-@@ -0,0 +1,33 @@
+@@ -0,0 +1,38 @@
 +#if !TARGET_OS_TV
 +
 +#import <UIKit/UIKit.h>
++#import <React/RCTComponent.h>
 +
 +@class WebRTCModule;
 +
@@ -284,6 +287,10 @@ index 0000000..e060742
 +
 +@property(nonatomic, weak) WebRTCModule *module;
 +
++// Fires with { zoom: <videoZoomFactor> } while pinching and on double-tap reset,
++// so JS can show a zoom-level indicator.
++@property(nonatomic, copy) RCTDirectEventBlock onZoomChange;
++
 +// React tag of the local MediaStream (same value RTCView's `streamURL` takes).
 +- (void)setStreamURL:(NSString *)streamURL;
 +// Continuous rotation (degrees) applied to the preview layer. JS owns the sign
@@ -297,10 +304,10 @@ index 0000000..e060742
 +#endif
 diff --git a/node_modules/react-native-webrtc/ios/RCTWebRTC/WRLDCameraPreviewView.m b/node_modules/react-native-webrtc/ios/RCTWebRTC/WRLDCameraPreviewView.m
 new file mode 100644
-index 0000000..1c641cc
+index 0000000..cbe6c79
 --- /dev/null
 +++ b/node_modules/react-native-webrtc/ios/RCTWebRTC/WRLDCameraPreviewView.m
-@@ -0,0 +1,220 @@
+@@ -0,0 +1,241 @@
 +#if !TARGET_OS_TV
 +
 +#import "WRLDCameraPreviewView.h"
@@ -317,8 +324,9 @@ index 0000000..1c641cc
 +#import "WebRTCModule.h"
 +
 +// Cap on pinch zoom. Device formats report a huge videoMaxZoomFactor (often
-+// 100+), but digital zoom past ~8x is unusable mush — clamp to that.
-+static const CGFloat kWRLDMaxZoom = 8.0;
++// 100+), but this is pure digital zoom (single lens) and viewers see it too —
++// past ~5x it's unusable mush, so clamp to that.
++static const CGFloat kWRLDMaxZoom = 5.0;
 +
 +@interface WRLDCameraPreviewView ()
 +@property(nonatomic, strong) AVCaptureVideoPreviewLayer *previewLayer;
@@ -340,6 +348,11 @@ index 0000000..1c641cc
 +        UIPinchGestureRecognizer *pinch =
 +            [[UIPinchGestureRecognizer alloc] initWithTarget:self action:@selector(handlePinch:)];
 +        [self addGestureRecognizer:pinch];
++        // Double-tap → reset zoom to 1x.
++        UITapGestureRecognizer *doubleTap =
++            [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(handleDoubleTap:)];
++        doubleTap.numberOfTapsRequired = 2;
++        [self addGestureRecognizer:doubleTap];
 +    }
 +    return self;
 +}
@@ -445,6 +458,21 @@ index 0000000..1c641cc
 +    return nil;
 +}
 +
++// Clamp + apply a zoom factor to the device, and report it up to JS.
++- (void)applyZoom:(CGFloat)zoom toDevice:(AVCaptureDevice *)device {
++    CGFloat minZoom = device.minAvailableVideoZoomFactor;  // usually 1.0
++    CGFloat maxZoom = MIN(device.activeFormat.videoMaxZoomFactor, kWRLDMaxZoom);
++    CGFloat target = MAX(minZoom, MIN(zoom, maxZoom));
++    NSError *err = nil;
++    if ([device lockForConfiguration:&err]) {
++        device.videoZoomFactor = target;
++        [device unlockForConfiguration];
++        if (self.onZoomChange) {
++            self.onZoomChange(@{@"zoom" : @(target)});
++        }
++    }
++}
++
 +- (void)handlePinch:(UIPinchGestureRecognizer *)g {
 +    AVCaptureDevice *device = [self currentVideoDevice];
 +    if (!device) {
@@ -457,13 +485,13 @@ index 0000000..1c641cc
 +    if (g.state != UIGestureRecognizerStateChanged) {
 +        return;
 +    }
-+    CGFloat minZoom = device.minAvailableVideoZoomFactor;  // usually 1.0
-+    CGFloat maxZoom = MIN(device.activeFormat.videoMaxZoomFactor, kWRLDMaxZoom);
-+    CGFloat target = MAX(minZoom, MIN(_zoomBase * g.scale, maxZoom));
-+    NSError *err = nil;
-+    if ([device lockForConfiguration:&err]) {
-+        device.videoZoomFactor = target;
-+        [device unlockForConfiguration];
++    [self applyZoom:_zoomBase * g.scale toDevice:device];
++}
++
++- (void)handleDoubleTap:(UITapGestureRecognizer *)g {
++    AVCaptureDevice *device = [self currentVideoDevice];
++    if (device) {
++        [self applyZoom:1.0 toDevice:device];
 +    }
 +}
 +
