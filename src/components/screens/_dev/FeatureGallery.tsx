@@ -307,8 +307,9 @@ export function FeatureGallery() {
       </Section>
 
       <Section title="ChatMessage">
-        <Row label="user (default)">
+        <Row label="self (you — primary accent) vs others (secondary accent)">
           <View style={styles.chatBg}>
+            <ChatMessage role="self" handle="@you" body="on my way, save me a spot" />
             <ChatMessage role="user" handle="@mira" body="that drone shot is wild" />
             <ChatMessage role="user" handle="@kai" body="where is this exactly?" />
           </View>

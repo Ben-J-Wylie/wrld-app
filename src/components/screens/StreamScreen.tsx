@@ -53,7 +53,6 @@ import { useLocalSearchParams, router, useFocusEffect } from 'expo-router'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { RTCView } from 'react-native-webrtc'
 import { CameraPreview } from '@/components/native/CameraPreview'
-import { LinearGradient } from 'expo-linear-gradient'
 import { useAuth } from '@clerk/clerk-expo'
 import { Button } from '@/components/primitives/Button'
 import { Input } from '@/components/primitives/Input'
@@ -498,24 +497,17 @@ export function StreamScreen() {
   const camBottom = isNew
     ? footerPad + LIVE_CLOCK_BAR_H + 54 + theme.spacing.sm
     : LIVE_CLOCK_BAR_H
-  // The bottom control line (chat toggle · chat input · send · flip) sits just
-  // INSIDE the bottom edge of the camera frame (sm above camBottom), overlaid on
-  // the video — not down in the End-Stream-button / clock zone. They render `sm`
-  // above composerBottom, so anchor at camBottom (the +sm lands them at the edge).
-  const controlsLineBottom = camBottom
-
-  // Shared bottom anchor for the chat composer, the camera-flip button, AND the
-  // chat toggle so they sit on one line and travel together. Keyboard up → hug
-  // the top of the keyboard: `bottom:` is measured from the SafeAreaView's
-  // (inset) bottom, but `endCoordinates.height` is measured from the real screen
-  // bottom, so subtract insets.bottom or the row floats a safe-inset too high.
-  // Keyboard down → the broadcaster's inside-the-frame line (viewers bottom).
+  // Shared bottom anchor for the chat toggle · input · send so they sit on one
+  // line just INSIDE the bottom edge of the camera frame, overlaid on the video
+  // — identical for broadcaster and viewer. Keyboard up → hug the top of the
+  // keyboard (`bottom:` is from the SafeAreaView's inset bottom, but the keyboard
+  // height is from the real screen bottom, so subtract insets.bottom). Keyboard
+  // down → `camBottom` (mode-aware: broadcaster = above the button, viewer = the
+  // clock top); elements add `sm`, landing them just inside the frame's edge.
   const composerBottom =
     keyboardHeight > 0
       ? Math.max(0, keyboardHeight - insets.bottom)
-      : isNew
-        ? controlsLineBottom
-        : 0
+      : camBottom
 
   function scheduleHide() {
     if (hideTimerRef.current) clearTimeout(hideTimerRef.current)
@@ -1098,7 +1090,8 @@ export function StreamScreen() {
   }
 
   function chatRoleFor(from: string): ChatRole {
-    if (broadcaster && from === broadcaster.handle) return 'host'
+    // Your own handle → primary accent; everyone else → secondary accent.
+    if (wrldUser && from === wrldUser.handle) return 'self'
     return 'user'
   }
 
@@ -1160,10 +1153,10 @@ export function StreamScreen() {
       )}
 
       {/* Chat toggle — far left of the bottom control line (alongside the chat
-          input · send · flip), inside the camera frame, while the broadcaster is
-          live. Shares the composer's bottom anchor so it sits on the same line
-          and rises with the keyboard. */}
-      {isLiveBroadcast && (
+          input · send), inside the camera frame, whenever in-room. Identical for
+          broadcaster and viewer. Shares the composer's bottom anchor so it sits
+          on the same line and rises with the keyboard. */}
+      {status === 'in-room' && !streamEnded && (
         <View style={[styles.frameChatBtn, { bottom: composerBottom + theme.spacing.sm }]}>
           <IconButton
             name={chatOpen ? 'x' : 'message-circle'}
@@ -1174,17 +1167,6 @@ export function StreamScreen() {
           />
         </View>
       )}
-
-      {/* Top scrim behind the header — same cream gradient as the globe's top
-          stack (paper100 → transparent). Rendered right after the video so it
-          sits ABOVE the camera but BELOW the header UI + flip button (which
-          render later) — otherwise it paints over the flip button while live. */}
-      <LinearGradient
-        pointerEvents="none"
-        colors={['rgba(236,230,214,1)', 'rgba(236,230,214,0.85)', 'rgba(236,230,214,0)']}
-        locations={[0, 0.6, 1]}
-        style={[styles.headerScrim, { height: insets.top + 100 }]}
-      />
 
       {isNew && !!adminWarning && (
         <View style={styles.adminWarningWrap}>
@@ -1225,6 +1207,27 @@ export function StreamScreen() {
             size="lg"
             onPress={switchCamera}
             accessibilityLabel="Flip camera"
+          />
+        </View>
+      )}
+
+      {/* Viewer controls — tip · flag — top-right of the camera frame (mirrors
+          the broadcaster's flip slot). Chat lives on the bottom line (shared with
+          the broadcaster); these stay off the header so it's the clean branded
+          name/handle strip. */}
+      {!isNew && status === 'in-room' && !streamEnded && (
+        <View style={[styles.viewerActions, { top: camTop + theme.spacing.sm }]}>
+          <Pressable onPress={handleTipPress} style={styles.tipHeaderBtn} hitSlop={8}>
+            <Text variant="monoLabel" color={theme.colors.accent.default}>
+              🚀 TIP
+            </Text>
+          </Pressable>
+          <IconButton
+            name="flag"
+            variant="surface"
+            size="md"
+            onPress={handleReportPress}
+            accessibilityLabel="Report stream"
           />
         </View>
       )}
@@ -1281,42 +1284,31 @@ export function StreamScreen() {
           )}
         </View>
       ) : (
+        // Viewer: the same branded header as the broadcaster — back chevron +
+        // logo, with the broadcaster's display name as the page title and a tiny
+        // @handle underneath. Tip / flag / chat live on the camera frame (below).
         <View
-          style={[styles.header, styles.headerRow, styles.headerBorder]}
+          style={styles.headerBorder}
           onLayout={(e) =>
             setHeaderBottom(e.nativeEvent.layout.y + e.nativeEvent.layout.height)
           }
         >
-          <IconButton
-            name="arrow-left"
-            variant={showOverlay ? 'surface' : 'ghost'}
-            size="md"
-            onPress={handleBack}
-            accessibilityLabel="Back"
+          <ScreenHeader
+            onBack={handleBack}
+            right={
+              broadcaster ? (
+                <View style={styles.viewerTitle}>
+                  <Text variant="heading" numberOfLines={1}>
+                    {broadcaster.displayName}
+                  </Text>
+                  <Text variant="monoCaption" color={theme.colors.text.muted}>
+                    @{broadcaster.handle}
+                  </Text>
+                </View>
+              ) : undefined
+            }
+            style={styles.previewHeaderPad}
           />
-          {status === 'in-room' && !streamEnded && (
-            <View style={styles.headerActions}>
-              <Pressable onPress={handleTipPress} style={styles.tipHeaderBtn} hitSlop={8}>
-                <Text variant="monoLabel" color={theme.colors.accent.default}>
-                  🚀 TIP
-                </Text>
-              </Pressable>
-              <IconButton
-                name="flag"
-                variant={showOverlay ? 'surface' : 'ghost'}
-                size="md"
-                onPress={handleReportPress}
-                accessibilityLabel="Report stream"
-              />
-              <IconButton
-                name={chatOpen ? 'x' : 'message-circle'}
-                variant={showOverlay ? 'surface' : 'ghost'}
-                size="md"
-                onPress={() => setChatOpen((o) => !o)}
-                accessibilityLabel={chatOpen ? 'Close chat' : 'Open chat'}
-              />
-            </View>
-          )}
         </View>
       )}
 
@@ -1602,13 +1594,13 @@ export function StreamScreen() {
             // margin (mirroring the toggle). The composer itself is inset past the
             // toggle below; the message list stays flush left.
             { left: theme.spacing.lg, right: theme.spacing.lg },
-            // Stretch from just below the header's close-X down to the composer
-            // (top + bottom, NO height) so the panel HEIGHT — not its top — tracks
-            // the keyboard. The top crop sits a footerPad below the header's bottom
-            // edge (the close-X), matching the footerPad gap below the composer's
-            // input — so the top crop stays in the exact same spot whether the
-            // keyboard is present or not. Never set top+bottom+height together
-            // (Yoga drops `bottom`, the composer would float).
+            // Stretch from just below the header down to the composer (top +
+            // bottom, NO height) so the panel HEIGHT — not its top — tracks the
+            // keyboard. The top crop sits a footerPad below the header's bottom
+            // edge, matching the footerPad gap below the composer's input — so the
+            // top crop stays in the exact same spot whether the keyboard is present
+            // or not. Never set top+bottom+height together (Yoga drops `bottom`,
+            // the composer would float).
             headerBottom > 0
               ? { top: headerBottom + footerPad, bottom: composerBottom }
               : { height: 320, bottom: composerBottom },
@@ -1630,16 +1622,10 @@ export function StreamScreen() {
             ))}
           </ScrollView>
           {/* Bottom crop = footerPad — the same gap as below the End Stream button.
-              Broadcaster: inset left past the far-left chat toggle so the input
-              starts after it (with an sm gap) and the send mirrors it on the right
-              — equal sm gaps on either side of the input. */}
-          <View
-            style={[
-              styles.composerWrap,
-              { paddingTop: footerPad },
-              isNew && { paddingLeft: 44 + theme.spacing.sm },
-            ]}
-          >
+              Inset left past the far-left chat toggle so the input starts after it
+              (with an sm gap) and the send mirrors it on the right — equal sm gaps
+              on either side of the input. Identical for broadcaster and viewer. */}
+          <View style={[styles.composerWrap, { paddingTop: footerPad, paddingLeft: 44 + theme.spacing.sm }]}>
             <ChatComposer
               value={chatInput}
               onChangeText={setChatInput}
@@ -1812,11 +1798,24 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
   },
   center: { textAlign: 'center' },
-  header: { paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.sm },
   // Pre-live brand header + title field. paddingTop sm above the header and sm
   // above the field mirror the globe / dashboard so the field lands at the
   // same Y on every screen.
   previewHeaderPad: { paddingTop: theme.spacing.sm },
+  // Viewer header right slot — broadcaster display name + tiny @handle, stacked
+  // and right-justified under the page-name convention.
+  viewerTitle: { alignItems: 'flex-end' },
+  // Viewer controls (tip · flag · chat) — top-right of the camera frame (`top`
+  // set inline to camTop + sm). zIndex above the chat panel so the chat toggle
+  // stays tappable where the two vertically overlap.
+  viewerActions: {
+    position: 'absolute',
+    right: theme.spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    zIndex: 20,
+  },
   zoomPill: {
     position: 'absolute',
     top: '46%',
@@ -1864,12 +1863,6 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: theme.radius.full,
   },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-  },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
   liveRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
   actions: { width: '100%', gap: theme.spacing.sm, alignItems: 'center' },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
@@ -1966,12 +1959,6 @@ const styles = StyleSheet.create({
   flipBtn: {
     position: 'absolute',
     right: theme.spacing.lg,
-  },
-  headerScrim: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
   },
 
   pausedBanner: {

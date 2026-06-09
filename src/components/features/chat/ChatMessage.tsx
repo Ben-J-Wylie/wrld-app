@@ -5,7 +5,8 @@
 // stays legible when overlaid on the live video.
 //
 // Roles:
-//   user    — handle in `text.muted` (the default — most participants)
+//   self    — your own handle, in the primary accent (`accent.default`)
+//   user    — everyone else, in the secondary accent (`accent.bright`)
 //   mod     — handle in `warn` amber (community moderator)
 //   host    — handle in `accent.default` (broadcaster, the room owner)
 //   system  — full mono-caps line, no handle (e.g. "USER JOINED",
@@ -19,7 +20,7 @@ import { StyleSheet, Text as RNText, View, type StyleProp, type ViewStyle } from
 import { Text } from '@/components/primitives/Text'
 import { theme } from '@/tokens/theme'
 
-export type ChatRole = 'user' | 'mod' | 'host' | 'system'
+export type ChatRole = 'self' | 'user' | 'mod' | 'host' | 'system'
 
 type Props = {
   role?: ChatRole
@@ -29,7 +30,8 @@ type Props = {
 }
 
 const HANDLE_COLOR: Record<Exclude<ChatRole, 'system'>, string> = {
-  user: theme.colors.text.muted,
+  self: theme.colors.accent.default, // your own handle — primary accent
+  user: theme.colors.accent.bright, // everyone else — secondary (lighter) accent
   mod: theme.colors.warn,
   host: theme.colors.accent.default,
 }

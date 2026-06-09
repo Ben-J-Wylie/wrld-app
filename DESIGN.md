@@ -2861,7 +2861,7 @@ per-source record (Aaron's lane).
 
 - **Tier:** feature (composes Text)
 - **Location:** `src/components/features/chat/ChatMessage.tsx`
-- **Variants:** `user` (default — handle in `text.muted`), `mod` (handle in `warn` amber), `host` (handle in `accent.default`), `system` (no handle — full mono caps line in `text.inverse`)
+- **Variants:** `self` (your own handle — primary accent `accent.default`), `user` (everyone else — secondary accent `accent.bright`; 2026-06-09, was `text.muted`), `mod` (handle in `warn` amber), `host` (handle in `accent.default`), `system` (no handle — full mono caps line in `text.inverse`)
 - **Sizes:** md
 - **States:** default
 - **Used in:** populated in 12.6 (ChatOverlay refactor)
