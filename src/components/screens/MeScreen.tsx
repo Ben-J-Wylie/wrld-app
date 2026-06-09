@@ -31,11 +31,22 @@ import { AvatarPicker } from '@/components/features/user/AvatarPicker'
 import { PursesCard } from '@/components/features/wallet/PursesCard'
 import { usersApi } from '@/api/users'
 import { useCurrentUser, useSetCurrentUser } from '@/hooks/useCurrentUser'
+import { useUserProfile } from '@/hooks/useUserProfile'
 import { useAuthStore } from '@/stores/authStore'
+
+// Mirrors ProfileScreen's compact count formatting (e.g. 12, 1.2k, 12k).
+function formatCount(n: number): string {
+  if (n >= 10_000) return `${Math.floor(n / 1000)}k`
+  if (n >= 1_000) return `${(n / 1000).toFixed(1)}k`
+  return String(n)
+}
 
 export function MeScreen() {
   const { isSignedIn } = useAuth()
   const { data: user, isLoading } = useCurrentUser()
+  // Gift collection lives on the public profile endpoint (GET /users/:handle),
+  // not /auth/me — fetch our own profile to surface "Gifts collected" here.
+  const { data: profile } = useUserProfile(user?.handle ?? null)
   const setCurrentUser = useSetCurrentUser()
   const setWrldUser = useAuthStore((s) => s.setWrldUser)
 
@@ -171,6 +182,9 @@ export function MeScreen() {
     )
   }
 
+  const gifts = profile?.giftsReceived ?? []
+  const totalGifts = gifts.reduce((sum, g) => sum + g.count, 0)
+
   return (
     <ScreenScroll header={<ScreenHeader title="Me" />} contentContainerStyle={styles.content}>
       <AvatarPicker
@@ -238,6 +252,27 @@ export function MeScreen() {
 
       <PursesCard spaceBucks={user.spaceBucks} starDust={user.stardust} />
 
+      {gifts.length > 0 && (
+        <View style={styles.giftsCard}>
+          <View style={styles.giftsHeader}>
+            <Text variant="monoLabel" color={theme.colors.text.subtle}>
+              GIFTS COLLECTED
+            </Text>
+            <Text variant="monoLabel" color={theme.colors.text.subtle}>
+              {formatCount(totalGifts)}
+            </Text>
+          </View>
+          <View style={styles.giftsRow}>
+            {gifts.map((g) => (
+              <View key={g.giftType} style={styles.giftCell}>
+                <Text variant="display">{g.emoji}</Text>
+                <Text variant="bodyEmphasized">{formatCount(g.count)}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
+
       {/* Library + Wallet moved off the footer — reached from here now. */}
       <Button
         label="Wallet"
@@ -286,5 +321,26 @@ const styles = StyleSheet.create({
   fieldBtns: {
     flexDirection: 'row',
     gap: theme.spacing.sm,
+  },
+  giftsCard: {
+    borderWidth: 1,
+    borderColor: theme.colors.border.subtle,
+    borderRadius: theme.radius.md,
+    padding: theme.spacing.md,
+    gap: theme.spacing.sm,
+  },
+  giftsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  giftsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  giftCell: {
+    alignItems: 'center',
+    gap: 2,
   },
 })
