@@ -94,9 +94,13 @@ const EMPTY_SESSIONS: BufferSession[] = []
 // at the head, HLS latency at the live edge) is a gap, so the clip never renders
 // longer than its footage and never bleeds the next session's head into the tail.
 // Falls back to `durationSec` / 0 against an older backend that omits the fields.
+// THE single source of truth for a session's length: the real flushed media
+// (the served HLS playlist's EXTINF sum), precise — never the rounded durationSec.
+// Both the timeline geometry AND the playback media-time math derive from this, so
+// they're locked to the same value (and to what the player actually plays).
+const sessionMediaSec = (s: BufferSession) => Math.max(0, s.mediaDurationSec ?? s.durationSec)
 const sessionStartMs = (s: BufferSession) => Date.parse(s.startedAt) + (s.mediaStartOffsetMs ?? 0)
-const sessionEndMs = (s: BufferSession) =>
-  sessionStartMs(s) + Math.max(0, s.mediaDurationSec ?? s.durationSec) * 1000
+const sessionEndMs = (s: BufferSession) => sessionStartMs(s) + sessionMediaSec(s) * 1000
 
 // Dev-only video diagnostics (stripped from production by the __DEV__ guard).
 function vlog(msg: string, extra?: unknown) {
@@ -290,7 +294,7 @@ export const ClipEditScreen = () => {
       .filter((s) => s.kinds.includes('camera'))
       .map((s) => {
         const mediaStart = acc
-        acc += Math.max(0, s.durationSec)
+        acc += sessionMediaSec(s)
         return { s, mediaStart, mediaEnd: acc }
       })
   })()
@@ -348,7 +352,7 @@ export const ClipEditScreen = () => {
       const st = sessionStartMs(c.s)
       const en = sessionEndMs(c.s)
       if (playheadMs >= st && playheadMs <= en) {
-        return c.mediaStart + Math.min(Math.max(0, c.s.durationSec), Math.max(0, (playheadMs - st) / 1000))
+        return c.mediaStart + Math.min(sessionMediaSec(c.s), Math.max(0, (playheadMs - st) / 1000))
       }
     }
     if (playheadMs <= sessionStartMs(camCum[0]!.s)) return 0
@@ -542,7 +546,7 @@ export const ClipEditScreen = () => {
       const st = sessionStartMs(c.s)
       const en = sessionEndMs(c.s)
       if (ms >= st && ms <= en) {
-        return c.mediaStart + Math.min(Math.max(0, c.s.durationSec), Math.max(0, (ms - st) / 1000))
+        return c.mediaStart + Math.min(sessionMediaSec(c.s), Math.max(0, (ms - st) / 1000))
       }
     }
     return null
@@ -843,7 +847,7 @@ export const ClipEditScreen = () => {
       const st = sessionStartMs(c.s)
       const en = sessionEndMs(c.s)
       if (ms >= st && ms <= en) {
-        global = c.mediaStart + Math.min(Math.max(0, c.s.durationSec), Math.max(0, (ms - st) / 1000))
+        global = c.mediaStart + Math.min(sessionMediaSec(c.s), Math.max(0, (ms - st) / 1000))
         break
       }
     }
