@@ -23,6 +23,7 @@ import { ToastBanner } from '@/components/features/feedback/ToastBanner'
 import { SearchBar } from '@/components/features/discovery/SearchBar'
 import { ScaleBar } from '@/components/features/discovery/ScaleBar'
 import { TimeScrubber } from '@/components/features/discovery/TimeScrubber'
+import { LiveClockBar } from '@/components/features/discovery/LiveClockBar'
 import { PlaceResult } from '@/components/features/discovery/PlaceResult'
 import { SwapCard } from '@/components/features/identity/SwapCard'
 import { AccountIDPill } from '@/components/features/user/AccountIDPill'
@@ -501,6 +502,19 @@ export function FeatureGallery() {
       <Section title="TimeScrubber">
         <Row label="live (ticking) — tap to expand, drag a field to scrub">
           <TimeScrubberDemo />
+        </Row>
+        <Row label="interactive=false — passive live readout (no tap/scrub)">
+          <View style={styles.darkStage}>
+            <TimeScrubber offsetMs={0} onOffsetChange={() => {}} interactive={false} />
+          </View>
+        </Row>
+      </Section>
+
+      <Section title="LiveClockBar">
+        <Row label="live readout — the WRLD clock as footer chrome (Dashboard / Stream)">
+          <View style={styles.darkStage}>
+            <LiveClockBar />
+          </View>
         </Row>
       </Section>
 

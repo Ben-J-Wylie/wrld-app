@@ -123,6 +123,11 @@ type Props = {
   // pause playback while spinning and resume on release. Independent of `playback`.
   onScrubStart?: () => void
   onScrubEnd?: () => void
+  // When false, the dial is a passive live readout — no tap-to-expand, no scrub.
+  // Used by LiveClockBar on screens with no time-travel surface (Dashboard,
+  // Stream): the clock ticks live (NOW) but can't be driven. Default true (the
+  // globe + clip editor scrub).
+  interactive?: boolean
   style?: StyleProp<ViewStyle>
 }
 
@@ -140,6 +145,7 @@ export function TimeScrubber({
   playback = true,
   onScrubStart,
   onScrubEnd,
+  interactive = true,
   style,
 }: Props) {
   const [expanded, setExpanded] = useState(false)
@@ -301,6 +307,7 @@ export function TimeScrubber({
     onScrub: scrub,
     onScrubEnd: scrubEnd,
     onToggle: toggleExpand,
+    interactive,
   }
 
   return (
@@ -374,6 +381,7 @@ function Field({
   onScrub,
   onScrubEnd,
   onToggle,
+  interactive,
 }: {
   fieldKey: FieldKey
   playhead: Date
@@ -384,6 +392,7 @@ function Field({
   onScrub: (key: FieldKey, startPlayhead: Date, delta: number) => void
   onScrubEnd: () => void
   onToggle: () => void
+  interactive: boolean
 }) {
   // One responder per field handles BOTH tap (toggle expand) and drag (dial)
   // — no parent Pressable to fight for the touch. A near-still release is a
@@ -448,7 +457,7 @@ function Field({
     <View
       style={[styles.field, { width: FIELD_W[fieldKey] }]}
       hitSlop={HIT_SLOP}
-      {...responder.panHandlers}
+      {...(interactive ? responder.panHandlers : {})}
     >
       <Animated.View style={{ transform: [{ translateY: slide }] }}>
         {WINDOW.map((delta) => {

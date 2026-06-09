@@ -1,12 +1,12 @@
 // app/(app)/_layout.tsx
 //
 // Tabs scaffold with a custom 5-item footer:
-//   Globe · Dashboard · [Stream] · Me · Events
+//   Globe · Dashboard · [Stream] · Clips · Me
 // The center "Stream" item is the broadcaster's own stream view — an accent
 // dot that's static when idle and pulses concentric rings while live (read
 // from useBroadcastStore). Tapping it opens stream/new (the armed preview,
-// or the live view if already broadcasting). Library + Wallet moved off the
-// footer; they're reached from the Me screen now.
+// or the live view if already broadcasting). Library, Wallet + Events moved
+// off the footer; they're reached from the Me screen now.
 //
 // The footer is a fully custom bar (not BottomTabBar) so we control exactly
 // five slots regardless of how many href:null routes exist; it navigates via
@@ -141,8 +141,8 @@ function AppTabBar() {
           {isLive ? 'Live' : 'Stream'}
         </Text>
       </Pressable>
+      <TabButton icon="film" label="Clips" active={pathname.startsWith('/clip-editor')} onPress={() => router.navigate('/(app)/clip-editor')} />
       <TabButton icon="user" label="Me" active={pathname.startsWith('/me')} onPress={() => router.navigate('/(app)/me')} />
-      <TabButton icon="calendar" label="Events" active={pathname.startsWith('/ppv')} onPress={() => router.navigate('/(app)/ppv')} />
     </View>
   )
 }
@@ -157,12 +157,12 @@ export default function AppLayout() {
       >
         <Tabs.Screen name="globe" options={{ title: 'Globe' }} />
         <Tabs.Screen name="dashboard" options={{ title: 'Dashboard' }} />
+        <Tabs.Screen name="clip-editor" options={{ title: 'Clips' }} />
         <Tabs.Screen name="me" options={{ title: 'Me' }} />
-        <Tabs.Screen name="ppv" options={{ title: 'Events' }} />
         {/* Off the footer — reached from Me. */}
+        <Tabs.Screen name="ppv" options={{ href: null }} />
         <Tabs.Screen name="library" options={{ href: null }} />
         <Tabs.Screen name="wallet" options={{ href: null }} />
-        <Tabs.Screen name="clip-editor" options={{ href: null }} />
         {/* Non-tab routes. */}
         <Tabs.Screen name="creator-onboarding" options={{ href: null }} />
         <Tabs.Screen name="broadcaster-onboarding" options={{ href: null }} />

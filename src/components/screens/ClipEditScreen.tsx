@@ -19,7 +19,7 @@ import { RefreshControl, StyleSheet, View } from 'react-native'
 import { ScreenScroll } from '@/components/sections/ScreenScroll'
 import { ScreenHeader } from '@/components/sections/ScreenHeader'
 import { PageTabs } from '@/components/features/navigation/PageTabs'
-import { TimeScrubber } from '@/components/features/discovery/TimeScrubber'
+import { TimeScrubber, CLOCK_COLLAPSED_H } from '@/components/features/discovery/TimeScrubber'
 import { Text } from '@/components/primitives/Text'
 import { Input } from '@/components/primitives/Input'
 import { Pressable } from '@/components/primitives/Pressable'
@@ -1061,6 +1061,7 @@ export const ClipEditScreen = () => {
   const canSave = bracket != null && bracket.outMs - bracket.inMs >= MIN_BRACKET_MS
 
   return (
+    <View style={styles.root}>
     <ScreenScroll
       header={<ScreenHeader title="Clip editor" onBack={() => router.back()} />}
       contentContainerStyle={styles.content}
@@ -1089,12 +1090,11 @@ export const ClipEditScreen = () => {
 
       {page === 'editor' ? (
         <View style={styles.editor}>
-          {/* Field + time-machine clock as a FLUSH group (no gap): the clock sits
-              directly against the bottom of the buffer view, above the transport.
-              Expand the clock to spin-scrub the buffer; both place the playhead. While
-              expanded the screen scroll is locked; touching the field (or anything
-              below) collapses it — the clock itself isn't collapse-wrapped. The field,
-              clock, and timeline share the editor's lg padding, not full-bleed. */}
+          {/* The buffer scrub field. The clock that drives this field's playhead
+              is no longer flush beneath it — it's docked at the bottom of the
+              screen (above the footer), the predictable cross-screen clock
+              pattern (globe / dashboard / stream). Field and docked clock still
+              scrub the same playhead; touching the field collapses the clock. */}
           <View>
             <View style={styles.fieldWrap} onTouchStart={collapseClock}>
               <BufferScrubField
@@ -1118,15 +1118,6 @@ export const ClipEditScreen = () => {
                 onScrubEnd={handleScrubEnd}
               />
             </View>
-            <TimeScrubber
-              offsetMs={offsetForClock}
-              onOffsetChange={(v) => placePlayhead(Date.now() - v)}
-              onScrubStart={handleScrubStart}
-              onScrubEnd={handleScrubEnd}
-              onExpandedChange={setClockExpanded}
-              collapseSignal={collapseSignal}
-              playback={false}
-            />
           </View>
 
           <View onTouchStart={collapseClock}>
@@ -1251,6 +1242,24 @@ export const ClipEditScreen = () => {
         onDismiss={() => setDrawerOpen(false)}
       />
     </ScreenScroll>
+
+      {/* WRLD clock — docked flush above the app footer (the predictable
+          cross-screen pattern). Interactive here: scrubbing the dial drives the
+          buffer playhead, same as the field/timeline. Editor page only. */}
+      {page === 'editor' && (
+        <View style={styles.clockDock}>
+          <TimeScrubber
+            offsetMs={offsetForClock}
+            onOffsetChange={(v) => placePlayhead(Date.now() - v)}
+            onScrubStart={handleScrubStart}
+            onScrubEnd={handleScrubEnd}
+            onExpandedChange={setClockExpanded}
+            collapseSignal={collapseSignal}
+            playback={false}
+          />
+        </View>
+      )}
+    </View>
   )
 }
 
@@ -1342,8 +1351,14 @@ function fmtClock(ms: number): string {
 }
 
 const styles = StyleSheet.create({
+  root: { flex: 1 },
+  // WRLD clock dock — flush above the app footer, spanning full width. The
+  // interactive dial expands upward over the editor, so it's bottom-anchored.
+  clockDock: { position: 'absolute', left: 0, right: 0, bottom: 0 },
   content: {
-    paddingBottom: theme.spacing.xxxl,
+    // Extra bottom clearance so the Save button isn't hidden behind the docked
+    // clock's collapsed band.
+    paddingBottom: theme.spacing.xxxl + CLOCK_COLLAPSED_H,
   },
   pager: {
     marginTop: theme.spacing.sm,

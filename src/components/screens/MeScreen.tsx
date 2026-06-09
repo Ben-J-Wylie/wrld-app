@@ -238,7 +238,7 @@ export function MeScreen() {
 
       <PursesCard spaceBucks={user.spaceBucks} starDust={user.stardust} />
 
-      {/* Library + Wallet moved off the footer — reached from here now. */}
+      {/* Library, Wallet + Events moved off the footer — reached from here now. */}
       <Button
         label="Wallet"
         onPress={() => router.push('/(app)/wallet')}
@@ -250,8 +250,8 @@ export function MeScreen() {
         variant="secondary"
       />
       <Button
-        label="Clip editor"
-        onPress={() => router.push('/(app)/clip-editor')}
+        label="Events"
+        onPress={() => router.push('/(app)/ppv')}
         variant="secondary"
       />
       <Button

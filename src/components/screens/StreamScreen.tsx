@@ -62,7 +62,9 @@ import { Icon } from '@/components/primitives/Icon'
 import { IconButton } from '@/components/primitives/IconButton'
 import { HelpText } from '@/components/primitives/HelpText'
 import { LivePill } from '@/components/features/stream/LivePill'
+import { Avatar } from '@/components/primitives/Avatar'
 import { GoLiveRecordBar } from '@/components/features/broadcast/GoLiveRecordBar'
+import { LiveClockBar, LIVE_CLOCK_BAR_H } from '@/components/features/discovery/LiveClockBar'
 import { BroadcasterRow } from '@/components/features/user/BroadcasterRow'
 import {
   ChatMessage as ChatMessageRow,
@@ -329,6 +331,10 @@ export function StreamScreen() {
   const showCameraPreview = isNew && !!localStream && isCameraArmed
   const showRemoteVideo = !isNew && status === 'in-room' && !!remoteStream && broadcastSources.includes('camera')
   const showOverlay = showCameraPreview || showRemoteVideo
+  // True while THIS broadcaster is live — drives the header page name ("Live")
+  // and the live info row (LivePill + avatar + viewer count) that takes the
+  // title input's place.
+  const isLiveBroadcast = isNew && status === 'in-room' && !streamEnded
 
   // Physical device orientation (sensed via DeviceMotion — the app UI is
   // portrait-locked, so this is the only way to know how the phone is held).
@@ -430,27 +436,41 @@ export function StreamScreen() {
 
   const showControls = isNew || !showOverlay || controlsVisible
 
+  // Camera box top = the measured bottom of the header. The bordered header
+  // strip is the SAME height pre-live and live (logo + one row, swapped input ↔
+  // live-info), so this — and the camera crop below it — never jumps on go-live.
+  // Falls back to a sane offset until measured.
+  const camTop = headerBottom || insets.top + 96
+
   // Docked-footer bottom padding (Go Live / End Stream), and the shared offset
   // for things that float just ABOVE that 54-tall button — the preview
   // camera-flip button and the live chat composer both sit here so they clear it.
   const footerPad = Math.max(theme.spacing.sm, insets.bottom + theme.spacing.md - FOOTER_DROP)
-  // Components (chat input · send · flip) sit so the gap ABOVE the End Stream
-  // button equals the gap BELOW it (footerPad) — symmetric around the 54-tall
-  // button. EndStream top = footerPad + 54; we want the components a further
-  // footerPad up. They render `sm` above composerBottom, so subtract that sm.
-  const floatAboveFooter = footerPad + 54 + footerPad - theme.spacing.sm
+  // Camera box bottom. Broadcaster: sit just ABOVE the Go Live / End Stream
+  // button (button height 54 + footerPad below it + the clock), with an `sm`
+  // gap above the button — so the page reads input → camera → button → clock
+  // with the SAME spacing as the dashboard (header → scroll → button → clock).
+  // Viewer: there's no button, so the camera runs down to the clock top.
+  const camBottom = isNew
+    ? footerPad + LIVE_CLOCK_BAR_H + 54 + theme.spacing.sm
+    : LIVE_CLOCK_BAR_H
+  // The bottom control line (chat toggle · chat input · send · flip) sits just
+  // INSIDE the bottom edge of the camera frame (sm above camBottom), overlaid on
+  // the video — not down in the End-Stream-button / clock zone. They render `sm`
+  // above composerBottom, so anchor at camBottom (the +sm lands them at the edge).
+  const controlsLineBottom = camBottom
 
-  // Shared bottom anchor for the chat composer AND the camera-flip button, so
-  // input · send · flip sit on one line and travel together. Keyboard up → hug
+  // Shared bottom anchor for the chat composer, the camera-flip button, AND the
+  // chat toggle so they sit on one line and travel together. Keyboard up → hug
   // the top of the keyboard: `bottom:` is measured from the SafeAreaView's
   // (inset) bottom, but `endCoordinates.height` is measured from the real screen
   // bottom, so subtract insets.bottom or the row floats a safe-inset too high.
-  // Keyboard down → the broadcaster's float-above-footer slot (viewers bottom).
+  // Keyboard down → the broadcaster's inside-the-frame line (viewers bottom).
   const composerBottom =
     keyboardHeight > 0
       ? Math.max(0, keyboardHeight - insets.bottom)
       : isNew
-        ? floatAboveFooter
+        ? controlsLineBottom
         : 0
 
   function scheduleHide() {
@@ -1016,37 +1036,53 @@ export function StreamScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {showCameraPreview &&
-        // Local preview.
-        // iOS: CONTINUOUS gimbal — CameraPreview renders an
-        // AVCaptureVideoPreviewLayer off the WebRTC capturer's AVCaptureSession
-        // and counter-rotates it by the physical roll (cover-scaled) so the
-        // scene stays vertical at any tilt, matching Android.
-        // Android: already orients correctly on its own — keep RTCView (cover,
-        // no override). The recording is oriented separately (server-side bake).
-        (Platform.OS === 'ios' ? (
-          <CameraPreview
-            streamURL={(localStream as unknown as { toURL(): string }).toURL()}
-            style={StyleSheet.absoluteFill}
-            rotationDeg={previewGimbalDeg}
-            mirror={facingMode === 'user'}
-            onZoomChange={handlePreviewZoom}
-          />
-        ) : (
-          <GestureDetector gesture={androidZoomGesture}>
-            <View style={StyleSheet.absoluteFill} collapsable={false}>
-              <RTCView
+      {/* Camera — bounded in a box from below the top chrome (header / title
+          input) down to the top of the clock.
+          iOS broadcaster: WRLDCameraPreview (the gimbal layer) — keeps the scene
+          vertical at any tilt and carries native pinch-zoom. It cover-scales (no
+          contain), so the iOS preview fills the box rather than letterboxing —
+          orientation correctness wins over the full-frame view (reverted the
+          earlier RTCView-contain swap, which broke preview orientation on tilt).
+          Android broadcaster + viewer: RTCView with objectFit "contain" so the
+          FULL frame shows (black letterbox fills the rest). */}
+      {showOverlay && (
+        <View style={[styles.cameraBox, { top: camTop, bottom: camBottom }]}>
+          {showCameraPreview ? (
+            Platform.OS === 'android' ? (
+              <GestureDetector gesture={androidZoomGesture}>
+                <View style={StyleSheet.absoluteFill} collapsable={false}>
+                  <RTCView
+                    streamURL={(localStream as unknown as { toURL(): string }).toURL()}
+                    style={StyleSheet.absoluteFill}
+                    objectFit="contain"
+                    mirror={facingMode === 'user'}
+                    zOrder={0}
+                  />
+                </View>
+              </GestureDetector>
+            ) : (
+              <CameraPreview
                 streamURL={(localStream as unknown as { toURL(): string }).toURL()}
                 style={StyleSheet.absoluteFill}
-                objectFit="cover"
+                rotationDeg={previewGimbalDeg}
                 mirror={facingMode === 'user'}
-                zOrder={0}
+                onZoomChange={handlePreviewZoom}
               />
-            </View>
-          </GestureDetector>
-        ))}
+            )
+          ) : (
+            <RTCView
+              streamURL={(remoteStream as unknown as { toURL(): string }).toURL()}
+              style={StyleSheet.absoluteFill}
+              objectFit="contain"
+              mirror={false}
+              zOrder={0}
+            />
+          )}
+        </View>
+      )}
 
-      {/* Pinch-to-zoom level indicator (broadcaster preview, iOS + Android). */}
+      {/* Pinch-to-zoom level indicator (broadcaster preview — Android JS pinch +
+          iOS native pinch via CameraPreview). */}
       {showCameraPreview && zoomLabel && (
         <Animated.View style={[styles.zoomPill, { opacity: zoomOpacity }]} pointerEvents="none">
           <Text variant="monoLabel" color={theme.colors.text.inverse}>
@@ -1055,14 +1091,20 @@ export function StreamScreen() {
         </Animated.View>
       )}
 
-      {showRemoteVideo && (
-        <RTCView
-          streamURL={(remoteStream as unknown as { toURL(): string }).toURL()}
-          style={StyleSheet.absoluteFill}
-          objectFit="cover"
-          mirror={false}
-          zOrder={0}
-        />
+      {/* Chat toggle — far left of the bottom control line (alongside the chat
+          input · send · flip), inside the camera frame, while the broadcaster is
+          live. Shares the composer's bottom anchor so it sits on the same line
+          and rises with the keyboard. */}
+      {isLiveBroadcast && (
+        <View style={[styles.frameChatBtn, { bottom: composerBottom + theme.spacing.sm }]}>
+          <IconButton
+            name={chatOpen ? 'x' : 'message-circle'}
+            variant="surface"
+            size="lg"
+            onPress={() => setChatOpen((o) => !o)}
+            accessibilityLabel={chatOpen ? 'Close chat' : 'Open chat'}
+          />
+        </View>
       )}
 
       {/* Top scrim behind the header — same cream gradient as the globe's top
@@ -1104,12 +1146,11 @@ export function StreamScreen() {
         </View>
       )}
 
-      {/* Camera flip — shares the chat composer's bottom anchor so it sits on the
-          exact same line as the chat input + send button (all three 44-tall, both
-          travel with the keyboard). `+ sm` matches the composer's paddingBottom.
-          Sits in the right margin the chat panel leaves open. */}
+      {/* Camera flip — top-right of the camera frame. Moved off the bottom line
+          so the chat input gets the full width and the send button takes the
+          bottom-right corner the flip used to hold. */}
       {showCameraPreview && (
-        <View style={[styles.flipBtn, { bottom: composerBottom + theme.spacing.sm }]}>
+        <View style={[styles.flipBtn, { top: camTop + theme.spacing.sm }]}>
           <IconButton
             name="repeat"
             variant="surface"
@@ -1124,50 +1165,60 @@ export function StreamScreen() {
         <Pressable style={StyleSheet.absoluteFill} onPress={handleTap} />
       )}
 
-      {isNew && status !== 'in-room' && !streamEnded ? (
-        // Broadcaster, pre-live: the shared brand header (page = "Go Live"),
-        // matching the dashboard / globe so the title field below lines up.
-        <ScreenHeader title="Go Live" style={styles.previewHeaderPad} />
-      ) : (
+      {/* Header — logo + page name ("Go Live" → "Live" once live), matching the
+          dashboard's bordered header. For the broadcaster the row below swaps
+          the title input (pre-live) for the live info (LivePill + avatar +
+          viewer count) when live — both rows the same height, so the header
+          height (and the camera crop below it) doesn't move on go-live. The
+          viewer keeps its back + tip/flag/chat row. Both carry the dashboard's
+          faint bottom border + sm bottom space. */}
+      {isNew ? (
         <View
-          style={[styles.header, styles.headerRow]}
+          style={styles.headerBorder}
           onLayout={(e) =>
             setHeaderBottom(e.nativeEvent.layout.y + e.nativeEvent.layout.height)
           }
         >
-        {isNew ? (
-          // Broadcaster: no back button (leave via the tab bar / End Stream).
-          // While live, the live pill + identity + viewer count sit top-left.
-          status === 'in-room' && !streamEnded ? (
-            <View style={styles.broadcasterTopLeft}>
-              <LivePill />
-              {broadcaster && (
-                <BroadcasterRow
-                  variant="chip"
-                  avatarUrl={broadcaster.avatarUrl}
-                  displayName={broadcaster.displayName}
-                  handle={broadcaster.handle}
+          <ScreenHeader
+            title={isLiveBroadcast ? 'Live' : 'Go Live'}
+            style={styles.previewHeaderPad}
+          />
+          {isSignedIn && (
+            <View style={styles.titleRow}>
+              {isLiveBroadcast ? (
+                <View style={styles.liveInfoRow}>
+                  <LivePill />
+                  {broadcaster && (
+                    <Avatar
+                      size="sm"
+                      avatarUrl={broadcaster.avatarUrl}
+                      displayName={broadcaster.displayName}
+                    />
+                  )}
+                  <Pressable onPress={openViewerList} hitSlop={8}>
+                    <Text variant="body" color={theme.colors.text.primary}>
+                      {viewerCount} {viewerCount === 1 ? 'viewer' : 'viewers'}
+                    </Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <Input
+                  placeholder="What's happening?"
+                  value={cfg?.title ?? ''}
+                  onChangeText={updatePreviewTitle}
+                  autoCorrect={false}
                 />
               )}
-              <Pressable onPress={openViewerList} hitSlop={8}>
-                <Text variant="caption" color={theme.colors.text.inverse}>
-                  {viewerCount} {viewerCount === 1 ? 'viewer' : 'viewers'}
-                </Text>
-              </Pressable>
-              {/* Chat toggle/close — on the left beneath the viewer count (for
-                  now). Surface + lg to match the send / camera-flip buttons. */}
-              <IconButton
-                name={chatOpen ? 'x' : 'message-circle'}
-                variant="surface"
-                size="lg"
-                onPress={() => setChatOpen((o) => !o)}
-                accessibilityLabel={chatOpen ? 'Close chat' : 'Open chat'}
-              />
             </View>
-          ) : (
-            <View />
-          )
-        ) : (
+          )}
+        </View>
+      ) : (
+        <View
+          style={[styles.header, styles.headerRow, styles.headerBorder]}
+          onLayout={(e) =>
+            setHeaderBottom(e.nativeEvent.layout.y + e.nativeEvent.layout.height)
+          }
+        >
           <IconButton
             name="arrow-left"
             variant={showOverlay ? 'surface' : 'ghost'}
@@ -1175,56 +1226,55 @@ export function StreamScreen() {
             onPress={handleBack}
             accessibilityLabel="Back"
           />
-        )}
-        {!isNew && status === 'in-room' && !streamEnded && (
-          <View style={styles.headerActions}>
-            <Pressable onPress={handleTipPress} style={styles.tipHeaderBtn} hitSlop={8}>
-              <Text variant="monoLabel" color={theme.colors.accent.default}>
-                🚀 TIP
-              </Text>
-            </Pressable>
-            <IconButton
-              name="flag"
-              variant={showOverlay ? 'surface' : 'ghost'}
-              size="md"
-              onPress={handleReportPress}
-              accessibilityLabel="Report stream"
-            />
-            <IconButton
-              name={chatOpen ? 'x' : 'message-circle'}
-              variant={showOverlay ? 'surface' : 'ghost'}
-              size="md"
-              onPress={() => setChatOpen((o) => !o)}
-              accessibilityLabel={chatOpen ? 'Close chat' : 'Open chat'}
-            />
-          </View>
-        )}
+          {status === 'in-room' && !streamEnded && (
+            <View style={styles.headerActions}>
+              <Pressable onPress={handleTipPress} style={styles.tipHeaderBtn} hitSlop={8}>
+                <Text variant="monoLabel" color={theme.colors.accent.default}>
+                  🚀 TIP
+                </Text>
+              </Pressable>
+              <IconButton
+                name="flag"
+                variant={showOverlay ? 'surface' : 'ghost'}
+                size="md"
+                onPress={handleReportPress}
+                accessibilityLabel="Report stream"
+              />
+              <IconButton
+                name={chatOpen ? 'x' : 'message-circle'}
+                variant={showOverlay ? 'surface' : 'ghost'}
+                size="md"
+                onPress={() => setChatOpen((o) => !o)}
+                accessibilityLabel={chatOpen ? 'Close chat' : 'Open chat'}
+              />
+            </View>
+          )}
         </View>
       )}
 
-      {/* Pre-live: the "What's happening" field sits directly under the brand
-          header, at the same Y as the globe search / dashboard title so it
-          doesn't jump when switching tabs. */}
-      {isNew && status === 'idle' && !streamEnded && isSignedIn && (
-        <View style={styles.previewTop}>
-          <Input
-            placeholder="What's happening?"
-            value={cfg?.title ?? ''}
-            onChangeText={updatePreviewTitle}
-            autoCorrect={false}
-          />
-          {!anyAirArmed && (
-            <Text variant="caption" color={theme.colors.text.muted} style={styles.center}>
-              Arm a source on the dashboard to go live
-            </Text>
-          )}
-          {locationLoading && !coords && (
-            <Text variant="caption" color={theme.colors.text.muted} style={styles.center}>
-              Detecting location…
-            </Text>
-          )}
-        </View>
-      )}
+      {/* Pre-live hints — float just below the header line, over the camera (or
+          the empty cream area when no camera is armed). Rendered as chips with
+          a translucent dark fill so they read on either background, and kept
+          OUT of the header so they never change its height / move the crop. */}
+      {isNew && status === 'idle' && !streamEnded && isSignedIn &&
+        (!anyAirArmed || (locationLoading && !coords)) && (
+          <View style={[styles.previewHints, { top: camTop + theme.spacing.sm }]} pointerEvents="none">
+            {!anyAirArmed && (
+              <View style={styles.hintChip}>
+                <Text variant="caption" color={theme.colors.text.inverse}>
+                  Arm a source on the dashboard to go live
+                </Text>
+              </View>
+            )}
+            {locationLoading && !coords && (
+              <View style={styles.hintChip}>
+                <Text variant="caption" color={theme.colors.text.inverse}>
+                  Detecting location…
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
 
       {showControls && (
         <View style={styles.content}>
@@ -1437,7 +1487,7 @@ export function StreamScreen() {
           moving between the two pages while not live. */}
       {isNew && status === 'idle' && isSignedIn && (
         <View
-          style={[styles.broadcasterFooter, { paddingBottom: footerPad }]}
+          style={[styles.broadcasterFooter, { paddingBottom: footerPad + LIVE_CLOCK_BAR_H }]}
           pointerEvents="box-none"
         >
           <GoLiveRecordBar
@@ -1455,7 +1505,7 @@ export function StreamScreen() {
           recording is implicit under the rolling-buffer model.) */}
       {isNew && status === 'in-room' && !streamEnded && (
         <View
-          style={[styles.broadcasterFooter, { paddingBottom: footerPad }]}
+          style={[styles.broadcasterFooter, { paddingBottom: footerPad + LIVE_CLOCK_BAR_H }]}
           pointerEvents="box-none"
         >
           <GoLiveRecordBar
@@ -1479,6 +1529,11 @@ export function StreamScreen() {
         <View
           style={[
             styles.chatPanel,
+            // Panel spans lg-to-lg, so the message list aligns at the left margin
+            // (the chat toggle's left edge) and the send button lands on the right
+            // margin (mirroring the toggle). The composer itself is inset past the
+            // toggle below; the message list stays flush left.
+            { left: theme.spacing.lg, right: theme.spacing.lg },
             // Stretch from just below the header's close-X down to the composer
             // (top + bottom, NO height) so the panel HEIGHT — not its top — tracks
             // the keyboard. The top crop sits a footerPad below the header's bottom
@@ -1506,8 +1561,17 @@ export function StreamScreen() {
               />
             ))}
           </ScrollView>
-          {/* Bottom crop = footerPad — the same gap as below the End Stream button. */}
-          <View style={[styles.composerWrap, { paddingTop: footerPad }]}>
+          {/* Bottom crop = footerPad — the same gap as below the End Stream button.
+              Broadcaster: inset left past the far-left chat toggle so the input
+              starts after it (with an sm gap) and the send mirrors it on the right
+              — equal sm gaps on either side of the input. */}
+          <View
+            style={[
+              styles.composerWrap,
+              { paddingTop: footerPad },
+              isNew && { paddingLeft: 44 + theme.spacing.sm },
+            ]}
+          >
             <ChatComposer
               value={chatInput}
               onChangeText={setChatInput}
@@ -1623,12 +1687,32 @@ export function StreamScreen() {
           </Text>
         </View>
       )}
+
+      {/* WRLD clock — pinned flush above the app footer in every stream mode
+          (broadcaster preview/live + viewer), the predictable cross-screen
+          pattern. Live readout only; pointerEvents none so it never steals
+          touches from the controls beneath it. The Go Live / End Stream bar is
+          offset up by LIVE_CLOCK_BAR_H to sit above it. */}
+      <View style={styles.clockDock} pointerEvents="none">
+        <LiveClockBar />
+      </View>
     </SafeAreaView>
   )
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.bg.primary },
+  // WRLD clock dock — flush above the app footer, spanning full width.
+  clockDock: { position: 'absolute', left: 0, right: 0, bottom: 0 },
+  // Camera box — bounded below the top chrome (inline `top`) to just above the
+  // Go Live / End Stream button for the broadcaster, or the clock top for the
+  // viewer (inline `bottom`). Black so the contain letterbox bars read as such.
+  cameraBox: { position: 'absolute', left: 0, right: 0, backgroundColor: '#000' },
+  // Chat toggle parked at the far left of the bottom control line while live
+  // (`bottom` set inline to the shared composer line). zIndex above the chat
+  // panel (10) so the ✕ stays tappable to close when chat is open — the panel
+  // now spans from this same left margin and would otherwise swallow the tap.
+  frameChatBtn: { position: 'absolute', left: theme.spacing.lg, zIndex: 20 },
   content: {
     flex: 1,
     padding: theme.spacing.lg,
@@ -1652,10 +1736,42 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.55)',
     zIndex: 50,
   },
-  previewTop: {
+  // Bordered header strip — faint bottom line + sm space below the content,
+  // matching the dashboard header. Applied to both the broadcaster and viewer
+  // headers.
+  headerBorder: {
+    paddingBottom: theme.spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border.subtle,
+  },
+  // Row beneath the brand header (input pre-live / live-info when live). sm gap
+  // below the header + lg side padding, matching the dashboard title row.
+  titleRow: {
     paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.sm,
+  },
+  // Live info row — LivePill + avatar + viewer count in the title input's slot.
+  // minHeight matches the Input (md = 52) so the header height — and the camera
+  // crop below it — is identical pre-live and live.
+  liveInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: theme.spacing.sm,
+    minHeight: 52,
+  },
+  // Pre-live hint chips floating just under the header line, over the camera.
+  previewHints: {
+    position: 'absolute',
+    left: theme.spacing.lg,
+    right: theme.spacing.lg,
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+  },
+  hintChip: {
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 4,
+    borderRadius: theme.radius.full,
   },
   headerRow: {
     flexDirection: 'row',
@@ -1663,15 +1779,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
-  // Broadcaster live: live pill + identity + viewer count stacked top-left,
-  // directly over the camera (no box).
-  broadcasterTopLeft: { alignItems: 'flex-start', gap: theme.spacing.xs },
   liveRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
   actions: { width: '100%', gap: theme.spacing.sm, alignItems: 'center' },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
-  // Center-tab preview: title + hints near the top, camera feed (if armed)
-  // behind; the Go Live button is docked separately (broadcasterFooter).
-  previewControls: { flex: 1, width: '100%', gap: theme.spacing.sm },
   fullWidth: { width: '100%' },
   roomInfo: { width: '100%', alignItems: 'center', gap: theme.spacing.lg },
   roomInfoOverlay: {
@@ -1729,13 +1839,9 @@ const styles = StyleSheet.create({
 
   chatPanel: {
     position: 'absolute',
-    left: 0,
-    right: 90,
     zIndex: 10,
-    // `top`/`bottom`/`height` are set inline per-case (see render) so we never
-    // combine top+bottom+height. lg so the chat input + messages share the End
-    // Stream button's left edge (same as the live-pill / viewer-count cluster).
-    paddingHorizontal: theme.spacing.lg,
+    // `left`/`right` (both lg, the screen margins) and `top`/`bottom`/`height`
+    // are set inline per-case (see render); never combine top+bottom+height.
   },
   // Right-inset the message list by the send button (44) + its gap (sm) so the
   // messages' right boundary lines up with the chat input field's right edge,
@@ -1759,8 +1865,8 @@ const styles = StyleSheet.create({
     bottom: '38%',
   },
 
-  // Camera flip — docked bottom-right above the bottom button; `bottom` is set
-  // inline to the shared float-above-footer offset (same as the chat composer).
+  // Camera flip — top-right of the camera frame; `top` is set inline to
+  // camTop + sm.
   flipBtn: {
     position: 'absolute',
     right: theme.spacing.lg,

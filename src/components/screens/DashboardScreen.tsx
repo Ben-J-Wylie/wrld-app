@@ -47,6 +47,7 @@ import { Divider } from '@/components/primitives/Divider'
 import { FeedRow, type SourceAvailability } from '@/components/features/broadcast/FeedRow'
 import { type FeedKind } from '@/components/features/broadcast/FeedThumb'
 import { GoLiveRecordBar } from '@/components/features/broadcast/GoLiveRecordBar'
+import { LiveClockBar } from '@/components/features/discovery/LiveClockBar'
 import { useBroadcastStore } from '@/stores/broadcastStore'
 import { useAuth } from '@clerk/clerk-expo'
 import { useLocation } from '@/hooks/useLocation'
@@ -489,6 +490,11 @@ export function DashboardScreen() {
           onRecordPress={handleRecordPress}
         />
       </View>
+
+      {/* WRLD clock — flush above the app footer, the predictable cross-screen
+          pattern (globe / stream / clips). Live readout only here (no surface
+          to time-travel); the Go Live bar above is bumped up by its height. */}
+      <LiveClockBar />
     </View>
   )
 }

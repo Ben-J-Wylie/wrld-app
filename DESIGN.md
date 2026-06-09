@@ -1628,8 +1628,8 @@ this feature is the lift target either way.
 - **Location:** `src/components/features/discovery/TimeScrubber.tsx`
 - **Variants:** `default` (the running WRLD clock / time machine bar)
 - **Sizes:** collapsed (~50 tall) / expanded (~104 tall)
-- **States:** live (offset 0 — ticking, "● NOW" tag), scrubbed (offset > 0 — playback playhead + muted tappable "● THEN" button); collapsed (transparent band-only over the globe) / expanded (solid `bg.glassPanel` + per-field ghosts)
-- **Used in:** `GlobeScreenMapbox` (pinned at the bottom above the tab bar; the drawer rides flush on top of it) — 2026-06-04, repositioned 2026-06-05
+- **States:** live (offset 0 — ticking, "● NOW" tag), scrubbed (offset > 0 — playback playhead + muted tappable "● THEN" button); collapsed (transparent band-only over the globe) / expanded (solid `bg.glassPanel` + per-field ghosts); **passive (`interactive=false`)** — live readout only, no tap-to-expand / no scrub (see `LiveClockBar`)
+- **Used in:** `GlobeScreenMapbox` (pinned bottom, drawer rides flush on it) + `ClipEditScreen` (docked buffer clock, `playback=false`) — both interactive. The **passive live-readout** (`interactive=false`) is wrapped by `LiveClockBar` on Dashboard + Stream — 2026-06-04, repositioned 2026-06-05, `interactive` mode 2026-06-09
 - **Tweak impact:** the globe time-machine bar
 - **Shipped:** 2026-06-04 (Time Machine initiative · UI v1)
 
@@ -1729,11 +1729,40 @@ the real data floor (WRLD launched 2026) is the backend's call.
 the neighbours sit on the transparent area when expanded). The earlier
 center-out gradient was dropped per Ben.
 
+**Passive mode (`interactive=false`, 2026-06-09).** Each `Field`'s
+`PanResponder` is only attached when `interactive` — so passing
+`interactive={false}` makes the dial a pure live readout: it still ticks
+every second (reads "● NOW"), but it can't be tapped to expand or dragged
+to scrub. This is what the clock-as-footer-chrome pattern wants on screens
+with no time-travel surface; `LiveClockBar` is the thin wrapper for it.
+
 **Seam (Aaron / backend).** The component only emits `offsetMs`;
 `GlobeScreenMapbox` holds it and carries a commented TIME-MACHINE seam at
 `useDiscoverySocket()` where the live feed swaps to a historical
 "surviving clips near, at playhead" query. Until then the globe stays live
 regardless of the clock. See CLAUDE.md "Time Machine initiative."
+
+---
+
+##### `LiveClockBar`
+
+- **Tier:** feature (wraps `TimeScrubber` in its `interactive=false` mode)
+- **Location:** `src/components/features/discovery/LiveClockBar.tsx`
+- **Variants:** `default` (passive live-readout clock)
+- **Sizes:** fixed collapsed band height (`LIVE_CLOCK_BAR_H` = `CLOCK_COLLAPSED_H`)
+- **States:** live (ticking "● NOW") only — non-interactive
+- **Used in:** Dashboard (flush above the footer, Go Live bar bumped up by its height) + Stream (pinned `bottom:0` over the camera in every mode) — the predictable "WRLD clock above the footer" pattern
+- **Tweak impact:** the persistent clock chrome on Dashboard / Stream
+- **Shipped:** 2026-06-09
+
+**Why it exists:** the WRLD clock should sit above the footer on every main
+surface as a predictable pattern. On the globe + clip editor the clock is
+*interactive* (it drives the globe replay / the buffer playhead). On the
+Dashboard + Stream there's nothing to time-travel, so the clock is a passive
+live readout — `LiveClockBar` is that one-liner (`TimeScrubber offsetMs={0}
+interactive={false}`) so screens don't repeat the boilerplate, and it exports
+`LIVE_CLOCK_BAR_H` so hosts can offset a docked Go Live / End Stream button up
+over it. See CLAUDE.md "5-item footer / clock-above-footer pattern."
 
 ---
 
@@ -4055,6 +4084,63 @@ above. The seam is not a separate motion category.
 
 Append-only. Most recent first. Each entry: date, decision, rationale,
 constraint it imposes downstream.
+
+### 2026-06-09 — Clock-above-footer pattern; Stream ⇄ Dashboard layout parity; footer reshuffle
+
+A run of layout/pixel work on `design` (footer `_layout`, `DashboardScreen`, `StreamScreen`,
+`ClipEditScreen`, `TimeScrubber`, new `LiveClockBar`; all pure JS, hot-reloadable):
+
+- **Footer reshuffle (5 slots).** Globe · Dashboard · [Stream] · **Clips** · **Me**. The clip
+  editor earned a permanent footer slot (4th); **Me** moved to 5th; **Events** left the footer for
+  a link on the Me screen (with Wallet · Library). The clip-editor link was dropped from Me (it's
+  the footer now). *Imposes:* `clip-editor` is a footer tab; `ppv` is `href:null`.
+
+- **The WRLD clock is now a predictable pattern: sticky, flush above the footer, on Globe ·
+  Dashboard · Stream · Clips.** On the globe + clip editor it stays **interactive** (drives the
+  replay / the buffer playhead). On Dashboard + Stream there's no time-travel surface, so it's a
+  **passive live readout** (decision, Ben: live-readout only, not a scrubber). *Imposes:*
+  `TimeScrubber` gained an **`interactive`** prop (default true; false detaches the per-field
+  PanResponders → no tap-to-expand / no scrub, still ticks). New thin wrapper **`LiveClockBar`**
+  (`TimeScrubber offsetMs={0} interactive={false}`) is the productised live readout and exports
+  `LIVE_CLOCK_BAR_H` so hosts can offset a docked button up over it.
+
+- **Stream ⇄ Dashboard layout parity (broadcaster).** The stream page now reads the same as the
+  dashboard top-to-bottom: **header → middle region → Go Live/End Stream button → clock**, same
+  gaps — the button sits at the dashboard's screen offset so it doesn't jump between pages. The
+  **header is unified**: always `ScreenHeader` (page name **"Go Live" → "Live"** when live), and
+  the row beneath swaps the **title input** (pre-live) for a **live-info row** (`LivePill` +
+  `Avatar` + viewer count) when live. Both rows are pinned to the input's 52px height, so the
+  header — and the camera crop below it — **never moves on go-live** (decision: no jumping crop).
+  Added the dashboard's faint **bottom border + sm space** to the header (broadcaster + viewer).
+  Pre-live hints ("Arm a source…", "Detecting location…") moved out of the header into floating
+  chips over the camera so they can't change its height.
+
+- **Camera is a bounded box, not full-bleed.** The camera renders in a box from below the header to
+  just above the button (broadcaster) / the clock top (viewer), so it sits *above* the clock
+  (decision: don't paint the camera behind the clock). Shown `objectFit="contain"` (full frame +
+  letterbox) on **Android broadcaster + viewer**; the **iOS broadcaster keeps `CameraPreview`** —
+  see the gimbal-revert bullet.
+
+- **Bottom control line moved inside the camera frame.** Chat input · send · flip used to float in
+  the button/clock zone; they're now just inside the frame's bottom edge. **Flip → top-right of the
+  frame** (off the line). The **chat toggle moved to the far left**, **mirroring the send at the
+  far right** (both at the `lg` margin), input centred between them (equal `sm` gaps); the message
+  list aligns to the toggle's left edge. *Imposes:* the chat toggle needs `zIndex: 20` (above the
+  panel's 10) or the panel — which now starts at that same left margin — swallows the ✕-to-close tap.
+
+- **Gimbal revert (iOS broadcaster).** Reversed the earlier RTCView-`contain` swap on the iOS
+  broadcaster preview — it broke preview orientation on tilt (RTCView shows the raw, rotating
+  stream; `CameraPreview`'s AVCaptureVideoPreviewLayer stays vertical). So iOS broadcaster is back
+  on `CameraPreview` (cover + native pinch-zoom). *Trade-off:* the iOS broadcaster preview is
+  cover-cropped (not full-frame); Android + viewer still contain. Full-frame **and** orientation on
+  iOS would need a `resizeMode`/contain option on the native `WRLDCameraPreview` (deferred).
+
+- **Cleanup.** Registered `LiveClockBar` + the `TimeScrubber` `interactive` mode in Section 3 and
+  the FeatureGallery; swept orphaned `StreamScreen` styles (`broadcasterTopLeft`, `previewControls`).
+
+*Not device-tested yet:* the clock spacing parity, the stable crop across go-live, the in-frame
+control line + mirrored toggle/send, the top-right flip, and the iOS gimbal orientation all need an
+on-device pass.
 
 ### 2026-06-07 — Buffer editor: transport, tap-to-seek, scrub/clock pause-resume, gap collapse
 
