@@ -239,6 +239,42 @@ function Dashboard({
         </View>
       </Section>
 
+      {/* Gifts */}
+      <Section title="Gifts" subtitle="Emoji gifts viewers sent you — collected, not cashed out (gifts spend Space Bucks 🚀; you keep the collection).">
+        <View style={styles.tripleGrid}>
+          <Kpi wide icon="gift" label="Gifts received" value={compact(s.giftsReceivedCount)} sub="across all gift types" />
+          <Kpi wide icon="zap" label="Space Bucks gifted to you" value={`🚀 ${compact(s.giftsReceivedSpaceBucks)}`} sub="spent by viewers on gifts" />
+        </View>
+        <Card variant="solid" style={styles.cardPad}>
+          <Text variant="monoLabel" color={theme.colors.text.subtle}>BY GIFT</Text>
+          <View style={styles.giftRow}>
+            {data.giftsBreakdown.map((g) => (
+              <View key={g.giftType} style={styles.giftCell}>
+                <Text variant="display">{g.emoji}</Text>
+                <Text variant="bodyEmphasized">{compact(g.count)}</Text>
+                <Text variant="monoCaption" color={theme.colors.text.subtle}>{g.label}</Text>
+              </View>
+            ))}
+          </View>
+        </Card>
+      </Section>
+      <Section title="Top gifters" subtitle="Your biggest gift senders by Space Bucks.">
+        {data.topGifters.length === 0 ? (
+          <Card variant="solid" style={styles.cardPad}>
+            <Text variant="caption" color={theme.colors.text.subtle}>No gifts yet this period.</Text>
+          </Card>
+        ) : (
+          <PeopleList
+            rows={data.topGifters.map((v) => ({
+              id: v.id, handle: v.handle, displayName: v.displayName, avatarUrl: v.avatarUrl,
+              primary: v.displayName || `@${v.handle}`,
+              sub: `@${v.handle} · ${v.giftCount} gift${v.giftCount === 1 ? '' : 's'}`,
+              metric: `🚀 ${compact(v.spaceBucks)}`, metricLabel: 'gifted',
+            }))}
+          />
+        )}
+      </Section>
+
       {/* Country map + top countries */}
       <Section title="Where your audience is watching" subtitle="Every viewer (anonymous + signed-in), resolved to a country.">
         <Card variant="solid" style={styles.mapCard}>
@@ -796,6 +832,8 @@ const styles = StyleSheet.create({
   // Cities
   inlineRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
   cityRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 4, gap: theme.spacing.sm },
+  giftRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginTop: theme.spacing.sm },
+  giftCell: { alignItems: 'center', gap: 2, flex: 1 },
 
   // Charts
   chartCard: { padding: theme.spacing.sm, gap: theme.spacing.sm },

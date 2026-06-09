@@ -196,6 +196,27 @@ export function ProfileScreen() {
         )
       )}
 
+      {profile.giftsReceived && profile.giftsReceived.length > 0 && (
+        <View style={styles.giftsCard}>
+          <View style={styles.giftsHeader}>
+            <Text variant="monoLabel" color={theme.colors.text.subtle}>
+              GIFTS RECEIVED
+            </Text>
+            <Text variant="monoLabel" color={theme.colors.text.subtle}>
+              {formatCount(profile.giftsReceivedTotal ?? 0)} 🚀
+            </Text>
+          </View>
+          <View style={styles.giftsRow}>
+            {profile.giftsReceived.map((g) => (
+              <View key={g.giftType} style={styles.giftCell}>
+                <Text variant="display">{g.emoji}</Text>
+                <Text variant="bodyEmphasized">{formatCount(g.count)}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
+
       {isOwnProfile && (
         <Button
           label="Edit Profile"
@@ -340,6 +361,27 @@ const styles = StyleSheet.create({
     width: 1,
     height: 40,
     backgroundColor: theme.colors.border.subtle,
+  },
+  giftsCard: {
+    borderWidth: 1,
+    borderColor: theme.colors.border.subtle,
+    borderRadius: theme.radius.md,
+    padding: theme.spacing.md,
+    gap: theme.spacing.sm,
+  },
+  giftsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  giftsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  giftCell: {
+    alignItems: 'center',
+    gap: 2,
   },
   ppvSection: {
     gap: theme.spacing.sm,

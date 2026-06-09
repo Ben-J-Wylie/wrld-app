@@ -40,6 +40,25 @@ export type PublicUser = {
   isFollowing: boolean
   subscriptionEnabled: boolean
   subscriptionPriceUsd: number | null  // monthly price in cents
+  giftsReceived?: GiftCollectionItem[]
+  giftsReceivedTotal?: number          // total Space Bucks value of gifts received (display only)
+}
+
+// A gift type the viewer can send, with its live Space Bucks value (from GET /gifts/catalog).
+export type GiftCatalogItem = {
+  id: string
+  emoji: string
+  label: string
+  value: number
+}
+
+// One row of a streamer's profile gift collection.
+export type GiftCollectionItem = {
+  giftType: string
+  emoji: string
+  label: string
+  count: number
+  totalValue: number  // summed Space Bucks value received for this type (display only)
 }
 
 export type WalletTransaction = {
