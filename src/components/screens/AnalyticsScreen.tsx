@@ -243,7 +243,7 @@ function Dashboard({
       <Section title="Gifts" subtitle="Emoji gifts viewers sent you — collected, not cashed out (gifts spend Space Bucks 🚀; you keep the collection).">
         <View style={styles.tripleGrid}>
           <Kpi wide icon="gift" label="Gifts received" value={compact(s.giftsReceivedCount)} sub="across all gift types" />
-          <Kpi wide icon="zap" label="Space Bucks gifted to you" value={`🚀 ${compact(s.giftsReceivedSpaceBucks)}`} sub="spent by viewers on gifts" />
+          <Kpi wide icon="zap" label="Value of Space Bucks gifted to you" value={`🚀 ${compact(s.giftsReceivedSpaceBucks)}`} sub="spent by viewers on gifts" />
         </View>
         <Card variant="solid" style={styles.cardPad}>
           <Text variant="monoLabel" color={theme.colors.text.subtle}>BY GIFT</Text>
