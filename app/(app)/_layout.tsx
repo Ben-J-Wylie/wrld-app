@@ -128,14 +128,27 @@ function TabButton({
 function AppTabBar() {
   const pathname = usePathname()
   const isLive = useBroadcastStore((s) => s.isLive)
+  const creatorReady = useAuthStore((s) => s.wrldUser?.creatorReady ?? false)
   const insets = useSafeAreaInsets()
   const streamActive = pathname.startsWith('/stream')
+
+  // The center Stream tab opens the broadcaster preview / live view. Going live
+  // requires creator onboarding, so a non-creator is sent to finish setup
+  // instead of the preview (mirrors the Dashboard wall). An already-live
+  // broadcaster always returns straight to their stream.
+  const onStreamPress = () => {
+    if (!isLive && !creatorReady) {
+      router.navigate('/(app)/creator-onboarding')
+      return
+    }
+    returnToActiveBroadcast()
+  }
 
   return (
     <View style={[styles.tabBar, { paddingBottom: insets.bottom }]}>
       <TabButton icon="globe" label="Globe" active={pathname.startsWith('/globe')} onPress={() => router.navigate('/(app)/globe')} />
       <TabButton icon="sliders" label="Dashboard" active={pathname.startsWith('/dashboard')} onPress={() => router.navigate('/(app)/dashboard')} />
-      <Pressable style={styles.tabItem} onPress={returnToActiveBroadcast} accessibilityRole="button" accessibilityLabel="Your stream">
+      <Pressable style={styles.tabItem} onPress={onStreamPress} accessibilityRole="button" accessibilityLabel="Your stream">
         <StreamTabIcon live={isLive} />
         <Text variant="monoCaption" color={isLive || streamActive ? theme.colors.accent.default : theme.colors.text.muted}>
           {isLive ? 'Live' : 'Stream'}

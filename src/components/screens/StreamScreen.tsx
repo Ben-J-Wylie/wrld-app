@@ -39,6 +39,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Text as RNText,
   View,
 } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
@@ -80,6 +81,8 @@ import { ActionSheet } from '@/components/sections/ActionSheet'
 import { NearbyStreamsDrawer } from '@/components/features/stream/NearbyStreamsDrawer'
 import { AuthModal } from '@/components/features/stream/AuthModal'
 import { TipSheet } from '@/components/features/stream/TipSheet'
+import { GiftRail } from '@/components/features/stream/GiftRail'
+import { useGiftCatalog } from '@/hooks/useGiftCatalog'
 import { FollowButton } from '@/components/features/user/FollowButton'
 import { useInvalidateCurrentUser } from '@/hooks/useCurrentUser'
 import { useInvalidateWallet } from '@/hooks/useWallet'
@@ -100,8 +103,8 @@ import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake'
 import { useLocation } from '@/hooks/useLocation'
 import { useStream, useStreamByRoom } from '@/hooks/useStream'
 import { useAuthStore } from '@/stores/authStore'
-import type { Stream, SourceType } from '@/types'
-import type { TipEvent } from '@/hooks/useSignaling'
+import type { Stream, SourceType, GiftCatalogItem } from '@/types'
+import type { TipEvent, GiftEvent } from '@/hooks/useSignaling'
 
 const SOURCE_LABELS: Record<SourceType, string> = {
   camera: 'Camera',
@@ -171,6 +174,46 @@ const tipStyles = StyleSheet.create({
   },
 })
 
+// Floating gift burst — same upward-drift treatment as tips, shown to all peers.
+function FloatingGift({ gift, onDone }: { gift: GiftEvent; onDone: (id: number) => void }) {
+  const translateY = useRef(new Animated.Value(0)).current
+  const opacity = useRef(new Animated.Value(1)).current
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(translateY, { toValue: -140, duration: 2400, useNativeDriver: true }),
+      Animated.sequence([
+        Animated.delay(1600),
+        Animated.timing(opacity, { toValue: 0, duration: 800, useNativeDriver: true }),
+      ]),
+    ]).start(() => onDone(gift.id))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  return (
+    <Animated.View style={[tipStyles.floating, { transform: [{ translateY }], opacity }]}>
+      <View style={giftStyles.bubble}>
+        <RNText style={giftStyles.emoji}>{gift.emoji}</RNText>
+        <Text variant="caption" color={theme.colors.text.inverse}>
+          @{gift.handle}
+        </Text>
+      </View>
+    </Animated.View>
+  )
+}
+
+const giftStyles = StyleSheet.create({
+  bubble: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: theme.colors.accent.default,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 4,
+    borderRadius: theme.radius.full,
+    overflow: 'hidden',
+  },
+  emoji: { fontSize: 18 },
+})
+
 export function StreamScreen() {
   const { id, streamId: paramStreamId, sources: paramSources, lat: paramLat, lng: paramLng, go: paramGo, rec: paramRec } = useLocalSearchParams<{
     id: string
@@ -213,10 +256,11 @@ export function StreamScreen() {
     error: signalingError, setError,
     suspensionError, clearSuspensionError,
     chatMessages, reactions, broadcasterPaused,
-    tipEvents, confirmedBalance,
+    tipEvents, giftEvents, confirmedBalance,
     connect, createRoom, joinRoom, disconnect,
     sendChatMessage, sendReaction, dismissReaction,
     sendTip, dismissTip,
+    sendGift, dismissGift,
     sendLocationUpdate,
     sendBroadcasterPaused, sendBroadcasterResumed, sendBroadcasterOrientation,
   } = useSignaling()
@@ -769,6 +813,14 @@ export function StreamScreen() {
   }, [liveRecordings, activeRecordingId, isRecording])
 
   async function handleGoLive(configOverride?: CaptureConfig) {
+    // Going live requires creator onboarding (age gate + ToS + camera
+    // permission). The dashboard already walls this off; the center-tab preview
+    // path didn't, so gate here too — both go-live entry points funnel through
+    // handleGoLive. (mediasoup enforces the same as a hard server-side block.)
+    if (wrldUser && !wrldUser.creatorReady) {
+      router.push('/(app)/creator-onboarding')
+      return
+    }
     // Arming + title come from captureConfig (the shared source of truth), so
     // going live works identically from the dashboard (go=1, passes the
     // freshly-loaded config) and from the stream-view preview's Go Live
@@ -817,6 +869,9 @@ export function StreamScreen() {
       if (msg.toLowerCase().includes('suspended')) {
         // suspensionError useEffect will show the Alert; navigate back cleanly
         router.navigate('/(app)/dashboard')
+      } else if (msg.toLowerCase().includes('creator setup')) {
+        // Server-side go-live gate (non-creator). Send them to finish setup.
+        router.push('/(app)/creator-onboarding')
       } else {
         setStatus('error')
         setError(msg)
@@ -947,6 +1002,19 @@ export function StreamScreen() {
   function handleTipPress() {
     if (!isSignedIn) { setAuthModalVisible(true); return }
     setTipSheetVisible(true)
+  }
+
+  const { data: giftCatalog } = useGiftCatalog()
+
+  function handleSendGift(giftId: string) {
+    sendGift(giftId)
+  }
+
+  function handleGiftInsufficient(gift: GiftCatalogItem) {
+    Alert.alert(
+      'Not enough Space Bucks',
+      `The ${gift.label} gift costs ${gift.value} 🚀. Top up to send it.`,
+    )
   }
 
   async function handleReportPress() {
@@ -1597,6 +1665,20 @@ export function StreamScreen() {
         </View>
       )}
 
+      {/* Gift rail — viewers only. Tap to reveal the 5 gift emojis above the button. */}
+      {!isNew && status === 'in-room' && !streamEnded && (giftCatalog?.length ?? 0) > 0 && (
+        <View style={styles.giftRailWrap}>
+          <GiftRail
+            gifts={giftCatalog ?? []}
+            balance={tipBalance}
+            authenticated={!!isSignedIn}
+            onSend={handleSendGift}
+            onAuthRequest={() => setAuthModalVisible(true)}
+            onInsufficient={handleGiftInsufficient}
+          />
+        </View>
+      )}
+
       <AuthModal
         visible={authModalVisible}
         onClose={() => setAuthModalVisible(false)}
@@ -1665,6 +1747,15 @@ export function StreamScreen() {
         <View style={styles.tipBurstArea} pointerEvents="none">
           {tipEvents.map((t) => (
             <FloatingTip key={t.id} tip={t} onDone={dismissTip} />
+          ))}
+        </View>
+      )}
+
+      {/* Gift burst animations — visible to all peers */}
+      {status === 'in-room' && !streamEnded && (
+        <View style={styles.giftBurstArea} pointerEvents="none">
+          {giftEvents.map((g) => (
+            <FloatingGift key={g.id} gift={g} onDone={dismissGift} />
           ))}
         </View>
       )}
@@ -1864,6 +1955,11 @@ const styles = StyleSheet.create({
     // broadcast controls.
     bottom: '38%',
   },
+  giftRailWrap: {
+    position: 'absolute',
+    left: theme.spacing.sm,
+    bottom: '38%',
+  },
 
   // Camera flip — top-right of the camera frame; `top` is set inline to
   // camTop + sm.
@@ -1894,6 +1990,12 @@ const styles = StyleSheet.create({
     bottom: 100,
     left: theme.spacing.lg,
     width: 200,
+  },
+  giftBurstArea: {
+    position: 'absolute',
+    bottom: 140,
+    left: theme.spacing.lg,
+    right: theme.spacing.lg,
   },
 
   adminWarningWrap: {

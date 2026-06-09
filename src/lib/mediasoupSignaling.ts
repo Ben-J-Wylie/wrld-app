@@ -15,6 +15,7 @@ export type ClientMessage =
   | { type: 'broadcasterOrientation'; orientation: 'portrait' | 'landscape'; rotationDeg?: number; hold?: string }
   | { type: 'locationUpdate'; lat: number; lng: number }
   | { type: 'tip'; amount: number }
+  | { type: 'gift'; giftType: string }
 
 export type ServerMessage =
   | { type: 'authenticated'; clerkUserId: string }
@@ -40,6 +41,8 @@ export type ServerMessage =
   | { type: 'reaction'; from: string; kind: string; ts: number }
   | { type: 'tipReceived'; handle: string; amount: number }
   | { type: 'tipConfirmed'; newBalance: number }
+  | { type: 'giftReceived'; handle: string; giftType: string; emoji: string; amount: number }
+  | { type: 'giftConfirmed'; newBalance: number }
   | { type: 'adminEnded' }
   | { type: 'adminWarning'; message: string }
   | { type: 'error'; message: string }
@@ -227,6 +230,10 @@ class MediasoupSignalingClient {
 
   sendTip(amount: number): void {
     this.send({ type: 'tip', amount })
+  }
+
+  sendGift(giftType: string): void {
+    this.send({ type: 'gift', giftType })
   }
 
 }

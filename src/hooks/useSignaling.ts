@@ -18,6 +18,7 @@ type Producer = { id: string; kind: string }
 export type ChatMessage = { from: string; text: string; ts: number }
 export type Reaction = { from: string; kind: string; ts: number; id: number }
 export type TipEvent = { handle: string; amount: number; id: number }
+export type GiftEvent = { handle: string; giftType: string; emoji: string; amount: number; id: number }
 
 export function useSignaling() {
   const [status, setStatus] = useState<SignalingStatus>('idle')
@@ -33,10 +34,12 @@ export function useSignaling() {
   const [reactions, setReactions] = useState<Reaction[]>([])
   const [broadcasterPaused, setBroadcasterPaused] = useState(false)
   const [tipEvents, setTipEvents] = useState<TipEvent[]>([])
+  const [giftEvents, setGiftEvents] = useState<GiftEvent[]>([])
   const [confirmedBalance, setConfirmedBalance] = useState<number | null>(null)
   const [suspensionError, setSuspensionError] = useState<string | null>(null)
   const reactionCounterRef = useRef(0)
   const tipCounterRef = useRef(0)
+  const giftCounterRef = useRef(0)
   // Distinguishes intentional disconnect() calls from unexpected network drops.
   const intentionalRef = useRef(false)
 
@@ -60,6 +63,13 @@ export function useSignaling() {
         setTipEvents((prev) => [...prev, { handle: msg.handle, amount: msg.amount, id }])
       }
       if (msg.type === 'tipConfirmed') {
+        setConfirmedBalance(msg.newBalance)
+      }
+      if (msg.type === 'giftReceived') {
+        const id = ++giftCounterRef.current
+        setGiftEvents((prev) => [...prev, { handle: msg.handle, giftType: msg.giftType, emoji: msg.emoji, amount: msg.amount, id }])
+      }
+      if (msg.type === 'giftConfirmed') {
         setConfirmedBalance(msg.newBalance)
       }
       if (msg.type === 'error' && msg.message?.toLowerCase().includes('suspended')) {
@@ -150,6 +160,7 @@ export function useSignaling() {
     setReactions([])
     setBroadcasterPaused(false)
     setTipEvents([])
+    setGiftEvents([])
     setConfirmedBalance(null)
   }, [])
 
@@ -169,6 +180,7 @@ export function useSignaling() {
   const sendBroadcasterOrientation = useCallback((orientation: 'portrait' | 'landscape', rotationDeg?: number, hold?: string) => signalingClient.sendBroadcasterOrientation(orientation, rotationDeg, hold), [])
   const sendLocationUpdate = useCallback((lat: number, lng: number) => signalingClient.sendLocationUpdate(lat, lng), [])
   const sendTip = useCallback((amount: number) => signalingClient.sendTip(amount), [])
+  const sendGift = useCallback((giftType: string) => signalingClient.sendGift(giftType), [])
 
   const dismissReaction = useCallback((id: number) => {
     setReactions((prev) => prev.filter((r) => r.id !== id))
@@ -176,6 +188,10 @@ export function useSignaling() {
 
   const dismissTip = useCallback((id: number) => {
     setTipEvents((prev) => prev.filter((t) => t.id !== id))
+  }, [])
+
+  const dismissGift = useCallback((id: number) => {
+    setGiftEvents((prev) => prev.filter((g) => g.id !== id))
   }, [])
 
   return {
@@ -192,11 +208,13 @@ export function useSignaling() {
     reactions,
     broadcasterPaused,
     tipEvents,
+    giftEvents,
     confirmedBalance,
     sendBroadcasterPaused,
     sendBroadcasterResumed,
     sendBroadcasterOrientation,
     sendTip,
+    sendGift,
     sendLocationUpdate,
     connect,
     createRoom,
@@ -206,6 +224,7 @@ export function useSignaling() {
     sendReaction,
     dismissReaction,
     dismissTip,
+    dismissGift,
     suspensionError,
     clearSuspensionError: () => setSuspensionError(null),
   }

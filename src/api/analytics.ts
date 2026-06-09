@@ -46,6 +46,9 @@ export type AnalyticsSummary = {
   tipsReceivedSpaceBucks: number     // gross Space Bucks from tippers
   stardustEarned: number             // net Stardust credited (cash-outable)
   stardustEarnedUsd: number
+  // Gifts — pure Space Bucks sink (never Stardust, never cash-outable)
+  giftsReceivedCount: number
+  giftsReceivedSpaceBucks: number
 }
 
 export type AnalyticsPoint = {
@@ -97,6 +100,23 @@ export type AnalyticsTopSupporter = {
   spaceBucks: number
 }
 
+export type AnalyticsGiftBreakdown = {
+  giftType: string
+  emoji: string
+  label: string
+  count: number
+  spaceBucks: number
+}
+
+export type AnalyticsTopGifter = {
+  id: string
+  handle: string
+  displayName: string | null
+  avatarUrl: string | null
+  giftCount: number
+  spaceBucks: number
+}
+
 export type AnalyticsActivityCell = { dow: number; hour: number; count: number }
 
 export type AnalyticsPpvEvent = {
@@ -121,6 +141,8 @@ export type AnalyticsData = {
   topClips: AnalyticsTopClip[]
   topViewers: AnalyticsTopViewer[]
   topSupporters: AnalyticsTopSupporter[]
+  giftsBreakdown: AnalyticsGiftBreakdown[]
+  topGifters: AnalyticsTopGifter[]
   activity: AnalyticsActivityCell[]
   ppvEvents: AnalyticsPpvEvent[]
 }
