@@ -40,6 +40,7 @@ import { SavedClipRow } from '@/components/features/clip/SavedClipRow'
 import { useAuth } from '@clerk/clerk-expo'
 import { useVideoPlayer, VideoView } from 'expo-video'
 import { useBuffer } from '@/hooks/useBuffer'
+import { useBroadcastStore } from '@/stores/broadcastStore'
 import type { BufferSession, BufferTrackKind } from '@/api/buffer'
 import { theme } from '@/tokens/theme'
 
@@ -87,8 +88,15 @@ const KIND_ORDER: BufferTrackKind[] = ['camera', 'audio', 'location', 'compass',
 const SOURCE_DEFAULT_ON = new Set<BufferTrackKind>(['camera', 'audio', 'location'])
 const EMPTY_SESSIONS: BufferSession[] = []
 
-const sessionStartMs = (s: BufferSession) => Date.parse(s.startedAt)
-const sessionEndMs = (s: BufferSession) => (s.endedAt ? Date.parse(s.endedAt) : Date.now())
+// Footage occupies [startedAt + mediaStartOffsetMs, + mediaDurationSec] (the time
+// model, option b). The session block is its REAL media length — NOT wall-clock
+// (startedAt→endedAt/now). The wall-clock tail beyond the footage (encoder warm-up
+// at the head, HLS latency at the live edge) is a gap, so the clip never renders
+// longer than its footage and never bleeds the next session's head into the tail.
+// Falls back to `durationSec` / 0 against an older backend that omits the fields.
+const sessionStartMs = (s: BufferSession) => Date.parse(s.startedAt) + (s.mediaStartOffsetMs ?? 0)
+const sessionEndMs = (s: BufferSession) =>
+  sessionStartMs(s) + Math.max(0, s.mediaDurationSec ?? s.durationSec) * 1000
 
 // Dev-only video diagnostics (stripped from production by the __DEV__ guard).
 function vlog(msg: string, extra?: unknown) {
@@ -108,7 +116,11 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
 
 export const ClipEditScreen = () => {
   const { isSignedIn } = useAuth()
-  const { data: buffer, refetch: refetchBuffer } = useBuffer(!!isSignedIn)
+  // The user's own live state — the authoritative, immediate signal that the
+  // latest buffer session is actively being written right now. Drives the live
+  // (teeth) tail and a faster buffer refetch while live.
+  const isLive = useBroadcastStore((s) => s.isLive)
+  const { data: buffer, refetch: refetchBuffer } = useBuffer(!!isSignedIn, isLive)
   const sessions = buffer?.sessions ?? EMPTY_SESSIONS
 
   // Pull fresh buffer on every screen focus (ignoring useBuffer's 30s staleTime),
@@ -243,8 +255,11 @@ export const ClipEditScreen = () => {
     sessions.find((s) => playheadMs >= sessionStartMs(s) && playheadMs <= sessionEndMs(s)) ?? null
   const fieldThumb = sessionAtPlayhead?.thumbnailUrl ?? null
 
-  // Streaming iff the latest buffer session is still open (endedAt === null).
-  const streaming = sessions.length > 0 && sessions[sessions.length - 1]!.endedAt === null
+  // Streaming iff the user is live now AND the latest session is still open.
+  // Gating on `isLive` (not just `endedAt === null`) flips the tail to its dark/
+  // ended state the instant the stream stops, without waiting for the backend
+  // session-ended roundtrip + refetch.
+  const streaming = isLive && sessions.length > 0 && sessions[sessions.length - 1]!.endedAt === null
 
   // When the playhead is in a gap (no session under it), the field shows a card
   // instead of video: a static duration for an inter-session gap, or a running

@@ -11,6 +11,13 @@ export type BufferSession = {
   startedAt: string          // ISO
   endedAt: string | null     // ISO, null while still live
   durationSec: number
+  // Time model (option b): the footage block occupies
+  // [startedAt + mediaStartOffsetMs, + mediaDurationSec]; anything outside is a gap
+  // (encoder warm-up at the head, the live HLS latency at the tail). `mediaDurationSec`
+  // is the REAL flushed media (not wall-clock), updated live for the open session.
+  // Optional for back-compat with an older backend (fall back to durationSec / 0).
+  mediaDurationSec?: number
+  mediaStartOffsetMs?: number
   kinds: BufferTrackKind[]
   playableKind: BufferTrackKind | null
   manifestUrl: string | null // tokenized HLS (unused by the thumbnail field, kept for later)
