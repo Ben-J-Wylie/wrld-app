@@ -206,7 +206,46 @@ export function useMediasoup() {
                 },
               }
             : { track: track as never }
-          await transport.produce(opts as never)
+          const producer = await transport.produce(opts as never)
+
+          // DEV: confirm the SENT resolution stays pinned. getUserMedia settings
+          // are the capture size; the recorded size is whatever WebRTC actually
+          // sends (outbound-rtp), which is what we're trying to keep constant.
+          // Logs once on go-live, then only when the sent resolution CHANGES (so
+          // it's silent if the pin holds), with WebRTC's reason for any limit.
+          if (isVideo && __DEV__) {
+            const settings = (track as unknown as { getSettings?: () => Record<string, number> }).getSettings?.()
+            console.log(
+              `[capture] video capture (getUserMedia): ${settings?.width}x${settings?.height}@${settings?.frameRate}fps`,
+            )
+            let lastKey = ''
+            const p = producer as unknown as {
+              closed: boolean
+              getStats: () => Promise<{ forEach: (cb: (st: Record<string, unknown>) => void) => void }>
+            }
+            const poll = setInterval(() => {
+              if (!p || p.closed) {
+                clearInterval(poll)
+                return
+              }
+              p.getStats()
+                .then((report) => {
+                  report.forEach((st: Record<string, unknown>) => {
+                    if (st.type === 'outbound-rtp' && st.frameWidth) {
+                      const key = `${st.frameWidth}x${st.frameHeight}`
+                      if (key !== lastKey) {
+                        lastKey = key
+                        console.log(
+                          `[capture] SENT video now ${key}@${Math.round((st.framesPerSecond as number) ?? 0)}fps` +
+                            ` — recorded as-is (limit: ${st.qualityLimitationReason ?? 'none'})`,
+                        )
+                      }
+                    }
+                  })
+                })
+                .catch(() => clearInterval(poll))
+            }, 5000)
+          }
         }
       }
     } catch (err) {
