@@ -749,6 +749,14 @@ export function StreamScreen() {
   }, [liveRecordings, activeRecordingId, isRecording])
 
   async function handleGoLive(configOverride?: CaptureConfig) {
+    // Going live requires creator onboarding (age gate + ToS + camera
+    // permission). The dashboard already walls this off; the center-tab preview
+    // path didn't, so gate here too — both go-live entry points funnel through
+    // handleGoLive. (mediasoup enforces the same as a hard server-side block.)
+    if (wrldUser && !wrldUser.creatorReady) {
+      router.push('/(app)/creator-onboarding')
+      return
+    }
     // Arming + title come from captureConfig (the shared source of truth), so
     // going live works identically from the dashboard (go=1, passes the
     // freshly-loaded config) and from the stream-view preview's Go Live
@@ -797,6 +805,9 @@ export function StreamScreen() {
       if (msg.toLowerCase().includes('suspended')) {
         // suspensionError useEffect will show the Alert; navigate back cleanly
         router.navigate('/(app)/dashboard')
+      } else if (msg.toLowerCase().includes('creator setup')) {
+        // Server-side go-live gate (non-creator). Send them to finish setup.
+        router.push('/(app)/creator-onboarding')
       } else {
         setStatus('error')
         setError(msg)
