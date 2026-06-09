@@ -178,8 +178,33 @@ export function useMediasoup() {
           // system-wide for the broadcaster's tier.
           const isVideo = (track as unknown as { kind: string }).kind === 'video'
           const tier = useAuthStore.getState().wrldUser?.tier
+          // Pin the SENT video resolution so every go-live emits the SAME SPS.
+          // WebRTC otherwise downscales resolution under CPU/bandwidth pressure
+          // (degradationPreference defaults to 'balanced'), and the `-c:v copy`
+          // buffer recorder mirrors exactly what it sends — so a drifting
+          // resolution makes each recording a new codec group, which stalls and
+          // stutters when the clip editor concatenates them at playback. With
+          // `scaleResolutionDownBy: 1` + `maintain-resolution`, congestion drops
+          // FRAMERATE instead of resolution, keeping the SPS stable across go-lives.
           const opts = isVideo
-            ? { track: track as never, encodings: [{ maxBitrate: maxVideoBitrate(tier) }], codecOptions: { videoGoogleStartBitrate: 1500 } }
+            ? {
+                track: track as never,
+                encodings: [{ maxBitrate: maxVideoBitrate(tier), scaleResolutionDownBy: 1 }],
+                codecOptions: { videoGoogleStartBitrate: 1500 },
+                onRtpSender: (sender: {
+                  getParameters: () => { degradationPreference?: string }
+                  setParameters: (p: unknown) => unknown
+                }) => {
+                  try {
+                    const params = sender.getParameters()
+                    params.degradationPreference = 'maintain-resolution'
+                    Promise.resolve(sender.setParameters(params)).catch(() => {})
+                  } catch {
+                    // setParameters/degradationPreference not supported on this
+                    // platform — scaleResolutionDownBy still pins the common path.
+                  }
+                },
+              }
             : { track: track as never }
           await transport.produce(opts as never)
         }
