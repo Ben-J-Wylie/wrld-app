@@ -164,12 +164,23 @@ export const ClipEditScreen = () => {
 
   // Sessions → timeline segments; live session's end tracks the live head (the
   // 1s tick below re-renders so it stays fresh).
-  const segments: BufferSegment[] = sessions.map((s) => ({
-    id: s.id,
-    startMs: sessionStartMs(s),
-    endMs: sessionEndMs(s),
-    posterUrl: s.thumbnailUrl, // real broadcast frame per session (server filmstrip later)
-  }))
+  //
+  // MEMOIZED on `sessions` (the query data, stable between refetches): a fresh
+  // array every render gave BufferTimeline a new `segBlocks` identity every
+  // render, which re-armed its visible-range timer on every render and drove a
+  // perpetual setVisibleRange → setThumbs → re-render loop (the "Maximum update
+  // depth exceeded" cascade). Segment geometry derives only from `sessions`
+  // (real media duration, not wall-clock), so this is the correct dep.
+  const segments: BufferSegment[] = useMemo(
+    () =>
+      sessions.map((s) => ({
+        id: s.id,
+        startMs: sessionStartMs(s),
+        endMs: sessionEndMs(s),
+        posterUrl: s.thumbnailUrl, // real broadcast frame per session (server filmstrip later)
+      })),
+    [sessions],
+  )
   const bufferStartMs = sessions.length ? sessionStartMs(sessions[0]!) : Date.now()
   const bufferEndMs = Date.now()
 
