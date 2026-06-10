@@ -3096,6 +3096,16 @@ clips appear as read-only hatched bands. No date/axis row
 - **Zoom-level toggle** below the scrollbar (`SegmentedToggle`: All · Days · Hours · Min ·
   Sec) — a non-pinch way to snap the zoom to a span, centred on the playhead; the
   highlighted segment tracks the live zoom. Reports zoom up via `onZoomChange`.
+- **Adaptive level count (2026-06-09).** The toggle only renders the levels that are
+  *meaningful for the current footage extent*: `All` always, and each of `Days`/`Hours`/
+  `Min`/`Sec` only once its target scale beats the fit scale by `LEVEL_MEANINGFUL_FACTOR`
+  (1.25) — i.e. snapping to it is a real zoom-**in** from "All" rather than clamping back
+  to fit. Derived from the existing `levelToPx` vs `fit` math (keyed on `totalSegMs`, the
+  recorded footage with gaps collapsed), so it stays in sync with pinch. A short buffer
+  collapses to **All · Sec** (or just `All`, in which case the toggle is **hidden** — no
+  dead single chip); as footage grows, `Min → Hours → Days` cross the threshold and appear
+  in turn. `currentLevel` highlights the nearest *visible* level so pinch never targets a
+  hidden chip.
 - **Stateful edge indicators (`BufferEdge`, 15px) replace the head/tail `GapMarker`s.**
   Idle → darkest token (`text.primary`); **head evicting** (buffer full) → `accent` with
   a **right-edge zigzag**; **tail live** (streaming) → `accent` with a **left-edge

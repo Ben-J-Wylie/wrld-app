@@ -24,7 +24,14 @@
 
 import { useEffect, useMemo, useRef, useState, type ComponentProps } from 'react'
 import { StyleSheet, View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from 'react-native'
-import Animated, { useAnimatedStyle, useSharedValue, runOnJS } from 'react-native-reanimated'
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  runOnJS,
+  withTiming,
+  cancelAnimation,
+  Easing,
+} from 'react-native-reanimated'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import { Image } from 'expo-image'
 import { theme } from '@/tokens/theme'
@@ -83,6 +90,11 @@ type Props = {
   // The visible time window (+ per-cell duration), reported on settle — the screen
   // generates thumbnails for exactly this range/density.
   onVisibleRangeChange?: (range: VisibleRange) => void
+  // Bump this (e.g. from a transport button: prev/next clip, play, to-start/end) to
+  // recenter the playhead in the viewport. If the playhead has scrolled out of frame,
+  // the scroll animates so it lands as close to centre as the content bounds allow;
+  // if it's already visible, the view stays put.
+  centerSignal?: number
   style?: StyleProp<ViewStyle>
 }
 
@@ -118,6 +130,15 @@ const LEVEL_SPAN_MS: Record<Exclude<ZoomLevel, 'all'>, number> = {
   min: 10 * 60_000,
   sec: SEC_SPAN_MS,
 }
+// A non-"All" level only earns its own toggle button once the buffer holds enough
+// footage that snapping to it is a real zoom-IN from "All" — i.e. its target scale is
+// meaningfully tighter than the fit scale. Below this, snapping to it would clamp back
+// to fit (== "All"), so the button is a no-op and gets hidden. The factor is the margin
+// over fit required (≈ footage must exceed the level's span × this), which keeps a
+// near-duplicate-of-All level from showing. As the buffer grows, Min → Hours → Days
+// cross the threshold and appear in turn; "All" is always present, and a short buffer
+// collapses to just "All" + "Sec".
+const LEVEL_MEANINGFUL_FACTOR = 1.25
 
 type SegBlock = { kind: 'seg'; seg: BufferSegment; leftPx: number; widthPx: number }
 type GapBlock = { kind: 'gap'; leftPx: number; skippedMs: number }
@@ -139,6 +160,7 @@ export function BufferTimeline({
   onBracketChange,
   onZoomChange,
   onVisibleRangeChange,
+  centerSignal,
   style,
 }: Props) {
   const [width, setWidth] = useState(0)
@@ -351,12 +373,22 @@ export function BufferTimeline({
     if (level === 'all' || width <= 0 || fit <= 0) return fit
     return clamp(width / LEVEL_SPAN_MS[level], minPx, maxPx)
   }
-  // The segment highlighted = the level whose scale is nearest the current zoom.
+  // Which levels earn a toggle button for THIS buffer's footage extent. "All" always;
+  // each other level only once it's a real zoom-in from fit (levelToPx beats fit by the
+  // margin). Short buffer → just ["all", ("sec")]; the rest appear as footage grows.
+  const visibleLevels: ZoomLevel[] = useMemo(() => {
+    if (fit <= 0 || width <= 0) return ['all']
+    return ZOOM_LEVELS.filter((lv) => lv === 'all' || levelToPx(lv) > fit * LEVEL_MEANINGFUL_FACTOR)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fit, minPx, maxPx, width])
+  const visibleOpts = useMemo(() => ZOOM_OPTS.filter((o) => visibleLevels.includes(o.value)), [visibleLevels])
+
+  // The segment highlighted = the visible level whose scale is nearest the current zoom.
   const currentLevel: ZoomLevel = useMemo(() => {
     if (px <= 0) return 'all'
     let best: ZoomLevel = 'all'
     let bestD = Infinity
-    for (const lv of ZOOM_LEVELS) {
+    for (const lv of visibleLevels) {
       const lpx = levelToPx(lv)
       if (lpx <= 0) continue
       const d = Math.abs(Math.log(px) - Math.log(lpx))
@@ -367,7 +399,7 @@ export function BufferTimeline({
     }
     return best
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [px, fit, minPx, maxPx, width])
+  }, [px, fit, minPx, maxPx, width, visibleLevels])
   // Tap a level → snap the zoom, keeping the playhead centred in the viewport.
   function applyZoomLevel(level: ZoomLevel) {
     const newPx = levelToPx(level)
@@ -517,6 +549,30 @@ export function BufferTimeline({
     tx.value = -end
   }, [playheadMs, effContentWidth, width, nowMs, bufferEndMs, tx])
 
+  // Recenter the playhead on demand. The parent bumps `centerSignal` from a transport
+  // action (prev/next clip, play, to-start/end); if the playhead has scrolled out of
+  // the viewport we glide the scroll so it lands as close to centre as the content
+  // bounds + zoom allow. Already on-screen → leave the view put (no needless jump).
+  // Runs after the render that carries the new playhead + signal, so playheadX/offset
+  // here are fresh. scrollOffset is committed only on completion, so the line above's
+  // `tx = -offset` effect doesn't snap mid-animation.
+  const centerSignalRef = useRef(centerSignal)
+  useEffect(() => {
+    if (centerSignal == null || centerSignal === centerSignalRef.current) return
+    centerSignalRef.current = centerSignal
+    if (width <= 0) return
+    const phViewX = playheadX - offset
+    if (phViewX >= 0 && phViewX <= width) return // already visible
+    const target = clamp(playheadX - width / 2, 0, maxScroll)
+    if (Math.abs(target - offset) < 1) return
+    cancelAnimation(tx)
+    tx.value = withTiming(-target, { duration: 300, easing: Easing.out(Easing.cubic) }, (finished) => {
+      'worklet'
+      if (finished) runOnJS(setScrollOffset)(target)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [centerSignal])
+
   function onLayout(e: LayoutChangeEvent) {
     setWidth(e.nativeEvent.layout.width)
   }
@@ -620,7 +676,9 @@ export function BufferTimeline({
         }}
       />
 
-      <SegmentedToggle options={ZOOM_OPTS} value={currentLevel} onChange={applyZoomLevel} />
+      {visibleOpts.length > 1 && (
+        <SegmentedToggle options={visibleOpts} value={currentLevel} onChange={applyZoomLevel} />
+      )}
     </View>
   )
 }

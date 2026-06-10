@@ -82,7 +82,7 @@ import { Icon } from '@/components/primitives/Icon'
 import { SegmentedToggle } from '@/components/primitives/SegmentedToggle'
 import { Pressable } from '@/components/primitives/Pressable'
 import { BroadcasterRow } from '@/components/features/user/BroadcasterRow'
-import { useState, type ComponentProps } from 'react'
+import { useState, useMemo, useEffect, type ComponentProps } from 'react'
 import { theme } from '@/tokens/theme'
 
 export function FeatureGallery() {
@@ -1631,36 +1631,84 @@ function TimelineDemo({ trim }: { trim: boolean }) {
   )
 }
 
-function BufferTimelineDemo() {
-  const [model] = useState(() => {
-    const now = Date.now()
-    const H = 3_600_000
-    const segments = [
-      { id: 's1', startMs: now - 8 * H, endMs: now - 5 * H },
-      { id: 's2', startMs: now - 4 * H, endMs: now - 0.5 * H },
-      { id: 's3', startMs: now - 0.3 * H, endMs: now },
-    ]
-    const savedRegions = [{ id: 'r1', startMs: now - 3 * H, endMs: now - 2.5 * H }]
+// Three mock buffers of different footage extents — switch between them to watch the
+// zoom toggle adapt its level count (2026-06-09): a short buffer collapses to All · Sec
+// (or hides the toggle), and Min → Hours → Days appear as footage grows.
+type BufExtent = 'days' | 'hours' | 'mins'
+function buildBufModel(extent: BufExtent) {
+  const now = Date.now()
+  const H = 3_600_000
+  const M = 60_000
+  if (extent === 'days') {
     return {
-      segments,
-      savedRegions,
+      segments: [
+        { id: 's1', startMs: now - 70 * H, endMs: now - 40 * H },
+        { id: 's2', startMs: now - 30 * H, endMs: now - 6 * H },
+        { id: 's3', startMs: now - 2 * H, endMs: now },
+      ],
+      savedRegions: [{ id: 'r1', startMs: now - 28 * H, endMs: now - 26 * H }],
+      bracket0: { inMs: now - 24 * H, outMs: now - 22 * H },
+      playhead0: now - 23 * H,
+    }
+  }
+  if (extent === 'hours') {
+    return {
+      segments: [
+        { id: 's1', startMs: now - 8 * H, endMs: now - 5 * H },
+        { id: 's2', startMs: now - 4 * H, endMs: now - 0.5 * H },
+        { id: 's3', startMs: now - 0.3 * H, endMs: now },
+      ],
+      savedRegions: [{ id: 'r1', startMs: now - 3 * H, endMs: now - 2.5 * H }],
       bracket0: { inMs: now - 2 * H, outMs: now - 1.7 * H },
       playhead0: now - 1.85 * H,
     }
-  })
+  }
+  // mins — a few minutes of footage: too short for Min/Hours/Days → just All · Sec.
+  return {
+    segments: [
+      { id: 's1', startMs: now - 6 * M, endMs: now - 4 * M },
+      { id: 's2', startMs: now - 3 * M, endMs: now },
+    ],
+    savedRegions: [{ id: 'r1', startMs: now - 5 * M, endMs: now - 4.5 * M }],
+    bracket0: { inMs: now - 2 * M, outMs: now - 1.5 * M },
+    playhead0: now - 1.7 * M,
+  }
+}
+
+const BUF_EXTENT_OPTS: { value: BufExtent; label: string }[] = [
+  { value: 'days', label: 'Days of footage' },
+  { value: 'hours', label: 'Hours' },
+  { value: 'mins', label: 'Minutes' },
+]
+
+function BufferTimelineDemo() {
+  const [extent, setExtent] = useState<BufExtent>('hours')
+  const model = useMemo(() => buildBufModel(extent), [extent])
   const [playhead, setPlayhead] = useState(model.playhead0)
   const [bracket, setBracket] = useState<{ inMs: number; outMs: number } | null>(model.bracket0)
+  // Reset the interactive state when the mock extent changes.
+  useEffect(() => {
+    setPlayhead(model.playhead0)
+    setBracket(model.bracket0)
+  }, [model])
   // Tap to position the playhead · one-finger drag to pan · two-finger pinch to
-  // zoom · drag the scrollbar (below the track) to pan.
+  // zoom · drag the scrollbar (below the track) to pan. The zoom toggle below the
+  // scrollbar only shows the levels meaningful for the selected footage extent.
   return (
-    <BufferTimeline
-      segments={model.segments}
-      savedRegions={model.savedRegions}
-      playheadMs={playhead}
-      bracket={bracket}
-      onScrub={setPlayhead}
-      onBracketChange={setBracket}
-    />
+    <View style={{ gap: theme.spacing.sm }}>
+      <SegmentedToggle options={BUF_EXTENT_OPTS} value={extent} onChange={setExtent} />
+      <Text variant="caption" color={theme.colors.text.muted}>
+        Mock buffer extent — the zoom toggle adapts its level count to fit.
+      </Text>
+      <BufferTimeline
+        segments={model.segments}
+        savedRegions={model.savedRegions}
+        playheadMs={playhead}
+        bracket={bracket}
+        onScrub={setPlayhead}
+        onBracketChange={setBracket}
+      />
+    </View>
   )
 }
 

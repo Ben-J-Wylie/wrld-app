@@ -12,13 +12,22 @@
 // "look here").
 
 import { useRef, useState } from 'react'
-import { PanResponder, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
+import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
+import { GestureDetector, Gesture } from 'react-native-gesture-handler'
+import { runOnJS } from 'react-native-reanimated'
 import { theme } from '@/tokens/theme'
 
-const MIN_THUMB = 28
-const TRACK_H = 22
+// Visual stays a thin hairline; the GRAB target is deliberately much larger —
+// a taller track for vertical room, a finger-wide minimum thumb, and generous
+// hitSlop around the thin thumb so a thin scrollbar is still easy to catch.
+const MIN_THUMB = 44
+const TRACK_H = 34
 const RAIL_H = 4
 const THUMB_H = 8
+// Touch padding around the (thin) thumb. Vertical is sized to fill the track
+// (THUMB_H + 2×SLOP ≈ TRACK_H) so the whole bar height is grabbable without
+// spilling into the zoom toggle below; horizontal makes the thumb ends catchable.
+const THUMB_HIT_SLOP = { top: 13, bottom: 13, left: 12, right: 12 }
 
 type Props = {
   contentWidth: number
@@ -49,21 +58,33 @@ export function TimelineScrollbar({ contentWidth, viewport, scrollOffset, onScro
   thumbXRef.current = thumbX
   onScrollToRef.current = onScrollTo
 
-  const pan = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_e, g) => Math.abs(g.dx) > 1,
-      onPanResponderGrant: () => {
-        startThumbX.current = thumbXRef.current
-      },
-      onPanResponderMove: (_e, g) => {
-        const mtx = maxThumbXRef.current
-        if (mtx <= 0) return
-        const nx = Math.max(0, Math.min(mtx, startThumbX.current + g.dx))
-        onScrollToRef.current((nx / mtx) * maxScrollRef.current)
-      },
-    }),
-  ).current
+  // Anchor the thumb at touch-down, then drag it by the gesture's translation.
+  function onGrab() {
+    startThumbX.current = thumbXRef.current
+  }
+  function onDrag(translationX: number) {
+    const mtx = maxThumbXRef.current
+    if (mtx <= 0) return
+    const nx = Math.max(0, Math.min(mtx, startThumbX.current + translationX))
+    onScrollToRef.current((nx / mtx) * maxScrollRef.current)
+  }
+  // RNGH Pan (not PanResponder) so a horizontal thumb drag claims the gesture and the
+  // parent vertical ScrollView stays put — same arbitration as the timeline scrub and
+  // the buffer field: `activeOffsetX` claims horizontal movement, `failOffsetY` lets a
+  // vertical drag fall through to the page scroll. The enlarged grab target rides on
+  // the gesture's hitSlop (bounded by the track height, so it works on Android too).
+  const pan = Gesture.Pan()
+    .activeOffsetX([-8, 8])
+    .failOffsetY([-12, 12])
+    .hitSlop(THUMB_HIT_SLOP)
+    .onBegin(() => {
+      'worklet'
+      runOnJS(onGrab)()
+    })
+    .onUpdate((e) => {
+      'worklet'
+      runOnJS(onDrag)(e.translationX)
+    })
 
   return (
     <View
@@ -71,15 +92,15 @@ export function TimelineScrollbar({ contentWidth, viewport, scrollOffset, onScro
       onLayout={(e) => setBarW(e.nativeEvent.layout.width)}
     >
       <View style={styles.rail} />
-      <View
-        style={[
-          styles.thumb,
-          { width: thumbW, transform: [{ translateX: thumbX }] },
-          !scrollable && styles.thumbInactive,
-        ]}
-        hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
-        {...pan.panHandlers}
-      />
+      <GestureDetector gesture={pan}>
+        <View
+          style={[
+            styles.thumb,
+            { width: thumbW, transform: [{ translateX: thumbX }] },
+            !scrollable && styles.thumbInactive,
+          ]}
+        />
+      </GestureDetector>
     </View>
   )
 }

@@ -13,8 +13,8 @@
 // (promote-on-publish) — saving stays in-session (local) until that backend
 // route lands; the Saved tab + saved-regions reflect this session's saves only.
 
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { router, useFocusEffect } from 'expo-router'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useFocusEffect } from 'expo-router'
 import { RefreshControl, StyleSheet, View } from 'react-native'
 import { ScreenScroll } from '@/components/sections/ScreenScroll'
 import { ScreenHeader } from '@/components/sections/ScreenHeader'
@@ -54,6 +54,15 @@ type SavedClip = {
   variant: 'camera' | 'audio-only' | 'map-only'
   sourcesLabel: string
   visibility: 'draft' | 'anon' | 'public'
+}
+
+// A row in the Saved-clips list: either an explicit in-session trim (`source: 'saved'`)
+// or an auto-listed recording/buffer session (`source: 'session'`, which may carry a
+// poster + a Recording/Unedited status tag).
+type DisplayClip = SavedClip & {
+  source: 'saved' | 'session'
+  thumbnailUrl?: string | null
+  tags?: { label: string; tone: 'warn' | 'accent' | 'muted' }[]
 }
 
 const H = 3_600_000
@@ -236,6 +245,54 @@ export const ClipEditScreen = () => {
   const [savedRegions, setSavedRegions] = useState<BufferSavedRegion[]>([])
   const [savedClips, setSavedClips] = useState<SavedClip[]>([])
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  // Local in-session overrides for the auto-listed recording entries (delete = hide;
+  // publish = mark public). Real persistence is R3 — Aaron.
+  const [hiddenSessionIds, setHiddenSessionIds] = useState<Set<string>>(() => new Set())
+  const [publishedSessionIds, setPublishedSessionIds] = useState<Set<string>>(() => new Set())
+
+  // EVERY recording (buffer session) is a Saved-clips entry — listed whether or not it's
+  // been trimmed/edited, mirroring the Library. A live session is tagged "Recording", a
+  // finished-but-untrimmed one "Unedited". Newest first. (Reconciling these against the
+  // real Library + persisting trims is R3 — Aaron; today this is the in-session view.)
+  const sessionClips = useMemo<DisplayClip[]>(
+    () =>
+      [...sessions]
+        .reverse()
+        .filter((s) => !hiddenSessionIds.has(s.id))
+        .map((s) => {
+          const live = s.endedAt === null
+          const hasCam = s.kinds.includes('camera')
+          const hasAud = s.kinds.includes('audio')
+          const sourcesLabel = KIND_ORDER.filter((k) => s.kinds.includes(k))
+            .map((k) => titleCase(KIND_META[k]!.label))
+            .join(' · ')
+          const tags: DisplayClip['tags'] = [
+            live ? { label: 'Recording', tone: 'accent' } : { label: 'Unedited', tone: 'muted' },
+            ...(sourcesLabel ? [{ label: sourcesLabel, tone: 'muted' as const }] : []),
+          ]
+          return {
+            id: s.id,
+            name: `Recording · ${fmtClipStamp(sessionStartMs(s))}`,
+            capturedAt: fmtClipStamp(sessionStartMs(s)),
+            durationSec: Math.max(1, Math.round(s.durationSec)),
+            variant: hasCam ? 'camera' : hasAud ? 'audio-only' : 'map-only',
+            sourcesLabel,
+            visibility: publishedSessionIds.has(s.id) ? 'public' : 'draft',
+            thumbnailUrl: s.thumbnailUrl,
+            tags,
+            source: 'session',
+          }
+        }),
+    [sessions, hiddenSessionIds, publishedSessionIds],
+  )
+
+  // The Saved-clips list = explicit in-session trims (most-recent user intent) +
+  // every recording. Trims carry their own visibility/no tags; recordings carry the
+  // Recording/Unedited status tag.
+  const displayClips: DisplayClip[] = useMemo(
+    () => [...savedClips.map((c) => ({ ...c, source: 'saved' as const })), ...sessionClips],
+    [savedClips, sessionClips],
+  )
 
   // Recorded-source list seeded from the kinds the buffer actually captured.
   // Seeded once when sessions first arrive; user toggles are preserved after.
@@ -1027,14 +1084,21 @@ export const ClipEditScreen = () => {
     for (const st of sessionStarts) if (st > playheadRef.current + 1000) return st
     return null
   }
+  // Bumped to ask the timeline to recenter the playhead in its viewport (animated) —
+  // every transport action raises it, so a playhead that scrolled out of frame glides
+  // back as close to centre as the zoom allows.
+  const [centerSignal, setCenterSignal] = useState(0)
+  const recenterTimeline = useCallback(() => setCenterSignal((s) => s + 1), [])
+
   // Jump the playhead; keep playing across the jump by re-anchoring the wall clock
-  // (and cancelling any in-progress gap rush).
+  // (and cancelling any in-progress gap rush). Recenters the timeline on the new spot.
   function jumpTo(ms: number) {
     placePlayhead(ms)
     if (playingRef.current) {
       playClockRef.current = null
       gapRushRef.current = null
     }
+    recenterTimeline()
   }
   const canPrev = bufferEndMs > 0 && playheadMs > bufferStartMs + 1000
   const canNext = bufferEndMs > 0 && playheadMs < Date.now() - 1000
@@ -1082,7 +1146,7 @@ export const ClipEditScreen = () => {
   return (
     <View style={styles.root}>
     <ScreenScroll
-      header={<ScreenHeader title="Clip editor" onBack={() => router.back()} />}
+      header={<ScreenHeader title="Clip editor" />}
       contentContainerStyle={styles.content}
       scrollEnabled={!clockExpanded}
       refreshControl={
@@ -1097,7 +1161,7 @@ export const ClipEditScreen = () => {
       <PageTabs
         tabs={[
           { key: 'editor', label: 'Editor' },
-          { key: 'saved', label: `Saved clips${savedClips.length ? ` · ${savedClips.length}` : ''}` },
+          { key: 'saved', label: `Saved clips${displayClips.length ? ` · ${displayClips.length}` : ''}` },
         ]}
         value={page}
         onChange={(p) => {
@@ -1154,6 +1218,7 @@ export const ClipEditScreen = () => {
                   return
                 }
                 setPlaying((p) => !p)
+                recenterTimeline()
               }}
               onNext={() => jumpTo(nextClipTarget() ?? Date.now())}
               onToEnd={() => jumpTo(Date.now())}
@@ -1184,6 +1249,7 @@ export const ClipEditScreen = () => {
                 timelinePxPerMsRef.current = ppm
               }}
               onVisibleRangeChange={setVisibleRange}
+              centerSignal={centerSignal}
             />
 
             <View style={styles.btnRow}>
@@ -1213,12 +1279,12 @@ export const ClipEditScreen = () => {
         </View>
       ) : (
         <View style={styles.saved}>
-          {savedClips.length === 0 ? (
+          {displayClips.length === 0 ? (
             <View style={styles.empty}>
               <Icon name="scissors" size="lg" color={theme.colors.text.subtle} />
               <Text variant="bodyEmphasized">No clips yet</Text>
               <Text variant="caption" color={theme.colors.text.muted} style={styles.emptyText}>
-                Clips you cut from your buffer land here as private drafts.
+                Your recordings land here automatically; clips you cut from the buffer join them.
               </Text>
               <Pressable variant="default" onPress={() => setPage('editor')} style={styles.emptyCta}>
                 <Icon name="plus" size="sm" color={theme.colors.accent.default} />
@@ -1228,24 +1294,32 @@ export const ClipEditScreen = () => {
               </Pressable>
             </View>
           ) : (
-            savedClips.map((c) => (
+            displayClips.map((c) => (
               <SavedClipRow
                 key={c.id}
                 name={c.name}
                 capturedAt={c.capturedAt}
                 durationSec={c.durationSec}
+                thumbnailUrl={c.thumbnailUrl}
                 variant={c.variant}
                 sourcesLabel={c.sourcesLabel}
                 visibility={c.visibility}
+                tags={c.tags}
                 expanded={expandedId === c.id}
                 onToggleExpand={() => setExpandedId((id) => (id === c.id ? null : c.id))}
                 onShare={() => {}}
                 onPublish={() =>
-                  setSavedClips((prev) =>
-                    prev.map((x) => (x.id === c.id ? { ...x, visibility: 'public' } : x)),
-                  )
+                  c.source === 'saved'
+                    ? setSavedClips((prev) =>
+                        prev.map((x) => (x.id === c.id ? { ...x, visibility: 'public' } : x)),
+                      )
+                    : setPublishedSessionIds((s) => new Set(s).add(c.id))
                 }
-                onDelete={() => deleteClip(c.id)}
+                onDelete={() =>
+                  c.source === 'saved'
+                    ? deleteClip(c.id)
+                    : setHiddenSessionIds((s) => new Set(s).add(c.id))
+                }
               />
             ))
           )}
