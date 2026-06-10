@@ -856,6 +856,22 @@ export const ClipEditScreen = () => {
       if (now - lastFootage < 200) return
       lastFootage = now
       if (!playClockRef.current) playClockRef.current = { wall: now, ph: playheadRef.current }
+      // VIDEO-AUTHORITATIVE in-session: glue the wall-clock anchor to where the video
+      // ACTUALLY is, so the playhead FOLLOWS the video rather than the video being
+      // seeked to the playhead. That removes the corrective seek entirely during
+      // smooth playback (it turned every rebuffer stall into a forward skip), and a
+      // stall now just holds the playhead with the video (no run-ahead, no snap-back).
+      // Released within ~0.6s of a session end so the wall clock can still advance into
+      // the gap and fire the gap-rush + the one intended clip-to-clip skip.
+      const ag = playGroupsRef.current[activeGroupIndexRef.current]
+      if (ag && player.currentTime > 0.1) {
+        const vGlobal = ag.startSec + player.currentTime
+        const sess = camCumRef.current.find((cc) => vGlobal >= cc.mediaStart && vGlobal < cc.mediaEnd)
+        if (sess && sess.mediaEnd - vGlobal > 0.6) {
+          const vWall = mediaSecToPlayhead(vGlobal)
+          if (vWall != null && vWall < now - 300) playClockRef.current = { wall: now, ph: vWall }
+        }
+      }
       const c = playClockRef.current
       const ph = c.ph + (now - c.wall)
       // Reached the live edge → stop playback and go live (follow the head).
