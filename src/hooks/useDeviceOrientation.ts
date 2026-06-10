@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { Platform } from 'react-native'
 import { Accelerometer, DeviceMotion } from 'expo-sensors'
 
 // Physical device orientation + continuous tilt, sensed from the accelerometer's
@@ -33,18 +32,20 @@ const SMOOTH = 0.5 // exponential smoothing factor for tiltDeg (higher = more re
 const MIN_DELTA_DEG = 0.5 // skip a state update if the angle barely moved
 
 // Roll from the GYRO-FUSED gravity vector (DeviceMotion: accelerationIncluding
-// gravity minus user-acceleration), normalised so it's unit-agnostic. iOS/Android
-// report opposite X/Y signs — iOS negates both. atan2(x, y) gives the roll:
-// 0°=portrait, 180°=upside-down, ±90°=the two landscapes. If a hold is misread on
-// a platform, this sign pair is the place to flip.
+// gravity minus user-acceleration), normalised so it's unit-agnostic. atan2(x, y)
+// gives the roll: 0°=portrait, 180°=upside-down, ±90°=the two landscapes.
+// BOTH platforms negate x/y: the gravity vector reads 180° off raw on both, so
+// raw portrait lands at 180° (upside-down) and the two landscapes swap. Confirmed
+// on-device 2026-06-10 — Android (@aaron, @aaron2) was misreading portrait as
+// portrait-upside-down and landscapes reversed because it was NOT negating (the
+// old "iOS/Android opposite signs" assumption was wrong). Negating both fixes the
+// fine 4-way hold, which the recording's landscape direction depends on. (The live
+// preview is unaffected — GIMBAL_GAIN is 0, so tiltDeg never drives it.) If a hold
+// is ever misread on a new platform, this negation is the place to flip.
 function rollDeg(gx: number, gy: number, gz: number): number | null {
   const mag = Math.hypot(gx, gy, gz) || 1
-  let x = gx / mag
-  let y = gy / mag
-  if (Platform.OS === 'ios') {
-    x = -x
-    y = -y
-  }
+  const x = -gx / mag
+  const y = -gy / mag
   if (Math.hypot(x, y) < FLAT_GUARD) return null // phone ~flat — undefined roll
   return (Math.atan2(x, y) * 180) / Math.PI // -180..180, 0 = upright portrait
 }
