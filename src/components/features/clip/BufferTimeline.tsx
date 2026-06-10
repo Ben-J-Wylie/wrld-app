@@ -331,6 +331,11 @@ export function BufferTimeline({
   const savedRegionsRef = useRef(savedRegions)
   const bufferStartRef = useRef(bufferStartMs)
   const bufferEndRef = useRef(bufferEndMs)
+  // `nowMs` is the live wall-clock the parent passes (Date.now()), so it changes
+  // every render — read it via a ref where effects only need its current value
+  // (not to re-run on it). See the auto-follow effect below.
+  const nowMsRef = useRef(nowMs)
+  nowMsRef.current = nowMs
   const leadingPxRef = useRef(leadingPx)
   const leadingGapRef = useRef(leadingGap)
   leadingPxRef.current = leadingPx
@@ -576,15 +581,20 @@ export function BufferTimeline({
   const moveGesture = makeBracketGesture('move')
 
   // Auto-follow the live edge when the playhead is at now and not gesturing.
+  // `nowMs`/`bufferEndMs` are read via refs (not deps): the parent passes
+  // `nowMs={Date.now()}`, which changes every render, so listing it here re-ran
+  // this setState-bearing effect on every render — half of the render-loop that
+  // tripped "Maximum update depth exceeded". It only needs the live threshold's
+  // current value; the meaningful triggers are a moved playhead or a relayout.
   useEffect(() => {
     if (gesturingRef.current) return
-    const live = nowMs ?? bufferEndMs
+    const live = nowMsRef.current ?? bufferEndRef.current
     if (playheadMs < live - 1500) return
     const end = Math.max(0, effContentWidth - width)
     if (end <= 0) return
     setScrollOffset(end)
     tx.value = -end
-  }, [playheadMs, effContentWidth, width, nowMs, bufferEndMs, tx])
+  }, [playheadMs, effContentWidth, width, tx])
 
   // Recenter the playhead on demand. The parent bumps `centerSignal` from a transport
   // action (prev/next clip, play, to-start/end); if the playhead has scrolled out of

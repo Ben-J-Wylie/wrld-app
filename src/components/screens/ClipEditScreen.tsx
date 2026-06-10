@@ -83,6 +83,9 @@ const GAP_SCRUB_PX = 20
 // behind the flag; the durable fix is SERVER-generated thumbnails — wrld-backend
 // CLAUDE.md stacked-work item 6. Until then the timeline shows its sprocket filmstrip.
 const CLIENT_THUMB_GEN = false
+// Max server-frame thumbnails fetched for the timeline's visible window per pass —
+// bounds request volume regardless of buffer length (only the on-screen window loads).
+const SERVER_THUMB_CAP = 40
 
 // Recorded-source kind → ClipSource row metadata (icon/label/value). Only the
 // kinds the buffer actually captured are shown; unknown kinds are skipped.
@@ -161,12 +164,23 @@ export const ClipEditScreen = () => {
 
   // Sessions → timeline segments; live session's end tracks the live head (the
   // 1s tick below re-renders so it stays fresh).
-  const segments: BufferSegment[] = sessions.map((s) => ({
-    id: s.id,
-    startMs: sessionStartMs(s),
-    endMs: sessionEndMs(s),
-    posterUrl: s.thumbnailUrl, // real broadcast frame per session (server filmstrip later)
-  }))
+  //
+  // MEMOIZED on `sessions` (the query data, stable between refetches): a fresh
+  // array every render gave BufferTimeline a new `segBlocks` identity every
+  // render, which re-armed its visible-range timer on every render and drove a
+  // perpetual setVisibleRange → setThumbs → re-render loop (the "Maximum update
+  // depth exceeded" cascade). Segment geometry derives only from `sessions`
+  // (real media duration, not wall-clock), so this is the correct dep.
+  const segments: BufferSegment[] = useMemo(
+    () =>
+      sessions.map((s) => ({
+        id: s.id,
+        startMs: sessionStartMs(s),
+        endMs: sessionEndMs(s),
+        posterUrl: s.thumbnailUrl, // real broadcast frame per session (server filmstrip later)
+      })),
+    [sessions],
+  )
   const bufferStartMs = sessions.length ? sessionStartMs(sessions[0]!) : Date.now()
   const bufferEndMs = Date.now()
 
@@ -199,6 +213,10 @@ export const ClipEditScreen = () => {
   // mode and derives its offset from this absolute instant.
   const [playheadMs, setPlayheadMs] = useState(() => Date.now() - 2 * H)
   const [following, setFollowing] = useState(false)
+  // True while the user is dragging the field / timeline / clock. The field shows the
+  // static server frame under the playhead during a scrub (no video seek = no stutter),
+  // then returns to live video on release.
+  const [scrubbing, setScrubbing] = useState(false)
   const playheadRef = useRef(playheadMs)
   playheadRef.current = playheadMs
   const followingRef = useRef(following)
@@ -315,6 +333,16 @@ export const ClipEditScreen = () => {
   const sessionAtPlayhead =
     sessions.find((s) => playheadMs >= sessionStartMs(s) && playheadMs <= sessionEndMs(s)) ?? null
   const fieldThumb = sessionAtPlayhead?.thumbnailUrl ?? null
+  // The exact server frame under the playhead — shown in the field WHILE scrubbing
+  // (instant, no decode) instead of seeking the HLS video on every tick (the cause of
+  // scrub stutter). Falls back to the session poster, then the field's placeholder.
+  const fieldFrame = (() => {
+    const fs = sessionAtPlayhead?.filmstrip
+    if (!sessionAtPlayhead || !fs) return null
+    const mediaSec = Math.max(0, (playheadMs - sessionStartMs(sessionAtPlayhead)) / 1000)
+    const idx = Math.min(fs.frameCount, Math.max(1, Math.floor(mediaSec / fs.intervalSec) + 1))
+    return `${fs.baseUrl}/${idx}.jpg?t=${fs.token}`
+  })()
 
   // Streaming iff the user is live now AND the latest session is still open.
   // Gating on `isLive` (not just `endedAt === null`) flips the tail to its dark/
@@ -436,6 +464,15 @@ export const ClipEditScreen = () => {
   const player = useVideoPlayer(null, (p) => {
     p.muted = true
     p.pause()
+    // Buffer further ahead so playback doesn't stall at segment boundaries (iOS
+    // defaults to 0 = auto, which AVPlayer keeps conservative for this tokenized HLS;
+    // a stall is what makes the wall-clock playhead run ahead and then hard-seek the
+    // video forward — a visible skip). Set the whole object (per-field set is unsupported).
+    p.bufferOptions = {
+      preferredForwardBufferDuration: 30,
+      minBufferForPlayback: 4,
+      waitsToMinimizeStalling: true,
+    }
   })
 
   const targetSec = playheadToMediaSec()
@@ -641,6 +678,7 @@ export const ClipEditScreen = () => {
   const wasPlayingRef = useRef(false)
   const resumeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   function handleScrubStart() {
+    setScrubbing(true)
     // If a resume is already pending, we were playing before this burst — keep that
     // intent so adjusting several wheels (or re-grabbing) in a row still resumes at the
     // end, instead of each new grab capturing the already-paused state as "was paused".
@@ -653,6 +691,7 @@ export const ClipEditScreen = () => {
     if (playingRef.current) setPlaying(false)
   }
   function handleScrubEnd() {
+    setScrubbing(false)
     if (!wasPlayingRef.current) return
     wasPlayingRef.current = false
     if (resumeTimer.current) clearTimeout(resumeTimer.current)
@@ -817,6 +856,22 @@ export const ClipEditScreen = () => {
       if (now - lastFootage < 200) return
       lastFootage = now
       if (!playClockRef.current) playClockRef.current = { wall: now, ph: playheadRef.current }
+      // VIDEO-AUTHORITATIVE in-session: glue the wall-clock anchor to where the video
+      // ACTUALLY is, so the playhead FOLLOWS the video rather than the video being
+      // seeked to the playhead. That removes the corrective seek entirely during
+      // smooth playback (it turned every rebuffer stall into a forward skip), and a
+      // stall now just holds the playhead with the video (no run-ahead, no snap-back).
+      // Released within ~0.6s of a session end so the wall clock can still advance into
+      // the gap and fire the gap-rush + the one intended clip-to-clip skip.
+      const ag = playGroupsRef.current[activeGroupIndexRef.current]
+      if (ag && player.currentTime > 0.1) {
+        const vGlobal = ag.startSec + player.currentTime
+        const sess = camCumRef.current.find((cc) => vGlobal >= cc.mediaStart && vGlobal < cc.mediaEnd)
+        if (sess && sess.mediaEnd - vGlobal > 0.6) {
+          const vWall = mediaSecToPlayhead(vGlobal)
+          if (vWall != null && vWall < now - 300) playClockRef.current = { wall: now, ph: vWall }
+        }
+      }
       const c = playClockRef.current
       const ph = c.ph + (now - c.wall)
       // Reached the live edge → stop playback and go live (follow the head).
@@ -856,7 +911,13 @@ export const ClipEditScreen = () => {
         return
       }
       try {
-        if (Math.abs(player.currentTime - g.localSec) > 0.75) player.seekBy(g.localSec - player.currentTime)
+        // Only hard-seek the video back in sync on a LARGE drift. A brief rebuffer
+        // stall leaves the video a fraction of a second behind the wall clock; at the
+        // old 0.75s threshold that triggered a forward seekBy every stall — a visible
+        // skip. Tolerating up to 1.5s lets the video keep playing smoothly (the clock
+        // simply leads it slightly) and only corrects a real desync. Paired with the
+        // larger forward buffer above, which makes stalls rarer in the first place.
+        if (Math.abs(player.currentTime - g.localSec) > 1.5) player.seekBy(g.localSec - player.currentTime)
         player.play()
       } catch {}
     }
@@ -919,7 +980,8 @@ export const ClipEditScreen = () => {
   // group change), so local second-buckets never collide across groups.
   useEffect(() => {
     thumbCache.current.clear()
-    setThumbs([])
+    // NOTE: server-frame thumbs (the effect below) own `thumbs`; don't clear them on
+    // group change — the filmstrip is per-session and group-independent.
     if (!CLIENT_THUMB_GEN || !activeGroupUrl) return
     let cancelled = false
     ;(async () => {
@@ -1035,6 +1097,33 @@ export const ClipEditScreen = () => {
     return () => sub.remove()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [thumbPlayer])
+
+  // ── Timeline filmstrip from SERVER frames (replaces the non-viable client gen) ──
+  // Map each visible cell's wall-clock instant to the backend frame URL covering it
+  // (per-session `filmstrip`: idx = floor(mediaSec / intervalSec) + 1) and feed
+  // BufferTimeline's `thumbnails` prop. Pure URL building — no decode, no seeking, no
+  // hang; expo-image fetches/caches the actual frames, and only for the on-screen
+  // window. Missing frames (gaps, audio-only, older backend) fall back to sprockets.
+  useEffect(() => {
+    const range = visibleRange
+    if (!range || range.endMs <= range.startMs) {
+      setThumbs([])
+      return
+    }
+    const { startMs, endMs, cellMs } = range
+    const step = Math.max(cellMs, (endMs - startMs) / SERVER_THUMB_CAP)
+    const out: TimelineThumb[] = []
+    for (let t = startMs; t <= endMs && out.length < SERVER_THUMB_CAP; t += step) {
+      const sess = sessions.find((s) => t >= sessionStartMs(s) && t <= sessionEndMs(s))
+      const fs = sess?.filmstrip
+      if (!sess || !fs) continue
+      const mediaSec = Math.max(0, (t - sessionStartMs(sess)) / 1000)
+      const idx = Math.min(fs.frameCount, Math.max(1, Math.floor(mediaSec / fs.intervalSec) + 1))
+      out.push({ tMs: t, source: { uri: `${fs.baseUrl}/${idx}.jpg?t=${fs.token}` } })
+    }
+    setThumbs(out)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleRange, sessions])
 
   // The gap an instant falls in (inter-session / leading / trailing), or null in
   // footage — used to collapse gaps during the field scrub.
@@ -1182,9 +1271,9 @@ export const ClipEditScreen = () => {
             <View style={styles.fieldWrap} onTouchStart={collapseClock}>
               <BufferScrubField
                 variant={fieldVariant}
-                thumbnailUrl={fieldThumb}
+                thumbnailUrl={scrubbing ? fieldFrame ?? fieldThumb : fieldThumb}
                 frameSlot={
-                  hasCameraVideo && !playerError ? (
+                  !scrubbing && hasCameraVideo && !playerError ? (
                     <VideoView
                       player={player}
                       style={StyleSheet.absoluteFill}

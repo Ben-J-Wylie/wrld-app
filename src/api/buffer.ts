@@ -22,6 +22,17 @@ export type BufferSession = {
   playableKind: BufferTrackKind | null
   manifestUrl: string | null // tokenized HLS (unused by the thumbnail field, kept for later)
   thumbnailUrl: string | null // tokenized poster frame (camera sessions only)
+  // Server-generated scrub filmstrip: lightweight per-interval frames shown while
+  // dragging (and as the timeline strip) instead of seeking the HLS video. Build a
+  // frame URL as `${baseUrl}/${idx}.jpg?t=${token}` where idx (1-based) =
+  // floor(mediaSec / intervalSec) + 1, clamped to [1, frameCount]. Null when the
+  // session has no playable frames (audio-only / empty). Fetched per on-screen window.
+  filmstrip?: {
+    intervalSec: number
+    frameCount: number
+    baseUrl: string
+    token: string
+  } | null
 }
 
 // One codec-uniform run of the camera buffer: a contiguous group of sessions
