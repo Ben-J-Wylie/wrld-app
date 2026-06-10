@@ -3093,19 +3093,16 @@ clips appear as read-only hatched bands. No date/axis row
   a collapsed gap marker's pixels** ↔ the gap's wall-clock span (inter-session, leading,
   and trailing). Tapping/dragging glides the playhead through `[prevEnd → nextStart]`
   instead of snapping to the next clip's head.
-- **Zoom-level toggle** below the scrollbar (`SegmentedToggle`: All · Days · Hours · Min ·
-  Sec) — a non-pinch way to snap the zoom to a span, centred on the playhead; the
-  highlighted segment tracks the live zoom. Reports zoom up via `onZoomChange`.
-- **Adaptive level count (2026-06-09).** The toggle only renders the levels that are
-  *meaningful for the current footage extent*: `All` always, and each of `Days`/`Hours`/
-  `Min`/`Sec` only once its target scale beats the fit scale by `LEVEL_MEANINGFUL_FACTOR`
-  (1.25) — i.e. snapping to it is a real zoom-**in** from "All" rather than clamping back
-  to fit. Derived from the existing `levelToPx` vs `fit` math (keyed on `totalSegMs`, the
-  recorded footage with gaps collapsed), so it stays in sync with pinch. A short buffer
-  collapses to **All · Sec** (or just `All`, in which case the toggle is **hidden** — no
-  dead single chip); as footage grows, `Min → Hours → Days` cross the threshold and appear
-  in turn. `currentLevel` highlights the nearest *visible* level so pinch never targets a
-  hidden chip.
+- **Zoom buttons flanking the scrollbar (2026-06-10 — replaced the level toggle).** A
+  `‹zoom-out` button left of the scrollbar and a `zoom-in›` right of it (the discrete
+  `SegmentedToggle` of All/Days/Hours/Min/Sec is **removed**). Zoom is now continuous
+  `pxPerMs` from `fit` (whole buffer) up to a **frame-level max** (`FRAME_MAX_PXPERMS` ≈
+  a 30fps frame ~12px wide). **Tap** = one step (`× / ÷ ZOOM_TAP_STEP` 1.6); **press-and-
+  hold** = a smooth ramp across the **whole** range in `ZOOM_HOLD_MS` (5s) *regardless of
+  buffer size* — a constant rate in log-space (`ln(max/min)/5s`), driven by a
+  `requestAnimationFrame` loop that re-centres on the playhead each frame. Buttons disable
+  at the min/max ends. Pinch is unchanged; both report up via `onZoomChange`. (`ZoomButton`
+  uses the same tap-vs-hold shape as the transport's frame buttons.)
 - **Stateful edge indicators (`BufferEdge`, 15px) replace the head/tail `GapMarker`s.**
   Idle → darkest token (`text.primary`); **head evicting** (buffer full) → `accent` with
   a **right-edge zigzag**; **tail live** (streaming) → `accent` with a **left-edge
@@ -3151,7 +3148,10 @@ never scale — only the filmstrip segments do).
 - **Proposed props:** `inMs`, `outMs`, `pxPerMs`, `onChangeIn`, `onChangeOut`, `onMove`, `blocked?`
 
 **Mock says (Frames 2–4):** 2px accent frame with accent-tinted fill; left edge =
-in-point, right edge = out-point, both with large finger-friendly grip handles.
+in-point, right edge = out-point. **Slim "D" grip handles (2026-06-10)** — flat on the
+OUTER side (aligned with the frame's thin precision edge), bulging inward at the vertical
+middle, thin top + bottom (`BULB_W 7 × BULB_H 18`, inner corners rounded). Replaced the
+fat 16px solid blocks; the 16px touch column stays (transparent) for the gesture.
 **No time readout on the selection (removed 2026-06-10)** — the only pill is the
 transient "Blocked · saved region" warning when an edge drag clamps at a saved region.
 
@@ -3236,16 +3236,19 @@ Direction (drag-right = earlier) is flippable. (Was PanResponder pre-2026-06-07.
 - **Tier:** feature (composes Pressable + Icon)
 - **Location:** `src/components/features/clip/BufferTransport.tsx` *(built 2026-06-07)*
 - **Variants:** `default`
-- **Sizes:** row of five; 44 step buttons + a 52 accent play/pause circle
-- **States:** `playing` (glyph) · prev/next `disabled` at the buffer edges
-- **Props (built):** `playing`, `onToStart`, `onPrev`, `onTogglePlay`, `onNext`, `onToEnd`, `canPrev?`, `canNext?`
+- **Sizes:** row of seven; 40-wide step buttons + a 48 accent play/pause circle (`gap: sm`)
+- **States:** `playing` (glyph) · prev/next/frame `disabled` at the buffer edges
+- **Props (built):** `playing`, `onToStart`, `onPrevClip`, `onFrameBack`, `onFrameBackHold(held)`, `onTogglePlay`, `onFrameForward`, `onFrameForwardHold(held)`, `onNextClip`, `onToEnd`, `canPrev?`, `canNext?`, `canFrameBack?`, `canFrameForward?`
 
-**Code does (built):** The transport row beneath the buffer field (above the clock):
-**|◀ beginning of buffer · ‹ previous clip · ▶/❚❚ · next clip › · end of buffer ▶|**.
-Presentational — the host (`ClipEditScreen`) owns where each jump lands (clip heads =
-session starts; beginning = the leading eviction-gap edge when present, else oldest
-footage; end = the live edge) and the play-state. Prev/next disable at the edges; the
-outer two never do. Jumps keep playing across them (the host re-anchors the wall clock).
+**Code does (built · 7-button rework 2026-06-10):** The transport row beneath the buffer
+field (above the clock): **|◀ head · ‹‹ prev clip edge · ‹ frame back · ▶/❚❚ · frame
+forward › · next clip edge ›› · tail ▶|**. The **frame buttons are tap-or-hold** — a tap
+steps exactly one frame (`HoldStepButton` distinguishes via `onPressIn`/`onPressOut` +
+a 240ms timer), a press-and-hold plays (forward for ›, reverse for ‹) until released.
+The **clip-edge buttons (double chevron) land on clip heads AND tails** (every session
+start + end). Presentational — the host (`ClipEditScreen`) owns the jump targets, the
+one-frame size (1000/30 at the pinned 30fps), and forward/reverse playback (reverse =
+a 1× `requestAnimationFrame` scrub; the paused-seek effect repaints the field).
 
 ---
 

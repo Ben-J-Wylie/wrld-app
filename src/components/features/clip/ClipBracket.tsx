@@ -18,7 +18,11 @@ import { GestureDetector, type GestureType } from 'react-native-gesture-handler'
 import { Text } from '@/components/primitives/Text'
 import { theme } from '@/tokens/theme'
 
-const HANDLE_W = 16
+const HANDLE_W = 26 // touch target per edge (the visible grip is the slimmer bulb below)
+// The in/out grip: a slim "D" — flat on the OUTER edge (aligned with the frame's thin
+// 2px precision line), bulging inward at the vertical middle, thin top + bottom.
+const BULB_W = 7
+const BULB_H = 18
 
 type Props = {
   leftPx: number
@@ -43,8 +47,10 @@ export function ClipBracket({ leftPx, widthPx, blocked, inGesture, outGesture, c
       <View style={[styles.frame, { left: leftPx, width }, blocked && styles.frameBlocked, style]}>
         {withGesture(
           inGesture,
-          <View style={[styles.handle, styles.handleL, blocked && styles.handleBlocked]}>
-            <View style={styles.grip} />
+          <View style={[styles.handle, styles.handleL]}>
+            <View style={[styles.bulb, styles.bulbL, blocked && styles.bulbBlocked]}>
+              <View style={styles.grip} />
+            </View>
           </View>,
         )}
         {withGesture(
@@ -59,7 +65,9 @@ export function ClipBracket({ leftPx, widthPx, blocked, inGesture, outGesture, c
         {withGesture(
           outGesture,
           <View style={[styles.handle, styles.handleR]}>
-            <View style={styles.grip} />
+            <View style={[styles.bulb, styles.bulbR, blocked && styles.bulbBlocked]}>
+              <View style={styles.grip} />
+            </View>
           </View>,
         )}
       </View>
@@ -89,23 +97,39 @@ const styles = StyleSheet.create({
   frameBlocked: {
     borderColor: theme.colors.warn,
   },
+  // Transparent touch column; the frame's 2px accent border is the flat precision edge.
+  // The bulb is pinned to the OUTER edge and vertically centred.
   handle: {
     width: HANDLE_W,
+    justifyContent: 'center',
+  },
+  handleL: { alignItems: 'flex-start' },
+  handleR: { alignItems: 'flex-end' },
+  // The grip bulb: flat outer side, rounded (bulging) inner side toward the crop.
+  bulb: {
+    width: BULB_W,
+    height: BULB_H,
+    backgroundColor: theme.colors.accent.default,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: theme.colors.accent.default,
   },
-  handleL: {},
-  handleR: {},
-  handleBlocked: {
+  bulbL: {
+    borderTopRightRadius: BULB_H / 2,
+    borderBottomRightRadius: BULB_H / 2,
+  },
+  bulbR: {
+    borderTopLeftRadius: BULB_H / 2,
+    borderBottomLeftRadius: BULB_H / 2,
+  },
+  bulbBlocked: {
     backgroundColor: theme.colors.warn,
   },
   grip: {
     width: 2,
-    height: 20,
+    height: 10,
     borderRadius: 1,
     backgroundColor: theme.colors.text.inverse,
-    opacity: 0.8,
+    opacity: 0.85,
   },
   center: {
     flex: 1,

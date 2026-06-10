@@ -1295,7 +1295,7 @@ export function FeatureGallery() {
       </Section>
 
       <Section title="BufferTransport">
-        <Row label="buffer-start · prev clip · play/pause · next clip · buffer-end">
+        <Row label="head · ‹‹clip · ‹frame(hold=rev) · play · frame›(hold=play) · clip›› · tail">
           <BufferTransportDemo />
         </Row>
       </Section>
@@ -1874,13 +1874,17 @@ function BufferSourceViewerDemo() {
 function BufferTransportDemo() {
   const [playing, setPlaying] = useState(false)
   return (
-    <View style={{ width: 240 }}>
+    <View style={{ width: 320 }}>
       <BufferTransport
         playing={playing}
         onToStart={() => {}}
-        onPrev={() => {}}
+        onPrevClip={() => {}}
+        onFrameBack={() => {}}
+        onFrameBackHold={() => {}}
         onTogglePlay={() => setPlaying((p) => !p)}
-        onNext={() => {}}
+        onFrameForward={() => {}}
+        onFrameForwardHold={() => {}}
+        onNextClip={() => {}}
         onToEnd={() => {}}
       />
     </View>

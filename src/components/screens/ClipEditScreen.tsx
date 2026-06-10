@@ -67,6 +67,10 @@ type SavedClip = {
 const H = 3_600_000
 const DEFAULT_CLIP_MS = 120_000 // 2 min default bracket on "New clip"
 const MIN_BRACKET_MS = 500
+const FRAME_MS = 1000 / 30 // one frame at the pinned 30fps capture (transport frame-step)
+// Prev/next clip-edge buttons skip edges within this of the playhead (so they advance
+// to the NEXT distinct head/tail rather than re-snapping to where you already are).
+const EDGE_SNAP_GUARD_MS = 300
 // During playback EVERY gap is rushed over exactly this long: the clock spins across the
 // gap's full span in 3s, then the next clip plays. Long gap → fast spin; 3s gap → reads
 // as normal counting; <3s gap → reads as slowing down.
@@ -1182,16 +1186,27 @@ export const ClipEditScreen = () => {
   }
 
   // ── Transport (jump controls below the field) ───────────────────────────────
-  // Clip heads = each session's start. Prev = current clip's head if we're >1s into it,
-  // else the previous clip's head; Next = the next clip's head (else the live end).
-  const sessionStarts = sessions.map(sessionStartMs).sort((a, b) => a - b)
+  // Clip EDGES = every session's start AND end (so prev/next land on clip tails too,
+  // not just heads). Prev = nearest edge before the playhead; next = nearest edge after.
+  const clipEdges = useMemo(() => {
+    const set = new Set<number>()
+    sessions.forEach((s) => {
+      set.add(sessionStartMs(s))
+      set.add(sessionEndMs(s))
+    })
+    return [...set].sort((a, b) => a - b)
+  }, [sessions])
   function prevClipTarget(): number {
     let best: number | null = null
-    for (const st of sessionStarts) if (st < playheadRef.current - 1000) best = st
-    return best ?? bufferStartMs
+    for (const e of clipEdges) if (e < playheadRef.current - EDGE_SNAP_GUARD_MS) best = e
+    // No earlier clip edge → fall back to the HEAD OF BUFFER (the leading eviction-gap
+    // edge when there's headroom, else the oldest footage). This mirrors the tail: once
+    // you're at the oldest clip's head, a second tap steps out to the buffer head, just
+    // as a second forward tap steps past the last clip's tail to the buffer end.
+    return best ?? (hasLeadingGap ? leadStartMs : bufferStartMs)
   }
   function nextClipTarget(): number | null {
-    for (const st of sessionStarts) if (st > playheadRef.current + 1000) return st
+    for (const e of clipEdges) if (e > playheadRef.current + EDGE_SNAP_GUARD_MS) return e
     return null
   }
   // Bumped to ask the timeline to recenter the playhead in its viewport (animated) —
@@ -1210,8 +1225,60 @@ export const ClipEditScreen = () => {
     }
     recenterTimeline()
   }
-  const canPrev = bufferEndMs > 0 && playheadMs > bufferStartMs + 1000
+  // The buffer's head/floor — the leading eviction-gap edge when there's headroom, else
+  // the oldest footage. clip-back's enable + the reverse floor both key off this, so a
+  // second clip-back tap steps PAST the oldest clip's head into the eviction gap (and
+  // the button stays live there) — mirroring the tail stepping past the last clip's tail
+  // to the buffer end. Guarding against bufferStartMs here is what disabled the 2nd tap.
+  const floorMs = hasLeadingGap ? leadStartMs : bufferStartMs
+  const canPrev = bufferEndMs > 0 && playheadMs > floorMs + 1000
   const canNext = bufferEndMs > 0 && playheadMs < Date.now() - 1000
+
+  // ── Frame step + hold-to-play (the transport's ‹ / › buttons) ───────────────
+  const reverseRaf = useRef<number | null>(null)
+  function stopReverse() {
+    if (reverseRaf.current != null) {
+      cancelAnimationFrame(reverseRaf.current)
+      reverseRaf.current = null
+    }
+  }
+  // Hold ‹ → reverse-scrub at 1× until released; the paused-seek effect repaints the
+  // field to the nearest frame as the playhead moves back. Stops at the buffer floor.
+  function startReverse() {
+    if (reverseRaf.current != null) return
+    if (playingRef.current) setPlaying(false)
+    let last = Date.now()
+    const step = () => {
+      const now = Date.now()
+      const next = playheadRef.current - (now - last)
+      last = now
+      placePlayhead(next)
+      if (next <= floorMs) {
+        stopReverse()
+        return
+      }
+      reverseRaf.current = requestAnimationFrame(step)
+    }
+    reverseRaf.current = requestAnimationFrame(step)
+  }
+  // Tap ‹ / › → step exactly one frame (and pause).
+  function frameStep(dir: 1 | -1) {
+    stopReverse()
+    if (playingRef.current) setPlaying(false)
+    placePlayhead(playheadRef.current + dir * FRAME_MS)
+    recenterTimeline()
+  }
+  function frameForwardHold(held: boolean) {
+    stopReverse()
+    setPlaying(held) // hold → forward playback; release → stop
+  }
+  function frameBackHold(held: boolean) {
+    if (held) startReverse()
+    else stopReverse()
+  }
+  const canFrameBack = playheadMs > floorMs + 1
+  const canFrameForward = playheadMs < Date.now() - 1
+  useEffect(() => () => stopReverse(), [])
 
   function saveClip(clipName: string) {
     if (!bracket) return
@@ -1425,7 +1492,9 @@ export const ClipEditScreen = () => {
             <BufferTransport
               playing={playing}
               onToStart={() => jumpTo(hasLeadingGap ? leadStartMs : bufferStartMs)}
-              onPrev={() => jumpTo(prevClipTarget())}
+              onPrevClip={() => jumpTo(prevClipTarget())}
+              onFrameBack={() => frameStep(-1)}
+              onFrameBackHold={frameBackHold}
               onTogglePlay={() => {
                 // If recovery is exhausted (field shows the poster), play re-arms a
                 // fresh recovery attempt instead of toggling.
@@ -1438,10 +1507,14 @@ export const ClipEditScreen = () => {
                 setPlaying((p) => !p)
                 recenterTimeline()
               }}
-              onNext={() => jumpTo(nextClipTarget() ?? Date.now())}
+              onFrameForward={() => frameStep(1)}
+              onFrameForwardHold={frameForwardHold}
+              onNextClip={() => jumpTo(nextClipTarget() ?? Date.now())}
               onToEnd={() => jumpTo(Date.now())}
               canPrev={canPrev}
               canNext={canNext}
+              canFrameBack={canFrameBack}
+              canFrameForward={canFrameForward}
             />
           </View>
 

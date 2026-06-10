@@ -35,7 +35,8 @@ import Animated, {
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import { Image } from 'expo-image'
 import { theme } from '@/tokens/theme'
-import { SegmentedToggle } from '@/components/primitives/SegmentedToggle'
+import { Pressable } from '@/components/primitives/Pressable'
+import { Icon } from '@/components/primitives/Icon'
 import { GapMarker, GAP_MARKER_WIDTH } from './GapMarker'
 import { SavedClipRegion } from './SavedClipRegion'
 import { ClipBracket } from './ClipBracket'
@@ -101,7 +102,6 @@ type Props = {
 const TRACK_H = 52
 const MIN_BRACKET_MS = 500
 const GAP_THRESHOLD_MS = 500
-const ZOOM_MAX_FACTOR = 12
 // Real-frame filmstrip: each recorded segment is tiled with little FILM CELLS — a
 // sprocket-hole band above and below, the thumbnail framed between them. The frame's
 // aspect follows the video's display aspect (PORTRAIT — the scrub field + stream view
@@ -125,35 +125,15 @@ const EDGE_GAP_WIDTH = 15
 const ZIGZAG_TEETH = 4 // fixed count, evenly spaced over the track height
 const ZIGZAG_DEPTH = 5 // how far the teeth bite into the footage (px)
 
-// Zoom-level toggle (an alternative to pinch). Each non-"All" level targets a
-// span that fills the viewport; "All" fits the whole buffer. pxPerMs = width/span,
-// clamped to the live zoom range. maxPx is raised so the finest (Sec) level — and
-// pinch — can reach it even on a wide (multi-day) buffer.
-type ZoomLevel = 'all' | 'days' | 'hours' | 'min' | 'sec'
-const ZOOM_LEVELS: ZoomLevel[] = ['all', 'days', 'hours', 'min', 'sec']
-const ZOOM_OPTS: { value: ZoomLevel; label: string }[] = [
-  { value: 'all', label: 'All' },
-  { value: 'days', label: 'Days' },
-  { value: 'hours', label: 'Hours' },
-  { value: 'min', label: 'Min' },
-  { value: 'sec', label: 'Sec' },
-]
-const SEC_SPAN_MS = 20_000
-const LEVEL_SPAN_MS: Record<Exclude<ZoomLevel, 'all'>, number> = {
-  days: 2 * 86_400_000,
-  hours: 3 * 3_600_000,
-  min: 10 * 60_000,
-  sec: SEC_SPAN_MS,
-}
-// A non-"All" level only earns its own toggle button once the buffer holds enough
-// footage that snapping to it is a real zoom-IN from "All" — i.e. its target scale is
-// meaningfully tighter than the fit scale. Below this, snapping to it would clamp back
-// to fit (== "All"), so the button is a no-op and gets hidden. The factor is the margin
-// over fit required (≈ footage must exceed the level's span × this), which keeps a
-// near-duplicate-of-All level from showing. As the buffer grows, Min → Hours → Days
-// cross the threshold and appear in turn; "All" is always present, and a short buffer
-// collapses to just "All" + "Sec".
-const LEVEL_MEANINGFUL_FACTOR = 1.25
+// Zoom is a continuous pxPerMs from `fit` (the whole buffer fills the viewport) up to a
+// frame-level max. The ‹zoom-out / zoom-in› buttons flanking the scrollbar step it on a
+// tap and smoothly ramp it on a press-and-hold (replacing the old discrete level toggle).
+const FRAME_MS = 1000 / 30 // one frame at the pinned 30fps capture
+const FRAME_VIEW_PX = 12 // a single frame is ≈ this wide at the finest zoom
+const FRAME_MAX_PXPERMS = FRAME_VIEW_PX / FRAME_MS // max zoom (≈0.36 px/ms = frame level)
+const ZOOM_TAP_STEP = 1.6 // each tap multiplies / divides the zoom by this
+const ZOOM_HOLD_TRIGGER_MS = 240 // press longer than this → smooth-zoom hold (not a tap)
+const ZOOM_HOLD_MS = 5000 // a full-range hold (fit ⇆ frames) takes this long, any buffer
 
 type SegBlock = { kind: 'seg'; seg: BufferSegment; leftPx: number; widthPx: number }
 type GapBlock = { kind: 'gap'; leftPx: number; skippedMs: number }
@@ -214,8 +194,8 @@ export function BufferTimeline({
   const fit =
     totalSegMs > 0 && width > 0 ? Math.max(0, (width - gapsPx - leadingPx - trailingPx) / totalSegMs) : 0
   const minPx = fit
-  const secPx = width > 0 ? width / SEC_SPAN_MS : 0
-  const maxPx = fit > 0 ? Math.max(fit * ZOOM_MAX_FACTOR, secPx) : 0
+  // Max zoom is the finer of frame-level and fit (a tiny buffer can't zoom past fit).
+  const maxPx = fit > 0 ? Math.max(fit, FRAME_MAX_PXPERMS) : 0
   const px = pxPerMs > 0 ? pxPerMs : fit
 
   // Layout starts the cursor at leadingPx so every block is offset past the leading gap.
@@ -410,51 +390,67 @@ export function BufferTimeline({
     gesturingRef.current = false
   }
 
-  // ── zoom-level toggle (alternative to pinch) ────────────────────────────────
-  function levelToPx(level: ZoomLevel): number {
-    if (level === 'all' || width <= 0 || fit <= 0) return fit
-    return clamp(width / LEVEL_SPAN_MS[level], minPx, maxPx)
-  }
-  // Which levels earn a toggle button for THIS buffer's footage extent. "All" always;
-  // each other level only once it's a real zoom-in from fit (levelToPx beats fit by the
-  // margin). Short buffer → just ["all", ("sec")]; the rest appear as footage grows.
-  const visibleLevels: ZoomLevel[] = useMemo(() => {
-    if (fit <= 0 || width <= 0) return ['all']
-    return ZOOM_LEVELS.filter((lv) => lv === 'all' || levelToPx(lv) > fit * LEVEL_MEANINGFUL_FACTOR)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fit, minPx, maxPx, width])
-  const visibleOpts = useMemo(() => ZOOM_OPTS.filter((o) => visibleLevels.includes(o.value)), [visibleLevels])
-
-  // The segment highlighted = the visible level whose scale is nearest the current zoom.
-  const currentLevel: ZoomLevel = useMemo(() => {
-    if (px <= 0) return 'all'
-    let best: ZoomLevel = 'all'
-    let bestD = Infinity
-    for (const lv of visibleLevels) {
-      const lpx = levelToPx(lv)
-      if (lpx <= 0) continue
-      const d = Math.abs(Math.log(px) - Math.log(lpx))
-      if (d < bestD) {
-        bestD = d
-        best = lv
-      }
-    }
-    return best
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [px, fit, minPx, maxPx, width, visibleLevels])
-  // Tap a level → snap the zoom, keeping the playhead centred in the viewport.
-  function applyZoomLevel(level: ZoomLevel) {
-    const newPx = levelToPx(level)
+  // ── continuous zoom (the ‹zoom-out / zoom-in› buttons flanking the scrollbar) ─
+  // Set the zoom to `target` (clamped), keeping `focalTime` PINNED at the viewport
+  // centre — so it grows/shrinks evenly on both sides of that instant, and a side that
+  // reaches a buffer edge just stops (offset clamp) while the other keeps going. Reads
+  // geometry via refs so it works from a tap AND the hold rAF loop.
+  function applyZoom(target: number, focalTime: number) {
+    const newPx = clamp(target, minPxRef.current, maxPxRef.current)
     if (newPx <= 0) return
-    const nl = layout(segmentsRef.current, newPx, leadingPx)
-    const newCW = nl.contentWidth + trailingPx
-    const phX = timeToX(playheadMs, nl.segBlocks, newPx)
-    const no = clamp(phX - width / 2, 0, Math.max(0, newCW - width))
+    const nl = layout(segmentsRef.current, newPx, leadingPxRef.current)
+    const newCW = nl.contentWidth + tailRef.current.trailingPx
+    const focalX = timeToX(focalTime, nl.segBlocks, newPx)
+    const no = clamp(focalX - widthRef.current / 2, 0, Math.max(0, newCW - widthRef.current))
     sx.value = 1
     tx.value = -no
     setPxPerMs(newPx)
     setScrollOffset(no)
   }
+  // The time currently at the viewport centre — the focal the zoom locks onto.
+  function viewportCenterTime() {
+    return xToTime(offsetRef.current + widthRef.current / 2, segBlocksRef.current, pxRef.current)
+  }
+  function zoomStep(dir: 1 | -1) {
+    applyZoom(dir > 0 ? pxRef.current * ZOOM_TAP_STEP : pxRef.current / ZOOM_TAP_STEP, viewportCenterTime())
+  }
+  // Hold → smoothly ramp the zoom across the WHOLE range (fit ⇆ frames) in ZOOM_HOLD_MS,
+  // independent of buffer size: a constant rate in log-space (exponential zoom reads as
+  // perceptually linear). `cur` carries the live value so React state batching can't lag
+  // it; `focal` is captured ONCE so the centre stays rock-still (no per-frame re-pick).
+  const zoomRaf = useRef<number | null>(null)
+  function stopZoomHold() {
+    if (zoomRaf.current != null) {
+      cancelAnimationFrame(zoomRaf.current)
+      zoomRaf.current = null
+    }
+  }
+  function startZoomHold(dir: 1 | -1) {
+    if (zoomRaf.current != null) return
+    const minP = minPxRef.current
+    const maxP = maxPxRef.current
+    if (maxP <= minP) return
+    const ratePerMs = Math.log(maxP / minP) / ZOOM_HOLD_MS
+    const focal = viewportCenterTime()
+    let cur = pxRef.current
+    let last = Date.now()
+    const step = () => {
+      const now = Date.now()
+      const dt = now - last
+      last = now
+      cur = clamp(cur * Math.exp(dir * ratePerMs * dt), minP, maxP)
+      applyZoom(cur, focal)
+      if ((dir > 0 && cur >= maxP) || (dir < 0 && cur <= minP)) {
+        stopZoomHold()
+        return
+      }
+      zoomRaf.current = requestAnimationFrame(step)
+    }
+    zoomRaf.current = requestAnimationFrame(step)
+  }
+  useEffect(() => () => stopZoomHold(), [])
+  const canZoomOut = px > minPx * 1.002
+  const canZoomIn = px < maxPx * 0.998
 
   // ── gestures ──────────────────────────────────────────────────────────────
   const panRef = useRef(undefined as unknown)
@@ -561,7 +557,7 @@ export function BufferTimeline({
     }
   }
   function makeBracketGesture(mode: 'in' | 'out' | 'move') {
-    return Gesture.Pan()
+    const g = Gesture.Pan()
       .blocksExternalGesture(panRef as never)
       .onBegin(() => {
         'worklet'
@@ -575,6 +571,11 @@ export function BufferTimeline({
         'worklet'
         runOnJS(setBlocked)(false)
       })
+    // Extend the in/out grab area beyond the slim bulb — outward (away from the crop) +
+    // vertically — for an easier handle grab. The move zone keeps its own bounds.
+    if (mode === 'in') return g.hitSlop({ top: 12, bottom: 12, left: 14 })
+    if (mode === 'out') return g.hitSlop({ top: 12, bottom: 12, right: 14 })
+    return g
   }
   const inGesture = makeBracketGesture('in')
   const outGesture = makeBracketGesture('out')
@@ -702,21 +703,92 @@ export function BufferTimeline({
         </View>
       </GestureDetector>
 
-      <TimelineScrollbar
-        contentWidth={effContentWidth}
-        viewport={width}
-        scrollOffset={offset}
-        onScrollTo={(o) => {
-          const no = clamp(o, 0, maxScroll)
-          tx.value = -no
-          setScrollOffset(no)
-        }}
-      />
-
-      {visibleOpts.length > 1 && (
-        <SegmentedToggle options={visibleOpts} value={currentLevel} onChange={applyZoomLevel} />
-      )}
+      {/* Scrollbar flanked by zoom-out (left) / zoom-in (right): tap to step, hold to
+          smooth-zoom across the whole range. */}
+      <View style={styles.zoomRow}>
+        <ZoomButton
+          icon="zoom-out"
+          label="Zoom out"
+          disabled={!canZoomOut}
+          onTap={() => zoomStep(-1)}
+          onHold={(held) => (held ? startZoomHold(-1) : stopZoomHold())}
+        />
+        <View style={styles.zoomScroll}>
+          <TimelineScrollbar
+            contentWidth={effContentWidth}
+            viewport={width}
+            scrollOffset={offset}
+            onScrollTo={(o) => {
+              const no = clamp(o, 0, maxScroll)
+              tx.value = -no
+              setScrollOffset(no)
+            }}
+          />
+        </View>
+        <ZoomButton
+          icon="zoom-in"
+          label="Zoom in"
+          disabled={!canZoomIn}
+          onTap={() => zoomStep(1)}
+          onHold={(held) => (held ? startZoomHold(1) : stopZoomHold())}
+        />
+      </View>
     </View>
+  )
+}
+
+// Zoom button flanking the scrollbar: TAP = one zoom step; press-and-hold (past
+// ZOOM_HOLD_TRIGGER_MS) = smooth zoom until release. Same tap-vs-hold shape as the
+// transport's frame buttons.
+function ZoomButton({
+  icon,
+  label,
+  onTap,
+  onHold,
+  disabled,
+}: {
+  icon: Parameters<typeof Icon>[0]['name']
+  label: string
+  onTap: () => void
+  onHold: (held: boolean) => void
+  disabled?: boolean
+}) {
+  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const holding = useRef(false)
+  const clearTimer = () => {
+    if (holdTimer.current) {
+      clearTimeout(holdTimer.current)
+      holdTimer.current = null
+    }
+  }
+  return (
+    <Pressable
+      variant={disabled ? 'none' : 'subtle'}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      hitSlop={8}
+      style={styles.zoomBtn}
+      onPressIn={() => {
+        holding.current = false
+        clearTimer()
+        holdTimer.current = setTimeout(() => {
+          holding.current = true
+          onHold(true)
+        }, ZOOM_HOLD_TRIGGER_MS)
+      }}
+      onPressOut={() => {
+        clearTimer()
+        if (holding.current) {
+          holding.current = false
+          onHold(false)
+        } else {
+          onTap()
+        }
+      }}
+    >
+      <Icon name={icon} size="md" color={disabled ? theme.colors.text.subtle : theme.colors.text.muted} />
+    </Pressable>
   )
 }
 
@@ -965,6 +1037,20 @@ function clamp(v: number, lo: number, hi: number): number {
 const styles = StyleSheet.create({
   wrap: {
     gap: theme.spacing.sm,
+  },
+  zoomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+  },
+  zoomScroll: {
+    flex: 1,
+  },
+  zoomBtn: {
+    width: 38,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   timeline: {
     // TRACK_H + the two 1px borders: the content (TRACK_H) then sits BETWEEN the
