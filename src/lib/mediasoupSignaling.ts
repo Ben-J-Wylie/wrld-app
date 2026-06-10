@@ -13,6 +13,7 @@ export type ClientMessage =
   | { type: 'broadcasterPaused' }
   | { type: 'broadcasterResumed' }
   | { type: 'broadcasterOrientation'; orientation: 'portrait' | 'landscape'; rotationDeg?: number; hold?: string }
+  | { type: 'cameraFacing'; facing: 'user' | 'environment' }
   | { type: 'locationUpdate'; lat: number; lng: number }
   | { type: 'tip'; amount: number }
   | { type: 'gift'; giftType: string }
@@ -222,6 +223,13 @@ class MediasoupSignalingClient {
     hold?: string,
   ): void {
     this.send({ type: 'broadcasterOrientation', orientation, rotationDeg, hold })
+  }
+
+  // Tell the server which camera is live (back/front). Sent at go-live and on
+  // every flip so the recorder can re-bake rotation per camera — back and front
+  // need rotations 180° apart and the bake is fixed per recording session.
+  sendCameraFacing(facing: 'user' | 'environment'): void {
+    this.send({ type: 'cameraFacing', facing })
   }
 
   sendLocationUpdate(lat: number, lng: number): void {

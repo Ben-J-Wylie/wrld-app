@@ -261,7 +261,7 @@ export function StreamScreen() {
     sendTip, dismissTip,
     sendGift, dismissGift,
     sendLocationUpdate,
-    sendBroadcasterPaused, sendBroadcasterResumed, sendBroadcasterOrientation,
+    sendBroadcasterPaused, sendBroadcasterResumed, sendBroadcasterOrientation, sendCameraFacing,
   } = useSignaling()
   // Broadcaster: while live, the source set comes from the store (stable
   // across tab re-entry); while previewing, from the armed config. Viewers
@@ -725,6 +725,16 @@ export function StreamScreen() {
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isNew, status, localStream, deviceOrientation])
+
+  // Tell the server which camera is live, at go-live and on every flip. Back and
+  // front cameras need rotations 180° apart, and the recorder bakes one rotation
+  // per session — so a flip makes the server start a fresh session that re-bakes
+  // for the new camera. Without this, half a flipped recording is upside-down.
+  useEffect(() => {
+    if (!isNew || status !== 'in-room') return
+    sendCameraFacing(facingMode)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isNew, status, facingMode])
 
   useEffect(() => {
     if (!isNew || status !== 'in-room') return
