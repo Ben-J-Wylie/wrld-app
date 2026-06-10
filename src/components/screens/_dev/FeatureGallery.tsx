@@ -65,6 +65,13 @@ import { ClipBracket } from '@/components/features/clip/ClipBracket'
 import { BufferTimeline } from '@/components/features/clip/BufferTimeline'
 import { BufferScrubField } from '@/components/features/clip/BufferScrubField'
 import { BufferTransport } from '@/components/features/clip/BufferTransport'
+import { SourceRail, type SourceRailItem } from '@/components/features/clip/SourceRail'
+import { ClipToolRail, type ClipToolItem } from '@/components/features/clip/ClipToolRail'
+import { SaveClipSheet } from '@/components/features/clip/SaveClipSheet'
+import { SourceWaveform } from '@/components/features/clip/SourceWaveform'
+import { SourceTelemetryGraph } from '@/components/features/clip/SourceTelemetryGraph'
+import { SourceLocationTrail } from '@/components/features/clip/SourceLocationTrail'
+import { SourceIdentityCard } from '@/components/features/clip/SourceIdentityCard'
 import { ClipSourcesDrawer, type ClipSource } from '@/components/features/clip/ClipSourcesDrawer'
 import { SavedClipRow } from '@/components/features/clip/SavedClipRow'
 import { TimelineScrollbar } from '@/components/features/clip/TimelineScrollbar'
@@ -1293,6 +1300,26 @@ export function FeatureGallery() {
         </Row>
       </Section>
 
+      <Section title="SourceRail + source views">
+        <Row label="tap a source — field renders its view (mock data)">
+          <BufferSourceViewerDemo />
+        </Row>
+      </Section>
+
+      <Section title="ClipToolRail">
+        <Row label="select · set in/out · delete · trim · save · clear (warn = destructive)">
+          <View style={{ backgroundColor: '#1a1612', padding: theme.spacing.md, borderRadius: theme.radius.md }}>
+            <ClipToolRail tools={CLIP_TOOL_DEMO} />
+          </View>
+        </Row>
+      </Section>
+
+      <Section title="SaveClipSheet">
+        <Row label="keyboard-aware name modal (opens from the tool rail's Save)">
+          <SaveClipSheetDemo />
+        </Row>
+      </Section>
+
       <Section title="GapMarker">
         <Row label="10px collapsed-gap break (no label)">
           <View style={galleryStyles.gapStrip}>
@@ -1316,12 +1343,12 @@ export function FeatureGallery() {
       <Section title="ClipBracket">
         <Row label="active">
           <View style={galleryStyles.trackMock}>
-            <ClipBracket leftPx={60} widthPx={150} durationLabel="0:18" rangeLabel="14:22 → 14:40" />
+            <ClipBracket leftPx={60} widthPx={150} />
           </View>
         </Row>
         <Row label="blocked (clamped at saved region)">
           <View style={galleryStyles.trackMock}>
-            <ClipBracket leftPx={60} widthPx={150} durationLabel="0:18" rangeLabel="14:22 → 14:40" blocked />
+            <ClipBracket leftPx={60} widthPx={150} blocked />
           </View>
         </Row>
       </Section>
@@ -1733,6 +1760,113 @@ function BufferScrubFieldDemo({ variant }: { variant: 'camera' | 'audio-only' })
   return (
     <View style={{ width: 200 }}>
       <BufferScrubField variant={variant} reachLabel="Buffer · 72h" onScrub={() => {}} />
+    </View>
+  )
+}
+
+// The buffer viewer source switcher: a rail of captured sources overlaid on the scrub
+// field; tapping one renders that source's view (camera → video placeholder, audio →
+// waveform, location → map trail, compass → graph, identity → card). All mock data.
+// The full dashboard suite in dashboard order; not-captured / no-view sources are greyed.
+const SOURCE_VIEWER_ITEMS: SourceRailItem[] = [
+  { key: 'identity', iconName: 'user', label: 'Identity' },
+  { key: 'location', iconName: 'map-pin', label: 'Location' },
+  { key: 'camera', iconName: 'video', label: 'Camera' },
+  { key: 'audio', iconName: 'mic', label: 'Audio' },
+  { key: 'screen', iconName: 'monitor', label: 'Screen', disabled: true },
+  { key: 'compass', iconName: 'compass', label: 'Compass' },
+  { key: 'gyro', iconName: 'navigation', label: 'Gyro', disabled: true },
+  { key: 'motion', iconName: 'activity', label: 'Motion', disabled: true },
+  { key: 'speed', iconName: 'fast-forward', label: 'Speed', disabled: true },
+  { key: 'temp', iconName: 'thermometer', label: 'Temp', disabled: true },
+  { key: 'torch', iconName: 'zap', label: 'Torch', disabled: true },
+]
+const MOCK_PEAKS = Array.from({ length: 56 }, (_, i) => 0.3 + 0.55 * Math.abs(Math.sin(i * 0.5)))
+const MOCK_COMPASS = Array.from({ length: 56 }, (_, i) => 0.5 + 0.4 * Math.sin(i * 0.32))
+const MOCK_TRAIL: [number, number][] = Array.from({ length: 22 }, (_, i) => [
+  -0.1276 + i * 0.0009,
+  51.5074 + 0.0006 * Math.sin(i * 0.5),
+])
+const VIEWER_PROGRESS = 0.6
+
+const CLIP_TOOL_DEMO: ClipToolItem[] = [
+  { key: 'select', iconName: 'crop', label: 'Select current clip', onPress: () => {} },
+  { key: 'in', iconName: 'log-in', label: 'Set in point', onPress: () => {} },
+  { key: 'out', iconName: 'log-out', label: 'Set out point', onPress: () => {} },
+  { key: 'delete', iconName: 'trash-2', label: 'Delete selected', onPress: () => {}, tone: 'warn' },
+  { key: 'trim', iconName: 'scissors', label: 'Trim selected', onPress: () => {}, tone: 'warn', disabled: true },
+  { key: 'save', iconName: 'save', label: 'Save clip', onPress: () => {}, disabled: true },
+  { key: 'clear', iconName: 'x', label: 'Clear selection', onPress: () => {} },
+]
+
+function SaveClipSheetDemo() {
+  const [open, setOpen] = useState(false)
+  return (
+    <View>
+      <Pressable
+        variant="default"
+        onPress={() => setOpen(true)}
+        style={{
+          alignSelf: 'flex-start',
+          paddingHorizontal: theme.spacing.md,
+          paddingVertical: theme.spacing.sm,
+          borderRadius: theme.radius.md,
+          borderWidth: 1,
+          borderColor: theme.colors.border.strong,
+        }}
+      >
+        <Text variant="bodyEmphasized">Open save sheet</Text>
+      </Pressable>
+      <SaveClipSheet
+        visible={open}
+        durationLabel="0:18 clip"
+        onSave={() => setOpen(false)}
+        onCancel={() => setOpen(false)}
+      />
+    </View>
+  )
+}
+
+function BufferSourceViewerDemo() {
+  const [view, setView] = useState('camera')
+  const here = MOCK_TRAIL[Math.round((MOCK_TRAIL.length - 1) * VIEWER_PROGRESS)]
+  const frame =
+    view === 'camera' ? undefined
+    : view === 'audio' ? <SourceWaveform peaks={MOCK_PEAKS} progress={VIEWER_PROGRESS} />
+    : view === 'location' ? <SourceLocationTrail path={MOCK_TRAIL} position={here} />
+    : view === 'compass' ? (
+        <SourceTelemetryGraph
+          values={MOCK_COMPASS}
+          progress={VIEWER_PROGRESS}
+          label="COMPASS"
+          reading="182°"
+          iconName="compass"
+        />
+      )
+    : (
+        <SourceIdentityCard
+          displayName="Ada L."
+          handle="ada"
+          attributed
+          meta={[
+            { label: 'Resolution', value: '720p' },
+            { label: 'Captured', value: 'Today 14:03' },
+            { label: 'Sources', value: 'Cam · Audio · GPS' },
+          ]}
+        />
+      )
+  return (
+    <View style={{ width: 300 }}>
+      <BufferScrubField
+        variant={view === 'camera' ? 'camera' : view === 'location' ? 'map-only' : 'audio-only'}
+        reachLabel="Buffer · 72h"
+        frameSlot={frame}
+        showScrubHint={false}
+        onScrub={() => {}}
+      />
+      <View style={{ position: 'absolute', right: 8, top: 0, bottom: 0, justifyContent: 'center' }}>
+        <SourceRail sources={SOURCE_VIEWER_ITEMS} value={view} onChange={setView} />
+      </View>
     </View>
   )
 }

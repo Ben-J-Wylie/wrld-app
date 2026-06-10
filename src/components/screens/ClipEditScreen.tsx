@@ -15,16 +15,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFocusEffect } from 'expo-router'
-import { RefreshControl, StyleSheet, View } from 'react-native'
+import { Alert, RefreshControl, StyleSheet, View } from 'react-native'
 import { ScreenScroll } from '@/components/sections/ScreenScroll'
 import { ScreenHeader } from '@/components/sections/ScreenHeader'
 import { PageTabs } from '@/components/features/navigation/PageTabs'
 import { TimeScrubber, CLOCK_COLLAPSED_H } from '@/components/features/discovery/TimeScrubber'
 import { Text } from '@/components/primitives/Text'
-import { Input } from '@/components/primitives/Input'
 import { Pressable } from '@/components/primitives/Pressable'
 import { Icon } from '@/components/primitives/Icon'
-import { SaveClipButton } from '@/components/features/broadcast/SaveClipButton'
 import { BufferScrubField } from '@/components/features/clip/BufferScrubField'
 import { BufferTransport } from '@/components/features/clip/BufferTransport'
 import {
@@ -35,17 +33,27 @@ import {
   type TimelineThumb,
   type VisibleRange,
 } from '@/components/features/clip/BufferTimeline'
-import { ClipSourcesDrawer, type ClipSource } from '@/components/features/clip/ClipSourcesDrawer'
+import { type ClipSource } from '@/components/features/clip/ClipSourcesDrawer'
+import { SaveClipSheet } from '@/components/features/clip/SaveClipSheet'
 import { SavedClipRow } from '@/components/features/clip/SavedClipRow'
+import { ClipToolRail, type ClipToolItem } from '@/components/features/clip/ClipToolRail'
+import { SourceRail, type SourceRailItem } from '@/components/features/clip/SourceRail'
+import { SourceWaveform } from '@/components/features/clip/SourceWaveform'
+import { SourceTelemetryGraph } from '@/components/features/clip/SourceTelemetryGraph'
+import { SourceLocationTrail } from '@/components/features/clip/SourceLocationTrail'
+import { SourceIdentityCard } from '@/components/features/clip/SourceIdentityCard'
 import { useAuth } from '@clerk/clerk-expo'
 import { useVideoPlayer, VideoView } from 'expo-video'
 import { useBuffer } from '@/hooks/useBuffer'
+import { useCurrentUser } from '@/hooks/useCurrentUser'
 import { useBroadcastStore } from '@/stores/broadcastStore'
 import type { BufferSession, BufferTrackKind } from '@/api/buffer'
 import { theme } from '@/tokens/theme'
 
 type Page = 'editor' | 'saved'
 
+// A saved clip: the named selection a user cuts from the buffer (the Saved-clips
+// gallery is ONLY these — not every recording). Persistence is R3 (in-session today).
 type SavedClip = {
   id: string
   name: string
@@ -54,15 +62,6 @@ type SavedClip = {
   variant: 'camera' | 'audio-only' | 'map-only'
   sourcesLabel: string
   visibility: 'draft' | 'anon' | 'public'
-}
-
-// A row in the Saved-clips list: either an explicit in-session trim (`source: 'saved'`)
-// or an auto-listed recording/buffer session (`source: 'session'`, which may carry a
-// poster + a Recording/Unedited status tag).
-type DisplayClip = SavedClip & {
-  source: 'saved' | 'session'
-  thumbnailUrl?: string | null
-  tags?: { label: string; tone: 'warn' | 'accent' | 'muted' }[]
 }
 
 const H = 3_600_000
@@ -97,7 +96,49 @@ const KIND_META: Record<string, { key: string; iconName: ClipSource['iconName'];
   gyro: { key: 'gyro', iconName: 'navigation', label: 'GYRO', value: 'AXIS' },
 }
 const KIND_ORDER: BufferTrackKind[] = ['camera', 'audio', 'location', 'compass', 'gyro']
-const SOURCE_DEFAULT_ON = new Set<BufferTrackKind>(['camera', 'audio', 'location'])
+
+// ── Source viewer (the rail's view switch — which captured track the field renders) ──
+// Camera + identity show real data; audio / location / telemetry render against the mock
+// below until the buffer descriptor exposes those tracks (Aaron). Distinct from the
+// ClipSourcesDrawer save-set above.
+// The full dashboard capture suite, top-to-bottom in the SAME order the dashboard
+// groups them (identity/location · cam/audio/screen · compass/gyro/motion/speed/temp ·
+// torch). The buffer only records 6 of these (BufferTrackKind); the v0.3+ sources
+// (motion/speed/temp/torch) and any uncaptured kind render greyed. Icons match the
+// dashboard (`FeedThumb` GLYPH + the identity/location meta icons).
+const VIEW_META: Record<string, { iconName: SourceRailItem['iconName']; label: string }> = {
+  identity: { iconName: 'user', label: 'Identity' },
+  location: { iconName: 'map-pin', label: 'Location' },
+  camera: { iconName: 'video', label: 'Camera' },
+  audio: { iconName: 'mic', label: 'Audio' },
+  screen: { iconName: 'monitor', label: 'Screen' },
+  compass: { iconName: 'compass', label: 'Compass' },
+  gyro: { iconName: 'navigation', label: 'Gyro' },
+  motion: { iconName: 'activity', label: 'Motion' },
+  speed: { iconName: 'fast-forward', label: 'Speed' },
+  temp: { iconName: 'thermometer', label: 'Temp' },
+  torch: { iconName: 'zap', label: 'Torch' },
+}
+const RAIL_ORDER = [
+  'identity',
+  'location',
+  'camera',
+  'audio',
+  'screen',
+  'compass',
+  'gyro',
+  'motion',
+  'speed',
+  'temp',
+  'torch',
+]
+const MOCK_PEAKS = Array.from({ length: 56 }, (_, i) => 0.3 + 0.55 * Math.abs(Math.sin(i * 0.5)))
+const MOCK_COMPASS = Array.from({ length: 56 }, (_, i) => 0.5 + 0.4 * Math.sin(i * 0.32))
+const MOCK_GYRO = Array.from({ length: 56 }, (_, i) => 0.5 + 0.45 * Math.sin(i * 0.6 + 1))
+const MOCK_TRAIL: [number, number][] = Array.from({ length: 22 }, (_, i) => [
+  -0.1276 + i * 0.0009,
+  51.5074 + 0.0006 * Math.sin(i * 0.5),
+])
 const EMPTY_SESSIONS: BufferSession[] = []
 
 // Footage occupies [startedAt + mediaStartOffsetMs, + mediaDurationSec] (the time
@@ -137,6 +178,7 @@ export const ClipEditScreen = () => {
   // (teeth) tail and a faster buffer refetch while live.
   const isLive = useBroadcastStore((s) => s.isLive)
   const { data: buffer, refetch: refetchBuffer } = useBuffer(!!isSignedIn, isLive)
+  const { data: currentUser } = useCurrentUser()
   const sessions = buffer?.sessions ?? EMPTY_SESSIONS
 
   // Pull fresh buffer on every screen focus (ignoring useBuffer's 30s staleTime),
@@ -255,79 +297,14 @@ export const ClipEditScreen = () => {
     if (clockExpanded) setCollapseSignal((s) => s + 1)
   }
   const [bracket, setBracket] = useState<BufferBracket | null>(null)
-  const [name, setName] = useState('')
-  const [drawerOpen, setDrawerOpen] = useState(false)
+  // The name-this-clip modal (opened from the tool rail's Save).
+  const [saveSheetOpen, setSaveSheetOpen] = useState(false)
 
   // Saved-clip persistence is R3 — these stay in-session (local) until the
   // promote-on-publish backend route lands.
   const [savedRegions, setSavedRegions] = useState<BufferSavedRegion[]>([])
   const [savedClips, setSavedClips] = useState<SavedClip[]>([])
   const [expandedId, setExpandedId] = useState<string | null>(null)
-  // Local in-session overrides for the auto-listed recording entries (delete = hide;
-  // publish = mark public). Real persistence is R3 — Aaron.
-  const [hiddenSessionIds, setHiddenSessionIds] = useState<Set<string>>(() => new Set())
-  const [publishedSessionIds, setPublishedSessionIds] = useState<Set<string>>(() => new Set())
-
-  // EVERY recording (buffer session) is a Saved-clips entry — listed whether or not it's
-  // been trimmed/edited, mirroring the Library. A live session is tagged "Recording", a
-  // finished-but-untrimmed one "Unedited". Newest first. (Reconciling these against the
-  // real Library + persisting trims is R3 — Aaron; today this is the in-session view.)
-  const sessionClips = useMemo<DisplayClip[]>(
-    () =>
-      [...sessions]
-        .reverse()
-        .filter((s) => !hiddenSessionIds.has(s.id))
-        .map((s) => {
-          const live = s.endedAt === null
-          const hasCam = s.kinds.includes('camera')
-          const hasAud = s.kinds.includes('audio')
-          const sourcesLabel = KIND_ORDER.filter((k) => s.kinds.includes(k))
-            .map((k) => titleCase(KIND_META[k]!.label))
-            .join(' · ')
-          const tags: DisplayClip['tags'] = [
-            live ? { label: 'Recording', tone: 'accent' } : { label: 'Unedited', tone: 'muted' },
-            ...(sourcesLabel ? [{ label: sourcesLabel, tone: 'muted' as const }] : []),
-          ]
-          return {
-            id: s.id,
-            name: `Recording · ${fmtClipStamp(sessionStartMs(s))}`,
-            capturedAt: fmtClipStamp(sessionStartMs(s)),
-            durationSec: Math.max(1, Math.round(s.durationSec)),
-            variant: hasCam ? 'camera' : hasAud ? 'audio-only' : 'map-only',
-            sourcesLabel,
-            visibility: publishedSessionIds.has(s.id) ? 'public' : 'draft',
-            thumbnailUrl: s.thumbnailUrl,
-            tags,
-            source: 'session',
-          }
-        }),
-    [sessions, hiddenSessionIds, publishedSessionIds],
-  )
-
-  // The Saved-clips list = explicit in-session trims (most-recent user intent) +
-  // every recording. Trims carry their own visibility/no tags; recordings carry the
-  // Recording/Unedited status tag.
-  const displayClips: DisplayClip[] = useMemo(
-    () => [...savedClips.map((c) => ({ ...c, source: 'saved' as const })), ...sessionClips],
-    [savedClips, sessionClips],
-  )
-
-  // Recorded-source list seeded from the kinds the buffer actually captured.
-  // Seeded once when sessions first arrive; user toggles are preserved after.
-  const [sources, setSources] = useState<ClipSource[]>([])
-  useEffect(() => {
-    if (!sessions.length) return
-    setSources((prev) => {
-      if (prev.length) return prev
-      const captured = new Set<string>()
-      sessions.forEach((s) => s.kinds.forEach((k) => captured.add(k)))
-      return KIND_ORDER.filter((k) => captured.has(k)).map((k) => ({
-        ...KIND_META[k]!,
-        active: SOURCE_DEFAULT_ON.has(k),
-      }))
-    })
-  }, [sessions])
-  const activeCount = sources.filter((s) => s.active).length
 
   // Field poster + variant follow the session under the playhead.
   const sessionAtPlayhead =
@@ -452,6 +429,50 @@ export const ClipEditScreen = () => {
     : sessionAtPlayhead?.kinds.includes('audio')
       ? 'audio-only'
       : 'map-only'
+
+  // ── Source viewer: a rail of the buffer's captured sources; tapping one swaps what the
+  // field renders. Camera + identity are real; audio/location/telemetry are mock until
+  // the buffer exposes those tracks. The rail items come from the union of captured kinds
+  // (+ identity, always available from the signed-in user).
+  const capturedKinds = useMemo(() => new Set(sessions.flatMap((s) => s.kinds)), [sessions])
+  // The rail shows EVERY source; ones this buffer didn't capture are greyed + unselectable.
+  // Identity is always available (the signed-in user).
+  const railItems: SourceRailItem[] = useMemo(
+    () =>
+      RAIL_ORDER.map((k) => ({
+        key: k,
+        ...VIEW_META[k]!,
+        // Identity is always available; every other source is enabled only if the
+        // buffer actually captured that track (v0.3+ kinds never are → greyed).
+        disabled: k === 'identity' ? false : !capturedKinds.has(k as BufferTrackKind),
+      })),
+    [capturedKinds],
+  )
+  const [view, setView] = useState('camera')
+  // Keep the selection on a CAPTURED source as the buffer resolves (don't land on a greyed one).
+  useEffect(() => {
+    const cur = railItems.find((i) => i.key === view)
+    if (!cur || cur.disabled) {
+      const firstEnabled = railItems.find((i) => !i.disabled)
+      if (firstEnabled) setView(firstEnabled.key)
+    }
+  }, [railItems, view])
+  // Mock telemetry/waveform/trail progress tracks the playhead within the current session.
+  const viewProgress = sessionAtPlayhead
+    ? clamp(
+        (playheadMs - sessionStartMs(sessionAtPlayhead)) /
+          Math.max(1, sessionEndMs(sessionAtPlayhead) - sessionStartMs(sessionAtPlayhead)),
+        0,
+        1,
+      )
+    : 0.5
+  const identityMeta: { label: string; value: string }[] = []
+  if (sessionAtPlayhead) identityMeta.push({ label: 'Captured', value: fmtClipStamp(sessionStartMs(sessionAtPlayhead)) })
+  const capturedLabels = RAIL_ORDER.filter((k) => capturedKinds.has(k as BufferTrackKind)).map((k) => VIEW_META[k]!.label)
+  if (capturedLabels.length) identityMeta.push({ label: 'Sources', value: capturedLabels.join(' · ') })
+  // The field's chrome variant tracks the active view (light for map/identity, dark else).
+  const viewVariant: 'camera' | 'audio-only' | 'map-only' =
+    view === 'camera' ? fieldVariant : view === 'location' || view === 'identity' ? 'map-only' : 'audio-only'
 
   // ── Video controller ──────────────────────────────────────────────────────
   // Default = PAUSED, holding the frame at the playhead: any playhead change (tap /
@@ -1192,27 +1213,25 @@ export const ClipEditScreen = () => {
   const canPrev = bufferEndMs > 0 && playheadMs > bufferStartMs + 1000
   const canNext = bufferEndMs > 0 && playheadMs < Date.now() - 1000
 
-  function newClip() {
-    const half = DEFAULT_CLIP_MS / 2
-    const inMs = clamp(playheadMs - half, bufferStartMs, bufferEndMs - DEFAULT_CLIP_MS)
-    setBracket({ inMs, outMs: inMs + DEFAULT_CLIP_MS })
-  }
-
-  function saveClip() {
+  function saveClip(clipName: string) {
     if (!bracket) return
     const id = `c${savedClips.length + 1}-${bracket.inMs}`
     const durationSec = Math.max(1, Math.round((bracket.outMs - bracket.inMs) / 1000))
-    const activeSources = sources.filter((s) => s.active)
-    const sourcesLabel = activeSources.map((s) => titleCase(s.label)).join(' · ')
-    const hasCam = activeSources.some((s) => s.key === 'cam')
-    const hasAud = activeSources.some((s) => s.key === 'aud')
+    // Sources come from the clip's footage — the session the in-point falls in (no more
+    // user-toggled save-set; a clip just carries whatever that session captured).
+    const clipSession =
+      sessions.find((s) => bracket.inMs >= sessionStartMs(s) && bracket.inMs <= sessionEndMs(s)) ?? sessionAtPlayhead
+    const kinds = clipSession?.kinds ?? []
+    const sourcesLabel = KIND_ORDER.filter((k) => kinds.includes(k))
+      .map((k) => titleCase(KIND_META[k]!.label))
+      .join(' · ')
     setSavedClips((prev) => [
       {
         id,
-        name: name.trim() || 'Untitled clip',
+        name: clipName.trim() || 'Untitled clip',
         capturedAt: fmtClipStamp(bracket.inMs),
         durationSec,
-        variant: hasCam ? 'camera' : hasAud ? 'audio-only' : 'map-only',
+        variant: kinds.includes('camera') ? 'camera' : kinds.includes('audio') ? 'audio-only' : 'map-only',
         sourcesLabel,
         visibility: 'draft',
       },
@@ -1220,7 +1239,7 @@ export const ClipEditScreen = () => {
     ])
     setSavedRegions((prev) => [...prev, { id, startMs: bracket.inMs, endMs: bracket.outMs, label: 'SAVED' }])
     setBracket(null)
-    setName('')
+    setSaveSheetOpen(false)
     setExpandedId(id)
     setPage('saved')
   }
@@ -1231,6 +1250,74 @@ export const ClipEditScreen = () => {
   }
 
   const canSave = bracket != null && bracket.outMs - bracket.inMs >= MIN_BRACKET_MS
+
+  // ── Clip-editing tools (the left rail) ──────────────────────────────────────
+  // Select / set-in / set-out manipulate the in-out bracket (client-side, real). Save
+  // routes through the existing in-session saveClip. Delete / trim are destructive buffer
+  // mutations — the confirm + UX live here; the actual removal needs the backend buffer
+  // endpoint (Aaron). The bracket is the selection.
+  function selectCurrentClip() {
+    if (!sessionAtPlayhead) return
+    setBracket({ inMs: sessionStartMs(sessionAtPlayhead), outMs: sessionEndMs(sessionAtPlayhead) })
+  }
+  function setInPoint() {
+    const inMs = playheadMs
+    setBracket((b) => {
+      if (!b) return { inMs, outMs: Math.min(bufferEndMs, inMs + DEFAULT_CLIP_MS) }
+      const outMs = b.outMs > inMs + MIN_BRACKET_MS ? b.outMs : Math.min(bufferEndMs, inMs + MIN_BRACKET_MS)
+      return { inMs, outMs }
+    })
+  }
+  function setOutPoint() {
+    const outMs = playheadMs
+    setBracket((b) => {
+      if (!b) return { inMs: Math.max(bufferStartMs, outMs - DEFAULT_CLIP_MS), outMs }
+      // If the new out is before the in, pull the in to just before the new out.
+      const inMs = b.inMs <= outMs - MIN_BRACKET_MS ? b.inMs : Math.max(bufferStartMs, outMs - MIN_BRACKET_MS)
+      return { inMs, outMs }
+    })
+  }
+  function deleteSelected() {
+    if (!bracket) return
+    Alert.alert(
+      'Delete footage?',
+      'Permanently delete everything between the in and out points, leaving a gap. This can’t be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        // TODO(Aaron): real buffer mutation (remove the [in,out] segments → gap). The
+        // confirm + UX are wired; the destructive op needs the backend buffer endpoint.
+        { text: 'Delete', style: 'destructive', onPress: () => setBracket(null) },
+      ],
+    )
+  }
+  function trimSelected() {
+    if (!bracket || !sessionAtPlayhead) return
+    Alert.alert(
+      'Trim clip?',
+      'Permanently delete everything outside the in and out points in this clip. This can’t be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        // TODO(Aaron): real buffer mutation (delete this clip's footage outside [in,out]).
+        { text: 'Trim', style: 'destructive', onPress: () => {} },
+      ],
+    )
+  }
+  const clipTools: ClipToolItem[] = [
+    { key: 'select', iconName: 'crop', label: 'Select current clip', onPress: selectCurrentClip, disabled: !sessionAtPlayhead },
+    { key: 'in', iconName: 'log-in', label: 'Set in point', onPress: setInPoint, disabled: !sessions.length },
+    { key: 'out', iconName: 'log-out', label: 'Set out point', onPress: setOutPoint, disabled: !sessions.length },
+    { key: 'delete', iconName: 'trash-2', label: 'Delete selected', onPress: deleteSelected, disabled: !bracket, tone: 'warn' },
+    {
+      key: 'trim',
+      iconName: 'scissors',
+      label: 'Trim selected',
+      onPress: trimSelected,
+      disabled: !bracket || !sessionAtPlayhead,
+      tone: 'warn',
+    },
+    { key: 'save', iconName: 'save', label: 'Save clip', onPress: () => setSaveSheetOpen(true), disabled: !canSave },
+    { key: 'clear', iconName: 'x', label: 'Clear selection', onPress: () => setBracket(null), disabled: !bracket },
+  ]
 
   return (
     <View style={styles.root}>
@@ -1250,7 +1337,7 @@ export const ClipEditScreen = () => {
       <PageTabs
         tabs={[
           { key: 'editor', label: 'Editor' },
-          { key: 'saved', label: `Saved clips${displayClips.length ? ` · ${displayClips.length}` : ''}` },
+          { key: 'saved', label: `Saved clips${savedClips.length ? ` · ${savedClips.length}` : ''}` },
         ]}
         value={page}
         onChange={(p) => {
@@ -1270,15 +1357,48 @@ export const ClipEditScreen = () => {
           <View>
             <View style={styles.fieldWrap} onTouchStart={collapseClock}>
               <BufferScrubField
-                variant={fieldVariant}
+                variant={viewVariant}
                 thumbnailUrl={scrubbing ? fieldFrame ?? fieldThumb : fieldThumb}
                 frameSlot={
-                  !scrubbing && hasCameraVideo && !playerError ? (
-                    <VideoView
-                      player={player}
-                      style={StyleSheet.absoluteFill}
-                      nativeControls={false}
-                      contentFit="cover"
+                  view === 'camera' ? (
+                    !scrubbing && hasCameraVideo && !playerError ? (
+                      <VideoView
+                        player={player}
+                        style={StyleSheet.absoluteFill}
+                        nativeControls={false}
+                        contentFit="cover"
+                      />
+                    ) : undefined
+                  ) : view === 'audio' ? (
+                    <SourceWaveform peaks={MOCK_PEAKS} progress={viewProgress} />
+                  ) : view === 'location' ? (
+                    <SourceLocationTrail
+                      path={MOCK_TRAIL}
+                      position={MOCK_TRAIL[Math.round((MOCK_TRAIL.length - 1) * viewProgress)]}
+                    />
+                  ) : view === 'compass' ? (
+                    <SourceTelemetryGraph
+                      values={MOCK_COMPASS}
+                      progress={viewProgress}
+                      label="COMPASS"
+                      reading={`${Math.round(viewProgress * 359)}°`}
+                      iconName="compass"
+                    />
+                  ) : view === 'gyro' ? (
+                    <SourceTelemetryGraph
+                      values={MOCK_GYRO}
+                      progress={viewProgress}
+                      label="GYRO"
+                      reading="±1.2 rad/s"
+                      iconName="navigation"
+                    />
+                  ) : view === 'identity' ? (
+                    <SourceIdentityCard
+                      displayName={currentUser?.displayName ?? '—'}
+                      handle={currentUser?.handle ?? 'you'}
+                      avatarUrl={currentUser?.avatarUrl}
+                      attributed
+                      meta={identityMeta}
                     />
                   ) : undefined
                 }
@@ -1289,6 +1409,15 @@ export const ClipEditScreen = () => {
                 onScrubStart={handleScrubStart}
                 onScrubEnd={handleScrubEnd}
               />
+              {/* Left: clip-editing tools. Right: source view switch. */}
+              <View style={styles.toolRail} pointerEvents="box-none">
+                <ClipToolRail tools={clipTools} />
+              </View>
+              {railItems.length > 1 && (
+                <View style={styles.sourceRail} pointerEvents="box-none">
+                  <SourceRail sources={railItems} value={view} onChange={setView} />
+                </View>
+              )}
             </View>
           </View>
 
@@ -1340,40 +1469,18 @@ export const ClipEditScreen = () => {
               onVisibleRangeChange={setVisibleRange}
               centerSignal={centerSignal}
             />
-
-            <View style={styles.btnRow}>
-              {bracket ? (
-                <TbBtn icon="rotate-ccw" label="Reset" onPress={() => setBracket(null)} muted />
-              ) : (
-                <TbBtn icon="plus" label="New clip" onPress={newClip} accent />
-              )}
-              <TbBtn
-                icon="grid"
-                label="Sources"
-                trailing={`${activeCount}/${sources.length}`}
-                onPress={() => setDrawerOpen(true)}
-                muted
-              />
-            </View>
-
-            <Input value={name} onChangeText={setName} placeholder="Name this clip" />
-
-            <SaveClipButton
-              label={canSave ? `Save clip · ${fmtDur((bracket!.outMs - bracket!.inMs) / 1000)}` : 'Save clip'}
-              hint={canSave ? 'Saves as a private draft' : 'Drop a clip to enable save'}
-              disabled={!canSave}
-              onPress={saveClip}
-            />
+            {/* All editing controls live in the field's left ClipToolRail; naming
+                happens in the SaveClipSheet when Save is tapped. */}
           </View>
         </View>
       ) : (
         <View style={styles.saved}>
-          {displayClips.length === 0 ? (
+          {savedClips.length === 0 ? (
             <View style={styles.empty}>
               <Icon name="scissors" size="lg" color={theme.colors.text.subtle} />
               <Text variant="bodyEmphasized">No clips yet</Text>
               <Text variant="caption" color={theme.colors.text.muted} style={styles.emptyText}>
-                Your recordings land here automatically; clips you cut from the buffer join them.
+                Cut a clip from the buffer — select an in/out and Save — and it lands here.
               </Text>
               <Pressable variant="default" onPress={() => setPage('editor')} style={styles.emptyCta}>
                 <Icon name="plus" size="sm" color={theme.colors.accent.default} />
@@ -1383,45 +1490,33 @@ export const ClipEditScreen = () => {
               </Pressable>
             </View>
           ) : (
-            displayClips.map((c) => (
+            savedClips.map((c) => (
               <SavedClipRow
                 key={c.id}
                 name={c.name}
                 capturedAt={c.capturedAt}
                 durationSec={c.durationSec}
-                thumbnailUrl={c.thumbnailUrl}
                 variant={c.variant}
                 sourcesLabel={c.sourcesLabel}
                 visibility={c.visibility}
-                tags={c.tags}
                 expanded={expandedId === c.id}
                 onToggleExpand={() => setExpandedId((id) => (id === c.id ? null : c.id))}
                 onShare={() => {}}
                 onPublish={() =>
-                  c.source === 'saved'
-                    ? setSavedClips((prev) =>
-                        prev.map((x) => (x.id === c.id ? { ...x, visibility: 'public' } : x)),
-                      )
-                    : setPublishedSessionIds((s) => new Set(s).add(c.id))
+                  setSavedClips((prev) => prev.map((x) => (x.id === c.id ? { ...x, visibility: 'public' } : x)))
                 }
-                onDelete={() =>
-                  c.source === 'saved'
-                    ? deleteClip(c.id)
-                    : setHiddenSessionIds((s) => new Set(s).add(c.id))
-                }
+                onDelete={() => deleteClip(c.id)}
               />
             ))
           )}
         </View>
       )}
 
-      <ClipSourcesDrawer
-        visible={drawerOpen}
-        sources={sources}
-        onToggleSource={(k) =>
-          setSources((s) => s.map((x) => (x.key === k ? { ...x, active: !x.active } : x)))
-        }
-        onDismiss={() => setDrawerOpen(false)}
+      <SaveClipSheet
+        visible={saveSheetOpen}
+        durationLabel={bracket ? `${fmtDur((bracket.outMs - bracket.inMs) / 1000)} clip` : undefined}
+        onSave={(clipName) => saveClip(clipName)}
+        onCancel={() => setSaveSheetOpen(false)}
       />
     </ScreenScroll>
 
@@ -1445,43 +1540,6 @@ export const ClipEditScreen = () => {
   )
 }
 
-function TbBtn({
-  icon,
-  label,
-  trailing,
-  onPress,
-  accent,
-  muted,
-}: {
-  icon: Parameters<typeof Icon>[0]['name']
-  label: string
-  trailing?: string
-  onPress: () => void
-  accent?: boolean
-  muted?: boolean
-}) {
-  const tint = accent ? theme.colors.accent.default : theme.colors.text.primary
-  return (
-    <Pressable
-      variant="default"
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      style={[styles.tbBtn, accent && styles.tbBtnAccent, muted && styles.tbBtnMuted]}
-    >
-      <Icon name={icon} size="sm" color={accent ? theme.colors.accent.default : theme.colors.text.muted} />
-      <Text variant="bodyEmphasized" color={tint}>
-        {label}
-      </Text>
-      {trailing != null && (
-        <Text variant="monoLabel" color={theme.colors.text.muted}>
-          {trailing}
-        </Text>
-      )}
-    </Pressable>
-  )
-}
-
 function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v))
 }
@@ -1496,9 +1554,7 @@ function fmtClipStamp(ms: number): string {
 }
 function fmtDur(sec: number): string {
   const total = Math.max(0, Math.round(sec))
-  const m = Math.floor(total / 60)
-  const s = total % 60
-  return `${m}:${pad(s)}`
+  return `${Math.floor(total / 60)}:${pad(total % 60)}`
 }
 function titleCase(s: string): string {
   return s.charAt(0) + s.slice(1).toLowerCase()
@@ -1552,29 +1608,26 @@ const styles = StyleSheet.create({
   fieldWrap: {
     position: 'relative',
   },
+  // Clip-editing tools on the left edge, source switcher on the right — both centred.
+  toolRail: {
+    position: 'absolute',
+    left: theme.spacing.sm,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'flex-start',
+  },
+  sourceRail: {
+    position: 'absolute',
+    right: theme.spacing.sm,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'flex-end',
+  },
   belowField: {
     gap: theme.spacing.md,
   },
-  btnRow: {
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-  },
-  tbBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.sm,
-    height: 42,
-    paddingHorizontal: theme.spacing.md,
-    borderRadius: theme.radius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border.strong,
-    backgroundColor: theme.colors.bg.elevated,
-  },
-  tbBtnAccent: {
-    borderColor: theme.colors.accent.border,
-    backgroundColor: theme.colors.accent.surface,
-  },
-  tbBtnMuted: {},
   saved: {
     padding: theme.spacing.lg,
     gap: theme.spacing.sm,

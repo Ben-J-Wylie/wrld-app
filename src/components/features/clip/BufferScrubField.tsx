@@ -230,7 +230,7 @@ const styles = StyleSheet.create({
   },
   reachPill: {
     position: 'absolute',
-    right: theme.spacing.sm,
+    left: theme.spacing.sm,
     top: theme.spacing.sm,
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: theme.spacing.xs,

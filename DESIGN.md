@@ -3151,9 +3151,9 @@ never scale — only the filmstrip segments do).
 - **Proposed props:** `inMs`, `outMs`, `pxPerMs`, `onChangeIn`, `onChangeOut`, `onMove`, `blocked?`
 
 **Mock says (Frames 2–4):** 2px accent frame with accent-tinted fill; left edge =
-in-point, right edge = out-point, both with large finger-friendly grip handles. A
-readout pill (ink bg, accent duration) shows live duration + in/out timecodes in
-`monoValue`.
+in-point, right edge = out-point, both with large finger-friendly grip handles.
+**No time readout on the selection (removed 2026-06-10)** — the only pill is the
+transient "Blocked · saved region" warning when an edge drag clamps at a saved region.
 
 **Proposed behavior:** Drag a handle to set in/out; press-drag the center zone
 moves the whole selection **without** changing duration. Clamps at saved-region
@@ -3296,6 +3296,105 @@ opacity) states. Header "Sources in this clip · N of M active"; "Done" dismisse
 this editor. Selection is **reversible active/inactive only** —
 **delete-permanently is NOT in this drawer** (out of scope here). Choices persist
 into the saved clip. **No new primitive** — assembly of two existing ones.
+
+---
+
+##### Buffer viewer source switcher (built 2026-06-10 · clips initiative · Ben / `design`)
+
+A column of source icons overlaid on the scrub field that switches **which captured
+track the field renders** — a VIEW switch, distinct from `ClipSourcesDrawer` (the
+**save-set**). The rail lists the **full dashboard capture suite in the same
+top-to-bottom order** (identity · location · cam · audio · screen · compass · gyro ·
+motion · speed · temp · torch); sources this buffer didn't capture (incl. the v0.3+
+ones) render greyed + unselectable. The rail emits a selected source; the parent renders the matching view
+into the field's `frameSlot`. Camera + identity are shaped for real data today;
+audio / location / telemetry render against mock until the buffer descriptor exposes
+those tracks (Aaron — same component-ahead-of-data pattern as the timeline thumbnails).
+Demoed together in the gallery's **"SourceRail + source views"** section.
+
+###### `SourceRail`
+
+- **Tier:** feature (composes `Pressable` + `Icon`)
+- **Location:** `src/components/features/clip/SourceRail.tsx` *(built 2026-06-10)*
+- **Variants:** `default` · **Sizes:** 36px icon buttons in a translucent-ink rounded column
+- **States:** per-item active (accent fill, inverse icon) / inactive (light icon) / **disabled** (dimmed icon, non-selectable — a source this buffer didn't capture)
+- **Props:** `sources` (`SourceRailItem[]` = `{ key, iconName, label, disabled? }`), `value`, `onChange`, `style?`
+
+**Code does:** A self-contained `rgba(20,16,12,0.55)` column (reads over dark video, a
+light map, or a paper identity card). The rail shows the **full** source set; items with
+`disabled: true` (not captured) render greyed and ignore taps. Tapping an enabled item
+calls `onChange(key)`. Positioning (right-overlay on the field) is the composer's job.
+
+###### `SourceWaveform`
+
+- **Tier:** feature (pure Views — no chart lib / native module)
+- **Location:** `src/components/features/clip/SourceWaveform.tsx` *(built 2026-06-10)*
+- **Props:** `peaks` (0..1, oldest→newest), `progress?` (0..1 playhead), `label?`, `style?`
+
+**Code does:** A centred amplitude waveform on a warm-ink media backdrop; bars left of
+the playhead read accent ("played"), the rest a muted cream. Mic + label tag bottom-centre.
+
+###### `SourceTelemetryGraph`
+
+- **Tier:** feature (pure Views)
+- **Location:** `src/components/features/clip/SourceTelemetryGraph.tsx` *(built 2026-06-10)*
+- **Props:** `values` (0..1), `progress?`, `label`, `reading?` (preformatted value at playhead), `iconName?`, `style?`
+
+**Code does:** A bottom-anchored bar sparkline of one data channel (gyro / compass /
+speed / temp …) on the ink backdrop, with a header (icon + label + the live reading at
+the playhead). Played portion accent.
+
+###### `SourceLocationTrail`
+
+- **Tier:** feature (composes `@rnmapbox/maps`)
+- **Location:** `src/components/features/clip/SourceLocationTrail.tsx` *(built 2026-06-10)*
+- **Props:** `path` (`[lng,lat][]`, oldest→newest), `position?` (playhead point), `style?`
+
+**Code does:** A static (non-interactive) Mapbox `Light` mini-map. If the track moved
+(>~11m span) it draws a **slug trail** (`LineLayer`) + a position dot and fits the
+bounds; if stationary, a single **pin** centred at zoom 14. Empty track → a neutral
+"No location track" placeholder. TRAIL/LOCATION tag bottom-left. **Native module — rides
+the existing dev client (the globe uses it); no extra rebuild.**
+
+###### `SourceIdentityCard`
+
+- **Tier:** feature (composes `Avatar` + Text + `Icon`)
+- **Location:** `src/components/features/clip/SourceIdentityCard.tsx` *(built 2026-06-10)*
+- **Props:** `displayName`, `handle`, `avatarUrl?`, `attributed` (false → anon), `meta?` (`{label,value}[]`), `style?`
+
+**Code does:** A paper (`panelHi`) card — avatar + name + @handle, an **Attributed**
+(accent, `user-check`) / **Anonymous** (muted, `eye-off`) flag pill, and a capture-meta
+list (resolution / when / sources). Identity is metadata, so it's a light surface, not media.
+
+###### `ClipToolRail`
+
+- **Tier:** feature (composes `Pressable` + `Icon`)
+- **Location:** `src/components/features/clip/ClipToolRail.tsx` *(built 2026-06-10)*
+- **Variants:** `default` · **Sizes:** 30px icon buttons in a translucent-ink column (pairs with `SourceRail` on the opposite edge)
+- **States:** per-item default / **warn** (destructive — accent icon) / disabled (dimmed, inert)
+- **Props:** `tools` (`ClipToolItem[]` = `{ key, iconName, label, onPress, disabled?, tone? }`), `style?`
+
+**Code does:** An **action** rail (vs `SourceRail`'s view switch) — the buffer editor's
+clip tools as a left-edge column: **select current clip · set in · set out · delete ·
+trim · save · clear (✕)**. Each button fires `onPress`; destructive tools (`tone: 'warn'`)
+tint the icon accent; disabled tools grey out. The parent (`ClipEditScreen`) owns the
+in/out bracket logic: select = bracket to the clip under the playhead; set-in/out = move
+that edge to the playhead (out-before-in pulls the in back); delete/trim = confirm →
+**backend buffer mutation (Aaron)**; save = opens the `SaveClipSheet`; clear = drop the
+bracket. These replace the old below-field New clip / Reset / Save buttons.
+
+###### `SaveClipSheet`
+
+- **Tier:** feature (composes `Input` + `Button` + `Text` in a `Modal` + `KeyboardAvoidingView`)
+- **Location:** `src/components/features/clip/SaveClipSheet.tsx` *(built 2026-06-10)*
+- **Props:** `visible`, `defaultName?`, `durationLabel?`, `onSave(name)`, `onCancel`
+
+**Code does:** The name-this-clip modal — a keyboard-aware bottom sheet opened by the tool
+rail's **Save** (replacing the persistent below-field name input). Auto-focuses the name
+field so the keyboard rises and the sheet floats above it (the `AuthModal` Modal +
+`KeyboardAvoidingView` pattern); optional duration line under the title; Save confirms,
+Cancel / backdrop dismisses. The **`ClipSourcesDrawer` save-set is retired from the editor**
+— a saved clip just carries the sources its footage captured (derived at save time).
 
 ---
 

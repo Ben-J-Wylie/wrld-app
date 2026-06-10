@@ -23,8 +23,6 @@ const HANDLE_W = 16
 type Props = {
   leftPx: number
   widthPx: number
-  durationLabel: string
-  rangeLabel: string
   blocked?: boolean
   // RNGH gestures created by BufferTimeline (each blocks the timeline pan). Optional
   // so the gallery can render a static, non-interactive bracket.
@@ -38,17 +36,7 @@ function withGesture(g: GestureType | undefined, node: ReactElement): ReactEleme
   return g ? <GestureDetector gesture={g}>{node}</GestureDetector> : node
 }
 
-export function ClipBracket({
-  leftPx,
-  widthPx,
-  durationLabel,
-  rangeLabel,
-  blocked,
-  inGesture,
-  outGesture,
-  centerGesture,
-  style,
-}: Props) {
+export function ClipBracket({ leftPx, widthPx, blocked, inGesture, outGesture, centerGesture, style }: Props) {
   const width = Math.max(HANDLE_W * 2, widthPx)
   return (
     <>
@@ -75,22 +63,15 @@ export function ClipBracket({
           </View>,
         )}
       </View>
-      <View style={[styles.readout, { left: leftPx }, blocked && styles.readoutBlocked]} pointerEvents="none">
-        {blocked ? (
+      {/* No time readout on the selection — only a transient "blocked" pill when an
+          edge drag hits a saved-region boundary. */}
+      {blocked && (
+        <View style={[styles.readout, styles.readoutBlocked, { left: leftPx }]} pointerEvents="none">
           <Text variant="monoValue" color={theme.colors.text.inverse}>
             Blocked · saved region
           </Text>
-        ) : (
-          <>
-            <Text variant="monoValue" color={theme.colors.accent.bright}>
-              {durationLabel}
-            </Text>
-            <Text variant="monoValue" color={theme.colors.text.inverse}>
-              {` · ${rangeLabel}`}
-            </Text>
-          </>
-        )}
-      </View>
+        </View>
+      )}
     </>
   )
 }

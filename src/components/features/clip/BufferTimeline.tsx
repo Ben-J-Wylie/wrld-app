@@ -688,8 +688,6 @@ export function BufferTimeline({
               <ClipBracket
                 leftPx={timeToX(bracket.inMs, segBlocks, px)}
                 widthPx={Math.max(0, timeToX(bracket.outMs, segBlocks, px) - timeToX(bracket.inMs, segBlocks, px))}
-                durationLabel={formatDuration(bracket.outMs - bracket.inMs)}
-                rangeLabel={`${formatClock(bracket.inMs)} → ${formatClock(bracket.outMs)}`}
                 blocked={blocked}
                 inGesture={inGesture}
                 outGesture={outGesture}
@@ -962,18 +960,6 @@ function xToTime(x: number, segBlocks: SegBlock[], px: number): number {
 
 function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v))
-}
-
-function formatClock(ms: number): string {
-  const d = new Date(ms)
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-}
-
-function formatDuration(ms: number): string {
-  const total = Math.max(0, Math.round(ms / 1000))
-  const m = Math.floor(total / 60)
-  const s = total % 60
-  return `${m}:${String(s).padStart(2, '0')}`
 }
 
 const styles = StyleSheet.create({
