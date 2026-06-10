@@ -412,34 +412,80 @@ export function BufferTimeline({
     return xToTime(offsetRef.current + widthRef.current / 2, segBlocksRef.current, pxRef.current)
   }
   function zoomStep(dir: 1 | -1) {
+    // Block auto-follow from clobbering the zoom's offset for this frame (it would
+    // otherwise snap the scroll to the live edge when the playhead is near now).
+    zoomingRef.current = true
     applyZoom(dir > 0 ? pxRef.current * ZOOM_TAP_STEP : pxRef.current / ZOOM_TAP_STEP, viewportCenterTime())
+    setTimeout(() => {
+      zoomingRef.current = false
+    }, 60)
   }
-  // Hold → smoothly ramp the zoom across the WHOLE range (fit ⇆ frames) in ZOOM_HOLD_MS,
-  // independent of buffer size: a constant rate in log-space (exponential zoom reads as
-  // perceptually linear). `cur` carries the live value so React state batching can't lag
-  // it; `focal` is captured ONCE so the centre stays rock-still (no per-frame re-pick).
+  // Hold → drive the zoom on the UI thread (scaleX/translateX, exactly like pinch) so
+  // there is NO per-frame React re-render / filmstrip re-tile — that view churn was the
+  // button-zoom jitter. Ramps the WHOLE range (fit ⇆ frames) in ZOOM_HOLD_MS at a
+  // constant log-rate, anchored on the viewport centre; the real pxPerMs is committed
+  // once on release (one re-layout).
   const zoomRaf = useRef<number | null>(null)
+  // True while a tap/hold zoom is applying — the auto-follow effect checks it so it
+  // can't fight the zoom's offset (the two-writers-over-scrollOffset jitter).
+  const zoomingRef = useRef(false)
+  // Anchor captured at hold start (mirrors the pinch shared values) + the live scale px.
+  const zoomAnchorRef = useRef<{ startPx: number; focalX: number; anchorContentX: number; cw: number } | null>(
+    null,
+  )
+  const zoomCurRef = useRef(0)
+  // Commit the live scale → real pxPerMs + offset (one re-layout), keeping the anchored
+  // (viewport-centre) instant put. Mirrors commitPinch.
+  function commitZoom() {
+    const a = zoomAnchorRef.current
+    if (!a) return
+    zoomAnchorRef.current = null
+    const newPx = clamp(zoomCurRef.current, minPxRef.current, maxPxRef.current)
+    const nl = layout(segmentsRef.current, newPx, leadingPxRef.current)
+    const anchorMs = xToTime(a.anchorContentX, segBlocksRef.current, a.startPx)
+    const newCW = nl.contentWidth + tailRef.current.trailingPx
+    const no = clamp(timeToX(anchorMs, nl.segBlocks, newPx) - a.focalX, 0, Math.max(0, newCW - widthRef.current))
+    sx.value = 1
+    tx.value = -no
+    setPxPerMs(newPx)
+    setScrollOffset(no)
+  }
   function stopZoomHold() {
     if (zoomRaf.current != null) {
       cancelAnimationFrame(zoomRaf.current)
       zoomRaf.current = null
     }
+    commitZoom()
+    // Keep the auto-follow suppressed across the commit's render so it can't snap the
+    // freshly-committed offset to the live edge; clear shortly after.
+    setTimeout(() => {
+      zoomingRef.current = false
+    }, 60)
   }
   function startZoomHold(dir: 1 | -1) {
     if (zoomRaf.current != null) return
     const minP = minPxRef.current
     const maxP = maxPxRef.current
     if (maxP <= minP) return
+    const startPx = pxRef.current
+    const focalX = widthRef.current / 2
+    const anchorContentX = focalX + offsetRef.current
+    const cw = tailRef.current.contentWidth + tailRef.current.trailingPx
+    zoomAnchorRef.current = { startPx, focalX, anchorContentX, cw }
+    zoomCurRef.current = startPx
+    zoomingRef.current = true
     const ratePerMs = Math.log(maxP / minP) / ZOOM_HOLD_MS
-    const focal = viewportCenterTime()
-    let cur = pxRef.current
+    let cur = startPx
     let last = Date.now()
     const step = () => {
       const now = Date.now()
       const dt = now - last
       last = now
       cur = clamp(cur * Math.exp(dir * ratePerMs * dt), minP, maxP)
-      applyZoom(cur, focal)
+      zoomCurRef.current = cur
+      const s = cur / startPx
+      sx.value = s
+      tx.value = focalX - anchorContentX * s - ((1 - s) * cw) / 2
       if ((dir > 0 && cur >= maxP) || (dir < 0 && cur <= minP)) {
         stopZoomHold()
         return
@@ -448,7 +494,16 @@ export function BufferTimeline({
     }
     zoomRaf.current = requestAnimationFrame(step)
   }
-  useEffect(() => () => stopZoomHold(), [])
+  // On unmount just cancel — don't commit (no setState on an unmounting component).
+  useEffect(
+    () => () => {
+      if (zoomRaf.current != null) {
+        cancelAnimationFrame(zoomRaf.current)
+        zoomRaf.current = null
+      }
+    },
+    [],
+  )
   const canZoomOut = px > minPx * 1.002
   const canZoomIn = px < maxPx * 0.998
 
@@ -588,7 +643,10 @@ export function BufferTimeline({
   // tripped "Maximum update depth exceeded". It only needs the live threshold's
   // current value; the meaningful triggers are a moved playhead or a relayout.
   useEffect(() => {
-    if (gesturingRef.current) return
+    // `zoomingRef` blocks this while a zoom is applying — otherwise the `effContentWidth`
+    // dep makes it re-run every zoom frame and snap the scroll to the live edge, fighting
+    // the zoom's focal-centred offset (the jitter).
+    if (gesturingRef.current || zoomingRef.current) return
     const live = nowMsRef.current ?? bufferEndRef.current
     if (playheadMs < live - 1500) return
     const end = Math.max(0, effContentWidth - width)
