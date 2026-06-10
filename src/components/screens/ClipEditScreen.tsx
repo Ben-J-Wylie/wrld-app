@@ -75,6 +75,11 @@ const EDGE_SNAP_GUARD_MS = 300
 // gap's full span in 3s, then the next clip plays. Long gap → fast spin; 3s gap → reads
 // as normal counting; <3s gap → reads as slowing down.
 const GAP_RUSH_MS = 3_000
+// The video-authoritative loop only FOLLOWS the video while it's within this of the
+// playhead (a genuine in-session stall). Beyond it — a tap-seek jump, or the video run
+// ahead into the next session across a collapsed gap — it must NOT glue, so the tap
+// sticks and the gap-rush fires. Must sit above the in-session seek-drift tolerance.
+const VIDEO_FOLLOW_MAX_DRIFT_MS = 2_000
 // Field scrub: finger-px to cross an ENTIRE gap, regardless of its duration — collapses
 // gaps like the timeline (the 10px inter-gap marker at the field's half rate ≈ 20px), so
 // scrubbing has no slowdown over long gaps.
@@ -894,7 +899,16 @@ export const ClipEditScreen = () => {
         const sess = camCumRef.current.find((cc) => vGlobal >= cc.mediaStart && vGlobal < cc.mediaEnd)
         if (sess && sess.mediaEnd - vGlobal > 0.6) {
           const vWall = mediaSecToPlayhead(vGlobal)
-          if (vWall != null && vWall < now - 300) playClockRef.current = { wall: now, ph: vWall }
+          // Only FOLLOW the video while it's near the playhead — a genuine in-session
+          // stall (the case this glue fixes). When it's far — a tap-seek just moved the
+          // playhead, or the collapsed-gap VOD ran the video ahead into the next session
+          // — do NOT glue: that lets the tap stick (until its seek lands) and lets the
+          // wall clock advance into the gap and fire the gap-rush.
+          const cur = playClockRef.current
+          const curPh = cur.ph + (now - cur.wall)
+          if (vWall != null && vWall < now - 300 && Math.abs(vWall - curPh) < VIDEO_FOLLOW_MAX_DRIFT_MS) {
+            playClockRef.current = { wall: now, ph: vWall }
+          }
         }
       }
       const c = playClockRef.current
@@ -1222,6 +1236,23 @@ export const ClipEditScreen = () => {
     if (playingRef.current) {
       playClockRef.current = null
       gapRushRef.current = null
+      // Seek the VIDEO to the new instant too — otherwise the video-authoritative loop
+      // reads the video's old currentTime next tick and snaps the playhead back. (The
+      // loop's proximity guard ignores the stale position until this seek lands.)
+      const gsec = globalSecForWall(ms)
+      if (gsec != null) {
+        const g = groupForMediaSec(gsec)
+        if (g) {
+          if (g.index !== activeGroupIndexRef.current) {
+            setActiveGroupIndex(g.index) // load effect seeks on ready (playingRef)
+          } else {
+            try {
+              const d = g.localSec - player.currentTime
+              if (Math.abs(d) >= 0.05) player.seekBy(d)
+            } catch {}
+          }
+        }
+      }
     }
     recenterTimeline()
   }
