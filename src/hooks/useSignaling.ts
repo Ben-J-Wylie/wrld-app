@@ -178,6 +178,7 @@ export function useSignaling() {
   const sendBroadcasterPaused = useCallback(() => signalingClient.sendBroadcasterPaused(), [])
   const sendBroadcasterResumed = useCallback(() => signalingClient.sendBroadcasterResumed(), [])
   const sendBroadcasterOrientation = useCallback((orientation: 'portrait' | 'landscape', rotationDeg?: number, hold?: string) => signalingClient.sendBroadcasterOrientation(orientation, rotationDeg, hold), [])
+  const sendCameraFacing = useCallback((facing: 'user' | 'environment') => signalingClient.sendCameraFacing(facing), [])
   const sendLocationUpdate = useCallback((lat: number, lng: number) => signalingClient.sendLocationUpdate(lat, lng), [])
   const sendTip = useCallback((amount: number) => signalingClient.sendTip(amount), [])
   const sendGift = useCallback((giftType: string) => signalingClient.sendGift(giftType), [])
@@ -213,6 +214,7 @@ export function useSignaling() {
     sendBroadcasterPaused,
     sendBroadcasterResumed,
     sendBroadcasterOrientation,
+    sendCameraFacing,
     sendTip,
     sendGift,
     sendLocationUpdate,
