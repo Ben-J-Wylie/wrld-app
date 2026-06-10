@@ -453,6 +453,15 @@ export const ClipEditScreen = () => {
   const player = useVideoPlayer(null, (p) => {
     p.muted = true
     p.pause()
+    // Buffer further ahead so playback doesn't stall at segment boundaries (iOS
+    // defaults to 0 = auto, which AVPlayer keeps conservative for this tokenized HLS;
+    // a stall is what makes the wall-clock playhead run ahead and then hard-seek the
+    // video forward — a visible skip). Set the whole object (per-field set is unsupported).
+    p.bufferOptions = {
+      preferredForwardBufferDuration: 30,
+      minBufferForPlayback: 4,
+      waitsToMinimizeStalling: true,
+    }
   })
 
   const targetSec = playheadToMediaSec()
@@ -875,7 +884,13 @@ export const ClipEditScreen = () => {
         return
       }
       try {
-        if (Math.abs(player.currentTime - g.localSec) > 0.75) player.seekBy(g.localSec - player.currentTime)
+        // Only hard-seek the video back in sync on a LARGE drift. A brief rebuffer
+        // stall leaves the video a fraction of a second behind the wall clock; at the
+        // old 0.75s threshold that triggered a forward seekBy every stall — a visible
+        // skip. Tolerating up to 1.5s lets the video keep playing smoothly (the clock
+        // simply leads it slightly) and only corrects a real desync. Paired with the
+        // larger forward buffer above, which makes stalls rarer in the first place.
+        if (Math.abs(player.currentTime - g.localSec) > 1.5) player.seekBy(g.localSec - player.currentTime)
         player.play()
       } catch {}
     }
