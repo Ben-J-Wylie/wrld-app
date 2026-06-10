@@ -1366,7 +1366,9 @@ export const ClipEditScreen = () => {
                         player={player}
                         style={StyleSheet.absoluteFill}
                         nativeControls={false}
-                        contentFit="cover"
+                        // contain (not cover) so a landscape recording shows whole —
+                        // letterboxed to fit the field — instead of being cropped/zoomed.
+                        contentFit="contain"
                       />
                     ) : undefined
                   ) : view === 'audio' ? (
