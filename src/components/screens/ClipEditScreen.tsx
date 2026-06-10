@@ -83,6 +83,9 @@ const GAP_SCRUB_PX = 20
 // behind the flag; the durable fix is SERVER-generated thumbnails — wrld-backend
 // CLAUDE.md stacked-work item 6. Until then the timeline shows its sprocket filmstrip.
 const CLIENT_THUMB_GEN = false
+// Max server-frame thumbnails fetched for the timeline's visible window per pass —
+// bounds request volume regardless of buffer length (only the on-screen window loads).
+const SERVER_THUMB_CAP = 40
 
 // Recorded-source kind → ClipSource row metadata (icon/label/value). Only the
 // kinds the buffer actually captured are shown; unknown kinds are skipped.
@@ -199,6 +202,10 @@ export const ClipEditScreen = () => {
   // mode and derives its offset from this absolute instant.
   const [playheadMs, setPlayheadMs] = useState(() => Date.now() - 2 * H)
   const [following, setFollowing] = useState(false)
+  // True while the user is dragging the field / timeline / clock. The field shows the
+  // static server frame under the playhead during a scrub (no video seek = no stutter),
+  // then returns to live video on release.
+  const [scrubbing, setScrubbing] = useState(false)
   const playheadRef = useRef(playheadMs)
   playheadRef.current = playheadMs
   const followingRef = useRef(following)
@@ -315,6 +322,16 @@ export const ClipEditScreen = () => {
   const sessionAtPlayhead =
     sessions.find((s) => playheadMs >= sessionStartMs(s) && playheadMs <= sessionEndMs(s)) ?? null
   const fieldThumb = sessionAtPlayhead?.thumbnailUrl ?? null
+  // The exact server frame under the playhead — shown in the field WHILE scrubbing
+  // (instant, no decode) instead of seeking the HLS video on every tick (the cause of
+  // scrub stutter). Falls back to the session poster, then the field's placeholder.
+  const fieldFrame = (() => {
+    const fs = sessionAtPlayhead?.filmstrip
+    if (!sessionAtPlayhead || !fs) return null
+    const mediaSec = Math.max(0, (playheadMs - sessionStartMs(sessionAtPlayhead)) / 1000)
+    const idx = Math.min(fs.frameCount, Math.max(1, Math.floor(mediaSec / fs.intervalSec) + 1))
+    return `${fs.baseUrl}/${idx}.jpg?t=${fs.token}`
+  })()
 
   // Streaming iff the user is live now AND the latest session is still open.
   // Gating on `isLive` (not just `endedAt === null`) flips the tail to its dark/
@@ -641,6 +658,7 @@ export const ClipEditScreen = () => {
   const wasPlayingRef = useRef(false)
   const resumeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   function handleScrubStart() {
+    setScrubbing(true)
     // If a resume is already pending, we were playing before this burst — keep that
     // intent so adjusting several wheels (or re-grabbing) in a row still resumes at the
     // end, instead of each new grab capturing the already-paused state as "was paused".
@@ -653,6 +671,7 @@ export const ClipEditScreen = () => {
     if (playingRef.current) setPlaying(false)
   }
   function handleScrubEnd() {
+    setScrubbing(false)
     if (!wasPlayingRef.current) return
     wasPlayingRef.current = false
     if (resumeTimer.current) clearTimeout(resumeTimer.current)
@@ -919,7 +938,8 @@ export const ClipEditScreen = () => {
   // group change), so local second-buckets never collide across groups.
   useEffect(() => {
     thumbCache.current.clear()
-    setThumbs([])
+    // NOTE: server-frame thumbs (the effect below) own `thumbs`; don't clear them on
+    // group change — the filmstrip is per-session and group-independent.
     if (!CLIENT_THUMB_GEN || !activeGroupUrl) return
     let cancelled = false
     ;(async () => {
@@ -1035,6 +1055,33 @@ export const ClipEditScreen = () => {
     return () => sub.remove()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [thumbPlayer])
+
+  // ── Timeline filmstrip from SERVER frames (replaces the non-viable client gen) ──
+  // Map each visible cell's wall-clock instant to the backend frame URL covering it
+  // (per-session `filmstrip`: idx = floor(mediaSec / intervalSec) + 1) and feed
+  // BufferTimeline's `thumbnails` prop. Pure URL building — no decode, no seeking, no
+  // hang; expo-image fetches/caches the actual frames, and only for the on-screen
+  // window. Missing frames (gaps, audio-only, older backend) fall back to sprockets.
+  useEffect(() => {
+    const range = visibleRange
+    if (!range || range.endMs <= range.startMs) {
+      setThumbs([])
+      return
+    }
+    const { startMs, endMs, cellMs } = range
+    const step = Math.max(cellMs, (endMs - startMs) / SERVER_THUMB_CAP)
+    const out: TimelineThumb[] = []
+    for (let t = startMs; t <= endMs && out.length < SERVER_THUMB_CAP; t += step) {
+      const sess = sessions.find((s) => t >= sessionStartMs(s) && t <= sessionEndMs(s))
+      const fs = sess?.filmstrip
+      if (!sess || !fs) continue
+      const mediaSec = Math.max(0, (t - sessionStartMs(sess)) / 1000)
+      const idx = Math.min(fs.frameCount, Math.max(1, Math.floor(mediaSec / fs.intervalSec) + 1))
+      out.push({ tMs: t, source: { uri: `${fs.baseUrl}/${idx}.jpg?t=${fs.token}` } })
+    }
+    setThumbs(out)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleRange, sessions])
 
   // The gap an instant falls in (inter-session / leading / trailing), or null in
   // footage — used to collapse gaps during the field scrub.
@@ -1182,9 +1229,9 @@ export const ClipEditScreen = () => {
             <View style={styles.fieldWrap} onTouchStart={collapseClock}>
               <BufferScrubField
                 variant={fieldVariant}
-                thumbnailUrl={fieldThumb}
+                thumbnailUrl={scrubbing ? fieldFrame ?? fieldThumb : fieldThumb}
                 frameSlot={
-                  hasCameraVideo && !playerError ? (
+                  !scrubbing && hasCameraVideo && !playerError ? (
                     <VideoView
                       player={player}
                       style={StyleSheet.absoluteFill}
