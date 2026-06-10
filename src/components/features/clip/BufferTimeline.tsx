@@ -102,7 +102,22 @@ const TRACK_H = 52
 const MIN_BRACKET_MS = 500
 const GAP_THRESHOLD_MS = 500
 const ZOOM_MAX_FACTOR = 12
-const FILM_CELL_W = 24
+// Real-frame filmstrip: each recorded segment is tiled with little FILM CELLS — a
+// sprocket-hole band above and below, the thumbnail framed between them. The frame's
+// aspect follows the video's display aspect (PORTRAIT — the scrub field + stream view
+// are portrait boxes; tweak THUMB_ASPECT if that changes), so a portrait video gives a
+// portrait frame and a landscape one a landscape frame. The sprocket holes are a fixed
+// size + pitch regardless of frame orientation (only their count varies with width),
+// so the perforations always look the same.
+const THUMB_ASPECT = 9 / 16
+const SPROCKET_BAND_H = 7 // height of each (top/bottom) perforation band
+const SPROCKET_HOLE_W = 5
+const SPROCKET_HOLE_H = 3
+const SPROCKET_PITCH = 9 // target horizontal spacing between holes (fixed → consistent)
+const THUMB_FRAME_H = TRACK_H - SPROCKET_BAND_H * 2 // the image area between the bands
+const THUMB_CELL_W = Math.max(12, Math.round(THUMB_FRAME_H * THUMB_ASPECT)) // ≈ 21 portrait
+const MAX_THUMB_TILES = 200 // per-segment cap (perf backstop at extreme zoom)
+const EMPTY_THUMBS: TimelineThumb[] = []
 // The head/tail buffer-edge indicators are wider than inter-session gaps and carry
 // state: dark (idle), or accent with a footage-facing zigzag (head = evicting oldest,
 // tail = live/growing) — "the buffer eating the footage".
@@ -173,6 +188,12 @@ export function BufferTimeline({
 
   const bufferStartMs = segments.length > 0 ? segments[0]!.startMs : 0
   const bufferEndMs = segments.length > 0 ? segments[segments.length - 1]!.endMs : 0
+  // Every separator is a CELL border over the panelHi cell background, so they all match
+  // (drawing on the dark eviction bars or the lighter gap fill would shift the colour).
+  // Cells always carry a right border; a segment's FIRST cell additionally gets a left
+  // border when something to its left can't own the separator itself — i.e. the head
+  // eviction bar (first segment) or a preceding gap. The tail bar + inter-cell + cell→
+  // gap boundaries are already covered by right borders.
   const lastEnd = bufferEndMs
 
   const { totalSegMs, gapsPx } = useMemo(() => measure(segments), [segments])
@@ -202,6 +223,22 @@ export function BufferTimeline({
     () => layout(segments, px, leadingPx),
     [segments, px, leadingPx],
   )
+
+  // Group per-instant frames by the segment that contains them, so each segment's
+  // filmstrip can pick the nearest real frame for each of its tiles. Empty today
+  // (no per-time frame source wired yet) → tiles fall back to the segment poster.
+  const thumbsBySeg = useMemo(() => {
+    const m = new Map<string, TimelineThumb[]>()
+    if (!thumbnails?.length) return m
+    for (const t of thumbnails) {
+      const seg = segments.find((s) => t.tMs >= s.startMs && t.tMs <= s.endMs)
+      if (!seg) continue
+      const arr = m.get(seg.id)
+      if (arr) arr.push(t)
+      else m.set(seg.id, [t])
+    }
+    return m
+  }, [segments, thumbnails])
   const effContentWidth = contentWidth + trailingPx
   const maxScroll = Math.max(0, effContentWidth - width)
   const offset = clamp(scrollOffset, 0, maxScroll)
@@ -244,7 +281,7 @@ export function BufferTimeline({
       cb({
         startMs: xToTime(offset, segBlocks, px),
         endMs: xToTime(offset + width, segBlocks, px),
-        cellMs: FILM_CELL_W / px,
+        cellMs: THUMB_CELL_W / px,
       })
     }, 200)
     return () => {
@@ -588,54 +625,46 @@ export function BufferTimeline({
               contentStyle,
             ]}
           >
-            {blocks.map((b, i) =>
-              b.kind === 'seg' ? (
+            {blocks.map((b, i) => {
+              if (b.kind !== 'seg') {
+                return (
+                  <View key={`gap-${i}`} style={[styles.gapHolder, { left: b.leftPx }]}>
+                    <GapMarker style={styles.gapFill} />
+                  </View>
+                )
+              }
+              const poster =
+                b.seg.posterUrl && !failedPosters.has(b.seg.posterUrl) ? b.seg.posterUrl : null
+              const frames = thumbsBySeg.get(b.seg.id) ?? EMPTY_THUMBS
+              return (
                 <View key={`seg-${b.seg.id}`} style={[styles.seg, { left: b.leftPx, width: b.widthPx }]}>
-                  {b.seg.posterUrl && !failedPosters.has(b.seg.posterUrl) ? (
-                    <Image
-                      source={{ uri: b.seg.posterUrl }}
-                      style={styles.segPoster}
-                      contentFit="cover"
-                      pointerEvents="none"
-                      transition={120}
-                      onError={() => {
-                        const url = b.seg.posterUrl
-                        if (!url) return
-                        // eslint-disable-next-line no-console
-                        if (__DEV__) console.log('[clip-video] poster 404 → sprockets', url)
+                  {poster || frames.length ? (
+                    <SegmentFilmstrip
+                      widthPx={b.widthPx}
+                      startMs={b.seg.startMs}
+                      endMs={b.seg.endMs}
+                      posterUrl={poster}
+                      frames={frames}
+                      leadingBorder={i === 0 || blocks[i - 1]?.kind === 'gap'}
+                      onPosterError={(url) =>
                         setFailedPosters((prev) => {
                           if (prev.has(url)) return prev
                           const next = new Set(prev)
                           next.add(url)
                           return next
                         })
-                      }}
+                      }
                     />
                   ) : (
                     <FilmstripFill widthPx={b.widthPx} />
                   )}
                 </View>
-              ) : (
-                <View key={`gap-${i}`} style={[styles.gapHolder, { left: b.leftPx }]}>
-                  <GapMarker style={styles.gapFill} />
-                </View>
-              ),
-            )}
+              )
+            })}
 
             {hasFootage && <BufferEdge side="head" leftPx={0} accent={headEvicting} />}
 
             {hasFootage && <BufferEdge side="tail" leftPx={contentWidth} accent={tailLive} />}
-
-            {/* Real frame thumbnails over the sprocket filmstrip (where available). */}
-            {thumbnails?.map((t) => (
-              <Image
-                key={`thumb-${t.tMs}`}
-                source={t.source}
-                style={[styles.thumbTile, { left: timeToX(t.tMs, segBlocks, px) }]}
-                contentFit="cover"
-                pointerEvents="none"
-              />
-            ))}
 
             {savedRegions.map((r) => {
               const left = timeToX(r.startMs, segBlocks, px)
@@ -690,7 +719,10 @@ function BufferEdge({ side, leftPx, accent }: { side: 'head' | 'tail'; leftPx: n
   const color = accent ? theme.colors.accent.default : theme.colors.text.primary
   return (
     <View
-      style={[styles.edge, { left: leftPx, width: EDGE_GAP_WIDTH, backgroundColor: color }]}
+      style={[
+        styles.edge,
+        { left: leftPx, width: EDGE_GAP_WIDTH, backgroundColor: color },
+      ]}
       pointerEvents="none"
     >
       {accent && <ZigzagColumn side={side === 'head' ? 'right' : 'left'} color={color} />}
@@ -727,18 +759,124 @@ function ZigzagColumn({ side, color }: { side: 'left' | 'right'; color: string }
   )
 }
 
-function FilmstripFill({ widthPx }: { widthPx: number }) {
-  const n = Math.max(1, Math.min(160, Math.ceil(widthPx / FILM_CELL_W)))
+// A fixed-pitch row of sprocket holes for one film-cell band. Hole size + spacing are
+// constant; only the count scales with the cell width, so perforations look identical
+// whether the frame is portrait or landscape.
+function SprocketRow({ widthPx }: { widthPx: number }) {
+  const n = Math.max(1, Math.round(widthPx / SPROCKET_PITCH))
   return (
-    <View style={styles.film} pointerEvents="none">
+    <View style={styles.sprocketRow} pointerEvents="none">
       {Array.from({ length: n }).map((_, i) => (
-        <View key={i} style={styles.filmCell}>
-          <View style={styles.filmHole} />
-          <View style={styles.filmHole} />
-        </View>
+        <View key={i} style={styles.sprocketHole} />
       ))}
     </View>
   )
+}
+
+// One film cell: a perforation band top and bottom with the frame (image, or empty for
+// the sprocket-only fallback) in between. The frame area carries the thumbnail's aspect.
+function FilmCell({
+  widthPx,
+  src,
+  onError,
+  leftBorder,
+}: {
+  widthPx: number
+  src?: ComponentProps<typeof Image>['source'] | null
+  onError?: () => void
+  leftBorder?: boolean
+}) {
+  return (
+    <View style={[styles.filmCell, { width: widthPx }, leftBorder && styles.filmCellLeft]}>
+      <SprocketRow widthPx={widthPx} />
+      <View style={styles.filmFrame}>
+        {src ? (
+          <Image
+            source={src}
+            style={styles.segPoster}
+            contentFit="cover"
+            transition={120}
+            pointerEvents="none"
+            onError={onError}
+          />
+        ) : null}
+      </View>
+      <SprocketRow widthPx={widthPx} />
+    </View>
+  )
+}
+
+// Sprocket-only fallback (audio-only / missing poster): a row of empty film cells.
+function FilmstripFill({ widthPx }: { widthPx: number }) {
+  const n = Math.max(1, Math.min(MAX_THUMB_TILES, Math.round(widthPx / THUMB_CELL_W)))
+  const cellW = widthPx / n
+  return (
+    <View style={styles.film} pointerEvents="none">
+      {Array.from({ length: n }).map((_, i) => (
+        <FilmCell key={i} widthPx={cellW} />
+      ))}
+    </View>
+  )
+}
+
+// The real-frame filmstrip for one recorded segment: a row of film cells whose frame
+// width follows the thumbnail aspect (stretched slightly to fill the segment exactly).
+// Each cell shows the frame at its evenly-distributed time — cell 0 = the clip's head,
+// the last = its tail — picking the nearest available per-time frame, else the session
+// poster (so a single-poster backend still tiles; distinct frames light up unchanged
+// once the server serves per-time frames). Cell count scales with zoom (segment width).
+function SegmentFilmstrip({
+  widthPx,
+  startMs,
+  endMs,
+  posterUrl,
+  frames,
+  onPosterError,
+  leadingBorder,
+}: {
+  widthPx: number
+  startMs: number
+  endMs: number
+  posterUrl: string | null
+  frames: TimelineThumb[]
+  onPosterError: (url: string) => void
+  leadingBorder?: boolean
+}) {
+  const n = Math.max(1, Math.min(MAX_THUMB_TILES, Math.round(widthPx / THUMB_CELL_W)))
+  const cellW = widthPx / n
+  return (
+    <View style={styles.film} pointerEvents="none">
+      {Array.from({ length: n }).map((_, i) => {
+        const t = n > 1 ? startMs + ((endMs - startMs) * i) / (n - 1) : startMs
+        const frame = nearestFrame(frames, t)
+        const src = frame?.source ?? (posterUrl ? { uri: posterUrl } : undefined)
+        return (
+          <FilmCell
+            key={i}
+            widthPx={cellW}
+            src={src}
+            leftBorder={leadingBorder && i === 0}
+            onError={!frame && posterUrl ? () => onPosterError(posterUrl) : undefined}
+          />
+        )
+      })}
+    </View>
+  )
+}
+
+// The frame nearest a given time, or null when there are no per-time frames.
+function nearestFrame(frames: TimelineThumb[], tMs: number): TimelineThumb | null {
+  if (!frames.length) return null
+  let best = frames[0]!
+  let bestD = Math.abs(best.tMs - tMs)
+  for (let i = 1; i < frames.length; i++) {
+    const d = Math.abs(frames[i]!.tMs - tMs)
+    if (d < bestD) {
+      bestD = d
+      best = frames[i]!
+    }
+  }
+  return best
 }
 
 // ── layout + helpers ─────────────────────────────────────────────────────────
@@ -833,7 +971,10 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
   },
   timeline: {
-    height: TRACK_H,
+    // TRACK_H + the two 1px borders: the content (TRACK_H) then sits BETWEEN the
+    // borders instead of clipping over the bottom one (iOS clips to the border box),
+    // so the top and bottom rules match.
+    height: TRACK_H + 2,
     backgroundColor: theme.colors.bg.panel,
     borderTopWidth: 1,
     borderBottomWidth: 1,
@@ -850,33 +991,55 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.bg.panelHi,
     overflow: 'hidden',
   },
-  thumbTile: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    width: FILM_CELL_W,
-  },
   segPoster: {
     ...StyleSheet.absoluteFillObject,
+    // 4px rounded corners on the framed thumbnail; the corners reveal the film cell's
+    // own frame background behind it.
+    borderRadius: 4,
   },
   film: {
     ...StyleSheet.absoluteFillObject,
     flexDirection: 'row',
   },
+  // One film cell: a perforation band top + bottom (column), the frame between them.
+  // Separators follow one rule across the whole strip — every column (cell, gap, the
+  // head eviction bar) draws a 1px RIGHT border and nothing draws a left border, so each
+  // boundary is exactly one 1px line (no 2px doubling at gaps, no missing line at the
+  // left edge). All use the same token.
   filmCell: {
-    width: FILM_CELL_W,
     height: '100%',
+    flexDirection: 'column',
     borderRightWidth: 1,
-    borderRightColor: 'rgba(26,22,18,0.12)',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 5,
+    borderRightColor: theme.colors.border.strong,
   },
-  filmHole: {
-    width: 10,
-    height: 3,
-    borderRadius: 1,
-    backgroundColor: 'rgba(26,22,18,0.22)',
+  // The first cell of the first segment: a matching left border so the head eviction
+  // bar gets the same cell-style separator the tail bar already has from the last cell.
+  filmCellLeft: {
+    borderLeftWidth: 1,
+    borderLeftColor: theme.colors.border.strong,
+  },
+  filmFrame: {
+    flex: 1,
+    overflow: 'hidden',
+    // The exact cell background (opaque) so the thumbnail's rounded corners reveal a
+    // colour that matches the rest of the cell — not the previous semi-transparent tint,
+    // which read a touch darker.
+    backgroundColor: theme.colors.bg.panelHi,
+  },
+  sprocketRow: {
+    height: SPROCKET_BAND_H,
+    flexDirection: 'row',
+    alignItems: 'center',
+    // space-around → edge gaps are half the inter-hole gap, so a hole's spacing to its
+    // neighbour reads the same whether that neighbour is in this cell or the next one
+    // over (the 1px cell border sits in the middle of the shared gap).
+    justifyContent: 'space-around',
+  },
+  sprocketHole: {
+    width: SPROCKET_HOLE_W,
+    height: SPROCKET_HOLE_H,
+    borderRadius: 1.5,
+    backgroundColor: theme.colors.text.subtle,
   },
   gapHolder: {
     position: 'absolute',
@@ -896,6 +1059,12 @@ const styles = StyleSheet.create({
   },
   gapFill: {
     flex: 1,
+    // The gap draws NO borders. Its fill is paper100 (lighter than the panelHi cells),
+    // so a semi-transparent border.strong line on it reads lighter than the rest. Both
+    // 1px separators instead come from the adjacent CELLS (prior cell's right border,
+    // next cell's left border), which sit over panelHi — so every separator matches.
+    borderLeftWidth: 0,
+    borderRightWidth: 0,
   },
   saved: {
     position: 'absolute',
