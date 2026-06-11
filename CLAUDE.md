@@ -2826,3 +2826,34 @@ exercised in a headless typecheck.
 
 No native rebuild implied. Start only when the backend H-series begins; this slice is
 independent and can land anytime.
+
+---
+
+## Updates — June 2026 (Clips landing grid shipped; saved-clip persistence → Aaron)
+
+Ben shipped the **Clips landing grid** to `main` (`581ce6a`): a two-lane time-ordered
+grid (`app/(app)/clips.tsx` → `ClipsScreen`) — buffered recording sessions (left) and
+saved clips (right) on a shared vertical axis (now at the bottom), per-clip collapsed-gap
+layout, pinch-to-zoom, **double-tap → editor**, **drag across lanes to save / un-save**.
+Carries a shared **`[Clips | Editor]` `PageTabs`** with `ClipEditScreen` (sibling
+`href:null` tab routes → instant swap). **Phase C** scopes `ClipEditScreen` to the
+double-tapped clip's own window (`clipId` param → single segment, no eviction gap / live
+tail, bracket defaulted to the whole clip). The **Library screen is retired** — the grid
+is the saved-clips surface. New design components in DESIGN.md Section 3: `ClipBlock`,
+`ClipLane`, `TimeGapMarker` (+ `ZoomButton` extracted from `BufferTimeline`; `TimeGridlines`
+parked).
+
+**Drag-to-save is NOT durable yet — handed to Aaron.** `moveClip` sets a local (ephemeral)
+`laneOverride` and calls `bufferApi.saveClip` → `POST /buffer/me/clips`, which **501s**
+(R3 promote-on-publish not built); on reload the clip is back in the buffer lane, and the
+saved lane reads `useRecordings` (not saved clips) so a persisted clip wouldn't show anyway.
+The durable fix is two backend pieces + an app-side source swap, spec'd in
+**`HANDOFF-clips-saved-persistence-2026-06-11.md`**:
+- **R3** — `POST /buffer/me/clips` must **promote bytes out of the rolling buffer into the
+  permanent saved-clip pool** (survives eviction), returning `{ clip: { id } }`.
+- **C5** — new `GET /buffer/me/clips` (list, for reload + the saved lane) + `DELETE
+  /buffer/me/clips/:id` (un-save). **Open model decision (Aaron's):** saved lane = saved
+  buffer-clips / recordings / both-unified (recommendation: unified with a `source` field).
+- **App side (Ben, once contract agreed):** `bufferApi.listSavedClips()` + `useSavedClips()`,
+  grid saved lane → `useSavedClips()`, `moveClip` → save/delete + query-invalidate (drop the
+  local override). The app already calls `saveClip`; it just needs the endpoints to persist.
