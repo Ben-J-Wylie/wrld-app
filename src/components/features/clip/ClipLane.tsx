@@ -4,13 +4,11 @@
 // shared vertical time axis (top = distance below "now", height = duration × pxPerMs). The
 // buffered lane and the saved lane are two of these side by side.
 //
-// Sub-columns: a single broadcasting device records sequentially, so its clips never
-// overlap in time → one column. Concurrent recordings from multiple devices DO overlap →
-// the lane splits the overlapping run into side-by-side sub-columns (greedy interval
-// colouring) so each clip stays visible + tappable. With today's single-device data this
-// is always one column. See DESIGN.md Section 3 (Clips landing grid).
+// One clip per time region (full width): a saved clip is a single source of truth, and a
+// saved session is hidden from the buffer lane (the host moves it), so clips in a lane
+// never overlap → no sub-columns. (Concurrent multi-device capture, if it ever lands, is a
+// future conversation.) See DESIGN.md Section 3 (Clips landing grid).
 
-import { useMemo } from 'react'
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
 import { ClipBlock, type ClipTone } from './ClipBlock'
 
@@ -22,8 +20,6 @@ export type LaneClip = {
   sublabel?: string
   posterUrl?: string | null
 }
-
-const SUBCOL_GAP_PCT = 1.5 // % gap between sub-columns when a lane splits
 
 export type ClipPos = { top: number; height: number }
 
@@ -45,34 +41,16 @@ type Props = {
 export function ClipLane({ clips, tone, posOf, onOpenClip, reachPx, onMoveClip, style }: Props) {
   // Buffered clips drag RIGHT (→ saved); saved clips drag LEFT (→ buffered).
   const dragDir: 1 | -1 = tone === 'buffered' ? 1 : -1
-  // Assign each clip to a sub-column so overlapping clips sit side by side.
-  const { colOf, colCount } = useMemo(() => assignColumns(clips), [clips])
 
   return (
     <View style={[styles.lane, style]}>
       {clips.map((c) => {
         const p = posOf(c.id)
         if (!p) return null
-        const top = p.top
-        const height = p.height
-        const col = colOf.get(c.id) ?? 0
-        const widthPct = 100 / colCount
-        const leftPct = col * widthPct
         return (
-          <View
-            key={c.id}
-            style={[
-              styles.slot,
-              {
-                top,
-                height,
-                left: `${leftPct + (colCount > 1 ? SUBCOL_GAP_PCT / 2 : 0)}%`,
-                width: `${widthPct - (colCount > 1 ? SUBCOL_GAP_PCT : 0)}%`,
-              },
-            ]}
-          >
+          <View key={c.id} style={[styles.slot, { top: p.top, height: p.height }]}>
             <ClipBlock
-              heightPx={height}
+              heightPx={p.height}
               label={c.label}
               sublabel={c.sublabel}
               posterUrl={c.posterUrl}
@@ -89,30 +67,13 @@ export function ClipLane({ clips, tone, posOf, onOpenClip, reachPx, onMoveClip, 
   )
 }
 
-// Greedy interval colouring: sort by start, drop each clip into the first column whose last
-// clip has already ended. `colCount` = how many columns were needed (1 when nothing overlaps).
-function assignColumns(clips: LaneClip[]): { colOf: Map<string, number>; colCount: number } {
-  const colOf = new Map<string, number>()
-  const colEnds: number[] = [] // last endMs placed in each column
-  const sorted = [...clips].sort((a, b) => a.startMs - b.startMs)
-  for (const c of sorted) {
-    let col = colEnds.findIndex((end) => end <= c.startMs)
-    if (col === -1) {
-      col = colEnds.length
-      colEnds.push(c.endMs)
-    } else {
-      colEnds[col] = c.endMs
-    }
-    colOf.set(c.id, col)
-  }
-  return { colOf, colCount: Math.max(1, colEnds.length) }
-}
-
 const styles = StyleSheet.create({
   lane: {
     flex: 1,
   },
   slot: {
     position: 'absolute',
+    left: 0,
+    right: 0,
   },
 })

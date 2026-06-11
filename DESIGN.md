@@ -3341,13 +3341,13 @@ over [start, end], no rolling-buffer eviction gap / live tail, playhead bounded,
 to the whole clip — Phase C); **drag** a clip across to the other lane to **save** (buffered →
 saved) / **un-save**
 (saved → buffered) — locked in time. Opens at a default zoom where the longest clip is ~130px,
-scrolled to now. Replaces the retired Library screen (its recordings feed the saved lane). The
-lanes are filtered views of one combined set, so a drag just flips a clip's lane (`laneOverride`,
-mock until the real clips model + un-save endpoint land). The screen owns the layout
-(`buildLayout` → a per-clip `pos` map + gap list), so a later flip to top/bottom lanes is a
-layout swap. *(Known limitation to iterate: concurrent cross-lane clips — a session and a
-recording within it — stack sequentially rather than aligning at the same y; correct for today's
-single-device sequential data.)*
+scrolled to now. **A clip lives in exactly ONE lane (2026-06-11 model):** saving is a *move*,
+not a copy — a buffered session covered by a saved clip is **hidden from the buffer lane**
+(`savedClipCovers`, window-matched; the exact link is the clip's source `bufferSessionId` —
+pending in the API, see handoff), and un-saving brings it back. So clips in a lane never overlap →
+**no sub-columns**. Saved clips come from the durable `Clip` pool (`useSavedClips`); buffered from
+the live buffer sessions. The screen owns the layout (`buildLayout` → a per-clip `pos` map + gap
+list), so a later flip to top/bottom lanes is a layout swap.
 
 > Zoom = a 2-finger **pinch** over a native `ScrollView`. The shared **`ZoomButton`**
 > (extracted from `BufferTimeline`) is the *editor timeline's* tap/hold zoom — not on this grid.
@@ -3375,13 +3375,13 @@ on the sublabel and the left ruler.
   so vertical scrolls fall through); past halfway commits `onCross`, else springs back; lifts
   (shadow) while dragging. Props `heightPx` · `label` · `sublabel?` · `posterUrl?` · `tone` ·
   `onOpen?` · `dragDir?` · `reachPx?` · `onCross?`.
-- **`ClipLane`** — `src/components/features/clip/ClipLane.tsx`. A column that positions its
-  `LaneClip[]` from a host **`posOf(id) → { top, height }`** map (`ClipPos`) — the per-clip
+- **`ClipLane`** — `src/components/features/clip/ClipLane.tsx`. A full-width column that positions
+  its `LaneClip[]` from a host **`posOf(id) → { top, height }`** map (`ClipPos`) — the per-clip
   collapsed layout (with the height floor already reserved) lives in the host, so the lane just
-  renders. **Sub-columns** via greedy interval colouring so concurrent (multi-device) overlapping
-  clips sit side by side — one column with today's single-device data. Forwards drag (`reachPx` +
-  `onMoveClip`) to the blocks. Props `clips` · `tone` · `posOf` · `onOpenClip?` · `reachPx?` ·
-  `onMoveClip?`.
+  renders. One clip per time region (a saved clip is a single source of truth; a saved session is
+  hidden from the buffer lane), so blocks never overlap — **no sub-columns** (multi-device
+  concurrent capture is a future conversation). Forwards drag (`reachPx` + `onMoveClip`) to the
+  blocks. Props `clips` · `tone` · `posOf` · `onOpenClip?` · `reachPx?` · `onMoveClip?`.
 
 ---
 

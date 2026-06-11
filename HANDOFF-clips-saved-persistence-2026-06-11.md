@@ -131,6 +131,31 @@ Recommendation: **unified list with a `source` field** (one saved surface, least
 
 ---
 
+## Model refinement (2026-06-11, Ben) — a clip lives in exactly ONE lane
+
+Decided UX model (and partly wired on the front end now): **a clip is a single entity in one
+state** — buffered (ephemeral) OR saved (durable) — not a copy shown in both. Saving is a
+**move**: a saved clip's source buffered session is **hidden from the buffer lane**; un-saving
+brings it back. **No sub-lanes** (one source of truth per time region; the app dropped the
+sub-column rendering). The clip is **editable in either lane** (trim / delete / per-source
+visibility), and that source-visibility state is the single truth used at time-machine playback.
+
+**Front end now (Ben):** the grid hides a buffered session when a saved clip's **window covers it**
+(`savedClipCovers`, ±1.5s) — exact for the current whole-session save flow. Sub-columns removed.
+
+**Backend asks (Aaron):**
+1. **Expose the clip's source `bufferSessionId`** on `GET /buffer/me/clips` (it's already on the
+   `Clip` row). Then the app hides the **exact** source session instead of window-matching — robust
+   once clips can be trimmed to sub-windows. Add it to the `SavedClip` shape: `bufferSessionId: string | null`.
+2. **Confirm (likely already true): saving COPIES, the buffer footage is NOT consumed.** The schema
+   comment says the promoted clip is a durable copy that outlives the session, so un-save = delete
+   the copy and the session reappears in the buffer lane (until it ages out) with no re-write. This
+   is exactly the desired behaviour — just confirm nothing deletes the buffer segments on save.
+3. **Edit persistence (C4 manifest).** Trim / delete-source / per-source-visibility on a clip (in
+   either lane) needs to write the non-destructive **manifest** (the single source of truth). The
+   editor UI + tools exist (scaffold); the persistence is yours. Editing a *buffered* (not-yet-saved)
+   clip implies promoting-on-edit or holding a draft manifest — worth a quick model call together.
+
 ## Also needed: clip titles on sessions + recordings (small, additive)
 
 The grid now labels each clip by the **stream title** instead of its start time. **No DB

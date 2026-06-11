@@ -49,6 +49,15 @@ const slog = (...args: unknown[]) => {
   if (__DEV__) console.log('[clips-save]', ...args)
 }
 
+const SAVED_MATCH_TOL_MS = 1500
+// A saved clip and its source buffered session are the SAME clip in two states, so a
+// saved session is hidden from the buffer lane (saving MOVES it, never duplicates). The
+// exact link is the clip's source `bufferSessionId` (pending in the API — see handoff);
+// until then we match on the window, which is exact for whole-session saves: a buffered
+// session is "saved" when a saved clip's window covers it.
+const savedClipCovers = (b: LaneClip, savedList: LaneClip[]) =>
+  savedList.some((s) => s.startMs <= b.startMs + SAVED_MATCH_TOL_MS && s.endMs >= b.endMs - SAVED_MATCH_TOL_MS)
+
 const sessionStartMs = (s: BufferSession) => Date.parse(s.startedAt) + (s.mediaStartOffsetMs ?? 0)
 // `?? 0` matters: a brand-new live session can have BOTH duration fields undefined.
 const sessionEndMs = (s: BufferSession) => sessionStartMs(s) + (s.mediaDurationSec ?? s.durationSec ?? 0) * 1000
@@ -165,9 +174,12 @@ export const ClipsScreen = () => {
   // copy (the block springs back), and dragging a saved clip left DELETES the copy
   // (un-save). `pendingDelete` optimistically hides a clip being un-saved.
   const [pendingDelete, setPendingDelete] = useState<Set<string>>(new Set())
-  const bufferedLane = buffered
   const savedLane = useMemo(() => saved.filter((c) => !pendingDelete.has(c.id)), [saved, pendingDelete])
-  const allClips = useMemo(() => [...buffered, ...savedLane], [buffered, savedLane])
+  // Saving MOVES a clip to the saved lane (it must not show in both): a buffered session
+  // covered by a saved clip drops out of the buffer lane. Un-saving (the clip leaves
+  // `savedLane` via pendingDelete / refetch) brings its session back automatically.
+  const bufferedLane = useMemo(() => buffered.filter((b) => !savedClipCovers(b, savedLane)), [buffered, savedLane])
+  const allClips = useMemo(() => [...bufferedLane, ...savedLane], [bufferedLane, savedLane])
   const hasAny = allClips.length > 0
 
   // A just-saved clip is processed async (status:'processing' → 'ready'), so it
