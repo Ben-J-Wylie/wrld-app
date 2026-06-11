@@ -107,17 +107,27 @@ Recommendation: **unified list with a `source` field** (one saved surface, least
 > Seam note: this crosses into `screens`/`hooks`/`api` (your lane). Happy to wire the consumption
 > against the agreed contract so it's live when your routes land, or leave it to you — just say which.
 
-> **✅ WIRED (Ben, 2026-06-11).** App now consumes the real endpoints:
-> `bufferApi.listSavedClips()` / `deleteSavedClip()`, `useSavedClips()` (`['buffer','clips']`).
-> The grid's saved lane reads `useSavedClips` (recordings dropped). Drag-right = `saveClip`
-> (the buffer block springs back — saving is a COPY, not a move); drag-left = `deleteSavedClip`
-> (optimistic remove). `ClipEditScreen` focus resolves a saved clip via `useSavedClips`.
-> **Two coordination points back to you:**
-> 1. **Save is async (`processing`→`ready`).** The grid invalidates `['buffer','clips']` at 0/3/8s
->    after a save as a stopgap. A **ready push** (e.g. a `clip_ready` user-socket event) would
->    replace the poll and make drag-to-save feel instant — is there one / can there be?
-> 2. **Buffered-lane titles** still need `title` on the `GET /buffer/me` session objects (see the
->    "clip titles" section below) — saved-lane titles already work off `Clip.title`.
+> **✅ WIRED + WORKING (Ben, 2026-06-11 eve).** App consumes the real endpoints
+> (`bufferApi.listSavedClips()` / `deleteSavedClip()`, `useSavedClips()` = `['buffer','clips']`).
+> Saved lane reads `useSavedClips` (recordings dropped). Drag-right = `saveClip` (a COPY — the
+> buffer block springs back); drag-left = `deleteSavedClip` (optimistic). `ClipEditScreen` focus
+> resolves a saved clip via `useSavedClips`. **On-device verified: saves persist, the list grows,
+> clips stay in the saved lane.**
+>
+> One contract fix on the way: the save was 500ing because `SaveClipBody.kinds` requires ≥1
+> element but the app sent `[]`. **The app now sends the covered sessions' actual kinds** (e.g.
+> `["camera","audio"]`), so it works. Reconcile when convenient — either accept `[]` = "all" (as
+> this doc originally said) or keep non-empty; the app is fine either way.
+>
+> **Remaining for you (Aaron):**
+> 1. **THE one that matters for UX — buffered-lane titles.** `GET /buffer/me` sessions don't carry
+>    `title`, so both lanes label by start time. Add `title` via `BufferSession.streamId →
+>    Stream.title` (relation/lookup, **no migration** — see the "clip titles" section below). App
+>    already consumes `session.title`. *(New saves made after this lands inherit the title as their
+>    clip name; clips already saved keep their time-name.)*
+> 2. *(minor, optional)* the Zod reject returns **500** — should be **400**.
+> 3. ~~A `clip_ready` push to replace the poll~~ — **MOOT**: your `POST` is synchronous (returns once
+>    `ready`), so the clip shows on the immediate refetch. No push needed.
 
 ---
 
