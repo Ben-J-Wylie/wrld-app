@@ -14,7 +14,7 @@
 // route lands; the Saved tab + saved-regions reflect this session's saves only.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useFocusEffect, useLocalSearchParams } from 'expo-router'
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { Alert, Animated, RefreshControl, StyleSheet, View } from 'react-native'
 import { ScreenScroll } from '@/components/sections/ScreenScroll'
 import { ScreenHeader } from '@/components/sections/ScreenHeader'
@@ -1662,15 +1662,19 @@ export const ClipEditScreen = () => {
         />
       }
     >
+      {/* Top tabs shared with the Clips grid: "Clips" returns to the vertical
+          grid (a sibling tab route — instant swap), "Editor" is this page. */}
       <PageTabs
         tabs={[
+          { key: 'grid', label: 'Clips' },
           { key: 'editor', label: 'Editor' },
-          { key: 'saved', label: `Saved clips${savedClips.length ? ` · ${savedClips.length}` : ''}` },
         ]}
-        value={page}
-        onChange={(p) => {
-          setClockExpanded(false) // leaving the editor unmounts the clock — restore scroll
-          setPage(p)
+        value="editor"
+        onChange={(k) => {
+          if (k === 'grid') {
+            setClockExpanded(false) // leaving the editor unmounts the clock — restore scroll
+            router.navigate('/(app)/clips')
+          }
         }}
         style={styles.pager}
       />

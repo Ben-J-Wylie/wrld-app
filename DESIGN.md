@@ -3323,7 +3323,11 @@ a 1× `requestAnimationFrame` scrub; the paused-seek effect repaints the field).
 
 The **Clips landing** (`ClipsScreen`, the first page from the footer Clip button) is a
 two-lane, time-ordered grid of every clip — buffered recording sessions on the LEFT, saved
-clips on the RIGHT. The shared vertical axis is laid out **per-clip with collapsed gaps**
+clips on the RIGHT. The grid and `ClipEditScreen` carry a shared **`PageTabs` [Clips | Editor]**
+at the top (the grid is "Clips", the editor is "Editor"): the two are sibling `href:null` tab
+routes, so the tabs swap between them instantly — double-tapping a clip opens the editor on it,
+and the "Clips" tab returns to the grid. The shared vertical axis is laid out **per-clip with
+collapsed gaps**
 (2026-06-11): each clip's height is its duration × zoom **floored to `MIN_BLOCK_H` (34)**, and
 that floored height is the space it **reserves** — so short clips keep a readable block and
 blocks never overlap (the fix for the prior thin-line bug: the earlier segment-scale axis

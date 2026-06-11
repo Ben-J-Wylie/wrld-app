@@ -23,6 +23,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import { useAuth } from '@clerk/clerk-expo'
 import { theme } from '@/tokens/theme'
 import { ScreenHeader } from '@/components/sections/ScreenHeader'
+import { PageTabs } from '@/components/features/navigation/PageTabs'
 import { Text } from '@/components/primitives/Text'
 import { Icon } from '@/components/primitives/Icon'
 import { ClipLane, type LaneClip, type ClipPos } from '@/components/features/clip/ClipLane'
@@ -262,13 +263,24 @@ export const ClipsScreen = () => {
   )
 
   const openClip = useCallback((clip: LaneClip, kind: 'buffered' | 'saved') => {
-    router.push({ pathname: '/(app)/clip-editor', params: { clipId: clip.id, kind } })
+    router.navigate({ pathname: '/(app)/clip-editor', params: { clipId: clip.id, kind } })
   }, [])
 
   return (
     <View style={styles.root}>
       <View style={[styles.header, { paddingTop: insets.top + theme.spacing.sm }]}>
         <ScreenHeader title="Clips" />
+        <PageTabs
+          tabs={[
+            { key: 'grid', label: 'Clips' },
+            { key: 'editor', label: 'Editor' },
+          ]}
+          value="grid"
+          onChange={(k) => {
+            if (k === 'editor') router.navigate('/(app)/clip-editor')
+          }}
+          style={styles.pager}
+        />
         <View style={styles.laneHeaders}>
           <View style={styles.laneHeaderCell}>
             <Icon name="film" size="sm" color={theme.colors.text.muted} />
@@ -346,6 +358,9 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.bg.primary,
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border.subtle,
+  },
+  pager: {
+    marginTop: theme.spacing.sm,
   },
   laneHeaders: {
     flexDirection: 'row',
