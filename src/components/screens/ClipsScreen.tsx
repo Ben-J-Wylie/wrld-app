@@ -15,6 +15,7 @@
 // real saved-clips model + un-save are Aaron's lane (the manifest).
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { router, useFocusEffect } from 'expo-router'
 import { ScrollView, StyleSheet, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -30,10 +31,9 @@ import { ClipLane, type LaneClip, type ClipPos } from '@/components/features/cli
 import { TimeGapMarker } from '@/components/features/clip/TimeGapMarker'
 import { ClipTimeRuler, type RulerTick } from '@/components/features/clip/ClipTimeRuler'
 import { useBuffer } from '@/hooks/useBuffer'
-import { useRecordings } from '@/hooks/useRecordings'
+import { useSavedClips } from '@/hooks/useSavedClips'
 import { useBroadcastStore } from '@/stores/broadcastStore'
 import { bufferApi, type BufferSession } from '@/api/buffer'
-import type { Recording } from '@/types'
 
 const GUTTER_W = 52 // left ruler column (ghosted time marks)
 const MIN_TICK_GAP = 26 // min vertical px between ruler labels so they don't collide
@@ -117,13 +117,15 @@ export const ClipsScreen = () => {
   const insets = useSafeAreaInsets()
   const { isSignedIn } = useAuth()
   const isLive = useBroadcastStore((s) => s.isLive)
+  const qc = useQueryClient()
   const { data: buffer } = useBuffer(!!isSignedIn, isLive)
-  const { data: recordings } = useRecordings(!!isSignedIn)
+  const { data: savedData } = useSavedClips(!!isSignedIn)
 
   // ── normalise both data sources into time-positioned lane clips ──
-  // Clips are labelled by the stream TITLE; the start time + duration move to the
-  // sublabel (and the left ruler). Falls back to the time as the title until the
-  // backend carries `title` onto sessions / recordings (handoff 2026-06-11).
+  // Clips are labelled by the stream TITLE; the start time + duration live on the
+  // sublabel + the left ruler. Buffered sessions fall back to the time until the
+  // backend carries `title` onto the buffer descriptor (handoff 2026-06-11); saved
+  // clips carry their saved name.
   const buffered = useMemo<LaneClip[]>(() => {
     return (buffer?.sessions ?? []).map((s) => {
       const startMs = sessionStartMs(s)
@@ -139,44 +141,68 @@ export const ClipsScreen = () => {
     })
   }, [buffer])
   const saved = useMemo<LaneClip[]>(() => {
-    const recs: Recording[] = recordings ?? []
-    return recs.map((r) => {
-      const startMs = Date.parse(r.startedAt)
-      const endMs = startMs + (r.durationSec ?? 0) * 1000
-      return {
-        id: r.id,
-        startMs,
-        endMs,
-        label: r.title?.trim() || fmtTime(startMs),
-        sublabel: fmtDur(r.durationSec ?? 0),
-        posterUrl: r.thumbnailUrl,
-      }
-    })
-  }, [recordings])
+    return (savedData ?? []).map((c) => ({
+      id: c.id,
+      startMs: c.startAtMs,
+      endMs: c.endAtMs,
+      label: c.name?.trim() || fmtTime(c.startAtMs),
+      sublabel: fmtDur((c.endAtMs - c.startAtMs) / 1000),
+      posterUrl: c.thumbnailUrl,
+    }))
+  }, [savedData])
 
-  // Combine into one set so a drag just flips a clip's lane (locked in time). Lanes are
-  // filtered views; `laneOverride` is the local (mock) save / un-save.
-  const [laneOverride, setLaneOverride] = useState<Record<string, 'buffered' | 'saved'>>({})
-  const laneOf = useCallback((id: string, def: 'buffered' | 'saved') => laneOverride[id] ?? def, [laneOverride])
-  const bufferedLane = useMemo(
-    () => [...buffered.filter((c) => laneOf(c.id, 'buffered') === 'buffered'), ...saved.filter((c) => laneOf(c.id, 'saved') === 'buffered')],
-    [buffered, saved, laneOf],
-  )
-  const savedLane = useMemo(
-    () => [...saved.filter((c) => laneOf(c.id, 'saved') === 'saved'), ...buffered.filter((c) => laneOf(c.id, 'buffered') === 'saved')],
-    [buffered, saved, laneOf],
-  )
-  const allClips = useMemo(() => [...buffered, ...saved], [buffered, saved])
+  // Saving COPIES a buffer span into a durable Clip (new id) — the buffer session
+  // stays. So this isn't a "move": dragging a buffered clip right CREATES a saved
+  // copy (the block springs back), and dragging a saved clip left DELETES the copy
+  // (un-save). `pendingDelete` optimistically hides a clip being un-saved.
+  const [pendingDelete, setPendingDelete] = useState<Set<string>>(new Set())
+  const bufferedLane = buffered
+  const savedLane = useMemo(() => saved.filter((c) => !pendingDelete.has(c.id)), [saved, pendingDelete])
+  const allClips = useMemo(() => [...buffered, ...savedLane], [buffered, savedLane])
   const hasAny = allClips.length > 0
 
-  const moveClip = useCallback((clip: LaneClip, to: 'buffered' | 'saved') => {
-    setLaneOverride((prev) => ({ ...prev, [clip.id]: to }))
-    if (to === 'saved') {
+  // A just-saved clip is processed async (status:'processing' → 'ready'), so it
+  // doesn't appear in the list immediately. Invalidate now + a few times after, so
+  // it lands in the saved lane once ready. (Replace with Aaron's ready push later.)
+  const refetchSavedSoon = useCallback(() => {
+    qc.invalidateQueries({ queryKey: ['buffer', 'clips'] })
+    const t1 = setTimeout(() => qc.invalidateQueries({ queryKey: ['buffer', 'clips'] }), 3000)
+    const t2 = setTimeout(() => qc.invalidateQueries({ queryKey: ['buffer', 'clips'] }), 8000)
+    return () => {
+      clearTimeout(t1)
+      clearTimeout(t2)
+    }
+  }, [qc])
+
+  // Drag a BUFFERED clip right → save a durable copy of its window.
+  const saveClip = useCallback(
+    (clip: LaneClip) => {
       bufferApi
         .saveClip({ startAtMs: Math.round(clip.startMs), endAtMs: Math.round(clip.endMs), name: clip.label, kinds: [] })
+        .then(() => refetchSavedSoon())
         .catch(() => {})
-    }
-  }, [])
+    },
+    [refetchSavedSoon],
+  )
+
+  // Drag a SAVED clip left → un-save (delete the durable copy). Optimistically hide
+  // it; revert if the delete fails.
+  const unsaveClip = useCallback(
+    (clip: LaneClip) => {
+      setPendingDelete((prev) => new Set(prev).add(clip.id))
+      bufferApi
+        .deleteSavedClip(clip.id)
+        .then(() => qc.invalidateQueries({ queryKey: ['buffer', 'clips'] }))
+        .catch(() =>
+          setPendingDelete((prev) => {
+            const next = new Set(prev)
+            next.delete(clip.id)
+            return next
+          }),
+        )
+    },
+    [qc],
+  )
 
   const [lanesRowW, setLanesRowW] = useState(0)
   const reachPx = lanesRowW > 0 ? (lanesRowW + theme.spacing.sm) / 2 : 0
@@ -370,7 +396,7 @@ export const ClipsScreen = () => {
                     posOf={posOf}
                     onOpenClip={(c) => openClip(c, 'buffered')}
                     reachPx={reachPx}
-                    onMoveClip={(c) => moveClip(c, 'saved')}
+                    onMoveClip={saveClip}
                   />
                   <View style={styles.laneGap} />
                   <ClipLane
@@ -379,7 +405,7 @@ export const ClipsScreen = () => {
                     posOf={posOf}
                     onOpenClip={(c) => openClip(c, 'saved')}
                     reachPx={reachPx}
-                    onMoveClip={(c) => moveClip(c, 'buffered')}
+                    onMoveClip={unsaveClip}
                   />
                 </View>
               </View>

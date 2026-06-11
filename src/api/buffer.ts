@@ -90,4 +90,29 @@ export const bufferApi = {
     const res = await apiClient.post<{ clip: { id: string } }>('/buffer/me/clips', input)
     return { clipId: res.data.clip.id }
   },
+
+  // C5 — the SAVED-clip pool (durable Clip rows) that backs the Clips-grid saved
+  // lane. Separate from the rolling buffer; survives eviction. Only `status:'ready'`
+  // clips are returned, so a just-saved clip appears once processing finishes.
+  listSavedClips: async (): Promise<SavedClip[]> => {
+    const res = await apiClient.get<{ clips: SavedClip[] }>('/buffer/me/clips')
+    return res.data.clips
+  },
+
+  // C5 — un-save: delete the durable copy + reclaim the saved-clip quota. The
+  // rolling buffer is untouched, so the clip's footage stays in the buffer lane.
+  deleteSavedClip: async (id: string): Promise<void> => {
+    await apiClient.delete(`/buffer/me/clips/${id}`)
+  },
+}
+
+// One durable saved clip (the buffer-promoted Clip row). Wall-clock window; `name`
+// is the clip title; `kinds` are the captured source tracks.
+export type SavedClip = {
+  id: string
+  name: string
+  startAtMs: number
+  endAtMs: number
+  thumbnailUrl: string | null
+  kinds: BufferTrackKind[]
 }

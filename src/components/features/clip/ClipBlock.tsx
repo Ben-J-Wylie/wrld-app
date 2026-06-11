@@ -87,12 +87,10 @@ export function ClipBlock({ heightPx, label, sublabel, posterUrl, tone, onOpen, 
         const dir = dirSv.value
         const reach = reachSv.value
         const crossed = dir !== 0 && (dir > 0 ? tx.value >= reach / 2 : tx.value <= -reach / 2)
-        if (crossed) {
-          // Leave tx put — the host moves the clip to the other lane and this block unmounts.
-          runOnJS(fireCross)()
-        } else {
-          tx.value = withTiming(0, { duration: 160 })
-        }
+        if (crossed) runOnJS(fireCross)()
+        // Always spring back: a save COPIES (the block stays) and an un-save removes
+        // the block via the host's data change — either way the offset shouldn't stick.
+        tx.value = withTiming(0, { duration: 160 })
       })
       .onFinalize(() => {
         'worklet'

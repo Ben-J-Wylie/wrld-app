@@ -107,6 +107,18 @@ Recommendation: **unified list with a `source` field** (one saved surface, least
 > Seam note: this crosses into `screens`/`hooks`/`api` (your lane). Happy to wire the consumption
 > against the agreed contract so it's live when your routes land, or leave it to you — just say which.
 
+> **✅ WIRED (Ben, 2026-06-11).** App now consumes the real endpoints:
+> `bufferApi.listSavedClips()` / `deleteSavedClip()`, `useSavedClips()` (`['buffer','clips']`).
+> The grid's saved lane reads `useSavedClips` (recordings dropped). Drag-right = `saveClip`
+> (the buffer block springs back — saving is a COPY, not a move); drag-left = `deleteSavedClip`
+> (optimistic remove). `ClipEditScreen` focus resolves a saved clip via `useSavedClips`.
+> **Two coordination points back to you:**
+> 1. **Save is async (`processing`→`ready`).** The grid invalidates `['buffer','clips']` at 0/3/8s
+>    after a save as a stopgap. A **ready push** (e.g. a `clip_ready` user-socket event) would
+>    replace the poll and make drag-to-save feel instant — is there one / can there be?
+> 2. **Buffered-lane titles** still need `title` on the `GET /buffer/me` session objects (see the
+>    "clip titles" section below) — saved-lane titles already work off `Clip.title`.
+
 ---
 
 ## Also needed: clip titles on sessions + recordings (small, additive)

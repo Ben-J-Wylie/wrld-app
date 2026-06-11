@@ -51,7 +51,7 @@ import { SourceChatLog } from '@/components/features/clip/SourceChatLog'
 import { useAuth } from '@clerk/clerk-expo'
 import { useVideoPlayer, VideoView } from 'expo-video'
 import { useBuffer } from '@/hooks/useBuffer'
-import { useRecordings } from '@/hooks/useRecordings'
+import { useSavedClips } from '@/hooks/useSavedClips'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
 import { useBroadcastStore } from '@/stores/broadcastStore'
 import { bufferApi } from '@/api/buffer'
@@ -231,7 +231,7 @@ export const ClipEditScreen = () => {
   const isLive = useBroadcastStore((s) => s.isLive)
   const { data: buffer, refetch: refetchBuffer } = useBuffer(!!isSignedIn, isLive)
   const { data: currentUser } = useCurrentUser()
-  const { data: recordings } = useRecordings(!!isSignedIn)
+  const { data: savedClipsData } = useSavedClips(!!isSignedIn)
   const sessions = buffer?.sessions ?? EMPTY_SESSIONS
 
   // ── focus clip (opened from the Clips grid) ──────────────────────────────────
@@ -239,21 +239,18 @@ export const ClipEditScreen = () => {
   // window — a single segment over [start, end], NO rolling-buffer leading-eviction
   // gap, NO live tail, playhead bounded to the clip. (Phase C scaffold: the video
   // VOD mapping below stays whole-buffer, so a clip whose footage is in the buffer
-  // plays from the correct media offset; the saved-recording case degrades to its
-  // poster until Aaron wires real saved-clip playback.)
-  // `kind` is a hint; resolve by id in both sources so a mock-moved clip still opens.
+  // plays from the correct media offset; a saved clip whose footage has since been
+  // evicted degrades to its poster until real saved-clip playback is wired.)
+  // `kind` is a hint; resolve by id in both sources so either lane's clip opens.
   const { clipId } = useLocalSearchParams<{ clipId?: string; kind?: string }>()
   const focusClip = useMemo<{ startMs: number; endMs: number; name: string } | null>(() => {
     if (!clipId) return null
-    const r = (recordings ?? []).find((x) => x.id === clipId)
-    if (r) {
-      const startMs = Date.parse(r.startedAt)
-      return { startMs, endMs: startMs + (r.durationSec ?? 0) * 1000, name: clipLabel(startMs) }
-    }
+    const saved = (savedClipsData ?? []).find((x) => x.id === clipId)
+    if (saved) return { startMs: saved.startAtMs, endMs: saved.endAtMs, name: saved.name?.trim() || clipLabel(saved.startAtMs) }
     const s = sessions.find((x) => x.id === clipId)
-    if (s) return { startMs: sessionStartMs(s), endMs: sessionEndMs(s), name: clipLabel(sessionStartMs(s)) }
+    if (s) return { startMs: sessionStartMs(s), endMs: sessionEndMs(s), name: s.title?.trim() || clipLabel(sessionStartMs(s)) }
     return null
-  }, [clipId, recordings, sessions])
+  }, [clipId, savedClipsData, sessions])
   const focused = !!focusClip
   const focusedRef = useRef(focused)
   focusedRef.current = focused
