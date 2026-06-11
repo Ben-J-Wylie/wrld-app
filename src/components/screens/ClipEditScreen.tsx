@@ -50,6 +50,7 @@ import { useVideoPlayer, VideoView } from 'expo-video'
 import { useBuffer } from '@/hooks/useBuffer'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
 import { useBroadcastStore } from '@/stores/broadcastStore'
+import { bufferApi } from '@/api/buffer'
 import type { BufferSession, BufferTrackKind } from '@/api/buffer'
 import { theme } from '@/tokens/theme'
 
@@ -1330,23 +1331,46 @@ export const ClipEditScreen = () => {
   const canFrameForward = playheadMs < Date.now() - 1
   useEffect(() => () => stopReverse(), [])
 
-  function saveClip(clipName: string) {
+  async function saveClip(clipName: string) {
     if (!bracket) return
-    const id = `c${savedClips.length + 1}-${bracket.inMs}`
-    const durationSec = Math.max(1, Math.round((bracket.outMs - bracket.inMs) / 1000))
-    // Sources come from the clip's footage — the session the in-point falls in (no more
-    // user-toggled save-set; a clip just carries whatever that session captured).
-    const clipSession =
-      sessions.find((s) => bracket.inMs >= sessionStartMs(s) && bracket.inMs <= sessionEndMs(s)) ?? sessionAtPlayhead
-    const kinds = clipSession?.kinds ?? []
+    const { inMs, outMs } = bracket
+    const durationSec = Math.max(1, Math.round((outMs - inMs) / 1000))
+    // R3 promote-on-publish: a clip is a wall-clock window that can span MULTIPLE
+    // buffer sessions (a camera flip / rotation starts a new session). Send every
+    // kind any covered session captured — the backend resolves the sessions and
+    // copies/transcodes the in-window footage. (No more user-toggled save-set.)
+    const coveredSessions = sessions.filter((s) => sessionStartMs(s) < outMs && sessionEndMs(s) > inMs)
+    const kinds = Array.from(
+      new Set(coveredSessions.length ? coveredSessions.flatMap((s) => s.kinds) : (sessionAtPlayhead?.kinds ?? [])),
+    )
+    if (!kinds.length) {
+      Alert.alert('Nothing to save', 'No captured footage in the selected range.')
+      return
+    }
     const sourcesLabel = KIND_ORDER.filter((k) => kinds.includes(k))
       .map((k) => titleCase(KIND_META[k]!.label))
       .join(' · ')
+
+    let clipId: string
+    try {
+      const res = await bufferApi.saveClip({
+        startAtMs: Math.round(inMs),
+        endAtMs: Math.round(outMs),
+        name: clipName.trim() || 'Untitled clip',
+        kinds,
+      })
+      clipId = res.clipId
+    } catch (err: any) {
+      const msg = err?.response?.data?.message ?? err?.message ?? 'Could not save the clip. Please try again.'
+      Alert.alert('Save failed', String(msg))
+      return
+    }
+
     setSavedClips((prev) => [
       {
-        id,
+        id: clipId,
         name: clipName.trim() || 'Untitled clip',
-        capturedAt: fmtClipStamp(bracket.inMs),
+        capturedAt: fmtClipStamp(inMs),
         durationSec,
         variant: kinds.includes('camera') ? 'camera' : kinds.includes('audio') ? 'audio-only' : 'map-only',
         sourcesLabel,
@@ -1354,10 +1378,10 @@ export const ClipEditScreen = () => {
       },
       ...prev,
     ])
-    setSavedRegions((prev) => [...prev, { id, startMs: bracket.inMs, endMs: bracket.outMs, label: 'SAVED' }])
+    setSavedRegions((prev) => [...prev, { id: clipId, startMs: inMs, endMs: outMs, label: 'SAVED' }])
     setBracket(null)
     setSaveSheetOpen(false)
-    setExpandedId(id)
+    setExpandedId(clipId)
     setPage('saved')
   }
 
