@@ -93,6 +93,17 @@ class MediasoupSignalingClient {
     this.ws!.send(JSON.stringify(msg))
   }
 
+  // Best-effort push for signals fired automatically from React effects / AppState
+  // / timers (orientation, cameraFacing, pause/resume, location). These must NEVER
+  // throw on a momentary disconnect (reconnect, hot-reload, go-live race) — an
+  // uncaught throw inside an effect red-screens the app. Control-flow senders
+  // (createRoom/join/produce/consume/transport) keep using send() so their awaited
+  // callers still see failures.
+  private trySend(msg: ClientMessage): void {
+    if (!this.isConnected) return
+    this.ws!.send(JSON.stringify(msg))
+  }
+
   onMessage(cb: (msg: ServerMessage) => void): () => void {
     this.msgCbs.add(cb)
     return () => this.msgCbs.delete(cb)
@@ -212,11 +223,11 @@ class MediasoupSignalingClient {
   }
 
   sendBroadcasterPaused(): void {
-    this.send({ type: 'broadcasterPaused' })
+    this.trySend({ type: 'broadcasterPaused' })
   }
 
   sendBroadcasterResumed(): void {
-    this.send({ type: 'broadcasterResumed' })
+    this.trySend({ type: 'broadcasterResumed' })
   }
 
   sendBroadcasterOrientation(
@@ -228,18 +239,18 @@ class MediasoupSignalingClient {
     // (constant coded frame → footage rotates in-place; no re-bake/restart). iOS
     // still re-bakes (its frame shape changes on rotation). Missing → treated iOS.
     const platform = Platform.OS === 'android' ? 'android' : 'ios'
-    this.send({ type: 'broadcasterOrientation', orientation, rotationDeg, hold, platform })
+    this.trySend({ type: 'broadcasterOrientation', orientation, rotationDeg, hold, platform })
   }
 
   // Tell the server which camera is live (back/front). Sent at go-live and on
   // every flip so the recorder can re-bake rotation per camera — back and front
   // need rotations 180° apart and the bake is fixed per recording session.
   sendCameraFacing(facing: 'user' | 'environment'): void {
-    this.send({ type: 'cameraFacing', facing })
+    this.trySend({ type: 'cameraFacing', facing })
   }
 
   sendLocationUpdate(lat: number, lng: number): void {
-    this.send({ type: 'locationUpdate', lat, lng })
+    this.trySend({ type: 'locationUpdate', lat, lng })
   }
 
   sendTip(amount: number): void {
