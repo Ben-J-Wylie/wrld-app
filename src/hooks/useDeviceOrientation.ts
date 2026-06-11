@@ -136,11 +136,23 @@ export function useDeviceOrientation(enabled = true): DeviceTilt {
       }
     }
 
+    // Start the plain Accelerometer IMMEDIATELY (needs no permission, fires within
+    // ~50ms) so the discrete orientation settles in ~200ms. This matters at GO-LIVE:
+    // the recorder bakes the recording's display rotation ~1-2s after the first
+    // camera frame from whatever orientation we've reported, and the bake is fixed
+    // for the session (-c:v copy). If we instead block on the DeviceMotion
+    // availability/permission flow first (which can take ~2s on Android), the sensor
+    // reports nothing until then, the recorder bakes the default portrait, and a
+    // landscape start records sideways. So: accelerometer now for a fast first read,
+    // then UPGRADE to gyro-fused DeviceMotion for the smooth gimbal once it's ready.
+    Accelerometer.setUpdateInterval(UPDATE_MS)
+    const accelSub = Accelerometer.addListener(({ x, y, z }) => process(x, y, z ?? 0))
+    sub = accelSub
+
     ;(async () => {
       // Prefer DeviceMotion (gyro-fused gravity — smooth through a turn), but it
-      // needs a motion-permission grant + availability on iOS. Fall back to the
-      // raw Accelerometer (always fires, just can't track during fast motion) so
-      // the gimbal never silently does nothing.
+      // needs a motion-permission grant + availability on iOS. The Accelerometer
+      // above already covers the fallback, so this only UPGRADES when available.
       let useDM = false
       try {
         if (await DeviceMotion.isAvailableAsync()) {
@@ -149,20 +161,18 @@ export function useDeviceOrientation(enabled = true): DeviceTilt {
           useDM = perm.granted
         }
       } catch {}
-      if (cancelled) return
+      if (cancelled || !useDM) return // accelerometer stays as-is
 
-      if (useDM) {
-        DeviceMotion.setUpdateInterval(UPDATE_MS)
-        sub = DeviceMotion.addListener((d) => {
-          const g = d.accelerationIncludingGravity
-          if (!g) return
-          const u = d.acceleration // user accel — subtract to recover clean gravity
-          process(g.x - (u?.x ?? 0), g.y - (u?.y ?? 0), g.z - (u?.z ?? 0))
-        })
-      } else {
-        Accelerometer.setUpdateInterval(UPDATE_MS)
-        sub = Accelerometer.addListener(({ x, y, z }) => process(x, y, z ?? 0))
-      }
+      // Swap the accelerometer for DeviceMotion (drop the old listener first).
+      accelSub.remove()
+      DeviceMotion.setUpdateInterval(UPDATE_MS)
+      const dmSub = DeviceMotion.addListener((d) => {
+        const g = d.accelerationIncludingGravity
+        if (!g) return
+        const u = d.acceleration // user accel — subtract to recover clean gravity
+        process(g.x - (u?.x ?? 0), g.y - (u?.y ?? 0), g.z - (u?.z ?? 0))
+      })
+      sub = dmSub
     })()
 
     return () => {
