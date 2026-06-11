@@ -80,6 +80,7 @@ import { TimelineLaneFill, type TimelineLaneKind } from '@/components/features/c
 import { ClipBlock } from '@/components/features/clip/ClipBlock'
 import { ClipLane, type LaneClip } from '@/components/features/clip/ClipLane'
 import { TimeGapMarker } from '@/components/features/clip/TimeGapMarker'
+import { ClipTimeRuler } from '@/components/features/clip/ClipTimeRuler'
 import { DiscoveryHandoffCard } from '@/components/features/stream/DiscoveryHandoffCard'
 import { LegalAcceptanceCard } from '@/components/features/onboarding/LegalAcceptanceCard'
 import { ContextStrip } from '@/components/features/report/ContextStrip'
@@ -1337,6 +1338,22 @@ export function FeatureGallery() {
         <Row label="a collapsed empty stretch between clips">
           <View style={{ width: 240 }}>
             <TimeGapMarker height={34} label="3h 12m" />
+          </View>
+        </Row>
+      </Section>
+
+      <Section title="ClipTimeRuler (clips grid)">
+        <Row label="ghosted left-gutter time marks (host supplies y + label)">
+          <View style={{ width: 240, height: 180 }}>
+            <ClipTimeRuler
+              width={52}
+              ticks={[
+                { y: 8, label: '14:02' },
+                { y: 70, label: '14:48' },
+                { y: 132, label: '15:10' },
+                { y: 172, label: 'now', now: true },
+              ]}
+            />
           </View>
         </Row>
       </Section>

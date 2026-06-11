@@ -94,6 +94,9 @@ export type SourceType = 'camera' | 'audio'
 export type Recording = {
   id: string
   streamId: string
+  // The stream's title at go-live, so the Clips grid can label a saved clip by title
+  // (not its start time). Backend populates it (handoff 2026-06-11); falls back to time.
+  title?: string | null
   status: 'recording' | 'ready' | 'failed' | 'expired'
   manifestUrl: string | null
   thumbnailUrl: string | null

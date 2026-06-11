@@ -100,6 +100,18 @@ Recommendation: **unified list with a `source` field** (one saved surface, least
 
 ---
 
+## Also needed: clip titles on sessions + recordings (small, additive)
+
+The grid now labels each clip by the **stream title** instead of its start time, but neither
+`BufferSession` nor `Recording` carries one today, so it falls back to the time. Populate an
+optional `title: string | null` (the stream's go-live title) on:
+- `GET /buffer/me` sessions (`BufferSession.title`)
+- the recordings list (`Recording.title`)
+- and `GET /buffer/me/clips` saved clips (`SavedClip.name` already covers this)
+
+The app types already declare the optional field (`src/api/buffer.ts`, `src/types/index.ts`) and
+consume it — no app change needed once the payloads include it.
+
 ## Rollout mapping
 
 This is the **C3 save payload finalisation + R3 (persist) + C5 (saved-lane source)** from the

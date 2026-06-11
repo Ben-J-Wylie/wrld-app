@@ -28,12 +28,15 @@ import { Text } from '@/components/primitives/Text'
 import { Icon } from '@/components/primitives/Icon'
 import { ClipLane, type LaneClip, type ClipPos } from '@/components/features/clip/ClipLane'
 import { TimeGapMarker } from '@/components/features/clip/TimeGapMarker'
+import { ClipTimeRuler, type RulerTick } from '@/components/features/clip/ClipTimeRuler'
 import { useBuffer } from '@/hooks/useBuffer'
 import { useRecordings } from '@/hooks/useRecordings'
 import { useBroadcastStore } from '@/stores/broadcastStore'
 import { bufferApi, type BufferSession } from '@/api/buffer'
 import type { Recording } from '@/types'
 
+const GUTTER_W = 52 // left ruler column (ghosted time marks)
+const MIN_TICK_GAP = 26 // min vertical px between ruler labels so they don't collide
 const MIN_BLOCK_H = 34 // a short clip stays a readable, tappable block
 const GAP_PX = 34 // height an empty stretch collapses to
 const GAP_THRESHOLD_MS = 45_000 // gaps longer than this get a marker; shorter → a hair of spacing
@@ -118,11 +121,21 @@ export const ClipsScreen = () => {
   const { data: recordings } = useRecordings(!!isSignedIn)
 
   // ── normalise both data sources into time-positioned lane clips ──
+  // Clips are labelled by the stream TITLE; the start time + duration move to the
+  // sublabel (and the left ruler). Falls back to the time as the title until the
+  // backend carries `title` onto sessions / recordings (handoff 2026-06-11).
   const buffered = useMemo<LaneClip[]>(() => {
     return (buffer?.sessions ?? []).map((s) => {
       const startMs = sessionStartMs(s)
       const endMs = sessionEndMs(s)
-      return { id: s.id, startMs, endMs, label: fmtTime(startMs), sublabel: fmtDur((endMs - startMs) / 1000), posterUrl: s.thumbnailUrl }
+      return {
+        id: s.id,
+        startMs,
+        endMs,
+        label: s.title?.trim() || fmtTime(startMs),
+        sublabel: fmtDur((endMs - startMs) / 1000),
+        posterUrl: s.thumbnailUrl,
+      }
     })
   }, [buffer])
   const saved = useMemo<LaneClip[]>(() => {
@@ -130,7 +143,14 @@ export const ClipsScreen = () => {
     return recs.map((r) => {
       const startMs = Date.parse(r.startedAt)
       const endMs = startMs + (r.durationSec ?? 0) * 1000
-      return { id: r.id, startMs, endMs, label: fmtTime(startMs), sublabel: fmtDur(r.durationSec ?? 0), posterUrl: r.thumbnailUrl }
+      return {
+        id: r.id,
+        startMs,
+        endMs,
+        label: r.title?.trim() || fmtTime(startMs),
+        sublabel: fmtDur(r.durationSec ?? 0),
+        posterUrl: r.thumbnailUrl,
+      }
     })
   }, [recordings])
 
@@ -196,6 +216,25 @@ export const ClipsScreen = () => {
   const layout = useMemo(() => buildLayout(allClips, px, axisTop), [allClips, px, axisTop])
   const contentHeight = layout.contentHeight
   const posOf = useCallback((id: string) => layout.pos.get(id), [layout])
+
+  // Ghosted ruler: a time mark at each clip's start (top edge), deduped so labels don't
+  // collide, plus a "now" mark at the bottom.
+  const rulerTicks = useMemo<RulerTick[]>(() => {
+    const sorted = allClips
+      .filter((c) => Number.isFinite(c.startMs))
+      .map((c) => ({ c, top: layout.pos.get(c.id)?.top }))
+      .filter((x): x is { c: LaneClip; top: number } => x.top != null)
+      .sort((a, b) => a.top - b.top)
+    const out: RulerTick[] = []
+    let lastY = -Infinity
+    for (const { c, top } of sorted) {
+      if (top - lastY < MIN_TICK_GAP) continue
+      out.push({ y: top, label: fmtTime(c.startMs) })
+      lastY = top
+    }
+    if (contentHeight - lastY >= MIN_TICK_GAP) out.push({ y: contentHeight, label: 'now', now: true })
+    return out
+  }, [allClips, layout, contentHeight])
 
   const scrollRef = useRef<ScrollView>(null)
   const scrollYRef = useRef(0)
@@ -282,6 +321,8 @@ export const ClipsScreen = () => {
           style={styles.pager}
         />
         <View style={styles.laneHeaders}>
+          {/* Spacer aligning the lane labels over the gutter-offset lanes below. */}
+          <View style={{ width: GUTTER_W }} />
           <View style={styles.laneHeaderCell}>
             <Icon name="film" size="sm" color={theme.colors.text.muted} />
             <Text variant="monoLabel" color={theme.colors.text.muted}>
@@ -314,13 +355,15 @@ export const ClipsScreen = () => {
           <GestureDetector gesture={pinch}>
             <ScrollView ref={scrollRef} onScroll={onScroll} scrollEventThrottle={16} showsVerticalScrollIndicator={false}>
               <View style={{ height: contentHeight }}>
-                {/* Collapsed-time gap markers across both lanes. */}
+                {/* Ghosted time-mark ruler down the left gutter. */}
+                <ClipTimeRuler ticks={rulerTicks} width={GUTTER_W} />
+                {/* Collapsed-time gap markers across both lanes (right of the gutter). */}
                 {layout.gaps.map((g, i) => (
-                  <View key={`gap-${i}`} style={[styles.gapBand, { top: g.yTop }]}>
+                  <View key={`gap-${i}`} style={[styles.gapBand, { top: g.yTop, left: GUTTER_W }]}>
                     <TimeGapMarker height={g.height} label={fmtGap(g.ms)} />
                   </View>
                 ))}
-                <View style={styles.lanesRow} onLayout={(e) => setLanesRowW(e.nativeEvent.layout.width)}>
+                <View style={[styles.lanesRow, { left: GUTTER_W }]} onLayout={(e) => setLanesRowW(e.nativeEvent.layout.width)}>
                   <ClipLane
                     clips={bufferedLane}
                     tone="buffered"

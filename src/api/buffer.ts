@@ -8,6 +8,10 @@ export type BufferTrackKind = 'camera' | 'audio' | 'screen' | 'location' | 'gyro
 
 export type BufferSession = {
   id: string
+  // The stream's title at go-live, carried onto the session so the Clips grid can
+  // label footage by title rather than its start time. Backend populates it (handoff
+  // 2026-06-11); the grid falls back to the start time when absent.
+  title?: string | null
   startedAt: string          // ISO
   endedAt: string | null     // ISO, null while still live
   durationSec: number

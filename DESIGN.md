@@ -3355,6 +3355,15 @@ single-device sequential data.)*
 > the collapsed-gap model uses clip + gap labels for time reference instead; it's available if we
 > want ghosted increments *within* covered segments later.
 
+Each clip block is labelled by the **stream title** (falls back to its start time until the backend
+carries `title` onto sessions / recordings — handoff 2026-06-11); the **start time + duration** live
+on the sublabel and the left ruler.
+- **`ClipTimeRuler`** — `src/components/features/clip/ClipTimeRuler.tsx`. The ghosted time-mark
+  ruler down a left gutter (`GUTTER_W` 52). Because the axis collapses empty time, a regular-interval
+  ruler wouldn't line up — so the host (`ClipsScreen`) feeds it explicit ticks at the y-positions it
+  knows: **a mark at each clip's start** (deduped by a min vertical gap so labels don't collide) +
+  **"now" at the bottom** (accent). Each tick is a hairline + a small time label. Presentational.
+  Props `ticks: { y, label, now? }[]` · `width` · `style?`.
 - **`TimeGapMarker`** — `src/components/features/clip/TimeGapMarker.tsx`. A fixed thin band
   across both lanes where empty time was collapsed — dashed rules above/below a paper pill with a
   `more-vertical` glyph + the skipped duration (e.g. "3h 12m"). Props `height` · `label` · `style?`.
