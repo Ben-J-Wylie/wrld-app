@@ -35,7 +35,16 @@ so a persisted clip wouldn't appear there anyway.
 
 ## Backend work (Aaron)
 
-### 1. R3 — persist the save · `POST /buffer/me/clips` (currently 501)
+> **Update (2026-06-11, Aaron):** all three backend pieces are now built. **R3
+> was already done** in `wrld-backend` `883abfb` (the "currently 501" note below
+> was stale) — `POST /buffer/me/clips` promotes the wall-clock window across
+> covered buffer sessions into durable `Clip` rows. **C5** (`GET /buffer/me/clips`
+> + `DELETE /buffer/me/clips/:id`) added co-located in `buffer.ts`. **Model
+> decision: saved lane = `Clip` rows** (not unified clips+recordings — recordings
+> were purged in the buffer pivot; `Clip` already unifies buffer-promoted +
+> recording-sourced). The original spec below stands as the contract.
+
+### 1. R3 — persist the save · `POST /buffer/me/clips` (~~currently 501~~ ✅ done, `883abfb`)
 
 The app already calls this exactly:
 ```
