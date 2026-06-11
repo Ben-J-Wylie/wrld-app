@@ -17,7 +17,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { router, useFocusEffect } from 'expo-router'
-import { ScrollView, StyleSheet, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native'
+import { Alert, ScrollView, StyleSheet, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useSharedValue, runOnJS } from 'react-native-reanimated'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
@@ -174,13 +174,23 @@ export const ClipsScreen = () => {
     }
   }, [qc])
 
-  // Drag a BUFFERED clip right → save a durable copy of its window.
+  // Drag a BUFFERED clip right → save a durable copy of its window. The POST is
+  // synchronous server-side (returns once the clip is `ready`), so on success the
+  // clip appears on the next refetch. Surface failures (quota / no-footage / promote
+  // error) instead of swallowing them — silent failure is why a save "won't stick".
   const saveClip = useCallback(
     (clip: LaneClip) => {
       bufferApi
         .saveClip({ startAtMs: Math.round(clip.startMs), endAtMs: Math.round(clip.endMs), name: clip.label, kinds: [] })
         .then(() => refetchSavedSoon())
-        .catch(() => {})
+        .catch((err: unknown) => {
+          const msg =
+            (err as { response?: { data?: { message?: string; error?: string } } })?.response?.data?.message ??
+            (err as { response?: { data?: { message?: string; error?: string } } })?.response?.data?.error ??
+            (err as { message?: string })?.message ??
+            'Could not save clip'
+          Alert.alert('Save failed', msg)
+        })
     },
     [refetchSavedSoon],
   )
