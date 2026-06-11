@@ -3319,6 +3319,56 @@ a 1× `requestAnimationFrame` scrub; the paused-seek effect repaints the field).
 
 ---
 
+##### Clips landing grid — `TimeGapMarker` · `ClipBlock` · `ClipLane` *(built 2026-06-11 · Phase A/B)*
+
+The **Clips landing** (`ClipsScreen`, the first page from the footer Clip button) is a
+two-lane, time-ordered grid of every clip — buffered recording sessions on the LEFT, saved
+clips on the RIGHT. The shared vertical axis is laid out **per-clip with collapsed gaps**
+(2026-06-11): each clip's height is its duration × zoom **floored to `MIN_BLOCK_H` (34)**, and
+that floored height is the space it **reserves** — so short clips keep a readable block and
+blocks never overlap (the fix for the prior thin-line bug: the earlier segment-scale axis
+allocated the *unfloored* height, so floored blocks overlapped and showed only a top sliver).
+Empty stretches between clips — and the trailing stretch up to **now** — collapse to a fixed
+**`TimeGapMarker`** (near-adjacent clips get a hair of spacing, no marker). **Now is at the
+BOTTOM** (scroll up = older). **2-finger pinch** zooms (longer clips grow past the floor →
+proportional; focal pinned by content fraction; no bottom zoom bar). **Double-tap** a clip →
+editor; **drag** a clip across to the other lane to **save** (buffered → saved) / **un-save**
+(saved → buffered) — locked in time. Opens at a default zoom where the longest clip is ~130px,
+scrolled to now. Replaces the retired Library screen (its recordings feed the saved lane). The
+lanes are filtered views of one combined set, so a drag just flips a clip's lane (`laneOverride`,
+mock until the real clips model + un-save endpoint land). The screen owns the layout
+(`buildLayout` → a per-clip `pos` map + gap list), so a later flip to top/bottom lanes is a
+layout swap. *(Known limitation to iterate: concurrent cross-lane clips — a session and a
+recording within it — stack sequentially rather than aligning at the same y; correct for today's
+single-device sequential data.)*
+
+> Zoom = a 2-finger **pinch** over a native `ScrollView`. The shared **`ZoomButton`**
+> (extracted from `BufferTimeline`) is the *editor timeline's* tap/hold zoom — not on this grid.
+> **`TimeGridlines`** (`src/components/features/clip/TimeGridlines.tsx`) is built but **parked** —
+> the collapsed-gap model uses clip + gap labels for time reference instead; it's available if we
+> want ghosted increments *within* covered segments later.
+
+- **`TimeGapMarker`** — `src/components/features/clip/TimeGapMarker.tsx`. A fixed thin band
+  across both lanes where empty time was collapsed — dashed rules above/below a paper pill with a
+  `more-vertical` glyph + the skipped duration (e.g. "3h 12m"). Props `height` · `label` · `style?`.
+- **`ClipBlock`** — `src/components/features/clip/ClipBlock.tsx`. One clip drawn to scale;
+  `tone: 'buffered'` (neutral paper) · `'saved'` (accent-tinted, bookmark badge). Poster +
+  name/duration when tall; **collapses to a thin labelled bar** below `COMPACT_H` (44).
+  Double-tap → `onOpen`. **Drag-to-cross:** a `dragDir` (1 = right→saved, −1 = left→buffered) +
+  `reachPx` + `onCross` make it draggable horizontally (RNGH `Pan`, `activeOffsetX`/`failOffsetY`
+  so vertical scrolls fall through); past halfway commits `onCross`, else springs back; lifts
+  (shadow) while dragging. Props `heightPx` · `label` · `sublabel?` · `posterUrl?` · `tone` ·
+  `onOpen?` · `dragDir?` · `reachPx?` · `onCross?`.
+- **`ClipLane`** — `src/components/features/clip/ClipLane.tsx`. A column that positions its
+  `LaneClip[]` from a host **`posOf(id) → { top, height }`** map (`ClipPos`) — the per-clip
+  collapsed layout (with the height floor already reserved) lives in the host, so the lane just
+  renders. **Sub-columns** via greedy interval colouring so concurrent (multi-device) overlapping
+  clips sit side by side — one column with today's single-device data. Forwards drag (`reachPx` +
+  `onMoveClip`) to the blocks. Props `clips` · `tone` · `posOf` · `onOpenClip?` · `reachPx?` ·
+  `onMoveClip?`.
+
+---
+
 ##### `SavedClipRow`
 
 - **Tier:** feature (composes `ClipPreview` + Pill + IconButton + Button + Text)

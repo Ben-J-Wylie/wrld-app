@@ -273,15 +273,11 @@ export function MeScreen() {
         </View>
       )}
 
-      {/* Library, Wallet + Events moved off the footer — reached from here now. */}
+      {/* Wallet + Events moved off the footer — reached from here now. (Library retired:
+          the Clips tab's grid is the saved-clips surface.) */}
       <Button
         label="Wallet"
         onPress={() => router.push('/(app)/wallet')}
-        variant="secondary"
-      />
-      <Button
-        label="Library"
-        onPress={() => router.push('/(app)/library')}
         variant="secondary"
       />
       <Button

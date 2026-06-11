@@ -154,7 +154,7 @@ function AppTabBar() {
           {isLive ? 'Live' : 'Stream'}
         </Text>
       </Pressable>
-      <TabButton icon="film" label="Clips" active={pathname.startsWith('/clip-editor')} onPress={() => router.navigate('/(app)/clip-editor')} />
+      <TabButton icon="film" label="Clips" active={pathname.startsWith('/clip')} onPress={() => router.navigate('/(app)/clips')} />
       <TabButton icon="user" label="Me" active={pathname.startsWith('/me')} onPress={() => router.navigate('/(app)/me')} />
     </View>
   )
@@ -170,11 +170,11 @@ export default function AppLayout() {
       >
         <Tabs.Screen name="globe" options={{ title: 'Globe' }} />
         <Tabs.Screen name="dashboard" options={{ title: 'Dashboard' }} />
-        <Tabs.Screen name="clip-editor" options={{ title: 'Clips' }} />
+        <Tabs.Screen name="clips" options={{ title: 'Clips' }} />
         <Tabs.Screen name="me" options={{ title: 'Me' }} />
-        {/* Off the footer — reached from Me. */}
+        {/* Off the footer. clip-editor is reached by double-tapping a clip on the Clips grid. */}
+        <Tabs.Screen name="clip-editor" options={{ href: null }} />
         <Tabs.Screen name="ppv" options={{ href: null }} />
-        <Tabs.Screen name="library" options={{ href: null }} />
         <Tabs.Screen name="wallet" options={{ href: null }} />
         {/* Non-tab routes. */}
         <Tabs.Screen name="creator-onboarding" options={{ href: null }} />

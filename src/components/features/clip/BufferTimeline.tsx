@@ -43,6 +43,7 @@ import { SavedClipRegion } from './SavedClipRegion'
 import { ClipBracket } from './ClipBracket'
 import { TimelineScrollbar } from './TimelineScrollbar'
 import { TimelineLaneFill, type TimelineLaneKind } from './TimelineLaneFill'
+import { ZoomButton, ZOOM_HOLD_TRIGGER_MS } from './ZoomButton'
 
 export type BufferSegment = {
   id: string
@@ -183,7 +184,6 @@ const FRAME_MS = 1000 / 30 // one frame at the pinned 30fps capture
 const FRAME_VIEW_PX = 12 // a single frame is ≈ this wide at the finest zoom
 const FRAME_MAX_PXPERMS = FRAME_VIEW_PX / FRAME_MS // max zoom (≈0.36 px/ms = frame level)
 const ZOOM_TAP_STEP = 1.6 // each tap multiplies / divides the zoom by this
-const ZOOM_HOLD_TRIGGER_MS = 240 // press longer than this → smooth-zoom hold (not a tap)
 const ZOOM_HOLD_MS = 5000 // a full-range hold (fit ⇆ frames) takes this long, any buffer
 
 type SegBlock = { kind: 'seg'; seg: BufferSegment; leftPx: number; widthPx: number }
@@ -1134,61 +1134,6 @@ export function TimelineScrollbarShelf({
   )
 }
 
-// Zoom button flanking the scrollbar: TAP = one zoom step; press-and-hold (past
-// ZOOM_HOLD_TRIGGER_MS) = smooth zoom until release. Same tap-vs-hold shape as the
-// transport's frame buttons.
-function ZoomButton({
-  icon,
-  label,
-  onTap,
-  onHold,
-  disabled,
-}: {
-  icon: Parameters<typeof Icon>[0]['name']
-  label: string
-  onTap: () => void
-  onHold: (held: boolean) => void
-  disabled?: boolean
-}) {
-  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const holding = useRef(false)
-  const clearTimer = () => {
-    if (holdTimer.current) {
-      clearTimeout(holdTimer.current)
-      holdTimer.current = null
-    }
-  }
-  return (
-    <Pressable
-      variant={disabled ? 'none' : 'subtle'}
-      disabled={disabled}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      hitSlop={8}
-      style={styles.zoomBtn}
-      onPressIn={() => {
-        holding.current = false
-        clearTimer()
-        holdTimer.current = setTimeout(() => {
-          holding.current = true
-          onHold(true)
-        }, ZOOM_HOLD_TRIGGER_MS)
-      }}
-      onPressOut={() => {
-        clearTimer()
-        if (holding.current) {
-          holding.current = false
-          onHold(false)
-        } else {
-          onTap()
-        }
-      }}
-    >
-      <Icon name={icon} size="md" color={disabled ? theme.colors.text.subtle : theme.colors.text.muted} />
-    </Pressable>
-  )
-}
-
 // The head/tail buffer-edge indicator: a 20px block, dark when idle or accent when
 // "active" (head evicting / tail live). When accent, a zigzag bites into the footage
 // from the footage-facing edge (head → right, tail → left).
@@ -1454,12 +1399,6 @@ const styles = StyleSheet.create({
   },
   zoomScroll: {
     flex: 1,
-  },
-  zoomBtn: {
-    width: 38,
-    height: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   trackRow: {
     flexDirection: 'row',

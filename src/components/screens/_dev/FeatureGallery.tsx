@@ -77,6 +77,9 @@ import { ClipSourcesDrawer, type ClipSource } from '@/components/features/clip/C
 import { SavedClipRow } from '@/components/features/clip/SavedClipRow'
 import { TimelineScrollbar } from '@/components/features/clip/TimelineScrollbar'
 import { TimelineLaneFill, type TimelineLaneKind } from '@/components/features/clip/TimelineLaneFill'
+import { ClipBlock } from '@/components/features/clip/ClipBlock'
+import { ClipLane, type LaneClip } from '@/components/features/clip/ClipLane'
+import { TimeGapMarker } from '@/components/features/clip/TimeGapMarker'
 import { DiscoveryHandoffCard } from '@/components/features/stream/DiscoveryHandoffCard'
 import { LegalAcceptanceCard } from '@/components/features/onboarding/LegalAcceptanceCard'
 import { ContextStrip } from '@/components/features/report/ContextStrip'
@@ -1308,6 +1311,36 @@ export function FeatureGallery() {
         </Row>
       </Section>
 
+      <Section title="ClipBlock (clips grid)">
+        <Row label="buffered · saved · compact">
+          <View style={{ flexDirection: 'row', gap: theme.spacing.sm, height: 120 }}>
+            <View style={{ width: 96 }}>
+              <ClipBlock heightPx={120} label="14:03" sublabel="2:18" tone="buffered" />
+            </View>
+            <View style={{ width: 96 }}>
+              <ClipBlock heightPx={120} label="13:40" sublabel="0:42" tone="saved" />
+            </View>
+            <View style={{ width: 96, justifyContent: 'flex-start' }}>
+              <ClipBlock heightPx={26} label="9:12" tone="saved" />
+            </View>
+          </View>
+        </Row>
+      </Section>
+
+      <Section title="ClipLane (clips grid)">
+        <Row label="clips to scale on a vertical time axis (buffered / saved)">
+          <ClipLaneDemo />
+        </Row>
+      </Section>
+
+      <Section title="TimeGapMarker (clips grid)">
+        <Row label="a collapsed empty stretch between clips">
+          <View style={{ width: 240 }}>
+            <TimeGapMarker height={34} label="3h 12m" />
+          </View>
+        </Row>
+      </Section>
+
       <Section title="SourceRail + source views">
         <Row label="tap a source — field renders its view (mock data)">
           <BufferSourceViewerDemo />
@@ -1949,6 +1982,36 @@ function BufferSourceViewerDemo() {
       <View style={{ position: 'absolute', right: 8, top: 0, bottom: 0, justifyContent: 'center' }}>
         <SourceRail sources={SOURCE_VIEWER_ITEMS} value={view} onChange={setView} />
       </View>
+    </View>
+  )
+}
+
+function ClipLaneDemo() {
+  const now = useMemo(() => Date.now(), [])
+  const viewportH = 220
+  const p2 = (n: number) => String(n).padStart(2, '0')
+  const mk = (minsAgo: number, durMin: number, id: string): LaneClip => {
+    const startMs = now - minsAgo * 60_000
+    const endMs = startMs + durMin * 60_000
+    const d = new Date(startMs)
+    return { id, startMs, endMs, label: `${p2(d.getHours())}:${p2(d.getMinutes())}`, sublabel: `${durMin}:00` }
+  }
+  const buffered: LaneClip[] = [mk(4, 3, 'b1'), mk(13, 4, 'b2'), mk(24, 2, 'b3')]
+  const saved: LaneClip[] = [mk(8, 2, 's1'), mk(20, 3, 's2')]
+  // The real screen owns the per-clip collapsed layout; this demo stacks by recency with a
+  // duration-scaled (floored) height to show ClipLane positioning.
+  const all = [...buffered, ...saved]
+  const oldest = Math.min(...all.map((c) => c.startMs))
+  const pos: Record<string, { top: number; height: number }> = {}
+  for (const c of all) {
+    pos[c.id] = { top: ((c.startMs - oldest) / 60_000) * 7, height: Math.max(34, ((c.endMs - c.startMs) / 60_000) * 18) }
+  }
+  const posOf = (id: string) => pos[id]
+  return (
+    <View style={{ width: 280, height: viewportH, flexDirection: 'row' }}>
+      <ClipLane clips={buffered} tone="buffered" posOf={posOf} />
+      <View style={{ width: theme.spacing.sm }} />
+      <ClipLane clips={saved} tone="saved" posOf={posOf} />
     </View>
   )
 }
