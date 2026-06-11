@@ -190,7 +190,15 @@ export const ClipsScreen = () => {
   // `[clips-save]` traces print to the Metro terminal (dev only) for diagnosing.
   const saveClip = useCallback(
     (clip: LaneClip) => {
-      const payload = { startAtMs: Math.round(clip.startMs), endAtMs: Math.round(clip.endMs), name: clip.label, kinds: [] as string[] }
+      // The backend requires a non-empty `kinds`. Resolve the captured source tracks
+      // from the buffer session(s) the window covers (union across a cross-session
+      // span); fall back to camera if a session reports none.
+      const kindSet = new Set<string>()
+      for (const s of buffer?.sessions ?? []) {
+        if (sessionEndMs(s) > clip.startMs && sessionStartMs(s) < clip.endMs) s.kinds.forEach((k) => kindSet.add(k))
+      }
+      const kinds = kindSet.size ? [...kindSet] : ['camera']
+      const payload = { startAtMs: Math.round(clip.startMs), endAtMs: Math.round(clip.endMs), name: clip.label, kinds }
       slog('POST /buffer/me/clips →', payload, `(window ${Math.round((payload.endAtMs - payload.startAtMs) / 1000)}s)`)
       bufferApi
         .saveClip(payload)
@@ -205,7 +213,7 @@ export const ClipsScreen = () => {
           Alert.alert('Save failed', msg)
         })
     },
-    [refetchSavedSoon],
+    [buffer, refetchSavedSoon],
   )
 
   // Drag a SAVED clip left → un-save (delete the durable copy). Optimistically hide
@@ -334,7 +342,11 @@ export const ClipsScreen = () => {
     [minPx, maxPx, viewportH],
   )
   const pxSv = useSharedValue(px)
-  pxSv.value = px
+  // Mirror px into the shared value in an effect (not during render — reanimated's
+  // strict mode warns on render-time writes); the pinch gesture reads it on start.
+  useEffect(() => {
+    pxSv.value = px
+  }, [px, pxSv])
   const pinchStartSv = useSharedValue(0)
   const pinch = useMemo(
     () =>
