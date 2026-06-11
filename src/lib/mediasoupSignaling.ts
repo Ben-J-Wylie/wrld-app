@@ -1,3 +1,5 @@
+import { Platform } from 'react-native'
+
 export type ClientMessage =
   | { type: 'identify'; deviceId: string }
   | { type: 'authenticate'; token: string }
@@ -12,7 +14,7 @@ export type ClientMessage =
   | { type: 'reaction'; kind: string; handle: string }
   | { type: 'broadcasterPaused' }
   | { type: 'broadcasterResumed' }
-  | { type: 'broadcasterOrientation'; orientation: 'portrait' | 'landscape'; rotationDeg?: number; hold?: string }
+  | { type: 'broadcasterOrientation'; orientation: 'portrait' | 'landscape'; rotationDeg?: number; hold?: string; platform?: 'ios' | 'android' }
   | { type: 'cameraFacing'; facing: 'user' | 'environment' }
   | { type: 'locationUpdate'; lat: number; lng: number }
   | { type: 'tip'; amount: number }
@@ -222,7 +224,11 @@ class MediasoupSignalingClient {
     rotationDeg?: number,
     hold?: string,
   ): void {
-    this.send({ type: 'broadcasterOrientation', orientation, rotationDeg, hold })
+    // platform lets the recorder relax the per-rotation session re-bake on Android
+    // (rotation is metadata-only there; the start-of-session bake is kept and the
+    // footage rotates naturally). iOS keeps re-baking until verified on device.
+    const platform = Platform.OS === 'android' ? 'android' : 'ios'
+    this.send({ type: 'broadcasterOrientation', orientation, rotationDeg, hold, platform })
   }
 
   // Tell the server which camera is live (back/front). Sent at go-live and on
