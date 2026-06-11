@@ -19,12 +19,19 @@ import { Accelerometer, DeviceMotion } from 'expo-sensors'
 
 export type DeviceOrientation = 'portrait' | 'portrait-upside-down' | 'landscape-left' | 'landscape-right'
 
-// Below this normalised in-plane gravity the phone is ~flat (face up/down) — keep
-// the last reading rather than flip-flopping.
-const FLAT_GUARD = 0.45
-// Hysteresis for the discrete orientation: this many consecutive same samples
-// before committing, so wobble near a 45° boundary doesn't thrash the recording.
-const STABLE_SAMPLES = 4
+// Below this normalised in-plane gravity the phone is too tilted-back / flat for a
+// reliable roll — KEEP the last orientation rather than flip-flopping. Raised from
+// 0.45 → 0.5 (~holds when tilted >60° from vertical): when you tilt the phone back
+// to film, the in-plane gravity shrinks and atan2 gets noisy enough to flip
+// landscape-left↔right; holding the last orientation kills that bounce. You set the
+// orientation by holding the phone roughly upright at go-live; it then holds.
+const FLAT_GUARD = 0.5
+// Discrete orientation must persist this many samples (×50ms) before committing, so
+// a transient flip never reaches the recording. 12 ≈ 600ms.
+const STABLE_SAMPLES = 12
+// Angular hysteresis: the committed orientation holds until the angle moves this far
+// PAST its 45° boundary into a neighbour — stops portrait↔landscape boundary flip-flop.
+const HYSTERESIS_DEG = 15
 // DeviceMotion sampling. Its gravity is gyro-fused (clean during motion), so we
 // can smooth lightly and still track a turn smoothly.
 const UPDATE_MS = 50
@@ -55,6 +62,26 @@ function orientationFromDeg(deg: number): DeviceOrientation {
   if (deg > 45 && deg <= 135) return 'landscape-left'
   if (deg > 135 || deg <= -135) return 'portrait-upside-down'
   return 'landscape-right' // -135..-45
+}
+
+// Center angle of each orientation's zone (each spans ±45 from center).
+const ORIENTATION_CENTER: Record<DeviceOrientation, number> = {
+  portrait: 0,
+  'landscape-left': 90,
+  'portrait-upside-down': 180,
+  'landscape-right': -90,
+}
+// Smallest absolute angle between two headings (handles 360 wrap).
+function angularDist(a: number, b: number): number {
+  const d = Math.abs(((a - b) % 360) + 360) % 360
+  return d > 180 ? 360 - d : d
+}
+// Hysteresis classifier: keep the committed orientation until the angle is more than
+// (45 + HYSTERESIS_DEG) from its center — i.e. HYSTERESIS_DEG past the boundary into a
+// neighbour. Prevents flip-flop when the reading hovers on a 45° edge.
+function classifyOrientation(deg: number, committed: DeviceOrientation): DeviceOrientation {
+  if (angularDist(deg, ORIENTATION_CENTER[committed]) <= 45 + HYSTERESIS_DEG) return committed
+  return orientationFromDeg(deg)
 }
 
 // ── On-device tunables ───────────────────────────────────────────────────────
@@ -95,6 +122,7 @@ export function useDeviceOrientation(enabled = true): DeviceTilt {
   const [orientation, setOrientation] = useState<DeviceOrientation>('portrait')
   const [tiltDeg, setTiltDeg] = useState(0)
   const candidate = useRef<DeviceOrientation>('portrait')
+  const committed = useRef<DeviceOrientation>('portrait') // last committed orientation (for hysteresis)
   const stableCount = useRef(0)
   const smoothed = useRef(0)
   const lastEmitted = useRef(0)
@@ -123,8 +151,13 @@ export function useDeviceOrientation(enabled = true): DeviceTilt {
         setTiltDeg(next)
       }
 
-      // Discrete orientation (for the recording) with hysteresis.
-      const o = orientationFromDeg(deg)
+      // Discrete orientation (for the recording). Classify from the SMOOTHED angle
+      // (`next`), not the raw per-sample `deg` — the per-sample value is what flips
+      // landscape-left↔right when the phone's tilted back. Add angular hysteresis
+      // around the committed orientation + require it to persist STABLE_SAMPLES before
+      // committing, so a transient can't reach the recording. (Tilted-back/flat samples
+      // already returned above via rollDeg null, holding the last orientation.)
+      const o = classifyOrientation(next, committed.current)
       if (o === candidate.current) {
         stableCount.current += 1
       } else {
@@ -132,6 +165,7 @@ export function useDeviceOrientation(enabled = true): DeviceTilt {
         stableCount.current = 1
       }
       if (stableCount.current >= STABLE_SAMPLES) {
+        committed.current = candidate.current
         setOrientation((prev) => (prev === candidate.current ? prev : candidate.current))
       }
     }
