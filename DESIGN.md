@@ -3332,7 +3332,10 @@ Empty stretches between clips — and the trailing stretch up to **now** — col
 **`TimeGapMarker`** (near-adjacent clips get a hair of spacing, no marker). **Now is at the
 BOTTOM** (scroll up = older). **2-finger pinch** zooms (longer clips grow past the floor →
 proportional; focal pinned by content fraction; no bottom zoom bar). **Double-tap** a clip →
-editor; **drag** a clip across to the other lane to **save** (buffered → saved) / **un-save**
+editor **scoped to that clip's own window** (`ClipEditScreen` reads `clipId` → a single segment
+over [start, end], no rolling-buffer eviction gap / live tail, playhead bounded, bracket defaulted
+to the whole clip — Phase C); **drag** a clip across to the other lane to **save** (buffered →
+saved) / **un-save**
 (saved → buffered) — locked in time. Opens at a default zoom where the longest clip is ~130px,
 scrolled to now. Replaces the retired Library screen (its recordings feed the saved lane). The
 lanes are filtered views of one combined set, so a drag just flips a clip's lane (`laneOverride`,

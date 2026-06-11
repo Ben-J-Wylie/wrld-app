@@ -14,7 +14,7 @@
 // route lands; the Saved tab + saved-regions reflect this session's saves only.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useFocusEffect } from 'expo-router'
+import { useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { Alert, Animated, RefreshControl, StyleSheet, View } from 'react-native'
 import { ScreenScroll } from '@/components/sections/ScreenScroll'
 import { ScreenHeader } from '@/components/sections/ScreenHeader'
@@ -51,6 +51,7 @@ import { SourceChatLog } from '@/components/features/clip/SourceChatLog'
 import { useAuth } from '@clerk/clerk-expo'
 import { useVideoPlayer, VideoView } from 'expo-video'
 import { useBuffer } from '@/hooks/useBuffer'
+import { useRecordings } from '@/hooks/useRecordings'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
 import { useBroadcastStore } from '@/stores/broadcastStore'
 import { bufferApi } from '@/api/buffer'
@@ -182,6 +183,13 @@ const sessionMediaSec = (s: BufferSession) => Math.max(0, s.mediaDurationSec ?? 
 const sessionStartMs = (s: BufferSession) => Date.parse(s.startedAt) + (s.mediaStartOffsetMs ?? 0)
 const sessionEndMs = (s: BufferSession) => sessionStartMs(s) + sessionMediaSec(s) * 1000
 
+// A clip's display name when opened from the Clips grid — its start wall-clock time.
+const clipLabel = (ms: number) => {
+  const d = new Date(ms)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `Clip · ${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
 // ── per-lane clip model (trim/delete carve per-lane removed ranges → no-data blocks) ──
 type Interval = { startMs: number; endMs: number }
 
@@ -223,7 +231,32 @@ export const ClipEditScreen = () => {
   const isLive = useBroadcastStore((s) => s.isLive)
   const { data: buffer, refetch: refetchBuffer } = useBuffer(!!isSignedIn, isLive)
   const { data: currentUser } = useCurrentUser()
+  const { data: recordings } = useRecordings(!!isSignedIn)
   const sessions = buffer?.sessions ?? EMPTY_SESSIONS
+
+  // ── focus clip (opened from the Clips grid) ──────────────────────────────────
+  // When navigated with `clipId` + `kind`, the editor scopes to THAT clip's own
+  // window — a single segment over [start, end], NO rolling-buffer leading-eviction
+  // gap, NO live tail, playhead bounded to the clip. (Phase C scaffold: the video
+  // VOD mapping below stays whole-buffer, so a clip whose footage is in the buffer
+  // plays from the correct media offset; the saved-recording case degrades to its
+  // poster until Aaron wires real saved-clip playback.)
+  // `kind` is a hint; resolve by id in both sources so a mock-moved clip still opens.
+  const { clipId } = useLocalSearchParams<{ clipId?: string; kind?: string }>()
+  const focusClip = useMemo<{ startMs: number; endMs: number; name: string } | null>(() => {
+    if (!clipId) return null
+    const r = (recordings ?? []).find((x) => x.id === clipId)
+    if (r) {
+      const startMs = Date.parse(r.startedAt)
+      return { startMs, endMs: startMs + (r.durationSec ?? 0) * 1000, name: clipLabel(startMs) }
+    }
+    const s = sessions.find((x) => x.id === clipId)
+    if (s) return { startMs: sessionStartMs(s), endMs: sessionEndMs(s), name: clipLabel(sessionStartMs(s)) }
+    return null
+  }, [clipId, recordings, sessions])
+  const focused = !!focusClip
+  const focusedRef = useRef(focused)
+  focusedRef.current = focused
 
   // Pull fresh buffer on every screen focus (ignoring useBuffer's 30s staleTime),
   // so recordings made elsewhere — e.g. a web go-live — show up when you (re)open
@@ -257,7 +290,7 @@ export const ClipEditScreen = () => {
   // perpetual setVisibleRange → setThumbs → re-render loop (the "Maximum update
   // depth exceeded" cascade). Segment geometry derives only from `sessions`
   // (real media duration, not wall-clock), so this is the correct dep.
-  const segments: BufferSegment[] = useMemo(
+  const bufferSegments: BufferSegment[] = useMemo(
     () =>
       sessions.map((s) => ({
         id: s.id,
@@ -267,8 +300,23 @@ export const ClipEditScreen = () => {
       })),
     [sessions],
   )
-  const bufferStartMs = sessions.length ? sessionStartMs(sessions[0]!) : Date.now()
-  const bufferEndMs = Date.now()
+  // Focused: the clip's own segment(s) — the buffer sessions clipped to [start,end]
+  // (the common case is one session = the clip), or a single synthetic segment if the
+  // clip's footage isn't in the rolling buffer (a saved recording → poster only).
+  const focusSegments: BufferSegment[] = useMemo(() => {
+    if (!focusClip) return []
+    const overlap = sessions.filter((s) => sessionEndMs(s) > focusClip.startMs && sessionStartMs(s) < focusClip.endMs)
+    if (!overlap.length) return [{ id: 'focus', startMs: focusClip.startMs, endMs: focusClip.endMs, posterUrl: null }]
+    return overlap.map((s) => ({
+      id: s.id,
+      startMs: Math.max(focusClip.startMs, sessionStartMs(s)),
+      endMs: Math.min(focusClip.endMs, sessionEndMs(s)),
+      posterUrl: s.thumbnailUrl,
+    }))
+  }, [focusClip, sessions])
+  const segments = focused ? focusSegments : bufferSegments
+  const bufferStartMs = focused ? focusClip!.startMs : sessions.length ? sessionStartMs(sessions[0]!) : Date.now()
+  const bufferEndMs = focused ? focusClip!.endMs : Date.now()
 
   // Leading "eviction" edge: the buffer keeps `windowHours` of footage, so the oldest
   // frame (bufferStartMs) is deleted at bufferStartMs + window. While the oldest footage
@@ -276,7 +324,8 @@ export const ClipEditScreen = () => {
   // leading gap whose card counts down to when the oldest footage starts being deleted.
   const windowMs = (buffer?.windowHours ?? 72) * H
   const leadStartMs = bufferEndMs - windowMs
-  const hasLeadingGap = sessions.length > 0 && bufferStartMs > leadStartMs + 60_000
+  // No eviction edge in a focused single-clip view — only the live rolling buffer evicts.
+  const hasLeadingGap = !focused && sessions.length > 0 && bufferStartMs > leadStartMs + 60_000
   const leadingGap = hasLeadingGap ? { startMs: leadStartMs, endMs: bufferStartMs } : null
 
   // DIAGNOSTIC: poster availability + a sample URL (so we can see if thumbnailUrl is
@@ -313,19 +362,23 @@ export const ClipEditScreen = () => {
   useEffect(() => {
     const id = setInterval(() => {
       setClockTick((t) => (t + 1) % 60)
-      if (followingRef.current) setPlayheadMs(Date.now())
+      // Focused single-clip view never follows a live edge.
+      if (!focusedRef.current && followingRef.current) setPlayheadMs(Date.now())
     }, 1000)
     return () => clearInterval(id)
   }, [])
   // Lower bound extends into the leading eviction gap (so you can scrub onto it).
-  const clampPlayhead = (ms: number) => clamp(ms, hasLeadingGap ? leadStartMs : bufferStartMs, Date.now())
+  const clampPlayhead = (ms: number) =>
+    focused
+      ? clamp(ms, focusClip!.startMs, focusClip!.endMs)
+      : clamp(ms, hasLeadingGap ? leadStartMs : bufferStartMs, Date.now())
   // Place the playhead at an absolute instant (held); start following only if it
   // lands at the live edge.
   function placePlayhead(ms: number) {
     const m = clampPlayhead(ms)
     playheadRef.current = m
     setPlayheadMs(m)
-    setFollowing(m >= Date.now() - 1500)
+    setFollowing(!focused && m >= Date.now() - 1500)
   }
   // When following the live edge, the clock reads exactly 0 (NOW) and live-ticks;
   // otherwise it's the held instant's distance behind now. (Deriving it as
@@ -343,6 +396,20 @@ export const ClipEditScreen = () => {
   const [bracket, setBracket] = useState<BufferBracket | null>(null)
   // The name-this-clip modal (opened from the tool rail's Save).
   const [saveSheetOpen, setSaveSheetOpen] = useState(false)
+
+  // On opening a focus clip, land the playhead at its start and default the bracket to
+  // the whole clip (the user trims in from there). Runs once per focused clip.
+  const focusInitRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!focusClip || !clipId) return
+    if (focusInitRef.current === clipId) return
+    focusInitRef.current = clipId
+    playheadRef.current = focusClip.startMs
+    setPlayheadMs(focusClip.startMs)
+    setFollowing(false)
+    setBracket({ inMs: focusClip.startMs, outMs: focusClip.endMs })
+    setPage('editor')
+  }, [focusClip, clipId])
 
   // Saved-clip persistence is R3 — these stay in-session (local) until the
   // promote-on-publish backend route lands.
@@ -369,7 +436,7 @@ export const ClipEditScreen = () => {
   // Gating on `isLive` (not just `endedAt === null`) flips the tail to its dark/
   // ended state the instant the stream stops, without waiting for the backend
   // session-ended roundtrip + refetch.
-  const streaming = isLive && sessions.length > 0 && sessions[sessions.length - 1]!.endedAt === null
+  const streaming = !focused && isLive && sessions.length > 0 && sessions[sessions.length - 1]!.endedAt === null
 
   // When the playhead is in a gap (no session under it), the field shows a card
   // instead of video: a static duration for an inter-session gap, or a running
@@ -1579,7 +1646,7 @@ export const ClipEditScreen = () => {
   return (
     <View style={styles.root}>
     <ScreenScroll
-      header={<ScreenHeader title="Clip editor" />}
+      header={<ScreenHeader title={focused ? focusClip!.name : 'Clip editor'} />}
       contentContainerStyle={[
         styles.content,
         // Editor: clear the sticky bottom chrome (its collapsed `bottom` + measured height).
@@ -1668,7 +1735,7 @@ export const ClipEditScreen = () => {
                     <SourceChatLog messages={[]} progress={viewProgress} />
                   ) : undefined
                 }
-                reachLabel={`Buffer · ${buffer?.windowHours ?? 72}h`}
+                reachLabel={focused ? focusClip!.name : `Buffer · ${buffer?.windowHours ?? 72}h`}
                 card={gapCard}
                 showScrubHint={false}
                 onScrub={handleFieldScrub}
