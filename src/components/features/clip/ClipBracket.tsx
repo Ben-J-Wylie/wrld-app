@@ -18,9 +18,10 @@ import { GestureDetector, type GestureType } from 'react-native-gesture-handler'
 import { Text } from '@/components/primitives/Text'
 import { theme } from '@/tokens/theme'
 
-const HANDLE_W = 26 // touch target per edge (the visible grip is the slimmer bulb below)
-// The in/out grip: a slim "D" — flat on the OUTER edge (aligned with the frame's thin
-// 2px precision line), bulging inward at the vertical middle, thin top + bottom.
+const HANDLE_W = 26 // touch target per edge — sits OUTSIDE the frame, flanking the crop
+// The in/out grip: a slim "D" — flat on the INNER edge (flush with the frame's thin 2px
+// precision line), bulging OUTWARD at the vertical middle. Placed just outside the frame
+// so the selection itself can be any width — down to nothing (it collapses entirely).
 const BULB_W = 7
 const BULB_H = 18
 
@@ -41,36 +42,42 @@ function withGesture(g: GestureType | undefined, node: ReactElement): ReactEleme
 }
 
 export function ClipBracket({ leftPx, widthPx, blocked, inGesture, outGesture, centerGesture, style }: Props) {
-  const width = Math.max(HANDLE_W * 2, widthPx)
+  // The frame is the ACTUAL selection width (no handle-fit floor — the handles live
+  // outside it), so it can be any width and collapse entirely. A 2px floor just keeps the
+  // precision line visible.
+  const w = Math.max(2, widthPx)
   return (
     <>
-      <View style={[styles.frame, { left: leftPx, width }, blocked && styles.frameBlocked, style]}>
-        {withGesture(
-          inGesture,
-          <View style={[styles.handle, styles.handleL]}>
-            <View style={[styles.bulb, styles.bulbL, blocked && styles.bulbBlocked]}>
-              <View style={styles.grip} />
-            </View>
-          </View>,
-        )}
-        {withGesture(
-          centerGesture,
-          <View style={styles.center}>
+      {/* The selection box = the move zone (drag anywhere inside to slide the clip). */}
+      {withGesture(
+        centerGesture,
+        <View style={[styles.frame, { left: leftPx, width: w }, blocked && styles.frameBlocked, style]}>
+          {w >= 24 && (
             <View style={styles.moveDots}>
               <View style={styles.moveDot} />
               <View style={styles.moveDot} />
             </View>
-          </View>,
-        )}
-        {withGesture(
-          outGesture,
-          <View style={[styles.handle, styles.handleR]}>
-            <View style={[styles.bulb, styles.bulbR, blocked && styles.bulbBlocked]}>
-              <View style={styles.grip} />
-            </View>
-          </View>,
-        )}
-      </View>
+          )}
+        </View>,
+      )}
+      {/* In handle — just OUTSIDE the left edge; bulb flush-flat on the inner side, bulging out. */}
+      {withGesture(
+        inGesture,
+        <View style={[styles.handle, styles.handleL, { left: leftPx - HANDLE_W }]}>
+          <View style={[styles.bulb, styles.bulbL, blocked && styles.bulbBlocked]}>
+            <View style={styles.grip} />
+          </View>
+        </View>,
+      )}
+      {/* Out handle — just OUTSIDE the right edge. */}
+      {withGesture(
+        outGesture,
+        <View style={[styles.handle, styles.handleR, { left: leftPx + w }]}>
+          <View style={[styles.bulb, styles.bulbR, blocked && styles.bulbBlocked]}>
+            <View style={styles.grip} />
+          </View>
+        </View>,
+      )}
       {/* No time readout on the selection — only a transient "blocked" pill when an
           edge drag hits a saved-region boundary. */}
       {blocked && (
@@ -89,23 +96,27 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     bottom: 0,
-    flexDirection: 'row',
     borderWidth: 2,
     borderColor: theme.colors.accent.default,
     backgroundColor: theme.colors.accent.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   frameBlocked: {
     borderColor: theme.colors.warn,
   },
-  // Transparent touch column; the frame's 2px accent border is the flat precision edge.
-  // The bulb is pinned to the OUTER edge and vertically centred.
+  // Transparent touch column sitting OUTSIDE the frame (`left` set inline), vertically
+  // centred; the bulb hugs the inner edge (flush with the frame's 2px precision line).
   handle: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
     width: HANDLE_W,
     justifyContent: 'center',
   },
-  handleL: { alignItems: 'flex-start' },
-  handleR: { alignItems: 'flex-end' },
-  // The grip bulb: flat outer side, rounded (bulging) inner side toward the crop.
+  handleL: { alignItems: 'flex-end' }, // bulb hugs the frame's left edge, bulges left (out)
+  handleR: { alignItems: 'flex-start' }, // bulb hugs the frame's right edge, bulges right (out)
+  // The grip bulb: flat INNER side (against the frame), rounded (bulging) OUTER side.
   bulb: {
     width: BULB_W,
     height: BULB_H,
@@ -114,12 +125,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   bulbL: {
-    borderTopRightRadius: BULB_H / 2,
-    borderBottomRightRadius: BULB_H / 2,
-  },
-  bulbR: {
     borderTopLeftRadius: BULB_H / 2,
     borderBottomLeftRadius: BULB_H / 2,
+  },
+  bulbR: {
+    borderTopRightRadius: BULB_H / 2,
+    borderBottomRightRadius: BULB_H / 2,
   },
   bulbBlocked: {
     backgroundColor: theme.colors.warn,
@@ -130,11 +141,6 @@ const styles = StyleSheet.create({
     borderRadius: 1,
     backgroundColor: theme.colors.text.inverse,
     opacity: 0.85,
-  },
-  center: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   moveDots: {
     flexDirection: 'row',

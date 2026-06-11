@@ -1315,10 +1315,13 @@ export function FeatureGallery() {
       </Section>
 
       <Section title="ClipToolRail">
-        <Row label="select · set in/out · delete · trim · save · clear (warn = destructive)">
+        <Row label="rail — dark ink column overlaid on the field edge">
           <View style={{ backgroundColor: '#1a1612', padding: theme.spacing.md, borderRadius: theme.radius.md }}>
             <ClipToolRail tools={CLIP_TOOL_DEMO} />
           </View>
+        </Row>
+        <Row label="shelf — horizontal light row for a bottom shelf">
+          <ClipToolRail tools={CLIP_TOOL_DEMO} variant="shelf" />
         </Row>
       </Section>
 
@@ -1733,22 +1736,33 @@ function BufferTimelineDemo() {
   const model = useMemo(() => buildBufModel(extent), [extent])
   const [playhead, setPlayhead] = useState(model.playhead0)
   const [bracket, setBracket] = useState<{ inMs: number; outMs: number } | null>(model.bracket0)
-  const [selected, setSelected] = useState('camera')
   const [expanded, setExpanded] = useState(true)
+  // Clip inclusion (gutter on/off toggles); camera starts excluded to show the dim. A
+  // couple of pre-seeded removed ranges so the no-data blocks are visible.
+  const [included, setIncluded] = useState<string[]>(['audio', 'location', 'chat', 'compass', 'gyro', 'identity'])
+  const toggle = (k: string) => setIncluded((p) => (p.includes(k) ? p.filter((x) => x !== k) : [...p, k]))
+  const removedByLane = useMemo(() => {
+    const t = model.playhead0
+    return {
+      audio: [{ startMs: t - 90_000, endMs: t - 30_000 }],
+      location: [{ startMs: t + 60_000, endMs: t + 150_000 }],
+    }
+  }, [model])
   // Reset the interactive state when the mock extent changes.
   useEffect(() => {
     setPlayhead(model.playhead0)
     setBracket(model.bracket0)
   }, [model])
-  // Tap to position the playhead · one-finger drag to pan · two-finger pinch to
-  // zoom · drag the scrollbar (below the track) to pan. Expand/collapse stacks all
-  // source lanes vs the selected one; tap a gutter icon (expanded) to select a lane.
+  // Tap to position the playhead · drag to pan · pinch to zoom · scrollbar to pan.
+  // Expand/collapse stacks all source lanes vs the viewed one; tap a gutter icon to toggle
+  // that lane in/out of the clip (accent = in, subtle = out; excluded lanes dim, removed
+  // ranges read as no-data blocks).
   return (
     <View style={{ gap: theme.spacing.sm }}>
       <SegmentedToggle options={BUF_EXTENT_OPTS} value={extent} onChange={setExtent} />
       <Text variant="caption" color={theme.colors.text.muted}>
-        One timeline per source, perfectly aligned (shared gaps). Expand to see all, collapse
-        to the selected lane; tap a gutter icon to switch.
+        One timeline per source, aligned. Gutter icons toggle clip inclusion; trims/deletes
+        leave no-data blocks (audio + location are pre-edited here).
       </Text>
       <BufferTimeline
         segments={model.segments}
@@ -1758,10 +1772,12 @@ function BufferTimelineDemo() {
         onScrub={setPlayhead}
         onBracketChange={setBracket}
         lanes={DEMO_LANES}
-        selectedKey={selected}
+        selectedKey="audio"
         expanded={expanded}
-        onSelectLane={setSelected}
         onToggleExpand={() => setExpanded((v) => !v)}
+        includedKeys={included}
+        onToggleLane={toggle}
+        removedByLane={removedByLane}
       />
     </View>
   )

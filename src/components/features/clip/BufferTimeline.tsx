@@ -22,7 +22,7 @@
 //
 // See DESIGN.md Section 3 (Buffer-trim clip editor) + the 2026-06-06 decision log.
 
-import { useEffect, useMemo, useRef, useState, type ComponentProps } from 'react'
+import { useEffect, useMemo, useRef, useState, type ComponentProps, type MutableRefObject } from 'react'
 import { StyleSheet, View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from 'react-native'
 import Animated, {
   useAnimatedStyle,
@@ -107,22 +107,50 @@ type Props = {
   // pass a single lane) for the classic single-track behaviour. `kind: 'camera'` renders
   // the real filmstrip; other kinds render via TimelineLaneFill.
   lanes?: TimelineLane[]
-  // The highlighted lane — the only one shown when collapsed, accent in the gutter when
-  // expanded. Defaults to the first lane.
+  // The VIEWED lane — the only one shown when collapsed; its gutter icon carries a subtle
+  // "viewed" pill. Driven by the buffer-viewer rail (separate from clip inclusion below).
+  // Defaults to the first lane.
   selectedKey?: string
   // Expanded → all lanes stacked (compact, with a source-icon gutter); collapsed → just
-  // the selected lane at full height. Ignored unless there's more than one lane.
+  // the viewed lane at full height. Ignored unless there's more than one lane.
   expanded?: boolean
-  // Tapping a lane's gutter icon (expanded) selects it — drives the shared selection so
-  // the rail + buffer viewer follow.
-  onSelectLane?: (key: string) => void
   // Toggles `expanded`. When provided, the expand/collapse control renders.
   onToggleExpand?: () => void
+  // ── clip inclusion (the gutter icons are on/off toggles) ──
+  // Which lanes are IN the clip. The gutter icon reads accent (on) / subtle (off); an
+  // excluded lane dims. Omit → all lanes treated as included.
+  includedKeys?: string[]
+  // Tapping a lane's gutter icon toggles its clip inclusion.
+  onToggleLane?: (key: string) => void
+  // Per-lane removed (trimmed / deleted) time ranges, rendered as "no data" blocks within
+  // the lane — so an edited lane shows blocks of data and blocks of no data.
+  removedByLane?: Record<string, { startMs: number; endMs: number }[]>
+  // ── external scroll/zoom bar ──
+  // When true, the internal zoom/scrollbar row is NOT rendered; the host drives it via
+  // `TimelineScrollbarShelf` using the reported state + the exposed api (e.g. a sticky
+  // bottom shelf instead of a row below a tall expanded stack).
+  externalScrollbar?: boolean
+  onScrollbarState?: (s: ScrollbarState) => void
+  scrollbarApiRef?: MutableRefObject<ScrollbarApi | null>
   style?: StyleProp<ViewStyle>
 }
 
+// State the external scroll/zoom shelf needs (reported on change).
+export type ScrollbarState = {
+  contentWidth: number
+  viewport: number
+  scrollOffset: number
+  canZoomOut: boolean
+  canZoomIn: boolean
+}
+// Imperative handlers the external shelf calls (kept fresh per render via the api ref).
+export type ScrollbarApi = {
+  scrollTo: (offset: number) => void
+  zoomStep: (dir: 1 | -1) => void
+  zoomHold: (dir: 1 | -1, held: boolean) => void
+}
+
 const TRACK_H = 52
-const MIN_BRACKET_MS = 500
 const GAP_THRESHOLD_MS = 500
 // Real-frame filmstrip: each recorded segment is tiled with little FILM CELLS — a
 // sprocket-hole band above and below, the thumbnail framed between them. The frame's
@@ -140,6 +168,7 @@ const THUMB_FRAME_H = TRACK_H - SPROCKET_BAND_H * 2 // the image area between th
 const THUMB_CELL_W = Math.max(12, Math.round(THUMB_FRAME_H * THUMB_ASPECT)) // ≈ 21 portrait
 const MAX_THUMB_TILES = 200 // per-segment cap (perf backstop at extreme zoom)
 const EMPTY_THUMBS: TimelineThumb[] = []
+const EMPTY_REMOVED: { startMs: number; endMs: number }[] = []
 // The head/tail buffer-edge indicators are wider than inter-session gaps and carry
 // state: dark (idle), or accent with a footage-facing zigzag (head = evicting oldest,
 // tail = live/growing) — "the buffer eating the footage".
@@ -166,7 +195,7 @@ type Layout = { blocks: (SegBlock | GapBlock)[]; segBlocks: SegBlock[]; contentW
 // Lane height is purely vertical layout — it never touches the horizontal time geometry,
 // so the gesture/zoom/scroll core is unaffected.
 const COMPACT_LANE_H = 34
-const LANE_GAP = 2 // vertical space between stacked lanes (shows the track bg through)
+const LANE_GAP = 4 // distinct vertical space between stacked lanes (shows the lighter bg through)
 const GUTTER_W = 30
 
 // Source kind → gutter glyph (matches the dashboard / buffer-viewer source icons).
@@ -207,8 +236,13 @@ export function BufferTimeline({
   lanes,
   selectedKey,
   expanded,
-  onSelectLane,
   onToggleExpand,
+  includedKeys,
+  onToggleLane,
+  removedByLane,
+  externalScrollbar,
+  onScrollbarState,
+  scrollbarApiRef,
   style,
 }: Props) {
   const [width, setWidth] = useState(0)
@@ -265,6 +299,8 @@ export function BufferTimeline({
   const isExpanded = laned && !!expanded
   const selKey = selectedKey ?? laneList[0]!.key
   const selectedLane = laneList.find((l) => l.key === selKey) ?? laneList[0]!
+  // Clip inclusion: omitted → every lane is in the clip.
+  const isIncluded = (key: string) => (includedKeys ? includedKeys.includes(key) : true)
   // Collapsed → just the selected lane; expanded → every lane. (Never empty.)
   const visibleLanes = isExpanded ? laneList : [selectedLane]
   const laneH = isExpanded ? COMPACT_LANE_H : TRACK_H
@@ -422,6 +458,11 @@ export function BufferTimeline({
   function setGesturing(v: boolean) {
     gesturingRef.current = v
   }
+  // Is the VIEW pinned to the live edge (auto-following)? True until the user manually
+  // zooms or scrolls away — then the auto-follow must NOT yank the scroll back to the live
+  // edge (that's the "lock to centre, but it jumps" complaint). Re-armed once the playhead
+  // leaves the live window (scrub away → back to live re-follows).
+  const pinnedLiveRef = useRef(true)
 
   // Touch x → playhead time. Content x inside the leading gap maps to its wall-clock
   // span; inside the trailing gap to [lastEnd, now]; otherwise to footage/inter-gap time.
@@ -466,38 +507,82 @@ export function BufferTimeline({
     tx.value = -no
     setPxPerMs(newPx)
     setScrollOffset(no)
+    pinnedLiveRef.current = false // manual zoom → don't auto-snap back to the live edge
     gesturingRef.current = false
   }
 
   // ── continuous zoom (the ‹zoom-out / zoom-in› buttons flanking the scrollbar) ─
-  // Set the zoom to `target` (clamped), keeping `focalTime` PINNED at the viewport
-  // centre — so it grows/shrinks evenly on both sides of that instant, and a side that
-  // reaches a buffer edge just stops (offset clamp) while the other keeps going. Reads
-  // geometry via refs so it works from a tap AND the hold rAF loop.
-  function applyZoom(target: number, focalTime: number) {
-    const newPx = clamp(target, minPxRef.current, maxPxRef.current)
-    if (newPx <= 0) return
+  // A tap is ONE step (× / ÷ ZOOM_TAP_STEP) but RAMPED smoothly on the transform
+  // (scaleX/translateX) instead of an instant re-layout — so there's no mid-zoom
+  // filmstrip re-tile (the "jump") and it reads as a buttery zoom. It's PINNED on the
+  // viewport-centre instant the whole way (the same anchor maths the pinch + hold use),
+  // so the centre stays locked. Rapid taps accumulate into `tapTargetRef` and the ramp
+  // chases it; the real pxPerMs is committed once it settles.
+  const tapZoomRaf = useRef<number | null>(null)
+  const tapTargetRef = useRef(0)
+  const tapAnchorRef = useRef<{
+    startPx: number
+    focalX: number
+    anchorContentX: number
+    anchorMs: number
+    cw: number
+  } | null>(null)
+  function commitTapZoom() {
+    const a = tapAnchorRef.current
+    if (!a) return
+    if (tapZoomRaf.current != null) {
+      cancelAnimationFrame(tapZoomRaf.current)
+      tapZoomRaf.current = null
+    }
+    const newPx = clamp(tapTargetRef.current, minPxRef.current, maxPxRef.current)
+    tapTargetRef.current = 0
+    tapAnchorRef.current = null
     const nl = layout(segmentsRef.current, newPx, leadingPxRef.current)
     const newCW = nl.contentWidth + tailRef.current.trailingPx
-    const focalX = timeToX(focalTime, nl.segBlocks, newPx)
-    const no = clamp(focalX - widthRef.current / 2, 0, Math.max(0, newCW - widthRef.current))
+    const no = clamp(timeToX(a.anchorMs, nl.segBlocks, newPx) - a.focalX, 0, Math.max(0, newCW - widthRef.current))
     sx.value = 1
     tx.value = -no
     setPxPerMs(newPx)
     setScrollOffset(no)
-  }
-  // The time currently at the viewport centre — the focal the zoom locks onto.
-  function viewportCenterTime() {
-    return xToTime(offsetRef.current + widthRef.current / 2, segBlocksRef.current, pxRef.current)
-  }
-  function zoomStep(dir: 1 | -1) {
-    // Block auto-follow from clobbering the zoom's offset for this frame (it would
-    // otherwise snap the scroll to the live edge when the playhead is near now).
-    zoomingRef.current = true
-    applyZoom(dir > 0 ? pxRef.current * ZOOM_TAP_STEP : pxRef.current / ZOOM_TAP_STEP, viewportCenterTime())
+    pinnedLiveRef.current = false // manual zoom → don't auto-snap back to the live edge
     setTimeout(() => {
       zoomingRef.current = false
     }, 60)
+  }
+  function zoomStep(dir: 1 | -1) {
+    const base = tapTargetRef.current || pxRef.current
+    tapTargetRef.current = clamp(dir > 0 ? base * ZOOM_TAP_STEP : base / ZOOM_TAP_STEP, minPxRef.current, maxPxRef.current)
+    if (tapZoomRaf.current != null) return // already ramping — the chase picks up the new target
+    // Fresh ramp: capture the viewport-centre anchor once (held fixed for the burst).
+    const startPx = pxRef.current
+    const focalX = widthRef.current / 2
+    const anchorContentX = focalX + offsetRef.current
+    const anchorMs = xToTime(anchorContentX, segBlocksRef.current, startPx)
+    const cw = tailRef.current.contentWidth + tailRef.current.trailingPx
+    tapAnchorRef.current = { startPx, focalX, anchorContentX, anchorMs, cw }
+    zoomingRef.current = true
+    let cur = startPx
+    let last = Date.now()
+    const step = () => {
+      const a = tapAnchorRef.current
+      if (!a) return
+      const now = Date.now()
+      const dt = Math.min(50, now - last)
+      last = now
+      // Exponential approach in log space → smooth, and naturally chases a moving
+      // (accumulating) target without a per-tap restart.
+      const k = 1 - Math.exp(-dt / 70)
+      cur = Math.exp(Math.log(cur) + (Math.log(tapTargetRef.current) - Math.log(cur)) * k)
+      const s = cur / a.startPx
+      sx.value = s
+      tx.value = a.focalX - a.anchorContentX * s - ((1 - s) * a.cw) / 2
+      if (Math.abs(Math.log(tapTargetRef.current) - Math.log(cur)) < 0.004) {
+        commitTapZoom()
+        return
+      }
+      tapZoomRaf.current = requestAnimationFrame(step)
+    }
+    tapZoomRaf.current = requestAnimationFrame(step)
   }
   // Hold → drive the zoom on the UI thread (scaleX/translateX, exactly like pinch) so
   // there is NO per-frame React re-render / filmstrip re-tile — that view churn was the
@@ -528,6 +613,7 @@ export function BufferTimeline({
     tx.value = -no
     setPxPerMs(newPx)
     setScrollOffset(no)
+    pinnedLiveRef.current = false // manual zoom → don't auto-snap back to the live edge
   }
   function stopZoomHold() {
     if (zoomRaf.current != null) {
@@ -543,6 +629,8 @@ export function BufferTimeline({
   }
   function startZoomHold(dir: 1 | -1) {
     if (zoomRaf.current != null) return
+    // If a tap-zoom ramp is mid-flight, commit it first so the hold starts from a settled px.
+    if (tapZoomRaf.current != null) commitTapZoom()
     const minP = minPxRef.current
     const maxP = maxPxRef.current
     if (maxP <= minP) return
@@ -580,11 +668,42 @@ export function BufferTimeline({
         cancelAnimationFrame(zoomRaf.current)
         zoomRaf.current = null
       }
+      if (tapZoomRaf.current != null) {
+        cancelAnimationFrame(tapZoomRaf.current)
+        tapZoomRaf.current = null
+      }
     },
     [],
   )
   const canZoomOut = px > minPx * 1.002
   const canZoomIn = px < maxPx * 0.998
+
+  // ── external scroll/zoom bar bridge ──
+  // Keep the api fresh each render (closures read the current maxScroll / handlers).
+  if (scrollbarApiRef) {
+    scrollbarApiRef.current = {
+      scrollTo: (o: number) => {
+        const no = clamp(o, 0, maxScroll)
+        tx.value = -no
+        setScrollOffset(no)
+        pinnedLiveRef.current = false // manual scroll → don't auto-snap back to the live edge
+      },
+      zoomStep,
+      zoomHold: (dir, held) => (held ? startZoomHold(dir) : stopZoomHold()),
+    }
+  }
+  // Report viewport state on change (same cadence as this component's own re-renders).
+  const onScrollbarStateRef = useRef(onScrollbarState)
+  onScrollbarStateRef.current = onScrollbarState
+  useEffect(() => {
+    onScrollbarStateRef.current?.({
+      contentWidth: effContentWidth,
+      viewport: width,
+      scrollOffset: offset,
+      canZoomOut,
+      canZoomIn,
+    })
+  }, [effContentWidth, width, offset, canZoomOut, canZoomIn])
 
   // ── gestures ──────────────────────────────────────────────────────────────
   const panRef = useRef(undefined as unknown)
@@ -677,11 +796,14 @@ export function BufferTimeline({
     if (mode === 'in') {
       const desired = inMs + dms
       setBlocked(desired < lo)
-      cb({ inMs: clamp(desired, lo, outMs - MIN_BRACKET_MS), outMs })
+      // The in handle can meet the out (no min-width floor) → the bracket collapses
+      // entirely; the host clears it when the width hits zero.
+      cb({ inMs: clamp(desired, lo, outMs), outMs })
     } else if (mode === 'out') {
       const desired = outMs + dms
       setBlocked(desired > hi)
-      cb({ inMs, outMs: clamp(desired, inMs + MIN_BRACKET_MS, hi) })
+      // The out handle can meet the in → collapse entirely.
+      cb({ inMs, outMs: clamp(desired, inMs, hi) })
     } else {
       const dur = outMs - inMs
       const desired = inMs + dms
@@ -727,7 +849,14 @@ export function BufferTimeline({
     // the zoom's focal-centred offset (the jitter).
     if (gesturingRef.current || zoomingRef.current) return
     const live = nowMsRef.current ?? bufferEndRef.current
-    if (playheadMs < live - 1500) return
+    // Playhead away from the live edge → re-arm following (so scrubbing back to live, or a
+    // "to end", re-pins the view).
+    if (playheadMs < live - 1500) {
+      pinnedLiveRef.current = true
+      return
+    }
+    // User zoomed/scrolled away → don't yank the scroll back to the live edge.
+    if (!pinnedLiveRef.current) return
     const end = Math.max(0, effContentWidth - width)
     if (end <= 0) return
     setScrollOffset(end)
@@ -792,54 +921,51 @@ export function BufferTimeline({
 
   return (
     <View style={[styles.wrap, style]}>
-      {/* Lane header — which source is shown + the expand/collapse control. Only when
-          there's a stack (or an expand control is wired); a classic single track omits it. */}
-      {laned && (
+      {/* Expand/collapse control — only when there's a stack (or one is wired). The
+          source is identified by the gutter icon (below), the same in both states. */}
+      {laned && onToggleExpand && (
         <View style={styles.laneHeader}>
-          <View style={styles.laneHeaderLeft}>
-            <Icon name={LANE_ICON[selectedLane.kind]} size="sm" color={theme.colors.text.muted} />
+          <Pressable
+            variant="subtle"
+            accessibilityRole="button"
+            accessibilityLabel={isExpanded ? 'Collapse source lanes' : 'Expand all source lanes'}
+            hitSlop={8}
+            style={styles.expandBtn}
+            onPress={onToggleExpand}
+          >
+            <Icon name={isExpanded ? 'minimize-2' : 'maximize-2'} size="sm" color={theme.colors.text.muted} />
             <Text variant="monoLabel" color={theme.colors.text.muted}>
-              {isExpanded ? `All sources · ${laneList.length}` : selectedLane.label}
+              {isExpanded ? 'Collapse' : 'Expand'}
             </Text>
-          </View>
-          {onToggleExpand && (
-            <Pressable
-              variant="subtle"
-              accessibilityRole="button"
-              accessibilityLabel={isExpanded ? 'Collapse source lanes' : 'Expand all source lanes'}
-              hitSlop={8}
-              style={styles.expandBtn}
-              onPress={onToggleExpand}
-            >
-              <Icon name={isExpanded ? 'minimize-2' : 'maximize-2'} size="sm" color={theme.colors.text.muted} />
-              <Text variant="monoLabel" color={theme.colors.text.muted}>
-                {isExpanded ? 'Collapse' : 'Expand'}
-              </Text>
-            </Pressable>
-          )}
+          </Pressable>
         </View>
       )}
 
       <View style={styles.trackRow}>
-        {/* Fixed source-icon gutter (expanded only) — tap to select a lane (drives the
-            shared selection so the rail + buffer viewer follow). */}
-        {isExpanded && (
-          <View style={[styles.gutter, { height: contentHeight + 2, gap: laneGap }]}>
+        {/* Detached source-icon gutter — shown in BOTH collapsed and expanded so the two
+            look the same. Sits over the (lighter) page background, separated from the track
+            by the row gap. Each icon is an ON/OFF toggle for clip inclusion: accent = in the
+            clip, subtle = excluded. The VIEWED lane (the player's source) carries a subtle
+            pill. */}
+        {laned && (
+          <View style={[styles.gutter, { height: contentHeight, gap: laneGap }]}>
             {visibleLanes.map((lane) => {
-              const sel = lane.key === selKey
+              const included = isIncluded(lane.key)
+              const viewed = lane.key === selKey
               return (
                 <Pressable
                   key={lane.key}
                   variant="none"
-                  accessibilityRole="button"
-                  accessibilityLabel={`Show ${lane.label} timeline`}
-                  onPress={() => onSelectLane?.(lane.key)}
-                  style={[styles.gutterCell, { height: laneH }, sel && styles.gutterCellSel]}
+                  accessibilityRole="switch"
+                  accessibilityState={{ checked: included }}
+                  accessibilityLabel={`${lane.label} in clip`}
+                  onPress={() => onToggleLane?.(lane.key)}
+                  style={[styles.gutterCell, { height: laneH }, viewed && styles.gutterCellViewed]}
                 >
                   <Icon
                     name={LANE_ICON[lane.kind]}
                     size="sm"
-                    color={sel ? theme.colors.accent.default : theme.colors.text.subtle}
+                    color={included ? theme.colors.accent.default : theme.colors.text.subtle}
                   />
                 </Pressable>
               )
@@ -848,7 +974,7 @@ export function BufferTimeline({
         )}
 
         <GestureDetector gesture={composed}>
-          <View style={[styles.timeline, { height: contentHeight + 2 }]} onLayout={onLayout}>
+          <View style={[styles.timeline, { height: contentHeight }]} onLayout={onLayout}>
             <Animated.View
               style={[
                 styles.content,
@@ -856,20 +982,18 @@ export function BufferTimeline({
                 contentStyle,
               ]}
             >
-              {/* Gaps — shared across the whole stack (full height). */}
-              {gapBlocks.map((b) => (
-                <View key={`gap-${b.leftPx}`} style={[styles.gapHolder, { left: b.leftPx }]}>
-                  <GapMarker style={styles.gapFill} />
-                </View>
-              ))}
-
-              {/* Per-lane segment fills — identical geometry, source-specific fill. */}
+              {/* Per-lane: segment fills + clip gaps + head/tail edges, all on the same
+                  shared geometry. Drawing them INSIDE each lane (not as a full-height
+                  overlay) means the distinct inter-lane gap breaks the clip gaps and the
+                  head/tail edges too, and the gaps' lighter fill shows over the lane rather
+                  than hidden behind it. */}
               {visibleLanes.map((lane, li) => {
-                const sel = lane.key === selKey
+                const included = isIncluded(lane.key)
+                const removed = removedByLane?.[lane.key] ?? EMPTY_REMOVED
                 return (
                   <View
                     key={lane.key}
-                    style={[styles.lane, { top: li * (laneH + laneGap), height: laneH }, isExpanded && !sel && styles.laneDim]}
+                    style={[styles.lane, { top: li * (laneH + laneGap), height: laneH }, !included && styles.laneExcluded]}
                   >
                     {segBlocks.map((b) => {
                       const leadBorder = leadingBorderIds.has(b.seg.id)
@@ -883,13 +1007,25 @@ export function BufferTimeline({
                         </View>
                       )
                     })}
+                    {gapBlocks.map((b) => (
+                      <View key={`gap-${b.leftPx}`} style={[styles.gapHolder, { left: b.leftPx }]}>
+                        <GapMarker style={styles.gapFill} />
+                      </View>
+                    ))}
+                    {hasFootage && <BufferEdge side="head" leftPx={0} accent={headEvicting} height={laneH} />}
+                    {hasFootage && <BufferEdge side="tail" leftPx={contentWidth} accent={tailLive} height={laneH} />}
+                    {/* No-data blocks — footage trimmed/deleted from THIS lane reads as a gap
+                        (covers the fill). Shown whether the lane is toggled in or out of the
+                        clip (an excluded lane just dims with the rest of its content), so the
+                        edit history is always visible. */}
+                    {removed.map((r, i) => {
+                      const left = timeToX(r.startMs, segBlocks, px)
+                      const w = Math.max(2, timeToX(r.endMs, segBlocks, px) - left)
+                      return <View key={`nd-${i}`} style={[styles.noData, { left, width: w }]} pointerEvents="none" />
+                    })}
                   </View>
                 )
               })}
-
-              {hasFootage && <BufferEdge side="head" leftPx={0} accent={headEvicting} height={contentHeight} />}
-
-              {hasFootage && <BufferEdge side="tail" leftPx={contentWidth} accent={tailLive} height={contentHeight} />}
 
               {savedRegions.map((r) => {
                 const left = timeToX(r.startMs, segBlocks, px)
@@ -919,35 +1055,81 @@ export function BufferTimeline({
       </View>
 
       {/* Scrollbar flanked by zoom-out (left) / zoom-in (right): tap to step, hold to
-          smooth-zoom across the whole range. */}
-      <View style={styles.zoomRow}>
-        <ZoomButton
-          icon="zoom-out"
-          label="Zoom out"
-          disabled={!canZoomOut}
-          onTap={() => zoomStep(-1)}
-          onHold={(held) => (held ? startZoomHold(-1) : stopZoomHold())}
-        />
-        <View style={styles.zoomScroll}>
-          <TimelineScrollbar
-            contentWidth={effContentWidth}
-            viewport={width}
-            scrollOffset={offset}
-            onScrollTo={(o) => {
-              const no = clamp(o, 0, maxScroll)
-              tx.value = -no
-              setScrollOffset(no)
-            }}
+          smooth-zoom across the whole range. Suppressed when the host renders it
+          externally (TimelineScrollbarShelf). */}
+      {!externalScrollbar && (
+        <View style={styles.zoomRow}>
+          <ZoomButton
+            icon="zoom-out"
+            label="Zoom out"
+            disabled={!canZoomOut}
+            onTap={() => zoomStep(-1)}
+            onHold={(held) => (held ? startZoomHold(-1) : stopZoomHold())}
+          />
+          <View style={styles.zoomScroll}>
+            <TimelineScrollbar
+              contentWidth={effContentWidth}
+              viewport={width}
+              scrollOffset={offset}
+              onScrollTo={(o) => {
+                const no = clamp(o, 0, maxScroll)
+                tx.value = -no
+                setScrollOffset(no)
+                pinnedLiveRef.current = false // manual scroll → don't auto-snap to the live edge
+              }}
+            />
+          </View>
+          <ZoomButton
+            icon="zoom-in"
+            label="Zoom in"
+            disabled={!canZoomIn}
+            onTap={() => zoomStep(1)}
+            onHold={(held) => (held ? startZoomHold(1) : stopZoomHold())}
           />
         </View>
-        <ZoomButton
-          icon="zoom-in"
-          label="Zoom in"
-          disabled={!canZoomIn}
-          onTap={() => zoomStep(1)}
-          onHold={(held) => (held ? startZoomHold(1) : stopZoomHold())}
+      )}
+    </View>
+  )
+}
+
+// The scroll/zoom bar as a standalone row — same controls as BufferTimeline's internal
+// one, but driven by the reported `state` + the `api` ref, so a host can place it on a
+// sticky shelf (above a tall expanded lane stack). Render-null until the first state
+// report lands.
+export function TimelineScrollbarShelf({
+  state,
+  api,
+  style,
+}: {
+  state: ScrollbarState | null
+  api: MutableRefObject<ScrollbarApi | null>
+  style?: StyleProp<ViewStyle>
+}) {
+  if (!state) return null
+  return (
+    <View style={[styles.zoomRow, style]}>
+      <ZoomButton
+        icon="zoom-out"
+        label="Zoom out"
+        disabled={!state.canZoomOut}
+        onTap={() => api.current?.zoomStep(-1)}
+        onHold={(held) => api.current?.zoomHold(-1, held)}
+      />
+      <View style={styles.zoomScroll}>
+        <TimelineScrollbar
+          contentWidth={state.contentWidth}
+          viewport={state.viewport}
+          scrollOffset={state.scrollOffset}
+          onScrollTo={(o) => api.current?.scrollTo(o)}
         />
       </View>
+      <ZoomButton
+        icon="zoom-in"
+        label="Zoom in"
+        disabled={!state.canZoomIn}
+        onTap={() => api.current?.zoomStep(1)}
+        onHold={(held) => api.current?.zoomHold(1, held)}
+      />
     </View>
   )
 }
@@ -1282,33 +1464,29 @@ const styles = StyleSheet.create({
   trackRow: {
     flexDirection: 'row',
     alignItems: 'stretch',
+    // Detaches the source-icon gutter from the track — the icons float over the page
+    // background in the gap.
+    gap: theme.spacing.sm,
   },
-  // Fixed source-icon column (expanded only) to the left of the scrolling track.
+  // Detached source-icon column — no box/border/fill, so the icons sit over the (lighter)
+  // page background, separated from the track by the trackRow gap.
   gutter: {
     width: GUTTER_W,
-    backgroundColor: theme.colors.bg.panel,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderLeftWidth: 1,
-    borderRightWidth: 1,
-    borderColor: theme.colors.border.strong,
   },
   gutterCell: {
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: theme.radius.full,
   },
-  gutterCellSel: {
-    backgroundColor: theme.colors.accent.surface,
+  // Subtle pill behind the VIEWED lane's icon (the one the player is showing) — distinct
+  // from the accent/subtle on-off colour so view ≠ inclusion.
+  gutterCellViewed: {
+    backgroundColor: theme.colors.bg.elevated,
   },
   laneHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  laneHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.xs,
+    justifyContent: 'flex-end',
   },
   expandBtn: {
     flexDirection: 'row',
@@ -1319,25 +1497,40 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.md,
   },
   timeline: {
-    // height is set inline (content height + the two 1px borders) so the track grows with
-    // the stacked-lane count; the content then sits BETWEEN the borders instead of
-    // clipping over the bottom one (iOS clips to the border box), so the rules match.
+    // height is set inline (= contentHeight). No frame border here — each lane is its own
+    // bordered box (below); the gaps between lanes show this lighter background through.
     flex: 1,
-    backgroundColor: theme.colors.bg.panel,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: theme.colors.border.strong,
+    backgroundColor: theme.colors.bg.primary,
     overflow: 'hidden',
   },
-  // height is set inline (laneH × visible lane count).
+  // height is set inline (laneH × visible lane count + the inter-lane gaps).
   content: {},
+  // Each lane is a self-contained box: its own top + bottom border framing the fill, with
+  // a distinct gap (the lighter track background) between lanes. height/top set inline.
   lane: {
     position: 'absolute',
     left: 0,
     right: 0,
+    backgroundColor: theme.colors.bg.panelHi,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: theme.colors.border.strong,
   },
-  laneDim: {
-    opacity: 0.5,
+  // Excluded lane (toggled out of the clip): dimmed so its footage still shows (you can see
+  // what you'd be adding) but it reads as "not in the clip".
+  laneExcluded: {
+    opacity: 0.32,
+  },
+  // No-data block: footage removed from this lane by a trim/delete — reads as a gap
+  // (the lighter background) over the fill, framed like a clip gap.
+  noData: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    backgroundColor: theme.colors.bg.primary,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderColor: theme.colors.border.strong,
   },
   seg: {
     position: 'absolute',

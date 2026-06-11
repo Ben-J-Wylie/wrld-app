@@ -15,11 +15,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFocusEffect } from 'expo-router'
-import { Alert, RefreshControl, StyleSheet, View } from 'react-native'
+import { Alert, Animated, RefreshControl, StyleSheet, View } from 'react-native'
 import { ScreenScroll } from '@/components/sections/ScreenScroll'
 import { ScreenHeader } from '@/components/sections/ScreenHeader'
 import { PageTabs } from '@/components/features/navigation/PageTabs'
-import { TimeScrubber, CLOCK_COLLAPSED_H } from '@/components/features/discovery/TimeScrubber'
+import { TimeScrubber, CLOCK_COLLAPSED_H, CLOCK_EXPANDED_H } from '@/components/features/discovery/TimeScrubber'
 import { Text } from '@/components/primitives/Text'
 import { Pressable } from '@/components/primitives/Pressable'
 import { Icon } from '@/components/primitives/Icon'
@@ -27,12 +27,15 @@ import { BufferScrubField } from '@/components/features/clip/BufferScrubField'
 import { BufferTransport } from '@/components/features/clip/BufferTransport'
 import {
   BufferTimeline,
+  TimelineScrollbarShelf,
   type BufferSegment,
   type BufferSavedRegion,
   type BufferBracket,
   type TimelineThumb,
   type VisibleRange,
   type TimelineLane,
+  type ScrollbarState,
+  type ScrollbarApi,
 } from '@/components/features/clip/BufferTimeline'
 import { type TimelineLaneKind } from '@/components/features/clip/TimelineLaneFill'
 import { type ClipSource } from '@/components/features/clip/ClipSourcesDrawer'
@@ -84,6 +87,15 @@ const GAP_RUSH_MS = 3_000
 // ahead into the next session across a collapsed gap — it must NOT glue, so the tap
 // sticks and the gap-rush fires. Must sit above the in-session seek-drift tolerance.
 const VIDEO_FOLLOW_MAX_DRIFT_MS = 2_000
+// The glue HOLDS the playhead only during a genuine in-session STALL (video stopped
+// advancing). It must NOT fire when the video is just playing forward from a fresh seek
+// that landed slightly behind a keyframe — that pulled the playhead BACKWARD ("jumped
+// back to catch up") on tap-then-play. Guard 1: the video must be stalled this tick
+// (advanced < this fraction of real time). Guard 2: the glue is suppressed briefly after
+// any play-start / seek so the post-seek buffering can't snap the playhead back — instead
+// the playhead plays on from where it is and the video re-syncs at the next segment.
+const VIDEO_STALL_RATIO = 0.5
+const GLUE_SUPPRESS_MS = 800
 // Field scrub: finger-px to cross an ENTIRE gap, regardless of its duration — collapses
 // gaps like the timeline (the 10px inter-gap marker at the field's half rate ≈ 20px), so
 // scrubbing has no slowdown over long gaps.
@@ -169,6 +181,23 @@ const EMPTY_SESSIONS: BufferSession[] = []
 const sessionMediaSec = (s: BufferSession) => Math.max(0, s.mediaDurationSec ?? s.durationSec)
 const sessionStartMs = (s: BufferSession) => Date.parse(s.startedAt) + (s.mediaStartOffsetMs ?? 0)
 const sessionEndMs = (s: BufferSession) => sessionStartMs(s) + sessionMediaSec(s) * 1000
+
+// ── per-lane clip model (trim/delete carve per-lane removed ranges → no-data blocks) ──
+type Interval = { startMs: number; endMs: number }
+
+// Union of overlapping/adjacent removed ranges, so the no-data blocks stay tidy.
+function mergeIntervals(ivs: Interval[]): Interval[] {
+  if (ivs.length <= 1) return ivs
+  const sorted = [...ivs].sort((a, b) => a.startMs - b.startMs)
+  const out: Interval[] = [{ ...sorted[0]! }]
+  for (let i = 1; i < sorted.length; i++) {
+    const cur = sorted[i]!
+    const last = out[out.length - 1]!
+    if (cur.startMs <= last.endMs) last.endMs = Math.max(last.endMs, cur.endMs)
+    else out.push({ ...cur })
+  }
+  return out
+}
 
 // Dev-only video diagnostics (stripped from production by the __DEV__ guard).
 function vlog(msg: string, extra?: unknown) {
@@ -474,6 +503,41 @@ export const ClipEditScreen = () => {
     [],
   )
   const [lanesExpanded, setLanesExpanded] = useState(false)
+  // Measured height of the whole sticky bottom chrome (scroll/zoom · tools · transport),
+  // so the scroll content clears it (chrome + clock are fixed above the scroll, like the
+  // dashboard's GoBar over the clock).
+  const [chromeH, setChromeH] = useState(0)
+  // External scroll/zoom bar — BufferTimeline reports its viewport here + exposes its
+  // handlers via the ref, so the bar can live on the sticky chrome (not below a tall stack).
+  const [scrollbarState, setScrollbarState] = useState<ScrollbarState | null>(null)
+  const scrollbarApiRef = useRef<ScrollbarApi | null>(null)
+  // The bottom chrome rides UP when the clock expands (its `bottom` tracks the clock's
+  // animated height), so the shelves stay flush above the dial. Mirrors TimeScrubber's
+  // own expand timing so they move in lockstep.
+  const clockLift = useRef(new Animated.Value(CLOCK_COLLAPSED_H)).current
+  useEffect(() => {
+    Animated.timing(clockLift, {
+      toValue: clockExpanded ? CLOCK_EXPANDED_H : CLOCK_COLLAPSED_H,
+      duration: theme.motion.patterns.overlay.duration,
+      easing: theme.motion.patterns.overlay.easing,
+      useNativeDriver: false,
+    }).start()
+  }, [clockExpanded, clockLift])
+  // Clip inclusion: which lanes the gutter toggles have ON (in the clip). Default all on.
+  // Trims/deletes apply only to these; the clip span comes from their oldest/newest data.
+  const [clipLanes, setClipLanes] = useState<Set<string>>(() => new Set(RAIL_ORDER))
+  const toggleClipLane = useCallback((key: string) => {
+    setClipLanes((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }, [])
+  // Per-lane removed (trimmed / deleted) ranges → BufferTimeline renders them as no-data
+  // blocks. MOCK-side state today; Aaron's manifest persists these as the real clip edit.
+  const [removedByLane, setRemovedByLane] = useState<Record<string, Interval[]>>({})
+  const includedKeys = useMemo(() => [...clipLanes], [clipLanes])
   // Keep the selection on a CAPTURED source as the buffer resolves (don't land on a greyed one).
   useEffect(() => {
     const cur = railItems.find((i) => i.key === view)
@@ -537,11 +601,25 @@ export const ClipEditScreen = () => {
   // Wall-clock playback anchor: { wall, ph } captured when play starts; the playhead =
   // ph + (now - wall), advancing in real-time over footage until the live edge.
   const playClockRef = useRef<{ wall: number; ph: number } | null>(null)
+  // Video-stall detection for the follow glue: the video's currentTime + the wall time
+  // sampled on the previous footage tick, so a tick can tell whether the video advanced
+  // (playing) or froze (stalled) since then.
+  const lastVtRef = useRef(0)
+  const lastVtWallRef = useRef(0)
+  // While Date.now() < this, the follow glue is suppressed (a play-start / seek just
+  // happened, the video is buffering toward the target — don't let it snap the playhead
+  // back to the keyframe it landed on).
+  const glueSuppressUntilRef = useRef(0)
   // Active gap "rush": spin the clock from `from`→`to` over `hold` (≤GAP_RUSH_MS) while
   // the video holds; `live` = trailing gap (→ go live at the end vs resume next clip).
   const gapRushRef = useRef<{ startWall: number; from: number; to: number; hold: number; live: boolean } | null>(
     null,
   )
+  // Suppress the video-follow glue for a beat (after a play-start / seek). Called wherever
+  // we kick the video to a new position so the post-seek buffer can't pull the playhead back.
+  function suppressGlue() {
+    glueSuppressUntilRef.current = Date.now() + GLUE_SUPPRESS_MS
+  }
 
   const seekTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastSeekAt = useRef(0)
@@ -770,6 +848,7 @@ export const ClipEditScreen = () => {
         if (cancelled) return
         const local = localForActive(targetSecRef.current)
         if (playingRef.current) {
+          suppressGlue() // boundary swap re-seek — don't glue the playhead back to it
           try {
             const d = local - player.currentTime
             if (Math.abs(d) >= 0.05) player.seekBy(d)
@@ -845,6 +924,7 @@ export const ClipEditScreen = () => {
     wantPauseRef.current = false
     if (playing) {
       pendingSeek.current = null
+      suppressGlue() // play from the tapped spot — don't let the post-seek buffer snap back
       const g = groupForMediaSec(targetSecRef.current)
       if (g && g.index !== activeGroupIndexRef.current) {
         setActiveGroupIndex(g.index) // load effect plays on ready (playingRef)
@@ -905,25 +985,37 @@ export const ClipEditScreen = () => {
       const now = Date.now()
       if (now - lastFootage < 200) return
       lastFootage = now
-      if (!playClockRef.current) playClockRef.current = { wall: now, ph: playheadRef.current }
+      if (!playClockRef.current) {
+        playClockRef.current = { wall: now, ph: playheadRef.current }
+        // Fresh anchor → reset the stall baseline so the first tick isn't misread.
+        lastVtRef.current = player.currentTime
+        lastVtWallRef.current = now
+      }
+      // Did the video advance ~in step with real time since the last tick (it's PLAYING)
+      // or freeze (a STALL)? Only a genuine stall may glue the playhead back to the video.
+      const vtNow = player.currentTime
+      const dtWall = now - lastVtWallRef.current
+      const vtAdvanced = vtNow - lastVtRef.current
+      lastVtRef.current = vtNow
+      lastVtWallRef.current = now
+      const videoStalled = dtWall > 0 && vtAdvanced * 1000 < dtWall * VIDEO_STALL_RATIO
+      // Suppressed right after a play-start/seek (post-seek buffer) AND only while the video
+      // is genuinely stalled — so a fresh tap-seek that landed just behind a keyframe plays
+      // ON from the tap instead of snapping the playhead BACK to the keyframe.
+      const glueAllowed = now >= glueSuppressUntilRef.current && videoStalled
       // VIDEO-AUTHORITATIVE in-session: glue the wall-clock anchor to where the video
-      // ACTUALLY is, so the playhead FOLLOWS the video rather than the video being
-      // seeked to the playhead. That removes the corrective seek entirely during
-      // smooth playback (it turned every rebuffer stall into a forward skip), and a
-      // stall now just holds the playhead with the video (no run-ahead, no snap-back).
-      // Released within ~0.6s of a session end so the wall clock can still advance into
-      // the gap and fire the gap-rush + the one intended clip-to-clip skip.
+      // ACTUALLY is, so the playhead FOLLOWS the video rather than the video being seeked
+      // to the playhead. During a real stall this holds the playhead with the video (no
+      // run-ahead, no forward-skip-on-resume). Released within ~0.6s of a session end so
+      // the wall clock can still advance into the gap and fire the gap-rush + clip skip.
       const ag = playGroupsRef.current[activeGroupIndexRef.current]
-      if (ag && player.currentTime > 0.1) {
-        const vGlobal = ag.startSec + player.currentTime
+      if (glueAllowed && ag && vtNow > 0.1) {
+        const vGlobal = ag.startSec + vtNow
         const sess = camCumRef.current.find((cc) => vGlobal >= cc.mediaStart && vGlobal < cc.mediaEnd)
         if (sess && sess.mediaEnd - vGlobal > 0.6) {
           const vWall = mediaSecToPlayhead(vGlobal)
-          // Only FOLLOW the video while it's near the playhead — a genuine in-session
-          // stall (the case this glue fixes). When it's far — a tap-seek just moved the
-          // playhead, or the collapsed-gap VOD ran the video ahead into the next session
-          // — do NOT glue: that lets the tap stick (until its seek lands) and lets the
-          // wall clock advance into the gap and fire the gap-rush.
+          // Stay within the drift bound so a cross-session run-ahead (collapsed-gap VOD)
+          // still doesn't glue.
           const cur = playClockRef.current
           const curPh = cur.ph + (now - cur.wall)
           if (vWall != null && vWall < now - 300 && Math.abs(vWall - curPh) < VIDEO_FOLLOW_MAX_DRIFT_MS) {
@@ -1256,6 +1348,7 @@ export const ClipEditScreen = () => {
     if (playingRef.current) {
       playClockRef.current = null
       gapRushRef.current = null
+      suppressGlue() // resume from the tapped spot, not the keyframe the video lands on
       // Seek the VIDEO to the new instant too — otherwise the video-authoritative loop
       // reads the video's old currentTime next tick and snaps the playhead back. (The
       // loop's proximity guard ignores the stale position until this seek lands.)
@@ -1340,9 +1433,11 @@ export const ClipEditScreen = () => {
     // kind any covered session captured — the backend resolves the sessions and
     // copies/transcodes the in-window footage. (No more user-toggled save-set.)
     const coveredSessions = sessions.filter((s) => sessionStartMs(s) < outMs && sessionEndMs(s) > inMs)
+    // Only the toggled-on lanes go into the clip. (The per-lane removed ranges in
+    // `removedByLane` are the next thing for Aaron's manifest to persist.)
     const kinds = Array.from(
       new Set(coveredSessions.length ? coveredSessions.flatMap((s) => s.kinds) : (sessionAtPlayhead?.kinds ?? [])),
-    )
+    ).filter((k) => clipLanes.has(k))
     if (!kinds.length) {
       Alert.alert('Nothing to save', 'No captured footage in the selected range.')
       return
@@ -1397,10 +1492,14 @@ export const ClipEditScreen = () => {
   // routes through the existing in-session saveClip. Delete / trim are destructive buffer
   // mutations — the confirm + UX live here; the actual removal needs the backend buffer
   // endpoint (Aaron). The bracket is the selection.
+  // Create a clip = bracket the single session (clip) the playhead is over — its exact
+  // start/end. (Not the whole toggled-lanes extent.) No-op over a gap.
   function selectCurrentClip() {
     if (!sessionAtPlayhead) return
     setBracket({ inMs: sessionStartMs(sessionAtPlayhead), outMs: sessionEndMs(sessionAtPlayhead) })
   }
+  // In point lands EXACTLY on the playhead. If it ends up after the out, push the out to
+  // just after the new in (min-length clip).
   function setInPoint() {
     const inMs = playheadMs
     setBracket((b) => {
@@ -1418,28 +1517,45 @@ export const ClipEditScreen = () => {
       return { inMs, outMs }
     })
   }
+  // Mark a removed range on every TOGGLED-ON lane (per-lane, so a later edit with a
+  // different toggle set produces different data/no-data blocks). MOCK today; the real
+  // destructive buffer mutation is Aaron's manifest. Different-set edits accumulate.
+  function markRemoved(ranges: Interval[]) {
+    if (!ranges.length) return
+    setRemovedByLane((prev) => {
+      const next = { ...prev }
+      for (const key of clipLanes) next[key] = mergeIntervals([...(next[key] ?? []), ...ranges])
+      return next
+    })
+  }
   function deleteSelected() {
     if (!bracket) return
     Alert.alert(
       'Delete footage?',
-      'Permanently delete everything between the in and out points, leaving a gap. This can’t be undone.',
+      'Delete everything between the in and out points on the toggled-on lanes, leaving a gap.',
       [
         { text: 'Cancel', style: 'cancel' },
-        // TODO(Aaron): real buffer mutation (remove the [in,out] segments → gap). The
-        // confirm + UX are wired; the destructive op needs the backend buffer endpoint.
-        { text: 'Delete', style: 'destructive', onPress: () => setBracket(null) },
+        { text: 'Delete', style: 'destructive', onPress: () => markRemoved([{ startMs: bracket.inMs, endMs: bracket.outMs }]) },
       ],
     )
   }
   function trimSelected() {
-    if (!bracket || !sessionAtPlayhead) return
+    if (!bracket) return
     Alert.alert(
       'Trim clip?',
-      'Permanently delete everything outside the in and out points in this clip. This can’t be undone.',
+      'Delete everything outside the in and out points on the toggled-on lanes.',
       [
         { text: 'Cancel', style: 'cancel' },
-        // TODO(Aaron): real buffer mutation (delete this clip's footage outside [in,out]).
-        { text: 'Trim', style: 'destructive', onPress: () => {} },
+        {
+          text: 'Trim',
+          style: 'destructive',
+          onPress: () => {
+            const ranges: Interval[] = []
+            if (bracket.inMs > bufferStartMs) ranges.push({ startMs: bufferStartMs, endMs: bracket.inMs })
+            if (bracket.outMs < bufferEndMs) ranges.push({ startMs: bracket.outMs, endMs: bufferEndMs })
+            markRemoved(ranges)
+          },
+        },
       ],
     )
   }
@@ -1453,7 +1569,7 @@ export const ClipEditScreen = () => {
       iconName: 'scissors',
       label: 'Trim selected',
       onPress: trimSelected,
-      disabled: !bracket || !sessionAtPlayhead,
+      disabled: !bracket,
       tone: 'warn',
     },
     { key: 'save', iconName: 'save', label: 'Save clip', onPress: () => setSaveSheetOpen(true), disabled: !canSave },
@@ -1464,7 +1580,11 @@ export const ClipEditScreen = () => {
     <View style={styles.root}>
     <ScreenScroll
       header={<ScreenHeader title="Clip editor" />}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[
+        styles.content,
+        // Editor: clear the sticky bottom chrome (its collapsed `bottom` + measured height).
+        page === 'editor' && { paddingBottom: theme.spacing.xxxl + CLOCK_COLLAPSED_H + chromeH },
+      ]}
       scrollEnabled={!clockExpanded}
       refreshControl={
         <RefreshControl
@@ -1555,46 +1675,14 @@ export const ClipEditScreen = () => {
                 onScrubStart={handleScrubStart}
                 onScrubEnd={handleScrubEnd}
               />
-              {/* Left: source view switch. Right: clip-editing tools. */}
-              <View style={styles.toolRail} pointerEvents="box-none">
-                <ClipToolRail tools={clipTools} />
-              </View>
+              {/* Source view switch on the left edge of the field. The clip-editing tools
+                  moved to a sticky shelf above the transport (below). */}
               {railItems.length > 1 && (
                 <View style={styles.sourceRail} pointerEvents="box-none">
                   <SourceRail sources={railItems} value={view} onChange={setView} />
                 </View>
               )}
             </View>
-          </View>
-
-          <View onTouchStart={collapseClock}>
-            <BufferTransport
-              playing={playing}
-              onToStart={() => jumpTo(hasLeadingGap ? leadStartMs : bufferStartMs)}
-              onPrevClip={() => jumpTo(prevClipTarget())}
-              onFrameBack={() => frameStep(-1)}
-              onFrameBackHold={frameBackHold}
-              onTogglePlay={() => {
-                // If recovery is exhausted (field shows the poster), play re-arms a
-                // fresh recovery attempt instead of toggling.
-                if (playerError) {
-                  healAttemptsRef.current = 0
-                  setPlayerError(false)
-                  recoverPlayer('manual retry')
-                  return
-                }
-                setPlaying((p) => !p)
-                recenterTimeline()
-              }}
-              onFrameForward={() => frameStep(1)}
-              onFrameForwardHold={frameForwardHold}
-              onNextClip={() => jumpTo(nextClipTarget() ?? Date.now())}
-              onToEnd={() => jumpTo(Date.now())}
-              canPrev={canPrev}
-              canNext={canNext}
-              canFrameBack={canFrameBack}
-              canFrameForward={canFrameForward}
-            />
           </View>
 
           <View style={styles.belowField} onTouchStart={collapseClock}>
@@ -1614,7 +1702,7 @@ export const ClipEditScreen = () => {
               onSeek={(ms) => jumpTo(ms)}
               onScrubStart={handleScrubStart}
               onScrubEnd={handleScrubEnd}
-              onBracketChange={setBracket}
+              onBracketChange={(b) => setBracket(b.outMs - b.inMs <= 0 ? null : b)}
               onZoomChange={(ppm) => {
                 timelinePxPerMsRef.current = ppm
               }}
@@ -1623,8 +1711,13 @@ export const ClipEditScreen = () => {
               lanes={timelineLanes}
               selectedKey={view}
               expanded={lanesExpanded}
-              onSelectLane={setView}
               onToggleExpand={() => setLanesExpanded((v) => !v)}
+              includedKeys={includedKeys}
+              onToggleLane={toggleClipLane}
+              removedByLane={removedByLane}
+              externalScrollbar
+              onScrollbarState={setScrollbarState}
+              scrollbarApiRef={scrollbarApiRef}
             />
             {/* All editing controls live in the field's left ClipToolRail; naming
                 happens in the SaveClipSheet when Save is tapped. */}
@@ -1676,6 +1769,59 @@ export const ClipEditScreen = () => {
         onCancel={() => setSaveSheetOpen(false)}
       />
     </ScreenScroll>
+
+      {/* Sticky bottom chrome — three stacked shelves (scroll/zoom · clip tools ·
+          transport), all fixed above the scroll. The whole stack's `bottom` tracks the
+          clock's animated height, so it rides UP flush above the dial when the clock
+          expands (instead of being hidden). Editor page only. */}
+      {page === 'editor' && (
+        <Animated.View
+          style={[styles.bottomChrome, { bottom: clockLift }]}
+          onLayout={(e) => setChromeH(e.nativeEvent.layout.height)}
+        >
+          {/* Scroll / zoom bar — extracted from the timeline so it stays reachable above
+              a tall expanded lane stack. */}
+          <View style={[styles.shelf, styles.shelfTight]}>
+            <TimelineScrollbarShelf state={scrollbarState} api={scrollbarApiRef} />
+          </View>
+
+          {/* Clip-editing tools. */}
+          <View style={[styles.shelf, styles.shelfTight]}>
+            <ClipToolRail tools={clipTools} variant="shelf" />
+          </View>
+
+          {/* Transport — the main bottom shelf (dashboard GoBar pattern). */}
+          <View style={styles.shelf}>
+            <BufferTransport
+              playing={playing}
+              onToStart={() => jumpTo(hasLeadingGap ? leadStartMs : bufferStartMs)}
+              onPrevClip={() => jumpTo(prevClipTarget())}
+              onFrameBack={() => frameStep(-1)}
+              onFrameBackHold={frameBackHold}
+              onTogglePlay={() => {
+                // If recovery is exhausted (field shows the poster), play re-arms a
+                // fresh recovery attempt instead of toggling.
+                if (playerError) {
+                  healAttemptsRef.current = 0
+                  setPlayerError(false)
+                  recoverPlayer('manual retry')
+                  return
+                }
+                setPlaying((p) => !p)
+                recenterTimeline()
+              }}
+              onFrameForward={() => frameStep(1)}
+              onFrameForwardHold={frameForwardHold}
+              onNextClip={() => jumpTo(nextClipTarget() ?? Date.now())}
+              onToEnd={() => jumpTo(Date.now())}
+              canPrev={canPrev}
+              canNext={canNext}
+              canFrameBack={canFrameBack}
+              canFrameForward={canFrameForward}
+            />
+          </View>
+        </Animated.View>
+      )}
 
       {/* WRLD clock — docked flush above the app footer (the predictable
           cross-screen pattern). Interactive here: scrubbing the dial drives the
@@ -1750,6 +1896,29 @@ const styles = StyleSheet.create({
   // WRLD clock dock — flush above the app footer, spanning full width. The
   // interactive dial expands upward over the editor, so it's bottom-anchored.
   clockDock: { position: 'absolute', left: 0, right: 0, bottom: 0 },
+  // Sticky bottom chrome container — holds the stacked shelves; its `bottom` is animated
+  // (inline) to track the clock height so the whole stack rides up when the clock expands.
+  bottomChrome: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+  },
+  // One shelf tier (scroll/zoom · tools · transport). Stacks in the chrome column; matches
+  // the dashboard/stream bottom-shelf look (paper, top border).
+  shelf: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.sm,
+    paddingBottom: theme.spacing.sm,
+    backgroundColor: theme.colors.bg.primary,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border.subtle,
+  },
+  // Tighter vertical padding for the secondary tiers (tools + scroll/zoom) so the chrome
+  // stays compact.
+  shelfTight: {
+    paddingTop: theme.spacing.xs,
+    paddingBottom: theme.spacing.xs,
+  },
   content: {
     // Extra bottom clearance so the Save button isn't hidden behind the docked
     // clock's collapsed band.
@@ -1765,15 +1934,7 @@ const styles = StyleSheet.create({
   fieldWrap: {
     position: 'relative',
   },
-  // Source switcher on the left edge, clip-editing tools on the right — both centred.
-  toolRail: {
-    position: 'absolute',
-    right: theme.spacing.sm,
-    top: 0,
-    bottom: 0,
-    justifyContent: 'center',
-    alignItems: 'flex-end',
-  },
+  // Source switcher on the left edge of the field (clip-editing tools moved to a bottom shelf).
   sourceRail: {
     position: 'absolute',
     left: theme.spacing.sm,

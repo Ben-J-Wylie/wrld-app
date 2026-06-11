@@ -3097,12 +3097,16 @@ clips appear as read-only hatched bands. No date/axis row
   `‹zoom-out` button left of the scrollbar and a `zoom-in›` right of it (the discrete
   `SegmentedToggle` of All/Days/Hours/Min/Sec is **removed**). Zoom is now continuous
   `pxPerMs` from `fit` (whole buffer) up to a **frame-level max** (`FRAME_MAX_PXPERMS` ≈
-  a 30fps frame ~12px wide). **Tap** = one step (`× / ÷ ZOOM_TAP_STEP` 1.6); **press-and-
-  hold** = a smooth ramp across the **whole** range in `ZOOM_HOLD_MS` (5s) *regardless of
-  buffer size* — a constant rate in log-space (`ln(max/min)/5s`), driven by a
-  `requestAnimationFrame` loop that re-centres on the playhead each frame. Buttons disable
-  at the min/max ends. Pinch is unchanged; both report up via `onZoomChange`. (`ZoomButton`
-  uses the same tap-vs-hold shape as the transport's frame buttons.)
+  a 30fps frame ~12px wide). **Tap** = one step (`× / ÷ ZOOM_TAP_STEP` 1.6), but **RAMPED
+  smoothly on the transform** (scaleX/translateX, like pinch/hold) rather than an instant
+  re-layout — so there's no mid-zoom filmstrip re-tile (the "jump") and it reads buttery;
+  rapid taps **accumulate** into the target and the ramp chases it (2026-06-11). **Press-and-
+  hold** = a smooth ramp across the **whole** range in `ZOOM_HOLD_MS` (5s). Both are **pinned
+  on the viewport-centre instant** the whole way (the same anchor maths pinch uses), so the
+  centre stays locked. A manual zoom/scroll clears `pinnedLiveRef` so the **live-edge
+  auto-follow can't yank the scroll back** (it re-arms once the playhead leaves the live
+  window). Buttons disable at the min/max ends. (`ZoomButton` uses the same tap-vs-hold
+  shape as the transport's frame buttons.)
 - **Stateful edge indicators (`BufferEdge`, 15px) replace the head/tail `GapMarker`s.**
   Idle → darkest token (`text.primary`); **head evicting** (buffer full) → `accent` with
   a **right-edge zigzag**; **tail live** (streaming) → `accent` with a **left-edge
@@ -3127,19 +3131,41 @@ clips appear as read-only hatched bands. No date/axis row
   layout (`lane height never touches the time math`).
 - **Pluggable fills.** The `camera` lane renders the real film-frame filmstrip; every other
   `kind` renders via **`TimelineLaneFill`** (audio→waveform, telemetry→trace, location→
-  trail, chat→ticks, identity/screen/torch→flat+glyph). Shared overlays (gaps, head/tail
-  `BufferEdge`, saved bands, `ClipBracket`, playhead) span the **full stack** so alignment
-  is structural.
-- **Collapse / expand.** Collapsed → only the `selectedKey` lane at full height; expanded →
-  all lanes stacked compact (34px) behind a fixed **source-icon gutter** (tap an icon to
-  select a lane). A header shows the selected source / `All sources · N` + the toggle.
-  Non-selected lanes dim to 0.5; the selected gutter cell tints `accent.surface`.
-- **One shared selection.** `selectedKey` ties the lanes to the buffer-viewer rail + field
-  (`ClipEditScreen` passes `view`), so picking a source in the rail, the gutter, or the
-  viewer all move together.
-- **Backward compatible** — omit `lanes` (or pass one) → the classic single track, byte-for-
-  byte. `TimelineLaneFill` is memoized so a scrub (frequent re-render) doesn't recompute the
-  stack — only a zoom (width change) does.
+  trail, chat→ticks, identity/screen/torch→flat+glyph). The per-lane content — segment
+  fills, the lighter **clip-gap** markers, and the head/tail **`BufferEdge`** indicators —
+  is drawn **inside each lane box**, so the distinct inter-lane gap breaks them too (and the
+  gap markers' lighter fill shows over the lane rather than behind it). Only the
+  clip-level **selection overlays** (saved bands, `ClipBracket`, playhead) span the full
+  stack, so alignment is structural.
+- **Collapse / expand — identical treatment.** Collapsed → only the `selectedKey` (viewed)
+  lane at full height; expanded → all lanes stacked compact (34px). **Both** render the same
+  way: a **detached source-icon gutter** on the left (no box/fill — the icons float over the
+  lighter page background, separated from the track by a gap) and each lane as its **own
+  bordered box** (top + bottom `border.strong`, `panelHi` fill) with a **distinct 4px gap**
+  between lanes showing the lighter `bg.primary` through. The only chrome is a small
+  right-aligned expand/collapse toggle (no title — the gutter icon names the source in both
+  states).
+- **Two separate roles (decided 2026-06-10).** The buffer-viewer **rail** picks the single
+  source you VIEW (`selectedKey`, `ClipEditScreen` passes `view`; its gutter icon carries a
+  subtle "viewed" pill). The **gutter icons are independent on/off toggles for clip
+  inclusion** (`includedKeys` / `onToggleLane`): accent = in the clip, subtle = out; an
+  excluded lane dims to ~0.3 (footage still faintly visible). A lane can be viewed without
+  being in the clip, and vice-versa.
+- **Per-lane edits → no-data blocks.** Trims/deletes apply only to the toggled-on lanes and
+  are recorded per lane (`removedByLane`); each removed range renders as a **no-data block**
+  (a clip-gap-style lighter break) over that lane's fill — so an edited stack shows lanes
+  with blocks of data and blocks of no data. (The `ClipEditScreen` "Select current clip"
+  tool brackets the single session under the playhead; set-in/out land exactly on the
+  playhead and shift the opposite point to keep a minimum-length clip.)
+- **Backward compatible** — omit `lanes` (or pass one) → the classic single track; omit
+  `includedKeys` → all lanes treated as in the clip. `TimelineLaneFill` is memoized so a
+  scrub (frequent re-render) doesn't recompute the stack — only a zoom (width change) does.
+- **External scroll/zoom bar (2026-06-10).** `externalScrollbar` suppresses the internal
+  zoom/scrollbar row; the timeline instead reports its viewport via `onScrollbarState` and
+  exposes its handlers through `scrollbarApiRef`, and the host renders the bar with the
+  exported **`TimelineScrollbarShelf`**. The clip editor uses this to lift the bar onto its
+  sticky bottom chrome (scroll/zoom · tools · transport, above the clock) so it stays
+  reachable above a tall expanded lane stack instead of scrolling away below it.
 
 ---
 
@@ -3187,11 +3213,13 @@ never scale — only the filmstrip segments do).
 - **Proposed props:** `inMs`, `outMs`, `pxPerMs`, `onChangeIn`, `onChangeOut`, `onMove`, `blocked?`
 
 **Mock says (Frames 2–4):** 2px accent frame with accent-tinted fill; left edge =
-in-point, right edge = out-point. **Slim "D" grip handles (2026-06-10)** — flat on the
-OUTER side (aligned with the frame's thin precision edge), bulging inward at the vertical
-middle, thin top + bottom (`BULB_W 7 × BULB_H 18`, inner corners rounded). Replaced the
-fat 16px solid blocks; the 16px touch column stays (transparent) for the gesture.
-**No time readout on the selection (removed 2026-06-10)** — the only pill is the
+in-point, right edge = out-point. **Slim "D" grip handles** — `BULB_W 7 × BULB_H 18`,
+flat top + bottom. **Handles sit OUTSIDE the frame, flanking the crop, bulging OUTWARD
+with a flat inner side flush against the frame's precision edge (2026-06-10)** — moving
+them out of the frame means the selection has **no min width**: it can be any width and
+**collapse entirely** (drag a handle to meet the other → the host clears the bracket).
+The 26px touch columns are absolute siblings just outside each edge; the whole frame is
+the center move-zone. **No time readout on the selection** — the only pill is the
 transient "Blocked · saved region" warning when an edge drag clamps at a saved region.
 
 **Proposed behavior:** Drag a handle to set in/out; press-drag the center zone
@@ -3425,13 +3453,15 @@ dashboard **Chat** flag (CHAT / NO CHAT multistate, same row shape as Identity/L
 
 - **Tier:** feature (composes `Pressable` + `Icon`)
 - **Location:** `src/components/features/clip/ClipToolRail.tsx` *(built 2026-06-10)*
-- **Variants:** `default` · **Sizes:** 30px icon buttons in a translucent-ink column (pairs with `SourceRail` on the opposite edge)
+- **Variants:** `rail` (default — 30px icons in a translucent-ink **column** overlaid on the field edge) · `shelf` (horizontal **row** of light 40×32 icon buttons on the page background — used on the clip editor's sticky bottom tools shelf)
 - **States:** per-item default / **warn** (destructive — accent icon) / disabled (dimmed, inert)
-- **Props:** `tools` (`ClipToolItem[]` = `{ key, iconName, label, onPress, disabled?, tone? }`), `style?`
+- **Props:** `tools` (`ClipToolItem[]` = `{ key, iconName, label, onPress, disabled?, tone? }`), `variant?` (`rail` | `shelf`), `style?`
 
 **Code does:** An **action** rail (vs `SourceRail`'s view switch) — the buffer editor's
-clip tools as a left-edge column: **select current clip · set in · set out · delete ·
-trim · save · clear (✕)**. Each button fires `onPress`; destructive tools (`tone: 'warn'`)
+clip tools: **select current clip · set in · set out · delete · trim · save · clear (✕)**.
+As of 2026-06-10 it renders on the editor's **sticky bottom tools shelf** (`variant="shelf"`,
+above the transport shelf + clock); the `rail` variant remains for an over-field column.
+Each button fires `onPress`; destructive tools (`tone: 'warn'`)
 tint the icon accent; disabled tools grey out. The parent (`ClipEditScreen`) owns the
 in/out bracket logic: select = bracket to the clip under the playhead; set-in/out = move
 that edge to the playhead (out-before-in pulls the in back); delete/trim = confirm →

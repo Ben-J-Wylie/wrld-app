@@ -17,17 +17,17 @@ import { GestureDetector, Gesture } from 'react-native-gesture-handler'
 import { runOnJS } from 'react-native-reanimated'
 import { theme } from '@/tokens/theme'
 
-// Visual stays a thin hairline; the GRAB target is deliberately much larger —
-// a taller track for vertical room, a finger-wide minimum thumb, and generous
-// hitSlop around the thin thumb so a thin scrollbar is still easy to catch.
+// Visual stays a thin hairline; the GRAB target is deliberately much larger — the
+// WHOLE track width is the hit target (drag anywhere on the bar to pan, not just the
+// thumb), with a finger-wide minimum thumb and a tall track for vertical room.
 const MIN_THUMB = 44
 const TRACK_H = 34
 const RAIL_H = 4
 const THUMB_H = 8
-// Touch padding around the (thin) thumb. Vertical is sized to fill the track
-// (THUMB_H + 2×SLOP ≈ TRACK_H) so the whole bar height is grabbable without
-// spilling into the zoom toggle below; horizontal makes the thumb ends catchable.
-const THUMB_HIT_SLOP = { top: 13, bottom: 13, left: 12, right: 12 }
+// A little vertical padding so the bar is easy to catch above/below the thin track;
+// no horizontal slop (the full-width track already spans the grab area, and slop would
+// spill into the flanking zoom buttons).
+const TRACK_HIT_SLOP = { top: 8, bottom: 8 }
 
 type Props = {
   contentWidth: number
@@ -68,15 +68,17 @@ export function TimelineScrollbar({ contentWidth, viewport, scrollOffset, onScro
     const nx = Math.max(0, Math.min(mtx, startThumbX.current + translationX))
     onScrollToRef.current((nx / mtx) * maxScrollRef.current)
   }
-  // RNGH Pan (not PanResponder) so a horizontal thumb drag claims the gesture and the
-  // parent vertical ScrollView stays put — same arbitration as the timeline scrub and
-  // the buffer field: `activeOffsetX` claims horizontal movement, `failOffsetY` lets a
-  // vertical drag fall through to the page scroll. The enlarged grab target rides on
-  // the gesture's hitSlop (bounded by the track height, so it works on Android too).
+  // RNGH Pan (not PanResponder) so a horizontal drag claims the gesture and the parent
+  // vertical ScrollView stays put — same arbitration as the timeline scrub and the buffer
+  // field: `activeOffsetX` claims horizontal movement, `failOffsetY` lets a vertical drag
+  // fall through to the page scroll. The gesture wraps the WHOLE track, so the entire bar
+  // width is the grab target; the drag anchors at the thumb's current position on begin
+  // (no scroll side-effect until horizontal intent is confirmed, so a vertical page-scroll
+  // touch on the bar doesn't jump it).
   const pan = Gesture.Pan()
     .activeOffsetX([-8, 8])
     .failOffsetY([-12, 12])
-    .hitSlop(THUMB_HIT_SLOP)
+    .hitSlop(TRACK_HIT_SLOP)
     .onBegin(() => {
       'worklet'
       runOnJS(onGrab)()
@@ -87,12 +89,12 @@ export function TimelineScrollbar({ contentWidth, viewport, scrollOffset, onScro
     })
 
   return (
-    <View
-      style={[styles.track, style]}
-      onLayout={(e) => setBarW(e.nativeEvent.layout.width)}
-    >
-      <View style={styles.rail} />
-      <GestureDetector gesture={pan}>
+    <GestureDetector gesture={pan}>
+      <View
+        style={[styles.track, style]}
+        onLayout={(e) => setBarW(e.nativeEvent.layout.width)}
+      >
+        <View style={styles.rail} />
         <View
           style={[
             styles.thumb,
@@ -100,8 +102,8 @@ export function TimelineScrollbar({ contentWidth, viewport, scrollOffset, onScro
             !scrollable && styles.thumbInactive,
           ]}
         />
-      </GestureDetector>
-    </View>
+      </View>
+    </GestureDetector>
   )
 }
 

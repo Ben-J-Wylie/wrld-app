@@ -29,19 +29,28 @@ const DISABLED_ICON = 'rgba(236,230,214,0.30)'
 
 type Props = {
   tools: ClipToolItem[]
+  // 'rail' (default) — the dark translucent ink COLUMN overlaid on the field edge.
+  // 'shelf' — a horizontal, transparent ROW of light icon buttons for a bottom shelf
+  // (sits on the page background; matches BufferTransport's row).
+  variant?: 'rail' | 'shelf'
   style?: StyleProp<ViewStyle>
 }
 
-export function ClipToolRail({ tools, style }: Props) {
+export function ClipToolRail({ tools, variant = 'rail', style }: Props) {
   if (tools.length === 0) return null
+  const shelf = variant === 'shelf'
   return (
-    <View style={[styles.rail, style]}>
+    <View style={[shelf ? styles.shelf : styles.rail, style]}>
       {tools.map((t) => {
         const color = t.disabled
-          ? DISABLED_ICON
+          ? shelf
+            ? theme.colors.text.subtle
+            : DISABLED_ICON
           : t.tone === 'warn'
             ? theme.colors.accent.default
-            : theme.colors.text.inverse
+            : shelf
+              ? theme.colors.text.primary
+              : theme.colors.text.inverse
         return (
           <Pressable
             key={t.key}
@@ -52,9 +61,9 @@ export function ClipToolRail({ tools, style }: Props) {
             accessibilityRole="button"
             accessibilityLabel={t.label}
             accessibilityState={{ disabled: !!t.disabled }}
-            style={styles.btn}
+            style={shelf ? styles.btnShelf : styles.btn}
           >
-            <Icon name={t.iconName} size="sm" color={color} />
+            <Icon name={t.iconName} size={shelf ? 'md' : 'sm'} color={color} />
           </Pressable>
         )
       })}
@@ -75,6 +84,20 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // Horizontal shelf row — light icons on the page background, sized to match the
+  // BufferTransport step buttons so the two stacked shelves read as a set.
+  shelf: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: theme.spacing.sm,
+  },
+  btnShelf: {
+    width: 40,
+    height: 32,
     alignItems: 'center',
     justifyContent: 'center',
   },

@@ -2626,6 +2626,58 @@ decision-log entry).
 
 ---
 
+## Updates — June 2026 (Clip editor: chat source · stacked per-source timeline · bottom-shelf chrome)
+
+Big clip-editor pass on `design`, all pure JS (hot-reloads, no native rebuild). DESIGN.md
+Section 3 + galleries updated throughout. Highlights:
+
+- **Chat source.** Dashboard gains a **Chat** row under Location (a flag — `CHAT / NO CHAT`
+  multistate, same shape as Identity/Location — persisted in `captureConfig.chat`). The
+  clip editor's source rail gains **Chat**; a new **`SourceChatLog`** feature renders the
+  chat placeholder in the buffer viewer. New `FeedKind 'chat'` (glyph `message-circle`).
+- **Stacked per-source timeline (`BufferTimeline` lanes).** One timeline per source, all
+  sharing the **identical** segment/gap geometry (a clip is a recording duration → aligned
+  gaps); only each segment's **fill** differs by source — new **`TimelineLaneFill`** (audio→
+  waveform, telemetry→trace, location→trail, chat→ticks, flat→glyph; camera keeps the real
+  filmstrip). **Expand** = all lanes stacked (detached source-icon gutter, per-lane bordered
+  boxes, 4px gaps); **collapse** = just the viewed lane — both look the same. Per-lane clip
+  gaps + head/tail `BufferEdge`s render **inside each lane** so the inter-lane gap breaks
+  them too.
+- **Two roles (decided):** the buffer-viewer **rail** picks the single VIEWED source
+  (`selectedKey`); the **gutter icons are on/off toggles for clip inclusion**
+  (`includedKeys` / `onToggleLane`). Trims/deletes apply only to toggled-on lanes, recorded
+  per lane (`removedByLane`) and rendered as **no-data blocks** (shown for in- AND out-of-
+  clip lanes). Excluded lanes dim. **MOCK seam** — the real per-lane removed ranges +
+  destructive buffer mutation are Aaron's manifest.
+- **Clip tools (`ClipBracket` / tools).** Select = bracket the session under the playhead;
+  set-in/out land exactly on the playhead and shove the opposite point to keep a min clip.
+  **Bracket can now collapse entirely** — grip bulbs moved **OUTSIDE** the frame (bulge out,
+  flat inner side), so there's no min-width floor; dragging a handle to meet the other clears
+  the bracket.
+- **Bottom-shelf chrome.** The clip editor's bottom is now a single animated container with
+  three stacked sticky shelves — **scroll/zoom · clip-tools · transport** — above the clock
+  (the dashboard/stream shelf-over-clock pattern). The whole stack's `bottom` tracks the
+  clock's animated height, so it **rides up when the clock expands** (same timing as
+  `TimeScrubber`). The scroll/zoom bar was **extracted** from `BufferTimeline`
+  (`externalScrollbar` + `onScrollbarState` + `scrollbarApiRef` → the exported
+  `TimelineScrollbarShelf`) so it stays reachable above a tall expanded lane stack.
+  `ClipToolRail` gained a horizontal **`shelf`** variant; `TimelineScrollbar`'s grab target
+  is now the whole track.
+- **Buttery, centre-locked zoom.** Tap-zoom now **ramps smoothly on the transform** (no
+  instant re-layout / filmstrip re-tile = the "jump"), pinned on the viewport-centre instant,
+  rapid taps accumulate. A manual zoom/scroll clears `pinnedLiveRef` so the **live-edge
+  auto-follow can't yank the scroll back** (re-arms when the playhead leaves the live window).
+- **Playback tap-then-play fix.** Tapping a new playhead position and playing no longer
+  jumps back to the keyframe — the video-follow glue only holds the playhead during a genuine
+  stall (+ a brief post-seek suppression), so it plays on from the tapped instant.
+
+> **Seam note:** the 2026-06-06 scaffold crossing into `screens/` (Ben owns `primitives/`/
+> `features/`/`sections/` + DESIGN.md; Aaron owns `screens/`/`hooks/`/`api/`) still holds —
+> the `ClipEditScreen` edits here are the agreed Ben-scaffold; Aaron owns the real data
+> wiring (the manifest, per-lane coverage/removed ranges, save/delete/publish).
+
+---
+
 ## Pro analytics dashboard — port from wrld-web (DONE, June 2026)
 
 > **Shipped.** The plan below is preserved for context; see "What was built"
