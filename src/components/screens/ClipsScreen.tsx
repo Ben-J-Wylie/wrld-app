@@ -44,6 +44,11 @@ const MICRO_GAP_PX = 5 // spacing between near-adjacent clips (no marker)
 const LONGEST_DEFAULT_PX = 130 // at the default zoom, the longest clip is about this tall
 const MAX_PX_PER_MS = 0.2 // ~1s ≈ 200px at full zoom
 
+// Dev-only trace to the Metro terminal for diagnosing drag-to-save (stripped in prod).
+const slog = (...args: unknown[]) => {
+  if (__DEV__) console.log('[clips-save]', ...args)
+}
+
 const sessionStartMs = (s: BufferSession) => Date.parse(s.startedAt) + (s.mediaStartOffsetMs ?? 0)
 // `?? 0` matters: a brand-new live session can have BOTH duration fields undefined.
 const sessionEndMs = (s: BufferSession) => sessionStartMs(s) + (s.mediaDurationSec ?? s.durationSec ?? 0) * 1000
@@ -120,6 +125,10 @@ export const ClipsScreen = () => {
   const qc = useQueryClient()
   const { data: buffer } = useBuffer(!!isSignedIn, isLive)
   const { data: savedData } = useSavedClips(!!isSignedIn)
+  // Trace what the saved-clip list returns (does a just-saved clip show up?).
+  useEffect(() => {
+    slog('GET /buffer/me/clips →', savedData?.length ?? 0, 'saved clip(s)', (savedData ?? []).map((c) => c.id))
+  }, [savedData])
 
   // ── normalise both data sources into time-positioned lane clips ──
   // Clips are labelled by the stream TITLE; the start time + duration live on the
@@ -178,17 +187,21 @@ export const ClipsScreen = () => {
   // synchronous server-side (returns once the clip is `ready`), so on success the
   // clip appears on the next refetch. Surface failures (quota / no-footage / promote
   // error) instead of swallowing them — silent failure is why a save "won't stick".
+  // `[clips-save]` traces print to the Metro terminal (dev only) for diagnosing.
   const saveClip = useCallback(
     (clip: LaneClip) => {
+      const payload = { startAtMs: Math.round(clip.startMs), endAtMs: Math.round(clip.endMs), name: clip.label, kinds: [] as string[] }
+      slog('POST /buffer/me/clips →', payload, `(window ${Math.round((payload.endAtMs - payload.startAtMs) / 1000)}s)`)
       bufferApi
-        .saveClip({ startAtMs: Math.round(clip.startMs), endAtMs: Math.round(clip.endMs), name: clip.label, kinds: [] })
-        .then(() => refetchSavedSoon())
+        .saveClip(payload)
+        .then((res) => {
+          slog('SAVE OK → clipId', res.clipId, '— refetching saved lane')
+          refetchSavedSoon()
+        })
         .catch((err: unknown) => {
-          const msg =
-            (err as { response?: { data?: { message?: string; error?: string } } })?.response?.data?.message ??
-            (err as { response?: { data?: { message?: string; error?: string } } })?.response?.data?.error ??
-            (err as { message?: string })?.message ??
-            'Could not save clip'
+          const e = err as { response?: { status?: number; data?: { message?: string; error?: string } }; message?: string }
+          slog('SAVE FAILED — status', e.response?.status, '— body', JSON.stringify(e.response?.data), '— msg', e.message)
+          const msg = e.response?.data?.message ?? e.response?.data?.error ?? e.message ?? 'Could not save clip'
           Alert.alert('Save failed', msg)
         })
     },
