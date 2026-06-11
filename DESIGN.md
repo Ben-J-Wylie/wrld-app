@@ -3048,12 +3048,12 @@ PanResponder multitouch (no `react-native-gesture-handler` dep). The discrete
 
 ##### `BufferTimeline`
 
-- **Tier:** feature (composes `GapMarker` + `ClipBracket` + `SavedClipRegion` + `TimelineScrollbar` + PanResponder)
+- **Tier:** feature (composes `GapMarker` + `ClipBracket` + `SavedClipRegion` + `TimelineScrollbar` + `TimelineLaneFill` + RNGH)
 - **Location:** `src/components/features/clip/BufferTimeline.tsx` *(built 2026-06-06 · C2)*
-- **Variants:** `default`
-- **Sizes:** md (track h:52 — single track, **no axis/date row**; matches the Input `md` "What's happening" field — + the scrollbar below)
-- **States:** zoom = continuous `pxPerMs` (fit … fit×max, max raised so Sec is reachable on a multi-day buffer); pan = `scrollOffset`; playhead may be on- or off-screen
-- **Props (built):** `segments` (recorded spans; each may carry a `posterUrl`), `savedRegions?`, `playheadMs`, `nowMs?`, `streaming?`, `leadingGap?` (oldest-edge eviction span), `bracket?`, `thumbnails?` (per-instant frame overlay), `onScrub` (continuous drag), `onSeek?` (discrete TAP — host keeps playing from there), `onScrubStart?` / `onScrubEnd?` (drag activate/release — pause-while / resume-on-lift), `onBracketChange?`, `onZoomChange?` (px/ms → field scrub rate), `onVisibleRangeChange?` (debounced visible window) (zoom/pan are internal view state)
+- **Variants:** `default` · single-track (no `lanes`) **or** stacked source lanes (`lanes`)
+- **Sizes:** md (selected/single lane h:52 — matches the Input `md` "What's happening" field; expanded stack = compact 34px per lane + a 30px source-icon gutter) — **no axis/date row** — + the scrollbar below
+- **States:** zoom = continuous `pxPerMs` (fit … fit×max, max raised so Sec is reachable on a multi-day buffer); pan = `scrollOffset`; playhead may be on- or off-screen; lanes = collapsed (selected only) / expanded (all)
+- **Props (built):** `segments` (recorded spans; each may carry a `posterUrl`), `savedRegions?`, `playheadMs`, `nowMs?`, `streaming?`, `leadingGap?` (oldest-edge eviction span), `bracket?`, `thumbnails?` (per-instant frame overlay), `onScrub` (continuous drag), `onSeek?` (discrete TAP — host keeps playing from there), `onScrubStart?` / `onScrubEnd?` (drag activate/release — pause-while / resume-on-lift), `onBracketChange?`, `onZoomChange?` (px/ms → field scrub rate), `onVisibleRangeChange?` (debounced visible window), `lanes?` (`TimelineLane[]` = `{key, kind, label}` — one stacked source timeline each), `selectedKey?` (highlighted/sole-collapsed lane), `expanded?`, `onSelectLane?` (gutter tap), `onToggleExpand?` (zoom/pan/lane-view are internal view state when uncontrolled)
 
 **Mock says (Frames 1–4):** Horizontal full-bleed timeline of the buffer with
 **collapsed gaps** — recorded segments render as a repeating **filmstrip** (a fixed
@@ -3118,6 +3118,45 @@ clips appear as read-only hatched bands. No date/axis row
   poster currently 404s — graceful, auto-upgrades). `thumbnails` (per-instant frames) is
   the denser server-filmstrip path; **client-side `generateThumbnailsAsync` is OFF** (it
   hangs on the `-c:v copy` HLS VOD — see CLAUDE.md / wrld-backend item 6).
+
+**Code does — stacked source lanes (2026-06-10):**
+- **One timeline per source, perfectly aligned.** A clip is a recording *duration*, so
+  every source shares the **identical** segment/gap geometry, gestures, zoom, scroll,
+  playhead, brackets, saved-regions, and edges — only each recorded segment's **fill**
+  differs by source. The horizontal time-axis core is untouched; lanes are purely vertical
+  layout (`lane height never touches the time math`).
+- **Pluggable fills.** The `camera` lane renders the real film-frame filmstrip; every other
+  `kind` renders via **`TimelineLaneFill`** (audio→waveform, telemetry→trace, location→
+  trail, chat→ticks, identity/screen/torch→flat+glyph). Shared overlays (gaps, head/tail
+  `BufferEdge`, saved bands, `ClipBracket`, playhead) span the **full stack** so alignment
+  is structural.
+- **Collapse / expand.** Collapsed → only the `selectedKey` lane at full height; expanded →
+  all lanes stacked compact (34px) behind a fixed **source-icon gutter** (tap an icon to
+  select a lane). A header shows the selected source / `All sources · N` + the toggle.
+  Non-selected lanes dim to 0.5; the selected gutter cell tints `accent.surface`.
+- **One shared selection.** `selectedKey` ties the lanes to the buffer-viewer rail + field
+  (`ClipEditScreen` passes `view`), so picking a source in the rail, the gutter, or the
+  viewer all move together.
+- **Backward compatible** — omit `lanes` (or pass one) → the classic single track, byte-for-
+  byte. `TimelineLaneFill` is memoized so a scrub (frequent re-render) doesn't recompute the
+  stack — only a zoom (width change) does.
+
+---
+
+##### `TimelineLaneFill`
+
+- **Tier:** feature (View + `Icon`; rendered per-segment inside a `BufferTimeline` lane)
+- **Location:** `src/components/features/clip/TimelineLaneFill.tsx` *(built 2026-06-10)*
+- **Variants (by source kind):** `wave` (audio) · `trace` (compass/gyro/motion/speed/temp) · `trail` (location) · `ticks` (chat) · `flat` (identity/screen/torch — faint centred glyph)
+- **States:** static, deterministic from `seedId` (no flicker across re-renders); memoized
+- **Props (built):** `kind` (`TimelineLaneKind`), `seedId` (the segment id → stable seeded marks), `widthPx`, `leftBorder?`
+
+**Code does:** The per-source segment fill for the stacked timeline — the calm, idiomatic
+mini-representation of one recorded segment for a non-camera source (camera uses the real
+filmstrip in `BufferTimeline`). Dependency-free pure Views; marks are seeded from the
+segment id so they're stable but differ per segment. **PLACEHOLDER** until per-source
+mini-data (waveform peaks / telemetry samples / chat density) lands from the buffer
+descriptor (Aaron's lane) — the prop shape won't change, only the data source.
 
 ---
 
@@ -3368,6 +3407,19 @@ the existing dev client (the globe uses it); no extra rebuild.**
 **Code does:** A paper (`panelHi`) card — avatar + name + @handle, an **Attributed**
 (accent, `user-check`) / **Anonymous** (muted, `eye-off`) flag pill, and a capture-meta
 list (resolution / when / sources). Identity is metadata, so it's a light surface, not media.
+
+###### `SourceChatLog`
+
+- **Tier:** feature (composes Text + `Icon`)
+- **Location:** `src/components/features/clip/SourceChatLog.tsx` *(built 2026-06-10)*
+- **Props:** `messages` (`{handle,text}[]`), `progress?` (0..1 playhead), `label?`, `style?`
+
+**Code does:** Chat source view for the buffer viewer — a paper (`panelHi`) transcript of
+captured messages (`@handle` + text bubbles). The row the playhead has reached reads accent;
+future rows mute to 0.5. Dependency-free (pure Views). **Placeholder** until the buffer
+descriptor exposes a real chat track (Aaron's lane) — falls back to a self-contained mock
+when `messages` is empty, so the gallery and the pre-track editor render. Pairs with the
+dashboard **Chat** flag (CHAT / NO CHAT multistate, same row shape as Identity/Location).
 
 ###### `ClipToolRail`
 

@@ -62,7 +62,7 @@ import { Timeline } from '@/components/features/clip/Timeline'
 import { GapMarker } from '@/components/features/clip/GapMarker'
 import { SavedClipRegion } from '@/components/features/clip/SavedClipRegion'
 import { ClipBracket } from '@/components/features/clip/ClipBracket'
-import { BufferTimeline } from '@/components/features/clip/BufferTimeline'
+import { BufferTimeline, type TimelineLane } from '@/components/features/clip/BufferTimeline'
 import { BufferScrubField } from '@/components/features/clip/BufferScrubField'
 import { BufferTransport } from '@/components/features/clip/BufferTransport'
 import { SourceRail, type SourceRailItem } from '@/components/features/clip/SourceRail'
@@ -72,9 +72,11 @@ import { SourceWaveform } from '@/components/features/clip/SourceWaveform'
 import { SourceTelemetryGraph } from '@/components/features/clip/SourceTelemetryGraph'
 import { SourceLocationTrail } from '@/components/features/clip/SourceLocationTrail'
 import { SourceIdentityCard } from '@/components/features/clip/SourceIdentityCard'
+import { SourceChatLog } from '@/components/features/clip/SourceChatLog'
 import { ClipSourcesDrawer, type ClipSource } from '@/components/features/clip/ClipSourcesDrawer'
 import { SavedClipRow } from '@/components/features/clip/SavedClipRow'
 import { TimelineScrollbar } from '@/components/features/clip/TimelineScrollbar'
+import { TimelineLaneFill, type TimelineLaneKind } from '@/components/features/clip/TimelineLaneFill'
 import { DiscoveryHandoffCard } from '@/components/features/stream/DiscoveryHandoffCard'
 import { LegalAcceptanceCard } from '@/components/features/onboarding/LegalAcceptanceCard'
 import { ContextStrip } from '@/components/features/report/ContextStrip'
@@ -1274,8 +1276,14 @@ export function FeatureGallery() {
       </Section>
 
       <Section title="BufferTimeline">
-        <Row label="tap-to-position · pan · pinch-zoom · scrollbar">
+        <Row label="stacked source lanes · expand/collapse · tap-to-position · pan · pinch-zoom">
           <BufferTimelineDemo />
+        </Row>
+      </Section>
+
+      <Section title="TimelineLaneFill">
+        <Row label="per-source segment fills (camera = filmstrip, in BufferTimeline)">
+          <TimelineLaneFillDemo />
         </Row>
       </Section>
 
@@ -1708,24 +1716,39 @@ const BUF_EXTENT_OPTS: { value: BufExtent; label: string }[] = [
   { value: 'mins', label: 'Minutes' },
 ]
 
+// One stacked lane per source — all share the timeline's segment/gap geometry; only each
+// segment's fill differs (camera → filmstrip; others → TimelineLaneFill mini-views).
+const DEMO_LANES: TimelineLane[] = [
+  { key: 'camera', kind: 'camera', label: 'Camera' },
+  { key: 'audio', kind: 'audio', label: 'Audio' },
+  { key: 'location', kind: 'location', label: 'Location' },
+  { key: 'chat', kind: 'chat', label: 'Chat' },
+  { key: 'compass', kind: 'compass', label: 'Compass' },
+  { key: 'gyro', kind: 'gyro', label: 'Gyro' },
+  { key: 'identity', kind: 'identity', label: 'Identity' },
+]
+
 function BufferTimelineDemo() {
   const [extent, setExtent] = useState<BufExtent>('hours')
   const model = useMemo(() => buildBufModel(extent), [extent])
   const [playhead, setPlayhead] = useState(model.playhead0)
   const [bracket, setBracket] = useState<{ inMs: number; outMs: number } | null>(model.bracket0)
+  const [selected, setSelected] = useState('camera')
+  const [expanded, setExpanded] = useState(true)
   // Reset the interactive state when the mock extent changes.
   useEffect(() => {
     setPlayhead(model.playhead0)
     setBracket(model.bracket0)
   }, [model])
   // Tap to position the playhead · one-finger drag to pan · two-finger pinch to
-  // zoom · drag the scrollbar (below the track) to pan. The zoom toggle below the
-  // scrollbar only shows the levels meaningful for the selected footage extent.
+  // zoom · drag the scrollbar (below the track) to pan. Expand/collapse stacks all
+  // source lanes vs the selected one; tap a gutter icon (expanded) to select a lane.
   return (
     <View style={{ gap: theme.spacing.sm }}>
       <SegmentedToggle options={BUF_EXTENT_OPTS} value={extent} onChange={setExtent} />
       <Text variant="caption" color={theme.colors.text.muted}>
-        Mock buffer extent — the zoom toggle adapts its level count to fit.
+        One timeline per source, perfectly aligned (shared gaps). Expand to see all, collapse
+        to the selected lane; tap a gutter icon to switch.
       </Text>
       <BufferTimeline
         segments={model.segments}
@@ -1734,7 +1757,48 @@ function BufferTimelineDemo() {
         bracket={bracket}
         onScrub={setPlayhead}
         onBracketChange={setBracket}
+        lanes={DEMO_LANES}
+        selectedKey={selected}
+        expanded={expanded}
+        onSelectLane={setSelected}
+        onToggleExpand={() => setExpanded((v) => !v)}
       />
+    </View>
+  )
+}
+
+// Each non-camera source's per-segment fill idiom, shown standalone in a film-cell-sized
+// strip (the same height a lane uses inside BufferTimeline).
+const LANE_FILL_KINDS: { kind: TimelineLaneKind; label: string }[] = [
+  { kind: 'audio', label: 'audio · waveform' },
+  { kind: 'compass', label: 'compass · trace' },
+  { kind: 'gyro', label: 'gyro · trace' },
+  { kind: 'location', label: 'location · trail' },
+  { kind: 'chat', label: 'chat · ticks' },
+  { kind: 'identity', label: 'identity · flat' },
+]
+
+function TimelineLaneFillDemo() {
+  return (
+    <View style={{ gap: theme.spacing.xs, width: 240 }}>
+      {LANE_FILL_KINDS.map(({ kind, label }) => (
+        <View key={kind} style={{ gap: 2 }}>
+          <Text variant="monoCaption" color={theme.colors.text.subtle}>
+            {label}
+          </Text>
+          <View
+            style={{
+              height: 34,
+              backgroundColor: theme.colors.bg.panelHi,
+              borderWidth: 1,
+              borderColor: theme.colors.border.strong,
+              overflow: 'hidden',
+            }}
+          >
+            <TimelineLaneFill kind={kind} seedId={`gallery-${kind}`} widthPx={240} leftBorder />
+          </View>
+        </View>
+      ))}
     </View>
   )
 }
@@ -1771,6 +1835,7 @@ function BufferScrubFieldDemo({ variant }: { variant: 'camera' | 'audio-only' })
 const SOURCE_VIEWER_ITEMS: SourceRailItem[] = [
   { key: 'identity', iconName: 'user', label: 'Identity' },
   { key: 'location', iconName: 'map-pin', label: 'Location' },
+  { key: 'chat', iconName: 'message-circle', label: 'Chat' },
   { key: 'camera', iconName: 'video', label: 'Camera' },
   { key: 'audio', iconName: 'mic', label: 'Audio' },
   { key: 'screen', iconName: 'monitor', label: 'Screen', disabled: true },
@@ -1833,6 +1898,7 @@ function BufferSourceViewerDemo() {
   const frame =
     view === 'camera' ? undefined
     : view === 'audio' ? <SourceWaveform peaks={MOCK_PEAKS} progress={VIEWER_PROGRESS} />
+    : view === 'chat' ? <SourceChatLog messages={[]} progress={VIEWER_PROGRESS} />
     : view === 'location' ? <SourceLocationTrail path={MOCK_TRAIL} position={here} />
     : view === 'compass' ? (
         <SourceTelemetryGraph
@@ -1858,7 +1924,7 @@ function BufferSourceViewerDemo() {
   return (
     <View style={{ width: 300 }}>
       <BufferScrubField
-        variant={view === 'camera' ? 'camera' : view === 'location' ? 'map-only' : 'audio-only'}
+        variant={view === 'camera' ? 'camera' : view === 'location' || view === 'chat' ? 'map-only' : 'audio-only'}
         reachLabel="Buffer · 72h"
         frameSlot={frame}
         showScrubHint={false}

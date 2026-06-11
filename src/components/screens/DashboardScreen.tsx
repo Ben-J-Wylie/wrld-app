@@ -59,6 +59,7 @@ import {
   DEFAULT_CAPTURE_CONFIG,
   type LocationPrecision,
   type IdentityFlag,
+  type ChatMode,
 } from '@/lib/captureConfig'
 import { ppvApi } from '@/api/ppvEvents'
 import type { SourceType, PpvEvent } from '@/types'
@@ -83,6 +84,7 @@ type SourceDescriptor = {
   availability: SourceAvailability
   broadcastSource?: SourceType
   identityRow?: boolean
+  chatRow?: boolean
 }
 
 // Grouped by category; groups render with a Divider break between them.
@@ -92,6 +94,7 @@ const SOURCE_GROUPS: SourceDescriptor[][] = [
   [
     { kind: 'profile', label: 'Identity', detail: 'Off = anonymous · a flag, not a track', availability: 'available', identityRow: true },
     { kind: 'loc', label: 'Location', detail: 'Telemetry · gated by precision setting', availability: 'available' },
+    { kind: 'chat', label: 'Chat', detail: 'Live message stream · a flag, not a track', availability: 'available', chatRow: true },
   ],
   [
     { kind: 'cam', label: 'Camera', detail: 'Media · rear · 1080p', availability: 'available', broadcastSource: 'camera' },
@@ -122,6 +125,11 @@ const IDENTITY_OPTIONS: { value: IdentityFlag; label: string }[] = [
   { value: 'anon', label: 'ANON' },
 ]
 
+const CHAT_OPTIONS: { value: ChatMode; label: string }[] = [
+  { value: 'on', label: 'CHAT' },
+  { value: 'off', label: 'NO CHAT' },
+]
+
 type IconName = ComponentProps<typeof Icon>['name']
 
 // Location row: icon + subtitle reflect the chosen precision (the precision
@@ -138,6 +146,12 @@ const LOC_META: Record<LocationPrecision, { icon: IconName; detail: string; mute
 const IDENTITY_META: Record<IdentityFlag, { icon: IconName; detail: string }> = {
   public: { icon: 'user', detail: 'Shown as your @handle with your avatar' },
   anon: { icon: 'user-x', detail: 'Anonymous — no handle or avatar shown' },
+}
+
+// Chat row: a flag (like identity) — include a live message stream or not.
+const CHAT_META: Record<ChatMode, { icon: IconName; detail: string; muted?: boolean }> = {
+  on: { icon: 'message-circle', detail: 'Viewers can chat — shown as a live overlay' },
+  off: { icon: 'message-square', detail: 'Chat off — no message stream', muted: true },
 }
 
 // Leading icon tile for the Location / Identity rows (replaces FeedThumb),
@@ -217,6 +231,7 @@ export function DashboardScreen() {
   const [air, setAir] = useState<Partial<Record<FeedKind, boolean>>>(DEFAULT_CAPTURE_CONFIG.air)
   const [precision, setPrecision] = useState<LocationPrecision>(DEFAULT_CAPTURE_CONFIG.precision)
   const [identity, setIdentity] = useState<IdentityFlag>(DEFAULT_CAPTURE_CONFIG.identity)
+  const [chat, setChat] = useState<ChatMode>(DEFAULT_CAPTURE_CONFIG.chat)
   const [subscribersOnly, setSubscribersOnly] = useState(DEFAULT_CAPTURE_CONFIG.subscribersOnly)
 
   // Hydrate from AsyncStorage on focus (not just mount) so the dashboard
@@ -233,6 +248,7 @@ export function DashboardScreen() {
         setAir(cfg.air as Partial<Record<FeedKind, boolean>>)
         setPrecision(cfg.precision)
         setIdentity(cfg.identity)
+        setChat(cfg.chat)
         setSubscribersOnly(cfg.subscribersOnly)
         hydratedRef.current = true
       })
@@ -245,8 +261,8 @@ export function DashboardScreen() {
   // Auto-save on any capture-config change (no save button) — title included.
   useEffect(() => {
     if (!hydratedRef.current) return
-    saveCaptureConfig({ title, air, precision, identity, subscribersOnly })
-  }, [title, air, precision, identity, subscribersOnly])
+    saveCaptureConfig({ title, air, precision, identity, chat, subscribersOnly })
+  }, [title, air, precision, identity, chat, subscribersOnly])
 
   function setAirFor(kind: FeedKind, v: boolean) {
     setAir((prev) => ({ ...prev, [kind]: v }))
@@ -258,7 +274,7 @@ export function DashboardScreen() {
   // included when precision isn't private.
   const airedKinds = useMemo(() => {
     const toggled = SOURCE_GROUPS.flat()
-      .filter((s) => !s.identityRow && s.kind !== 'loc' && air[s.kind])
+      .filter((s) => !s.identityRow && !s.chatRow && s.kind !== 'loc' && air[s.kind])
       .map((s) => s.kind)
     return precision !== 'private' ? [...toggled, 'loc' as FeedKind] : toggled
   }, [air, precision])
@@ -286,7 +302,7 @@ export function DashboardScreen() {
       Alert.alert('Title not allowed', 'Your stream title contains prohibited content. Please choose a different title.')
       return
     }
-    await saveCaptureConfig({ title: title.trim(), air, precision, identity, subscribersOnly })
+    await saveCaptureConfig({ title: title.trim(), air, precision, identity, chat, subscribersOnly })
     activeBroadcast.set({ ppvEventId: ppvEventId ?? undefined })
     router.push({
       pathname: '/(app)/stream/[id]',
@@ -359,6 +375,25 @@ export function DashboardScreen() {
           showAir={false}
           showRec={false}
           footer={<SegmentedToggle options={IDENTITY_OPTIONS} value={identity} onChange={setIdentity} />}
+        />
+      )
+    }
+    // Chat: no Air toggle (it's a flag, not a track). Icon + subtitle reflect
+    // the on/off choice; the CHAT / NO CHAT multistate sits in the footer,
+    // same layout as Identity and Location.
+    if (src.chatRow) {
+      const meta = CHAT_META[chat]
+      return (
+        <FeedRow
+          key={src.kind}
+          kind={src.kind}
+          label={src.label}
+          availability={src.availability}
+          leading={<StateIcon name={meta.icon} muted={meta.muted} />}
+          detail={meta.detail}
+          showAir={false}
+          showRec={false}
+          footer={<SegmentedToggle options={CHAT_OPTIONS} value={chat} onChange={setChat} />}
         />
       )
     }

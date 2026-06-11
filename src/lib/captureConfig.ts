@@ -20,6 +20,9 @@ const KEY = '@wrld_capture_config'
 
 export type LocationPrecision = 'exact' | 'city' | 'country' | 'private'
 export type IdentityFlag = 'public' | 'anon'
+// Whether the live chat stream is included on the broadcast. A flag (like
+// identity), not a media track — its multistate is CHAT / NO CHAT.
+export type ChatMode = 'on' | 'off'
 
 // air is keyed by source kind (string) → on/off. Kept as a plain
 // string-keyed map so this module stays free of component-tier imports.
@@ -28,16 +31,19 @@ export type CaptureConfig = {
   air: Partial<Record<string, boolean>>
   precision: LocationPrecision
   identity: IdentityFlag
+  chat: ChatMode
   subscribersOnly: boolean
 }
 
 // Fresh-install defaults: empty title; camera + audio + location all aired;
-// every other source off; identity public; location precision ceiling at exact.
+// every other source off; identity public; location precision ceiling at exact;
+// chat on.
 export const DEFAULT_CAPTURE_CONFIG: CaptureConfig = {
   title: '',
   air: { cam: true, audio: true, loc: true },
   precision: 'exact',
   identity: 'public',
+  chat: 'on',
   subscribersOnly: false,
 }
 

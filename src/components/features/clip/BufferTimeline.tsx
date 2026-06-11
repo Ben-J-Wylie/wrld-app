@@ -37,10 +37,12 @@ import { Image } from 'expo-image'
 import { theme } from '@/tokens/theme'
 import { Pressable } from '@/components/primitives/Pressable'
 import { Icon } from '@/components/primitives/Icon'
+import { Text } from '@/components/primitives/Text'
 import { GapMarker, GAP_MARKER_WIDTH } from './GapMarker'
 import { SavedClipRegion } from './SavedClipRegion'
 import { ClipBracket } from './ClipBracket'
 import { TimelineScrollbar } from './TimelineScrollbar'
+import { TimelineLaneFill, type TimelineLaneKind } from './TimelineLaneFill'
 
 export type BufferSegment = {
   id: string
@@ -55,6 +57,10 @@ export type BufferSegment = {
 }
 export type BufferSavedRegion = { id: string; startMs: number; endMs: number; label?: string }
 export type BufferBracket = { inMs: number; outMs: number }
+// One stacked source lane. All lanes share the identical segment/gap geometry (a clip is
+// a recording duration) — only the per-segment FILL differs by `kind`. The camera lane
+// renders the real film-frame filmstrip; every other kind renders via TimelineLaneFill.
+export type TimelineLane = { key: string; kind: TimelineLaneKind; label: string }
 // Real frame thumbnails (from expo-video's generateThumbnailsAsync, rendered via
 // expo-image) placed at their wall-clock instant. Optional enhancement layer over the
 // sprocket filmstrip — where a thumb exists it covers the sprockets; gaps/missing →
@@ -96,6 +102,22 @@ type Props = {
   // the scroll animates so it lands as close to centre as the content bounds allow;
   // if it's already visible, the view stays put.
   centerSignal?: number
+  // ── stacked source lanes ──
+  // One timeline per source, all sharing this component's geometry/gestures. Omit (or
+  // pass a single lane) for the classic single-track behaviour. `kind: 'camera'` renders
+  // the real filmstrip; other kinds render via TimelineLaneFill.
+  lanes?: TimelineLane[]
+  // The highlighted lane — the only one shown when collapsed, accent in the gutter when
+  // expanded. Defaults to the first lane.
+  selectedKey?: string
+  // Expanded → all lanes stacked (compact, with a source-icon gutter); collapsed → just
+  // the selected lane at full height. Ignored unless there's more than one lane.
+  expanded?: boolean
+  // Tapping a lane's gutter icon (expanded) selects it — drives the shared selection so
+  // the rail + buffer viewer follow.
+  onSelectLane?: (key: string) => void
+  // Toggles `expanded`. When provided, the expand/collapse control renders.
+  onToggleExpand?: () => void
   style?: StyleProp<ViewStyle>
 }
 
@@ -139,6 +161,32 @@ type SegBlock = { kind: 'seg'; seg: BufferSegment; leftPx: number; widthPx: numb
 type GapBlock = { kind: 'gap'; leftPx: number; skippedMs: number }
 type Layout = { blocks: (SegBlock | GapBlock)[]; segBlocks: SegBlock[]; contentWidth: number }
 
+// Lane vertical sizing: one selected lane shows at the full track height; the expanded
+// stack uses a compact per-lane height so many sources fit (the page scrolls if needed).
+// Lane height is purely vertical layout — it never touches the horizontal time geometry,
+// so the gesture/zoom/scroll core is unaffected.
+const COMPACT_LANE_H = 34
+const LANE_GAP = 2 // vertical space between stacked lanes (shows the track bg through)
+const GUTTER_W = 30
+
+// Source kind → gutter glyph (matches the dashboard / buffer-viewer source icons).
+const LANE_ICON: Record<TimelineLaneKind, ComponentProps<typeof Icon>['name']> = {
+  camera: 'video',
+  audio: 'mic',
+  location: 'map-pin',
+  compass: 'compass',
+  gyro: 'navigation',
+  identity: 'user',
+  chat: 'message-circle',
+  screen: 'monitor',
+  motion: 'activity',
+  speed: 'fast-forward',
+  temp: 'thermometer',
+  torch: 'zap',
+}
+
+const DEFAULT_LANES: TimelineLane[] = [{ key: 'camera', kind: 'camera', label: 'Camera' }]
+
 export function BufferTimeline({
   segments,
   savedRegions = [],
@@ -156,6 +204,11 @@ export function BufferTimeline({
   onZoomChange,
   onVisibleRangeChange,
   centerSignal,
+  lanes,
+  selectedKey,
+  expanded,
+  onSelectLane,
+  onToggleExpand,
   style,
 }: Props) {
   const [width, setWidth] = useState(0)
@@ -203,6 +256,32 @@ export function BufferTimeline({
     () => layout(segments, px, leadingPx),
     [segments, px, leadingPx],
   )
+
+  // ── stacked source lanes (vertical layout only — shares ALL horizontal geometry) ──
+  const laneList = lanes && lanes.length > 0 ? lanes : DEFAULT_LANES
+  // "laned" = there's a real multi-source stack OR an expand control wired. Otherwise the
+  // component renders exactly as the classic single-track timeline (no gutter, full height).
+  const laned = (lanes?.length ?? 0) > 1 || !!onToggleExpand
+  const isExpanded = laned && !!expanded
+  const selKey = selectedKey ?? laneList[0]!.key
+  const selectedLane = laneList.find((l) => l.key === selKey) ?? laneList[0]!
+  // Collapsed → just the selected lane; expanded → every lane. (Never empty.)
+  const visibleLanes = isExpanded ? laneList : [selectedLane]
+  const laneH = isExpanded ? COMPACT_LANE_H : TRACK_H
+  // 2px between stacked lanes (the track bg shows through); none for a single lane.
+  const laneGap = isExpanded ? LANE_GAP : 0
+  const contentHeight = laneH * visibleLanes.length + laneGap * Math.max(0, visibleLanes.length - 1)
+  // Gaps render once across the whole stack; pulled out of the per-lane segment loop.
+  const gapBlocks = useMemo(() => blocks.filter((b): b is GapBlock => b.kind === 'gap'), [blocks])
+  // A segment needs a left border when it's first or a gap precedes it (mirrors the camera
+  // filmstrip's leadingBorder rule) — shared across all lanes.
+  const leadingBorderIds = useMemo(() => {
+    const s = new Set<string>()
+    blocks.forEach((b, i) => {
+      if (b.kind === 'seg' && (i === 0 || blocks[i - 1]?.kind === 'gap')) s.add(b.seg.id)
+    })
+    return s
+  }, [blocks])
 
   // Group per-instant frames by the segment that contains them, so each segment's
   // filmstrip can pick the nearest real frame for each of its tiles. Empty today
@@ -683,83 +762,161 @@ export function BufferTimeline({
     setWidth(e.nativeEvent.layout.width)
   }
 
+  // The camera lane's per-segment fill — the real film-frame filmstrip (poster / frames /
+  // sprocket fallback). Other lanes render via TimelineLaneFill. The seg wrapper (bg +
+  // clip) is provided by the lane loop, same as before.
+  function renderCameraFill(b: SegBlock, leadBorder: boolean) {
+    const poster = b.seg.posterUrl && !failedPosters.has(b.seg.posterUrl) ? b.seg.posterUrl : null
+    const frames = thumbsBySeg.get(b.seg.id) ?? EMPTY_THUMBS
+    return poster || frames.length ? (
+      <SegmentFilmstrip
+        widthPx={b.widthPx}
+        startMs={b.seg.startMs}
+        endMs={b.seg.endMs}
+        posterUrl={poster}
+        frames={frames}
+        leadingBorder={leadBorder}
+        onPosterError={(url) =>
+          setFailedPosters((prev) => {
+            if (prev.has(url)) return prev
+            const next = new Set(prev)
+            next.add(url)
+            return next
+          })
+        }
+      />
+    ) : (
+      <FilmstripFill widthPx={b.widthPx} />
+    )
+  }
+
   return (
     <View style={[styles.wrap, style]}>
-      <GestureDetector gesture={composed}>
-        <View style={styles.timeline} onLayout={onLayout}>
-          <Animated.View
-            style={[
-              styles.content,
-              { width: effContentWidth > 0 ? effContentWidth : '100%' },
-              contentStyle,
-            ]}
-          >
-            {blocks.map((b, i) => {
-              if (b.kind !== 'seg') {
+      {/* Lane header — which source is shown + the expand/collapse control. Only when
+          there's a stack (or an expand control is wired); a classic single track omits it. */}
+      {laned && (
+        <View style={styles.laneHeader}>
+          <View style={styles.laneHeaderLeft}>
+            <Icon name={LANE_ICON[selectedLane.kind]} size="sm" color={theme.colors.text.muted} />
+            <Text variant="monoLabel" color={theme.colors.text.muted}>
+              {isExpanded ? `All sources · ${laneList.length}` : selectedLane.label}
+            </Text>
+          </View>
+          {onToggleExpand && (
+            <Pressable
+              variant="subtle"
+              accessibilityRole="button"
+              accessibilityLabel={isExpanded ? 'Collapse source lanes' : 'Expand all source lanes'}
+              hitSlop={8}
+              style={styles.expandBtn}
+              onPress={onToggleExpand}
+            >
+              <Icon name={isExpanded ? 'minimize-2' : 'maximize-2'} size="sm" color={theme.colors.text.muted} />
+              <Text variant="monoLabel" color={theme.colors.text.muted}>
+                {isExpanded ? 'Collapse' : 'Expand'}
+              </Text>
+            </Pressable>
+          )}
+        </View>
+      )}
+
+      <View style={styles.trackRow}>
+        {/* Fixed source-icon gutter (expanded only) — tap to select a lane (drives the
+            shared selection so the rail + buffer viewer follow). */}
+        {isExpanded && (
+          <View style={[styles.gutter, { height: contentHeight + 2, gap: laneGap }]}>
+            {visibleLanes.map((lane) => {
+              const sel = lane.key === selKey
+              return (
+                <Pressable
+                  key={lane.key}
+                  variant="none"
+                  accessibilityRole="button"
+                  accessibilityLabel={`Show ${lane.label} timeline`}
+                  onPress={() => onSelectLane?.(lane.key)}
+                  style={[styles.gutterCell, { height: laneH }, sel && styles.gutterCellSel]}
+                >
+                  <Icon
+                    name={LANE_ICON[lane.kind]}
+                    size="sm"
+                    color={sel ? theme.colors.accent.default : theme.colors.text.subtle}
+                  />
+                </Pressable>
+              )
+            })}
+          </View>
+        )}
+
+        <GestureDetector gesture={composed}>
+          <View style={[styles.timeline, { height: contentHeight + 2 }]} onLayout={onLayout}>
+            <Animated.View
+              style={[
+                styles.content,
+                { width: effContentWidth > 0 ? effContentWidth : '100%', height: contentHeight },
+                contentStyle,
+              ]}
+            >
+              {/* Gaps — shared across the whole stack (full height). */}
+              {gapBlocks.map((b) => (
+                <View key={`gap-${b.leftPx}`} style={[styles.gapHolder, { left: b.leftPx }]}>
+                  <GapMarker style={styles.gapFill} />
+                </View>
+              ))}
+
+              {/* Per-lane segment fills — identical geometry, source-specific fill. */}
+              {visibleLanes.map((lane, li) => {
+                const sel = lane.key === selKey
                 return (
-                  <View key={`gap-${i}`} style={[styles.gapHolder, { left: b.leftPx }]}>
-                    <GapMarker style={styles.gapFill} />
+                  <View
+                    key={lane.key}
+                    style={[styles.lane, { top: li * (laneH + laneGap), height: laneH }, isExpanded && !sel && styles.laneDim]}
+                  >
+                    {segBlocks.map((b) => {
+                      const leadBorder = leadingBorderIds.has(b.seg.id)
+                      return (
+                        <View key={b.seg.id} style={[styles.seg, { left: b.leftPx, width: b.widthPx }]}>
+                          {lane.kind === 'camera' ? (
+                            renderCameraFill(b, leadBorder)
+                          ) : (
+                            <TimelineLaneFill kind={lane.kind} seedId={b.seg.id} widthPx={b.widthPx} leftBorder={leadBorder} />
+                          )}
+                        </View>
+                      )
+                    })}
                   </View>
                 )
-              }
-              const poster =
-                b.seg.posterUrl && !failedPosters.has(b.seg.posterUrl) ? b.seg.posterUrl : null
-              const frames = thumbsBySeg.get(b.seg.id) ?? EMPTY_THUMBS
-              return (
-                <View key={`seg-${b.seg.id}`} style={[styles.seg, { left: b.leftPx, width: b.widthPx }]}>
-                  {poster || frames.length ? (
-                    <SegmentFilmstrip
-                      widthPx={b.widthPx}
-                      startMs={b.seg.startMs}
-                      endMs={b.seg.endMs}
-                      posterUrl={poster}
-                      frames={frames}
-                      leadingBorder={i === 0 || blocks[i - 1]?.kind === 'gap'}
-                      onPosterError={(url) =>
-                        setFailedPosters((prev) => {
-                          if (prev.has(url)) return prev
-                          const next = new Set(prev)
-                          next.add(url)
-                          return next
-                        })
-                      }
-                    />
-                  ) : (
-                    <FilmstripFill widthPx={b.widthPx} />
-                  )}
-                </View>
-              )
-            })}
+              })}
 
-            {hasFootage && <BufferEdge side="head" leftPx={0} accent={headEvicting} />}
+              {hasFootage && <BufferEdge side="head" leftPx={0} accent={headEvicting} height={contentHeight} />}
 
-            {hasFootage && <BufferEdge side="tail" leftPx={contentWidth} accent={tailLive} />}
+              {hasFootage && <BufferEdge side="tail" leftPx={contentWidth} accent={tailLive} height={contentHeight} />}
 
-            {savedRegions.map((r) => {
-              const left = timeToX(r.startMs, segBlocks, px)
-              const w = Math.max(2, timeToX(r.endMs, segBlocks, px) - left)
-              return (
-                <SavedClipRegion key={`saved-${r.id}`} label={r.label} style={[styles.saved, { left, width: w }]} />
-              )
-            })}
+              {savedRegions.map((r) => {
+                const left = timeToX(r.startMs, segBlocks, px)
+                const w = Math.max(2, timeToX(r.endMs, segBlocks, px) - left)
+                return (
+                  <SavedClipRegion key={`saved-${r.id}`} label={r.label} style={[styles.saved, { left, width: w }]} />
+                )
+              })}
 
-            {bracket && (
-              <ClipBracket
-                leftPx={timeToX(bracket.inMs, segBlocks, px)}
-                widthPx={Math.max(0, timeToX(bracket.outMs, segBlocks, px) - timeToX(bracket.inMs, segBlocks, px))}
-                blocked={blocked}
-                inGesture={inGesture}
-                outGesture={outGesture}
-                centerGesture={moveGesture}
-              />
-            )}
+              {bracket && (
+                <ClipBracket
+                  leftPx={timeToX(bracket.inMs, segBlocks, px)}
+                  widthPx={Math.max(0, timeToX(bracket.outMs, segBlocks, px) - timeToX(bracket.inMs, segBlocks, px))}
+                  blocked={blocked}
+                  inGesture={inGesture}
+                  outGesture={outGesture}
+                  centerGesture={moveGesture}
+                />
+              )}
 
-            <View style={[styles.playhead, { left: playheadX - 1 }]} pointerEvents="none">
-              <View style={styles.playheadKnob} />
-            </View>
-          </Animated.View>
-        </View>
-      </GestureDetector>
+              <View style={[styles.playhead, { left: playheadX - 1 }]} pointerEvents="none">
+                <View style={styles.playheadKnob} />
+              </View>
+            </Animated.View>
+          </View>
+        </GestureDetector>
+      </View>
 
       {/* Scrollbar flanked by zoom-out (left) / zoom-in (right): tap to step, hold to
           smooth-zoom across the whole range. */}
@@ -853,7 +1010,17 @@ function ZoomButton({
 // The head/tail buffer-edge indicator: a 20px block, dark when idle or accent when
 // "active" (head evicting / tail live). When accent, a zigzag bites into the footage
 // from the footage-facing edge (head → right, tail → left).
-function BufferEdge({ side, leftPx, accent }: { side: 'head' | 'tail'; leftPx: number; accent: boolean }) {
+function BufferEdge({
+  side,
+  leftPx,
+  accent,
+  height,
+}: {
+  side: 'head' | 'tail'
+  leftPx: number
+  accent: boolean
+  height: number
+}) {
   const color = accent ? theme.colors.accent.default : theme.colors.text.primary
   return (
     <View
@@ -863,21 +1030,23 @@ function BufferEdge({ side, leftPx, accent }: { side: 'head' | 'tail'; leftPx: n
       ]}
       pointerEvents="none"
     >
-      {accent && <ZigzagColumn side={side === 'head' ? 'right' : 'left'} color={color} />}
+      {accent && <ZigzagColumn side={side === 'head' ? 'right' : 'left'} color={color} height={height} />}
     </View>
   )
 }
 
 // A vertical sawtooth of triangles at one edge, teeth pointing outward (toward the
 // footage). Rendered just past the edge so it overlaps the adjacent footage like a bite.
-function ZigzagColumn({ side, color }: { side: 'left' | 'right'; color: string }) {
-  const toothH = TRACK_H / ZIGZAG_TEETH
+// Teeth scale to the (possibly stacked) track height so they cover the full edge.
+function ZigzagColumn({ side, color, height }: { side: 'left' | 'right'; color: string; height: number }) {
+  const teeth = Math.max(ZIGZAG_TEETH, Math.round(height / (TRACK_H / ZIGZAG_TEETH)))
+  const toothH = height / teeth
   return (
     <View
       style={[styles.zig, side === 'right' ? { right: -ZIGZAG_DEPTH } : { left: -ZIGZAG_DEPTH }]}
       pointerEvents="none"
     >
-      {Array.from({ length: ZIGZAG_TEETH }).map((_, i) => (
+      {Array.from({ length: teeth }).map((_, i) => (
         <View
           key={i}
           style={{
@@ -1110,19 +1279,65 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  trackRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+  },
+  // Fixed source-icon column (expanded only) to the left of the scrolling track.
+  gutter: {
+    width: GUTTER_W,
+    backgroundColor: theme.colors.bg.panel,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderColor: theme.colors.border.strong,
+  },
+  gutterCell: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  gutterCellSel: {
+    backgroundColor: theme.colors.accent.surface,
+  },
+  laneHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  laneHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+  },
+  expandBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    paddingVertical: theme.spacing.xxs,
+    paddingHorizontal: theme.spacing.xs,
+    borderRadius: theme.radius.md,
+  },
   timeline: {
-    // TRACK_H + the two 1px borders: the content (TRACK_H) then sits BETWEEN the
-    // borders instead of clipping over the bottom one (iOS clips to the border box),
-    // so the top and bottom rules match.
-    height: TRACK_H + 2,
+    // height is set inline (content height + the two 1px borders) so the track grows with
+    // the stacked-lane count; the content then sits BETWEEN the borders instead of
+    // clipping over the bottom one (iOS clips to the border box), so the rules match.
+    flex: 1,
     backgroundColor: theme.colors.bg.panel,
     borderTopWidth: 1,
     borderBottomWidth: 1,
     borderColor: theme.colors.border.strong,
     overflow: 'hidden',
   },
-  content: {
-    height: TRACK_H,
+  // height is set inline (laneH × visible lane count).
+  content: {},
+  lane: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+  },
+  laneDim: {
+    opacity: 0.5,
   },
   seg: {
     position: 'absolute',

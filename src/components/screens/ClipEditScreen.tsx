@@ -32,7 +32,9 @@ import {
   type BufferBracket,
   type TimelineThumb,
   type VisibleRange,
+  type TimelineLane,
 } from '@/components/features/clip/BufferTimeline'
+import { type TimelineLaneKind } from '@/components/features/clip/TimelineLaneFill'
 import { type ClipSource } from '@/components/features/clip/ClipSourcesDrawer'
 import { SaveClipSheet } from '@/components/features/clip/SaveClipSheet'
 import { SavedClipRow } from '@/components/features/clip/SavedClipRow'
@@ -42,6 +44,7 @@ import { SourceWaveform } from '@/components/features/clip/SourceWaveform'
 import { SourceTelemetryGraph } from '@/components/features/clip/SourceTelemetryGraph'
 import { SourceLocationTrail } from '@/components/features/clip/SourceLocationTrail'
 import { SourceIdentityCard } from '@/components/features/clip/SourceIdentityCard'
+import { SourceChatLog } from '@/components/features/clip/SourceChatLog'
 import { useAuth } from '@clerk/clerk-expo'
 import { useVideoPlayer, VideoView } from 'expo-video'
 import { useBuffer } from '@/hooks/useBuffer'
@@ -118,6 +121,7 @@ const KIND_ORDER: BufferTrackKind[] = ['camera', 'audio', 'location', 'compass',
 const VIEW_META: Record<string, { iconName: SourceRailItem['iconName']; label: string }> = {
   identity: { iconName: 'user', label: 'Identity' },
   location: { iconName: 'map-pin', label: 'Location' },
+  chat: { iconName: 'message-circle', label: 'Chat' },
   camera: { iconName: 'video', label: 'Camera' },
   audio: { iconName: 'mic', label: 'Audio' },
   screen: { iconName: 'monitor', label: 'Screen' },
@@ -131,6 +135,7 @@ const VIEW_META: Record<string, { iconName: SourceRailItem['iconName']; label: s
 const RAIL_ORDER = [
   'identity',
   'location',
+  'chat',
   'camera',
   'audio',
   'screen',
@@ -444,20 +449,30 @@ export const ClipEditScreen = () => {
   // the buffer exposes those tracks. The rail items come from the union of captured kinds
   // (+ identity, always available from the signed-in user).
   const capturedKinds = useMemo(() => new Set(sessions.flatMap((s) => s.kinds)), [sessions])
-  // The rail shows EVERY source; ones this buffer didn't capture are greyed + unselectable.
-  // Identity is always available (the signed-in user).
+  // The rail shows EVERY source. For now every source is selectable (all active) so
+  // the full model — incl. the chat + telemetry placeholders — is browsable against
+  // the mock viewers; once the buffer descriptor exposes per-track capture state,
+  // restore `disabled` for kinds this buffer didn't capture (was: identity always on,
+  // others gated on `capturedKinds`).
   const railItems: SourceRailItem[] = useMemo(
     () =>
       RAIL_ORDER.map((k) => ({
         key: k,
         ...VIEW_META[k]!,
-        // Identity is always available; every other source is enabled only if the
-        // buffer actually captured that track (v0.3+ kinds never are → greyed).
-        disabled: k === 'identity' ? false : !capturedKinds.has(k as BufferTrackKind),
+        disabled: false,
       })),
-    [capturedKinds],
+    [],
   )
   const [view, setView] = useState('camera')
+  // One stacked timeline lane per source (dashboard order). All lanes share the timeline's
+  // segment/gap geometry — only each segment's fill differs by source. `selectedKey={view}`
+  // ties the lanes to the rail + buffer viewer (one shared selection); `lanesExpanded`
+  // toggles the whole stack vs just the selected lane.
+  const timelineLanes: TimelineLane[] = useMemo(
+    () => RAIL_ORDER.map((k) => ({ key: k, kind: k as TimelineLaneKind, label: VIEW_META[k]!.label })),
+    [],
+  )
+  const [lanesExpanded, setLanesExpanded] = useState(false)
   // Keep the selection on a CAPTURED source as the buffer resolves (don't land on a greyed one).
   useEffect(() => {
     const cur = railItems.find((i) => i.key === view)
@@ -481,7 +496,11 @@ export const ClipEditScreen = () => {
   if (capturedLabels.length) identityMeta.push({ label: 'Sources', value: capturedLabels.join(' · ') })
   // The field's chrome variant tracks the active view (light for map/identity, dark else).
   const viewVariant: 'camera' | 'audio-only' | 'map-only' =
-    view === 'camera' ? fieldVariant : view === 'location' || view === 'identity' ? 'map-only' : 'audio-only'
+    view === 'camera'
+      ? fieldVariant
+      : view === 'location' || view === 'identity' || view === 'chat'
+        ? 'map-only'
+        : 'audio-only'
 
   // ── Video controller ──────────────────────────────────────────────────────
   // Default = PAUSED, holding the frame at the playhead: any playhead change (tap /
@@ -1500,6 +1519,9 @@ export const ClipEditScreen = () => {
                       attributed
                       meta={identityMeta}
                     />
+                  ) : view === 'chat' ? (
+                    // Placeholder transcript until the buffer exposes a real chat track.
+                    <SourceChatLog messages={[]} progress={viewProgress} />
                   ) : undefined
                 }
                 reachLabel={`Buffer · ${buffer?.windowHours ?? 72}h`}
@@ -1509,7 +1531,7 @@ export const ClipEditScreen = () => {
                 onScrubStart={handleScrubStart}
                 onScrubEnd={handleScrubEnd}
               />
-              {/* Left: clip-editing tools. Right: source view switch. */}
+              {/* Left: source view switch. Right: clip-editing tools. */}
               <View style={styles.toolRail} pointerEvents="box-none">
                 <ClipToolRail tools={clipTools} />
               </View>
@@ -1574,6 +1596,11 @@ export const ClipEditScreen = () => {
               }}
               onVisibleRangeChange={setVisibleRange}
               centerSignal={centerSignal}
+              lanes={timelineLanes}
+              selectedKey={view}
+              expanded={lanesExpanded}
+              onSelectLane={setView}
+              onToggleExpand={() => setLanesExpanded((v) => !v)}
             />
             {/* All editing controls live in the field's left ClipToolRail; naming
                 happens in the SaveClipSheet when Save is tapped. */}
@@ -1714,22 +1741,22 @@ const styles = StyleSheet.create({
   fieldWrap: {
     position: 'relative',
   },
-  // Clip-editing tools on the left edge, source switcher on the right — both centred.
+  // Source switcher on the left edge, clip-editing tools on the right — both centred.
   toolRail: {
-    position: 'absolute',
-    left: theme.spacing.sm,
-    top: 0,
-    bottom: 0,
-    justifyContent: 'center',
-    alignItems: 'flex-start',
-  },
-  sourceRail: {
     position: 'absolute',
     right: theme.spacing.sm,
     top: 0,
     bottom: 0,
     justifyContent: 'center',
     alignItems: 'flex-end',
+  },
+  sourceRail: {
+    position: 'absolute',
+    left: theme.spacing.sm,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'flex-start',
   },
   belowField: {
     gap: theme.spacing.md,
