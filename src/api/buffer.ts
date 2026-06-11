@@ -71,12 +71,15 @@ export const bufferApi = {
     return res.data
   },
 
-  // Promote a span of one buffer session into a durable saved clip (R3
-  // promote-on-publish). Backend returns 501 until R3 lands.
+  // Promote a wall-clock span of the whole-buffer timeline into a durable saved
+  // clip (R3 promote-on-publish, CROSS-SESSION). The span may cross buffer
+  // sessions (a camera flip / portrait↔landscape rotation starts a new session);
+  // the backend resolves the covered sessions and copies (uniform) or transcodes
+  // (mixed orientation) the in-window footage. `startAtMs`/`endAtMs` are universal
+  // wall-clock ms — the ClipEditScreen bracket is already in that space.
   saveClip: async (input: {
-    sessionId: string
-    startSec: number
-    endSec: number
+    startAtMs: number
+    endAtMs: number
     name: string
     kinds: string[]
   }): Promise<{ clipId: string }> => {
