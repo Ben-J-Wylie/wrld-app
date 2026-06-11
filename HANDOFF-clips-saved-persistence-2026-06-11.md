@@ -102,14 +102,19 @@ Recommendation: **unified list with a `source` field** (one saved surface, least
 
 ## Also needed: clip titles on sessions + recordings (small, additive)
 
-The grid now labels each clip by the **stream title** instead of its start time, but neither
-`BufferSession` nor `Recording` carries one today, so it falls back to the time. Populate an
-optional `title: string | null` (the stream's go-live title) on:
-- `GET /buffer/me` sessions (`BufferSession.title`)
-- the recordings list (`Recording.title`)
-- and `GET /buffer/me/clips` saved clips (`SavedClip.name` already covers this)
+The grid now labels each clip by the **stream title** instead of its start time. **No DB
+migration is needed** — `Stream.title` already exists and both tables already reference the
+stream. Just surface it as `title: string | null` in the responses:
+- **recordings list** — `Recording` already has `streamId` + a `stream` relation → `include`
+  the stream and return `recording.stream.title`.
+- **`GET /buffer/me` sessions** — `BufferSession.streamId` is the (nullable) FK column, but there's
+  **no `stream` relation defined yet**. Add the relation annotation (`schema.prisma` +
+  `prisma generate`, no data migration — the column already exists) then `include` it, or just
+  look up `Stream.title` by `streamId`. Nullable `streamId` → no title → grid falls back to time
+  (already handled).
+- **`GET /buffer/me/clips`** saved clips — `SavedClip.name` already covers this.
 
-The app types already declare the optional field (`src/api/buffer.ts`, `src/types/index.ts`) and
+The app types already declare the optional `title` (`src/api/buffer.ts`, `src/types/index.ts`) and
 consume it — no app change needed once the payloads include it.
 
 ## Rollout mapping
