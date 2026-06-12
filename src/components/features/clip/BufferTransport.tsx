@@ -75,7 +75,7 @@ export function BufferTransport({
         accessibilityLabel={playing ? 'Pause' : 'Play'}
         style={styles.playBtn}
       >
-        <Icon name={playing ? 'pause' : 'play'} size={24} color={theme.colors.text.inverse} />
+        <Icon name={playing ? 'pause' : 'play'} size={20} color={theme.colors.text.inverse} />
       </Pressable>
       <HoldStepButton
         icon="chevron-right"
@@ -183,9 +183,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   playBtn: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: theme.colors.accent.default,

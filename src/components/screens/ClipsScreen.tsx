@@ -724,7 +724,7 @@ const styles = StyleSheet.create({
   },
   transport: {
     paddingHorizontal: theme.spacing.lg,
-    marginTop: theme.spacing.xs,
+    marginTop: theme.spacing.sm,
   },
   gridWrap: {
     flex: 1,
