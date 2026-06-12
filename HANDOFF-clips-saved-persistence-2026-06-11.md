@@ -62,15 +62,42 @@ Profile saved-clips feed**.
 - ~~Model decision: saved lane = clips / recordings / both~~ — **decided: `Clip` rows** (recordings
   were purged; `Clip` unifies buffer-promoted + recording-sourced).
 
+### Backend fast-path — where each open item lives (`wrld-backend`, line #s approx)
+
+- **P1 `Clip.thumbnailUrl`** — `src/services/bufferClipService.ts` `promoteBufferClip` returns
+  `{ tracks, primaryManifestUrl, totalBytes }` (~L472); add a `thumbnailUrl` (generate from the
+  clip's in-point frame, or copy the source session's poster). Then set it in the route:
+  `src/routes/buffer.ts` ~L913, the `clip.update` `data: { status:'ready', manifestUrl: …, … }` →
+  add `thumbnailUrl: result.thumbnailUrl`.
+- **P1 `manifestUrl` + P2 `bufferSessionId`** — `src/routes/buffer.ts`, `GET /buffer/me/clips`
+  `saved.map(...)` (~L976). Add `manifestUrl: c.manifestUrl` and `bufferSessionId: c.bufferSessionId`
+  to the returned object — both are already scalar columns on the `Clip` (the `findMany` returns them).
+- **P2 `title`** — `src/routes/buffer.ts`, `GET /buffer/me` session mapping (~L512, where
+  `thumbnailUrl` is built). Needs `Stream.title`: add `stream Stream? @relation(...)` on
+  `BufferSession` in `schema.prisma` (+ `prisma generate`, **no migration** — the `streamId` FK
+  already exists), `include: { stream: { select: { title: true } } }` on the sessions, return
+  `title: s.stream?.title ?? null`.
+- **Minor Zod 500→400** — the `SaveClipBody.parse(req.body)` in `POST /buffer/me/clips` throws raw →
+  500. Wrap it (or add a ZodError → 400 handler) so validation failures are `badRequest`.
+
+> **App consumption status (land in any order):**
+> - **`Clip.thumbnailUrl`** and **session `title`** — **zero app change**; both fields are already
+>   declared + consumed, so the moment you populate them every surface lights up (and the
+>   thumbnail one supersedes my borrow stopgap).
+> - **`manifestUrl` + `bufferSessionId` on `SavedClip`** — need a tiny app follow-up (add the two
+>   fields to the `SavedClip` type, prefer the real `manifestUrl` over the session-borrow, swap the
+>   window-match to the exact `bufferSessionId`). **Ping me when they're in and I'll do it same-day.**
+
 ---
 
 ## What shipped (on `main`)
 
 - **Clips landing grid** — `app/(app)/clips.tsx` → `ClipsScreen`. Two-lane, time-ordered grid:
   **buffered** recording sessions (left) and **saved** clips (right) on a shared vertical axis,
-  now at the bottom. Per-clip collapsed-gap layout (each clip a readable block, empty stretches
+  **newest at the top**. Per-clip collapsed-gap layout (each clip a readable block, empty stretches
   → gap markers), pinch-to-zoom, **double-tap → editor**, **drag a clip across lanes to
-  save / un-save**.
+  save / un-save**, a sticky **ClipViewer** + **transport/clock** preview the selected clip, and the
+  **Me → Public Profile** feed lists saved clips.
 - **Shared `[Clips | Editor]` top tabs** across the grid and `ClipEditScreen` (sibling `href:null`
   tab routes → instant swap).
 - **Phase C** — double-tapping a clip scopes `ClipEditScreen` to that clip's own window (`clipId`
