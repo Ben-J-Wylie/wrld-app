@@ -66,6 +66,13 @@ export const ppvApi = {
     return { refundCount: res.data.refundCount }
   },
 
+  // End an event — marks it 'ended', clearing the PPV go-live gate so the host
+  // can stream normally. Ends the live broadcast if one is running. No refunds
+  // (ticket holders keep their access).
+  endEvent: async (id: string): Promise<void> => {
+    await apiClient.post(`/ppv-events/${id}/end`)
+  },
+
   deleteEvent: async (id: string): Promise<void> => {
     await apiClient.delete(`/ppv-events/${id}`)
   },
