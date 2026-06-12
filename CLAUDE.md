@@ -2857,3 +2857,32 @@ The durable fix is two backend pieces + an app-side source swap, spec'd in
 - **App side (Ben, once contract agreed):** `bufferApi.listSavedClips()` + `useSavedClips()`,
   grid saved lane → `useSavedClips()`, `moveClip` → save/delete + query-invalidate (drop the
   local override). The app already calls `saveClip`; it just needs the endpoints to persist.
+
+---
+
+## Source visualizers initiative — audio + sensor telemetry (June 2026)
+
+A viewer (and the live broadcaster, as a local monitor) can switch between a stream's sources and
+**see a visualizer for each non-camera source** — audio waveform/orb, compass, gyro, motion,
+accelerometer (3-axis), speed, temperature, torch. Camera stays video. Built so a data-only /
+audio-only stream is no longer a bare panel.
+
+**Working reference: `HANDOFF-source-visualizers-2026-06-12.md`** (cross-repo, has a START-HERE
+checklist for Aaron). Split:
+
+- **Ben (`design`) — DONE:** 8 presentational visualizers + `VisualizerFrame` + `SOURCE_META`
+  (`features/stream/`), the **`SourceStage`** section (`sections/`, the kind→component "universal
+  remote" — data sources render directly, camera/screen via an injected `slot`), galleries +
+  DESIGN.md Section 3. **Camera + audio wired end-to-end** (crossed into `hooks/`+`screens/` at
+  Ben's direction): `useMediasoup` exposes a real `audioLevel` (shared getStats poll — consumer for
+  the viewer, producer for the broadcaster mic); `StreamScreen` viewer + broadcaster surfaces switch
+  source via `SourceRail` (inline 2-case cam/audio today). Verified by `tsc` + Metro bundle; **owes
+  an on-device pass** (audio level moving with speech; switch feel).
+- **Aaron (`main` + sister repos) — TODO (telemetry data path):** mediasoup `telemetry`→
+  `telemetryUpdate` relay (Option A, like `chatMessage`); advertise aired sensor kinds via
+  `Stream.sources` (no new tables/endpoints); widen `SourceType` → `FeedKind`; `useTelemetryCapture`
+  (broadcaster, **`expo-sensors`** → EAS rebuild); `useStreamTelemetry` (viewer) and **swap
+  StreamScreen's inline switch for `SourceStage`** so sensors slot in. Decided wire contract +
+  per-repo detail in the handoff. **Temp has no reliable phone sensor** — ship UI-present-but-data-
+  absent or drop (decision in handoff). DECIDED contract should be mirrored into
+  `wrld-backend/CLAUDE.md` + `wrld-mediasoup/CLAUDE.md`.

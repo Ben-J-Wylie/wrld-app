@@ -60,8 +60,11 @@ import { ScreenHeader } from '@/components/sections/ScreenHeader'
 import { Text } from '@/components/primitives/Text'
 import { Icon } from '@/components/primitives/Icon'
 import { IconButton } from '@/components/primitives/IconButton'
-import { HelpText } from '@/components/primitives/HelpText'
 import { LivePill } from '@/components/features/stream/LivePill'
+import { AudioVisualizer } from '@/components/features/stream/AudioVisualizer'
+import { SourceRail } from '@/components/features/clip/SourceRail'
+import { SOURCE_META } from '@/components/features/stream/sourceMeta'
+import type { FeedKind } from '@/components/features/broadcast/FeedThumb'
 import { Avatar } from '@/components/primitives/Avatar'
 import { GoLiveRecordBar } from '@/components/features/broadcast/GoLiveRecordBar'
 import { LiveClockBar, LIVE_CLOCK_BAR_H } from '@/components/features/discovery/LiveClockBar'
@@ -104,11 +107,6 @@ import { useStream, useStreamByRoom } from '@/hooks/useStream'
 import { useAuthStore } from '@/stores/authStore'
 import type { Stream, SourceType, GiftCatalogItem } from '@/types'
 import type { TipEvent, GiftEvent } from '@/hooks/useSignaling'
-
-const SOURCE_LABELS: Record<SourceType, string> = {
-  camera: 'Camera',
-  audio: 'Audio',
-}
 
 // Keep the broadcaster's End Stream button at the same screen-bottom offset
 // as the dashboard's Go Live button (same value), so the shared control
@@ -288,7 +286,7 @@ export function StreamScreen() {
   const invalidateCurrentUser = useInvalidateCurrentUser()
   const invalidateWallet = useInvalidateWallet()
   const {
-    localStream, remoteStream, error: mediaError, facingMode, videoIsLandscape,
+    localStream, remoteStream, audioLevel, error: mediaError, facingMode, videoIsLandscape,
     startPreview, startBroadcasting, startViewing, switchCamera, cleanup,
   } = useMediasoup()
   const { isSignedIn } = useAuth()
@@ -373,8 +371,31 @@ export function StreamScreen() {
   // Shows the broadcaster's own camera both while LIVE and while PREVIEWING
   // (center-tab, not yet live) — localStream is set by startPreview too.
   const showCameraPreview = isNew && !!localStream && isCameraArmed
-  const showRemoteVideo = !isNew && status === 'in-room' && !!remoteStream && broadcastSources.includes('camera')
-  const showOverlay = showCameraPreview || showRemoteVideo
+  // Viewer is in a live room with media flowing. The viewer media surface
+  // (camera video OR a source visualizer) renders for the whole time this is
+  // true; the SourceRail switches which source is shown.
+  const isViewerInRoom = !isNew && status === 'in-room' && !streamEnded && !!remoteStream
+  // The available sources as FeedKind, for the rail. Role-aware: broadcastSources
+  // is the viewer's stream sources or the broadcaster's live/armed set — so the
+  // same rail serves both the viewer and the live broadcaster (source monitor).
+  const availableKinds = useMemo<FeedKind[]>(
+    () => broadcastSources.map((s) => (s === 'camera' ? 'cam' : 'audio')),
+    [broadcastSources],
+  )
+  // Which source is currently being shown (defaults to the first). Shared by the
+  // viewer and the broadcaster's own monitor.
+  const selectedKind: FeedKind = activeSource
+    ? activeSource === 'camera'
+      ? 'cam'
+      : 'audio'
+    : availableKinds[0] ?? 'cam'
+  const selectSource = (k: FeedKind) => setActiveSource(k === 'cam' ? 'camera' : 'audio')
+  // The viewer always gets the dark media surface + translucent control overlay
+  // (so a visualizer reads like the video it replaces).
+  const showOverlay = showCameraPreview || isViewerInRoom
+  // Live broadcaster monitoring a non-camera source — show that visualizer in the
+  // camera's place; the camera preview only shows when 'cam' is selected.
+  const showBroadcasterCamera = showCameraPreview && selectedKind === 'cam'
   // True while THIS broadcaster is live — drives the header page name ("Live")
   // and the live info row (LivePill + avatar + viewer count) that takes the
   // title input's place.
@@ -1133,31 +1154,60 @@ export function StreamScreen() {
           earlier RTCView-contain swap, which broke preview orientation on tilt).
           Android broadcaster + viewer: RTCView with objectFit "contain" so the
           FULL frame shows (black letterbox fills the rest). */}
-      {showOverlay && (
+      {/* Broadcaster camera preview (iOS gimbal / Android RTCView) — only when the
+          broadcaster is monitoring the camera source. */}
+      {showBroadcasterCamera && (
         <View style={[styles.cameraBox, { top: camTop, bottom: camBottom }]}>
-          {showCameraPreview ? (
-            Platform.OS === 'android' ? (
-              <GestureDetector gesture={androidZoomGesture}>
-                <View style={StyleSheet.absoluteFill} collapsable={false}>
-                  <RTCView
-                    streamURL={(localStream as unknown as { toURL(): string }).toURL()}
-                    style={StyleSheet.absoluteFill}
-                    objectFit="contain"
-                    mirror={facingMode === 'user'}
-                    zOrder={0}
-                  />
-                </View>
-              </GestureDetector>
-            ) : (
-              <CameraPreview
-                streamURL={(localStream as unknown as { toURL(): string }).toURL()}
-                style={StyleSheet.absoluteFill}
-                rotationDeg={previewGimbalDeg}
-                mirror={facingMode === 'user'}
-                onZoomChange={handlePreviewZoom}
-              />
-            )
+          {Platform.OS === 'android' ? (
+            <GestureDetector gesture={androidZoomGesture}>
+              <View style={StyleSheet.absoluteFill} collapsable={false}>
+                <RTCView
+                  streamURL={(localStream as unknown as { toURL(): string }).toURL()}
+                  style={StyleSheet.absoluteFill}
+                  objectFit="contain"
+                  mirror={facingMode === 'user'}
+                  zOrder={0}
+                />
+              </View>
+            </GestureDetector>
           ) : (
+            <CameraPreview
+              streamURL={(localStream as unknown as { toURL(): string }).toURL()}
+              style={StyleSheet.absoluteFill}
+              rotationDeg={previewGimbalDeg}
+              mirror={facingMode === 'user'}
+              onZoomChange={handlePreviewZoom}
+            />
+          )}
+        </View>
+      )}
+
+      {/* Broadcaster source monitor — when live and monitoring a non-camera
+          source, its visualizer fills the camera's place (camera keeps streaming
+          either way). Audio uses the broadcaster's own mic level. */}
+      {isLiveBroadcast && selectedKind !== 'cam' && (
+        <View style={[styles.cameraBox, { top: camTop, bottom: camBottom }]}>
+          <AudioVisualizer level={audioLevel} variant="waveform" active style={StyleSheet.absoluteFill} />
+        </View>
+      )}
+
+      {/* Broadcaster source rail — switch which source the broadcaster is
+          monitoring (camera ↔ audio ↔ future sensors), same as a viewer. */}
+      {isLiveBroadcast && availableKinds.length > 1 && (
+        <SourceRail
+          sources={availableKinds.map((k) => ({ key: k, iconName: SOURCE_META[k].icon, label: SOURCE_META[k].label }))}
+          value={selectedKind}
+          onChange={(k) => selectSource(k as FeedKind)}
+          style={styles.broadcasterRail}
+        />
+      )}
+
+      {/* Viewer media surface — the SELECTED source fills the media box: camera
+          video (RTCView) or a source visualizer. The SourceRail (in the control
+          overlay below) switches between the stream's sources. */}
+      {isViewerInRoom && (
+        <View style={[styles.cameraBox, { top: camTop, bottom: camBottom }]}>
+          {selectedKind === 'cam' ? (
             <RTCView
               streamURL={(remoteStream as unknown as { toURL(): string }).toURL()}
               style={StyleSheet.absoluteFill}
@@ -1165,13 +1215,15 @@ export function StreamScreen() {
               mirror={false}
               zOrder={0}
             />
+          ) : (
+            <AudioVisualizer level={audioLevel} variant="waveform" active style={StyleSheet.absoluteFill} />
           )}
         </View>
       )}
 
       {/* Pinch-to-zoom level indicator (broadcaster preview — Android JS pinch +
           iOS native pinch via CameraPreview). */}
-      {showCameraPreview && zoomLabel && (
+      {showBroadcasterCamera && zoomLabel && (
         <Animated.View style={[styles.zoomPill, { opacity: zoomOpacity }]} pointerEvents="none">
           <Text variant="monoLabel" color={theme.colors.text.inverse}>
             {zoomLabel}
@@ -1226,7 +1278,7 @@ export function StreamScreen() {
       {/* Camera flip — top-right of the camera frame. Moved off the bottom line
           so the chat input gets the full width and the send button takes the
           bottom-right corner the flip used to hold. */}
-      {showCameraPreview && (
+      {showBroadcasterCamera && (
         <View style={[styles.flipBtn, { top: camTop + theme.spacing.sm }]}>
           <IconButton
             name="repeat"
@@ -1259,7 +1311,7 @@ export function StreamScreen() {
         </View>
       )}
 
-      {showRemoteVideo && (
+      {isViewerInRoom && (
         <Pressable style={StyleSheet.absoluteFill} onPress={handleTap} />
       )}
 
@@ -1447,36 +1499,12 @@ export function StreamScreen() {
                 </View>
               )}
 
-              {broadcastSources.length > 0 && (
-                <View style={styles.section}>
-                  {!showOverlay && <HelpText>SOURCES</HelpText>}
-                  <View style={styles.sourceRow}>
-                    {broadcastSources.map((kind) => {
-                      const isActive = activeSource === kind
-                      return (
-                        <Pressable
-                          key={kind}
-                          onPress={() => setActiveSource(kind)}
-                          style={[
-                            styles.sourceSwitchBtn,
-                            isActive && styles.sourceSwitchBtnActive,
-                          ]}
-                        >
-                          <Text
-                            variant="bodyEmphasized"
-                            color={
-                              isActive
-                                ? theme.colors.accent.default
-                                : theme.colors.text.muted
-                            }
-                          >
-                            {SOURCE_LABELS[kind]}
-                          </Text>
-                        </Pressable>
-                      )
-                    })}
-                  </View>
-                </View>
+              {availableKinds.length > 1 && (
+                <SourceRail
+                  sources={availableKinds.map((k) => ({ key: k, iconName: SOURCE_META[k].icon, label: SOURCE_META[k].label }))}
+                  value={selectedKind}
+                  onChange={(k) => selectSource(k as FeedKind)}
+                />
               )}
 
               <Button label="Leave" onPress={handleLeave} variant="primary" />
@@ -1981,6 +2009,13 @@ const styles = StyleSheet.create({
     bottom: '38%',
   },
 
+  // Broadcaster source rail — floating right-centre while live, clear of the
+  // top-right flip button and the bottom record/End-Stream footer.
+  broadcasterRail: {
+    position: 'absolute',
+    right: theme.spacing.md,
+    top: '40%',
+  },
   // Camera flip — top-right of the camera frame; `top` is set inline to
   // camTop + sm.
   flipBtn: {

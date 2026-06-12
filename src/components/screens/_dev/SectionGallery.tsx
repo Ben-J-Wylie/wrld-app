@@ -12,9 +12,11 @@
 //
 // Reachable in dev via expo-router push to `/(app)/section-gallery`.
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { View, StyleSheet } from 'react-native'
 import { ScreenScroll } from '@/components/sections/ScreenScroll'
+import { SourceStage, type SourceRender } from '@/components/sections/SourceStage'
+import type { FeedKind } from '@/components/features/broadcast/FeedThumb'
 import { ScreenHeader } from '@/components/sections/ScreenHeader'
 import { Pill } from '@/components/primitives/Pill'
 import { TrendingRail } from '@/components/sections/TrendingRail'
@@ -49,6 +51,17 @@ export function SectionGallery() {
           form-bearing screen on `main`) wraps in a `ScreenScroll`. There's
           no "inline" preview because the section IS the scroll viewport.
         </Text>
+      </Section>
+
+      <Section title="SourceStage">
+        <Text variant="caption" color={theme.colors.text.muted}>
+          Live "universal remote": renders the selected source full-bleed + a SourceRail to
+          switch. Tap the rail. Camera/screen are an injected RTCView slot (here a
+          placeholder); everything else renders directly. Synthetic data.
+        </Text>
+        <View style={styles.stageFrame}>
+          <SourceStageDemo />
+        </View>
       </Section>
 
       <Section title="ScreenHeader">
@@ -180,6 +193,86 @@ export function SectionGallery() {
         />
       </Section>
     </ScreenScroll>
+  )
+}
+
+const STAGE_SOURCES: FeedKind[] = [
+  'cam', 'audio', 'compass', 'gyro', 'motion', 'accel', 'speed', 'temp', 'torch', 'loc', 'profile', 'chat',
+]
+
+function SourceStageDemo() {
+  const [selected, setSelected] = useState<FeedKind>('audio')
+  const [t, setT] = useState(0)
+  useEffect(() => {
+    const id = setInterval(() => setT((x) => x + 1), 90)
+    return () => clearInterval(id)
+  }, [])
+  const s = (f: number, phase = 0) => Math.sin(t * f + phase)
+
+  let source: SourceRender
+  switch (selected) {
+    case 'cam':
+    case 'screen':
+      source = { kind: selected, slot: <CameraSlotPlaceholder /> }
+      break
+    case 'audio':
+      source = { kind: 'audio', level: s(0.3) * 0.4 + 0.4, variant: 'waveform' }
+      break
+    case 'compass':
+      source = { kind: 'compass', heading: (t * 2) % 360 }
+      break
+    case 'gyro':
+      source = { kind: 'gyro', pitch: s(0.05) * 25, roll: s(0.08, 1) * 35 }
+      break
+    case 'motion':
+      source = { kind: 'motion', intensity: s(0.07) * 0.5 + 0.5 }
+      break
+    case 'accel':
+      source = { kind: 'accel', x: s(0.23) * 6, y: s(0.17, 2) * 6, z: 9.8 + s(0.4, 1) * 4 }
+      break
+    case 'speed':
+      source = { kind: 'speed', mps: (s(0.04) * 0.5 + 0.5) * 28 }
+      break
+    case 'temp':
+      source = { kind: 'temp', celsius: 18 + s(0.03) * 12 }
+      break
+    case 'torch':
+      source = { kind: 'torch', on: Math.floor(t / 12) % 2 === 0 }
+      break
+    case 'loc':
+      source = {
+        kind: 'loc',
+        path: [
+          [-122.4194, 37.7749],
+          [-122.418, 37.776],
+          [-122.4165, 37.7772],
+        ],
+      }
+      break
+    case 'profile':
+      source = { kind: 'profile', displayName: 'Kai Decker', handle: 'kai.dc', avatarUrl: null, attributed: true }
+      break
+    default:
+      source = { kind: 'chat', messages: [] }
+  }
+
+  return (
+    <SourceStage
+      sources={STAGE_SOURCES}
+      selected={selected}
+      onSelect={setSelected}
+      source={source}
+    />
+  )
+}
+
+function CameraSlotPlaceholder() {
+  return (
+    <View style={styles.camSlot}>
+      <Text variant="monoCaption" color={theme.colors.text.inverse}>
+        CAMERA · RTCView slot (screen lane)
+      </Text>
+    </View>
   )
 }
 
@@ -321,4 +414,6 @@ const styles = StyleSheet.create({
   sub: {
     gap: theme.spacing.xs,
   },
+  stageFrame: { height: 260, borderRadius: theme.radius.md, overflow: 'hidden' },
+  camSlot: { flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center' },
 })

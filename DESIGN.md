@@ -1543,6 +1543,125 @@ to IconButton without API changes.
 
 ---
 
+##### `AudioVisualizer`
+
+- **Tier:** feature (pure Views + plain `Animated`; composes Icon + Text)
+- **Location:** `src/components/features/stream/AudioVisualizer.tsx`
+- **Variants:** `waveform` (scrolling amplitude history — a live `SourceWaveform`), `orb` (central glow that scales/brightens with loudness)
+- **Sizes:** fills its container (parent gives it a frame); orb core 96
+- **States:** active (reacting to `level`), idle (`active={false}` → settles to baseline / dim orb)
+- **Used in:** not yet — stream-view wiring is the data seam below (Aaron's lane)
+- **Tweak impact:** the audio-only viewer surface (and any future source-visualizer fallback for non-camera streams)
+- **Shipped:** 2026-06-12 (source-visualizers initiative — first source: audio)
+- **Last reviewed:** 2026-06-12
+
+**Why this shape:** react-native-webrtc has no Web Audio / `AnalyserNode`, so
+the only real loudness source is `getStats().audioLevel` — a single 0..1 scalar
+(~10 Hz), **not a frequency spectrum**. A faked multi-bar EQ would read as
+synthetic, so both variants are honest single-scalar visuals: the waveform
+scrolls amplitude *history*, the orb maps amplitude to scale + glow.
+
+**Code does:** Presentational only — takes `level` (0..1) and renders it.
+Internal asymmetric envelope (fast attack / slow decay) tames raw jitter; the
+waveform advances on its own steady `SAMPLE_MS` ticker (decoupled from the
+prop's update rate) so scroll speed is constant. A perceptual `GAIN` lifts
+normal speech into range before clamping. Plain `Animated` (native driver) per
+the CALayer rule (transform/opacity only). Backdrop is the ink900 media surface,
+matching `SourceWaveform`.
+
+**API:** `level` (0..1), `variant` (`'waveform' | 'orb'`), `active?`, `label?`
+(default `'AUDIO'`), `barCount?` (waveform resolution, effectively static),
+`style?`.
+
+**Data seam (Aaron — `hooks/` + `screens/`):** a thin `useAudioLevel(consumer)`
+hook retains the audio `Consumer` in `useMediasoup` and polls
+`consumer.getStats()` for the inbound-rtp `audioLevel` (~100 ms), returning the
+0..1 scalar. `StreamScreen` renders `<AudioVisualizer level={…} variant={…} />`
+for the audio-only viewer path (when `showRemoteVideo` is false but
+`remoteStream` has an audio track). Until then the gallery exercises it with a
+synthetic speech-like envelope.
+
+**Gap / proposal:** variant choice is currently a prop — once wired, decide on
+device whether it's user-toggleable or a fixed default. The orb + waveform are
+the two honest options for a single-scalar source; if a spectrum source ever
+becomes available (e.g. broadcaster-side FFT sent as data), a third `spectrum`
+variant could be added without changing the seam.
+
+---
+
+##### `VisualizerFrame`
+
+- **Tier:** feature (composes Icon + Text; the shared chrome for live source visualizers)
+- **Location:** `src/components/features/stream/VisualizerFrame.tsx`
+- **Variants:** none — a frame
+- **States:** active, `dim` (idle, when the source isn't sending)
+- **Used in:** `AudioVisualizer`, `CompassVisualizer`, `GyroVisualizer`, `MotionVisualizer`, `SpeedVisualizer`, `TemperatureVisualizer`, `TorchVisualizer`
+- **Tweak impact:** every live source-visualizer's backdrop + label tag at once
+- **Shipped:** 2026-06-12 (source-visualizers initiative)
+- **Last reviewed:** 2026-06-12
+
+**Code does:** Warm-ink (`#1a1612`, ink900) media backdrop matching
+`SourceWaveform` and the video frame these replace; centres the per-source visual
+in `children`; renders a bottom-left tag (source `icon` + mono `label`). Exports
+`VIZ_MUTED` (the muted-cream mark colour) so every visualizer's idle/secondary
+marks read consistently on the ink surface. `dim` drops opacity for the no-signal
+state.
+
+**Gap / proposal:** None — shipped.
+
+---
+
+##### Sensor visualizers (`Compass` · `Gyro` · `Motion` · `Accelerometer` · `Speed` · `Temperature` · `Torch`)
+
+- **Tier:** feature (each composes `VisualizerFrame` + plain `Animated` + Text/Icon)
+- **Location:** `src/components/features/stream/{Compass,Gyro,Motion,Accelerometer,Speed,Temperature,Torch}Visualizer.tsx`
+- **States:** active (reacting to its data prop), idle (`active={false}` → dim + baseline)
+- **Used in:** not yet — the viewer-render + telemetry seam is Aaron's lane (see handoff)
+- **Tweak impact:** the non-camera viewer surfaces (a viewer watching a data-only / sensor stream)
+- **Shipped:** 2026-06-12 (source-visualizers initiative — sources 2–7)
+- **Last reviewed:** 2026-06-12
+
+Companions to `AudioVisualizer`, one per non-AV source in the FeedKind taxonomy.
+Each is **presentational** — it takes a single typed data prop and renders it;
+none touch WebRTC. Plain `Animated`, native driver, transform/opacity only
+(CALayer-rule safe). Smoothing is internal so raw sensor jitter is tamed.
+
+- **`CompassVisualizer`** — `heading` (0..360° true). Rotating bezel (N pointer +
+  cardinals) under a fixed top marker; numeric heading + 8-point cardinal.
+  Continuous-angle unwrap so 350→10° spins +20°.
+- **`GyroVisualizer`** — `pitch` / `roll` (degrees). Artificial horizon: the plane
+  rolls (rotate) + pitches (translateY), fixed centre crosshair, numeric P/R.
+- **`MotionVisualizer`** — `intensity` (0..1, smoothed accelerometer magnitude).
+  Vertical segment ladder lit bottom→top + numeric %. Deliberately distinct from
+  the audio waveform (static ladder vs scroll).
+- **`AccelerometerVisualizer`** — `{ x, y, z }` (m/s²). Three scrolling per-axis dot
+  traces around a zero line + a current-value legend (X crimson · Y amber · Z cream).
+  **Same sensor as `MotionVisualizer`, fuller view:** motion is the accelerometer
+  collapsed to one magnitude scalar (glance: "how active"); this keeps all three
+  axes (detail: "how it's moving"). Both ship — they answer different questions.
+  Dependency-free (dot trace, no SVG/chart lib), like the clip `Source*` views.
+- **`SpeedVisualizer`** — `mps` (m/s; e.g. GPS `coords.speed`). Large numeric
+  (converted to `unit` km/h | mph) + a gauge bar toward `max`.
+- **`TemperatureVisualizer`** — `celsius`. Vertical thermometer fill over a fixed
+  range + numeric (`unit` c | f). **Caveat: ambient temp has no reliable
+  cross-platform sensor** (iOS none; Android `TYPE_AMBIENT_TEMPERATURE` rare) —
+  the component renders whatever it's given; sourcing it is the open problem (see handoff).
+- **`TorchVisualizer`** — `on` (+ optional `level`). Lamp with accent core + glow
+  halo when lit, ON/OFF label. Suits the on/off "torch channel" (incl. morse).
+
+**Data seam (Aaron — mediasoup + backend + `hooks/` + `screens/`):** unlike audio
+(whose track + `getStats` already flow), these need a **telemetry data path** that
+doesn't exist yet — the broadcaster captures the sensor, sends it over a relay,
+viewers receive it and feed the prop. Full cross-repo spec (mediasoup relay vs
+SCTP DataChannel, backend, Prisma, app hooks) is in
+`HANDOFF-source-visualizers-2026-06-12.md`.
+
+**Gap / proposal:** variant/visual choices are first-pass; revisit on device once
+real telemetry flows (e.g. gyro as horizon vs 3-axis dials; motion ladder vs
+ripple). Temperature is the weakest link — may ship UI-present but data-absent.
+
+---
+
 ##### `DiscoveryHandoffCard`
 
 - **Tier:** feature (composes Avatar + Text + Button + Pressable + Icon + LivePill + StreamStrip section)
@@ -3697,6 +3816,47 @@ Populated from the 12.2 inventory pass. Sections are regional patterns
 that repeat across two or more screens. The 16 entries below all meet
 that bar. Several patterns that *don't* meet it stay inline in their
 single home screen — flagged at the end.
+
+##### `SourceStage`
+
+- **Tier:** section (composes the live `*Visualizer` features + clip `Source*` views + `SourceRail`)
+- **Location:** `src/components/sections/SourceStage.tsx`
+- **Props:** `sources: FeedKind[]` (available → rail), `selected: FeedKind`, `onSelect`,
+  `source: SourceRender` (resolved data for the selected kind), `active?`, `style?`
+- **States:** per-source render; rail hidden when ≤1 source; data sources show idle until `active`
+- **Used in:** not yet — the live viewer wiring is the screen/telemetry lane (see handoff)
+- **Tweak impact:** the whole non-camera live viewer surface — one switchboard for every source
+- **Shipped:** 2026-06-12 (source-visualizers initiative)
+- **Last reviewed:** 2026-06-12
+
+The live **"universal remote"**: renders the selected source full-bleed and overlays a
+`SourceRail` to switch between the stream's available sources. It's a **section** because
+it composes many features (the tier rule forbids feature-composes-feature). The kind→
+component mapping lives here, so a screen drops in one component and the dispatch + rail
+are handled.
+
+**Render split (the rule that keeps the design layer clean):**
+- **Data / visual / map sources** — `audio` → `AudioVisualizer`; `compass`/`gyro`/`motion`/
+  `accel`/`speed`/`temp`/`torch` → their visualizers; `loc` → `SourceLocationTrail` (real
+  Mapbox mini-map, pin + slug trail); `profile` → `SourceIdentityCard`; `chat` →
+  `SourceChatLog` — rendered directly.
+- **Camera & screen (live WebRTC video)** — rendered via an **injected `slot`** (a
+  `ReactNode`) the SCREEN fills with `<RTCView>`. The design system stays WebRTC-free; same
+  pattern as `BufferScrubField`'s `frameSlot`.
+
+`SourceRender` is a discriminated union (one shape per `kind`) exported from the same file;
+`source.kind` must equal `selected`. The rail glyphs/labels come from the shared
+`SOURCE_META` map (`src/components/features/stream/sourceMeta.ts`), keyed by `FeedKind`, so
+the rail and dispatch can't drift.
+
+**Data seam (Aaron — `screens/` + telemetry path):** the screen owns `selected`/`onSelect`
+state, builds the `SourceRender` for the selected kind from live data (`useStreamTelemetry`
+for sensors, the `getStats` seam for audio, `remoteStream` `RTCView` for the camera slot),
+and widens the persisted source set beyond `SourceType = camera|audio`. See
+`HANDOFF-source-visualizers-2026-06-12.md`.
+
+**Gap / proposal:** one-source-at-a-time today (rail switches). A future multi-pane / PiP
+layout (several sources at once) would be a new section variant, not a change here.
 
 ##### `ScreenHeader`
 
