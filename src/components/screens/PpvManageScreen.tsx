@@ -39,6 +39,7 @@ export function PpvManageScreen() {
   const qc = useQueryClient()
   const [countdown, setCountdown] = useState('')
   const [cancelling, setCancelling] = useState(false)
+  const [ending, setEnding] = useState(false)
 
   const { data: event, isLoading, refetch } = useQuery({
     queryKey: ['ppv-event-manage', id],
@@ -80,6 +81,34 @@ export function PpvManageScreen() {
               Alert.alert('Error', 'Could not cancel event')
             } finally {
               setCancelling(false)
+            }
+          },
+        },
+      ],
+    )
+  }
+
+  function handleEnd() {
+    Alert.alert(
+      'End event',
+      `End "${event?.title}"? This finishes the event (ending the live broadcast if one is running) and lets you stream normally again. Ticket holders keep their access — no refunds.`,
+      [
+        { text: 'Keep event', style: 'cancel' },
+        {
+          text: 'End event',
+          style: 'destructive',
+          onPress: async () => {
+            setEnding(true)
+            try {
+              await ppvApi.endEvent(id)
+              qc.invalidateQueries({ queryKey: ['ppv-event-manage', id] })
+              qc.invalidateQueries({ queryKey: ['my-ppv-events'] })
+              qc.invalidateQueries({ queryKey: ['my-scheduled-ppv-events'] })
+              refetch()
+            } catch {
+              Alert.alert('Error', 'Could not end event')
+            } finally {
+              setEnding(false)
             }
           },
         },
@@ -202,6 +231,14 @@ export function PpvManageScreen() {
               pathname: '/(app)/ppv/create',
               params: { eventId: event.id },
             })}
+          />
+        )}
+        {(isScheduled || isLive) && (
+          <Button
+            label={ending ? 'Ending…' : 'End event'}
+            variant="secondary"
+            onPress={handleEnd}
+            disabled={ending}
           />
         )}
         {(isScheduled || isLive) && (
