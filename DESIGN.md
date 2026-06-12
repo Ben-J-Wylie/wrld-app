@@ -3341,13 +3341,16 @@ over [start, end], no rolling-buffer eviction gap / live tail, playhead bounded,
 to the whole clip — Phase C); **drag** a clip across to the other lane to **save** (buffered →
 saved) / **un-save**
 (saved → buffered) — locked in time. Opens at a default zoom where the longest clip is ~130px,
-scrolled to now. **A clip lives in exactly ONE lane (2026-06-11 model):** saving is a *move*,
-not a copy — a buffered session covered by a saved clip is **hidden from the buffer lane**
-(`savedClipCovers`, window-matched; the exact link is the clip's source `bufferSessionId` —
-pending in the API, see handoff), and un-saving brings it back. So clips in a lane never overlap →
-**no sub-columns**. Saved clips come from the durable `Clip` pool (`useSavedClips`); buffered from
-the live buffer sessions. The screen owns the layout (`buildLayout` → a per-clip `pos` map + gap
-list), so a later flip to top/bottom lanes is a layout swap.
+scrolled to now. **The buffer lane shows footage MINUS the saved ranges (carve — 2026-06-12, C4.5
+Phase 1):** a saved (possibly *trimmed*) clip carves its range out of its source session
+(`carveBuffer` subtracts each saved clip's `ranges`/window per `bufferSessionId`); the leading /
+trailing remainder stay as buffer entries you can still clip (synthetic id `sessionId~startMs`). A
+whole-session save → nothing remains (the "move" case); un-saving un-carves it. So a saved range
+shows in exactly one lane, and you **can't re-save a carved range** (the duplicate-save fix).
+Drag-to-save is optimistic (`pendingSaves` carves + placeholders until the real `Clip` lands, then
+prunes). Saved clips come from the durable `Clip` pool (`useSavedClips`); buffered from the live
+sessions; both refetch on focus (so an editor save reflects). Clips never overlap → **no
+sub-columns**. The screen owns the layout (`buildLayout` → a per-clip `pos` map + gap list).
 
 > Zoom = a 2-finger **pinch** over a native `ScrollView`. The shared **`ZoomButton`**
 > (extracted from `BufferTimeline`) is the *editor timeline's* tap/hold zoom — not on this grid.

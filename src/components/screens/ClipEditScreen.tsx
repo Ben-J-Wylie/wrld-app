@@ -241,16 +241,24 @@ export const ClipEditScreen = () => {
   // VOD mapping below stays whole-buffer, so a clip whose footage is in the buffer
   // plays from the correct media offset; a saved clip whose footage has since been
   // evicted degrades to its poster until real saved-clip playback is wired.)
-  // `kind` is a hint; resolve by id in both sources so either lane's clip opens.
-  const { clipId } = useLocalSearchParams<{ clipId?: string; kind?: string }>()
+  // `startMs`/`endMs` bound a carved buffer interval directly (its id is synthetic); `clipId`
+  // resolves a saved clip or whole session for its name. `kind` is a hint.
+  const { clipId, startMs: pStartMs, endMs: pEndMs } = useLocalSearchParams<{ clipId?: string; kind?: string; startMs?: string; endMs?: string; sessionId?: string }>()
   const focusClip = useMemo<{ startMs: number; endMs: number; name: string } | null>(() => {
+    const ps = pStartMs ? Number(pStartMs) : NaN
+    const pe = pEndMs ? Number(pEndMs) : NaN
+    const saved = clipId ? (savedClipsData ?? []).find((x) => x.id === clipId) : undefined
+    if (Number.isFinite(ps) && Number.isFinite(pe) && pe > ps) {
+      // A passed window (carved buffer interval, or any explicit range).
+      const name = saved?.name?.trim() || clipLabel(ps)
+      return { startMs: ps, endMs: pe, name }
+    }
     if (!clipId) return null
-    const saved = (savedClipsData ?? []).find((x) => x.id === clipId)
     if (saved) return { startMs: saved.startAtMs, endMs: saved.endAtMs, name: saved.name?.trim() || clipLabel(saved.startAtMs) }
     const s = sessions.find((x) => x.id === clipId)
     if (s) return { startMs: sessionStartMs(s), endMs: sessionEndMs(s), name: s.title?.trim() || clipLabel(sessionStartMs(s)) }
     return null
-  }, [clipId, savedClipsData, sessions])
+  }, [clipId, pStartMs, pEndMs, savedClipsData, sessions])
   const focused = !!focusClip
   const focusedRef = useRef(focused)
   focusedRef.current = focused

@@ -55,16 +55,8 @@ const slog = (...args: unknown[]) => {
   if (__DEV__) console.log('[clips-save]', ...args)
 }
 
-const SAVED_MATCH_TOL_MS = 1500
-// A saved clip and its source buffered session are the SAME clip in two states, so a saved
-// session is hidden from the buffer lane (saving MOVES it, never duplicates). The exact link
-// is the clip's `sourceSessionId` (= backend `bufferSessionId`); fall back to window overlap
-// for any legacy clip that has none.
-const isSourceSession = (b: LaneClip, s: { sourceSessionId?: string | null; startMs: number; endMs: number }) =>
-  s.sourceSessionId
-    ? s.sourceSessionId === b.id
-    : s.startMs <= b.startMs + SAVED_MATCH_TOL_MS && s.endMs >= b.endMs - SAVED_MATCH_TOL_MS
-const isSessionSaved = (b: LaneClip, savedList: LaneClip[]) => savedList.some((s) => isSourceSession(b, s))
+const MATCH_TOL_MS = 2000 // window tolerance matching an optimistic save to its real Clip
+const MIN_REMAINDER_MS = 1000 // don't show carved remainders shorter than this
 
 const sessionStartMs = (s: BufferSession) => Date.parse(s.startedAt) + (s.mediaStartOffsetMs ?? 0)
 // `?? 0` matters: a brand-new live session can have BOTH duration fields undefined.
@@ -97,6 +89,48 @@ function fmtGap(ms: number) {
   if (h > 0) return `${h}h ${pad(m)}m`
   if (m > 0) return `${m}m`
   return `${t}s`
+}
+
+// ── carve: the buffer lane shows footage MINUS the saved ranges ──────────────
+// A saved (possibly trimmed) clip carves its range out of its source session; the leading /
+// trailing remainder stay as buffer entries you can still clip. Whole-session save → nothing
+// remains (the "move" case). Backend keeps the buffer footage on save (verified), so this is
+// a pure display computation.
+type Claim = { sessionId: string; startMs: number; endMs: number }
+// An in-flight drag-to-save: carves its range out + shows a saved-lane placeholder until the
+// real Clip lands (then it's pruned and the real clip takes over seamlessly).
+type PendingSave = { tempId: string; sessionId: string; startMs: number; endMs: number; label: string; posterUrl?: string | null; manifestUrl?: string | null }
+function bufEntry(s: BufferSession, a: number, b: number): LaneClip {
+  return {
+    id: `${s.id}~${Math.round(a)}`,
+    startMs: a,
+    endMs: b,
+    label: s.title?.trim() || fmtTime(a),
+    sublabel: fmtDur((b - a) / 1000),
+    posterUrl: s.thumbnailUrl,
+    manifestUrl: s.manifestUrl,
+    sourceSessionId: s.id, // the session this footage belongs to
+  }
+}
+function carveBuffer(sessions: BufferSession[], claims: Claim[]): LaneClip[] {
+  const out: LaneClip[] = []
+  for (const s of sessions) {
+    const sStart = sessionStartMs(s)
+    const sEnd = sessionEndMs(s)
+    if (sEnd - sStart < MIN_REMAINDER_MS) continue
+    const cuts = claims
+      .filter((c) => c.sessionId === s.id)
+      .map((c) => [Math.max(sStart, c.startMs), Math.min(sEnd, c.endMs)] as [number, number])
+      .filter(([a, b]) => b > a)
+      .sort((x, y) => x[0] - y[0])
+    let cursor = sStart
+    for (const [a, b] of cuts) {
+      if (a - cursor > MIN_REMAINDER_MS) out.push(bufEntry(s, cursor, a))
+      cursor = Math.max(cursor, b)
+    }
+    if (sEnd - cursor > MIN_REMAINDER_MS) out.push(bufEntry(s, cursor, sEnd))
+  }
+  return out
 }
 
 // ── per-clip collapsed layout ────────────────────────────────────────────────
@@ -142,97 +176,92 @@ export const ClipsScreen = () => {
   const { isSignedIn } = useAuth()
   const isLive = useBroadcastStore((s) => s.isLive)
   const qc = useQueryClient()
-  const { data: buffer } = useBuffer(!!isSignedIn, isLive)
-  const { data: savedData } = useSavedClips(!!isSignedIn)
+  const { data: buffer, refetch: refetchBuffer } = useBuffer(!!isSignedIn, isLive)
+  const { data: savedData, refetch: refetchSaved } = useSavedClips(!!isSignedIn)
   // Trace what the saved-clip list returns (does a just-saved clip show up?).
   useEffect(() => {
     slog('GET /buffer/me/clips →', savedData?.length ?? 0, 'saved clip(s)', (savedData ?? []).map((c) => c.id))
   }, [savedData])
 
-  // ── normalise both data sources into time-positioned lane clips ──
-  // Clips are labelled by the stream TITLE; the start time + duration live on the
-  // sublabel + the left ruler. Buffered sessions fall back to the time until the
-  // backend carries `title` onto the buffer descriptor (handoff 2026-06-11); saved
-  // clips carry their saved name.
-  const buffered = useMemo<LaneClip[]>(() => {
-    return (buffer?.sessions ?? []).map((s) => {
-      const startMs = sessionStartMs(s)
-      const endMs = sessionEndMs(s)
-      return {
-        id: s.id,
-        startMs,
-        endMs,
-        label: s.title?.trim() || fmtTime(startMs),
-        sublabel: fmtDur((endMs - startMs) / 1000),
-        posterUrl: s.thumbnailUrl,
-        manifestUrl: s.manifestUrl, // playable in the sticky viewer
-      }
-    })
-  }, [buffer])
-  const saved = useMemo<LaneClip[]>(() => {
-    return (savedData ?? []).map((c) => {
-      // The Clip now carries its own durable poster + manifest (backend P1). Prefer those;
-      // fall back to borrowing the source buffer session's while it's still buffered (covers
-      // the brief window before a poster/manifest exists, and very old clips).
-      const src = buffered.find((b) => isSourceSession(b, { sourceSessionId: c.bufferSessionId, startMs: c.startAtMs, endMs: c.endAtMs }))
-      return {
-        id: c.id,
-        startMs: c.startAtMs,
-        endMs: c.endAtMs,
-        label: c.name?.trim() || fmtTime(c.startAtMs),
-        sublabel: fmtDur((c.endAtMs - c.startAtMs) / 1000),
-        posterUrl: c.thumbnailUrl ?? src?.posterUrl ?? null,
-        manifestUrl: c.manifestUrl ?? src?.manifestUrl ?? null,
-        sourceSessionId: c.bufferSessionId,
-      }
-    })
-  }, [savedData, buffered])
+  // ── lanes: buffer = footage minus saved ranges (carve); saved = the saved clips ──
+  const sessions = useMemo(() => buffer?.sessions ?? [], [buffer])
 
-  // Saving COPIES a buffer span into a durable Clip (new id) — the buffer session
-  // stays. So this isn't a "move": dragging a buffered clip right CREATES a saved
-  // copy (the block springs back), and dragging a saved clip left DELETES the copy
-  // (un-save). `pendingDelete` optimistically hides a clip being un-saved.
+  // Un-save: optimistically drop a clip being deleted (its range un-carves → back to buffer).
   const [pendingDelete, setPendingDelete] = useState<Set<string>>(new Set())
-  // Source session ids being saved right now — optimistically moved to the saved lane so the
-  // dragged block lands there immediately, before the POST + refetch round-trip resolves.
-  const [movingToSaved, setMovingToSaved] = useState<Set<string>>(new Set())
+  // In-flight drag-to-save: carved out + placeholdered until the real Clip lands.
+  const [pendingSaves, setPendingSaves] = useState<PendingSave[]>([])
 
-  // The real server-backed saved clips (minus any being un-saved).
-  const realSaved = useMemo(() => saved.filter((c) => !pendingDelete.has(c.id)), [saved, pendingDelete])
-  // Optimistic placeholder in the saved lane for each session mid-save whose real Clip
-  // hasn't arrived yet (`pending:` id; same window/label → seamless swap when it lands).
-  const optimisticSaved = useMemo(
-    () => buffered.filter((b) => movingToSaved.has(b.id) && !isSessionSaved(b, realSaved)).map((b) => ({ ...b, id: `pending:${b.id}` })),
-    [buffered, movingToSaved, realSaved],
+  const realSavedData = useMemo(() => (savedData ?? []).filter((c) => !pendingDelete.has(c.id)), [savedData, pendingDelete])
+
+  // Saved-lane clips. Prefer the clip's own durable poster/manifest; fall back to the source
+  // session's while it survives.
+  const savedLaneReal = useMemo<LaneClip[]>(
+    () =>
+      realSavedData.map((c) => {
+        const src = sessions.find((s) => s.id === c.bufferSessionId)
+        return {
+          id: c.id,
+          startMs: c.startAtMs,
+          endMs: c.endAtMs,
+          label: c.name?.trim() || fmtTime(c.startAtMs),
+          sublabel: fmtDur((c.endAtMs - c.startAtMs) / 1000),
+          posterUrl: c.thumbnailUrl ?? src?.thumbnailUrl ?? null,
+          manifestUrl: c.manifestUrl ?? src?.manifestUrl ?? null,
+          sourceSessionId: c.bufferSessionId,
+        }
+      }),
+    [realSavedData, sessions],
   )
-  const savedLane = useMemo(() => [...realSaved, ...optimisticSaved], [realSaved, optimisticSaved])
-  // Saving MOVES a clip (it must not show in both lanes): a buffered session drops out of the
-  // buffer lane while moving, and once a real saved clip covers its window. Un-saving (the clip
-  // leaves `realSaved` via pendingDelete / refetch) brings the session back automatically.
-  const bufferedLane = useMemo(
-    () => buffered.filter((b) => !movingToSaved.has(b.id) && !isSessionSaved(b, realSaved)),
-    [buffered, movingToSaved, realSaved],
+
+  // A pending save stays "pending" until a real saved clip with a matching window arrives.
+  const matchesReal = useCallback(
+    (ps: PendingSave) =>
+      realSavedData.some(
+        (c) => c.bufferSessionId === ps.sessionId && Math.abs(c.startAtMs - ps.startMs) < MATCH_TOL_MS && Math.abs(c.endAtMs - ps.endMs) < MATCH_TOL_MS,
+      ),
+    [realSavedData],
   )
+  const pendingNotReal = useMemo(() => pendingSaves.filter((ps) => !matchesReal(ps)), [pendingSaves, matchesReal])
+
+  const savedLane = useMemo<LaneClip[]>(
+    () => [
+      ...savedLaneReal,
+      ...pendingNotReal.map((ps) => ({
+        id: ps.tempId,
+        startMs: ps.startMs,
+        endMs: ps.endMs,
+        label: ps.label,
+        sublabel: fmtDur((ps.endMs - ps.startMs) / 1000),
+        posterUrl: ps.posterUrl,
+        manifestUrl: ps.manifestUrl,
+        sourceSessionId: ps.sessionId,
+      })),
+    ],
+    [savedLaneReal, pendingNotReal],
+  )
+
+  // Carve: subtract the saved ranges (real + pending) from each session → remaining footage.
+  const claims = useMemo<Claim[]>(() => {
+    const out: Claim[] = []
+    for (const c of realSavedData) {
+      if (c.ranges?.length) for (const r of c.ranges) out.push({ sessionId: r.bufferSessionId, startMs: r.startAtMs, endMs: r.endAtMs })
+      else if (c.bufferSessionId) out.push({ sessionId: c.bufferSessionId, startMs: c.startAtMs, endMs: c.endAtMs })
+    }
+    for (const ps of pendingNotReal) out.push({ sessionId: ps.sessionId, startMs: ps.startMs, endMs: ps.endMs })
+    return out
+  }, [realSavedData, pendingNotReal])
+
+  const bufferedLane = useMemo(() => carveBuffer(sessions, claims), [sessions, claims])
   const allClips = useMemo(() => [...bufferedLane, ...savedLane], [bufferedLane, savedLane])
   const hasAny = allClips.length > 0
 
-  // Drop the optimistic flag once the session's real Clip lands (covers it) or it vanishes —
-  // the placeholder is replaced by the real saved clip without a flicker.
+  // Prune pending saves once the real list has caught up.
   useEffect(() => {
-    setMovingToSaved((prev) => {
-      if (!prev.size) return prev
-      const next = new Set(prev)
-      let changed = false
-      for (const id of prev) {
-        const b = buffered.find((x) => x.id === id)
-        if (!b || isSessionSaved(b, realSaved)) {
-          next.delete(id)
-          changed = true
-        }
-      }
-      return changed ? next : prev
+    setPendingSaves((prev) => {
+      const next = prev.filter((ps) => !matchesReal(ps))
+      return next.length === prev.length ? prev : next
     })
-  }, [buffered, realSaved])
+  }, [matchesReal])
 
   // ── sticky viewer selection ──
   // Single-tap a clip → preview it in the viewer; default to the newest clip.
@@ -355,19 +384,25 @@ export const ClipsScreen = () => {
   // clip appears on the next refetch. Surface failures (quota / no-footage / promote
   // error) instead of swallowing them — silent failure is why a save "won't stick".
   // `[clips-save]` traces print to the Metro terminal (dev only) for diagnosing.
+  // Drag a buffered remainder right → save just its window. Optimistically carve it out +
+  // placeholder it in the saved lane; the real Clip prunes the placeholder when it lands.
   const saveClip = useCallback(
     (clip: LaneClip) => {
-      // The backend requires a non-empty `kinds`. Resolve the captured source tracks
-      // from the buffer session(s) the window covers (union across a cross-session
-      // span); fall back to camera if a session reports none.
+      const sessionId = clip.sourceSessionId
+      if (!sessionId) return
+      // The backend requires a non-empty `kinds` — resolve from the covered session(s).
       const kindSet = new Set<string>()
-      for (const s of buffer?.sessions ?? []) {
+      for (const s of sessions) {
         if (sessionEndMs(s) > clip.startMs && sessionStartMs(s) < clip.endMs) s.kinds.forEach((k) => kindSet.add(k))
       }
       const kinds = kindSet.size ? [...kindSet] : ['camera']
+      const tempId = `pending:${clip.id}`
+      setPendingSaves((prev) => [
+        ...prev,
+        { tempId, sessionId, startMs: clip.startMs, endMs: clip.endMs, label: clip.label, posterUrl: clip.posterUrl, manifestUrl: clip.manifestUrl },
+      ])
       const payload = { startAtMs: Math.round(clip.startMs), endAtMs: Math.round(clip.endMs), name: clip.label, kinds }
       slog('POST /buffer/me/clips →', payload, `(window ${Math.round((payload.endAtMs - payload.startAtMs) / 1000)}s)`)
-      setMovingToSaved((prev) => new Set(prev).add(clip.id)) // optimistic move → saved lane
       bufferApi
         .saveClip(payload)
         .then((res) => {
@@ -375,24 +410,21 @@ export const ClipsScreen = () => {
           refetchSavedSoon()
         })
         .catch((err: unknown) => {
-          setMovingToSaved((prev) => {
-            const next = new Set(prev)
-            next.delete(clip.id) // revert the optimistic move
-            return next
-          })
+          setPendingSaves((prev) => prev.filter((p) => p.tempId !== tempId)) // revert the optimistic carve
           const e = err as { response?: { status?: number; data?: { message?: string; error?: string } }; message?: string }
           slog('SAVE FAILED — status', e.response?.status, '— body', JSON.stringify(e.response?.data), '— msg', e.message)
           const msg = e.response?.data?.message ?? e.response?.data?.error ?? e.message ?? 'Could not save clip'
           Alert.alert('Save failed', msg)
         })
     },
-    [buffer, refetchSavedSoon],
+    [sessions, refetchSavedSoon],
   )
 
   // Drag a SAVED clip left → un-save (delete the durable copy). Optimistically hide
   // it; revert if the delete fails.
   const unsaveClip = useCallback(
     (clip: LaneClip) => {
+      if (clip.id.startsWith('pending:')) return // an optimistic placeholder, not a real clip yet
       setPendingDelete((prev) => new Set(prev).add(clip.id))
       bufferApi
         .deleteSavedClip(clip.id)
@@ -417,7 +449,17 @@ export const ClipsScreen = () => {
     const id = setInterval(() => setNowMs(Date.now()), 10_000)
     return () => clearInterval(id)
   }, [])
-  useFocusEffect(useCallback(() => setNowMs(Date.now()), []))
+  // On focus (e.g. returning from the editor after a save), refresh both sources so the
+  // carve reflects any new saved clip.
+  const refetchRef = useRef({ refetchBuffer, refetchSaved })
+  refetchRef.current = { refetchBuffer, refetchSaved }
+  useFocusEffect(
+    useCallback(() => {
+      setNowMs(Date.now())
+      refetchRef.current.refetchBuffer()
+      refetchRef.current.refetchSaved()
+    }, []),
+  )
   const axisTop = useMemo(() => {
     let newest = nowMs
     for (const c of allClips) if (Number.isFinite(c.endMs) && c.endMs > newest) newest = c.endMs
@@ -534,7 +576,18 @@ export const ClipsScreen = () => {
   )
 
   const openClip = useCallback((clip: LaneClip, kind: 'buffered' | 'saved') => {
-    router.navigate({ pathname: '/(app)/clip-editor', params: { clipId: clip.id, kind } })
+    // Pass the window so the editor scopes to a carved buffer interval (whose id is synthetic),
+    // and the source session so it can play the right buffer footage.
+    router.navigate({
+      pathname: '/(app)/clip-editor',
+      params: {
+        clipId: clip.id,
+        kind,
+        startMs: String(Math.round(clip.startMs)),
+        endMs: String(Math.round(clip.endMs)),
+        sessionId: clip.sourceSessionId ?? '',
+      },
+    })
   }, [])
 
   return (
