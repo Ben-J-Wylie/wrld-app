@@ -14,6 +14,7 @@
 // route lands; the Saved tab + saved-regions reflect this session's saves only.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { Alert, Animated, RefreshControl, StyleSheet, View } from 'react-native'
 import { ScreenScroll } from '@/components/sections/ScreenScroll'
@@ -232,6 +233,7 @@ export const ClipEditScreen = () => {
   const { data: buffer, refetch: refetchBuffer } = useBuffer(!!isSignedIn, isLive)
   const { data: currentUser } = useCurrentUser()
   const { data: savedClipsData } = useSavedClips(!!isSignedIn)
+  const qc = useQueryClient()
   const sessions = buffer?.sessions ?? EMPTY_SESSIONS
 
   // ── focus clip (opened from the Clips grid) ──────────────────────────────────
@@ -595,10 +597,13 @@ export const ClipEditScreen = () => {
       useNativeDriver: false,
     }).start()
   }, [clockExpanded, clockLift])
+  // True once the user makes a real edit (so just opening a clip doesn't create a draft).
+  const editStartedRef = useRef(false)
   // Clip inclusion: which lanes the gutter toggles have ON (in the clip). Default all on.
   // Trims/deletes apply only to these; the clip span comes from their oldest/newest data.
   const [clipLanes, setClipLanes] = useState<Set<string>>(() => new Set(RAIL_ORDER))
   const toggleClipLane = useCallback((key: string) => {
+    editStartedRef.current = true
     setClipLanes((prev) => {
       const next = new Set(prev)
       if (next.has(key)) next.delete(key)
@@ -610,6 +615,67 @@ export const ClipEditScreen = () => {
   // blocks. MOCK-side state today; Aaron's manifest persists these as the real clip edit.
   const [removedByLane, setRemovedByLane] = useState<Record<string, Interval[]>>({})
   const includedKeys = useMemo(() => [...clipLanes], [clipLanes])
+
+  // ── C4.5 draft persistence ──────────────────────────────────────────────────
+  // Editing a buffer interval lazily creates a DRAFT and PATCHes its manifest as you edit;
+  // editing an already-saved clip PATCHes it in place (C4.4). Save materialises the draft.
+  // (Trim window + per-source on/off persist now; per-lane mid-clip deletes — `removedByLane`
+  // — are still mock-only.)
+  const editingSavedId = useMemo(
+    () => (clipId && (savedClipsData ?? []).some((c) => c.id === clipId) ? clipId : null),
+    [clipId, savedClipsData],
+  )
+  const draftIdRef = useRef<string | null>(editingSavedId)
+  const draftPushTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Reset the draft context when the focused clip changes.
+  useEffect(() => {
+    editStartedRef.current = false
+    draftIdRef.current = editingSavedId
+  }, [clipId, editingSavedId])
+  const sessionIdForMs = useCallback(
+    (ms: number) => sessions.find((s) => sessionStartMs(s) <= ms && sessionEndMs(s) >= ms)?.id ?? sessions[0]?.id ?? null,
+    [sessions],
+  )
+  const sourcesFromLanes = useCallback(
+    (lanes: Set<string>) => {
+      const out: Record<string, boolean> = {}
+      for (const k of capturedKinds) out[k] = lanes.has(k)
+      return out
+    },
+    [capturedKinds],
+  )
+  // Debounced auto-PATCH while editing a DRAFT (only after a real edit; never on open). A
+  // saved clip is NOT auto-patched — a range/source change re-materialises (copies), so those
+  // edits apply on explicit save instead.
+  useEffect(() => {
+    if (!editStartedRef.current || !bracket || editingSavedId) return
+    const b = bracket
+    const lanes = clipLanes
+    if (draftPushTimer.current) clearTimeout(draftPushTimer.current)
+    draftPushTimer.current = setTimeout(async () => {
+      const sid = sessionIdForMs(b.inMs)
+      if (!sid) return
+      let id = draftIdRef.current
+      if (!id) {
+        try {
+          id = (await bufferApi.createDraft({ startAtMs: Math.round(b.inMs), endAtMs: Math.round(b.outMs) })).clipId
+          draftIdRef.current = id
+        } catch {
+          return
+        }
+      }
+      try {
+        await bufferApi.patchClip(id, {
+          ranges: [{ bufferSessionId: sid, startAtMs: Math.round(b.inMs), endAtMs: Math.round(b.outMs) }],
+          sources: sourcesFromLanes(lanes),
+        })
+        qc.invalidateQueries({ queryKey: ['buffer', 'clips'] })
+      } catch {}
+    }, 600)
+    return () => {
+      if (draftPushTimer.current) clearTimeout(draftPushTimer.current)
+    }
+  }, [bracket, clipLanes, editingSavedId, sessionIdForMs, sourcesFromLanes, qc])
   // Keep the selection on a CAPTURED source as the buffer resolves (don't land on a greyed one).
   useEffect(() => {
     const cur = railItems.find((i) => i.key === view)
@@ -1518,20 +1584,36 @@ export const ClipEditScreen = () => {
       .map((k) => titleCase(KIND_META[k]!.label))
       .join(' · ')
 
+    const name = clipName.trim() || 'Untitled clip'
+    if (draftPushTimer.current) clearTimeout(draftPushTimer.current) // we patch the final manifest below
+
+    // C4.5: materialise through a draft (create if needed → final PATCH → saveDraft). Falls
+    // back to the proven R3 one-shot save if anything in the draft path fails, so save never breaks.
     let clipId: string
     try {
-      const res = await bufferApi.saveClip({
-        startAtMs: Math.round(inMs),
-        endAtMs: Math.round(outMs),
-        name: clipName.trim() || 'Untitled clip',
-        kinds,
+      const sid = sessionIdForMs(inMs)
+      let id = draftIdRef.current
+      if (!id) id = (await bufferApi.createDraft({ startAtMs: Math.round(inMs), endAtMs: Math.round(outMs), name })).clipId
+      await bufferApi.patchClip(id, {
+        ...(sid ? { ranges: [{ bufferSessionId: sid, startAtMs: Math.round(inMs), endAtMs: Math.round(outMs) }] } : {}),
+        sources: sourcesFromLanes(clipLanes),
+        title: name,
       })
-      clipId = res.clipId
-    } catch (err: any) {
-      const msg = err?.response?.data?.message ?? err?.message ?? 'Could not save the clip. Please try again.'
-      Alert.alert('Save failed', String(msg))
-      return
+      if (!editingSavedId) await bufferApi.saveDraft(id) // an already-saved clip is already materialised
+      clipId = id
+      draftIdRef.current = null
+      editStartedRef.current = false
+    } catch {
+      try {
+        const res = await bufferApi.saveClip({ startAtMs: Math.round(inMs), endAtMs: Math.round(outMs), name, kinds })
+        clipId = res.clipId
+      } catch (err: any) {
+        const msg = err?.response?.data?.message ?? err?.message ?? 'Could not save the clip. Please try again.'
+        Alert.alert('Save failed', String(msg))
+        return
+      }
     }
+    qc.invalidateQueries({ queryKey: ['buffer', 'clips'] })
 
     setSavedClips((prev) => [
       {
@@ -1568,11 +1650,13 @@ export const ClipEditScreen = () => {
   // start/end. (Not the whole toggled-lanes extent.) No-op over a gap.
   function selectCurrentClip() {
     if (!sessionAtPlayhead) return
+    editStartedRef.current = true
     setBracket({ inMs: sessionStartMs(sessionAtPlayhead), outMs: sessionEndMs(sessionAtPlayhead) })
   }
   // In point lands EXACTLY on the playhead. If it ends up after the out, push the out to
   // just after the new in (min-length clip).
   function setInPoint() {
+    editStartedRef.current = true
     const inMs = playheadMs
     setBracket((b) => {
       if (!b) return { inMs, outMs: Math.min(bufferEndMs, inMs + DEFAULT_CLIP_MS) }
@@ -1581,6 +1665,7 @@ export const ClipEditScreen = () => {
     })
   }
   function setOutPoint() {
+    editStartedRef.current = true
     const outMs = playheadMs
     setBracket((b) => {
       if (!b) return { inMs: Math.max(bufferStartMs, outMs - DEFAULT_CLIP_MS), outMs }
@@ -1594,6 +1679,7 @@ export const ClipEditScreen = () => {
   // destructive buffer mutation is Aaron's manifest. Different-set edits accumulate.
   function markRemoved(ranges: Interval[]) {
     if (!ranges.length) return
+    editStartedRef.current = true
     setRemovedByLane((prev) => {
       const next = { ...prev }
       for (const key of clipLanes) next[key] = mergeIntervals([...(next[key] ?? []), ...ranges])
@@ -1778,7 +1864,10 @@ export const ClipEditScreen = () => {
               onSeek={(ms) => jumpTo(ms)}
               onScrubStart={handleScrubStart}
               onScrubEnd={handleScrubEnd}
-              onBracketChange={(b) => setBracket(b.outMs - b.inMs <= 0 ? null : b)}
+              onBracketChange={(b) => {
+                editStartedRef.current = true
+                setBracket(b.outMs - b.inMs <= 0 ? null : b)
+              }}
               onZoomChange={(ppm) => {
                 timelinePxPerMsRef.current = ppm
               }}
