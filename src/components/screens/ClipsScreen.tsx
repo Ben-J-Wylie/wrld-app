@@ -31,11 +31,15 @@ import { ClipLane, type LaneClip, type ClipPos } from '@/components/features/cli
 import { TimeGapMarker } from '@/components/features/clip/TimeGapMarker'
 import { ClipTimeRuler, type RulerTick } from '@/components/features/clip/ClipTimeRuler'
 import { ClipViewer } from '@/components/features/clip/ClipViewer'
+import { BufferTransport } from '@/components/features/clip/BufferTransport'
+import { TimeScrubber } from '@/components/features/discovery/TimeScrubber'
+import { useVideoPlayer, VideoView } from 'expo-video'
 import { useBuffer } from '@/hooks/useBuffer'
 import { useSavedClips } from '@/hooks/useSavedClips'
 import { useBroadcastStore } from '@/stores/broadcastStore'
 import { bufferApi, type BufferSession } from '@/api/buffer'
 
+const FRAME_MS = 1000 / 30 // one frame at the 30fps capture (transport frame-step)
 const GUTTER_W = 52 // left ruler column (ghosted time marks)
 const MIN_TICK_GAP = 26 // min vertical px between ruler labels so they don't collide
 const MIN_BLOCK_H = 34 // a short clip stays a readable, tappable block
@@ -227,6 +231,98 @@ export const ClipsScreen = () => {
       setSelectedId(newest.id)
     }
   }, [allClips, selectedId])
+
+  // ── playback: the selected clip drives one video player; the bottom transport + clock
+  // control it. For a buffered session, manifestUrl is the session VOD and the clip window
+  // is the whole session, so video [0,dur] maps to [clipStart, clipEnd]. Saved clips have no
+  // manifest yet → poster only (handoff). ──
+  const clipStart = selectedClip?.startMs ?? 0
+  const clipEnd = selectedClip?.endMs ?? 0
+  const manifestUrl = selectedClip?.manifestUrl ?? null
+  const player = useVideoPlayer(null, (p) => {
+    p.loop = false
+  })
+  const [playing, setPlaying] = useState(false)
+  const [playheadMs, setPlayheadMs] = useState(0)
+  const playheadRef = useRef(0)
+  playheadRef.current = playheadMs
+
+  // Load (or clear) the clip's video when the selection changes; reset to its start.
+  useEffect(() => {
+    setPlaying(false)
+    setPlayheadMs(clipStart)
+    if (manifestUrl) player.replaceAsync({ uri: manifestUrl, contentType: 'hls' }).catch(() => {})
+    else player.replace(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId])
+
+  const seekTo = useCallback(
+    (ms: number) => {
+      const m = clamp(ms, clipStart, clipEnd)
+      setPlayheadMs(m)
+      if (manifestUrl) {
+        try {
+          player.currentTime = (m - clipStart) / 1000
+        } catch {}
+      }
+    },
+    [clipStart, clipEnd, manifestUrl, player],
+  )
+
+  // While playing, follow the video's currentTime → playhead; stop at the clip end.
+  useEffect(() => {
+    if (!playing) return
+    let raf = 0
+    const tick = () => {
+      const ph = clipStart + player.currentTime * 1000
+      if (ph >= clipEnd - 16) {
+        player.pause()
+        setPlaying(false)
+        setPlayheadMs(clipEnd)
+        return
+      }
+      setPlayheadMs(ph)
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [playing, clipStart, clipEnd, player])
+
+  const togglePlay = useCallback(() => {
+    if (!manifestUrl) return
+    if (player.playing) {
+      player.pause()
+      setPlaying(false)
+    } else {
+      if (playheadRef.current >= clipEnd - 100) seekTo(clipStart) // restart from the top at the end
+      player.play()
+      setPlaying(true)
+    }
+  }, [manifestUrl, player, clipEnd, clipStart, seekTo])
+
+  // Prev / next clip = select the time-adjacent clip in the grid.
+  const ordered = useMemo(() => [...allClips].sort((a, b) => a.startMs - b.startMs), [allClips])
+  const selIdx = ordered.findIndex((c) => c.id === selectedId)
+  const canPrev = selIdx > 0
+  const canNext = selIdx >= 0 && selIdx < ordered.length - 1
+
+  // Frame-step: tap seeks one frame; hold repeats.
+  const holdRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const frameHold = useCallback(
+    (dir: 1 | -1, held: boolean) => {
+      if (holdRef.current) {
+        clearInterval(holdRef.current)
+        holdRef.current = null
+      }
+      if (held) holdRef.current = setInterval(() => seekTo(playheadRef.current + dir * FRAME_MS), 70)
+    },
+    [seekTo],
+  )
+
+  // Clock: a held instant (playback=false). Scrubbing the dial seeks within the clip.
+  const offsetForClock = Math.max(0, Date.now() - playheadMs)
+  const [clockExpanded, setClockExpanded] = useState(false)
+  const [collapseSignal, setCollapseSignal] = useState(0)
 
   // A just-saved clip is processed async (status:'processing' → 'ready'), so it
   // doesn't appear in the list immediately. Invalidate now + a few times after, so
@@ -452,8 +548,13 @@ export const ClipsScreen = () => {
           <View style={styles.viewerWrap}>
             <ClipViewer
               posterUrl={selectedClip?.posterUrl}
-              manifestUrl={selectedClip?.manifestUrl}
               title={selectedClip?.label}
+              playing={playing}
+              frameSlot={
+                manifestUrl ? (
+                  <VideoView player={player} style={StyleSheet.absoluteFill} nativeControls={false} contentFit="contain" />
+                ) : undefined
+              }
             />
           </View>
         ) : null}
@@ -488,9 +589,19 @@ export const ClipsScreen = () => {
           </Text>
         </View>
       ) : (
-        <View style={styles.gridWrap} onLayout={(e) => setViewportH(e.nativeEvent.layout.height)}>
+        <View
+          style={styles.gridWrap}
+          onLayout={(e) => setViewportH(e.nativeEvent.layout.height)}
+          onTouchStart={() => clockExpanded && setCollapseSignal((s) => s + 1)}
+        >
           <GestureDetector gesture={pinch}>
-            <ScrollView ref={scrollRef} onScroll={onScroll} scrollEventThrottle={16} showsVerticalScrollIndicator={false}>
+            <ScrollView
+              ref={scrollRef}
+              onScroll={onScroll}
+              scrollEventThrottle={16}
+              showsVerticalScrollIndicator={false}
+              scrollEnabled={!clockExpanded}
+            >
               <View style={{ height: contentHeight }}>
                 {/* Ghosted time-mark ruler down the left gutter. */}
                 <ClipTimeRuler ticks={rulerTicks} width={GUTTER_W} />
@@ -528,6 +639,42 @@ export const ClipsScreen = () => {
           </GestureDetector>
         </View>
       )}
+
+      {/* Bottom playback chrome: transport over the time clock (clock expands upward,
+          pushing the grid up as it grows). Drives the selected clip's video. */}
+      {hasAny ? (
+        <View style={styles.bottomChrome}>
+          <BufferTransport
+            playing={playing}
+            onToStart={() => seekTo(clipStart)}
+            onPrevClip={() => canPrev && setSelectedId(ordered[selIdx - 1]!.id)}
+            onFrameBack={() => seekTo(playheadRef.current - FRAME_MS)}
+            onFrameBackHold={(held) => frameHold(-1, held)}
+            onTogglePlay={togglePlay}
+            onFrameForward={() => seekTo(playheadRef.current + FRAME_MS)}
+            onFrameForwardHold={(held) => frameHold(1, held)}
+            onNextClip={() => canNext && setSelectedId(ordered[selIdx + 1]!.id)}
+            onToEnd={() => seekTo(clipEnd)}
+            canPrev={canPrev}
+            canNext={canNext}
+            canFrameBack={!!manifestUrl && playheadMs > clipStart}
+            canFrameForward={!!manifestUrl && playheadMs < clipEnd}
+          />
+          <TimeScrubber
+            offsetMs={offsetForClock}
+            onOffsetChange={(off) => seekTo(Date.now() - off)}
+            playback={false}
+            collapseSignal={collapseSignal}
+            onExpandedChange={setClockExpanded}
+            onScrubStart={() => {
+              if (player.playing) {
+                player.pause()
+                setPlaying(false)
+              }
+            }}
+          />
+        </View>
+      ) : null}
     </View>
   )
 }
@@ -572,6 +719,12 @@ const styles = StyleSheet.create({
   gridWrap: {
     flex: 1,
     paddingHorizontal: theme.spacing.lg,
+  },
+  bottomChrome: {
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border.subtle,
+    backgroundColor: theme.colors.bg.primary,
+    paddingTop: theme.spacing.xs,
   },
   gapBand: {
     position: 'absolute',
