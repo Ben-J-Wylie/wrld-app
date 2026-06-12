@@ -104,17 +104,66 @@ export const bufferApi = {
   deleteSavedClip: async (id: string): Promise<void> => {
     await apiClient.delete(`/buffer/me/clips/${id}`)
   },
+
+  // ── C4: editable-manifest (draft ↔ saved) ──
+  // List a lane: 'saved' (default), 'draft' (buffered-lane drafts), or 'all'.
+  listClips: async (lane: ClipLane = 'saved'): Promise<SavedClip[]> => {
+    const res = await apiClient.get<{ clips: SavedClip[] }>(`/buffer/me/clips?lane=${lane}`)
+    return res.data.clips
+  },
+
+  // Create a DRAFT over a buffer window (no copy, no quota). Returns the clip id.
+  createDraft: async (input: { startAtMs: number; endAtMs: number; name?: string }): Promise<{ clipId: string }> => {
+    const res = await apiClient.post<{ clip: { id: string } }>('/buffer/me/clips/draft', input)
+    return { clipId: res.data.clip.id }
+  },
+
+  // Edit a draft's manifest (ranges / sources / overrides). Works for drafts;
+  // saved-clip edits are also supported (C4.4).
+  patchClip: async (id: string, patch: ClipPatch): Promise<void> => {
+    await apiClient.patch(`/buffer/me/clips/${id}`, patch)
+  },
+
+  // Promote a draft → saved (materialise its enabled ranges). NO body — Fastify
+  // rejects an empty JSON body, so `post(url)` with no data is intentional.
+  saveDraft: async (id: string): Promise<{ clipId: string }> => {
+    const res = await apiClient.post<{ clip: { id: string } }>(`/buffer/me/clips/${id}/save`)
+    return { clipId: res.data.clip.id }
+  },
 }
 
-// One durable saved clip (the buffer-promoted Clip row). Wall-clock window; `name`
-// is the clip title; `kinds` are the captured source tracks.
+// One contiguous in-window slice of a buffer session — the manifest body (C4).
+export type ClipRange = { bufferSessionId: string; startAtMs: number; endAtMs: number; ordinal: number }
+
+// A clip (C4 manifest). The same row lives in two states via `saved`:
+//   draft (saved:false) — a manifest over the buffer, no copy, private, editable;
+//   saved (saved:true)  — its in-bounds footage materialised to durable storage.
+// `kinds` is the ENABLED sources only; `sources` is the full per-kind enabled map.
 export type SavedClip = {
   id: string
   name: string
   startAtMs: number
   endAtMs: number
   thumbnailUrl: string | null
-  manifestUrl: string | null // playable HLS — durable (survives buffer eviction)
+  manifestUrl: string | null // playable HLS — durable when saved, buffer-stitched when draft
   bufferSessionId: string | null // the source buffer session (exact "one lane" link)
   kinds: BufferTrackKind[]
+  saved: boolean
+  ranges: ClipRange[]
+  sources: Record<string, boolean>
+  attributed: boolean
+  locDisplayPrecision: string | null
+}
+
+export type ClipLane = 'saved' | 'draft' | 'all'
+
+// The editable-manifest PATCH (C4) — every field optional; the server replaces the
+// manifest (ranges are the authoritative full list) and recomputes outer bounds.
+export type ClipPatch = {
+  ranges?: { bufferSessionId: string; startAtMs: number; endAtMs: number }[]
+  sources?: Record<string, boolean>
+  attributed?: boolean
+  locDisplayPrecision?: string | null
+  title?: string
+  visibility?: 'public' | 'anon' | 'draft'
 }
