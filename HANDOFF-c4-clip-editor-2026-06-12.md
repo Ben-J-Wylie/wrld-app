@@ -1,11 +1,12 @@
 # HANDOFF — C4 clip editor: editable manifest (draft ↔ saved)
 
-**Date:** 2026-06-12 · **From:** Aaron (backend) · **To:** Ben (app: grid + `ClipEditScreen`)
-**Backend status:** C4.1–C4.3 **shipped + verified live on prod** (real auth, real buffer
-footage). C4.4 (edit a *saved* clip) in progress on the backend. **C4.5 is your app
-wiring** — do it when your dev-client tools are ready. Full design + as-built:
+**Date:** 2026-06-12 (updated) · **From:** Aaron (backend) · **To:** Ben (app: grid + `ClipEditScreen`)
+**Backend status:** **C4.1 → C4.4.1 are ALL shipped + verified live on prod** (real auth,
+real buffer footage) — the entire draft→edit→save→edit-saved→trim-after-evict lifecycle is
+done and the backend is **fully ready to integrate**. **C4.5 is your app wiring** — do it
+when your dev-client tools are ready. Full design + as-built:
 `wrld-backend/docs/design/c4-clip-manifest-editing.md` and the `wrld-backend/CLAUDE.md`
-"C4.1 + C4.2" update.
+"C4.1 + C4.2" / C4.3 / C4.4 / C4.4.1 updates.
 
 ---
 
@@ -31,7 +32,7 @@ discontinuity); auto-splitting into two clip entities is deferred.
 | Call | Body | Returns | Purpose |
 |---|---|---|---|
 | `POST /buffer/me/clips/draft` | `{ startAtMs, endAtMs, name? }` | `{ clip: { id } }` | Make a **draft** from a buffer window. No copy, no quota. |
-| `PATCH /buffer/me/clips/:id` | `{ ranges?, sources?, attributed?, locDisplayPrecision?, title?, visibility? }` | `{ ok: true }` | Edit a **draft's** manifest (saved-clip edits land in C4.4). |
+| `PATCH /buffer/me/clips/:id` | `{ ranges?, sources?, attributed?, locDisplayPrecision?, title?, visibility? }` | `{ ok: true }` | Edit a **draft's OR a saved clip's** manifest. On a saved clip: metadata is instant; a trim/source-drop frees bytes; a range edit / source-add re-materialises (`409` only if the buffer footage has fully evicted **and** you're adding/widening). |
 | `GET /buffer/me/clips?lane=saved\|draft\|all` | — | `{ clips: SavedClip[] }` | `saved` (default, the saved grid lane, unchanged) · `draft` (buffered-lane drafts) · `all`. |
 | play `clip.manifestUrl` | — | HLS | Draft → tokenized **buffer-stitched** HLS; saved → durable `/media/clips/`. |
 | `POST /buffer/me/clips/:id/save` | **none** | `{ clip: { id } }` | Promote a **draft → saved** (carries its edits). |
@@ -114,11 +115,27 @@ Each step, and what you should **see**:
 
 ---
 
+## Editing a SAVED clip (C4.4 — done, also via `PATCH`)
+
+The same `PATCH /buffer/me/clips/:id` works on a saved clip — wire it the same way as the
+draft edit; the backend picks the cheapest correct path:
+- **metadata** (title/attributed/loc/visibility) → instant, no re-encode.
+- **source removal** (`sources: { camera: false }`) → drops that track + frees its bytes
+  (works even after the buffer evicts); `kinds`/`sources` + storage update.
+- **trim / range edit** → re-materialises (from the buffer while it survives, else re-cuts
+  the clip's own copy), freeing bytes on a narrow. `manifestUrl` stays the durable
+  `/media/clips/` one; `usedStorageBytes` drops — refetch `/auth/me` for the meter.
+- **widen / add a source after the buffer evicted** → `409` (genuinely impossible — the
+  footage is gone). Trim-after-evict works; widen/add does not.
+
+Verified live: save camera+audio → trim 12s→5s (freed 7.5 MB) → `camera:off` (freed 10 MB,
+`kinds:["audio"]`) → trim again after a (simulated) buffer evict (re-cut the owned copy) →
+delete (exact reclaim). No orphan files, quota exact.
+
 ## What's still backend-side (not your lane)
-- **C4.4** (in progress) — editing a **saved** clip (trim narrower → free bytes; widen →
-  re-pull from buffer while it survives; source on/off; mid-clip delete). `PATCH` on a
-  saved clip currently returns a clear `400` until this lands.
 - **C4.5 reconciliation** — `clips/discover` will honour `saved`+visibility (drafts never
   on the globe). No app change needed for that.
+- **Deferred (rare):** mid-clip-delete (gapped) *after* the buffer has evicted → `409`.
 
-Ping when your tools are ready and I'll pair on the grid/editor wiring.
+**The whole backend (C4.1–C4.4.1) is shipped + verified — integrate whenever your tools are
+ready.** Ping me and I'll pair on the grid/editor wiring.
