@@ -445,14 +445,17 @@ export const ClipsScreen = () => {
           }}
           style={styles.pager}
         />
-        {/* Sticky 1:1 viewer for the selected clip — above the buffered/saved bar. */}
+        {/* Sticky viewer for the selected clip — above the buffered/saved bar. Padded
+            wrapper gives equal L/R margins (a full-width frame + marginHorizontal would
+            overflow the right edge). */}
         {hasAny ? (
-          <ClipViewer
-            posterUrl={selectedClip?.posterUrl}
-            manifestUrl={selectedClip?.manifestUrl}
-            title={selectedClip?.label}
-            style={styles.viewer}
-          />
+          <View style={styles.viewerWrap}>
+            <ClipViewer
+              posterUrl={selectedClip?.posterUrl}
+              manifestUrl={selectedClip?.manifestUrl}
+              title={selectedClip?.label}
+            />
+          </View>
         ) : null}
         <View style={styles.laneHeaders}>
           {/* Spacer aligning the lane labels over the gutter-offset lanes below. */}
@@ -543,8 +546,8 @@ const styles = StyleSheet.create({
   pager: {
     marginTop: theme.spacing.sm,
   },
-  viewer: {
-    marginHorizontal: theme.spacing.lg,
+  viewerWrap: {
+    paddingHorizontal: theme.spacing.lg,
     marginTop: theme.spacing.md,
   },
   laneHeaders: {

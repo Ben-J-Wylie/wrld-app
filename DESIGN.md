@@ -3358,10 +3358,10 @@ list), so a later flip to top/bottom lanes is a layout swap.
 Each clip block is labelled by the **stream title** (falls back to its start time until the backend
 carries `title` onto sessions / recordings — handoff 2026-06-11); the **start time + duration** live
 on the sublabel and the left ruler.
-- **`ClipViewer`** — `src/components/features/clip/ClipViewer.tsx`. The **sticky 1:1 square** preview
-  above the buffered/saved bar (full width minus the page margins). Footage is **letterboxed /
-  pillarboxed** inside the square (`contentFit="contain"` over a black field) so portrait + landscape
-  clips both show whole. Shows the poster by default; a centre play button starts the HLS video for
+- **`ClipViewer`** — `src/components/features/clip/ClipViewer.tsx`. The **sticky full-width 2:1**
+  (half-height) preview above the buffered/saved bar (the host pads it for equal L/R margins).
+  Footage is **letterboxed / pillarboxed** inside the field (`contentFit="contain"` over a black
+  field) so portrait + landscape clips both show whole. Shows the poster by default; a centre play button starts the HLS video for
   clips that expose a `manifestUrl` (buffered sessions today; saved clips once the backend returns
   their manifest — handoff). **Single-tap** a clip in the grid selects it here (double-tap still
   opens the editor); defaults to the newest clip. *(Capture currently encodes landscape, so buffer

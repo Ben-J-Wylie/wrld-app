@@ -1,9 +1,9 @@
 // src/components/features/clip/ClipViewer.tsx
 //
-// The sticky clip viewer at the top of the Clips landing page — a 1:1 SQUARE that previews
-// the currently-selected clip. The footage is letterboxed / pillarboxed inside the square
-// (`contentFit="contain"` over a black field), so portrait and landscape clips both show
-// whole — no crop. Shows the poster frame by default; a centre play button starts the HLS
+// The sticky clip viewer at the top of the Clips landing page — a full-width 2:1 field
+// (half-height) that previews the currently-selected clip. The footage is letterboxed /
+// pillarboxed inside the field (`contentFit="contain"` over a black field), so portrait and
+// landscape clips both show whole — no crop. Shows the poster frame by default; a centre play button starts the HLS
 // video (for clips that expose a `manifestUrl` — buffered sessions today; saved clips once
 // the backend returns their manifest). Tapping a clip in the grid selects it here.
 //
@@ -113,7 +113,7 @@ export function ClipViewer({ posterUrl, manifestUrl, title, style }: Props) {
 const styles = StyleSheet.create({
   frame: {
     width: '100%',
-    aspectRatio: 1, // square
+    aspectRatio: 2, // full width, half-height (was square — trimmed to save vertical space)
     backgroundColor: '#000', // letterbox / pillarbox bars
     borderRadius: theme.radius.md,
     overflow: 'hidden',
