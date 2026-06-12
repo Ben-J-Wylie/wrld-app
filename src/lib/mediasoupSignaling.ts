@@ -57,7 +57,6 @@ class MediasoupSignalingClient {
 
   connect(url: string): Promise<void> {
     return new Promise((resolve, reject) => {
-      console.log('[golive] WS connect →', JSON.stringify(url))
       if (this.ws) {
         this.ws.onclose = null
         this.ws.close()
@@ -66,10 +65,9 @@ class MediasoupSignalingClient {
       const ws = new WebSocket(url)
       this.ws = ws
 
-      ws.onopen = () => { console.log('[golive] WS OPEN'); resolve() }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      ws.onerror = (e: any) => { console.warn('[golive] WS ERROR', e?.message ?? String(e)); reject(new Error('WebSocket connection failed')) }
-      ws.onclose = (event) => { console.warn('[golive] WS CLOSE code', (event as CloseEvent).code ?? 1006); this.closeCbs.forEach((cb) => cb((event as CloseEvent).code ?? 1006)) }
+      ws.onopen = () => resolve()
+      ws.onerror = () => reject(new Error('WebSocket connection failed'))
+      ws.onclose = (event) => this.closeCbs.forEach((cb) => cb((event as CloseEvent).code ?? 1006))
       ws.onmessage = (event: MessageEvent) => {
         try {
           const msg: ServerMessage = JSON.parse(event.data as string)
@@ -160,10 +158,8 @@ class MediasoupSignalingClient {
   }
 
   async authenticate(token: string): Promise<string> {
-    console.log('[golive] authenticate: sending token (len', token?.length ?? 0, ')')
     this.send({ type: 'authenticate', token })
     const reply = await this.waitFor('authenticated')
-    console.log('[golive] authenticate: OK', reply.clerkUserId)
     return reply.clerkUserId
   }
 
@@ -174,10 +170,8 @@ class MediasoupSignalingClient {
   }
 
   async createRoom(meta: { title: string; lat: number; lng: number; sources: string[]; subscribersOnly: boolean; locationPrecision?: 'exact' | 'city' | 'country' | 'off'; ppvEventId?: string }): Promise<string> {
-    console.log('[golive] createRoom: sending', JSON.stringify(meta))
     this.send({ type: 'createRoom', ...meta })
     const reply = await this.waitFor('roomCreated')
-    console.log('[golive] createRoom: OK roomId', reply.roomId)
     return reply.roomId
   }
 
