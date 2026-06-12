@@ -31,6 +31,7 @@ import { Icon } from '@/components/primitives/Icon'
 import { ClipLane, type LaneClip, type ClipPos } from '@/components/features/clip/ClipLane'
 import { TimeGapMarker } from '@/components/features/clip/TimeGapMarker'
 import { ClipTimeRuler, type RulerTick } from '@/components/features/clip/ClipTimeRuler'
+import { ClipsTimeline } from '@/components/features/clip/ClipsTimeline'
 import { ClipViewer } from '@/components/features/clip/ClipViewer'
 import { BufferTransport } from '@/components/features/clip/BufferTransport'
 import { TimeScrubber } from '@/components/features/discovery/TimeScrubber'
@@ -642,23 +643,6 @@ export const ClipsScreen = () => {
             style={styles.transport}
           />
         ) : null}
-        <View style={styles.laneHeaders}>
-          {/* Spacer aligning the lane labels over the gutter-offset lanes below. */}
-          <View style={{ width: GUTTER_W }} />
-          <View style={styles.laneHeaderCell}>
-            <Icon name="film" size="sm" color={theme.colors.text.muted} />
-            <Text variant="monoLabel" color={theme.colors.text.muted}>
-              BUFFERED
-            </Text>
-          </View>
-          <View style={styles.laneGap} />
-          <View style={styles.laneHeaderCell}>
-            <Icon name="bookmark" size="sm" color={theme.colors.accent.default} />
-            <Text variant="monoLabel" color={theme.colors.accent.default}>
-              SAVED
-            </Text>
-          </View>
-        </View>
       </View>
 
       {!hasAny ? (
@@ -666,58 +650,20 @@ export const ClipsScreen = () => {
           <Icon name="film" size="lg" color={theme.colors.text.subtle} />
           <Text variant="bodyEmphasized">No clips yet</Text>
           <Text variant="caption" color={theme.colors.text.muted} style={styles.emptyText}>
-            Go live to start buffering. Your recent footage shows on the left; drag a clip right to save it.
+            Go live to start buffering. Trim + save the bits you want to keep.
           </Text>
         </View>
       ) : (
-        <View
-          style={styles.gridWrap}
-          onLayout={(e) => setViewportH(e.nativeEvent.layout.height)}
-          onTouchStart={() => clockExpanded && setCollapseSignal((s) => s + 1)}
-        >
-          <GestureDetector gesture={pinch}>
-            <ScrollView
-              ref={scrollRef}
-              onScroll={onScroll}
-              scrollEventThrottle={16}
-              showsVerticalScrollIndicator={false}
-              scrollEnabled={!clockExpanded}
-            >
-              <View style={{ height: contentHeight }}>
-                {/* Ghosted time-mark ruler down the left gutter. */}
-                <ClipTimeRuler ticks={rulerTicks} width={GUTTER_W} />
-                {/* Collapsed-time gap markers across both lanes (right of the gutter). */}
-                {layout.gaps.map((g, i) => (
-                  <View key={`gap-${i}`} style={[styles.gapBand, { top: g.yTop, left: GUTTER_W }]}>
-                    <TimeGapMarker height={g.height} label={fmtGap(g.ms)} />
-                  </View>
-                ))}
-                <View style={[styles.lanesRow, { left: GUTTER_W }]} onLayout={(e) => setLanesRowW(e.nativeEvent.layout.width)}>
-                  <ClipLane
-                    clips={bufferedLane}
-                    tone="buffered"
-                    posOf={posOf}
-                    selectedId={selectedId}
-                    onSelectClip={(c) => setSelectedId(c.id)}
-                    onOpenClip={(c) => openClip(c, 'buffered')}
-                    reachPx={reachPx}
-                    onMoveClip={saveClip}
-                  />
-                  <View style={styles.laneGap} />
-                  <ClipLane
-                    clips={savedLane}
-                    tone="saved"
-                    posOf={posOf}
-                    selectedId={selectedId}
-                    onSelectClip={(c) => setSelectedId(c.id)}
-                    onOpenClip={(c) => openClip(c, 'saved')}
-                    reachPx={reachPx}
-                    onMoveClip={unsaveClip}
-                  />
-                </View>
-              </View>
-            </ScrollView>
-          </GestureDetector>
+        <View style={styles.timelineWrap} onTouchStart={() => clockExpanded && setCollapseSignal((s) => s + 1)}>
+          {/* Horizontal timeline — reaper left, now right; collapsed gaps; pinch to zoom. */}
+          <ClipsTimeline
+            buffered={bufferedLane}
+            saved={savedLane}
+            nowMs={axisTop}
+            selectedId={selectedId}
+            onSelect={(c) => setSelectedId(c.id)}
+            onOpen={openClip}
+          />
         </View>
       )}
 
@@ -784,6 +730,11 @@ const styles = StyleSheet.create({
   gridWrap: {
     flex: 1,
     paddingHorizontal: theme.spacing.lg,
+  },
+  timelineWrap: {
+    flex: 1,
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.sm,
   },
   bottomChrome: {
     borderTopWidth: 1,
