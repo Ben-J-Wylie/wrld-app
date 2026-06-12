@@ -33,16 +33,18 @@ type Props = {
   selected?: boolean // shown in the sticky viewer → accent outline
   onSelect?: () => void // single-tap → preview in the viewer
   onOpen?: () => void // double-tap → editor
-  // Drag-to-cross (save / un-save): the allowed horizontal direction (1 = right → saved,
-  // -1 = left → buffered), the px distance to the other lane, and the commit callback once
-  // the block is dragged past halfway. Omit `dragDir` to make the block static.
+  // Drag-to-cross (save / un-save): the allowed direction along `dragAxis` (+1 = right/down →
+  // saved, -1 = left/up → buffered), the px distance to the other lane, and the commit callback
+  // once dragged past halfway. Omit `dragDir` to make the block static. `dragAxis` is 'x' for the
+  // side-by-side (vertical grid) lanes, 'y' for the stacked (horizontal timeline) lanes.
   dragDir?: 1 | -1
+  dragAxis?: 'x' | 'y'
   reachPx?: number
   onCross?: () => void
   style?: StyleProp<ViewStyle>
 }
 
-export function ClipBlock({ heightPx, label, sublabel, posterUrl, tone, selected, onSelect, onOpen, dragDir, reachPx, onCross, style }: Props) {
+export function ClipBlock({ heightPx, label, sublabel, posterUrl, tone, selected, onSelect, onOpen, dragDir, dragAxis = 'x', reachPx, onCross, style }: Props) {
   const lastTap = useRef(0)
   const onPress = () => {
     const now = Date.now()
@@ -70,10 +72,13 @@ export function ClipBlock({ heightPx, label, sublabel, posterUrl, tone, selected
   onCrossRef.current = onCross
   const fireCross = () => onCrossRef.current?.()
 
+  // Drag along `dragAxis`: horizontal for side-by-side lanes, vertical for stacked lanes.
+  const isY = dragAxis === 'y'
   const pan = useRef(
-    Gesture.Pan()
-      .activeOffsetX([-8, 8])
-      .failOffsetY([-12, 12])
+    (isY
+      ? Gesture.Pan().activeOffsetY([-8, 8]).failOffsetX([-12, 12])
+      : Gesture.Pan().activeOffsetX([-8, 8]).failOffsetY([-12, 12])
+    )
       .onStart(() => {
         'worklet'
         runOnJS(setDragging)(true)
@@ -83,7 +88,8 @@ export function ClipBlock({ heightPx, label, sublabel, posterUrl, tone, selected
         const dir = dirSv.value
         if (dir === 0) return
         const reach = reachSv.value
-        tx.value = dir > 0 ? Math.max(0, Math.min(reach, e.translationX)) : Math.min(0, Math.max(-reach, e.translationX))
+        const t = isY ? e.translationY : e.translationX
+        tx.value = dir > 0 ? Math.max(0, Math.min(reach, t)) : Math.min(0, Math.max(-reach, t))
       })
       .onEnd(() => {
         'worklet'
@@ -91,9 +97,8 @@ export function ClipBlock({ heightPx, label, sublabel, posterUrl, tone, selected
         const reach = reachSv.value
         const crossed = dir !== 0 && (dir > 0 ? tx.value >= reach / 2 : tx.value <= -reach / 2)
         if (crossed) {
-          // Committed: leave tx put — the host optimistically MOVES the clip to the other
-          // lane (hides the source, shows it in the target), so this block unmounts in
-          // place. Springing back here is what made the clip "jump back" before landing.
+          // Committed: leave tx put — the host optimistically moves the clip to the other lane,
+          // so this block unmounts in place (springing back here caused the "jump back").
           runOnJS(fireCross)()
         } else {
           tx.value = withTiming(0, { duration: 160 })
@@ -105,7 +110,7 @@ export function ClipBlock({ heightPx, label, sublabel, posterUrl, tone, selected
       }),
   ).current
 
-  const dragStyle = useAnimatedStyle(() => ({ transform: [{ translateX: tx.value }] }))
+  const dragStyle = useAnimatedStyle(() => ({ transform: isY ? [{ translateY: tx.value }] : [{ translateX: tx.value }] }))
 
   const block = (
     <Pressable

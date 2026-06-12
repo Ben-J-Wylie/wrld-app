@@ -663,6 +663,8 @@ export const ClipsScreen = () => {
             selectedId={selectedId}
             onSelect={(c) => setSelectedId(c.id)}
             onOpen={openClip}
+            onSave={saveClip}
+            onUnsave={unsaveClip}
           />
         </View>
       )}

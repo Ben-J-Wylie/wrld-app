@@ -95,9 +95,11 @@ type Props = {
   selectedId: string | null
   onSelect: (clip: LaneClip) => void
   onOpen: (clip: LaneClip, kind: 'buffered' | 'saved') => void
+  onSave: (clip: LaneClip) => void // drag a buffer block DOWN → save
+  onUnsave: (clip: LaneClip) => void // drag a saved block UP → un-save
 }
 
-export function ClipsTimeline({ buffered, saved, nowMs, selectedId, onSelect, onOpen }: Props) {
+export function ClipsTimeline({ buffered, saved, nowMs, selectedId, onSelect, onOpen, onSave, onUnsave }: Props) {
   // Combined set drives the shared axis (buffer + saved don't overlap → one timeline).
   const allClips = useMemo(() => [...buffered, ...saved], [buffered, saved])
   const maxDur = useMemo(() => allClips.reduce((m, c) => Math.max(m, c.endMs - c.startMs), 0), [allClips])
@@ -196,6 +198,10 @@ export function ClipsTimeline({ buffered, saved, nowMs, selectedId, onSelect, on
               selected={selectedId === c.id}
               onSelect={() => onSelect(c)}
               onOpen={() => onOpen(c, tone)}
+              dragAxis="y"
+              dragDir={tone === 'buffered' ? 1 : -1}
+              reachPx={laneHeight + 2}
+              onCross={() => (tone === 'buffered' ? onSave(c) : onUnsave(c))}
             />
           </View>
         )
