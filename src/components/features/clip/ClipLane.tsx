@@ -21,6 +21,7 @@ export type LaneClip = {
   posterUrl?: string | null
   manifestUrl?: string | null // playable HLS for the sticky ClipViewer
   sourceSessionId?: string | null // a saved clip's source buffer session (exact "one lane" link)
+  draftId?: string | null // set when this is an unsaved DRAFT (→ saveDraft on materialise)
 }
 
 export type ClipPos = { top: number; height: number }

@@ -245,7 +245,7 @@ export const ClipEditScreen = () => {
   // evicted degrades to its poster until real saved-clip playback is wired.)
   // `startMs`/`endMs` bound a carved buffer interval directly (its id is synthetic); `clipId`
   // resolves a saved clip or whole session for its name. `kind` is a hint.
-  const { clipId, startMs: pStartMs, endMs: pEndMs } = useLocalSearchParams<{ clipId?: string; kind?: string; startMs?: string; endMs?: string; sessionId?: string }>()
+  const { clipId, startMs: pStartMs, endMs: pEndMs, draftId: pDraftId } = useLocalSearchParams<{ clipId?: string; kind?: string; startMs?: string; endMs?: string; sessionId?: string; draftId?: string }>()
   const focusClip = useMemo<{ startMs: number; endMs: number; name: string } | null>(() => {
     const ps = pStartMs ? Number(pStartMs) : NaN
     const pe = pEndMs ? Number(pEndMs) : NaN
@@ -625,13 +625,15 @@ export const ClipEditScreen = () => {
     () => (clipId && (savedClipsData ?? []).some((c) => c.id === clipId) ? clipId : null),
     [clipId, savedClipsData],
   )
-  const draftIdRef = useRef<string | null>(editingSavedId)
+  // Reopening an existing DRAFT (from the grid) passes its id → continue editing it in place
+  // rather than spawning a new draft on the first edit.
+  const draftIdRef = useRef<string | null>(pDraftId || editingSavedId)
   const draftPushTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Reset the draft context when the focused clip changes.
   useEffect(() => {
     editStartedRef.current = false
-    draftIdRef.current = editingSavedId
-  }, [clipId, editingSavedId])
+    draftIdRef.current = pDraftId || editingSavedId
+  }, [clipId, editingSavedId, pDraftId])
   const sessionIdForMs = useCallback(
     (ms: number) => sessions.find((s) => sessionStartMs(s) <= ms && sessionEndMs(s) >= ms)?.id ?? sessions[0]?.id ?? null,
     [sessions],

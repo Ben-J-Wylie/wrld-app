@@ -194,6 +194,7 @@ export function ClipsTimeline({ buffered, saved, nowMs, selectedId, onSelect, on
               sublabel={c.sublabel}
               posterUrl={c.posterUrl}
               tone={tone}
+              draft={!!c.draftId}
               selected={selectedId === c.id}
               onSelect={() => onSelect(c)}
               onOpen={() => onOpen(c, tone)}

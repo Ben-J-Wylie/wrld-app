@@ -30,6 +30,7 @@ type Props = {
   sublabel?: string // duration / sources
   posterUrl?: string | null
   tone: ClipTone
+  draft?: boolean // an unsaved edit → dashed accent outline + DRAFT tag
   selected?: boolean // shown in the sticky viewer → accent outline
   onSelect?: () => void // single-tap → preview in the viewer
   onOpen?: () => void // double-tap → editor
@@ -44,7 +45,7 @@ type Props = {
   style?: StyleProp<ViewStyle>
 }
 
-export function ClipBlock({ heightPx, label, sublabel, posterUrl, tone, selected, onSelect, onOpen, dragDir, dragAxis = 'x', reachPx, onCross, style }: Props) {
+export function ClipBlock({ heightPx, label, sublabel, posterUrl, tone, draft, selected, onSelect, onOpen, dragDir, dragAxis = 'x', reachPx, onCross, style }: Props) {
   const lastTap = useRef(0)
   const onPress = () => {
     const now = Date.now()
@@ -118,7 +119,14 @@ export function ClipBlock({ heightPx, label, sublabel, posterUrl, tone, selected
       accessibilityRole="button"
       accessibilityLabel={`${label}${sublabel ? ` · ${sublabel}` : ''} — double-tap to edit${dragDir ? `, drag ${dragDir > 0 ? 'right to save' : 'left to un-save'}` : ''}`}
       onPress={onPress}
-      style={[styles.block, saved ? styles.blockSaved : styles.blockBuffered, selected && styles.blockSelected, { height: heightPx }, style]}
+      style={[
+        styles.block,
+        saved ? styles.blockSaved : styles.blockBuffered,
+        draft && styles.blockDraft,
+        selected && styles.blockSelected,
+        { height: heightPx },
+        style,
+      ]}
     >
       {posterUrl && !compact ? (
         <Image source={{ uri: posterUrl }} style={StyleSheet.absoluteFill} contentFit="cover" transition={120} />
@@ -207,6 +215,11 @@ const styles = StyleSheet.create({
   blockSelected: {
     borderColor: theme.colors.accent.default,
     borderWidth: 2,
+  },
+  // An unsaved draft — dashed accent outline.
+  blockDraft: {
+    borderColor: theme.colors.accent.default,
+    borderStyle: 'dashed',
   },
   scrim: {
     ...StyleSheet.absoluteFillObject,

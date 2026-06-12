@@ -33,6 +33,7 @@ import { TimeScrubber } from '@/components/features/discovery/TimeScrubber'
 import { useVideoPlayer, VideoView } from 'expo-video'
 import { useBuffer } from '@/hooks/useBuffer'
 import { useSavedClips } from '@/hooks/useSavedClips'
+import { useDrafts } from '@/hooks/useDrafts'
 import { useBroadcastStore } from '@/stores/broadcastStore'
 import { bufferApi, type BufferSession } from '@/api/buffer'
 
@@ -117,6 +118,7 @@ export const ClipsScreen = () => {
   const qc = useQueryClient()
   const { data: buffer, refetch: refetchBuffer } = useBuffer(!!isSignedIn, isLive)
   const { data: savedData, refetch: refetchSaved } = useSavedClips(!!isSignedIn)
+  const { data: draftsData, refetch: refetchDrafts } = useDrafts(!!isSignedIn)
   // Trace what the saved-clip list returns (does a just-saved clip show up?).
   useEffect(() => {
     slog('GET /buffer/me/clips →', savedData?.length ?? 0, 'saved clip(s)', (savedData ?? []).map((c) => c.id))
@@ -179,18 +181,36 @@ export const ClipsScreen = () => {
     [savedLaneReal, pendingNotReal],
   )
 
-  // Carve: subtract the saved ranges (real + pending) from each session → remaining footage.
+  // Drafts (edited-but-unsaved manifests) — shown in the buffer lane as draft blocks; they
+  // carve their range out of the raw session too (so a draft + its remainder tile the session).
+  const drafts = useMemo<LaneClip[]>(
+    () =>
+      (draftsData ?? []).map((c) => ({
+        id: c.id,
+        startMs: c.startAtMs,
+        endMs: c.endAtMs,
+        label: c.name?.trim() || fmtTime(c.startAtMs),
+        sublabel: `DRAFT · ${fmtDur((c.endAtMs - c.startAtMs) / 1000)}`,
+        posterUrl: c.thumbnailUrl ?? sessions.find((s) => s.id === c.bufferSessionId)?.thumbnailUrl ?? null,
+        manifestUrl: c.manifestUrl ?? sessions.find((s) => s.id === c.bufferSessionId)?.manifestUrl ?? null,
+        sourceSessionId: c.bufferSessionId,
+        draftId: c.id,
+      })),
+    [draftsData, sessions],
+  )
+
+  // Carve: subtract the saved + draft ranges (real + pending) from each session → remaining footage.
   const claims = useMemo<Claim[]>(() => {
     const out: Claim[] = []
-    for (const c of realSavedData) {
+    for (const c of [...realSavedData, ...(draftsData ?? [])]) {
       if (c.ranges?.length) for (const r of c.ranges) out.push({ sessionId: r.bufferSessionId, startMs: r.startAtMs, endMs: r.endAtMs })
       else if (c.bufferSessionId) out.push({ sessionId: c.bufferSessionId, startMs: c.startAtMs, endMs: c.endAtMs })
     }
     for (const ps of pendingNotReal) out.push({ sessionId: ps.sessionId, startMs: ps.startMs, endMs: ps.endMs })
     return out
-  }, [realSavedData, pendingNotReal])
+  }, [realSavedData, draftsData, pendingNotReal])
 
-  const bufferedLane = useMemo(() => carveBuffer(sessions, claims), [sessions, claims])
+  const bufferedLane = useMemo(() => [...carveBuffer(sessions, claims), ...drafts], [sessions, claims, drafts])
   const allClips = useMemo(() => [...bufferedLane, ...savedLane], [bufferedLane, savedLane])
   const hasAny = allClips.length > 0
 
@@ -327,6 +347,26 @@ export const ClipsScreen = () => {
   // placeholder it in the saved lane; the real Clip prunes the placeholder when it lands.
   const saveClip = useCallback(
     (clip: LaneClip) => {
+      // A DRAFT block → materialise it (saveDraft); optimistically carve it remains carved.
+      if (clip.draftId) {
+        const draftId = clip.draftId
+        setPendingSaves((prev) => [
+          ...prev,
+          { tempId: `pending:${draftId}`, sessionId: clip.sourceSessionId ?? '', startMs: clip.startMs, endMs: clip.endMs, label: clip.label.replace(/^DRAFT · /, ''), posterUrl: clip.posterUrl, manifestUrl: clip.manifestUrl },
+        ])
+        bufferApi
+          .saveDraft(draftId)
+          .then(() => {
+            qc.invalidateQueries({ queryKey: ['buffer', 'clips'] })
+            refetchSavedSoon()
+          })
+          .catch((err: unknown) => {
+            setPendingSaves((prev) => prev.filter((p) => p.tempId !== `pending:${draftId}`))
+            const e = err as { response?: { data?: { message?: string } }; message?: string }
+            Alert.alert('Save failed', e.response?.data?.message ?? e.message ?? 'Could not save clip')
+          })
+        return
+      }
       const sessionId = clip.sourceSessionId
       if (!sessionId) return
       // The backend requires a non-empty `kinds` — resolve from the covered session(s).
@@ -356,7 +396,7 @@ export const ClipsScreen = () => {
           Alert.alert('Save failed', msg)
         })
     },
-    [sessions, refetchSavedSoon],
+    [sessions, refetchSavedSoon, qc],
   )
 
   // Drag a SAVED clip left → un-save (delete the durable copy). Optimistically hide
@@ -385,15 +425,16 @@ export const ClipsScreen = () => {
     const id = setInterval(() => setNowMs(Date.now()), 10_000)
     return () => clearInterval(id)
   }, [])
-  // On focus (e.g. returning from the editor after a save), refresh both sources so the
-  // carve reflects any new saved clip.
-  const refetchRef = useRef({ refetchBuffer, refetchSaved })
-  refetchRef.current = { refetchBuffer, refetchSaved }
+  // On focus (e.g. returning from the editor after an edit/save), refresh all sources so the
+  // carve + drafts reflect any change.
+  const refetchRef = useRef({ refetchBuffer, refetchSaved, refetchDrafts })
+  refetchRef.current = { refetchBuffer, refetchSaved, refetchDrafts }
   useFocusEffect(
     useCallback(() => {
       setNowMs(Date.now())
       refetchRef.current.refetchBuffer()
       refetchRef.current.refetchSaved()
+      refetchRef.current.refetchDrafts()
     }, []),
   )
   const axisTop = useMemo(() => {
@@ -412,6 +453,7 @@ export const ClipsScreen = () => {
         startMs: String(Math.round(clip.startMs)),
         endMs: String(Math.round(clip.endMs)),
         sessionId: clip.sourceSessionId ?? '',
+        draftId: clip.draftId ?? '', // reopen an existing draft (continue editing it)
       },
     })
   }, [])
