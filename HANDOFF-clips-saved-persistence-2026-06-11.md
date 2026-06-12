@@ -156,14 +156,24 @@ visibility), and that source-visibility state is the single truth used at time-m
    editor UI + tools exist (scaffold); the persistence is yours. Editing a *buffered* (not-yet-saved)
    clip implies promoting-on-edit or holding a draft manifest — worth a quick model call together.
 
-## Also needed: `manifestUrl` on saved clips (for the new sticky ClipViewer)
+## Saved clips lose their thumbnail + can't play — two promote/list gaps
 
-The Clips page now has a sticky 1:1 **ClipViewer** that previews the selected clip — it plays the
-clip's HLS when a `manifestUrl` is available. **Buffered sessions already expose `manifestUrl`**, so
-they play. **Saved clips don't** — `GET /buffer/me/clips` returns `{ id, name, startAtMs, endAtMs,
-thumbnailUrl, kinds }` with no manifest, so a saved clip shows only its poster. The `Clip` row has
-`manifestUrl` already; please **add `manifestUrl: string | null` to the `SavedClip` response** (and
-ideally bundle it with the `bufferSessionId` add above). App consumes it with no change.
+The Clips page has a sticky **ClipViewer** + bottom transport that preview the selected clip. A
+saved clip currently shows **no poster and can't play**. Two distinct backend gaps (both on the
+durable `Clip`, so a stopgap that borrows from the buffer session breaks once the session evicts):
+
+1. **`Clip.thumbnailUrl` is never set on promote.** `POST /buffer/me/clips` creates the row and the
+   ready-update writes `manifestUrl` / `sizeBytes` / `tracks` but **never `thumbnailUrl`**, so it's
+   `null` and `GET /buffer/me/clips` returns `thumbnailUrl: null`. **Fix:** set it during promote —
+   copy the source session's poster frame into `clips/<id>/` (the session already has one), or
+   generate a poster from the first frame.
+2. **`GET /buffer/me/clips` doesn't expose the manifest.** The `Clip` *has* `manifestUrl`
+   (`result.primaryManifestUrl`) — the list just omits it. **Fix:** add `manifestUrl: string | null`
+   to the `SavedClip` response (bundle with the `bufferSessionId` add above).
+
+App-side stopgap shipped (Ben): a saved clip borrows its **source buffered session's** poster +
+manifest while that session is still in the buffer (matched by window). It degrades to none once the
+session evicts — the durable fix is the two items above.
 
 ## Also needed: clip titles on sessions + recordings (small, additive)
 

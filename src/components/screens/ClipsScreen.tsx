@@ -165,15 +165,24 @@ export const ClipsScreen = () => {
     })
   }, [buffer])
   const saved = useMemo<LaneClip[]>(() => {
-    return (savedData ?? []).map((c) => ({
-      id: c.id,
-      startMs: c.startAtMs,
-      endMs: c.endAtMs,
-      label: c.name?.trim() || fmtTime(c.startAtMs),
-      sublabel: fmtDur((c.endAtMs - c.startAtMs) / 1000),
-      posterUrl: c.thumbnailUrl,
-    }))
-  }, [savedData])
+    return (savedData ?? []).map((c) => {
+      // STOPGAP: the promoted Clip currently has no thumbnail of its own and the list
+      // doesn't expose its manifest (both backend gaps — handoff). A saved clip is a copy
+      // of its source buffered session (same window), so borrow that session's poster +
+      // video while it's still in the buffer. Degrades to none once the session evicts —
+      // the durable fix is the backend setting Clip.thumbnailUrl + returning manifestUrl.
+      const src = buffered.find((b) => c.startAtMs <= b.startMs + SAVED_MATCH_TOL_MS && c.endAtMs >= b.endMs - SAVED_MATCH_TOL_MS)
+      return {
+        id: c.id,
+        startMs: c.startAtMs,
+        endMs: c.endAtMs,
+        label: c.name?.trim() || fmtTime(c.startAtMs),
+        sublabel: fmtDur((c.endAtMs - c.startAtMs) / 1000),
+        posterUrl: c.thumbnailUrl ?? src?.posterUrl ?? null,
+        manifestUrl: src?.manifestUrl ?? null,
+      }
+    })
+  }, [savedData, buffered])
 
   // Saving COPIES a buffer span into a durable Clip (new id) — the buffer session
   // stays. So this isn't a "move": dragging a buffered clip right CREATES a saved
