@@ -30,47 +30,6 @@ function cameraConstraints() {
   }
 }
 
-// Acquire the local AV stream with graceful video-constraint fallback.
-//
-// cameraConstraints() pins width/height as BOTH ideal AND max (per-tier, for
-// codec-uniform capture). But Android's Camera2 HARD-REJECTS a `max` it can't
-// satisfy with an OverconstrainedError — e.g. pro's 1440 cap on a phone that
-// can't capture exactly 1440 (and `maxCaptureHeight` falls back to the static
-// 1440 whenever the remote tier ladder hasn't loaded yet). The rejection is
-// SILENT (the caller's catch only sets error state, nothing logs), and go-live
-// aborts before createRoom → no globe pin. iOS tolerates the same constraint and
-// picks the nearest mode, which is why iPhones are unaffected.
-//
-// So: try the pinned constraint first (keeps the codec-uniformity win when the
-// device supports it), then progressively looser fallbacks, so capture NEVER
-// silently hard-fails. Logs each attempt so the failing constraint is visible.
-async function acquireLocalStream(wantsCamera: boolean, wantsAudio: boolean): Promise<MediaStream> {
-  if (!wantsCamera) {
-    return (await mediaDevices.getUserMedia({ video: false, audio: wantsAudio })) as unknown as MediaStream
-  }
-  const ladder: Array<Record<string, unknown>> = [
-    cameraConstraints(), // per-tier pinned ideal+max (deterministic SPS when supported)
-    { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } }, // relaxed, ideal-only
-    { facingMode: 'environment' }, // bare minimum — let the device choose a supported mode
-  ]
-  let lastErr: unknown
-  console.log(`[golive] acquireLocalStream(camera=${wantsCamera}, audio=${wantsAudio})`)
-  for (let i = 0; i < ladder.length; i++) {
-    try {
-      const stream = (await mediaDevices.getUserMedia({ video: ladder[i] as never, audio: wantsAudio })) as unknown as MediaStream
-      console.log(`[golive] getUserMedia OK (constraint #${i})`)
-      return stream
-    } catch (err) {
-      lastErr = err
-      console.warn(
-        `[capture] getUserMedia failed (constraint #${i} ${JSON.stringify(ladder[i])}):`,
-        err instanceof Error ? err.message : String(err),
-      )
-    }
-  }
-  throw lastErr instanceof Error ? lastErr : new Error('Could not access camera')
-}
-
 export function useMediasoup() {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null)
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null)
@@ -139,7 +98,10 @@ export function useMediasoup() {
     }
     setFacingMode('environment')
     try {
-      const stream = await acquireLocalStream(wantsCamera, wantsAudio)
+      const stream = (await mediaDevices.getUserMedia({
+        video: wantsCamera ? cameraConstraints() : false,
+        audio: wantsAudio,
+      })) as unknown as MediaStream
       localStreamRef.current = stream
       previewSourcesRef.current = key
       setLocalStream(stream)
@@ -157,9 +119,7 @@ export function useMediasoup() {
   const startBroadcasting = useCallback(async (sources: SourceType[]) => {
     setError(null)
     try {
-      console.log('[golive] startBroadcasting: building device')
       const device = await buildDevice()
-      console.log('[golive] startBroadcasting: device ready, transports next')
 
       // Data-only broadcasts (location / telemetry / torch — no camera or
       // audio armed) skip getUserMedia entirely: calling it with both
@@ -174,7 +134,10 @@ export function useMediasoup() {
       let stream: MediaStream | null = localStreamRef.current
       if (!stream && (wantsCamera || wantsAudio)) {
         setFacingMode('environment')
-        stream = await acquireLocalStream(wantsCamera, wantsAudio)
+        stream = (await mediaDevices.getUserMedia({
+          video: wantsCamera ? cameraConstraints() : false,
+          audio: wantsAudio,
+        })) as unknown as MediaStream
         localStreamRef.current = stream
         setLocalStream(stream)
 
