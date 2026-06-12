@@ -30,16 +30,45 @@ function cameraConstraints() {
   }
 }
 
+// Poll a consumer (viewer receive) or producer (broadcaster local mic) for the
+// inbound/media-source `audioLevel` (0..1) — the only loudness signal RN-WebRTC
+// exposes (no AnalyserNode). Returns the interval id for teardown.
+function startAudioLevelPoll(
+  stats: { getStats(): Promise<unknown> },
+  setLevel: (n: number) => void,
+): ReturnType<typeof setInterval> {
+  return setInterval(() => {
+    stats
+      .getStats()
+      .then((report) => {
+        let level: number | null = null
+        ;(report as { forEach?: (cb: (r: Record<string, unknown>) => void) => void }).forEach?.((r) => {
+          if (typeof r.audioLevel === 'number') level = r.audioLevel as number
+        })
+        if (level != null) setLevel(level)
+      })
+      .catch(() => {})
+  }, 120)
+}
+
 export function useMediasoup() {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null)
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment')
   const [videoIsLandscape, setVideoIsLandscape] = useState(false)
+  // Viewer-side received audio loudness, 0..1 (for the audio visualizer). RN-WebRTC
+  // has no AnalyserNode, so this is polled from the audio consumer's inbound-rtp
+  // `audioLevel` (the only real loudness signal). 0 when there's no audio.
+  const [audioLevel, setAudioLevel] = useState(0)
 
   const sendTransport = useRef<Transport | null>(null)
   const recvTransport = useRef<Transport | null>(null)
   const localStreamRef = useRef<MediaStream | null>(null)
+  // Retain the audio stats source (consumer for a viewer, producer for the
+  // broadcaster's own mic) + its getStats poll; torn down in cleanup().
+  const audioStatsRef = useRef<{ getStats(): Promise<unknown> } | null>(null)
+  const audioLevelTimer = useRef<ReturnType<typeof setInterval> | null>(null)
 
   async function buildDevice(): Promise<Device> {
     const device = new Device({ handlerFactory: ReactNative106.createFactory() })
@@ -208,6 +237,14 @@ export function useMediasoup() {
             : { track: track as never }
           const producer = await transport.produce(opts as never)
 
+          // Broadcaster's own mic level → audio visualizer when monitoring the
+          // audio source (media-source.audioLevel from the producer's getStats).
+          if (!isVideo) {
+            audioStatsRef.current = producer as unknown as { getStats(): Promise<unknown> }
+            if (audioLevelTimer.current) clearInterval(audioLevelTimer.current)
+            audioLevelTimer.current = startAudioLevelPoll(audioStatsRef.current, setAudioLevel)
+          }
+
           // DEV: confirm the SENT resolution stays pinned. getUserMedia settings
           // are the capture size; the recorded size is whatever WebRTC actually
           // sends (outbound-rtp), which is what we're trying to keep constant.
@@ -271,6 +308,13 @@ export function useMediasoup() {
         const consumeParams = await signalingClient.consume(producer.id, device.rtpCapabilities)
         const consumer = await transport.consume(consumeParams as never)
         ms.addTrack(consumer.track as never)
+        // Keep the audio consumer + start a getStats loudness poll for the audio
+        // visualizer (RN-WebRTC has no AnalyserNode; inbound-rtp.audioLevel is it).
+        if ((consumer as unknown as { kind: string }).kind === 'audio') {
+          audioStatsRef.current = consumer as unknown as { getStats(): Promise<unknown> }
+          if (audioLevelTimer.current) clearInterval(audioLevelTimer.current)
+          audioLevelTimer.current = startAudioLevelPoll(audioStatsRef.current, setAudioLevel)
+        }
       }
       setRemoteStream(ms as unknown as MediaStream)
     } catch (err) {
@@ -279,6 +323,12 @@ export function useMediasoup() {
   }, [])
 
   const cleanup = useCallback(() => {
+    if (audioLevelTimer.current) {
+      clearInterval(audioLevelTimer.current)
+      audioLevelTimer.current = null
+    }
+    audioStatsRef.current = null
+    setAudioLevel(0)
     sendTransport.current?.close()
     recvTransport.current?.close()
     sendTransport.current = null
@@ -294,5 +344,5 @@ export function useMediasoup() {
     setVideoIsLandscape(false)
   }, [])
 
-  return { localStream, remoteStream, error, facingMode, videoIsLandscape, startPreview, startBroadcasting, startViewing, switchCamera, cleanup }
+  return { localStream, remoteStream, audioLevel, error, facingMode, videoIsLandscape, startPreview, startBroadcasting, startViewing, switchCamera, cleanup }
 }

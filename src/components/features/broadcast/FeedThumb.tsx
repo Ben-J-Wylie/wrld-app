@@ -32,6 +32,7 @@ export type FeedKind =
   | 'torch'
   | 'temp'
   | 'motion'
+  | 'accel'
   | 'chat'
 
 type IconName = ComponentProps<typeof Icon>['name']
@@ -43,6 +44,7 @@ const GLYPH: Partial<Record<FeedKind, IconName>> = {
   torch: 'zap',
   temp: 'thermometer',
   motion: 'activity',
+  accel: 'move',
   chat: 'message-circle',
 }
 
@@ -95,6 +97,7 @@ function renderKind(kind: FeedKind, active: boolean, w: number, h: number) {
     case 'torch':
     case 'temp':
     case 'motion':
+    case 'accel':
     case 'chat':
       return <GlyphThumb name={GLYPH[kind]!} />
   }

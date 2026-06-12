@@ -14,6 +14,14 @@ import { StreamCard } from '@/components/features/stream/StreamCard'
 import { VideoPreviewTile } from '@/components/features/stream/VideoPreviewTile'
 import { CoordHUD } from '@/components/features/stream/CoordHUD'
 import { StreamTile } from '@/components/features/stream/StreamTile'
+import { AudioVisualizer, type AudioVisualizerVariant } from '@/components/features/stream/AudioVisualizer'
+import { CompassVisualizer } from '@/components/features/stream/CompassVisualizer'
+import { GyroVisualizer } from '@/components/features/stream/GyroVisualizer'
+import { MotionVisualizer } from '@/components/features/stream/MotionVisualizer'
+import { AccelerometerVisualizer } from '@/components/features/stream/AccelerometerVisualizer'
+import { SpeedVisualizer } from '@/components/features/stream/SpeedVisualizer'
+import { TemperatureVisualizer } from '@/components/features/stream/TemperatureVisualizer'
+import { TorchVisualizer } from '@/components/features/stream/TorchVisualizer'
 import { ChatMessage } from '@/components/features/chat/ChatMessage'
 import { ChatComposer } from '@/components/features/chat/ChatComposer'
 import { StreamStateBanner } from '@/components/features/stream/StreamStateBanner'
@@ -97,7 +105,7 @@ import { Icon } from '@/components/primitives/Icon'
 import { SegmentedToggle } from '@/components/primitives/SegmentedToggle'
 import { Pressable } from '@/components/primitives/Pressable'
 import { BroadcasterRow } from '@/components/features/user/BroadcasterRow'
-import { useState, useMemo, useEffect, type ComponentProps } from 'react'
+import { useState, useMemo, useEffect, useRef, type ComponentProps } from 'react'
 import { theme } from '@/tokens/theme'
 
 export function FeatureGallery() {
@@ -119,6 +127,67 @@ export function FeatureGallery() {
           <View style={styles.row}>
             <LivePill size="sm" />
             <LivePill />
+          </View>
+        </Row>
+      </Section>
+
+      <Section title="AudioVisualizer">
+        <Row label="waveform (synthetic level)">
+          <View style={styles.audioVizFrame}>
+            <AudioVisualizerDemo variant="waveform" />
+          </View>
+        </Row>
+        <Row label="orb (synthetic level)">
+          <View style={styles.audioVizFrame}>
+            <AudioVisualizerDemo variant="orb" />
+          </View>
+        </Row>
+        <Row label="idle (no audio)">
+          <View style={styles.audioVizFrame}>
+            <AudioVisualizer level={0} active={false} variant="waveform" />
+          </View>
+        </Row>
+      </Section>
+
+      <Section title="Sensor visualizers (synthetic telemetry)">
+        <Row label="compass">
+          <View style={styles.audioVizFrame}>
+            <SensorVizDemo kind="compass" />
+          </View>
+        </Row>
+        <Row label="gyro (attitude)">
+          <View style={styles.audioVizFrame}>
+            <SensorVizDemo kind="gyro" />
+          </View>
+        </Row>
+        <Row label="motion intensity (accel → 1 scalar)">
+          <View style={styles.audioVizFrame}>
+            <SensorVizDemo kind="motion" />
+          </View>
+        </Row>
+        <Row label="accelerometer (3-axis x/y/z)">
+          <View style={styles.audioVizFrame}>
+            <SensorVizDemo kind="accel" />
+          </View>
+        </Row>
+        <Row label="speed (km/h)">
+          <View style={styles.audioVizFrame}>
+            <SensorVizDemo kind="speed" />
+          </View>
+        </Row>
+        <Row label="ambient temp">
+          <View style={styles.audioVizFrame}>
+            <SensorVizDemo kind="temp" />
+          </View>
+        </Row>
+        <Row label="torch status">
+          <View style={styles.audioVizFrame}>
+            <SensorVizDemo kind="torch" />
+          </View>
+        </Row>
+        <Row label="idle (no signal)">
+          <View style={styles.audioVizFrame}>
+            <CompassVisualizer heading={0} active={false} />
           </View>
         </Row>
       </Section>
@@ -1618,6 +1687,54 @@ function PageTabsDemo({ tabs }: { tabs: { key: string; label: string }[] }) {
   return <PageTabs tabs={tabs} value={value} onChange={setValue} />
 }
 
+// Drives AudioVisualizer with a synthetic speech-like envelope so the gallery
+// shows real motion without a live consumer (stands in for useAudioLevel).
+function AudioVisualizerDemo({ variant }: { variant: AudioVisualizerVariant }) {
+  const [level, setLevel] = useState(0)
+  const t = useRef(0)
+  useEffect(() => {
+    const id = setInterval(() => {
+      t.current += 1
+      const x = t.current
+      // Slow gate × faster syllabic wobble + occasional spike → speech-ish.
+      const gate = Math.sin(x * 0.06) * 0.5 + 0.5
+      const wobble = Math.sin(x * 0.33) * 0.5 + 0.5
+      const spike = Math.random() < 0.18 ? Math.random() * 0.5 : 0
+      setLevel(Math.min(1, gate * wobble * 0.7 + spike))
+    }, 80)
+    return () => clearInterval(id)
+  }, [])
+  return <AudioVisualizer level={level} variant={variant} />
+}
+
+// Drives each sensor visualizer with synthetic telemetry so the gallery shows
+// real motion without a live data channel (stands in for the telemetry seam).
+function SensorVizDemo({ kind }: { kind: 'compass' | 'gyro' | 'motion' | 'accel' | 'speed' | 'temp' | 'torch' }) {
+  const [t, setT] = useState(0)
+  useEffect(() => {
+    const id = setInterval(() => setT((x) => x + 1), 90)
+    return () => clearInterval(id)
+  }, [])
+  const s = (f: number, phase = 0) => Math.sin(t * f + phase) // -1..1
+  switch (kind) {
+    case 'compass':
+      return <CompassVisualizer heading={(t * 2) % 360} />
+    case 'gyro':
+      return <GyroVisualizer pitch={s(0.05) * 25} roll={s(0.08, 1) * 35} />
+    case 'motion':
+      return <MotionVisualizer intensity={(s(0.07) * 0.5 + 0.5) * (s(0.31) * 0.4 + 0.6)} />
+    case 'accel':
+      // gravity baseline on z + per-axis wobble
+      return <AccelerometerVisualizer x={s(0.23) * 6} y={s(0.17, 2) * 6} z={9.8 + s(0.4, 1) * 4} />
+    case 'speed':
+      return <SpeedVisualizer mps={(s(0.04) * 0.5 + 0.5) * 28} />
+    case 'temp':
+      return <TemperatureVisualizer celsius={18 + s(0.03) * 12} />
+    case 'torch':
+      return <TorchVisualizer on={Math.floor(t / 12) % 2 === 0} />
+  }
+}
+
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <View style={styles.section}>
@@ -2482,6 +2599,7 @@ function ChatComposerDemo({
 const styles = StyleSheet.create({
   scroll: { padding: theme.spacing.lg, gap: theme.spacing.md, paddingBottom: theme.spacing.xxxl },
   section: { gap: theme.spacing.sm, marginTop: theme.spacing.xl },
+  audioVizFrame: { width: '100%', height: 180, borderRadius: theme.radius.md, overflow: 'hidden' },
   galleryRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
