@@ -3333,8 +3333,8 @@ that floored height is the space it **reserves** — so short clips keep a reada
 blocks never overlap (the fix for the prior thin-line bug: the earlier segment-scale axis
 allocated the *unfloored* height, so floored blocks overlapped and showed only a top sliver).
 Empty stretches between clips — and the trailing stretch up to **now** — collapse to a fixed
-**`TimeGapMarker`** (near-adjacent clips get a hair of spacing, no marker). **Now is at the
-BOTTOM** (scroll up = older). **2-finger pinch** zooms (longer clips grow past the floor →
+**`TimeGapMarker`** (near-adjacent clips get a hair of spacing, no marker). **Newest is at the
+TOP** (scroll down = older; "now" is the top edge — 2026-06-12 flip). **2-finger pinch** zooms (longer clips grow past the floor →
 proportional; focal pinned by content fraction; no bottom zoom bar). **Double-tap** a clip →
 editor **scoped to that clip's own window** (`ClipEditScreen` reads `clipId` → a single segment
 over [start, end], no rolling-buffer eviction gap / live tail, playhead bounded, bracket defaulted
@@ -3368,13 +3368,14 @@ on the sublabel and the left ruler.
   currently encodes landscape, so buffer video can play rotated — a capture-side fix, NOT an app
   rotation.)* Props `posterUrl?` · `title?` · `playing?` · `frameSlot?` · `style?`.
 
-  The **Clips page bottom chrome** mirrors the editor: a `BufferTransport` (to-start · prev clip ·
-  frame-back · play/pause · frame-forward · next clip · to-end) over a `TimeScrubber` clock
-  (`playback={false}`, held instant). `ClipsScreen` owns one `expo-video` player for the selected
-  clip — the transport play/seek and the clock scrub drive it; while playing, the playhead follows
-  the video and stops at the clip end. Prev/next clip select the time-adjacent clip. The clock
-  expands upward (grid shrinks), locks the grid scroll, and collapses on any grid touch. Saved clips
-  have no `manifestUrl` yet → poster-only, transport play is a no-op until the backend add (handoff).
+  The **Clips page playback chrome**: a `BufferTransport` (to-start · prev clip · frame-back ·
+  play/pause · frame-forward · next clip · to-end) sits **directly below the viewer**; the
+  `TimeScrubber` clock (`playback={false}`, held instant) stays at the **bottom**. `ClipsScreen` owns
+  one `expo-video` player for the selected clip — the transport play/seek and the clock scrub drive
+  it; while playing, the playhead follows the video and stops at the clip end. Prev/next clip select
+  the time-adjacent clip. The bottom clock expands upward (grid shrinks), locks the grid scroll, and
+  collapses on any grid touch. Saved clips have no `manifestUrl` yet → poster-only, transport play is
+  a no-op until the backend add (handoff).
 - **`ClipTimeRuler`** — `src/components/features/clip/ClipTimeRuler.tsx`. The ghosted time-mark
   ruler down a left gutter (`GUTTER_W` 52). Because the axis collapses empty time, a regular-interval
   ruler wouldn't line up — so the host (`ClipsScreen`) feeds it explicit ticks at the y-positions it

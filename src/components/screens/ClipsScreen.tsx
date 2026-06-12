@@ -99,20 +99,26 @@ function fmtGap(ms: number) {
 // ── per-clip collapsed layout ────────────────────────────────────────────────
 type GapMark = { yTop: number; height: number; ms: number }
 type Layout = { pos: Map<string, ClipPos>; gaps: GapMark[]; contentHeight: number }
-// Walk all clips oldest → newest; give each a `top`/`height` slot (duration×px, floored to
-// MIN_BLOCK_H) and collapse the empty stretches between them — and up to `nowMs` — to gaps.
+// Walk all clips NEWEST → OLDEST (top → bottom): give each a `top`/`height` slot (duration×px,
+// floored to MIN_BLOCK_H) and collapse the empty stretches between them — and from `nowMs` down to
+// the newest clip — to gaps. Newest at the top, oldest at the bottom; "now" is the top edge.
 // Reserving the floored height is what stops short blocks overlapping (the old thin-line bug).
 function buildLayout(clips: LaneClip[], px: number, nowMs: number): Layout {
   const sorted = clips
     .filter((c) => Number.isFinite(c.startMs) && Number.isFinite(c.endMs) && c.endMs >= c.startMs)
-    .sort((a, b) => a.startMs - b.startMs)
+    .sort((a, b) => b.startMs - a.startMs) // newest first
   const pos = new Map<string, ClipPos>()
   const gaps: GapMark[] = []
   let cursor = 0
-  let prevEnd: number | null = null
+  // Leading gap at the TOP: from now down to the newest clip's end.
+  if (sorted.length && nowMs > sorted[0]!.endMs + GAP_THRESHOLD_MS) {
+    gaps.push({ yTop: cursor, height: GAP_PX, ms: nowMs - sorted[0]!.endMs })
+    cursor += GAP_PX
+  }
+  let prevStart: number | null = null // start of the previously-placed (newer) clip
   for (const c of sorted) {
-    if (prevEnd != null && c.startMs > prevEnd) {
-      const gapMs = c.startMs - prevEnd
+    if (prevStart != null && prevStart > c.endMs) {
+      const gapMs = prevStart - c.endMs
       if (gapMs > GAP_THRESHOLD_MS) {
         gaps.push({ yTop: cursor, height: GAP_PX, ms: gapMs })
         cursor += GAP_PX
@@ -123,11 +129,7 @@ function buildLayout(clips: LaneClip[], px: number, nowMs: number): Layout {
     const height = Math.max(MIN_BLOCK_H, (c.endMs - c.startMs) * px)
     pos.set(c.id, { top: cursor, height })
     cursor += height
-    prevEnd = prevEnd == null ? c.endMs : Math.max(prevEnd, c.endMs)
-  }
-  if (prevEnd != null && nowMs > prevEnd + GAP_THRESHOLD_MS) {
-    gaps.push({ yTop: cursor, height: GAP_PX, ms: nowMs - prevEnd })
-    cursor += GAP_PX
+    prevStart = prevStart == null ? c.startMs : Math.min(prevStart, c.startMs)
   }
   return { pos, gaps, contentHeight: cursor }
 }
@@ -443,24 +445,23 @@ export const ClipsScreen = () => {
   const contentHeight = layout.contentHeight
   const posOf = useCallback((id: string) => layout.pos.get(id), [layout])
 
-  // Ghosted ruler: a time mark at each clip's start (top edge), deduped so labels don't
-  // collide, plus a "now" mark at the bottom.
+  // Ghosted ruler: "now" at the top, then a time mark at each clip's start (top edge),
+  // deduped top-down so labels don't collide.
   const rulerTicks = useMemo<RulerTick[]>(() => {
     const sorted = allClips
       .filter((c) => Number.isFinite(c.startMs))
       .map((c) => ({ c, top: layout.pos.get(c.id)?.top }))
       .filter((x): x is { c: LaneClip; top: number } => x.top != null)
       .sort((a, b) => a.top - b.top)
-    const out: RulerTick[] = []
-    let lastY = -Infinity
+    const out: RulerTick[] = [{ y: 0, label: 'now', now: true }]
+    let lastY = 0
     for (const { c, top } of sorted) {
       if (top - lastY < MIN_TICK_GAP) continue
       out.push({ y: top, label: fmtTime(c.startMs) })
       lastY = top
     }
-    if (contentHeight - lastY >= MIN_TICK_GAP) out.push({ y: contentHeight, label: 'now', now: true })
     return out
-  }, [allClips, layout, contentHeight])
+  }, [allClips, layout])
 
   const scrollRef = useRef<ScrollView>(null)
   const scrollYRef = useRef(0)
@@ -486,12 +487,11 @@ export const ClipsScreen = () => {
       scrollYRef.current = y
     }
   }, [px])
-  // Land at "now" (the bottom) the first time we have content + a measured viewport.
+  // Land at "now"/newest (the TOP) the first time we have content + a measured viewport.
   useEffect(() => {
     if (!didInitialScroll.current && contentHeight > 0 && viewportH > 0) {
       didInitialScroll.current = true
-      const y = Math.max(0, contentHeight - viewportH)
-      requestAnimationFrame(() => scrollRef.current?.scrollTo({ y, animated: false }))
+      requestAnimationFrame(() => scrollRef.current?.scrollTo({ y: 0, animated: false }))
     }
   }, [contentHeight, viewportH])
 
@@ -567,6 +567,26 @@ export const ClipsScreen = () => {
             />
           </View>
         ) : null}
+        {/* Transport directly below the viewer (it drives it); the clock stays at the bottom. */}
+        {hasAny ? (
+          <BufferTransport
+            playing={playing}
+            onToStart={() => seekTo(clipStart)}
+            onPrevClip={() => canPrev && setSelectedId(ordered[selIdx - 1]!.id)}
+            onFrameBack={() => seekTo(playheadRef.current - FRAME_MS)}
+            onFrameBackHold={(held) => frameHold(-1, held)}
+            onTogglePlay={togglePlay}
+            onFrameForward={() => seekTo(playheadRef.current + FRAME_MS)}
+            onFrameForwardHold={(held) => frameHold(1, held)}
+            onNextClip={() => canNext && setSelectedId(ordered[selIdx + 1]!.id)}
+            onToEnd={() => seekTo(clipEnd)}
+            canPrev={canPrev}
+            canNext={canNext}
+            canFrameBack={!!manifestUrl && playheadMs > clipStart}
+            canFrameForward={!!manifestUrl && playheadMs < clipEnd}
+            style={styles.transport}
+          />
+        ) : null}
         <View style={styles.laneHeaders}>
           {/* Spacer aligning the lane labels over the gutter-offset lanes below. */}
           <View style={{ width: GUTTER_W }} />
@@ -584,9 +604,6 @@ export const ClipsScreen = () => {
             </Text>
           </View>
         </View>
-        <Text variant="monoCaption" color={theme.colors.text.subtle} style={styles.hint}>
-          double-tap to edit · drag across to save · pinch to zoom
-        </Text>
       </View>
 
       {!hasAny ? (
@@ -649,26 +666,10 @@ export const ClipsScreen = () => {
         </View>
       )}
 
-      {/* Bottom playback chrome: transport over the time clock (clock expands upward,
-          pushing the grid up as it grows). Drives the selected clip's video. */}
+      {/* Bottom clock — the transport moved up under the viewer. The clock expands upward,
+          pushing the grid up as it grows; it drives the selected clip's playhead. */}
       {hasAny ? (
         <View style={styles.bottomChrome}>
-          <BufferTransport
-            playing={playing}
-            onToStart={() => seekTo(clipStart)}
-            onPrevClip={() => canPrev && setSelectedId(ordered[selIdx - 1]!.id)}
-            onFrameBack={() => seekTo(playheadRef.current - FRAME_MS)}
-            onFrameBackHold={(held) => frameHold(-1, held)}
-            onTogglePlay={togglePlay}
-            onFrameForward={() => seekTo(playheadRef.current + FRAME_MS)}
-            onFrameForwardHold={(held) => frameHold(1, held)}
-            onNextClip={() => canNext && setSelectedId(ordered[selIdx + 1]!.id)}
-            onToEnd={() => seekTo(clipEnd)}
-            canPrev={canPrev}
-            canNext={canNext}
-            canFrameBack={!!manifestUrl && playheadMs > clipStart}
-            canFrameForward={!!manifestUrl && playheadMs < clipEnd}
-          />
           <TimeScrubber
             offsetMs={offsetForClock}
             onOffsetChange={(off) => seekTo(Date.now() - off)}
@@ -721,9 +722,9 @@ const styles = StyleSheet.create({
   laneGap: {
     width: theme.spacing.sm,
   },
-  hint: {
-    textAlign: 'center',
-    paddingTop: theme.spacing.xs,
+  transport: {
+    paddingHorizontal: theme.spacing.lg,
+    marginTop: theme.spacing.xs,
   },
   gridWrap: {
     flex: 1,
