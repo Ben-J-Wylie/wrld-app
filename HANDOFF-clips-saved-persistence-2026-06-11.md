@@ -12,33 +12,17 @@ noted). Detail for each is in the spec sections further down.
 
 - **R3** — `POST /buffer/me/clips` promotes a wall-clock window across sessions into a durable `Clip`.
 - **C5** — `GET /buffer/me/clips` (list) + `DELETE /buffer/me/clips/:id` (un-save).
+- **P1** — `Clip.thumbnailUrl` set on promote + `manifestUrl` returned on the clips list
+  (`wrld-backend` `7db83d2`). Saved clips now own a durable poster + playable HLS.
+- **P2** — `bufferSessionId` returned on the clips list (`7db83d2`) + session `title` from
+  `Stream.title` on `GET /buffer/me` (`dd9bd88`).
+- **Zod 500→400** — save validation errors now return `badRequest` (`7db83d2`).
+- **App wired (Ben, this commit):** `SavedClip` gained `manifestUrl` + `bufferSessionId`; the grid
+  prefers the real poster/manifest (borrow now just a fallback) and hides the buffer session via the
+  **exact** `sourceSessionId` (window-match is the legacy fallback). `title` + `thumbnailUrl` needed
+  no change — they flow. The ClipViewer plays saved clips now; the profile feed shows real posters.
 
-## ☐ AARON TO-DO (open) — roughly in priority order
-
-**P1 — saved clips show no poster + can't play (the active UX bug). THE ROBUST FIX IS HERE — it
-can only be done on the backend.** The durable `Clip` outlives the rolling buffer (which evicts), so
-any app-side "borrow the poster/manifest from the source buffer session" is non-robust by
-construction — it breaks the moment that session ages out. A `Clip` must own its poster + manifest.
-The app has the borrow as a temporary bridge **only** (works for just-saved clips); these two make it
-real. Surfaces affected: the Clips-grid saved lane, the sticky ClipViewer, and the **Me → Public
-Profile saved-clips feed**.
-- [ ] **Set `Clip.thumbnailUrl` on promote.** The create + ready-update never write it → it's `null`.
-      **Robust:** generate the poster from the clip's **own in-point frame** during promote (correct
-      for trimmed + multi-session clips), written to `clips/<id>/`. Copying the source session's
-      poster is an acceptable *first* version but is only correct for whole-session saves. *(§ "Saved
-      clips lose their thumbnail…")*
-- [ ] **Return `manifestUrl` on `GET /buffer/me/clips`.** The `Clip` already has it
-      (`primaryManifestUrl`) — the list just omits it. Add `manifestUrl: string | null` to the
-      `SavedClip` shape. (This is the *play-anywhere* half — without it the viewer/feed can't play a
-      saved clip even when its footage has evicted from the buffer.)
-
-**P2 — model exactness + titles.**
-- [ ] **Return `bufferSessionId` on `GET /buffer/me/clips`** (already on the `Clip` row). Lets the app
-      hide the **exact** source session ("a clip lives in one lane") instead of window-matching —
-      robust once clips can be trimmed to sub-windows. *(§ "Model refinement")*
-- [ ] **Add `title` to `GET /buffer/me` session objects** via `BufferSession.streamId → Stream.title`
-      (relation/lookup, **no migration**). Buffered-lane clips currently fall back to the start time.
-      App already consumes `session.title`. *(§ "clip titles")*
+## ☐ AARON TO-DO (open)
 
 **P3 — editing persistence (C4).**
 - [ ] **Non-destructive manifest writes** for trim / delete-source / per-source visibility, in either

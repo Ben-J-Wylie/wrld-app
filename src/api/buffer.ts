@@ -114,5 +114,7 @@ export type SavedClip = {
   startAtMs: number
   endAtMs: number
   thumbnailUrl: string | null
+  manifestUrl: string | null // playable HLS — durable (survives buffer eviction)
+  bufferSessionId: string | null // the source buffer session (exact "one lane" link)
   kinds: BufferTrackKind[]
 }

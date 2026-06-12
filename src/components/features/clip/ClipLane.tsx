@@ -19,7 +19,8 @@ export type LaneClip = {
   label: string
   sublabel?: string
   posterUrl?: string | null
-  manifestUrl?: string | null // playable HLS for the sticky ClipViewer (buffered sessions today)
+  manifestUrl?: string | null // playable HLS for the sticky ClipViewer
+  sourceSessionId?: string | null // a saved clip's source buffer session (exact "one lane" link)
 }
 
 export type ClipPos = { top: number; height: number }

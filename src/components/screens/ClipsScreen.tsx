@@ -1,18 +1,19 @@
 // src/components/screens/ClipsScreen.tsx
 //
 // Clips landing — the first page from the Clip (footer) button. A two-lane, time-ordered
-// grid of every clip: buffered recording sessions on the LEFT, saved clips on the RIGHT,
-// on a shared vertical time axis. Now is at the BOTTOM (scroll up = older).
+// grid of every clip: buffered sessions on the LEFT, saved clips on the RIGHT, on a shared
+// vertical time axis. NEWEST is at the TOP (scroll down = older); "now" is the top edge.
 //
 // The axis lays out clips PER-CLIP so each one keeps a readable, tappable block: a clip's
 // height is its duration × zoom, FLOORED to MIN_BLOCK_H, and that floored height is the
 // space it reserves — so short clips never collapse to slivers and blocks never overlap.
-// Empty stretches between clips (and the trailing stretch up to "now") collapse to a fixed
+// Empty stretches between clips (and the leading stretch from "now") collapse to a fixed
 // `TimeGapMarker`. 2-finger pinch zooms (longer clips grow past the floor → proportional).
 // Double-tap a clip → editor; drag a clip across to the other lane to save / un-save.
 //
-// MOCK SEAM: the saved lane reads the real recordings list; the buffer→saved promote + the
-// real saved-clips model + un-save are Aaron's lane (the manifest).
+// Saved lane = the durable Clip pool (useSavedClips). A saved clip is the SAME clip as its
+// source buffer session in two states (linked by sourceSessionId), so it shows in exactly
+// one lane. Clips carry their own poster + manifest (durable, survives buffer eviction).
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
@@ -55,13 +56,15 @@ const slog = (...args: unknown[]) => {
 }
 
 const SAVED_MATCH_TOL_MS = 1500
-// A saved clip and its source buffered session are the SAME clip in two states, so a
-// saved session is hidden from the buffer lane (saving MOVES it, never duplicates). The
-// exact link is the clip's source `bufferSessionId` (pending in the API — see handoff);
-// until then we match on the window, which is exact for whole-session saves: a buffered
-// session is "saved" when a saved clip's window covers it.
-const savedClipCovers = (b: LaneClip, savedList: LaneClip[]) =>
-  savedList.some((s) => s.startMs <= b.startMs + SAVED_MATCH_TOL_MS && s.endMs >= b.endMs - SAVED_MATCH_TOL_MS)
+// A saved clip and its source buffered session are the SAME clip in two states, so a saved
+// session is hidden from the buffer lane (saving MOVES it, never duplicates). The exact link
+// is the clip's `sourceSessionId` (= backend `bufferSessionId`); fall back to window overlap
+// for any legacy clip that has none.
+const isSourceSession = (b: LaneClip, s: { sourceSessionId?: string | null; startMs: number; endMs: number }) =>
+  s.sourceSessionId
+    ? s.sourceSessionId === b.id
+    : s.startMs <= b.startMs + SAVED_MATCH_TOL_MS && s.endMs >= b.endMs - SAVED_MATCH_TOL_MS
+const isSessionSaved = (b: LaneClip, savedList: LaneClip[]) => savedList.some((s) => isSourceSession(b, s))
 
 const sessionStartMs = (s: BufferSession) => Date.parse(s.startedAt) + (s.mediaStartOffsetMs ?? 0)
 // `?? 0` matters: a brand-new live session can have BOTH duration fields undefined.
@@ -168,12 +171,10 @@ export const ClipsScreen = () => {
   }, [buffer])
   const saved = useMemo<LaneClip[]>(() => {
     return (savedData ?? []).map((c) => {
-      // STOPGAP: the promoted Clip currently has no thumbnail of its own and the list
-      // doesn't expose its manifest (both backend gaps — handoff). A saved clip is a copy
-      // of its source buffered session (same window), so borrow that session's poster +
-      // video while it's still in the buffer. Degrades to none once the session evicts —
-      // the durable fix is the backend setting Clip.thumbnailUrl + returning manifestUrl.
-      const src = buffered.find((b) => c.startAtMs <= b.startMs + SAVED_MATCH_TOL_MS && c.endAtMs >= b.endMs - SAVED_MATCH_TOL_MS)
+      // The Clip now carries its own durable poster + manifest (backend P1). Prefer those;
+      // fall back to borrowing the source buffer session's while it's still buffered (covers
+      // the brief window before a poster/manifest exists, and very old clips).
+      const src = buffered.find((b) => isSourceSession(b, { sourceSessionId: c.bufferSessionId, startMs: c.startAtMs, endMs: c.endAtMs }))
       return {
         id: c.id,
         startMs: c.startAtMs,
@@ -181,7 +182,8 @@ export const ClipsScreen = () => {
         label: c.name?.trim() || fmtTime(c.startAtMs),
         sublabel: fmtDur((c.endAtMs - c.startAtMs) / 1000),
         posterUrl: c.thumbnailUrl ?? src?.posterUrl ?? null,
-        manifestUrl: src?.manifestUrl ?? null,
+        manifestUrl: c.manifestUrl ?? src?.manifestUrl ?? null,
+        sourceSessionId: c.bufferSessionId,
       }
     })
   }, [savedData, buffered])
@@ -200,7 +202,7 @@ export const ClipsScreen = () => {
   // Optimistic placeholder in the saved lane for each session mid-save whose real Clip
   // hasn't arrived yet (`pending:` id; same window/label → seamless swap when it lands).
   const optimisticSaved = useMemo(
-    () => buffered.filter((b) => movingToSaved.has(b.id) && !savedClipCovers(b, realSaved)).map((b) => ({ ...b, id: `pending:${b.id}` })),
+    () => buffered.filter((b) => movingToSaved.has(b.id) && !isSessionSaved(b, realSaved)).map((b) => ({ ...b, id: `pending:${b.id}` })),
     [buffered, movingToSaved, realSaved],
   )
   const savedLane = useMemo(() => [...realSaved, ...optimisticSaved], [realSaved, optimisticSaved])
@@ -208,7 +210,7 @@ export const ClipsScreen = () => {
   // buffer lane while moving, and once a real saved clip covers its window. Un-saving (the clip
   // leaves `realSaved` via pendingDelete / refetch) brings the session back automatically.
   const bufferedLane = useMemo(
-    () => buffered.filter((b) => !movingToSaved.has(b.id) && !savedClipCovers(b, realSaved)),
+    () => buffered.filter((b) => !movingToSaved.has(b.id) && !isSessionSaved(b, realSaved)),
     [buffered, movingToSaved, realSaved],
   )
   const allClips = useMemo(() => [...bufferedLane, ...savedLane], [bufferedLane, savedLane])
@@ -223,7 +225,7 @@ export const ClipsScreen = () => {
       let changed = false
       for (const id of prev) {
         const b = buffered.find((x) => x.id === id)
-        if (!b || savedClipCovers(b, realSaved)) {
+        if (!b || isSessionSaved(b, realSaved)) {
           next.delete(id)
           changed = true
         }
