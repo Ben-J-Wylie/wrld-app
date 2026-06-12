@@ -26,7 +26,6 @@ import { Icon } from '@/components/primitives/Icon'
 import { ClipBlock } from './ClipBlock'
 import { type LaneClip } from './ClipLane'
 
-const GUTTER_W = 46 // fixed left label column
 const RULER_H = 22
 const MIN_CLIP_W = 26 // a short clip stays a tappable block
 const GAP_W = 22 // collapsed-gap marker width
@@ -213,24 +212,7 @@ export function ClipsTimeline({ buffered, saved, nowMs, selectedId, onSelect, on
 
   return (
     <View style={styles.region} onLayout={(e) => setRegionH(e.nativeEvent.layout.height)}>
-      {/* Fixed left gutter — lane labels (don't scroll). */}
-      <View style={styles.gutter}>
-        <View style={{ height: RULER_H }} />
-        <View style={styles.gutterLabel}>
-          <Icon name="film" size="sm" color={theme.colors.text.muted} />
-          <Text variant="monoCaption" color={theme.colors.text.muted}>
-            BUFFER
-          </Text>
-        </View>
-        <View style={styles.gutterLabel}>
-          <Icon name="bookmark" size="sm" color={theme.colors.accent.default} />
-          <Text variant="monoCaption" color={theme.colors.accent.default}>
-            SAVED
-          </Text>
-        </View>
-      </View>
-
-      {/* Horizontally-scrolling timeline. */}
+      {/* Horizontally-scrolling timeline — full width; the lane titles sticky-overlay the left. */}
       <View style={styles.scrollArea} onLayout={(e) => setViewportW(e.nativeEvent.layout.width)}>
         {!hasAny ? (
           <View style={styles.empty}>
@@ -278,6 +260,24 @@ export function ClipsTimeline({ buffered, saved, nowMs, selectedId, onSelect, on
           </GestureDetector>
         )}
       </View>
+
+      {/* Sticky lane titles — top-left of each lane, icon + name inline, don't scroll. */}
+      {hasAny && regionH > 0 ? (
+        <>
+          <View style={[styles.laneTitle, { top: RULER_H + 4 }]} pointerEvents="none">
+            <Icon name="film" size="sm" color={theme.colors.text.muted} />
+            <Text variant="monoCaption" color={theme.colors.text.muted}>
+              BUFFER
+            </Text>
+          </View>
+          <View style={[styles.laneTitle, { top: RULER_H + laneHeight + 2 + 4 }]} pointerEvents="none">
+            <Icon name="bookmark" size="sm" color={theme.colors.accent.default} />
+            <Text variant="monoCaption" color={theme.colors.accent.default}>
+              SAVED
+            </Text>
+          </View>
+        </>
+      ) : null}
     </View>
   )
 }
@@ -285,19 +285,21 @@ export function ClipsTimeline({ buffered, saved, nowMs, selectedId, onSelect, on
 const styles = StyleSheet.create({
   region: {
     flex: 1,
-    flexDirection: 'row',
-  },
-  gutter: {
-    width: GUTTER_W,
-  },
-  gutterLabel: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 2,
   },
   scrollArea: {
     flex: 1,
+  },
+  // Sticky title chip over the top-left of each lane (paper bg so it reads over a block).
+  laneTitle: {
+    position: 'absolute',
+    left: theme.spacing.xs,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: theme.spacing.xs,
+    paddingVertical: 1,
+    borderRadius: theme.radius.full,
+    backgroundColor: theme.colors.bg.primary,
   },
   empty: {
     flex: 1,
