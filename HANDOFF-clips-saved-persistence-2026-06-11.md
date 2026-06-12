@@ -15,13 +15,22 @@ noted). Detail for each is in the spec sections further down.
 
 ## ☐ AARON TO-DO (open) — roughly in priority order
 
-**P1 — saved clips show no poster + can't play (the active UX bug).** Both are on the durable `Clip`,
-so the app's "borrow from the source buffer session" stopgap breaks once that session evicts.
+**P1 — saved clips show no poster + can't play (the active UX bug). THE ROBUST FIX IS HERE — it
+can only be done on the backend.** The durable `Clip` outlives the rolling buffer (which evicts), so
+any app-side "borrow the poster/manifest from the source buffer session" is non-robust by
+construction — it breaks the moment that session ages out. A `Clip` must own its poster + manifest.
+The app has the borrow as a temporary bridge **only** (works for just-saved clips); these two make it
+real. Surfaces affected: the Clips-grid saved lane, the sticky ClipViewer, and the **Me → Public
+Profile saved-clips feed**.
 - [ ] **Set `Clip.thumbnailUrl` on promote.** The create + ready-update never write it → it's `null`.
-      Copy the source session's poster into `clips/<id>/` (or generate one). *(§ "Saved clips lose
-      their thumbnail…")*
-- [ ] **Return `manifestUrl` on `GET /buffer/me/clips`.** The `Clip` has it (`primaryManifestUrl`);
-      the list just omits it. Add `manifestUrl: string | null` to the `SavedClip` shape.
+      **Robust:** generate the poster from the clip's **own in-point frame** during promote (correct
+      for trimmed + multi-session clips), written to `clips/<id>/`. Copying the source session's
+      poster is an acceptable *first* version but is only correct for whole-session saves. *(§ "Saved
+      clips lose their thumbnail…")*
+- [ ] **Return `manifestUrl` on `GET /buffer/me/clips`.** The `Clip` already has it
+      (`primaryManifestUrl`) — the list just omits it. Add `manifestUrl: string | null` to the
+      `SavedClip` shape. (This is the *play-anywhere* half — without it the viewer/feed can't play a
+      saved clip even when its footage has evicted from the buffer.)
 
 **P2 — model exactness + titles.**
 - [ ] **Return `bufferSessionId` on `GET /buffer/me/clips`** (already on the `Clip` row). Lets the app
@@ -207,22 +216,27 @@ visibility), and that source-visibility state is the single truth used at time-m
 
 ## Saved clips lose their thumbnail + can't play — two promote/list gaps
 
-The Clips page has a sticky **ClipViewer** + bottom transport that preview the selected clip. A
-saved clip currently shows **no poster and can't play**. Two distinct backend gaps (both on the
-durable `Clip`, so a stopgap that borrows from the buffer session breaks once the session evicts):
+A saved clip shows **no poster and can't play** on every surface that reads the saved pool — the
+Clips-grid saved lane, the sticky **ClipViewer** + bottom transport, and the **Me → Public Profile
+saved-clips feed**. Two distinct backend gaps, **both on the durable `Clip`** — which is exactly why
+no app-side fix can be robust: the borrow-from-buffer-session trick (below) breaks the instant the
+rolling buffer evicts that session, and the profile feed can't even borrow (it doesn't load the
+buffer), so it always shows placeholders today.
 
 1. **`Clip.thumbnailUrl` is never set on promote.** `POST /buffer/me/clips` creates the row and the
    ready-update writes `manifestUrl` / `sizeBytes` / `tracks` but **never `thumbnailUrl`**, so it's
-   `null` and `GET /buffer/me/clips` returns `thumbnailUrl: null`. **Fix:** set it during promote —
-   copy the source session's poster frame into `clips/<id>/` (the session already has one), or
-   generate a poster from the first frame.
+   `null` and `GET /buffer/me/clips` returns `thumbnailUrl: null`. **Fix (robust):** during promote,
+   generate a poster from the clip's **own in-point frame** (correct for trimmed + multi-session
+   clips) into `clips/<id>/`. Copying the source session's poster is an OK first cut but only correct
+   for whole-session saves.
 2. **`GET /buffer/me/clips` doesn't expose the manifest.** The `Clip` *has* `manifestUrl`
    (`result.primaryManifestUrl`) — the list just omits it. **Fix:** add `manifestUrl: string | null`
    to the `SavedClip` response (bundle with the `bufferSessionId` add above).
 
-App-side stopgap shipped (Ben): a saved clip borrows its **source buffered session's** poster +
-manifest while that session is still in the buffer (matched by window). It degrades to none once the
-session evicts — the durable fix is the two items above.
+App-side stopgap shipped (Ben), **temporary bridge only:** on the Clips grid, a saved clip borrows
+its source buffered session's poster + manifest while that session is still in the buffer (matched by
+window) — degrades to none on eviction, and the profile feed has no equivalent. The two items above
+are the real fix.
 
 ## Also needed: clip titles on sessions + recordings (small, additive)
 
