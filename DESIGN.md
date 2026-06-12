@@ -3360,13 +3360,21 @@ carries `title` onto sessions / recordings — handoff 2026-06-11); the **start 
 on the sublabel and the left ruler.
 - **`ClipViewer`** — `src/components/features/clip/ClipViewer.tsx`. The **sticky full-width 2:1**
   (half-height) preview above the buffered/saved bar (the host pads it for equal L/R margins).
-  Footage is **letterboxed / pillarboxed** inside the field (`contentFit="contain"` over a black
-  field) so portrait + landscape clips both show whole. Shows the poster by default; a centre play button starts the HLS video for
-  clips that expose a `manifestUrl` (buffered sessions today; saved clips once the backend returns
-  their manifest — handoff). **Single-tap** a clip in the grid selects it here (double-tap still
-  opens the editor); defaults to the newest clip. *(Capture currently encodes landscape, so buffer
-  video can play rotated — a capture-side fix, NOT an app rotation.)* Props `posterUrl?` ·
-  `manifestUrl?` · `title?` · `style?`.
+  **Presentational:** the host owns the video player (so the bottom transport + clock can drive it)
+  and passes its `VideoView` as **`frameSlot`**; the poster covers the video until `playing`. Footage
+  is **letterboxed / pillarboxed** inside the field (`contentFit="contain"` over black) so portrait +
+  landscape clips both show whole. No play button (the transport owns play/pause). **Single-tap** a
+  clip in the grid selects it here (double-tap opens the editor); defaults to the newest. *(Capture
+  currently encodes landscape, so buffer video can play rotated — a capture-side fix, NOT an app
+  rotation.)* Props `posterUrl?` · `title?` · `playing?` · `frameSlot?` · `style?`.
+
+  The **Clips page bottom chrome** mirrors the editor: a `BufferTransport` (to-start · prev clip ·
+  frame-back · play/pause · frame-forward · next clip · to-end) over a `TimeScrubber` clock
+  (`playback={false}`, held instant). `ClipsScreen` owns one `expo-video` player for the selected
+  clip — the transport play/seek and the clock scrub drive it; while playing, the playhead follows
+  the video and stops at the clip end. Prev/next clip select the time-adjacent clip. The clock
+  expands upward (grid shrinks), locks the grid scroll, and collapses on any grid touch. Saved clips
+  have no `manifestUrl` yet → poster-only, transport play is a no-op until the backend add (handoff).
 - **`ClipTimeRuler`** — `src/components/features/clip/ClipTimeRuler.tsx`. The ghosted time-mark
   ruler down a left gutter (`GUTTER_W` 52). Because the axis collapses empty time, a regular-interval
   ruler wouldn't line up — so the host (`ClipsScreen`) feeds it explicit ticks at the y-positions it
