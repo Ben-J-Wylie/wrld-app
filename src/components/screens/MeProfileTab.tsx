@@ -7,10 +7,11 @@
 //     name + @handle, permanent account ID, member-since date, plan
 //     (tier) badge, and follower / gifts stats. Editing lives in the
 //     Settings tab (ProfileEditCard), never here.
-//   • Feed — a timeline of the clips in the user's saved lane
-//     (recordings), newest first.
+//   • Feed — a timeline of the clips in the user's saved lane (the durable
+//     Clip rows from useSavedClips), newest first; tap a row to open the clip.
 
 import { ActivityIndicator, StyleSheet, View } from 'react-native'
+import { router } from 'expo-router'
 import { theme } from '@/tokens/theme'
 import { Avatar } from '@/components/primitives/Avatar'
 import { Text } from '@/components/primitives/Text'
@@ -20,8 +21,9 @@ import { AccountIDPill } from '@/components/features/user/AccountIDPill'
 import { SavedClipRow } from '@/components/features/clip/SavedClipRow'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
 import { useUserProfile } from '@/hooks/useUserProfile'
-import { useRecordings } from '@/hooks/useRecordings'
-import type { Recording, User } from '@/types'
+import { useSavedClips } from '@/hooks/useSavedClips'
+import type { SavedClip } from '@/api/buffer'
+import type { User } from '@/types'
 
 function formatCount(n: number): string {
   if (n >= 10_000) return `${Math.floor(n / 1000)}k`
@@ -37,16 +39,16 @@ function formatMemberSince(iso: string): string {
   }
 }
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, {
+function formatDate(v: number | string): string {
+  return new Date(v).toLocaleDateString(undefined, {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
   })
 }
 
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+function formatTime(v: number | string): string {
+  return new Date(v).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
 }
 
 function formatDuration(sec: number | null): string {
@@ -56,36 +58,28 @@ function formatDuration(sec: number | null): string {
   return m > 0 ? `${m}m ${s}s` : `${s}s`
 }
 
-function formatSize(bytes: number): string {
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
-
 const TIER_LABEL: Record<User['tier'], string> = {
   free: 'FREE',
   plus: 'PLUS',
   pro: 'PRO',
 }
 
-// One saved-lane clip as a feed row. Read-only here (no delete / kebab) —
-// the Library tab owns clip management.
-function FeedRow({ recording }: { recording: Recording }) {
-  const isReady = recording.status === 'ready'
-  const meta = [
-    formatTime(recording.startedAt),
-    isReady && recording.durationSec !== null ? formatDuration(recording.durationSec) : null,
-    isReady && recording.sizeBytes > 0 ? formatSize(recording.sizeBytes) : null,
-  ]
+// One saved-lane clip (a durable Clip) as a feed row. Tapping opens it in the clip
+// editor/viewer (same target as a double-tap on the Clips grid). Read-only here.
+function FeedRow({ clip }: { clip: SavedClip }) {
+  const durSec = Math.max(0, Math.round((clip.endAtMs - clip.startAtMs) / 1000))
+  const meta = [formatDate(clip.startAtMs), formatTime(clip.startAtMs), formatDuration(durSec)]
     .filter(Boolean)
     .join('  ·  ')
 
   return (
     <SavedClipRow
-      name={formatDate(recording.startedAt)}
+      name={clip.name?.trim() || formatDate(clip.startAtMs)}
       capturedAt={meta}
-      durationSec={recording.durationSec ?? 0}
-      thumbnailUrl={recording.thumbnailUrl}
-      showPlayGlyph={false}
+      durationSec={durSec}
+      thumbnailUrl={clip.thumbnailUrl}
+      showPlayGlyph
+      onToggleExpand={() => router.navigate({ pathname: '/(app)/clip-editor', params: { clipId: clip.id, kind: 'saved' } })}
     />
   )
 }
@@ -95,16 +89,14 @@ export function MeProfileTab() {
   // Follower / following / gifts live on the public profile endpoint, not
   // /auth/me — fetch our own profile to surface them.
   const { data: profile } = useUserProfile(user?.handle ?? null)
-  const { data: recordings, isLoading: clipsLoading } = useRecordings(!!user)
+  const { data: savedClips, isLoading: clipsLoading } = useSavedClips(!!user)
 
   if (!user) return null
 
   const gifts = profile?.giftsReceived ?? []
   const totalGifts = gifts.reduce((sum, g) => sum + g.count, 0)
-  // Saved-lane feed: only finished clips, newest first.
-  const feed = (recordings ?? [])
-    .filter((r) => r.status === 'ready')
-    .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())
+  // Saved-lane feed: the user's durable saved clips, newest first.
+  const feed = [...(savedClips ?? [])].sort((a, b) => b.startAtMs - a.startAtMs)
 
   return (
     <View style={styles.root}>
@@ -191,8 +183,8 @@ export function MeProfileTab() {
           </View>
         ) : (
           <View style={styles.feedList}>
-            {feed.map((r) => (
-              <FeedRow key={r.id} recording={r} />
+            {feed.map((c) => (
+              <FeedRow key={c.id} clip={c} />
             ))}
           </View>
         )}
