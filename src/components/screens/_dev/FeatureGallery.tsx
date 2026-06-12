@@ -82,6 +82,7 @@ import { ClipLane, type LaneClip } from '@/components/features/clip/ClipLane'
 import { TimeGapMarker } from '@/components/features/clip/TimeGapMarker'
 import { ClipTimeRuler } from '@/components/features/clip/ClipTimeRuler'
 import { ClipViewer } from '@/components/features/clip/ClipViewer'
+import { ClipsTimeline } from '@/components/features/clip/ClipsTimeline'
 import { DiscoveryHandoffCard } from '@/components/features/stream/DiscoveryHandoffCard'
 import { LegalAcceptanceCard } from '@/components/features/onboarding/LegalAcceptanceCard'
 import { ContextStrip } from '@/components/features/report/ContextStrip'
@@ -1329,7 +1330,13 @@ export function FeatureGallery() {
         </Row>
       </Section>
 
-      <Section title="ClipLane (clips grid)">
+      <Section title="ClipsTimeline (clips grid)">
+        <Row label="horizontal two-lane timeline — reaper left → now right, collapsed gaps, pinch + scroll">
+          <ClipsTimelineDemo />
+        </Row>
+      </Section>
+
+      <Section title="ClipLane (clips grid — legacy / vertical)">
         <Row label="clips to scale on a vertical time axis (buffered / saved)">
           <ClipLaneDemo />
         </Row>
@@ -2038,6 +2045,25 @@ function ClipLaneDemo() {
       <ClipLane clips={buffered} tone="buffered" posOf={posOf} />
       <View style={{ width: theme.spacing.sm }} />
       <ClipLane clips={saved} tone="saved" posOf={posOf} />
+    </View>
+  )
+}
+
+function ClipsTimelineDemo() {
+  const now = useMemo(() => Date.now(), [])
+  const p2 = (n: number) => String(n).padStart(2, '0')
+  const mk = (minsAgo: number, durMin: number, id: string): LaneClip => {
+    const startMs = now - minsAgo * 60_000
+    const endMs = startMs + durMin * 60_000
+    const d = new Date(startMs)
+    return { id, startMs, endMs, label: `${p2(d.getHours())}:${p2(d.getMinutes())}`, sublabel: `${durMin}:00` }
+  }
+  // Carve: buffer + saved never overlap in time.
+  const buffered: LaneClip[] = [mk(40, 6, 'b1'), mk(28, 4, 'b2'), mk(10, 3, 'b3')]
+  const saved: LaneClip[] = [mk(22, 5, 's1')]
+  return (
+    <View style={{ width: 320, height: 180 }}>
+      <ClipsTimeline buffered={buffered} saved={saved} nowMs={now} selectedId="b3" onSelect={() => {}} onOpen={() => {}} onSave={() => {}} onUnsave={() => {}} />
     </View>
   )
 }

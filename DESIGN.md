@@ -3322,35 +3322,29 @@ a 1× `requestAnimationFrame` scrub; the paused-seek effect repaints the field).
 ##### Clips landing grid — `TimeGapMarker` · `ClipBlock` · `ClipLane` *(built 2026-06-11 · Phase A/B)*
 
 The **Clips landing** (`ClipsScreen`, the first page from the footer Clip button) is a
-two-lane, time-ordered grid of every clip — buffered recording sessions on the LEFT, saved
-clips on the RIGHT. The grid and `ClipEditScreen` carry a shared **`PageTabs` [Clips | Editor]**
-at the top (the grid is "Clips", the editor is "Editor"): the two are sibling `href:null` tab
-routes, so the tabs swap between them instantly — double-tapping a clip opens the editor on it,
-and the "Clips" tab returns to the grid. The shared vertical axis is laid out **per-clip with
-collapsed gaps**
-(2026-06-11): each clip's height is its duration × zoom **floored to `MIN_BLOCK_H` (34)**, and
-that floored height is the space it **reserves** — so short clips keep a readable block and
-blocks never overlap (the fix for the prior thin-line bug: the earlier segment-scale axis
-allocated the *unfloored* height, so floored blocks overlapped and showed only a top sliver).
-Empty stretches between clips — and the trailing stretch up to **now** — collapse to a fixed
-**`TimeGapMarker`** (near-adjacent clips get a hair of spacing, no marker). **Newest is at the
-TOP** (scroll down = older; "now" is the top edge — 2026-06-12 flip). **2-finger pinch** zooms (longer clips grow past the floor →
-proportional; focal pinned by content fraction; no bottom zoom bar). **Double-tap** a clip →
-editor **scoped to that clip's own window** (`ClipEditScreen` reads `clipId` → a single segment
-over [start, end], no rolling-buffer eviction gap / live tail, playhead bounded, bracket defaulted
-to the whole clip — Phase C); **drag** a clip across to the other lane to **save** (buffered →
-saved) / **un-save**
-(saved → buffered) — locked in time. Opens at a default zoom where the longest clip is ~130px,
-scrolled to now. **The buffer lane shows footage MINUS the saved ranges (carve — 2026-06-12, C4.5
-Phase 1):** a saved (possibly *trimmed*) clip carves its range out of its source session
-(`carveBuffer` subtracts each saved clip's `ranges`/window per `bufferSessionId`); the leading /
-trailing remainder stay as buffer entries you can still clip (synthetic id `sessionId~startMs`). A
-whole-session save → nothing remains (the "move" case); un-saving un-carves it. So a saved range
-shows in exactly one lane, and you **can't re-save a carved range** (the duplicate-save fix).
-Drag-to-save is optimistic (`pendingSaves` carves + placeholders until the real `Clip` lands, then
-prunes). Saved clips come from the durable `Clip` pool (`useSavedClips`); buffered from the live
-sessions; both refetch on focus (so an editor save reflects). Clips never overlap → **no
-sub-columns**. The screen owns the layout (`buildLayout` → a per-clip `pos` map + gap list).
+two-lane **horizontal timeline** of every clip (2026-06-12 — flipped from the earlier vertical
+grid): buffered footage on the top lane, saved clips on the bottom lane, on a shared **collapsed-gap
+time axis running reaper/oldest LEFT → now RIGHT**. `ClipsScreen` owns the data + orchestration;
+the **`ClipsTimeline`** feature owns the rendering. The page has **no vertical scroll** — a fixed
+region between the transport and the clock holds a fixed left gutter (BUFFER / SAVED labels) + three
+stacked rows (time ruler · buffer lane · saved lane) that **scroll together horizontally** and
+**pinch to zoom**; lands scrolled to *now* on the right. The grid and `ClipEditScreen` carry a
+shared **`PageTabs` [Clips | Editor]** (sibling `href:null` tab routes → instant swap). **Single-tap**
+a clip → preview in the sticky `ClipViewer` (driven by the bottom transport + clock); **double-tap**
+→ editor **scoped to that clip's window** (passes `startMs`/`endMs` so a carved interval opens
+correctly); **drag a buffer block DOWN to save, a saved block UP to un-save** (`ClipBlock` `dragAxis`
+'y').
+
+**The buffer lane shows footage MINUS the saved ranges (carve — C4.5 Phase 1):** a saved (possibly
+*trimmed*) clip carves its range out of its source session (`carveBuffer` subtracts each saved clip's
+`ranges`/window per `bufferSessionId`); the leading/trailing remainder stay as buffer entries you can
+still clip (synthetic id `sessionId~startMs`). A whole-session save → nothing remains (the "move"
+case); un-saving un-carves it. So a saved range shows in exactly one lane, and a **carved range
+can't be re-saved** (the duplicate-save fix). Drag-to-save is optimistic (`pendingSaves` carves +
+placeholders until the real `Clip` lands, then prunes). Saved clips come from the durable `Clip` pool
+(`useSavedClips`); buffered from the live sessions; both refetch on focus (so an editor save
+reflects). Empty stretches collapse to thin gap markers; blocks (reused `ClipBlock`, sized to the
+lane height) never overlap (the carve guarantees it).
 
 > Zoom = a 2-finger **pinch** over a native `ScrollView`. The shared **`ZoomButton`**
 > (extracted from `BufferTimeline`) is the *editor timeline's* tap/hold zoom — not on this grid.
@@ -3361,6 +3355,17 @@ sub-columns**. The screen owns the layout (`buildLayout` → a per-clip `pos` ma
 Each clip block is labelled by the **stream title** (falls back to its start time until the backend
 carries `title` onto sessions / recordings — handoff 2026-06-11); the **start time + duration** live
 on the sublabel and the left ruler.
+- **`ClipsTimeline`** — `src/components/features/clip/ClipsTimeline.tsx`. The **horizontal two-lane
+  timeline** that is the grid (2026-06-12). A fixed-height region (no vertical scroll) with a fixed
+  left gutter (BUFFER / SAVED) + three stacked rows (ruler · buffer lane · saved lane) on a shared
+  **collapsed-gap axis, reaper left → now right**; horizontal scroll + pinch-zoom; lands at *now*.
+  Buffer + saved don't overlap (the carve), so one `buildHLayout` (oldest→x, collapsed gaps, min
+  width) positions both lanes + the ruler. Reuses `ClipBlock` (sized to the lane height); single-tap
+  selects, double-tap opens, **vertical** drag-to-cross (down = save, up = un-save). Presentational —
+  the host (`ClipsScreen`) owns the data + select/open/save/un-save callbacks. Props `buffered` ·
+  `saved` · `nowMs` · `selectedId` · `onSelect` · `onOpen` · `onSave` · `onUnsave`.
+  *(The vertical `ClipLane` / `ClipTimeRuler` / `TimeGapMarker` are now gallery-only — the timeline
+  superseded them for the grid; `ClipBlock` is shared.)*
 - **`ClipViewer`** — `src/components/features/clip/ClipViewer.tsx`. The **sticky full-width 2:1**
   (half-height) preview above the buffered/saved bar (the host pads it for equal L/R margins).
   **Presentational:** the host owns the video player (so the bottom transport + clock can drive it)
