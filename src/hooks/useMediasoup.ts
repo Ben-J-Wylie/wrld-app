@@ -54,10 +54,11 @@ async function acquireLocalStream(wantsCamera: boolean, wantsAudio: boolean): Pr
     { facingMode: 'environment' }, // bare minimum — let the device choose a supported mode
   ]
   let lastErr: unknown
+  console.log(`[golive] acquireLocalStream(camera=${wantsCamera}, audio=${wantsAudio})`)
   for (let i = 0; i < ladder.length; i++) {
     try {
       const stream = (await mediaDevices.getUserMedia({ video: ladder[i] as never, audio: wantsAudio })) as unknown as MediaStream
-      if (i > 0) console.warn(`[capture] getUserMedia recovered on fallback constraint #${i}`)
+      console.log(`[golive] getUserMedia OK (constraint #${i})`)
       return stream
     } catch (err) {
       lastErr = err
@@ -156,7 +157,9 @@ export function useMediasoup() {
   const startBroadcasting = useCallback(async (sources: SourceType[]) => {
     setError(null)
     try {
+      console.log('[golive] startBroadcasting: building device')
       const device = await buildDevice()
+      console.log('[golive] startBroadcasting: device ready, transports next')
 
       // Data-only broadcasts (location / telemetry / torch — no camera or
       // audio armed) skip getUserMedia entirely: calling it with both
