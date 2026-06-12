@@ -3358,6 +3358,15 @@ list), so a later flip to top/bottom lanes is a layout swap.
 Each clip block is labelled by the **stream title** (falls back to its start time until the backend
 carries `title` onto sessions / recordings — handoff 2026-06-11); the **start time + duration** live
 on the sublabel and the left ruler.
+- **`ClipViewer`** — `src/components/features/clip/ClipViewer.tsx`. The **sticky 1:1 square** preview
+  above the buffered/saved bar (full width minus the page margins). Footage is **letterboxed /
+  pillarboxed** inside the square (`contentFit="contain"` over a black field) so portrait + landscape
+  clips both show whole. Shows the poster by default; a centre play button starts the HLS video for
+  clips that expose a `manifestUrl` (buffered sessions today; saved clips once the backend returns
+  their manifest — handoff). **Single-tap** a clip in the grid selects it here (double-tap still
+  opens the editor); defaults to the newest clip. *(Capture currently encodes landscape, so buffer
+  video can play rotated — a capture-side fix, NOT an app rotation.)* Props `posterUrl?` ·
+  `manifestUrl?` · `title?` · `style?`.
 - **`ClipTimeRuler`** — `src/components/features/clip/ClipTimeRuler.tsx`. The ghosted time-mark
   ruler down a left gutter (`GUTTER_W` 52). Because the axis collapses empty time, a regular-interval
   ruler wouldn't line up — so the host (`ClipsScreen`) feeds it explicit ticks at the y-positions it

@@ -30,6 +30,8 @@ type Props = {
   sublabel?: string // duration / sources
   posterUrl?: string | null
   tone: ClipTone
+  selected?: boolean // shown in the sticky viewer → accent outline
+  onSelect?: () => void // single-tap → preview in the viewer
   onOpen?: () => void // double-tap → editor
   // Drag-to-cross (save / un-save): the allowed horizontal direction (1 = right → saved,
   // -1 = left → buffered), the px distance to the other lane, and the commit callback once
@@ -40,15 +42,16 @@ type Props = {
   style?: StyleProp<ViewStyle>
 }
 
-export function ClipBlock({ heightPx, label, sublabel, posterUrl, tone, onOpen, dragDir, reachPx, onCross, style }: Props) {
+export function ClipBlock({ heightPx, label, sublabel, posterUrl, tone, selected, onSelect, onOpen, dragDir, reachPx, onCross, style }: Props) {
   const lastTap = useRef(0)
   const onPress = () => {
     const now = Date.now()
     if (now - lastTap.current < 300) {
       lastTap.current = 0
-      onOpen?.()
+      onOpen?.() // double tap → open editor
     } else {
       lastTap.current = now
+      onSelect?.() // single tap → preview in the viewer (fires immediately)
     }
   }
   const compact = heightPx < COMPACT_H
@@ -110,7 +113,7 @@ export function ClipBlock({ heightPx, label, sublabel, posterUrl, tone, onOpen, 
       accessibilityRole="button"
       accessibilityLabel={`${label}${sublabel ? ` · ${sublabel}` : ''} — double-tap to edit${dragDir ? `, drag ${dragDir > 0 ? 'right to save' : 'left to un-save'}` : ''}`}
       onPress={onPress}
-      style={[styles.block, saved ? styles.blockSaved : styles.blockBuffered, { height: heightPx }, style]}
+      style={[styles.block, saved ? styles.blockSaved : styles.blockBuffered, selected && styles.blockSelected, { height: heightPx }, style]}
     >
       {posterUrl && !compact ? (
         <Image source={{ uri: posterUrl }} style={StyleSheet.absoluteFill} contentFit="cover" transition={120} />
@@ -194,6 +197,11 @@ const styles = StyleSheet.create({
   blockSaved: {
     backgroundColor: theme.colors.accent.surface,
     borderColor: theme.colors.accent.border,
+  },
+  // Currently shown in the sticky viewer — a stronger accent outline.
+  blockSelected: {
+    borderColor: theme.colors.accent.default,
+    borderWidth: 2,
   },
   scrim: {
     ...StyleSheet.absoluteFillObject,

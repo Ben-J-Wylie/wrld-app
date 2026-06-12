@@ -19,6 +19,7 @@ export type LaneClip = {
   label: string
   sublabel?: string
   posterUrl?: string | null
+  manifestUrl?: string | null // playable HLS for the sticky ClipViewer (buffered sessions today)
 }
 
 export type ClipPos = { top: number; height: number }
@@ -30,15 +31,17 @@ type Props = {
   // host reserves each clip's FLOORED height so blocks never overlap. (Axis-agnostic: a
   // horizontal mode would return left/width.)
   posOf: (id: string) => ClipPos | undefined
-  onOpenClip?: (clip: LaneClip) => void
+  onSelectClip?: (clip: LaneClip) => void // single tap → preview in the viewer
+  onOpenClip?: (clip: LaneClip) => void // double tap → editor
   // Drag-to-cross: when set, clips can be dragged across to the other lane (buffered → save,
   // saved → un-save). `reachPx` is the distance to the other lane; `onMoveClip` commits.
   reachPx?: number
   onMoveClip?: (clip: LaneClip) => void
+  selectedId?: string | null
   style?: StyleProp<ViewStyle>
 }
 
-export function ClipLane({ clips, tone, posOf, onOpenClip, reachPx, onMoveClip, style }: Props) {
+export function ClipLane({ clips, tone, posOf, onSelectClip, onOpenClip, reachPx, onMoveClip, selectedId, style }: Props) {
   // Buffered clips drag RIGHT (→ saved); saved clips drag LEFT (→ buffered).
   const dragDir: 1 | -1 = tone === 'buffered' ? 1 : -1
 
@@ -55,6 +58,8 @@ export function ClipLane({ clips, tone, posOf, onOpenClip, reachPx, onMoveClip, 
               sublabel={c.sublabel}
               posterUrl={c.posterUrl}
               tone={tone}
+              selected={selectedId === c.id}
+              onSelect={onSelectClip ? () => onSelectClip(c) : undefined}
               onOpen={onOpenClip ? () => onOpenClip(c) : undefined}
               dragDir={onMoveClip ? dragDir : undefined}
               reachPx={reachPx}

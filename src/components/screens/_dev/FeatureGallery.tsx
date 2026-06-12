@@ -81,6 +81,7 @@ import { ClipBlock } from '@/components/features/clip/ClipBlock'
 import { ClipLane, type LaneClip } from '@/components/features/clip/ClipLane'
 import { TimeGapMarker } from '@/components/features/clip/TimeGapMarker'
 import { ClipTimeRuler } from '@/components/features/clip/ClipTimeRuler'
+import { ClipViewer } from '@/components/features/clip/ClipViewer'
 import { DiscoveryHandoffCard } from '@/components/features/stream/DiscoveryHandoffCard'
 import { LegalAcceptanceCard } from '@/components/features/onboarding/LegalAcceptanceCard'
 import { ContextStrip } from '@/components/features/report/ContextStrip'
@@ -1331,6 +1332,14 @@ export function FeatureGallery() {
       <Section title="ClipLane (clips grid)">
         <Row label="clips to scale on a vertical time axis (buffered / saved)">
           <ClipLaneDemo />
+        </Row>
+      </Section>
+
+      <Section title="ClipViewer (clips grid)">
+        <Row label="sticky 1:1 viewer — empty state (no clip selected)">
+          <View style={{ width: 220 }}>
+            <ClipViewer title="Morning ride" />
+          </View>
         </Row>
       </Section>
 

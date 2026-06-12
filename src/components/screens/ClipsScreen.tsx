@@ -30,6 +30,7 @@ import { Icon } from '@/components/primitives/Icon'
 import { ClipLane, type LaneClip, type ClipPos } from '@/components/features/clip/ClipLane'
 import { TimeGapMarker } from '@/components/features/clip/TimeGapMarker'
 import { ClipTimeRuler, type RulerTick } from '@/components/features/clip/ClipTimeRuler'
+import { ClipViewer } from '@/components/features/clip/ClipViewer'
 import { useBuffer } from '@/hooks/useBuffer'
 import { useSavedClips } from '@/hooks/useSavedClips'
 import { useBroadcastStore } from '@/stores/broadcastStore'
@@ -155,6 +156,7 @@ export const ClipsScreen = () => {
         label: s.title?.trim() || fmtTime(startMs),
         sublabel: fmtDur((endMs - startMs) / 1000),
         posterUrl: s.thumbnailUrl,
+        manifestUrl: s.manifestUrl, // playable in the sticky viewer
       }
     })
   }, [buffer])
@@ -214,6 +216,17 @@ export const ClipsScreen = () => {
       return changed ? next : prev
     })
   }, [buffered, realSaved])
+
+  // ── sticky viewer selection ──
+  // Single-tap a clip → preview it in the viewer; default to the newest clip.
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const selectedClip = useMemo(() => allClips.find((c) => c.id === selectedId) ?? null, [allClips, selectedId])
+  useEffect(() => {
+    if ((!selectedId || !allClips.some((c) => c.id === selectedId)) && allClips.length) {
+      const newest = allClips.reduce((a, b) => (b.endMs > a.endMs ? b : a))
+      setSelectedId(newest.id)
+    }
+  }, [allClips, selectedId])
 
   // A just-saved clip is processed async (status:'processing' → 'ready'), so it
   // doesn't appear in the list immediately. Invalidate now + a few times after, so
@@ -432,6 +445,15 @@ export const ClipsScreen = () => {
           }}
           style={styles.pager}
         />
+        {/* Sticky 1:1 viewer for the selected clip — above the buffered/saved bar. */}
+        {hasAny ? (
+          <ClipViewer
+            posterUrl={selectedClip?.posterUrl}
+            manifestUrl={selectedClip?.manifestUrl}
+            title={selectedClip?.label}
+            style={styles.viewer}
+          />
+        ) : null}
         <View style={styles.laneHeaders}>
           {/* Spacer aligning the lane labels over the gutter-offset lanes below. */}
           <View style={{ width: GUTTER_W }} />
@@ -480,6 +502,8 @@ export const ClipsScreen = () => {
                     clips={bufferedLane}
                     tone="buffered"
                     posOf={posOf}
+                    selectedId={selectedId}
+                    onSelectClip={(c) => setSelectedId(c.id)}
                     onOpenClip={(c) => openClip(c, 'buffered')}
                     reachPx={reachPx}
                     onMoveClip={saveClip}
@@ -489,6 +513,8 @@ export const ClipsScreen = () => {
                     clips={savedLane}
                     tone="saved"
                     posOf={posOf}
+                    selectedId={selectedId}
+                    onSelectClip={(c) => setSelectedId(c.id)}
                     onOpenClip={(c) => openClip(c, 'saved')}
                     reachPx={reachPx}
                     onMoveClip={unsaveClip}
@@ -516,6 +542,10 @@ const styles = StyleSheet.create({
   },
   pager: {
     marginTop: theme.spacing.sm,
+  },
+  viewer: {
+    marginHorizontal: theme.spacing.lg,
+    marginTop: theme.spacing.md,
   },
   laneHeaders: {
     flexDirection: 'row',

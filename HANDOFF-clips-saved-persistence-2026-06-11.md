@@ -156,6 +156,15 @@ visibility), and that source-visibility state is the single truth used at time-m
    editor UI + tools exist (scaffold); the persistence is yours. Editing a *buffered* (not-yet-saved)
    clip implies promoting-on-edit or holding a draft manifest — worth a quick model call together.
 
+## Also needed: `manifestUrl` on saved clips (for the new sticky ClipViewer)
+
+The Clips page now has a sticky 1:1 **ClipViewer** that previews the selected clip — it plays the
+clip's HLS when a `manifestUrl` is available. **Buffered sessions already expose `manifestUrl`**, so
+they play. **Saved clips don't** — `GET /buffer/me/clips` returns `{ id, name, startAtMs, endAtMs,
+thumbnailUrl, kinds }` with no manifest, so a saved clip shows only its poster. The `Clip` row has
+`manifestUrl` already; please **add `manifestUrl: string | null` to the `SavedClip` response** (and
+ideally bundle it with the `bufferSessionId` add above). App consumes it with no change.
+
 ## Also needed: clip titles on sessions + recordings (small, additive)
 
 The grid now labels each clip by the **stream title** instead of its start time. **No DB
