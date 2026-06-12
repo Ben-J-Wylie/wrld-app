@@ -37,6 +37,11 @@ export function useSignaling() {
   const [giftEvents, setGiftEvents] = useState<GiftEvent[]>([])
   const [confirmedBalance, setConfirmedBalance] = useState<number | null>(null)
   const [suspensionError, setSuspensionError] = useState<string | null>(null)
+  // Server-sent error during go-live (e.g. backend rejected streamStarted: PPV
+  // event in progress, banned title). Arrives as a {type:'error'} message just
+  // before the 4001 close; StreamScreen surfaces it so the broadcaster sees the
+  // reason instead of a blank screen.
+  const [goLiveError, setGoLiveError] = useState<string | null>(null)
   const reactionCounterRef = useRef(0)
   const tipCounterRef = useRef(0)
   const giftCounterRef = useRef(0)
@@ -72,8 +77,9 @@ export function useSignaling() {
       if (msg.type === 'giftConfirmed') {
         setConfirmedBalance(msg.newBalance)
       }
-      if (msg.type === 'error' && msg.message?.toLowerCase().includes('suspended')) {
-        setSuspensionError(msg.message)
+      if (msg.type === 'error' && msg.message) {
+        if (msg.message.toLowerCase().includes('suspended')) setSuspensionError(msg.message)
+        else setGoLiveError(msg.message)
       }
     })
     return unsub
@@ -105,6 +111,7 @@ export function useSignaling() {
     setStreamEnded(false)
     setKicked(false)
     setAdminEnded(false)
+    setGoLiveError(null)
     try {
       await signalingClient.connect(env.mediasoupWssUrl)
       setStatus('connected')
@@ -229,5 +236,7 @@ export function useSignaling() {
     dismissGift,
     suspensionError,
     clearSuspensionError: () => setSuspensionError(null),
+    goLiveError,
+    clearGoLiveError: () => setGoLiveError(null),
   }
 }

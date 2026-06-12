@@ -254,6 +254,7 @@ export function StreamScreen() {
     adminWarning, setAdminWarning,
     error: signalingError, setError,
     suspensionError, clearSuspensionError,
+    goLiveError, clearGoLiveError,
     chatMessages, reactions, broadcasterPaused,
     tipEvents, giftEvents, confirmedBalance,
     connect, createRoom, joinRoom, disconnect,
@@ -675,6 +676,22 @@ export function StreamScreen() {
     if (!suspensionError) return
     Alert.alert('Account suspended', suspensionError, [{ text: 'OK', onPress: clearSuspensionError }])
   }, [suspensionError])
+
+  // Broadcaster: the backend rejected the go-live (e.g. a PPV event in progress,
+  // a banned title) — mediasoup sends the reason as an error then closes 4001.
+  // Without this the broadcaster just sees a blank "Going live…" screen. Surface
+  // the real reason and send them back to the dashboard to fix it and re-arm.
+  useEffect(() => {
+    if (!goLiveError || !isNew) return
+    const reason = goLiveError
+    clearGoLiveError()
+    cleanup()
+    disconnect()
+    useBroadcastStore.getState().clear()
+    Alert.alert("Couldn't go live", reason, [
+      { text: 'OK', onPress: () => router.navigate('/(app)/dashboard') },
+    ])
+  }, [goLiveError, isNew])
 
   // Clear the global broadcast flag on terminal states (idle before/after a
   // session, or a drop). `handleGoLive` sets it (with the live sources) once
