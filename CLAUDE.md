@@ -2886,3 +2886,10 @@ checklist for Aaron). Split:
   per-repo detail in the handoff. **Temp has no reliable phone sensor** — ship UI-present-but-data-
   absent or drop (decision in handoff). DECIDED contract should be mirrored into
   `wrld-backend/CLAUDE.md` + `wrld-mediasoup/CLAUDE.md`.
+- **Chat harmonization (Aaron's persistent-chat work, June 2026):** chat is one of the sources —
+  already shipped end-to-end on the design side (`FeedKind 'chat'`, `SOURCE_META.chat`,
+  `SourceStage` `case 'chat'` → `SourceChatLog`). Aaron's persistent chat is the **data** feeding
+  three surfaces from one source of truth: the live overlay, the chat source-view in the rail
+  (`{ kind:'chat', messages }` → `SourceStage`, shape `{ handle, text }`), and the clip chat track
+  (C6, `SourceChatLog` + `progress`). Persisting chat is what makes the clip chat track real — no
+  new chat viewer needed. See the "⚡ Chat is already a source" callout in the handoff.

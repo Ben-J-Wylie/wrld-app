@@ -63,9 +63,27 @@ build on them, not against them:
 ### Conventions
 - **Mirror the DECIDED contract** (below) into `wrld-backend/CLAUDE.md` + `wrld-mediasoup/CLAUDE.md`,
   same as other initiatives.
-- **Merge protocol unchanged:** Ben's Part-1 wiring is on `design`; pull it into `main` first.
+- **Already on `main`** (pushed `8130bf9`, 2026-06-12): all visualizers + `SourceStage` +
+  `SOURCE_META` + the camera/audio wiring. `git pull` and you have the baseline.
 - If a **component API** needs a change to wire cleanly, flag it — Ben adjusts the component rather
   than you working around it in the screen.
+
+### ⚡ Chat is already a source — plug your live-now persistence work into it (don't rebuild a viewer)
+
+You're making chat persistent on `main` right now. **Chat is one of our sources**, and the design
+layer already ships it end-to-end as a switchable source — so your persistence is the *data*, not a
+new view:
+- In place already: `FeedKind 'chat'`, `SOURCE_META.chat` (glyph + label), and `SourceStage`'s
+  `case 'chat'` → **`SourceChatLog`** (the full-log renderer). Nothing to build on the UI side.
+- Your persistent chat becomes the **single source of truth** feeding three surfaces:
+  1. the live chat **overlay** (`ChatMessage` / `ChatComposer`),
+  2. the chat **source view** in the rail (`SourceChatLog` via `SourceStage`), and
+  3. the **clip chat track** (C6 playback — `SourceChatLog` takes a `progress` playhead over recorded
+     messages). **Persisting chat is exactly what makes the clip chat track real** — so this dovetails
+     with the buffer `.jsonl` recording step.
+- **Seam:** map your message shape → `ChatLogMessage` (`{ handle, text }`) at the screen, and pass
+  `{ kind: 'chat', messages }` into `SourceStage` (see the viewer example below). Persist in a shape
+  that carries at least `handle` + `text` (+ `ts` for ordering / clip seek).
 
 The contract + per-repo detail follow.
 
@@ -363,6 +381,7 @@ Glyphs/labels come from the shared **`SOURCE_META`** map
        case 'compass': return { kind: 'compass', heading: tel.compass?.heading ?? 0 }
        case 'loc':   return { kind: 'loc', path: locPath }        // accumulate live positions
        case 'profile': return { kind: 'profile', displayName, handle, avatarUrl, attributed }
+       case 'chat':  return { kind: 'chat', messages: chatMessages.map(m => ({ handle: m.handle, text: m.text })) }  // ← your persistent chat
        // …gyro/motion/accel/speed/temp/torch from tel
      }
    }, [selected, tel, audioLevel, remoteStream, locPath])
