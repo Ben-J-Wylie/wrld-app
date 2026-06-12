@@ -1,8 +1,57 @@
 # HANDOFF — Clips landing grid: durable saved-clip persistence (R3 + C5)
 
 **Date:** 2026-06-11 · **From:** Ben (`design`) · **To:** Aaron (backend + `screens`/`hooks`/`api`)
-**Status of the app side:** shipped to `main` (`581ce6a`); drag-to-save is wired but **non-durable** —
-it's blocked on the two backend pieces below.
+**App side:** the Clips landing grid + viewer + transport are all built and on `main`. Drag-to-save,
+un-save, the optimistic lane move, and the sticky viewer all work. The items below are the
+**backend gaps** that keep saved clips from being fully self-sufficient (the app has stopgaps where
+noted). Detail for each is in the spec sections further down.
+
+---
+
+## ✅ DONE (Aaron, landed)
+
+- **R3** — `POST /buffer/me/clips` promotes a wall-clock window across sessions into a durable `Clip`.
+- **C5** — `GET /buffer/me/clips` (list) + `DELETE /buffer/me/clips/:id` (un-save).
+
+## ☐ AARON TO-DO (open) — roughly in priority order
+
+**P1 — saved clips show no poster + can't play (the active UX bug).** Both are on the durable `Clip`,
+so the app's "borrow from the source buffer session" stopgap breaks once that session evicts.
+- [ ] **Set `Clip.thumbnailUrl` on promote.** The create + ready-update never write it → it's `null`.
+      Copy the source session's poster into `clips/<id>/` (or generate one). *(§ "Saved clips lose
+      their thumbnail…")*
+- [ ] **Return `manifestUrl` on `GET /buffer/me/clips`.** The `Clip` has it (`primaryManifestUrl`);
+      the list just omits it. Add `manifestUrl: string | null` to the `SavedClip` shape.
+
+**P2 — model exactness + titles.**
+- [ ] **Return `bufferSessionId` on `GET /buffer/me/clips`** (already on the `Clip` row). Lets the app
+      hide the **exact** source session ("a clip lives in one lane") instead of window-matching —
+      robust once clips can be trimmed to sub-windows. *(§ "Model refinement")*
+- [ ] **Add `title` to `GET /buffer/me` session objects** via `BufferSession.streamId → Stream.title`
+      (relation/lookup, **no migration**). Buffered-lane clips currently fall back to the start time.
+      App already consumes `session.title`. *(§ "clip titles")*
+
+**P3 — editing persistence (C4).**
+- [ ] **Non-destructive manifest writes** for trim / delete-source / per-source visibility, in either
+      lane — the single source of truth at time-machine playback. Editor UI + tools exist (scaffold).
+- [ ] **Model call (together):** editing a *buffered* (not-yet-saved) clip → promote-on-edit, or hold
+      a draft manifest? *(§ "Model refinement", item 3)*
+
+**Minor / confirm.**
+- [ ] Zod validation failures (e.g. the `kinds` reject) return **500** — should be **4xx**.
+- [ ] Confirm saving **copies** (buffer footage NOT consumed) so un-save needs no rewrite — the schema
+      comment implies it; just verify nothing deletes the buffer segments on save.
+
+**Broader (not blocking the grid — from the clips C0–C6 rollout).**
+- [ ] **R2** — `GET /auth/me` dual-pool (`usedStorageBytes` + `bufferSizeBytes` + `bufferEarliestAt`)
+      for the storage display.
+- [ ] **C6** — telemetry tracks playback (loc / gyro / compass overlays).
+
+**Resolved / moot.**
+- ~~A `clip_ready` push to replace the app's save→refetch poll~~ — the `POST` is synchronous (returns
+  once `ready`), so the clip lands on the immediate refetch. No push needed.
+- ~~Model decision: saved lane = clips / recordings / both~~ — **decided: `Clip` rows** (recordings
+  were purged; `Clip` unifies buffer-promoted + recording-sourced).
 
 ---
 
