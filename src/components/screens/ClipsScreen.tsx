@@ -174,13 +174,46 @@ export const ClipsScreen = () => {
   // copy (the block springs back), and dragging a saved clip left DELETES the copy
   // (un-save). `pendingDelete` optimistically hides a clip being un-saved.
   const [pendingDelete, setPendingDelete] = useState<Set<string>>(new Set())
-  const savedLane = useMemo(() => saved.filter((c) => !pendingDelete.has(c.id)), [saved, pendingDelete])
-  // Saving MOVES a clip to the saved lane (it must not show in both): a buffered session
-  // covered by a saved clip drops out of the buffer lane. Un-saving (the clip leaves
-  // `savedLane` via pendingDelete / refetch) brings its session back automatically.
-  const bufferedLane = useMemo(() => buffered.filter((b) => !savedClipCovers(b, savedLane)), [buffered, savedLane])
+  // Source session ids being saved right now — optimistically moved to the saved lane so the
+  // dragged block lands there immediately, before the POST + refetch round-trip resolves.
+  const [movingToSaved, setMovingToSaved] = useState<Set<string>>(new Set())
+
+  // The real server-backed saved clips (minus any being un-saved).
+  const realSaved = useMemo(() => saved.filter((c) => !pendingDelete.has(c.id)), [saved, pendingDelete])
+  // Optimistic placeholder in the saved lane for each session mid-save whose real Clip
+  // hasn't arrived yet (`pending:` id; same window/label → seamless swap when it lands).
+  const optimisticSaved = useMemo(
+    () => buffered.filter((b) => movingToSaved.has(b.id) && !savedClipCovers(b, realSaved)).map((b) => ({ ...b, id: `pending:${b.id}` })),
+    [buffered, movingToSaved, realSaved],
+  )
+  const savedLane = useMemo(() => [...realSaved, ...optimisticSaved], [realSaved, optimisticSaved])
+  // Saving MOVES a clip (it must not show in both lanes): a buffered session drops out of the
+  // buffer lane while moving, and once a real saved clip covers its window. Un-saving (the clip
+  // leaves `realSaved` via pendingDelete / refetch) brings the session back automatically.
+  const bufferedLane = useMemo(
+    () => buffered.filter((b) => !movingToSaved.has(b.id) && !savedClipCovers(b, realSaved)),
+    [buffered, movingToSaved, realSaved],
+  )
   const allClips = useMemo(() => [...bufferedLane, ...savedLane], [bufferedLane, savedLane])
   const hasAny = allClips.length > 0
+
+  // Drop the optimistic flag once the session's real Clip lands (covers it) or it vanishes —
+  // the placeholder is replaced by the real saved clip without a flicker.
+  useEffect(() => {
+    setMovingToSaved((prev) => {
+      if (!prev.size) return prev
+      const next = new Set(prev)
+      let changed = false
+      for (const id of prev) {
+        const b = buffered.find((x) => x.id === id)
+        if (!b || savedClipCovers(b, realSaved)) {
+          next.delete(id)
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [buffered, realSaved])
 
   // A just-saved clip is processed async (status:'processing' → 'ready'), so it
   // doesn't appear in the list immediately. Invalidate now + a few times after, so
@@ -212,6 +245,7 @@ export const ClipsScreen = () => {
       const kinds = kindSet.size ? [...kindSet] : ['camera']
       const payload = { startAtMs: Math.round(clip.startMs), endAtMs: Math.round(clip.endMs), name: clip.label, kinds }
       slog('POST /buffer/me/clips →', payload, `(window ${Math.round((payload.endAtMs - payload.startAtMs) / 1000)}s)`)
+      setMovingToSaved((prev) => new Set(prev).add(clip.id)) // optimistic move → saved lane
       bufferApi
         .saveClip(payload)
         .then((res) => {
@@ -219,6 +253,11 @@ export const ClipsScreen = () => {
           refetchSavedSoon()
         })
         .catch((err: unknown) => {
+          setMovingToSaved((prev) => {
+            const next = new Set(prev)
+            next.delete(clip.id) // revert the optimistic move
+            return next
+          })
           const e = err as { response?: { status?: number; data?: { message?: string; error?: string } }; message?: string }
           slog('SAVE FAILED — status', e.response?.status, '— body', JSON.stringify(e.response?.data), '— msg', e.message)
           const msg = e.response?.data?.message ?? e.response?.data?.error ?? e.message ?? 'Could not save clip'
