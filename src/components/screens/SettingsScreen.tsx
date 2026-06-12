@@ -7,7 +7,7 @@
 // an AccountIDPill in its `right` slot so the user's permanent ID
 // surfaces alongside the changeable handle.
 
-import { Alert, StyleSheet, View } from 'react-native'
+import { Alert, ScrollView, StyleSheet, View } from 'react-native'
 import { router } from 'expo-router'
 import { useClerk } from '@clerk/clerk-expo'
 import { useQueryClient } from '@tanstack/react-query'
@@ -15,7 +15,7 @@ import { useState } from 'react'
 import { ScreenScroll } from '@/components/sections/ScreenScroll'
 import { SettingsGroup } from '@/components/sections/SettingsGroup'
 import { SettingsRow } from '@/components/features/settings/SettingsRow'
-import { AccountIDPill } from '@/components/features/user/AccountIDPill'
+import { ProfileEditCard } from '@/components/screens/ProfileEditCard'
 import { Button } from '@/components/primitives/Button'
 import { Toggle } from '@/components/primitives/Toggle'
 import { Text } from '@/components/primitives/Text'
@@ -25,7 +25,7 @@ import { usersApi } from '@/api/users'
 import { theme } from '@/tokens/theme'
 import * as Notifications from 'expo-notifications'
 
-export function SettingsScreen() {
+export function SettingsScreen({ embedded = false }: { embedded?: boolean } = {}) {
   const { signOut } = useClerk()
   const clearWrldUser = useAuthStore((s) => s.clearWrldUser)
   const wrldUser = useAuthStore((s) => s.wrldUser)
@@ -86,26 +86,14 @@ export function SettingsScreen() {
   const tierLabel =
     wrldUser?.tier === 'plus' ? 'Plus' : wrldUser?.tier === 'pro' ? 'Pro' : 'Free'
 
-  return (
-    <ScreenScroll
-      header={<ScreenHeader title="Settings" onBack={() => router.back()} />}
-      contentContainerStyle={styles.scroll}
-    >
-
-      {wrldUser && (
-        <SettingsGroup title="IDENTITY">
-          <SettingsRow
-            variant="highlight"
-            iconName="at-sign"
-            title={`@${wrldUser.handle}`}
-            value={wrldUser.displayName}
-            right={<AccountIDPill accountId={wrldUser.id} />}
-            showBorderTop={false}
-            onPress={() => router.push('/(app)/me')}
-            accessibilityLabel={`Open profile for ${wrldUser.handle}`}
-          />
-        </SettingsGroup>
-      )}
+  const body = (
+    <>
+      <View style={styles.profileSection}>
+        <Text variant="monoLabel" color={theme.colors.text.subtle} style={styles.profileTitle}>
+          PROFILE
+        </Text>
+        <ProfileEditCard />
+      </View>
 
       <SettingsGroup title="ACCOUNT">
         <SettingsRow
@@ -169,6 +157,24 @@ export function SettingsScreen() {
         />
       </SettingsGroup>
 
+      <SettingsGroup title="CONTENT">
+        <SettingsRow
+          iconName="film"
+          title="Library"
+          value="Your recordings & saved clips"
+          arrow
+          showBorderTop={false}
+          onPress={() => router.push('/(app)/library')}
+        />
+        <SettingsRow
+          iconName="calendar"
+          title="Events"
+          value="Schedule & manage pay-per-view events"
+          arrow
+          onPress={() => router.push('/(app)/ppv')}
+        />
+      </SettingsGroup>
+
       {__DEV__ && (
         <SettingsGroup title="DEVELOPMENT">
           <SettingsRow
@@ -203,15 +209,49 @@ export function SettingsScreen() {
           within 30 days.
         </Text>
       </View>
+    </>
+  )
+
+  // Embedded as the Settings tab of the Me page: the host owns the safe-area
+  // frame + header, so render a plain scroll. Standalone (the /settings route):
+  // bring our own ScreenScroll + header.
+  if (embedded) {
+    return (
+      <ScrollView
+        style={styles.embeddedRoot}
+        contentContainerStyle={styles.scroll}
+        keyboardShouldPersistTaps="handled"
+      >
+        {body}
+      </ScrollView>
+    )
+  }
+
+  return (
+    <ScreenScroll
+      header={<ScreenHeader title="Settings" onBack={() => router.back()} />}
+      contentContainerStyle={styles.scroll}
+    >
+      {body}
     </ScreenScroll>
   )
 }
 
 const styles = StyleSheet.create({
+  embeddedRoot: {
+    flex: 1,
+    backgroundColor: theme.colors.bg.primary,
+  },
   scroll: {
     padding: theme.spacing.lg,
     gap: theme.spacing.lg,
     paddingBottom: theme.spacing.xxxl,
+  },
+  profileSection: {
+    gap: theme.spacing.sm,
+  },
+  profileTitle: {
+    paddingHorizontal: theme.spacing.xs,
   },
   header: {
     flexDirection: 'row',

@@ -16,7 +16,7 @@
 //     feature's consumer-flat shape.
 //   • Empty state composes Card-style surface + Icon + Text + Button.
 
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { ScreenHeader } from '@/components/sections/ScreenHeader'
@@ -115,7 +115,20 @@ function mapWalletTx(
   }
 }
 
-export function WalletScreen() {
+// When embedded (e.g. as the Wallet tab of the Me page) the host owns the
+// safe-area frame + top header, so we drop our own SafeAreaView + ScreenHeader
+// to avoid doubling the chrome.
+function WalletFrame({ embedded, children }: { embedded: boolean; children: ReactNode }) {
+  if (embedded) return <View style={styles.embeddedRoot}>{children}</View>
+  return (
+    <SafeAreaView style={styles.container}>
+      <ScreenHeader title="Wallet" style={styles.walletHeaderPad} />
+      {children}
+    </SafeAreaView>
+  )
+}
+
+export function WalletScreen({ embedded = false }: { embedded?: boolean } = {}) {
   const { isSignedIn } = useAuth()
   const { data, isLoading, isError, refetch } = useWallet()
   const [filter, setFilter] = useState<string | null>(null)
@@ -125,22 +138,20 @@ export function WalletScreen() {
 
   if (!isSignedIn) {
     return (
-      <SafeAreaView style={styles.container}>
-        <ScreenHeader title="Wallet" style={styles.walletHeaderPad} />
+      <WalletFrame embedded={embedded}>
         <View style={styles.center}>
           <Text variant="body" color={theme.colors.text.muted}>
             Sign in to view your wallet
           </Text>
           <Button label="Sign in" onPress={() => router.push('/(auth)/login')} />
         </View>
-      </SafeAreaView>
+      </WalletFrame>
     )
   }
 
   if (isError) {
     return (
-      <SafeAreaView style={styles.container}>
-        <ScreenHeader title="Wallet" style={styles.walletHeaderPad} />
+      <WalletFrame embedded={embedded}>
         <View style={styles.center}>
           <Text variant="body" color={theme.colors.text.primary}>No connection</Text>
           <Text variant="caption" color={theme.colors.text.muted} style={styles.centerText}>
@@ -150,18 +161,17 @@ export function WalletScreen() {
             <Text variant="monoLabel" color={theme.colors.accent.default}>Try again</Text>
           </Pressable>
         </View>
-      </SafeAreaView>
+      </WalletFrame>
     )
   }
 
   if (isLoading || !data) {
     return (
-      <SafeAreaView style={styles.container}>
-        <ScreenHeader title="Wallet" style={styles.walletHeaderPad} />
+      <WalletFrame embedded={embedded}>
         <View style={styles.center}>
           <ActivityIndicator color={theme.colors.accent.default} />
         </View>
-      </SafeAreaView>
+      </WalletFrame>
     )
   }
 
@@ -182,8 +192,7 @@ export function WalletScreen() {
   )
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScreenHeader title="Wallet" style={styles.walletHeaderPad} />
+    <WalletFrame embedded={embedded}>
       <PageTabs
         tabs={[
           { key: 'balance', label: 'Balance' },
@@ -227,12 +236,13 @@ export function WalletScreen() {
 
       {tab === 'topup' && <TopUpPanel onDone={() => setTab('balance')} />}
       {tab === 'cashout' && <CashOutPanel onDone={() => setTab('balance')} />}
-    </SafeAreaView>
+    </WalletFrame>
   )
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.bg.primary },
+  embeddedRoot: { flex: 1, backgroundColor: theme.colors.bg.primary },
   // Fixed brand header offset — matches the globe / dashboard (safe-area-top + sm).
   walletHeaderPad: { paddingTop: theme.spacing.sm },
   center: {
