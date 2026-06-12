@@ -3,10 +3,39 @@
 **Date:** 2026-06-12 (updated) · **From:** Aaron (backend) · **To:** Ben (app: grid + `ClipEditScreen`)
 **Backend status:** **C4.1 → C4.4.1 are ALL shipped + verified live on prod** (real auth,
 real buffer footage) — the entire draft→edit→save→edit-saved→trim-after-evict lifecycle is
-done and the backend is **fully ready to integrate**. **C4.5 is your app wiring** — do it
-when your dev-client tools are ready. Full design + as-built:
+done and the backend is **fully ready to integrate**. Full design + as-built:
 `wrld-backend/docs/design/c4-clip-manifest-editing.md` and the `wrld-backend/CLAUDE.md`
 "C4.1 + C4.2" / C4.3 / C4.4 / C4.4.1 updates.
+
+---
+
+## ✅ C4.5 APP WIRING — DONE (Ben, `design` → `main` 2026-06-12, `bc1d07a`)
+
+The app side of the draft↔saved lifecycle is **integrated + merged to `main`** against the
+real endpoints below. Pure JS/TS — no native rebuild. As wired:
+
+- **`src/api/buffer.ts`** — `createDraft` → `POST /buffer/me/clips/draft`; `patchClip` →
+  `PATCH /buffer/me/clips/:id`; `listClips(lane)` → `GET /buffer/me/clips?lane=`; `saveDraft`
+  → bodyless `POST /buffer/me/clips/:id/save`; `deleteSavedClip` → `DELETE`. (`saveClip` still
+  uses the R3 `POST /buffer/me/clips` path for a fresh buffer-window save.)
+- **`ClipEditScreen`** — editing a buffer interval lazily `createDraft`s and debounce-PATCHes
+  its manifest (trim ranges + per-source on/off) as you edit. Reopening a draft from the grid
+  passes a `draftId` param → continues editing the **same** draft (no duplicate spawn). Saved
+  clips PATCH in place; explicit Save materialises a draft via `saveDraft`.
+- **Grid (`ClipsScreen` + `useDrafts`)** — `GET …?lane=draft` drafts render as **dashed accent
+  blocks** in the buffer lane, carved out of their source session (same carve as saved ranges).
+  Drag a draft down → `saveDraft` (materialise, no re-copy). Tap-tap → reopen in the editor.
+
+**Verified:** `c4smoke.mjs` 24/24 + `tsc` clean. **Owes only an on-device pass** (draft block
+renders dashed, carve looks right, reopen-continues-same-draft persists across reload).
+
+### ⏳ The one remaining app↔backend gap — `removedByLane` (per-lane mid-clip deletes)
+The editor can mark a **mid-clip removed range on a single source lane** (e.g. drop 4–7s of
+*audio only* while camera plays through). That's still **mock-only in the app** — it has no
+manifest backing. To make it real I need the `PATCH` `ranges`/`sources` model to express
+**per-source** removed ranges (today `ranges` is whole-clip + `sources` is whole-clip on/off;
+there's no "this source is absent for this sub-window" shape). If that's out of scope for C4,
+say so and I'll keep it mock / drop the affordance. Everything else round-trips for real.
 
 ---
 
@@ -132,10 +161,12 @@ Verified live: save camera+audio → trim 12s→5s (freed 7.5 MB) → `camera:of
 `kinds:["audio"]`) → trim again after a (simulated) buffer evict (re-cut the owned copy) →
 delete (exact reclaim). No orphan files, quota exact.
 
-## What's still backend-side (not your lane)
+## What's still backend-side (not Ben's lane)
 - **C4.5 reconciliation** — `clips/discover` will honour `saved`+visibility (drafts never
   on the globe). No app change needed for that.
+- **Per-source removed ranges** — needed to make the editor's `removedByLane` real (see the
+  ⏳ gap under the C4.5 status block above). Aaron's call on whether this is in C4 scope.
 - **Deferred (rare):** mid-clip-delete (gapped) *after* the buffer has evicted → `409`.
 
-**The whole backend (C4.1–C4.4.1) is shipped + verified — integrate whenever your tools are
-ready.** Ping me and I'll pair on the grid/editor wiring.
+**The whole backend (C4.1–C4.4.1) is shipped + verified; the app side (C4.5) is integrated +
+merged to `main`.** Remaining: Ben's on-device pass (Section B) + the `removedByLane` decision.
