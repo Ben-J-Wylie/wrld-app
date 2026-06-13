@@ -3257,3 +3257,27 @@ attach the `Report`.
   the moderator review UI is v0.3. The report-submit flow (`streamsApi.report` +
   snapshot) is unchanged; a clip-report entry point on the clip/profile surfaces is
   net-new front-end when we get there.
+
+---
+
+## Reporting & moderation initiative — app-side status (2026-06-13)
+
+> **The canonical status + resume checklist lives in `wrld-backend/CLAUDE.md`
+> "Reporting & moderation initiative — STATUS / where we left off".** This is the
+> app slice. The initiative is **partially built and not testable end-to-end** — a
+> report can be filed + the footage held, but there's no in-product review surface.
+
+- **Stream report submit — ✅** the ⚑ flag button in `StreamScreen` (Phase 5/22) →
+  `streamsApi.report` + the base64 snapshot upload. Unchanged.
+- **Clip report submit — ☐ no UI.** The backend route exists (`POST /clips/:id/report`,
+  built with the Report Centre), but there's **no ⚑ entry point on the clip viewer /
+  profile clip cards** — net-new front-end (Ben's lane; the stream ⚑ button is the
+  template).
+- **Moderation hold (Report Centre) — invisible by design.** On report, the backend
+  copies the footage to a platform hold; nothing surfaces in the app (correct — the
+  creator must never see it). So **there's nothing for Ben to test in-app** beyond the
+  report buttons themselves; the hold is verified backend-side (DB row +
+  `/opt/wrld-media/moderation/<id>/`), and the review loop needs the v0.3 moderator
+  tooling (admin read/serve routes + the `wrld-admin` UI), which isn't built.
+- **Next app work when the initiative resumes:** the clip-report ⚑ button. Everything
+  else (moderator review/takedown) is `wrld-admin` + backend, not `wrld-app`.
