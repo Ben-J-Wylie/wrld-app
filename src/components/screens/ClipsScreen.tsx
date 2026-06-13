@@ -25,6 +25,7 @@ import { ScreenHeader } from '@/components/sections/ScreenHeader'
 import { PageTabs } from '@/components/features/navigation/PageTabs'
 import { Text } from '@/components/primitives/Text'
 import { Icon } from '@/components/primitives/Icon'
+import { Pressable } from '@/components/primitives/Pressable'
 import { type LaneClip } from '@/components/features/clip/ClipLane'
 import { ClipsTimeline, type ClipsTimelineHandle } from '@/components/features/clip/ClipsTimeline'
 import { ClipViewer } from '@/components/features/clip/ClipViewer'
@@ -93,6 +94,36 @@ function bufEntry(s: BufferSession, a: number, b: number): LaneClip {
     manifestUrl: s.manifestUrl,
     sourceSessionId: s.id, // the session this footage belongs to
   }
+}
+// ── scissor split ────────────────────────────────────────────────────────────
+// A cut at the playhead is front-end METADATA: a {sessionId, atMs} split point. It doesn't
+// touch footage — it just subdivides the buffer entry so each piece is an independently
+// draggable clip. Saving a piece persists it (the backend's metadata response); the split
+// itself is local until a piece is saved. (Aaron can later persist splits as draft manifests.)
+type SplitPoint = { sessionId: string; atMs: number }
+function splitPiece(e: LaneClip, a: number, b: number): LaneClip {
+  return { ...e, id: `${e.sourceSessionId}~${Math.round(a)}`, startMs: a, endMs: b, sublabel: fmtDur((b - a) / 1000) }
+}
+function applySplits(entries: LaneClip[], splits: SplitPoint[]): LaneClip[] {
+  if (!splits.length) return entries
+  const out: LaneClip[] = []
+  for (const e of entries) {
+    const pts = splits
+      .filter((s) => s.sessionId === e.sourceSessionId && s.atMs > e.startMs + MIN_REMAINDER_MS && s.atMs < e.endMs - MIN_REMAINDER_MS)
+      .map((s) => s.atMs)
+      .sort((x, y) => x - y)
+    if (!pts.length) {
+      out.push(e)
+      continue
+    }
+    let cursor = e.startMs
+    for (const p of pts) {
+      out.push(splitPiece(e, cursor, p))
+      cursor = p
+    }
+    out.push(splitPiece(e, cursor, e.endMs))
+  }
+  return out
 }
 function carveBuffer(sessions: BufferSession[], claims: Claim[]): LaneClip[] {
   const out: LaneClip[] = []
@@ -214,7 +245,10 @@ export const ClipsScreen = () => {
     return out
   }, [realSavedData, draftsData, pendingNotReal])
 
-  const bufferedLane = useMemo(() => [...carveBuffer(sessions, claims), ...drafts], [sessions, claims, drafts])
+  // Scissor cuts at the playhead — local split points subdivide the carved buffer entries so each
+  // piece is independently draggable to a lane.
+  const [splitPoints, setSplitPoints] = useState<SplitPoint[]>([])
+  const bufferedLane = useMemo(() => [...applySplits(carveBuffer(sessions, claims), splitPoints), ...drafts], [sessions, claims, drafts, splitPoints])
   const allClips = useMemo(() => [...bufferedLane, ...savedLane], [bufferedLane, savedLane])
   const hasAny = allClips.length > 0
 
@@ -566,6 +600,18 @@ export const ClipsScreen = () => {
     })
   }, [])
 
+  // Scissor: cut the clip under the static playhead in two. Adds a local split point (metadata);
+  // each piece becomes an independently draggable buffer clip.
+  const handleScissor = useCallback(() => {
+    const c = timelineRef.current?.getCenter()
+    if (!c?.clipId) return
+    const clip = allClips.find((x) => x.id === c.clipId)
+    const sessionId = clip?.sourceSessionId
+    if (!clip || !sessionId) return
+    if (c.timeMs <= clip.startMs + MIN_REMAINDER_MS || c.timeMs >= clip.endMs - MIN_REMAINDER_MS) return // not strictly inside
+    setSplitPoints((prev) => (prev.some((s) => s.sessionId === sessionId && Math.abs(s.atMs - c.timeMs) < 1) ? prev : [...prev, { sessionId, atMs: c.timeMs }]))
+  }, [allClips])
+
   return (
     <View style={styles.root}>
       <View style={[styles.header, { paddingTop: insets.top + theme.spacing.sm }]}>
@@ -664,6 +710,12 @@ export const ClipsScreen = () => {
             onSave={saveClip}
             onUnsave={unsaveClip}
           />
+          {/* Scissor — cuts the clip at the static centre playhead. Sits on the playhead line. */}
+          <View style={styles.scissorRow} pointerEvents="box-none">
+            <Pressable variant="none" accessibilityLabel="Cut clip at the playhead" onPress={handleScissor} style={styles.scissorBtn}>
+              <Icon name="scissors" size="md" color={theme.colors.text.inverse} />
+            </Pressable>
+          </View>
         </View>
       )}
 
@@ -716,6 +768,24 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.sm,
+  },
+  // Centred over the playhead (which is at the timeline's horizontal centre).
+  scissorRow: {
+    position: 'absolute',
+    top: theme.spacing.sm,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  scissorBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.accent.default,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: theme.colors.bg.primary,
   },
   bottomChrome: {
     borderTopWidth: 1,

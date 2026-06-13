@@ -115,9 +115,11 @@ type Props = {
 }
 
 // Imperative handle so the host can drive the scroll from playback — bring a time instant under
-// the fixed centre playhead (reposition on play, then follow frame-by-frame as it plays).
+// the fixed centre playhead (reposition on play, then follow frame-by-frame as it plays) — and
+// read back the clip + instant currently under the playhead (for the scissor cut).
 export type ClipsTimelineHandle = {
   scrollToTime: (ms: number, animated?: boolean) => void
+  getCenter: () => { clipId: string | null; timeMs: number }
 }
 
 // ── animated leaf nodes (each reads the shared `layout` on the UI thread) ──
@@ -271,7 +273,22 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
     },
     [segs, trailGapPx, defaultPx, px, scroll],
   )
-  useImperativeHandle(ref, () => ({ scrollToTime }), [scrollToTime])
+  // The clip + instant currently under the centre playhead (read on demand for the scissor cut).
+  const getCenter = useCallback(() => {
+    const p = px.value || defaultPx
+    if (p <= 0) return { clipId: null, timeMs: 0 }
+    const lay = computeLayout(segs, trailGapPx, p)
+    const s = scroll.value
+    for (let i = 0; i < segs.length; i++) {
+      const seg = segs[i]!
+      if (s >= lay.lefts[i]! && s <= lay.lefts[i]! + lay.widths[i]!) {
+        const frac = lay.widths[i]! > 0 ? (s - lay.lefts[i]!) / lay.widths[i]! : 0
+        return { clipId: seg.id, timeMs: seg.startMs + frac * seg.durMs }
+      }
+    }
+    return { clipId: null, timeMs: 0 }
+  }, [segs, trailGapPx, defaultPx, px, scroll])
+  useImperativeHandle(ref, () => ({ scrollToTime, getCenter }), [scrollToTime, getCenter])
 
   // ── report the clip/instant under the centre playhead (only on a CLIP CHANGE — minimal hops) ──
   const reportCenter = useCallback(
