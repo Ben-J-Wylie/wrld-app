@@ -60,6 +60,7 @@ import { ScreenHeader } from '@/components/sections/ScreenHeader'
 import { Text } from '@/components/primitives/Text'
 import { Icon } from '@/components/primitives/Icon'
 import { IconButton } from '@/components/primitives/IconButton'
+import { Slider } from '@/components/primitives/Slider'
 import { LivePill } from '@/components/features/stream/LivePill'
 import { AudioVisualizer } from '@/components/features/stream/AudioVisualizer'
 import { SourceRail } from '@/components/features/clip/SourceRail'
@@ -100,6 +101,7 @@ import { recordingsApi } from '@/api/recordings'
 import { usersApi } from '@/api/users'
 import { useSignaling } from '@/hooks/useSignaling'
 import { useMediasoup } from '@/hooks/useMediasoup'
+import { useFullscreenVideo } from '@/hooks/useFullscreenVideo'
 import * as Location from 'expo-location'
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake'
 import { useLocation } from '@/hooks/useLocation'
@@ -287,6 +289,7 @@ export function StreamScreen() {
   const invalidateWallet = useInvalidateWallet()
   const {
     localStream, remoteStream, audioLevel, error: mediaError, facingMode, videoIsLandscape,
+    setRemoteAudioVolume,
     startPreview, startBroadcasting, startViewing, switchCamera, cleanup,
   } = useMediasoup()
   const { isSignedIn } = useAuth()
@@ -324,6 +327,13 @@ export function StreamScreen() {
   // chat panel's top crop a footerPad below the close-X, fixed regardless of the
   // keyboard (only the panel's height tracks the keyboard, not its top).
   const [headerBottom, setHeaderBottom] = useState(0)
+  // Fullscreen viewer + its audio controls. `volume` is 0..100 (Slider units);
+  // muted overrides it to silence without losing the level. Defaults (full
+  // volume, unmuted) mean the applied gain is unity — no behaviour change until
+  // the viewer touches the controls.
+  const { isFullscreen, enter: enterFullscreen, exit: exitFullscreen } = useFullscreenVideo()
+  const [volume, setVolume] = useState(100)
+  const [muted, setMuted] = useState(false)
   const [isRecording, setIsRecording] = useState(false)
   const [activeRecordingId, setActiveRecordingId] = useState<string | null>(null)
   const stoppedByUserRef = useRef(false)
@@ -407,6 +417,18 @@ export function StreamScreen() {
   // (continuous) drives the iOS gimbal preview.
   const { orientation: deviceOrientation, tiltDeg } = useDeviceOrientation(showCameraPreview)
   const isLandscapeHold = deviceOrientation === 'landscape-left' || deviceOrientation === 'landscape-right'
+
+  // Apply the viewer's volume/mute to the consumed remote audio track. Re-runs
+  // when the remote stream (re)connects so a fresh consumer picks up the level.
+  useEffect(() => {
+    setRemoteAudioVolume(muted ? 0 : volume / 100)
+  }, [muted, volume, remoteStream, setRemoteAudioVolume])
+
+  // Bail out of fullscreen (re-lock portrait) whenever the viewer leaves the
+  // live room — stream end, tab blur (cleanup nulls remoteStream), or a drop.
+  useEffect(() => {
+    if (!isViewerInRoom && isFullscreen) exitFullscreen()
+  }, [isViewerInRoom, isFullscreen, exitFullscreen])
 
   // iOS preview via AVCaptureVideoPreviewLayer (CameraPreview).
   // ON-DEVICE FINDING (2026-06-07): the raw preview layer stays vertical on its
@@ -1308,6 +1330,13 @@ export function StreamScreen() {
             onPress={handleReportPress}
             accessibilityLabel="Report stream"
           />
+          <IconButton
+            name="maximize"
+            variant="surface"
+            size="md"
+            onPress={() => enterFullscreen(videoIsLandscape)}
+            accessibilityLabel="Fullscreen"
+          />
         </View>
       )}
 
@@ -1720,6 +1749,59 @@ export function StreamScreen() {
         </View>
       )}
 
+      {/* Fullscreen viewer — edge-to-edge video over everything, with a close
+          button and audio controls (mute · volume). Landscape video rotated the
+          whole screen on enter (see useFullscreenVideo); portrait video just
+          fills upright. Renders its own RTCView/visualizer of the same stream. */}
+      {isFullscreen && isViewerInRoom && (
+        <View style={styles.fsRoot}>
+          {selectedKind === 'cam' ? (
+            <RTCView
+              streamURL={(remoteStream as unknown as { toURL(): string }).toURL()}
+              style={StyleSheet.absoluteFill}
+              objectFit="contain"
+              mirror={false}
+              zOrder={1}
+            />
+          ) : (
+            <AudioVisualizer level={audioLevel} variant="waveform" active style={StyleSheet.absoluteFill} />
+          )}
+
+          <View style={styles.fsClose}>
+            <IconButton
+              name="minimize"
+              variant="surface"
+              size="lg"
+              onPress={exitFullscreen}
+              accessibilityLabel="Exit fullscreen"
+            />
+          </View>
+
+          <View style={styles.fsControlsBar}>
+            <IconButton
+              name={muted || volume === 0 ? 'volume-x' : 'volume-2'}
+              variant="surface"
+              size="lg"
+              onPress={() => setMuted((m) => !m)}
+              accessibilityLabel={muted ? 'Unmute' : 'Mute'}
+            />
+            <View style={styles.fsSlider}>
+              <Slider
+                value={muted ? 0 : volume}
+                min={0}
+                max={100}
+                step={1}
+                onValueChange={(v) => {
+                  setVolume(v)
+                  if (v > 0 && muted) setMuted(false)
+                  if (v === 0) setMuted(true)
+                }}
+              />
+            </View>
+          </View>
+        </View>
+      )}
+
       <AuthModal
         visible={authModalVisible}
         onClose={() => setAuthModalVisible(false)}
@@ -1840,6 +1922,21 @@ const styles = StyleSheet.create({
   // Go Live / End Stream button for the broadcaster, or the clock top for the
   // viewer (inline `bottom`). Black so the contain letterbox bars read as such.
   cameraBox: { position: 'absolute', left: 0, right: 0, backgroundColor: '#000' },
+  // Fullscreen viewer overlay — covers the whole screen above all chrome.
+  fsRoot: { ...StyleSheet.absoluteFillObject, backgroundColor: '#000', zIndex: 100 },
+  // Close (minimize) button — top-right, clear of any notch in both orientations.
+  fsClose: { position: 'absolute', top: theme.spacing.lg, right: theme.spacing.lg },
+  // Audio control bar — mute toggle + volume slider, pinned near the bottom.
+  fsControlsBar: {
+    position: 'absolute',
+    left: theme.spacing.lg,
+    right: theme.spacing.lg,
+    bottom: theme.spacing.xl,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.md,
+  },
+  fsSlider: { flex: 1 },
   // Chat toggle parked at the far left of the bottom control line while live
   // (`bottom` set inline to the shared composer line). zIndex above the chat
   // panel (10) so the ✕ stays tappable to close when chat is open — the panel
