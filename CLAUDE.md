@@ -3104,3 +3104,39 @@ data wiring (`hooks/`/`lib/`/`screens/`). Pure JS, no rebuild.
 → switch the source rail → the visualizer animates from real motion (not the static
 mock). **Edge (follow-up):** a fully-saved clip whose buffer evicted reads its data
 from the clip API `track.dataUrl` (already exposed) rather than the buffer route.
+
+---
+
+## Updates — June 2026 (Content decision A — reversible location precision)
+
+Item 5 of `wrld-app/HANDOFF-aaron-2026-06-13.md` / CONTENT.md §1.4·§7·§8 (decided
+2026-06-13): location precision (and identity) are **reversible display-layer
+choices** — blur OR sharpen, any time — not an immutable go-live ceiling. Capture
+keeps full fidelity; replay/discovery read the clip's **current** choice.
+
+**What was actually shipped vs. the handoff's premise:** the handoff said "drop the
+≤-ceiling clamp" — but **there was no clamp in code.** The "immutable ceiling" was a
+*documented intent* never enforced: `PATCH /buffer/me/clips/:id` already sets
+`clipData.locDisplayPrecision = patch.locDisplayPrecision` with no bound (any of
+exact/city/country/off), and capture always stored exact coords (`Stream.lat/lng`;
+obfuscation is read-time only). So the rework is one real behaviour change:
+
+- **`GET /clips/discover`** now reads **`COALESCE(c."locDisplayPrecision",
+  s."locationPrecision", 'exact')`** for both the display coords and the `off`
+  exclusion (was `s."locationPrecision"`). The globe/time-machine now honour the
+  clip's *current* precision; `off` excludes only while currently off (re-enabling
+  brings it back). Live streams still use the stream's go-live precision (correct —
+  live has no clip yet). Doc comment in `docs/design/c4-clip-manifest-editing.md`
+  updated (was "≤ captured ceiling").
+
+**Not done — and NOT a "remove the bound" task (the handoff mis-scoped it):**
+- **A clip-editor UI to edit precision/identity.** The app `patchClip` API + the
+  `LocationGranularityPicker` are already unbounded, but no control in `ClipEditScreen`
+  drives `locDisplayPrecision`/`attributed` (only `visibility` is patched on save).
+  Exposing it is **net-new UI** (compose the picker + an identity toggle → `patchClip`).
+- **Identity on discover + buffer-clip discover (C4.5).** `clips/discover` joins
+  `Clip→Recording→Stream`, so it surfaces only recording-sourced clips (all purged) —
+  buffer-promoted clips aren't on the globe at all yet, and the query returns `host`
+  unconditionally (doesn't honour an anon clip's `attributed`/`visibility`). Surfacing
+  buffer clips with visibility + the clip's current precision/identity is the tracked
+  **C4.5** discover-completeness work — larger than item 5's reversibility rework.
