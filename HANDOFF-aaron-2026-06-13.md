@@ -71,11 +71,16 @@ This doc is the index + the priority order, not a re-statement.
    - ✅ **`GET /clips/discover` now reads the clip's CURRENT precision** (`COALESCE(c.locDisplayPrecision,
      s.locationPrecision, 'exact')`) for the coords + the `off` exclusion. Globe/time-machine honour it;
      `off` excludes only while currently off. *(see `wrld-backend/CLAUDE.md` "Content decision A".)*
-   - ☐ **Net-new (handoff mis-scoped as "remove a bound"):** a **clip-editor UI** to edit precision/identity
-     (compose the picker + identity toggle → `patchClip` — only `visibility` is patched today). And
-     discover honouring clip identity (`attributed`/`visibility`) + surfacing **buffer-promoted clips at all**
-     (today it joins `Clip→Recording→Stream`, so no buffer clips reach the globe) — that's **C4.5**
-     discover-completeness, larger than the reversibility rework.
+   - ✅ **Aaron-lane edit-UI prep:** `saveClip(name, privacy?)` accepts + persists
+     `{ locDisplayPrecision, attributed }` (omitted = leave current); seam documented at the
+     `SaveClipSheet` usage. **Ben's lane (remaining):** surface the picker + an identity toggle in
+     `SaveClipSheet` (a `features/` component) and emit them via `onSave` — then the one-line forward
+     `onSave={(n, privacy) => saveClip(n, privacy)}` lights it up.
+   - ✅ **C4.5 discover-completeness DONE (Aaron):** `clips/discover` rewritten — surfaces buffer-promoted
+     clips (LEFT JOIN Recording **+** BufferSession → Stream; clip window via `COALESCE(startAtMs, …)`),
+     filters `visibility='public'`, and honours the clip's current identity (anon → anonymous host) +
+     precision. SQL validated against the test DB. *(App: the time-machine clip-pin consumer
+     (`useHistoricalClips`/`DiscoveryPin`) is still unbuilt; `recordingId` is nullable for buffer clips.)*
 
 6. ☐ **Content decision B — moderation hold** *(DECIDED 2026-06-13; CONTENT.md §3)*:
    - On **report**, copy the content to a **separate platform-side moderation hold** (not one of the
