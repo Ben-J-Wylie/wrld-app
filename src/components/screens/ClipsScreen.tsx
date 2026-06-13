@@ -18,6 +18,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { router, useFocusEffect } from 'expo-router'
 import { Alert, StyleSheet, View } from 'react-native'
+import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useAuth } from '@clerk/clerk-expo'
 import { theme } from '@/tokens/theme'
@@ -101,10 +102,18 @@ function bufEntry(s: BufferSession, a: number, b: number): LaneClip {
 // draggable clip. Saving a piece persists it (the backend's metadata response); the split
 // itself is local until a piece is saved. (Aaron can later persist splits as draft manifests.)
 type SplitPoint = { sessionId: string; atMs: number }
-function splitPiece(e: LaneClip, a: number, b: number): LaneClip {
-  return { ...e, id: `${e.sourceSessionId}~${Math.round(a)}`, startMs: a, endMs: b, sublabel: fmtDur((b - a) / 1000) }
+// markParent: tag each piece with its origin SAVED clip id so a drag-up trims the parent's ranges.
+function splitPiece(e: LaneClip, a: number, b: number, markParent: boolean): LaneClip {
+  return {
+    ...e,
+    id: `${e.sourceSessionId}~${Math.round(a)}`,
+    startMs: a,
+    endMs: b,
+    sublabel: fmtDur((b - a) / 1000),
+    parentSavedId: markParent ? e.id : e.parentSavedId,
+  }
 }
-function applySplits(entries: LaneClip[], splits: SplitPoint[]): LaneClip[] {
+function applySplits(entries: LaneClip[], splits: SplitPoint[], markParent = false): LaneClip[] {
   if (!splits.length) return entries
   const out: LaneClip[] = []
   for (const e of entries) {
@@ -118,10 +127,23 @@ function applySplits(entries: LaneClip[], splits: SplitPoint[]): LaneClip[] {
     }
     let cursor = e.startMs
     for (const p of pts) {
-      out.push(splitPiece(e, cursor, p))
+      out.push(splitPiece(e, cursor, p, markParent))
       cursor = p
     }
-    out.push(splitPiece(e, cursor, e.endMs))
+    out.push(splitPiece(e, cursor, e.endMs, markParent))
+  }
+  return out
+}
+// Subtract a [start,end] hole from a set of claim ranges (splitting any range that straddles it).
+function subtractRange(claims: Claim[], hole: { startMs: number; endMs: number }): Claim[] {
+  const out: Claim[] = []
+  for (const c of claims) {
+    if (hole.endMs <= c.startMs || hole.startMs >= c.endMs) {
+      out.push(c)
+      continue
+    }
+    if (hole.startMs > c.startMs) out.push({ ...c, endMs: hole.startMs })
+    if (hole.endMs < c.endMs) out.push({ ...c, startMs: hole.endMs })
   }
   return out
 }
@@ -166,6 +188,13 @@ export const ClipsScreen = () => {
   const [pendingDelete, setPendingDelete] = useState<Set<string>>(new Set())
   // In-flight drag-to-save: carved out + placeholdered until the real Clip lands.
   const [pendingSaves, setPendingSaves] = useState<PendingSave[]>([])
+  // Scissor cuts at the playhead — local split points subdivide a clip in EITHER lane into pieces.
+  const [splitPoints, setSplitPoints] = useState<SplitPoint[]>([])
+  // When the playhead is over a (same-lane-healable) snip, the scissor becomes a bandaid → un-snip.
+  const [unsnip, setUnsnip] = useState<SplitPoint | null>(null)
+  // In-flight un-save of a saved PIECE: the piece's range is optimistically punched out of its
+  // parent's claim (→ returns to buffer) while the parent is trimmed on the backend.
+  const [pendingUnsave, setPendingUnsave] = useState<{ id: string; parentId: string; startMs: number; endMs: number }[]>([])
 
   const realSavedData = useMemo(() => (savedData ?? []).filter((c) => !pendingDelete.has(c.id)), [savedData, pendingDelete])
 
@@ -199,9 +228,10 @@ export const ClipsScreen = () => {
   )
   const pendingNotReal = useMemo(() => pendingSaves.filter((ps) => !matchesReal(ps)), [pendingSaves, matchesReal])
 
-  const savedLane = useMemo<LaneClip[]>(
-    () => [
-      ...savedLaneReal,
+  const savedLane = useMemo<LaneClip[]>(() => {
+    const unsavedIds = new Set(pendingUnsave.map((h) => h.id))
+    return [
+      ...applySplits(savedLaneReal, splitPoints, true).filter((p) => !unsavedIds.has(p.id)),
       ...pendingNotReal.map((ps) => ({
         id: ps.tempId,
         startMs: ps.startMs,
@@ -212,9 +242,8 @@ export const ClipsScreen = () => {
         manifestUrl: ps.manifestUrl,
         sourceSessionId: ps.sessionId,
       })),
-    ],
-    [savedLaneReal, pendingNotReal],
-  )
+    ]
+  }, [savedLaneReal, pendingNotReal, splitPoints, pendingUnsave])
 
   // Drafts (edited-but-unsaved manifests) — shown in the buffer lane as draft blocks; they
   // carve their range out of the raw session too (so a draft + its remainder tile the session).
@@ -235,19 +264,26 @@ export const ClipsScreen = () => {
   )
 
   // Carve: subtract the saved + draft ranges (real + pending) from each session → remaining footage.
+  // A pending-unsaved piece punches a hole in its parent's claim, so that range returns to buffer.
   const claims = useMemo<Claim[]>(() => {
     const out: Claim[] = []
-    for (const c of [...realSavedData, ...(draftsData ?? [])]) {
+    for (const c of realSavedData) {
+      let ranges: Claim[] = c.ranges?.length
+        ? c.ranges.map((r) => ({ sessionId: r.bufferSessionId, startMs: r.startAtMs, endMs: r.endAtMs }))
+        : c.bufferSessionId
+          ? [{ sessionId: c.bufferSessionId, startMs: c.startAtMs, endMs: c.endAtMs }]
+          : []
+      for (const h of pendingUnsave) if (h.parentId === c.id) ranges = subtractRange(ranges, h)
+      out.push(...ranges)
+    }
+    for (const c of draftsData ?? []) {
       if (c.ranges?.length) for (const r of c.ranges) out.push({ sessionId: r.bufferSessionId, startMs: r.startAtMs, endMs: r.endAtMs })
       else if (c.bufferSessionId) out.push({ sessionId: c.bufferSessionId, startMs: c.startAtMs, endMs: c.endAtMs })
     }
     for (const ps of pendingNotReal) out.push({ sessionId: ps.sessionId, startMs: ps.startMs, endMs: ps.endMs })
     return out
-  }, [realSavedData, draftsData, pendingNotReal])
+  }, [realSavedData, draftsData, pendingNotReal, pendingUnsave])
 
-  // Scissor cuts at the playhead — local split points subdivide the carved buffer entries so each
-  // piece is independently draggable to a lane.
-  const [splitPoints, setSplitPoints] = useState<SplitPoint[]>([])
   const bufferedLane = useMemo(() => [...applySplits(carveBuffer(sessions, claims), splitPoints), ...drafts], [sessions, claims, drafts, splitPoints])
   const allClips = useMemo(() => [...bufferedLane, ...savedLane], [bufferedLane, savedLane])
   const hasAny = allClips.length > 0
@@ -259,6 +295,20 @@ export const ClipsScreen = () => {
       return next.length === prev.length ? prev : next
     })
   }, [matchesReal])
+
+  // Prune un-save holes once the parent's real ranges no longer cover them (the trim landed) or
+  // the parent is gone.
+  useEffect(() => {
+    setPendingUnsave((prev) => {
+      const next = prev.filter((h) => {
+        const parent = realSavedData.find((c) => c.id === h.parentId)
+        if (!parent) return false
+        const ranges = parent.ranges?.length ? parent.ranges : [{ startAtMs: parent.startAtMs, endAtMs: parent.endAtMs }]
+        return ranges.some((r) => r.startAtMs < h.endMs && r.endAtMs > h.startMs) // keep while still covered
+      })
+      return next.length === prev.length ? prev : next
+    })
+  }, [realSavedData])
 
   // ── sticky viewer selection ──
   // `selectedId` = the tapped clip (red highlight). Scrolling the timeline while paused BLURS the
@@ -443,11 +493,6 @@ export const ClipsScreen = () => {
     [player, seekTo],
   )
 
-  // Prev / next clip = select the time-adjacent clip in the grid.
-  const ordered = useMemo(() => [...allClips].sort((a, b) => a.startMs - b.startMs), [allClips])
-  const selIdx = ordered.findIndex((c) => c.id === viewerId)
-  const canPrev = selIdx > 0
-  const canNext = selIdx >= 0 && selIdx < ordered.length - 1
 
   // Frame-step: tap seeks one frame; hold repeats.
   const holdRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -541,11 +586,35 @@ export const ClipsScreen = () => {
     [sessions, refetchSavedSoon, qc],
   )
 
-  // Drag a SAVED clip left → un-save (delete the durable copy). Optimistically hide
-  // it; revert if the delete fails.
+  // Drag a SAVED clip up → un-save. A WHOLE clip is deleted; a scissor PIECE only trims that range
+  // out of its parent (PATCH the parent's manifest to the kept ranges → the piece returns to
+  // buffer, the rest stays saved). Optimistic; revert on failure.
   const unsaveClip = useCallback(
     (clip: LaneClip) => {
       if (clip.id.startsWith('pending:')) return // an optimistic placeholder, not a real clip yet
+      if (clip.parentSavedId) {
+        const parentId = clip.parentSavedId
+        const parent = realSavedData.find((c) => c.id === parentId)
+        if (!parent) return
+        const hole = { id: clip.id, parentId, startMs: clip.startMs, endMs: clip.endMs }
+        // Kept ranges = the parent's full ranges minus every hole (existing pending + this one).
+        let kept: Claim[] = parent.ranges?.length
+          ? parent.ranges.map((r) => ({ sessionId: r.bufferSessionId, startMs: r.startAtMs, endMs: r.endAtMs }))
+          : parent.bufferSessionId
+            ? [{ sessionId: parent.bufferSessionId, startMs: parent.startAtMs, endMs: parent.endAtMs }]
+            : []
+        for (const h of [...pendingUnsave.filter((p) => p.parentId === parentId), hole]) kept = subtractRange(kept, h)
+        setPendingUnsave((prev) => [...prev, hole])
+        const revert = () => setPendingUnsave((prev) => prev.filter((p) => p.id !== hole.id))
+        const done = () => qc.invalidateQueries({ queryKey: ['buffer', 'clips'] })
+        if (!kept.length) bufferApi.deleteSavedClip(parentId).then(done).catch(revert)
+        else
+          bufferApi
+            .patchClip(parentId, { ranges: kept.map((r) => ({ bufferSessionId: r.sessionId, startAtMs: Math.round(r.startMs), endAtMs: Math.round(r.endMs) })) })
+            .then(done)
+            .catch(revert)
+        return
+      }
       setPendingDelete((prev) => new Set(prev).add(clip.id))
       bufferApi
         .deleteSavedClip(clip.id)
@@ -558,7 +627,7 @@ export const ClipsScreen = () => {
           }),
         )
     },
-    [qc],
+    [qc, realSavedData, pendingUnsave],
   )
 
   // ── time reference (now / axis end) ──
@@ -600,9 +669,37 @@ export const ClipsScreen = () => {
     })
   }, [])
 
-  // Scissor: cut the clip under the static playhead in two. Adds a local split point (metadata);
-  // each piece becomes an independently draggable buffer clip.
+  // Poll the playhead → when it's over a snip whose two pieces are still in the SAME lane, the
+  // scissor turns into a bandaid (un-snip). Reads lanes via a ref so the interval stays stable.
+  const laneRefs = useRef({ buffered: bufferedLane, saved: savedLane, splits: splitPoints })
+  laneRefs.current = { buffered: bufferedLane, saved: savedLane, splits: splitPoints }
+  useEffect(() => {
+    if (!splitPoints.length) {
+      setUnsnip(null)
+      return
+    }
+    const sameLane = (lane: LaneClip[], s: SplitPoint) =>
+      lane.some((x) => x.sourceSessionId === s.sessionId && Math.abs(x.endMs - s.atMs) < 4) &&
+      lane.some((x) => x.sourceSessionId === s.sessionId && Math.abs(x.startMs - s.atMs) < 4)
+    const id = setInterval(() => {
+      const c = timelineRef.current?.getCenter()
+      if (!c || c.pxPerMs <= 0) return
+      const tolMs = 16 / c.pxPerMs // ~16px proximity to the mark, zoom-correct
+      const { buffered, saved, splits } = laneRefs.current
+      const hit = splits.find((s) => Math.abs(s.atMs - c.timeMs) < tolMs && (sameLane(buffered, s) || sameLane(saved, s))) ?? null
+      setUnsnip((prev) => (prev?.atMs === hit?.atMs && prev?.sessionId === hit?.sessionId ? prev : hit))
+    }, 150)
+    return () => clearInterval(id)
+  }, [splitPoints.length])
+
+  // Scissor / bandaid. Over a healable snip → remove the split point (rejoin, metadata only).
+  // Otherwise → cut the clip under the static playhead in two (a local split point).
   const handleScissor = useCallback(() => {
+    if (unsnip) {
+      setSplitPoints((prev) => prev.filter((s) => !(s.sessionId === unsnip.sessionId && s.atMs === unsnip.atMs)))
+      setUnsnip(null)
+      return
+    }
     const c = timelineRef.current?.getCenter()
     if (!c?.clipId) return
     const clip = allClips.find((x) => x.id === c.clipId)
@@ -610,7 +707,47 @@ export const ClipsScreen = () => {
     if (!clip || !sessionId) return
     if (c.timeMs <= clip.startMs + MIN_REMAINDER_MS || c.timeMs >= clip.endMs - MIN_REMAINDER_MS) return // not strictly inside
     setSplitPoints((prev) => (prev.some((s) => s.sessionId === sessionId && Math.abs(s.atMs - c.timeMs) < 1) ? prev : [...prev, { sessionId, atMs: c.timeMs }]))
+  }, [unsnip, allClips])
+
+  // ── transport navigation: smooth-scroll the timeline so a boundary lands on the playhead ──
+  // Boundaries = every clip head + tail; plus the reaper (oldest) and now (live) edges.
+  const navBoundaries = useMemo(() => {
+    const set = new Set<number>()
+    for (const c of allClips) {
+      set.add(Math.round(c.startMs))
+      set.add(Math.round(c.endMs))
+    }
+    return [...set].sort((a, b) => a - b)
   }, [allClips])
+  const goTo = useCallback(
+    (timeMs: number) => {
+      setSelectedId(null)
+      const clip = allClips.find((c) => timeMs >= c.startMs - 1 && timeMs <= c.endMs + 1)
+      if (clip) setCenterClipId(clip.id)
+      timelineRef.current?.scrollToTime(timeMs, true)
+    },
+    [allClips],
+  )
+  const goPrev = useCallback(() => {
+    const c = timelineRef.current?.getCenter()
+    if (!c) return
+    let target: number | undefined
+    for (const b of navBoundaries) {
+      if (b < c.timeMs - 1) target = b
+      else break
+    }
+    if (target != null) goTo(target)
+  }, [navBoundaries, goTo])
+  const goNext = useCallback(() => {
+    const c = timelineRef.current?.getCenter()
+    if (!c) return
+    const target = navBoundaries.find((b) => b > c.timeMs + 1)
+    if (target != null) goTo(target)
+  }, [navBoundaries, goTo])
+  const goReaper = useCallback(() => {
+    if (navBoundaries.length) goTo(navBoundaries[0]!)
+  }, [navBoundaries, goTo])
+  const goNow = useCallback(() => goTo(axisTop), [goTo, axisTop])
 
   return (
     <View style={styles.root}>
@@ -648,17 +785,17 @@ export const ClipsScreen = () => {
         {hasAny ? (
           <BufferTransport
             playing={playing}
-            onToStart={() => seekTo(clipStart)}
-            onPrevClip={() => canPrev && setSelectedId(ordered[selIdx - 1]!.id)}
+            onToStart={goReaper} // 1st — snap the reaper (oldest) edge to the playhead
+            onPrevClip={goPrev} // 2nd — previous clip head/tail to the playhead
             onFrameBack={() => seekTo(playheadRef.current - FRAME_MS)}
             onFrameBackHold={(held) => frameHold(-1, held)}
             onTogglePlay={togglePlay}
             onFrameForward={() => seekTo(playheadRef.current + FRAME_MS)}
             onFrameForwardHold={(held) => frameHold(1, held)}
-            onNextClip={() => canNext && setSelectedId(ordered[selIdx + 1]!.id)}
-            onToEnd={() => seekTo(clipEnd)}
-            canPrev={canPrev}
-            canNext={canNext}
+            onNextClip={goNext} // 6th — next clip head/tail to the playhead
+            onToEnd={goNow} // 7th — snap the now (live) edge to the playhead
+            canPrev={navBoundaries.length > 1}
+            canNext={navBoundaries.length > 1}
             canFrameBack={!!manifestUrl && playheadMs > clipStart}
             canFrameForward={!!manifestUrl && playheadMs < clipEnd}
             style={styles.transport}
@@ -710,10 +847,19 @@ export const ClipsScreen = () => {
             onSave={saveClip}
             onUnsave={unsaveClip}
           />
-          {/* Scissor — cuts the clip at the static centre playhead. Sits on the playhead line. */}
+          {/* Scissor / bandaid — cuts the clip at the playhead, or un-snips when over a snip mark. */}
           <View style={styles.scissorRow} pointerEvents="box-none">
-            <Pressable variant="none" accessibilityLabel="Cut clip at the playhead" onPress={handleScissor} style={styles.scissorBtn}>
-              <Icon name="scissors" size="md" color={theme.colors.text.inverse} />
+            <Pressable
+              variant="none"
+              accessibilityLabel={unsnip ? 'Remove the snip at the playhead' : 'Cut clip at the playhead'}
+              onPress={handleScissor}
+              style={[styles.scissorBtn, unsnip && styles.bandaidBtn]}
+            >
+              {unsnip ? (
+                <MaterialCommunityIcons name="bandage" size={20} color={theme.colors.text.inverse} />
+              ) : (
+                <Icon name="scissors" size="md" color={theme.colors.text.inverse} />
+              )}
             </Pressable>
           </View>
         </View>
@@ -786,6 +932,10 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.accent.default,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: theme.colors.bg.primary,
+  },
+  // Un-snip mode reads as a distinct ink button (heal/rejoin), not the accent cut button.
+  bandaidBtn: {
+    backgroundColor: theme.colors.text.primary,
   },
   bottomChrome: {
     borderTopWidth: 1,

@@ -119,7 +119,7 @@ type Props = {
 // read back the clip + instant currently under the playhead (for the scissor cut).
 export type ClipsTimelineHandle = {
   scrollToTime: (ms: number, animated?: boolean) => void
-  getCenter: () => { clipId: string | null; timeMs: number }
+  getCenter: () => { clipId: string | null; timeMs: number; pxPerMs: number }
 }
 
 // ── animated leaf nodes (each reads the shared `layout` on the UI thread) ──
@@ -276,18 +276,28 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
   // The clip + instant currently under the centre playhead (read on demand for the scissor cut).
   const getCenter = useCallback(() => {
     const p = px.value || defaultPx
-    if (p <= 0) return { clipId: null, timeMs: 0 }
+    if (p <= 0 || !segs.length) return { clipId: null, timeMs: 0, pxPerMs: 0 }
     const lay = computeLayout(segs, trailGapPx, p)
     const s = scroll.value
     for (let i = 0; i < segs.length; i++) {
       const seg = segs[i]!
       if (s >= lay.lefts[i]! && s <= lay.lefts[i]! + lay.widths[i]!) {
         const frac = lay.widths[i]! > 0 ? (s - lay.lefts[i]!) / lay.widths[i]! : 0
-        return { clipId: seg.id, timeMs: seg.startMs + frac * seg.durMs }
+        return { clipId: seg.id, timeMs: seg.startMs + frac * seg.durMs, pxPerMs: p }
       }
     }
-    return { clipId: null, timeMs: 0 }
-  }, [segs, trailGapPx, defaultPx, px, scroll])
+    // Not over a clip: report a navigable instant. Before the first → its head; past the last
+    // (the trailing "now" gap) → NOW (so clip-back finds the most recent tail); in a between-gap
+    // → the tail of the clip on its left.
+    const first = segs[0]!
+    if (s <= lay.lefts[0]!) return { clipId: null, timeMs: first.startMs, pxPerMs: p }
+    const li = segs.length - 1
+    if (s >= lay.lefts[li]! + lay.widths[li]!) return { clipId: null, timeMs: nowMs, pxPerMs: p }
+    for (let i = li; i >= 0; i--) {
+      if (lay.lefts[i]! + lay.widths[i]! <= s) return { clipId: null, timeMs: segs[i]!.startMs + segs[i]!.durMs, pxPerMs: p }
+    }
+    return { clipId: null, timeMs: first.startMs, pxPerMs: p }
+  }, [segs, trailGapPx, defaultPx, px, scroll, nowMs])
   useImperativeHandle(ref, () => ({ scrollToTime, getCenter }), [scrollToTime, getCenter])
 
   // ── report the clip/instant under the centre playhead (only on a CLIP CHANGE — minimal hops) ──
@@ -620,6 +630,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: theme.colors.bg.primary, // empty-time band reads lighter than the lanes
   },
   gapRule: {
     width: 0,
