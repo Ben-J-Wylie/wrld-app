@@ -52,6 +52,8 @@ import { SourceChatLog } from '@/components/features/clip/SourceChatLog'
 import { useAuth } from '@clerk/clerk-expo'
 import { useVideoPlayer, VideoView } from 'expo-video'
 import { useBuffer } from '@/hooks/useBuffer'
+import { useDataTrack } from '@/hooks/useDataTrack'
+import { toGraphValues, readingAt, toTrail, trailPositionAt, toChatLog } from '@/lib/dataTrackRender'
 import { useSavedClips } from '@/hooks/useSavedClips'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
 import { useBroadcastStore } from '@/stores/broadcastStore'
@@ -695,6 +697,17 @@ export const ClipEditScreen = () => {
         1,
       )
     : 0.5
+  // C6 — the viewed data source's `.jsonl`, replayed through the design renderers at
+  // `viewProgress`. Fetch the data track for the session under the playhead; falls
+  // back to the MOCK placeholders below until real samples land. (cam/audio/identity
+  // have no data track → undefined → no fetch.)
+  const currentDataUrl =
+    view === 'location' || view === 'compass' || view === 'gyro' || view === 'chat'
+      ? sessionAtPlayhead?.dataUrls?.[view as BufferTrackKind]
+      : undefined
+  const dataSamples = useDataTrack(currentDataUrl)
+  const dataTrail = useMemo(() => toTrail(dataSamples), [dataSamples])
+
   const identityMeta: { label: string; value: string }[] = []
   if (sessionAtPlayhead) identityMeta.push({ label: 'Captured', value: fmtClipStamp(sessionStartMs(sessionAtPlayhead)) })
   const capturedLabels = RAIL_ORDER.filter((k) => capturedKinds.has(k as BufferTrackKind)).map((k) => VIEW_META[k]!.label)
@@ -1799,24 +1812,24 @@ export const ClipEditScreen = () => {
                   ) : view === 'audio' ? (
                     <SourceWaveform peaks={MOCK_PEAKS} progress={viewProgress} />
                   ) : view === 'location' ? (
-                    <SourceLocationTrail
-                      path={MOCK_TRAIL}
-                      position={MOCK_TRAIL[Math.round((MOCK_TRAIL.length - 1) * viewProgress)]}
-                    />
+                    (() => {
+                      const path = dataTrail.length ? dataTrail : MOCK_TRAIL
+                      return <SourceLocationTrail path={path} position={trailPositionAt(path, viewProgress)} />
+                    })()
                   ) : view === 'compass' ? (
                     <SourceTelemetryGraph
-                      values={MOCK_COMPASS}
+                      values={dataSamples.length ? toGraphValues(dataSamples, 'compass') : MOCK_COMPASS}
                       progress={viewProgress}
                       label="COMPASS"
-                      reading={`${Math.round(viewProgress * 359)}°`}
+                      reading={dataSamples.length ? readingAt(dataSamples, 'compass', viewProgress) : `${Math.round(viewProgress * 359)}°`}
                       iconName="compass"
                     />
                   ) : view === 'gyro' ? (
                     <SourceTelemetryGraph
-                      values={MOCK_GYRO}
+                      values={dataSamples.length ? toGraphValues(dataSamples, 'gyro') : MOCK_GYRO}
                       progress={viewProgress}
                       label="GYRO"
-                      reading="±1.2 rad/s"
+                      reading={dataSamples.length ? readingAt(dataSamples, 'gyro', viewProgress) : '±1.2 rad/s'}
                       iconName="navigation"
                     />
                   ) : view === 'identity' ? (
@@ -1828,8 +1841,9 @@ export const ClipEditScreen = () => {
                       meta={identityMeta}
                     />
                   ) : view === 'chat' ? (
-                    // Placeholder transcript until the buffer exposes a real chat track.
-                    <SourceChatLog messages={[]} progress={viewProgress} />
+                    // Real recorded chat track (C6); SourceChatLog shows its own
+                    // placeholder transcript until the first messages land.
+                    <SourceChatLog messages={toChatLog(dataSamples)} progress={viewProgress} />
                   ) : undefined
                 }
                 reachLabel={focused ? focusClip!.name : `Buffer · ${buffer?.windowHours ?? 72}h`}
