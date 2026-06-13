@@ -22,11 +22,15 @@ instance working in this repo is immediately oriented.
 > milestone after v0.2 — known commitments listed below.
 
 > **Content north star:** [`CONTENT.md`](CONTENT.md) is the cross-repo philosophy
-> for how WRLD captures, stores, edits, and surfaces content — the *why* behind
-> the buffer/saved two-pool model, the non-destructive clip manifest (draft ↔
-> saved), the carve, capture ⊆ broadcast, the privacy ceiling, and the time
-> machine. Principles land there; the weeds stay in the per-repo CLAUDE.md +
-> `HANDOFF-*.md` + DESIGN.md. Keep it honest as the model evolves.
+> for how WRLD captures, stores, edits, **represents**, and surfaces content — the
+> *why* behind the buffer/saved two-pool model, the non-destructive clip manifest
+> (draft ↔ saved), the carve, capture ⊆ broadcast, the privacy ceiling, and the
+> time machine. It also states the **content-representation nuances** (§5 — the
+> presentation rules that keep the UI true to the model) and the **cross-repo
+> substrate requirements** (§8 — what `wrld-backend` + `wrld-mediasoup` must
+> robustly provide to support it). Principles land there; the weeds stay in the
+> per-repo CLAUDE.md + `HANDOFF-*.md` + DESIGN.md. Keep it honest as the model
+> evolves.
 
 ---
 
