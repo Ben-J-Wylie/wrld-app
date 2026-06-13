@@ -60,7 +60,6 @@ import { ScreenHeader } from '@/components/sections/ScreenHeader'
 import { Text } from '@/components/primitives/Text'
 import { Icon } from '@/components/primitives/Icon'
 import { IconButton } from '@/components/primitives/IconButton'
-import { Slider } from '@/components/primitives/Slider'
 import { LivePill } from '@/components/features/stream/LivePill'
 import { AudioVisualizer } from '@/components/features/stream/AudioVisualizer'
 import { SourceRail } from '@/components/features/clip/SourceRail'
@@ -327,12 +326,9 @@ export function StreamScreen() {
   // chat panel's top crop a footerPad below the close-X, fixed regardless of the
   // keyboard (only the panel's height tracks the keyboard, not its top).
   const [headerBottom, setHeaderBottom] = useState(0)
-  // Fullscreen viewer + its audio controls. `volume` is 0..100 (Slider units);
-  // muted overrides it to silence without losing the level. Defaults (full
-  // volume, unmuted) mean the applied gain is unity — no behaviour change until
-  // the viewer touches the controls.
+  // Fullscreen viewer + its mute control. Unmuted by default (unity gain) — no
+  // behaviour change until the viewer mutes.
   const { isFullscreen, enter: enterFullscreen, exit: exitFullscreen } = useFullscreenVideo()
-  const [volume, setVolume] = useState(100)
   const [muted, setMuted] = useState(false)
   const [isRecording, setIsRecording] = useState(false)
   const [activeRecordingId, setActiveRecordingId] = useState<string | null>(null)
@@ -418,11 +414,11 @@ export function StreamScreen() {
   const { orientation: deviceOrientation, tiltDeg } = useDeviceOrientation(showCameraPreview)
   const isLandscapeHold = deviceOrientation === 'landscape-left' || deviceOrientation === 'landscape-right'
 
-  // Apply the viewer's volume/mute to the consumed remote audio track. Re-runs
-  // when the remote stream (re)connects so a fresh consumer picks up the level.
+  // Apply the viewer's mute to the consumed remote audio track. Re-runs when the
+  // remote stream (re)connects so a fresh consumer picks up the mute state.
   useEffect(() => {
-    setRemoteAudioVolume(muted ? 0 : volume / 100)
-  }, [muted, volume, remoteStream, setRemoteAudioVolume])
+    setRemoteAudioVolume(muted ? 0 : 1)
+  }, [muted, remoteStream, setRemoteAudioVolume])
 
   // Bail out of fullscreen (re-lock portrait) whenever the viewer leaves the
   // live room — stream end, tab blur (cleanup nulls remoteStream), or a drop.
@@ -1750,9 +1746,9 @@ export function StreamScreen() {
       )}
 
       {/* Fullscreen viewer — edge-to-edge video over everything, with a close
-          button and audio controls (mute · volume). Landscape video rotated the
-          whole screen on enter (see useFullscreenVideo); portrait video just
-          fills upright. Renders its own RTCView/visualizer of the same stream. */}
+          button and a mute toggle. Landscape video rotated the whole screen on
+          enter (see useFullscreenVideo); portrait video just fills upright.
+          Renders its own RTCView/visualizer of the same stream. */}
       {isFullscreen && isViewerInRoom && (
         <View style={styles.fsRoot}>
           {selectedKind === 'cam' ? (
@@ -1779,25 +1775,12 @@ export function StreamScreen() {
 
           <View style={styles.fsControlsBar}>
             <IconButton
-              name={muted || volume === 0 ? 'volume-x' : 'volume-2'}
+              name={muted ? 'volume-x' : 'volume-2'}
               variant="surface"
               size="lg"
               onPress={() => setMuted((m) => !m)}
               accessibilityLabel={muted ? 'Unmute' : 'Mute'}
             />
-            <View style={styles.fsSlider}>
-              <Slider
-                value={muted ? 0 : volume}
-                min={0}
-                max={100}
-                step={1}
-                onValueChange={(v) => {
-                  setVolume(v)
-                  if (v > 0 && muted) setMuted(false)
-                  if (v === 0) setMuted(true)
-                }}
-              />
-            </View>
           </View>
         </View>
       )}
@@ -1926,7 +1909,7 @@ const styles = StyleSheet.create({
   fsRoot: { ...StyleSheet.absoluteFillObject, backgroundColor: '#000', zIndex: 100 },
   // Close (minimize) button — top-right, clear of any notch in both orientations.
   fsClose: { position: 'absolute', top: theme.spacing.lg, right: theme.spacing.lg },
-  // Audio control bar — mute toggle + volume slider, pinned near the bottom.
+  // Mute toggle — pinned near the bottom.
   fsControlsBar: {
     position: 'absolute',
     left: theme.spacing.lg,
@@ -1936,7 +1919,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.md,
   },
-  fsSlider: { flex: 1 },
   // Chat toggle parked at the far left of the bottom control line while live
   // (`bottom` set inline to the shared composer line). zIndex above the chat
   // panel (10) so the ✕ stays tappable to close when chat is open — the panel

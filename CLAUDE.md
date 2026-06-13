@@ -2912,7 +2912,7 @@ checklist for Aaron). Split:
 ## Updates — June 2026 (Fullscreen video viewer — landscape + audio controls)
 
 Viewers can take the live stream (and external/HLS bar cams) **fullscreen**, with
-landscape rotation for landscape video and in-app **mute + volume** controls. All
+landscape rotation for landscape video and an in-app **mute/unmute** control. All
 in Aaron's lane (`screens/` + `hooks/`); **no new dependency** (uses the already-
 installed `expo-screen-orientation` + react-native-webrtc's per-track volume API).
 
@@ -2953,15 +2953,15 @@ needed); the fullscreen hook re-locks `PORTRAIT_UP` on exit/unmount.
   `PORTRAIT_UP` on `exit()` and on unmount, so a screen can't leak a landscape lock.
 - **`useMediasoup`** — new `setRemoteAudioVolume(0..1)` driving the consumed remote
   audio track's `_setVolume()` (react-native-webrtc's per-track gain; **no system-
-  volume dep needed**). 0 = muted; unity by default (no behaviour change until the
-  viewer touches the controls).
+  volume dep needed**). Used as a mute toggle (0 = muted, 1 = unity); unmuted by
+  default (no behaviour change until the viewer mutes).
 - **`StreamScreen` (WebRTC live viewer)** — a `maximize` button in the viewer action
   cluster opens a full-bleed overlay (own `RTCView`/visualizer of the same stream)
-  with a `minimize` close button + a mute toggle + volume `Slider`. Enters landscape
+  with a `minimize` close button + a mute/unmute toggle. Enters landscape
   iff `videoIsLandscape` (already computed from the consumed track). Auto-exits
   fullscreen when the viewer leaves the room (stream end / tab blur / drop).
-- **`ExternalStreamScreen` (expo-video HLS)** — same overlay; volume/mute drive
-  `player.volume`/`player.muted`. Aspect is **detected per cam** from the loaded
+- **`ExternalStreamScreen` (expo-video HLS)** — same overlay (mute drives
+  `player.muted`). Aspect is **detected per cam** from the loaded
   track (`sourceLoad` / `videoTrackChange` → `VideoTrack.size`), defaulting to
   landscape until the first dimensions arrive; fullscreen rotates only for
   landscape cams. Exits fullscreen on unfocus.
