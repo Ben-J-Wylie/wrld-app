@@ -37,8 +37,8 @@
    re-encode. The only destructive act a user can take is **permanent delete**
    (which reclaims quota). Everything else — trim, reorder, source on/off,
    visibility — is reversible metadata. Delete is real (off disk) **except**
-   reported content, a copy of which the platform holds for moderation beyond the
-   user's reach (§3).
+   reported content, a copy of which the platform holds in the **Report Centre**
+   for moderation beyond the user's reach (§3).
 4. **Privacy is the creator's, and reversible.** Location precision and identity
    (attributed/anon) are **display-layer choices the creator can change in either
    direction, any time** — blur *or* sharpen, live or on a saved clip. Capture
@@ -140,13 +140,51 @@ Content lives in exactly one of two stores, with opposite lifecycles:
 transcode): Free 24h / 720p · Plus 72h / 1080p · Pro 7d / 1440p. Byte backstops
 are sized worst-case-plus-cushion.
 
-**A third, platform-side hold — moderation.** When content is **reported**, the
-platform copies it to a **separate moderation hold** (not one of the user's two
-pools). It **survives the creator's deletion** and persists until a moderator
-dismisses or deletes it; because it's the platform's hold rather than the user's
-storage, once it is past the rolling-buffer window it **does not count toward the
-creator's quota**. *(Decided 2026-06-13. The review/takedown UI is v0.3; the
-copy-on-report retention is the decided principle now.)*
+**A third, platform-side hold — the Report Centre.** When content is
+**reported**, the platform copies it to a **separate moderation hold** (the
+*Report Centre*) — not one of the user's two pools. The decided shape (2026-06-13):
+
+- **What can be reported.** A **live stream** or a **public clip** (clips are
+  public — they appear in the time machine and on profiles). Both produce a
+  Report Centre record.
+- **What gets copied.**
+  - **Live stream →** a fixed window around the report instant T: **`[T − 60s,
+    T + 30s]`**, retrospective-weighted because the infraction precedes the tap.
+    The tail is grabbed shortly after T out of the still-writing buffer (no race —
+    the buffer holds ≥24h, so the last minute is always still on disk). Clamp the
+    head to session start if the session is younger than 60s.
+  - **Clip →** the **whole clip** (it's already a bounded object — no window).
+  - **All available sources** are copied (camera/audio/screen + location/chat/
+    sensors), at **capture fidelity** — never the display layer.
+- **Full fidelity; no hiding.** An offender cannot hide behind anon or private:
+  the record stamps the **real `hostId` and the exact coordinates**, regardless
+  of the content's current `attributed` / `locDisplayPrecision`. The platform
+  always retained both (§1.4); the Report Centre reads *through* the reversible
+  display choice.
+- **Readership.** **Moderators only.** Never the public, never the owner — the
+  pool is never tokenized to the creator and the owner has no read path to it.
+- **Retention & authority.** Held **until a moderator acts**; **only moderators
+  delete.** No reaper, no TTL, and no creator action reaches it — un-save,
+  delete-clip, and account deletion must **not** cascade into it. It is a
+  **standalone record that *names* the source by denormalized scalar value**
+  (`targetType` + `targetId`, the captured `hostUserId` / `hostHandle` / exact
+  coords) — **never a foreign-key relation** into the deletable
+  `Clip`/`User`/`Stream` graph, so no `onDelete` path can ever reach it. The held
+  bytes likewise live in a **platform-owned directory**, separate from the user's
+  saved pool, so deleting the source's files can't remove the evidence copy. (Only
+  the record's own internal children — its held ranges — cascade *from* it.) Past
+  the rolling-buffer window it **does not count toward the creator's quota** (it's
+  the platform's storage, not the user's). The concrete model is pinned in
+  `wrld-backend/CLAUDE.md` + the handoff.
+- **Many reports, one piece of content.** Reports accrete onto the content, not
+  the other way round: a second report on the same infraction attaches to the
+  **existing** Report Centre record rather than re-copying. If its `[T − 60s,
+  T + 30s]` window **overlaps** what's already held, only the **additional head
+  and tail** are copied to extend the span; disjoint windows add another range to
+  the same record. One content record, N reports stored with it.
+
+*(The review/takedown UI is v0.3; the copy-on-report retention + accretion is the
+decided principle now.)*
 
 ---
 

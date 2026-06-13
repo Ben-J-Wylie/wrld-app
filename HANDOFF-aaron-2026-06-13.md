@@ -82,12 +82,33 @@ This doc is the index + the priority order, not a re-statement.
      precision. SQL validated against the test DB. *(App: the time-machine clip-pin consumer
      (`useHistoricalClips`/`DiscoveryPin`) is still unbuilt; `recordingId` is nullable for buffer clips.)*
 
-6. ☐ **Content decision B — moderation hold** *(DECIDED 2026-06-13; CONTENT.md §3)*:
-   - On **report**, copy the content to a **separate platform-side moderation hold** (not one of the
-     user's two pools). It **survives the creator's deletion**; **excluded from the user's quota**
-     once past the rolling-buffer window; held until a moderator acts.
-   - Extend the existing report flow (reports + snapshots, Phase 5/22). The **review/takedown UI** is
-     v0.3; the **copy-on-report retention is decided now.**
+6. ☐ **Content decision B — the Report Centre (moderation hold)** *(FULLY SPECIFIED 2026-06-13;
+   CONTENT.md §3 is canonical; app detail in `wrld-app/CLAUDE.md` "Content decision B — the Report
+   Centre")*. The **third pool**: on report, copy the content to a platform-owned hold that survives
+   the creator's deletion. **Review/takedown UI is v0.3; the copy-on-report retention is decided now.**
+   - **Reportable:** a **live stream** or a **public clip** (clips are public — time machine + profiles).
+   - **Copy unit:** live stream → **`[T − 60s, T + 30s]`** (retrospective; tail grabbed after T from the
+     still-writing buffer — no race, buffer ≥24h; head clamps to session start if < 60s old). Clip →
+     **the whole clip**. **All sources**, at **capture fidelity** (reuse `promoteBufferClip` copy-out
+     into a platform pool, not the user's saved pool).
+   - **Full fidelity / no hiding:** stamp the **real `hostId` + exact coords** regardless of the content's
+     current `attributed`/`locDisplayPrecision`.
+   - **Readership:** moderators only (never the owner/public; never tokenized to the creator).
+   - **Retention/authority:** held until a moderator acts; **only moderators delete**; no reaper/TTL;
+     **outside the creator's quota**.
+   - **Model SETTLED (no-FK rule fixed; see `wrld-app/CLAUDE.md` + `wrld-backend/CLAUDE.md`):** standalone
+     `ReportEvidence` (one per content) → `ReportEvidenceRange[]` (held spans) ← `Report.evidenceId?`
+     (`onDelete: SetNull`, many reports → one record). The source is named by **denormalized scalar
+     columns** (`targetType`/`targetId`, captured `hostUserId`/`hostHandle`/`capturedLat`/`capturedLng`),
+     **never a `@relation`** into `Clip`/`User`/`Stream` — so no `onDelete` can reach the evidence. Held
+     bytes live in a **platform-owned dir**, not the saved pool. Only the internal `ranges` cascade *from*
+     the record.
+   - **Accretion:** a 2nd report on the same infraction attaches to the **existing** record (no re-copy);
+     overlapping window → copy only the **additional head/tail**; disjoint → another range on the same
+     record. One content record, N reports.
+   - **Lane:** extends Phase 5/22 (`Report` row + base64 `snapshotUrl`) — which today holds **no footage
+     copy**; this closes that. Backend owns the model + copy job + accretion; mediasoup needs no new
+     capture (copy is backend-side out of the buffer).
 
 ---
 

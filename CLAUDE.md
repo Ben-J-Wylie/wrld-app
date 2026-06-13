@@ -3160,3 +3160,100 @@ the clip's *current* precision + honours anon identity — see `wrld-backend/CLA
   variant for the time-machine globe (Watch CTA + anonymous-host rendering — gated on the
   app clip-pin consumer, still unbuilt). Everything else from items 1–5 (visualizers,
   `SourceStage`, scissor/snip, C6 renderers) is already Ben's and shipped.
+
+---
+
+## Updates — June 2026 (Content decision B — the Report Centre / moderation hold)
+
+Item 6 of `HANDOFF-aaron-2026-06-13.md`, fully specified (Ben + decision, 2026-06-13).
+Canonical principle: **CONTENT.md §3** ("A third, platform-side hold — the Report
+Centre"). This is the **third pool** alongside the rolling buffer + saved-clip pool:
+reported content is copied to a platform-owned hold that survives the creator's
+deletion. Backend/mediasoup work; **the review/takedown UI is v0.3** — the
+copy-on-report retention is what's decided now.
+
+### Decided shape
+- **Reportable:** a **live stream** *or* a **public clip** (clips are public — time
+  machine + profiles). Both produce a Report Centre record.
+- **Copy unit:**
+  - **Live stream →** `[T − 60s, T + 30s]` around the report instant T —
+    retrospective-weighted (the infraction precedes the tap). Tail copied shortly
+    after T from the still-writing buffer (no race; buffer holds ≥24h). Head clamps
+    to session start if the session is < 60s old.
+  - **Clip →** the **whole clip** (already bounded — no window).
+- **All sources** copied (camera/audio/screen + location/chat/sensors) at **capture
+  fidelity** — reuses the `promoteBufferClip` copy-out mechanism, but into a
+  platform-owned pool (`moderation/<recordId>/` or similar), not the user's saved pool.
+- **Full fidelity / no hiding:** stamp the **real `hostId` + exact coords** on the
+  record regardless of the content's current `attributed` / `locDisplayPrecision`
+  (the platform always retained both — CONTENT.md §1.4). Reads *through* the
+  reversible display layer.
+- **Readership:** moderators only. Never tokenized to the creator; owner has no read
+  path.
+- **Retention/authority:** held until a moderator acts; **only moderators delete**.
+  No reaper, no TTL. **Must not cascade** — un-save / delete-clip / account-delete
+  cannot wipe it. Past the buffer window it's **outside the creator's quota**.
+
+### Concrete model (SETTLED 2026-06-13 — no FK into the deletable graph)
+
+The source is named by **denormalized scalar columns**, never a Prisma `@relation`,
+so no `onDelete` path can reach the evidence. The only cascade is internal (the
+record → its own held ranges). Decided shape (Aaron tunes names/types; the *no-FK*
+rule is fixed):
+
+```prisma
+model ReportEvidence {              // one row per reported piece of content
+  id          String   @id @default(cuid())
+  targetType  String                 // 'stream' | 'clip'
+  targetId    String                 // streamId or clipId — SCALAR, no @relation
+  hostUserId  String                 // real owner, captured — SCALAR, no @relation
+  hostHandle  String                 // captured at copy time (survives user deletion)
+  capturedLat Float                  // exact coords, through the display layer
+  capturedLng Float
+  storagePath String                 // platform-owned moderation dir (NOT the saved pool)
+  sizeBytes   BigInt   @default(0)
+  status      String   @default("held")   // 'held' | 'resolved' (moderator-set)
+  createdAt   DateTime @default(now())
+  ranges      ReportEvidenceRange[]  // internal children — cascade from here is fine
+  reports     Report[]               // the N reports that cite this content
+  @@index([targetType, targetId])    // accretion lookup: does a record already exist?
+}
+
+model ReportEvidenceRange {          // the held wall-clock spans (accreted, merged)
+  id         String @id @default(cuid())
+  evidenceId String
+  evidence   ReportEvidence @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+  startAtMs  BigInt
+  endAtMs    BigInt
+  ordinal    Int
+}
+```
+
+`Report` (Phase 5/22) gains a nullable `evidenceId String?` + relation with
+**`onDelete: SetNull`** (deleting a report never touches the evidence; many reports →
+one `ReportEvidence`). **No** column on `Clip`/`User`/`Stream` points *at*
+`ReportEvidence` — the reference is one-way and scalar. Accretion: on report, look up
+`(targetType, targetId)`; reuse the existing record if present, else create one; merge
+the new `[T−60s, T+30s]` window into `ranges` (overlap → extend; disjoint → new range);
+attach the `Report`.
+- **Many reports → one content record:** a second report on the same infraction
+  attaches to the **existing** record (no re-copy). Overlapping `[T−60s, T+30s]`
+  window → copy only the **additional head/tail** to extend the held span; disjoint
+  windows add another range to the same record. One content record, N reports.
+
+### Lane split (Aaron — `wrld-backend` + `wrld-mediasoup`)
+- Extends the existing report flow (Phase 5/22: `Report` row + the base64 `snapshotUrl`
+  reporter screenshot). Today there's **no copy of the actual footage** on report —
+  that's the gap this closes.
+- **Backend:** standalone `ReportEvidence` model (no cascade) + the copy-out job
+  (window resolve → `promoteBufferClip`-style copy into the moderation pool); attach
+  N `Report` rows; accretion/overlap-merge logic; quota exclusion. The **clip-report**
+  path copies the whole clip; the **live-report** path resolves `[T−60s, T+30s]` from
+  the buffer.
+- **mediasoup:** no new capture work — the buffer already holds the window; the copy
+  is backend-side out of the persistent buffer. (Confirm the tail grab for a live
+  report fires after `T + 30s`.)
+- **App (later, Ben's lane):** no v0.2 surface beyond the existing report buttons —
+  the moderator review UI is v0.3. The report-submit flow (`streamsApi.report` +
+  snapshot) is unchanged; a clip-report entry point on the clip/profile surfaces is
+  net-new front-end when we get there.
