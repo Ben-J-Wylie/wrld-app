@@ -62,14 +62,20 @@ This doc is the index + the priority order, not a re-statement.
      samples at the playhead, replacing the `MOCK_*`. *Edge: fully-saved-clip-after-evict telemetry
      would read the clip API `dataUrl` (exposed) — a small follow-up. Needs an on-device pass.*
 
-5. ☐ **Content decision A — reversible precision/identity** *(DECIDED 2026-06-13; supersedes the
-   immutable model + the shipped behaviour; CONTENT.md §1.4/§7/§8/§9 updated)*:
-   - Backend **always stores exact coords + real identity** (full fidelity).
-   - **Drop the `≤`-ceiling clamp** on the `Clip` manifest's `locDisplayPrecision` / identity.
-   - Globe / replay / discovery read the clip's **current** `locDisplayPrecision`, not the immutable
-     `stream.locationPrecision`. `off` excludes only while set to `off`.
-   - App edit UI already exists (Ben's `LocationGranularityPicker` + identity segment) — just remove
-     the bound; it drives `locDisplayPrecision` both ways.
+5. 🔶 **Content decision A — reversible precision: MODEL REWORK DONE (Aaron, 2026-06-13).**
+   - ✅ Backend always stored exact coords + real identity (capture is full-fidelity; obfuscation is
+     read-time) — no change needed.
+   - ✅ **No `≤`-ceiling clamp to drop — there was none.** PATCH already accepted any `locDisplayPrecision`;
+     the "immutable ceiling" was a documented intent never enforced in code (app `patchClip` +
+     `LocationGranularityPicker` are also unbounded).
+   - ✅ **`GET /clips/discover` now reads the clip's CURRENT precision** (`COALESCE(c.locDisplayPrecision,
+     s.locationPrecision, 'exact')`) for the coords + the `off` exclusion. Globe/time-machine honour it;
+     `off` excludes only while currently off. *(see `wrld-backend/CLAUDE.md` "Content decision A".)*
+   - ☐ **Net-new (handoff mis-scoped as "remove a bound"):** a **clip-editor UI** to edit precision/identity
+     (compose the picker + identity toggle → `patchClip` — only `visibility` is patched today). And
+     discover honouring clip identity (`attributed`/`visibility`) + surfacing **buffer-promoted clips at all**
+     (today it joins `Clip→Recording→Stream`, so no buffer clips reach the globe) — that's **C4.5**
+     discover-completeness, larger than the reversibility rework.
 
 6. ☐ **Content decision B — moderation hold** *(DECIDED 2026-06-13; CONTENT.md §3)*:
    - On **report**, copy the content to a **separate platform-side moderation hold** (not one of the
