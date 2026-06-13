@@ -3074,3 +3074,33 @@ TODO. Two DeviceMotion listeners (orientation + telemetry) coexist but share one
 Pure JS — hot-reloads. **Needs an on-device pass:** broadcaster arms compass/gyro/
 accel/speed → a viewer switches to each source and sees it animate from real motion;
 confirm the saved-clip telemetry track fills.
+
+---
+
+## Updates — June 2026 (C6 — recorded data tracks play back in the clip editor)
+
+Finishes item 4. The design renderers were already wired in `ClipEditScreen` (fed
+`MOCK_*`); this feeds them **real recorded samples** at the playhead.
+
+- **`src/hooks/useDataTrack.ts`** — fetch + parse a data track's NDJSON (`.jsonl`)
+  into ts-sorted `DataSample[]` (the tokenized buffer `session.dataUrls[kind]` or a
+  saved clip's `track.dataUrl`). Re-fetches on url change (source/session switch).
+- **`src/lib/dataTrackRender.ts`** — pure mappers `samples → renderer inputs`:
+  `toGraphValues` (compass=heading/360 · gyro=tilt-magnitude · speed · accel),
+  `readingAt`, `toTrail`/`trailPositionAt` (location), `toChatLog` (chat).
+- **`ClipEditScreen`** — fetches the viewed data source's track for the session
+  under the playhead (`sessionAtPlayhead.dataUrls[view]`) and feeds
+  `SourceLocationTrail` / `SourceTelemetryGraph` (compass·gyro) / `SourceChatLog`
+  at `viewProgress`; falls back to the `MOCK_*` placeholders until samples land.
+- **`src/api/buffer.ts`** — `BufferTrackKind` widened (+accel/speed/torch/chat);
+  `BufferSession.dataUrls`.
+
+Backend half: a tokenized `GET /buffer/stream/:sessionId/:kind/data.jsonl` route +
+per-session `dataUrls` (see `wrld-backend/CLAUDE.md` "C6"). **Seam:** the renderers
+are Ben's (`features/`, untouched — props were already real-data-shaped); this is the
+data wiring (`hooks/`/`lib/`/`screens/`). Pure JS, no rebuild.
+
+**On-device pass:** arm gyro/compass/location/chat → scrub the editor to that footage
+→ switch the source rail → the visualizer animates from real motion (not the static
+mock). **Edge (follow-up):** a fully-saved clip whose buffer evicted reads its data
+from the clip API `track.dataUrl` (already exposed) rather than the buffer route.

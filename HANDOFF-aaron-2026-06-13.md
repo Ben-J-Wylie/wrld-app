@@ -52,19 +52,15 @@ This doc is the index + the priority order, not a re-statement.
    promoting ALL data tracks empty). *temp=data-absent, motion=derived, torch-on-toggle/loc-trail/
    chat-view deferred. Needs an on-device pass. See `wrld-app/CLAUDE.md` "Sensor telemetry data path".*
 
-4. 🔶 **Make every source SAVE — core DONE (Aaron, 2026-06-13); C6 playback UI remains.**
-   - ✅ **Highest-leverage:** aired telemetry/chat/location now record to the buffer per-source
-     `.jsonl` track (items 2+3), and the **`ts`/`t` data-sample fix** makes them actually *promote*
-     into a saved clip (they were silently promoting empty before). "Flows live" → "persists" done.
-   - ✅ **Prisma:** `BufferTrack.kind`/`ClipTrack.kind` are plain `String` → already cover every kind
-     (comments updated; no migration).
-   - ✅ **API substrate:** `GET /buffer/me/clips` now exposes per-track `dataUrl`/`manifestUrl` so the
-     viewer can fetch saved data tracks.
-   - ☐ **C6 playback UI** (the visible remainder): the renderers are already wired in `ClipEditScreen`
-     (fed `MOCK_*`). Finish = fetch the viewed data source's `.jsonl` → parse to time-indexed samples
-     → feed `SourceTelemetryGraph`/`SourceLocationTrail`/`SourceChatLog` at `viewProgress`. Saved-clip
-     data is consumable now; live-buffer scrubbing also needs a tokenized buffer `.jsonl` serve route
-     + per-session data-track URLs on `GET /buffer/me`. *(see `wrld-backend/CLAUDE.md` "item 4")*
+4. ✅ **DONE (Aaron, 2026-06-13)** — make every source SAVE + C6 playback.
+   - ✅ Aired telemetry/chat/location record to the buffer per-source `.jsonl` (items 2+3); the
+     **`ts`/`t` data-sample fix** makes them actually *promote* into a saved clip (was empty before).
+   - ✅ `BufferTrack.kind`/`ClipTrack.kind` are plain `String` → cover every kind (no migration).
+   - ✅ **C6 playback:** tokenized buffer `.jsonl` serve route + per-session `dataUrls` on `GET /buffer/me`
+     (+ per-track `dataUrl` on `GET /buffer/me/clips`); `useDataTrack` + `lib/dataTrackRender` feed the
+     **already-wired** `ClipEditScreen` renderers (location trail / compass+gyro graph / chat log) real
+     samples at the playhead, replacing the `MOCK_*`. *Edge: fully-saved-clip-after-evict telemetry
+     would read the clip API `dataUrl` (exposed) — a small follow-up. Needs an on-device pass.*
 
 5. ☐ **Content decision A — reversible precision/identity** *(DECIDED 2026-06-13; supersedes the
    immutable model + the shipped behaviour; CONTENT.md §1.4/§7/§8/§9 updated)*:
