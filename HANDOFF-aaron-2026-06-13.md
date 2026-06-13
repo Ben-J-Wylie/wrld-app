@@ -82,7 +82,17 @@ This doc is the index + the priority order, not a re-statement.
      precision. SQL validated against the test DB. *(App: the time-machine clip-pin consumer
      (`useHistoricalClips`/`DiscoveryPin`) is still unbuilt; `recordingId` is nullable for buffer clips.)*
 
-6. ☐ **Content decision B — the Report Centre (moderation hold)** *(FULLY SPECIFIED 2026-06-13;
+6. 🔶 **Content decision B — the Report Centre: COPY-ON-REPORT RETENTION DONE (Aaron, 2026-06-13).**
+   The decided-now backend retention is built (commit `e8fc9c5`): `ReportEvidence` +
+   `ReportEvidenceRange` + `Report.evidenceId` (`SetNull`, no FK into the deletable graph — FK
+   actions verified on a fresh DB); `reportEvidenceService.captureReportEvidence` (clip → whole-clip
+   copy; live stream → `[T−60s, T+30s]` via `promoteBufferClip` → `moderation/`, scheduled at T+30s);
+   accretion (one record per content, covered window reused); real owner + exact coords stamped through
+   the reversible display layer; bytes outside the user's quota + survive deletion. `POST /streams/:id/report`
+   extended + new `POST /clips/:id/report` (public clips). *(detail: `wrld-backend/CLAUDE.md` "Content
+   decision B".)* ☐ **v0.3:** moderator read/resolve routes + review/takedown UI + an app clip-report
+   button (net-new FE). On-device pass owed. The original full spec follows ↓
+   *(FULLY SPECIFIED 2026-06-13;
    CONTENT.md §3 is canonical; app detail in `wrld-app/CLAUDE.md` "Content decision B — the Report
    Centre")*. The **third pool**: on report, copy the content to a platform-owned hold that survives
    the creator's deletion. **Review/takedown UI is v0.3; the copy-on-report retention is decided now.**
