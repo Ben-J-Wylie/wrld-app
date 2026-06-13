@@ -47,17 +47,20 @@ build on them, not against them:
   visualizers, the `SourceStage` section, the `SOURCE_META` map.
 - `SourceType` is still `'camera' | 'audio'` — you widen it (or map to `FeedKind`).
 
-### The work, by repo — do in this order
+### The work, by repo — ✅ ALL DONE (Aaron, 2026-06-13)
 
-1. ☐ **wrld-mediasoup** — add a `telemetry` inbound case → fan out `telemetryUpdate` to room peers
-   (mirror `chatMessage`; broadcaster-authored only). Confirm data-only rooms are valid. *(§ mediasoup)*
-2. ☐ **wrld-backend + Prisma** — advertise the aired sensor kinds via `Stream.sources`. No new
-   tables, no new endpoints for live telemetry. *(§ backend, § Prisma)*
-3. ☐ **wrld-app — types** — widen `SourceType` to the `FeedKind` set (or map at the screen). *(§ viewer step 5)*
-4. ☐ **wrld-app — broadcaster** — `useTelemetryCapture` reads the sensors (**`expo-sensors`** → EAS
-   rebuild), throttles, emits `telemetry`. *(§ broadcaster capture)*
-5. ☐ **wrld-app — viewer** — `useStreamTelemetry` (latest sample per kind) + **swap StreamScreen's
-   inline switch for `SourceStage`**. *(§ viewer consume + render)*
+1. ✅ **wrld-mediasoup** — `telemetry` case fans out `telemetryUpdate` (broadcaster-only) + appends to
+   the buffer `.jsonl` track (C6 down-payment). DATA_KINDS +accel/speed/torch.
+2. ✅ **wrld-backend** — `VALID_SOURCES` widened to the sensor kinds (Stream.sources advertises them).
+   Also fixed a real `ts`/`t` data-sample bug that promoted ALL data tracks empty.
+3. ✅ **wrld-app types** — `activeSource` `SourceType`→`FeedKind`; `SOURCE_TO_FEEDKIND` maps the rail.
+4. ✅ **wrld-app broadcaster** — `useTelemetryCapture` (compass/speed via expo-location, gyro/accel via
+   DeviceMotion). **`expo-sensors` is already in the dev client (useDeviceOrientation) → NO EAS rebuild.**
+5. ✅ **wrld-app viewer** — `useStreamTelemetry` + the 3 StreamScreen media surfaces swapped to `SourceStage`.
+
+**Decisions:** Option A transport · motion derived viewer-side from accel · temp UI-present-data-absent.
+**Deferred:** torch-on-toggle, the `loc` trail / `chat` / `profile` source-views (each needs its own
+data wiring). **Needs an on-device pass.** Detail: `wrld-app/CLAUDE.md` "Sensor telemetry data path".
 6. ☐ **(later)** route aired telemetry into the buffer `.jsonl` for clip playback (C6). *(§ mediasoup recording)*
 
 ### Conventions
@@ -69,6 +72,15 @@ build on them, not against them:
   than you working around it in the screen.
 
 ### ⚡ Chat is already a source — plug your live-now persistence work into it (don't rebuild a viewer)
+
+> **✅ Persistence wired 2026-06-13 (Aaron).** The two mediasoup chat sinks (buffer `.jsonl`
+> playback track + durable `ChatMessage` moderation store) shipped 2026-06-12; the missing
+> app seam — sending the **armed source set** (not just AV) to `createRoom` so `room._meta.sources`
+> carries `chat` and the recorder writes the chat track — is done (`StreamScreen` `recordedSourcesFromConfig`
+> + `VALID_SOURCES` widen in `wrld-backend`). Chat (and location) now record into the buffer; the
+> clip chat track is real on save. The **viewer source-view** for chat (rail tile → `SourceStage`
+> `case 'chat'` → `SourceChatLog`) is still the SourceStage swap below (item 3) — the rail currently
+> filters to AV. See `wrld-app/CLAUDE.md` "Chat persists into the buffer".
 
 You're making chat persistent on `main` right now. **Chat is one of our sources**, and the design
 layer already ships it end-to-end as a switchable source — so your persistence is the *data*, not a

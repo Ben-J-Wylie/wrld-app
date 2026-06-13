@@ -18,7 +18,6 @@ import { useVideoPlayer, VideoView } from 'expo-video'
 import { Text } from '@/components/primitives/Text'
 import { Icon } from '@/components/primitives/Icon'
 import { IconButton } from '@/components/primitives/IconButton'
-import { Slider } from '@/components/primitives/Slider'
 import { Avatar } from '@/components/primitives/Avatar'
 import { LivePill } from '@/components/features/stream/LivePill'
 import { useStreamByRoom } from '@/hooks/useStream'
@@ -46,7 +45,6 @@ export function ExternalStreamScreen() {
   // (bar cams are usually landscape) until the first frame's dimensions arrive.
   const { isFullscreen, enter: enterFullscreen, exit: exitFullscreen } = useFullscreenVideo()
   const [videoIsLandscape, setVideoIsLandscape] = useState(true)
-  const [volume, setVolume] = useState(100)
   const [muted, setMuted] = useState(false)
   const recoveries = useRef(0)
   const recoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -104,11 +102,10 @@ export function ExternalStreamScreen() {
     }
   }, [player])
 
-  // Drive playback volume / mute from the viewer's fullscreen audio controls.
+  // Drive playback mute from the viewer's fullscreen control.
   useEffect(() => {
-    player.volume = muted ? 0 : volume / 100
     player.muted = muted
-  }, [player, muted, volume])
+  }, [player, muted])
 
   // Pause when the screen loses focus (tab switch / navigate away); resume on
   // return. Also drop out of fullscreen so we never leave a landscape lock behind.
@@ -215,25 +212,12 @@ export function ExternalStreamScreen() {
 
           <View style={styles.fsControlsBar}>
             <IconButton
-              name={muted || volume === 0 ? 'volume-x' : 'volume-2'}
+              name={muted ? 'volume-x' : 'volume-2'}
               variant="surface"
               size="lg"
               onPress={() => setMuted((m) => !m)}
               accessibilityLabel={muted ? 'Unmute' : 'Mute'}
             />
-            <View style={styles.fsSlider}>
-              <Slider
-                value={muted ? 0 : volume}
-                min={0}
-                max={100}
-                step={1}
-                onValueChange={(v) => {
-                  setVolume(v)
-                  if (v > 0 && muted) setMuted(false)
-                  if (v === 0) setMuted(true)
-                }}
-              />
-            </View>
           </View>
         </View>
       ) : null}
@@ -273,5 +257,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.md,
   },
-  fsSlider: { flex: 1 },
 })

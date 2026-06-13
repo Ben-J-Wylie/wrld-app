@@ -4,7 +4,17 @@ import { apiClient } from './client'
 // Each session is one go-live span; the time between sessions is a real-time gap
 // the editor collapses. URLs are short-lived tokenized (buffer is NOT on the
 // public /media path).
-export type BufferTrackKind = 'camera' | 'audio' | 'screen' | 'location' | 'gyro' | 'compass'
+export type BufferTrackKind =
+  | 'camera'
+  | 'audio'
+  | 'screen'
+  | 'location'
+  | 'gyro'
+  | 'compass'
+  | 'accel'
+  | 'speed'
+  | 'torch'
+  | 'chat'
 
 export type BufferSession = {
   id: string
@@ -37,6 +47,10 @@ export type BufferSession = {
     baseUrl: string
     token: string
   } | null
+  // Per-data-source tokenized `.jsonl` URL (C6): location/gyro/compass/accel/speed/
+  // torch/chat. The editor fetches the viewed data track for the session under the
+  // playhead and replays it through the design renderers. Absent for media-only sessions.
+  dataUrls?: Partial<Record<BufferTrackKind, string>>
 }
 
 // One codec-uniform run of the camera buffer: a contiguous group of sessions

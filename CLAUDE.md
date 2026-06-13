@@ -470,6 +470,9 @@ manifest:
   removes a track from disk, reclaims quota); reveal a record-only source.
 - **Identity** — Attributed / Anon. **Location** — `locDisplayPrecision`, only ever
   ≤ the captured ceiling. **Visibility** — public / anon / draft. **Tags.**
+  > ⚠️ **Superseded 2026-06-13** (see CONTENT.md §1.4): identity + location are now
+  > **fully reversible** (blur OR sharpen, either direction) — drop the ≤-ceiling
+  > clamp; capture stores exact coords + real identity.
 
 Most clip components shipped in 12.5 against mock data (ClipCard, ClipPreview,
 Timeline, LayerEditorRow, FeedRow/FeedThumb). Storage usage is already available:
@@ -732,6 +735,10 @@ Fallback when null: `'exact'` (not the user's current setting). Clips where
 the stream was `'off'` are excluded entirely — same rule as the live feed.
 Future: when `Clip.locDisplayPrecision` is added (C4 clip editor work), the
 globe uses `clip.locDisplayPrecision ?? stream.locationPrecision` instead.
+> ⚠️ **Superseded 2026-06-13** (see CONTENT.md §1.4 / §7 / §8): precision is **no
+> longer immutable** — replay/globe read the clip's **current** `locDisplayPrecision`
+> (creator can blur OR sharpen anytime); the platform retains exact coords so
+> sharpening is possible. `off` excludes from discovery only while set to `off`.
 
 **Seek offset** — computed server-side as
 `T_sec − (recording.startedAt_unix_sec + clip.startSec)`, where T is the
@@ -2912,7 +2919,7 @@ checklist for Aaron). Split:
 ## Updates — June 2026 (Fullscreen video viewer — landscape + audio controls)
 
 Viewers can take the live stream (and external/HLS bar cams) **fullscreen**, with
-landscape rotation for landscape video and in-app **mute + volume** controls. All
+landscape rotation for landscape video and an in-app **mute/unmute** control. All
 in Aaron's lane (`screens/` + `hooks/`); **no new dependency** (uses the already-
 installed `expo-screen-orientation` + react-native-webrtc's per-track volume API).
 
@@ -2953,15 +2960,15 @@ needed); the fullscreen hook re-locks `PORTRAIT_UP` on exit/unmount.
   `PORTRAIT_UP` on `exit()` and on unmount, so a screen can't leak a landscape lock.
 - **`useMediasoup`** — new `setRemoteAudioVolume(0..1)` driving the consumed remote
   audio track's `_setVolume()` (react-native-webrtc's per-track gain; **no system-
-  volume dep needed**). 0 = muted; unity by default (no behaviour change until the
-  viewer touches the controls).
+  volume dep needed**). Used as a mute toggle (0 = muted, 1 = unity); unmuted by
+  default (no behaviour change until the viewer mutes).
 - **`StreamScreen` (WebRTC live viewer)** — a `maximize` button in the viewer action
   cluster opens a full-bleed overlay (own `RTCView`/visualizer of the same stream)
-  with a `minimize` close button + a mute toggle + volume `Slider`. Enters landscape
+  with a `minimize` close button + a mute/unmute toggle. Enters landscape
   iff `videoIsLandscape` (already computed from the consumed track). Auto-exits
   fullscreen when the viewer leaves the room (stream end / tab blur / drop).
-- **`ExternalStreamScreen` (expo-video HLS)** — same overlay; volume/mute drive
-  `player.volume`/`player.muted`. Aspect is **detected per cam** from the loaded
+- **`ExternalStreamScreen` (expo-video HLS)** — same overlay (mute drives
+  `player.muted`). Aspect is **detected per cam** from the loaded
   track (`sourceLoad` / `videoTrackChange` → `VideoTrack.size`), defaulting to
   landscape until the first dimensions arrive; fullscreen rotates only for
   landscape cams. Exits fullscreen on unfocus.
@@ -3000,3 +3007,306 @@ known bugs remain** (Ben is still squashing; flagged below).
   reaping transition has a one-time GAP_W layout shift; playhead-clamp out of the reaped region is on
   the 10s tick. Seam discipline holds — these are Ben's `design` components/scaffold; Aaron owns the
   real buffer/manifest wiring (`screens`/`hooks`/`api`).
+
+---
+
+## Updates — June 2026 (Chat persists into the buffer — armed sources reach the recorder)
+
+Item 2 of `HANDOFF-aaron-2026-06-13.md` ("chat persistence → wire to the chat
+track"). The mediasoup buffer `.jsonl` chat sink + the durable `ChatMessage`
+moderation store both already shipped (2026-06-12); the missing seam was **app-side**
+— the recorder only records a data track for a kind in `room._meta.sources`, and the
+app sent `createRoom` only the **AV** set (`camera`/`audio`), so chat (and location,
+and any sensor) never recorded ("nothing writes to it yet").
+
+**Fix (`StreamScreen.tsx` `handleGoLive`):** a new **`recordedSourcesFromConfig(cfg)`**
+maps the armed `captureConfig` (the `air` keys cam→camera, audio→audio, loc→location,
+screen, gyro, compass + the `chat:'on'` flag) to the backend's canonical kind names,
+and `createRoom({ sources })` now sends that **full armed set** instead of `av`.
+`startBroadcasting(av)` + `useBroadcastStore.setLive(av)` stay **AV-only** (getUserMedia
++ the live source rail are unchanged). Capture ⊆ broadcast — the armed data sources are
+aired sources, so they belong in `Stream.sources`.
+
+**Consequences (surfaced, not surprises):**
+- **Chat now records** to the buffer `chat/<sessionId>/<chunkMs>.jsonl` track when
+  chat is armed → the saved-clip chat track (`SourceChatLog` + `progress`) becomes real
+  on save (the backend `promoteBufferClip` already promotes the `chat` data kind).
+- **Location now records** too (it's armed by default and already airs via
+  `locationUpdate`) — a natural down-payment on item 4 ("every source saves"). Gyro/
+  compass would also record once armed, but the app doesn't emit them yet (item 3), so
+  they'd just create empty track dirs — harmless.
+- **Backend:** `VALID_SOURCES` in `internal.ts` had to widen from `['camera','audio']`
+  to the full set or the `streamStarted` Zod enum would reject `chat`/`location` and
+  break go-live. Paired change (see `wrld-backend/CLAUDE.md`).
+- **Viewer source rail:** `Stream.sources` now carries the data kinds, so the viewer
+  rail's `availableKinds` filters to **AV** (`camera`/`audio`) — the switchable
+  chat/sensor source-views are the `SourceStage` telemetry work (item 3). No globe
+  card change (no feature iterates `Stream.sources` into badges).
+
+Pure JS, no native module — hot-reloads, no EAS rebuild. **Needs an on-device pass:**
+go live with chat armed → send chat → confirm `buffers/<userId>/chat/<sessionId>/…jsonl`
+fills, and a saved clip over that window carries the chat track. The mediasoup +
+backend halves are already deployed; this app change + the `VALID_SOURCES` widen are
+what light it up end-to-end.
+
+---
+
+## Updates — June 2026 (Sensor telemetry data path — visualizers light up)
+
+Item 3 of `HANDOFF-aaron-2026-06-13.md` / Part 2 of the source-visualizers handoff:
+the 7 sensor visualizers (shipped presentational on `design`) now react to real
+broadcaster sensor data. **Transport: Option A** (relay over the signaling WS, like
+`chatMessage`). **No new native module / no EAS rebuild** — `expo-sensors` is already
+in the dev client (`useDeviceOrientation` uses DeviceMotion in prod).
+
+**Decisions taken** (per the handoff's asks): Option A transport · `motion` derived
+**viewer-side** from `accel` (one sensor on the wire) · `temp` UI-present-but-data-
+absent (no reliable phone sensor) · `torch` is a control not a sensor (emitted on
+toggle, not in the capture loop — deferred).
+
+**Wire contract** (`src/lib/mediasoupSignaling.ts`): `TelemetryPayload` discriminated
+by `kind` (compass/gyro/accel/speed/torch, each with `ts`). Broadcaster →
+`{ type:'telemetry', payload }`; server fans out `{ type:'telemetryUpdate', payload }`.
+`sendTelemetry` added to the client + `useSignaling`.
+
+**Broadcaster capture** (`src/hooks/useTelemetryCapture.ts`): while live, reads the
+armed sensor sources and emits — compass via `expo-location` `watchHeadingAsync`,
+speed via `watchPositionAsync.coords.speed` (both already deps), gyro+accel via one
+`expo-sensors` `DeviceMotion` listener (~15 Hz). All guarded — a missing sensor just
+leaves that visualizer idle.
+
+**Viewer consume** (`src/hooks/useStreamTelemetry.ts`): subscribes to `telemetryUpdate`,
+keeps the latest sample per kind (drops stale `ts`), derives `motionIntensity` from
+accel. Single decode point.
+
+**StreamScreen render** — swapped the inline `cam ? RTCView : AudioVisualizer` switch
+at all three media surfaces (broadcaster monitor · viewer · fullscreen) for the
+**`SourceStage`** section (Ben's universal renderer), fed a `buildSource(kind, camSlot)`
+`SourceRender` from `tel`/`audioLevel`/the injected RTCView. `activeSource` widened
+`SourceType → FeedKind`; `availableKinds` now maps `Stream.sources` (which carries the
+armed sensor kinds since item 2) → FeedKind via `SOURCE_TO_FEEDKIND`. The viewer's rail
+shows the sensor sources and their visualizers animate from live data; the broadcaster's
+rail stays AV (self-monitoring sensors is separate — the broadcaster doesn't receive its
+own fan-out). `useTelemetryCapture(armedKinds, sendTelemetry, isLiveBroadcast)` wired.
+
+**Recording (C6 down-payment):** mediasoup also appends each telemetry sample to the
+buffer `.jsonl` track (when the kind is armed/recorded), so saved clips carry the
+telemetry track. Pairs with the backend `ts`/`t` data-sample fix (without which ALL
+data tracks — location, chat, telemetry — promoted empty; see `wrld-backend/CLAUDE.md`).
+
+**Scope notes:** `loc` (trail), `chat` (source-view), `profile` source-views are
+omitted from the rail for now — each needs its own data wiring (path accumulator /
+chat-log mapping / host identity), separate follow-ups. `torch` emission on toggle is
+TODO. Two DeviceMotion listeners (orientation + telemetry) coexist but share one
+`setUpdateInterval` — an on-device tweak if the rate fights.
+
+Pure JS — hot-reloads. **Needs an on-device pass:** broadcaster arms compass/gyro/
+accel/speed → a viewer switches to each source and sees it animate from real motion;
+confirm the saved-clip telemetry track fills.
+
+---
+
+## Updates — June 2026 (C6 — recorded data tracks play back in the clip editor)
+
+Finishes item 4. The design renderers were already wired in `ClipEditScreen` (fed
+`MOCK_*`); this feeds them **real recorded samples** at the playhead.
+
+- **`src/hooks/useDataTrack.ts`** — fetch + parse a data track's NDJSON (`.jsonl`)
+  into ts-sorted `DataSample[]` (the tokenized buffer `session.dataUrls[kind]` or a
+  saved clip's `track.dataUrl`). Re-fetches on url change (source/session switch).
+- **`src/lib/dataTrackRender.ts`** — pure mappers `samples → renderer inputs`:
+  `toGraphValues` (compass=heading/360 · gyro=tilt-magnitude · speed · accel),
+  `readingAt`, `toTrail`/`trailPositionAt` (location), `toChatLog` (chat).
+- **`ClipEditScreen`** — fetches the viewed data source's track for the session
+  under the playhead (`sessionAtPlayhead.dataUrls[view]`) and feeds
+  `SourceLocationTrail` / `SourceTelemetryGraph` (compass·gyro) / `SourceChatLog`
+  at `viewProgress`; falls back to the `MOCK_*` placeholders until samples land.
+- **`src/api/buffer.ts`** — `BufferTrackKind` widened (+accel/speed/torch/chat);
+  `BufferSession.dataUrls`.
+
+Backend half: a tokenized `GET /buffer/stream/:sessionId/:kind/data.jsonl` route +
+per-session `dataUrls` (see `wrld-backend/CLAUDE.md` "C6"). **Seam:** the renderers
+are Ben's (`features/`, untouched — props were already real-data-shaped); this is the
+data wiring (`hooks/`/`lib/`/`screens/`). Pure JS, no rebuild.
+
+**On-device pass:** arm gyro/compass/location/chat → scrub the editor to that footage
+→ switch the source rail → the visualizer animates from real motion (not the static
+mock). **Edge (follow-up):** a fully-saved clip whose buffer evicted reads its data
+from the clip API `track.dataUrl` (already exposed) rather than the buffer route.
+
+---
+
+## Updates — June 2026 (Content decision A — reversible location precision)
+
+Item 5 of `wrld-app/HANDOFF-aaron-2026-06-13.md` / CONTENT.md §1.4·§7·§8 (decided
+2026-06-13): location precision (and identity) are **reversible display-layer
+choices** — blur OR sharpen, any time — not an immutable go-live ceiling. Capture
+keeps full fidelity; replay/discovery read the clip's **current** choice.
+
+**What was actually shipped vs. the handoff's premise:** the handoff said "drop the
+≤-ceiling clamp" — but **there was no clamp in code.** The "immutable ceiling" was a
+*documented intent* never enforced: `PATCH /buffer/me/clips/:id` already sets
+`clipData.locDisplayPrecision = patch.locDisplayPrecision` with no bound (any of
+exact/city/country/off), and capture always stored exact coords (`Stream.lat/lng`;
+obfuscation is read-time only). So the rework is one real behaviour change:
+
+- **`GET /clips/discover`** now reads **`COALESCE(c."locDisplayPrecision",
+  s."locationPrecision", 'exact')`** for both the display coords and the `off`
+  exclusion (was `s."locationPrecision"`). The globe/time-machine now honour the
+  clip's *current* precision; `off` excludes only while currently off (re-enabling
+  brings it back). Live streams still use the stream's go-live precision (correct —
+  live has no clip yet). Doc comment in `docs/design/c4-clip-manifest-editing.md`
+  updated (was "≤ captured ceiling").
+
+**Not done — and NOT a "remove the bound" task (the handoff mis-scoped it):**
+- **A clip-editor UI to edit precision/identity.** The app `patchClip` API + the
+  `LocationGranularityPicker` are already unbounded, but no control in `ClipEditScreen`
+  drives `locDisplayPrecision`/`attributed` (only `visibility` is patched on save).
+  Exposing it is **net-new UI** (compose the picker + an identity toggle → `patchClip`).
+- **Identity on discover + buffer-clip discover (C4.5).** `clips/discover` joins
+  `Clip→Recording→Stream`, so it surfaces only recording-sourced clips (all purged) —
+  buffer-promoted clips aren't on the globe at all yet, and the query returns `host`
+  unconditionally (doesn't honour an anon clip's `attributed`/`visibility`). Surfacing
+  buffer clips with visibility + the clip's current precision/identity is the tracked
+  **C4.5** discover-completeness work — larger than item 5's reversibility rework.
+
+---
+
+## Updates — June 2026 (Decision A app prep + front-end handoff to Ben)
+
+Reversible location precision/identity (CONTENT.md §1.4/§7/§8) is implemented on the
+backend (capture keeps full fidelity, no ≤-ceiling ever existed, `clips/discover` reads
+the clip's *current* precision + honours anon identity — see `wrld-backend/CLAUDE.md`
+"Content decision A" + "C4.5"). App side:
+
+- **`ClipEditScreen.saveClip(name, privacy?)`** now accepts + persists
+  `{ locDisplayPrecision, attributed }` via `patchClip` (omitted = leave the clip's
+  current value — a new draft inherits the go-live precision server-side, so this never
+  clobbers). The data seam is ready; the **edit control is Ben's lane**.
+- **Front-end work still needed is collected in `HANDOFF-ben-frontend-2026-06-13.md`:**
+  (1) precision picker + Public/Anon identity segment in `SaveClipSheet` (decision A),
+  (2) a reusable Public/Anon `SegmentedToggle`, (3) a `DiscoveryHandoffCard` `kind:'clip'`
+  variant for the time-machine globe (Watch CTA + anonymous-host rendering — gated on the
+  app clip-pin consumer, still unbuilt). Everything else from items 1–5 (visualizers,
+  `SourceStage`, scissor/snip, C6 renderers) is already Ben's and shipped.
+
+---
+
+## Updates — June 2026 (Content decision B — the Report Centre / moderation hold)
+
+Item 6 of `HANDOFF-aaron-2026-06-13.md`, fully specified (Ben + decision, 2026-06-13).
+Canonical principle: **CONTENT.md §3** ("A third, platform-side hold — the Report
+Centre"). This is the **third pool** alongside the rolling buffer + saved-clip pool:
+reported content is copied to a platform-owned hold that survives the creator's
+deletion. Backend/mediasoup work; **the review/takedown UI is v0.3** — the
+copy-on-report retention is what's decided now.
+
+### Decided shape
+- **Reportable:** a **live stream** *or* a **public clip** (clips are public — time
+  machine + profiles). Both produce a Report Centre record.
+- **Copy unit:**
+  - **Live stream →** `[T − 60s, T + 30s]` around the report instant T —
+    retrospective-weighted (the infraction precedes the tap). Tail copied shortly
+    after T from the still-writing buffer (no race; buffer holds ≥24h). Head clamps
+    to session start if the session is < 60s old.
+  - **Clip →** the **whole clip** (already bounded — no window).
+- **All sources** copied (camera/audio/screen + location/chat/sensors) at **capture
+  fidelity** — reuses the `promoteBufferClip` copy-out mechanism, but into a
+  platform-owned pool (`moderation/<recordId>/` or similar), not the user's saved pool.
+- **Full fidelity / no hiding:** stamp the **real `hostId` + exact coords** on the
+  record regardless of the content's current `attributed` / `locDisplayPrecision`
+  (the platform always retained both — CONTENT.md §1.4). Reads *through* the
+  reversible display layer.
+- **Readership:** moderators only. Never tokenized to the creator; owner has no read
+  path.
+- **Retention/authority:** held until a moderator acts; **only moderators delete**.
+  No reaper, no TTL. **Must not cascade** — un-save / delete-clip / account-delete
+  cannot wipe it. Past the buffer window it's **outside the creator's quota**.
+
+### Concrete model (SETTLED 2026-06-13 — no FK into the deletable graph)
+
+The source is named by **denormalized scalar columns**, never a Prisma `@relation`,
+so no `onDelete` path can reach the evidence. The only cascade is internal (the
+record → its own held ranges). Decided shape (Aaron tunes names/types; the *no-FK*
+rule is fixed):
+
+```prisma
+model ReportEvidence {              // one row per reported piece of content
+  id          String   @id @default(cuid())
+  targetType  String                 // 'stream' | 'clip'
+  targetId    String                 // streamId or clipId — SCALAR, no @relation
+  hostUserId  String                 // real owner, captured — SCALAR, no @relation
+  hostHandle  String                 // captured at copy time (survives user deletion)
+  capturedLat Float                  // exact coords, through the display layer
+  capturedLng Float
+  storagePath String                 // platform-owned moderation dir (NOT the saved pool)
+  sizeBytes   BigInt   @default(0)
+  status      String   @default("held")   // 'held' | 'resolved' (moderator-set)
+  createdAt   DateTime @default(now())
+  ranges      ReportEvidenceRange[]  // internal children — cascade from here is fine
+  reports     Report[]               // the N reports that cite this content
+  @@index([targetType, targetId])    // accretion lookup: does a record already exist?
+}
+
+model ReportEvidenceRange {          // the held wall-clock spans (accreted, merged)
+  id         String @id @default(cuid())
+  evidenceId String
+  evidence   ReportEvidence @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+  startAtMs  BigInt
+  endAtMs    BigInt
+  ordinal    Int
+}
+```
+
+`Report` (Phase 5/22) gains a nullable `evidenceId String?` + relation with
+**`onDelete: SetNull`** (deleting a report never touches the evidence; many reports →
+one `ReportEvidence`). **No** column on `Clip`/`User`/`Stream` points *at*
+`ReportEvidence` — the reference is one-way and scalar. Accretion: on report, look up
+`(targetType, targetId)`; reuse the existing record if present, else create one; merge
+the new `[T−60s, T+30s]` window into `ranges` (overlap → extend; disjoint → new range);
+attach the `Report`.
+- **Many reports → one content record:** a second report on the same infraction
+  attaches to the **existing** record (no re-copy). Overlapping `[T−60s, T+30s]`
+  window → copy only the **additional head/tail** to extend the held span; disjoint
+  windows add another range to the same record. One content record, N reports.
+
+### Lane split (Aaron — `wrld-backend` + `wrld-mediasoup`)
+- Extends the existing report flow (Phase 5/22: `Report` row + the base64 `snapshotUrl`
+  reporter screenshot). Today there's **no copy of the actual footage** on report —
+  that's the gap this closes.
+- **Backend:** standalone `ReportEvidence` model (no cascade) + the copy-out job
+  (window resolve → `promoteBufferClip`-style copy into the moderation pool); attach
+  N `Report` rows; accretion/overlap-merge logic; quota exclusion. The **clip-report**
+  path copies the whole clip; the **live-report** path resolves `[T−60s, T+30s]` from
+  the buffer.
+- **mediasoup:** no new capture work — the buffer already holds the window; the copy
+  is backend-side out of the persistent buffer. (Confirm the tail grab for a live
+  report fires after `T + 30s`.)
+- **App (later, Ben's lane):** no v0.2 surface beyond the existing report buttons —
+  the moderator review UI is v0.3. The report-submit flow (`streamsApi.report` +
+  snapshot) is unchanged; a clip-report entry point on the clip/profile surfaces is
+  net-new front-end when we get there.
+
+---
+
+## Reporting & moderation initiative — app-side status (2026-06-13)
+
+> **The canonical status + resume checklist lives in `wrld-backend/CLAUDE.md`
+> "Reporting & moderation initiative — STATUS / where we left off".** This is the
+> app slice. The initiative is **partially built and not testable end-to-end** — a
+> report can be filed + the footage held, but there's no in-product review surface.
+
+- **Stream report submit — ✅** the ⚑ flag button in `StreamScreen` (Phase 5/22) →
+  `streamsApi.report` + the base64 snapshot upload. Unchanged.
+- **Clip report submit — ☐ no UI.** The backend route exists (`POST /clips/:id/report`,
+  built with the Report Centre), but there's **no ⚑ entry point on the clip viewer /
+  profile clip cards** — net-new front-end (Ben's lane; the stream ⚑ button is the
+  template).
+- **Moderation hold (Report Centre) — invisible by design.** On report, the backend
+  copies the footage to a platform hold; nothing surfaces in the app (correct — the
+  creator must never see it). So **there's nothing for Ben to test in-app** beyond the
+  report buttons themselves; the hold is verified backend-side (DB row +
+  `/opt/wrld-media/moderation/<id>/`), and the review loop needs the v0.3 moderator
+  tooling (admin read/serve routes + the `wrld-admin` UI), which isn't built.
+- **Next app work when the initiative resumes:** the clip-report ⚑ button. Everything
+  else (moderator review/takedown) is `wrld-admin` + backend, not `wrld-app`.

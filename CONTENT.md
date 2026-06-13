@@ -36,11 +36,19 @@
 3. **Editing is non-destructive.** A clip is a *manifest* over footage, never a
    re-encode. The only destructive act a user can take is **permanent delete**
    (which reclaims quota). Everything else — trim, reorder, source on/off,
-   visibility — is reversible metadata.
-4. **The user owns the privacy ceiling at capture time.** Location precision,
-   identity (attributed/anon), and which sources air are chosen per go-live and
-   are immutable for that recording. Edits can only ever *narrow* below the
-   captured ceiling, never widen past it.
+   visibility — is reversible metadata. Delete is real (off disk) **except**
+   reported content, a copy of which the platform holds in the **Report Centre**
+   for moderation beyond the user's reach (§3).
+4. **Privacy is the creator's, and reversible.** Location precision and identity
+   (attributed/anon) are **display-layer choices the creator can change in either
+   direction, any time** — blur *or* sharpen, live or on a saved clip. Capture
+   retains **full fidelity** (exact coords + real identity; the owner is known
+   server-side), so sharpening later is always possible; replay and discovery read
+   the clip's **current** choice, never a value frozen at capture. *(Decided
+   2026-06-13 — supersedes the earlier "immutable ceiling, narrow-only" model; the
+   shipped immutable-precision behaviour is the rework.)* The captured **set of
+   sources** is a historical fact (you can't capture a source retroactively), but a
+   clip may disable any of them (§5).
 5. **Storage is honest and bounded.** Two pools, explicit caps per tier, visible
    usage. The system never quietly grows without bound, and it never silently
    drops content a user chose to keep.
@@ -131,6 +139,52 @@ Content lives in exactly one of two stores, with opposite lifecycles:
 **Per-tier caps** (capture is pinned to the tier — "cap produce", no server
 transcode): Free 24h / 720p · Plus 72h / 1080p · Pro 7d / 1440p. Byte backstops
 are sized worst-case-plus-cushion.
+
+**A third, platform-side hold — the Report Centre.** When content is
+**reported**, the platform copies it to a **separate moderation hold** (the
+*Report Centre*) — not one of the user's two pools. The decided shape (2026-06-13):
+
+- **What can be reported.** A **live stream** or a **public clip** (clips are
+  public — they appear in the time machine and on profiles). Both produce a
+  Report Centre record.
+- **What gets copied.**
+  - **Live stream →** a fixed window around the report instant T: **`[T − 60s,
+    T + 30s]`**, retrospective-weighted because the infraction precedes the tap.
+    The tail is grabbed shortly after T out of the still-writing buffer (no race —
+    the buffer holds ≥24h, so the last minute is always still on disk). Clamp the
+    head to session start if the session is younger than 60s.
+  - **Clip →** the **whole clip** (it's already a bounded object — no window).
+  - **All available sources** are copied (camera/audio/screen + location/chat/
+    sensors), at **capture fidelity** — never the display layer.
+- **Full fidelity; no hiding.** An offender cannot hide behind anon or private:
+  the record stamps the **real `hostId` and the exact coordinates**, regardless
+  of the content's current `attributed` / `locDisplayPrecision`. The platform
+  always retained both (§1.4); the Report Centre reads *through* the reversible
+  display choice.
+- **Readership.** **Moderators only.** Never the public, never the owner — the
+  pool is never tokenized to the creator and the owner has no read path to it.
+- **Retention & authority.** Held **until a moderator acts**; **only moderators
+  delete.** No reaper, no TTL, and no creator action reaches it — un-save,
+  delete-clip, and account deletion must **not** cascade into it. It is a
+  **standalone record that *names* the source by denormalized scalar value**
+  (`targetType` + `targetId`, the captured `hostUserId` / `hostHandle` / exact
+  coords) — **never a foreign-key relation** into the deletable
+  `Clip`/`User`/`Stream` graph, so no `onDelete` path can ever reach it. The held
+  bytes likewise live in a **platform-owned directory**, separate from the user's
+  saved pool, so deleting the source's files can't remove the evidence copy. (Only
+  the record's own internal children — its held ranges — cascade *from* it.) Past
+  the rolling-buffer window it **does not count toward the creator's quota** (it's
+  the platform's storage, not the user's). The concrete model is pinned in
+  `wrld-backend/CLAUDE.md` + the handoff.
+- **Many reports, one piece of content.** Reports accrete onto the content, not
+  the other way round: a second report on the same infraction attaches to the
+  **existing** Report Centre record rather than re-copying. If its `[T − 60s,
+  T + 30s]` window **overlaps** what's already held, only the **additional head
+  and tail** are copied to extend the span; disjoint windows add another range to
+  the same record. One content record, N reports stored with it.
+
+*(The review/takedown UI is v0.3; the copy-on-report retention + accretion is the
+decided principle now.)*
 
 ---
 
@@ -248,9 +302,11 @@ nuances, not styling — styling lives in DESIGN.md.
 - **The consent step is the relaxable half.** Currently parked for friends-and-
   family; the `RecordConsentSheet` and sensitive/benign badges are shipped and
   re-enabled before any wider exposure.
-- **Precision is per-stream, set at go-live** (exact / city / country / off),
-  immutable for that recording; the globe renders the broadcaster's *captured*
-  choice, not their current account setting. `off` never reaches a client.
+- **Precision is per-stream and reversible** (exact / city / country / off): set at
+  go-live but **editable in either direction afterward** on the clip; the globe and
+  replay render the clip's **current** choice. Capture keeps the exact coordinate so
+  it can be sharpened later. `off` never reaches a client while it is set to `off`.
+  *(Reversibility decided 2026-06-13 — see §1.4.)*
 - **Anonymous is truly anonymous.** No device IDs, no local UUIDs, no backend
   row for a viewer. Identity actions (go live, chat, react, follow, save) are
   what require an account.
@@ -265,10 +321,10 @@ nuances, not styling — styling lives in DESIGN.md.
 - **Forward-only data.** Audience geo, activity heatmaps, analytics — all accrue
   from new activity; nothing is backfilled. The honest story beats a fabricated
   history.
-- **The globe encodes the privacy ceiling visually.** Location precision renders
+- **The globe encodes the privacy choice visually.** Location precision renders
   as a sharp pin (exact), a soft halo (city), or a diffuse haze (country),
-  centred on the *obfuscated* coordinate — the representation itself respects the
-  captured precision. Subscription status reads by colour; the broadcaster's own
+  centred on the *obfuscated* coordinate — the representation respects the clip's
+  **current** precision (reversible, §7). Subscription status reads by colour; the broadcaster's own
   live stream is a black self-pin (excluded from the join drawer; tapping returns
   to the broadcast); pin counts are clusters-only and exclude your own stream.
 - **One pin type for live + past.** A unified `DiscoveryPin` (`stream | clip`) so
@@ -327,8 +383,10 @@ regresses, the app's content surfaces degrade or lie.
 ### Shared contracts
 
 - `SourceType` / `FeedKind` is the seven-source (+ chat) union.
-- Location precision is **immutable at capture** and travels with the
-  stream/clip, not the user.
+- Location precision (and identity) **travel with the clip and are reversible** —
+  the clip's *current* value, not the user's account setting, editable in either
+  direction. Backend stores full fidelity (exact coords + real identity) so a clip
+  can be sharpened; the manifest carries the display choice.
 - The `DiscoveryPin` discriminated union + the seek-offset math are the live↔past
   contract.
 
@@ -351,5 +409,7 @@ DESIGN.md + CONTENT.md §6 (representation). Aaron owns `screens/`, `hooks/`,
 - Backend detail: `wrld-backend/CLAUDE.md` (C-series + R-series) and
   `wrld-backend/docs/`.
 - Recorder detail: `wrld-mediasoup/CLAUDE.md`.
-- Live handoffs: `HANDOFF-c4-clip-editor-*.md`,
-  `HANDOFF-clips-saved-persistence-*.md`, `HANDOFF-source-visualizers-*.md`.
+- Live handoffs: `HANDOFF-aaron-2026-06-13.md` (cross-initiative todo, status-tracked),
+  `HANDOFF-ben-frontend-2026-06-13.md` (front-end components still needed),
+  `HANDOFF-c4-clip-editor-*.md`, `HANDOFF-clips-saved-persistence-*.md`,
+  `HANDOFF-source-visualizers-*.md`.

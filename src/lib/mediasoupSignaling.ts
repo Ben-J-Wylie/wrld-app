@@ -1,5 +1,16 @@
 import { Platform } from 'react-native'
 
+// Sensor telemetry payload — one discriminated union carries every kind over the
+// signaling WS (Option A). `ts` is broadcaster wall-clock ms (viewer drops stale
+// samples; the recorder timestamps the .jsonl track). Flat + tiny. `motion` is
+// derived viewer-side from `accel`; `temp` has no phone sensor (UI-present only).
+export type TelemetryPayload =
+  | { kind: 'compass'; ts: number; heading: number; accuracy?: number }
+  | { kind: 'gyro'; ts: number; pitch: number; roll: number; yaw?: number }
+  | { kind: 'accel'; ts: number; x: number; y: number; z: number }
+  | { kind: 'speed'; ts: number; mps: number; accuracy?: number }
+  | { kind: 'torch'; ts: number; on: boolean; level?: number }
+
 export type ClientMessage =
   | { type: 'identify'; deviceId: string }
   | { type: 'authenticate'; token: string }
@@ -17,6 +28,7 @@ export type ClientMessage =
   | { type: 'broadcasterOrientation'; orientation: 'portrait' | 'landscape'; rotationDeg?: number; hold?: string; platform?: 'ios' | 'android' }
   | { type: 'cameraFacing'; facing: 'user' | 'environment' }
   | { type: 'locationUpdate'; lat: number; lng: number }
+  | { type: 'telemetry'; payload: TelemetryPayload }
   | { type: 'tip'; amount: number }
   | { type: 'gift'; giftType: string }
 
@@ -41,6 +53,7 @@ export type ServerMessage =
   | { type: 'broadcasterResumed' }
   | { type: 'viewerCountUpdated'; viewerCount: number }
   | { type: 'chatMessage'; from: string; text: string; ts: number }
+  | { type: 'telemetryUpdate'; payload: TelemetryPayload }
   | { type: 'reaction'; from: string; kind: string; ts: number }
   | { type: 'tipReceived'; handle: string; amount: number }
   | { type: 'tipConfirmed'; newBalance: number }
@@ -251,6 +264,12 @@ class MediasoupSignalingClient {
 
   sendLocationUpdate(lat: number, lng: number): void {
     this.trySend({ type: 'locationUpdate', lat, lng })
+  }
+
+  // Fire-and-forget sensor sample (broadcaster). trySend silently no-ops when the
+  // socket isn't open — telemetry is lossy by nature (the next sample supersedes).
+  sendTelemetry(payload: TelemetryPayload): void {
+    this.trySend({ type: 'telemetry', payload })
   }
 
   sendTip(amount: number): void {

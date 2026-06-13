@@ -52,6 +52,8 @@ import { SourceChatLog } from '@/components/features/clip/SourceChatLog'
 import { useAuth } from '@clerk/clerk-expo'
 import { useVideoPlayer, VideoView } from 'expo-video'
 import { useBuffer } from '@/hooks/useBuffer'
+import { useDataTrack } from '@/hooks/useDataTrack'
+import { toGraphValues, readingAt, toTrail, trailPositionAt, toChatLog } from '@/lib/dataTrackRender'
 import { useSavedClips } from '@/hooks/useSavedClips'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
 import { useBroadcastStore } from '@/stores/broadcastStore'
@@ -695,6 +697,17 @@ export const ClipEditScreen = () => {
         1,
       )
     : 0.5
+  // C6 — the viewed data source's `.jsonl`, replayed through the design renderers at
+  // `viewProgress`. Fetch the data track for the session under the playhead; falls
+  // back to the MOCK placeholders below until real samples land. (cam/audio/identity
+  // have no data track → undefined → no fetch.)
+  const currentDataUrl =
+    view === 'location' || view === 'compass' || view === 'gyro' || view === 'chat'
+      ? sessionAtPlayhead?.dataUrls?.[view as BufferTrackKind]
+      : undefined
+  const dataSamples = useDataTrack(currentDataUrl)
+  const dataTrail = useMemo(() => toTrail(dataSamples), [dataSamples])
+
   const identityMeta: { label: string; value: string }[] = []
   if (sessionAtPlayhead) identityMeta.push({ label: 'Captured', value: fmtClipStamp(sessionStartMs(sessionAtPlayhead)) })
   const capturedLabels = RAIL_ORDER.filter((k) => capturedKinds.has(k as BufferTrackKind)).map((k) => VIEW_META[k]!.label)
@@ -1564,7 +1577,17 @@ export const ClipEditScreen = () => {
   const canFrameForward = playheadMs < Date.now() - 1
   useEffect(() => () => stopReverse(), [])
 
-  async function saveClip(clipName: string) {
+  // `privacy` carries the clip's REVERSIBLE display choices (decision A): location
+  // precision + identity (attributed/anon). Both are blur-or-sharpen, any time —
+  // the backend stores full fidelity and has no ≤-ceiling. SEAM: the controls live
+  // in `SaveClipSheet` (Ben's feature) + an in-place edit on a focused saved clip;
+  // when that surface emits them, pass them here (and call `editClipPrivacy` for an
+  // already-saved clip). Omitted fields are left to the clip's current value (a new
+  // draft inherits the go-live precision server-side), so this never clobbers.
+  async function saveClip(
+    clipName: string,
+    privacy?: { locDisplayPrecision?: 'exact' | 'city' | 'country' | 'off'; attributed?: boolean },
+  ) {
     if (!bracket) return
     const { inMs, outMs } = bracket
     const durationSec = Math.max(1, Math.round((outMs - inMs) / 1000))
@@ -1600,6 +1623,9 @@ export const ClipEditScreen = () => {
         ...(sid ? { ranges: [{ bufferSessionId: sid, startAtMs: Math.round(inMs), endAtMs: Math.round(outMs) }] } : {}),
         sources: sourcesFromLanes(clipLanes),
         title: name,
+        // Reversible privacy (decision A) — only sent when the sheet provides them.
+        ...(privacy?.locDisplayPrecision !== undefined ? { locDisplayPrecision: privacy.locDisplayPrecision } : {}),
+        ...(privacy?.attributed !== undefined ? { attributed: privacy.attributed } : {}),
       })
       if (!editingSavedId) await bufferApi.saveDraft(id) // an already-saved clip is already materialised
       clipId = id
@@ -1799,24 +1825,24 @@ export const ClipEditScreen = () => {
                   ) : view === 'audio' ? (
                     <SourceWaveform peaks={MOCK_PEAKS} progress={viewProgress} />
                   ) : view === 'location' ? (
-                    <SourceLocationTrail
-                      path={MOCK_TRAIL}
-                      position={MOCK_TRAIL[Math.round((MOCK_TRAIL.length - 1) * viewProgress)]}
-                    />
+                    (() => {
+                      const path = dataTrail.length ? dataTrail : MOCK_TRAIL
+                      return <SourceLocationTrail path={path} position={trailPositionAt(path, viewProgress)} />
+                    })()
                   ) : view === 'compass' ? (
                     <SourceTelemetryGraph
-                      values={MOCK_COMPASS}
+                      values={dataSamples.length ? toGraphValues(dataSamples, 'compass') : MOCK_COMPASS}
                       progress={viewProgress}
                       label="COMPASS"
-                      reading={`${Math.round(viewProgress * 359)}°`}
+                      reading={dataSamples.length ? readingAt(dataSamples, 'compass', viewProgress) : `${Math.round(viewProgress * 359)}°`}
                       iconName="compass"
                     />
                   ) : view === 'gyro' ? (
                     <SourceTelemetryGraph
-                      values={MOCK_GYRO}
+                      values={dataSamples.length ? toGraphValues(dataSamples, 'gyro') : MOCK_GYRO}
                       progress={viewProgress}
                       label="GYRO"
-                      reading="±1.2 rad/s"
+                      reading={dataSamples.length ? readingAt(dataSamples, 'gyro', viewProgress) : '±1.2 rad/s'}
                       iconName="navigation"
                     />
                   ) : view === 'identity' ? (
@@ -1828,8 +1854,9 @@ export const ClipEditScreen = () => {
                       meta={identityMeta}
                     />
                   ) : view === 'chat' ? (
-                    // Placeholder transcript until the buffer exposes a real chat track.
-                    <SourceChatLog messages={[]} progress={viewProgress} />
+                    // Real recorded chat track (C6); SourceChatLog shows its own
+                    // placeholder transcript until the first messages land.
+                    <SourceChatLog messages={toChatLog(dataSamples)} progress={viewProgress} />
                   ) : undefined
                 }
                 reachLabel={focused ? focusClip!.name : `Buffer · ${buffer?.windowHours ?? 72}h`}
@@ -1929,6 +1956,11 @@ export const ClipEditScreen = () => {
         </View>
       )}
 
+      {/* Decision A (reversible precision/identity): when SaveClipSheet surfaces the
+          precision picker + identity toggle and emits them via onSave, forward them —
+          `onSave={(name, privacy) => saveClip(name, privacy)}`. saveClip already
+          accepts + persists `{ locDisplayPrecision, attributed }`; the backend is
+          unbounded (blur OR sharpen). Sheet UI is Ben's lane; this wiring is ready. */}
       <SaveClipSheet
         visible={saveSheetOpen}
         durationLabel={bracket ? `${fmtDur((bracket.outMs - bracket.inMs) / 1000)} clip` : undefined}

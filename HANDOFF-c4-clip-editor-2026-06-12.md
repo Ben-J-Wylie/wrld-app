@@ -29,13 +29,22 @@ real endpoints below. Pure JS/TS — no native rebuild. As wired:
 **Verified:** `c4smoke.mjs` 24/24 + `tsc` clean. **Owes only an on-device pass** (draft block
 renders dashed, carve looks right, reopen-continues-same-draft persists across reload).
 
-### ⏳ The one remaining app↔backend gap — `removedByLane` (per-lane mid-clip deletes)
-The editor can mark a **mid-clip removed range on a single source lane** (e.g. drop 4–7s of
-*audio only* while camera plays through). That's still **mock-only in the app** — it has no
-manifest backing. To make it real I need the `PATCH` `ranges`/`sources` model to express
-**per-source** removed ranges (today `ranges` is whole-clip + `sources` is whole-clip on/off;
-there's no "this source is absent for this sub-window" shape). If that's out of scope for C4,
-say so and I'll keep it mock / drop the affordance. Everything else round-trips for real.
+### ✅ RESOLVED 2026-06-13 (Aaron) — `removedByLane` now has real manifest backing
+Per-source removed ranges are implemented end-to-end (decided IN scope). New
+`ClipTrack.removedRanges` (absolute-ms `{startAtMs,endAtMs}` intervals per source);
+the materialiser subtracts them per track (one source carries a mid-clip gap the
+others don't). **Ben — wire it:**
+- **`PATCH /buffer/me/clips/:id`** gains **`removedRanges: { [kind]: [{ startAtMs, endAtMs }] }`**
+  (the authoritative full per-kind list, same as `ranges`). On a **draft** it's a cheap
+  write (the dynamic draft HLS shows the gap on the served source); on a **saved** clip it
+  re-materialises the affected tracks (`409` only if the buffer footage has fully evicted).
+- **`GET /buffer/me/clips`** now returns **`removedRanges: { [kind]: [...] }`** per clip —
+  seed the editor's `removedByLane` state from it on load (`[]` = source spans the whole clip).
+- **Draft → save** carries the draft's per-lane removals into the baked footage automatically
+  (no extra call). Data sources (`.jsonl`) honour removals too.
+
+Backend: `wrld-backend/CLAUDE.md` "C4.4 per-source removed ranges — removedByLane".
+Everything else in C4 round-trips for real; this was the last gap.
 
 ---
 

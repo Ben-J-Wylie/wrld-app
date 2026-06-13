@@ -24,19 +24,29 @@ keeps both pieces in their current lane; dragging is the only thing that moves a
   Optimistic via a hole punched in the parent's carve claim; reverts on failure.
 - **Bandaid** removes a `splitPoint` (rejoin) — only offered when both pieces are still **same-lane**.
 
-**Aaron — next steps the snip work needs:**
-1. **Confirm `PATCH ranges` covers the un-save-a-piece cases** (this is the load-bearing call):
-   - trim one end (single kept range),
-   - **un-save a middle piece → TWO kept ranges with a gap** (a gapped/discontinuous manifest),
-   - **trim-after-evict** — re-cut from the clip's own copy when the buffer footage is gone
-     (the C4 handoff says PATCH supports this; the app now depends on it for saved-piece un-save).
-   The app sends `ranges: [{ bufferSessionId, startAtMs, endAtMs }]` (the authoritative full list).
-   Multi-session clips: confirm the right `bufferSessionId` is preserved per kept range.
-2. **Persist snips (decide the model).** Split points are **local — they reset on reload** (only a
-   *saved* piece survives, because it's a real `Clip`; the buffer remainder re-derives). Options:
-   keep snips ephemeral (materialise only on save — current behaviour), **or** persist each piece as
-   a **draft `Clip`** so a cut survives reload. This is the same open "buffer snips durable?" question
-   as the draft-manifest item below — pick one model for buffer-side cuts.
+**Aaron — next steps the snip work needs:**  ✅ **DONE 2026-06-13 (Aaron) — see backend
+`wrld-backend/CLAUDE.md` "C4.4.1 gapped recut + snip persistence".**
+1. ✅ **`PATCH ranges` now covers all four un-save-a-piece cases.** Trim-one-end, un-save-a-
+   middle-piece → gapped manifest (same- and multi-session), and trim-after-evict already
+   worked. The **one gap** — un-save a middle piece *after the buffer evicted* (gapped + recut
+   from the clip's own copy) — was a `409` and is **now implemented** (`recutSavedClip` takes
+   multiple windows; cut-each + concat-copy). This matters because saved clips are permanent,
+   so editing one after the buffer rolls off is the common case. Per-range `bufferSessionId` is
+   preserved for multi-session clips. (Source-ADD-after-evict and ranges crossing the clip's own
+   gap stay `409` by design.) The app keeps sending `ranges: [{ bufferSessionId, startAtMs, endAtMs }]`
+   (full list), `DELETE` when nothing's kept — no app change needed.
+2. ✅ **Snips now persist (decided WITH Aaron: snips survive reload).** Chosen model: a snip stays
+   **pure display metadata** (no footage/ranges touched; only a drag materialises) but is stored as
+   an **opaque, app-owned `splitPoints` array** on the row that already backs each grid clip — NOT
+   as draft `Clip`s (which would carve the buffer + churn rows). **Ben — wire this:**
+   - **Buffer-lane block** (a `BufferSession`): on snip/bandaid → `PATCH /buffer/me/sessions/:id/splits`
+     with `{ splitPoints }` (the authoritative full list; bandaid sends the reduced array or `[]`).
+   - **Saved-lane block** (a `Clip`): on snip/bandaid → existing `PATCH /buffer/me/clips/:id` with
+     `splitPoints` (cheap metadata write, never re-materialises).
+   - **On load:** seed local split state from the new **`splitPoints`** field now returned on each
+     session in `GET /buffer/me` and each `SavedClip` in `GET /buffer/me/clips` (`[]` = never snipped).
+   - The backend round-trips the array verbatim (you own the `{ sessionId, atMs }` shape); it only
+     validates it's an array (≤64) of objects with a numeric `atMs`. Drags unchanged.
 3. Everything else (R3 promote, R2 storage, C4 manifest editing, C6 telemetry) is unchanged below.
 
 **Pure-app, no backend** (FYI, already on `main`): the scissor/bandaid button, the transport 1/2/6/7
