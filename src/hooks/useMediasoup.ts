@@ -322,6 +322,17 @@ export function useMediasoup() {
     }
   }, [])
 
+  // Set the playback volume of the consumed remote audio (viewer side).
+  // react-native-webrtc exposes a per-track `_setVolume(gain)` where 1.0 is
+  // unity; we drive it from a 0..1 UI value (0 = muted). No-op if there's no
+  // remote audio track yet.
+  const setRemoteAudioVolume = useCallback((volume: number) => {
+    const track = (remoteStream as unknown as {
+      getAudioTracks?: () => Array<{ _setVolume?: (v: number) => void }>
+    } | null)?.getAudioTracks?.()[0]
+    track?._setVolume?.(Math.max(0, Math.min(1, volume)))
+  }, [remoteStream])
+
   const cleanup = useCallback(() => {
     if (audioLevelTimer.current) {
       clearInterval(audioLevelTimer.current)
@@ -344,5 +355,5 @@ export function useMediasoup() {
     setVideoIsLandscape(false)
   }, [])
 
-  return { localStream, remoteStream, audioLevel, error, facingMode, videoIsLandscape, startPreview, startBroadcasting, startViewing, switchCamera, cleanup }
+  return { localStream, remoteStream, audioLevel, error, facingMode, videoIsLandscape, setRemoteAudioVolume, startPreview, startBroadcasting, startViewing, switchCamera, cleanup }
 }

@@ -2906,3 +2906,68 @@ checklist for Aaron). Split:
   (`{ kind:'chat', messages }` → `SourceStage`, shape `{ handle, text }`), and the clip chat track
   (C6, `SourceChatLog` + `progress`). Persisting chat is what makes the clip chat track real — no
   new chat viewer needed. See the "⚡ Chat is already a source" callout in the handoff.
+
+---
+
+## Updates — June 2026 (Fullscreen video viewer — landscape + audio controls)
+
+Viewers can take the live stream (and external/HLS bar cams) **fullscreen**, with
+landscape rotation for landscape video and in-app **mute + volume** controls. All
+in Aaron's lane (`screens/` + `hooks/`); **no new dependency** (uses the already-
+installed `expo-screen-orientation` + react-native-webrtc's per-track volume API).
+
+### No EAS rebuild needed (no native change)
+
+`app.json` stays `"orientation": "portrait"` and there are **no new native
+modules** — so this is pure-JS / hot-reloadable. `expo-screen-orientation` has
+been compiled into the dev client since May 2026 (the view-shot rebuild), and its
+runtime `lockAsync` overrides the *static* config on **both** platforms:
+- **Android** — `lockAsync` calls `setRequestedOrientation` at runtime, overriding
+  the manifest's `android:screenOrientation`.
+- **iOS** — the module auto-registers an Expo AppDelegate subscriber
+  (`ScreenOrientationAppDelegate`) implementing
+  `application(_:supportedInterfaceOrientationsFor:)`, which iOS uses **instead of**
+  Info.plist's `UISupportedInterfaceOrientations`. So `lockAsync(LANDSCAPE)` rotates
+  even though Info.plist is portrait-only. (It defers to react-native-screens only
+  when a screen explicitly sets a `screenOrientation` trait — expo-router screens
+  don't, so the registry mask wins.)
+
+The app's portrait baseline comes from the unchanged `app.json` (no startup lock
+needed); the fullscreen hook re-locks `PORTRAIT_UP` on exit/unmount.
+
+> An earlier draft flipped `app.json` to `"default"` + added a global startup lock
+> and claimed a rebuild was required — both reverted as unnecessary once the
+> AppDelegate-override path was confirmed. **Fallback only if device testing shows
+> iOS not rotating** (e.g. an unforeseen RNScreens interaction): flip `app.json` to
+> `"default"` (Info.plist permits landscape) + add the global `PORTRAIT_UP` startup
+> lock back — *that* path would need one `eas build --profile development
+> --platform all`.
+
+### What was built
+
+- **`src/hooks/useFullscreenVideo.ts`** (new) — `enter(landscape)` / `exit()` +
+  `isFullscreen`. `enter(true)` → `lockAsync(LANDSCAPE)` (allows **both** landscape-
+  left and landscape-right; the OS keeps the picture upright either way — satisfies
+  "upright whichever way they turn"). `enter(false)` → portrait fullscreen (just
+  drops the chrome). Hides the status bar while fullscreen; always re-locks
+  `PORTRAIT_UP` on `exit()` and on unmount, so a screen can't leak a landscape lock.
+- **`useMediasoup`** — new `setRemoteAudioVolume(0..1)` driving the consumed remote
+  audio track's `_setVolume()` (react-native-webrtc's per-track gain; **no system-
+  volume dep needed**). 0 = muted; unity by default (no behaviour change until the
+  viewer touches the controls).
+- **`StreamScreen` (WebRTC live viewer)** — a `maximize` button in the viewer action
+  cluster opens a full-bleed overlay (own `RTCView`/visualizer of the same stream)
+  with a `minimize` close button + a mute toggle + volume `Slider`. Enters landscape
+  iff `videoIsLandscape` (already computed from the consumed track). Auto-exits
+  fullscreen when the viewer leaves the room (stream end / tab blur / drop).
+- **`ExternalStreamScreen` (expo-video HLS)** — same overlay; volume/mute drive
+  `player.volume`/`player.muted`. Aspect is **detected per cam** from the loaded
+  track (`sourceLoad` / `videoTrackChange` → `VideoTrack.size`), defaulting to
+  landscape until the first dimensions arrive; fullscreen rotates only for
+  landscape cams. Exits fullscreen on unfocus.
+
+### Not yet tested on device
+
+Needs an on-device pass after the rebuild: iOS landscape rotation + upright-both-ways,
+the portrait-everywhere-else lock holding across navigation, volume/mute on the live
+WebRTC track, and the overlay layout (close button clear of the notch in landscape).

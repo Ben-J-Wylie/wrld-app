@@ -17,9 +17,12 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { useVideoPlayer, VideoView } from 'expo-video'
 import { Text } from '@/components/primitives/Text'
 import { Icon } from '@/components/primitives/Icon'
+import { IconButton } from '@/components/primitives/IconButton'
+import { Slider } from '@/components/primitives/Slider'
 import { Avatar } from '@/components/primitives/Avatar'
 import { LivePill } from '@/components/features/stream/LivePill'
 import { useStreamByRoom } from '@/hooks/useStream'
+import { useFullscreenVideo } from '@/hooks/useFullscreenVideo'
 import { theme } from '@/tokens/theme'
 
 // AVPlayer/ExoPlayer can briefly error on a live playlist at the segment edge or
@@ -38,6 +41,13 @@ export function ExternalStreamScreen() {
   const { data: stream } = useStreamByRoom(roomId)
 
   const [phase, setPhase] = useState<'loading' | 'playing' | 'error'>('loading')
+  // Fullscreen + audio controls. `videoIsLandscape` is detected from the loaded
+  // track (below) so fullscreen rotates only for landscape cams; default true
+  // (bar cams are usually landscape) until the first frame's dimensions arrive.
+  const { isFullscreen, enter: enterFullscreen, exit: exitFullscreen } = useFullscreenVideo()
+  const [videoIsLandscape, setVideoIsLandscape] = useState(true)
+  const [volume, setVolume] = useState(100)
+  const [muted, setMuted] = useState(false)
   const recoveries = useRef(0)
   const recoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -76,12 +86,40 @@ export function ExternalStreamScreen() {
     }
   }, [player, liveUrl])
 
-  // Pause when the screen loses focus (tab switch / navigate away); resume on return.
+  // Detect the cam's aspect from the loaded video track so fullscreen rotates
+  // to landscape only when the video actually is landscape. `sourceLoad` fires
+  // when the HLS source finishes loading; `videoTrackChange` covers a mid-stream
+  // variant switch (a landscape/portrait flip is unlikely but cheap to track).
+  useEffect(() => {
+    function fromSize(size?: { width: number; height: number } | null) {
+      if (size && size.width > 0 && size.height > 0) setVideoIsLandscape(size.width >= size.height)
+    }
+    const load = player.addListener('sourceLoad', ({ availableVideoTracks }) =>
+      fromSize(availableVideoTracks?.[0]?.size),
+    )
+    const change = player.addListener('videoTrackChange', ({ videoTrack }) => fromSize(videoTrack?.size))
+    return () => {
+      load.remove()
+      change.remove()
+    }
+  }, [player])
+
+  // Drive playback volume / mute from the viewer's fullscreen audio controls.
+  useEffect(() => {
+    player.volume = muted ? 0 : volume / 100
+    player.muted = muted
+  }, [player, muted, volume])
+
+  // Pause when the screen loses focus (tab switch / navigate away); resume on
+  // return. Also drop out of fullscreen so we never leave a landscape lock behind.
   useFocusEffect(
     useCallback(() => {
       player.play()
-      return () => player.pause()
-    }, [player]),
+      return () => {
+        player.pause()
+        exitFullscreen()
+      }
+    }, [player, exitFullscreen]),
   )
 
   function back() {
@@ -143,8 +181,64 @@ export function ExternalStreamScreen() {
               </View>
             </View>
           ) : null}
+          {liveUrl && phase === 'playing' ? (
+            <IconButton
+              name="maximize"
+              variant="surface"
+              size="md"
+              onPress={() => enterFullscreen(videoIsLandscape)}
+              accessibilityLabel="Fullscreen"
+            />
+          ) : null}
         </View>
       </SafeAreaView>
+
+      {/* Fullscreen viewer — edge-to-edge over the chrome, with a close button +
+          audio controls. Rotates to landscape only for landscape cams (detected
+          from the track). Shares the same player as the inline VideoView above. */}
+      {isFullscreen && liveUrl ? (
+        <View style={styles.fsRoot}>
+          <VideoView
+            player={player}
+            style={StyleSheet.absoluteFill}
+            nativeControls={false}
+            contentFit="contain"
+          />
+
+          <View style={styles.fsClose}>
+            <IconButton
+              name="minimize"
+              variant="surface"
+              size="lg"
+              onPress={exitFullscreen}
+              accessibilityLabel="Exit fullscreen"
+            />
+          </View>
+
+          <View style={styles.fsControlsBar}>
+            <IconButton
+              name={muted || volume === 0 ? 'volume-x' : 'volume-2'}
+              variant="surface"
+              size="lg"
+              onPress={() => setMuted((m) => !m)}
+              accessibilityLabel={muted ? 'Unmute' : 'Mute'}
+            />
+            <View style={styles.fsSlider}>
+              <Slider
+                value={muted ? 0 : volume}
+                min={0}
+                max={100}
+                step={1}
+                onValueChange={(v) => {
+                  setVolume(v)
+                  if (v > 0 && muted) setMuted(false)
+                  if (v === 0) setMuted(true)
+                }}
+              />
+            </View>
+          </View>
+        </View>
+      ) : null}
     </View>
   )
 }
@@ -170,4 +264,16 @@ const styles = StyleSheet.create({
   identity: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs, flex: 1 },
   identityText: { flex: 1 },
   title: { opacity: 0.85 },
+  fsRoot: { ...StyleSheet.absoluteFillObject, backgroundColor: '#000', zIndex: 100 },
+  fsClose: { position: 'absolute', top: theme.spacing.lg, right: theme.spacing.lg },
+  fsControlsBar: {
+    position: 'absolute',
+    left: theme.spacing.lg,
+    right: theme.spacing.lg,
+    bottom: theme.spacing.xl,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.md,
+  },
+  fsSlider: { flex: 1 },
 })
