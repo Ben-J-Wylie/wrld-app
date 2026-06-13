@@ -25,12 +25,14 @@ instance working in this repo is immediately oriented.
 > for how WRLD captures, stores, edits, **represents**, and surfaces content — the
 > *why* behind the buffer/saved two-pool model, the non-destructive clip manifest
 > (draft ↔ saved), the carve, capture ⊆ broadcast, the privacy ceiling, and the
-> time machine. It also states the **content-representation nuances** (§5 — the
-> presentation rules that keep the UI true to the model) and the **cross-repo
-> substrate requirements** (§8 — what `wrld-backend` + `wrld-mediasoup` must
-> robustly provide to support it). Principles land there; the weeds stay in the
-> per-repo CLAUDE.md + `HANDOFF-*.md` + DESIGN.md. Keep it honest as the model
-> evolves.
+> time machine. Its spine is **§2 — the content-handling directive** (a broadcast
+> is N compartmentalized per-source captures, bound to one wall clock, buffered
+> at the behest of the reaper, fully scrubbable + per-source editable — plus the
+> evolution that earned it). It also states the **content-representation
+> nuances** (§6) and the **cross-repo substrate requirements** (§9 — what
+> `wrld-backend` + `wrld-mediasoup` must robustly provide). Principles land there;
+> the weeds stay in the per-repo CLAUDE.md + `HANDOFF-*.md` + DESIGN.md. Keep it
+> honest as the model evolves.
 
 ---
 

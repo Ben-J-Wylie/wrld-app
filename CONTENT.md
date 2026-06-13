@@ -14,10 +14,11 @@
 >
 > **Cross-repo.** Mirrored intent across `wrld-app` (capture + edit + represent
 > surfaces), `wrld-backend` (durable store, clip manifests, discovery), and
-> `wrld-mediasoup` (live media + the rolling-buffer recorder). Section 8 states
-> the requirements the lower repos must robustly meet for the representation in
-> Section 5 to hold. If a principle here and code disagree, that's a bug or a
-> decision to log — not a thing to silently route around.
+> `wrld-mediasoup` (live media + the rolling-buffer recorder). **§2 is the
+> content-handling directive** — the prerogative everything else serves. §9
+> states the requirements the lower repos must robustly meet for the
+> representation in §6 to hold. If a principle here and code disagree, that's a
+> bug or a decision to log — not a thing to silently route around.
 
 ---
 
@@ -46,11 +47,76 @@
 6. **The representation never lies about the model.** What the UI shows — lane,
    lifecycle, precision, frame, state — must be true to the underlying content.
    Where it can't show the full truth it degrades visibly (thinner), never
-   fabricates or misleads. (Section 5 is this principle, made concrete.)
+   fabricates or misleads. (Section 6 is this principle, made concrete.)
 
 ---
 
-## 2. The two pools
+## 2. The content-handling directive
+
+> The prerogative the whole system serves: **a broadcast is not a video — it is
+> a set of compartmentalized per-source captures, bound to one wall clock,
+> continuously buffered at the behest of the reaper, fully scrubbable, and
+> per-source editable, so any past moment can be retroactively saved as a
+> non-destructive clip.** Every model, surface, and contract in this doc is
+> downstream of this. When a new content decision comes up, check it here first:
+> if it fights the directive, it's probably wrong.
+
+1. **Many sources, each a compartmentalized capture.** A live session is N
+   independent source streams (camera, audio, screen, location, gyro, compass,
+   chat, …), each captured, stored, thumbnailed, and edited on its **own track**.
+   The composite a viewer sees is a *view* over the tracks, never the storage
+   shape. Sources arm, start, drop, and resume independently.
+2. **One wall clock binds everything.** Every source obeys a single absolute
+   **wall-clock** timeline. Alignment is by *time*, not by stream position — so
+   independently-started/dropped sources still line up, and the same clock
+   indexes the buffer, clips, discovery, and the time machine. Nothing is
+   positioned by "frame N of stream X"; the wall clock is the universal key.
+3. **Per-source representation.** Each source carries its **own thumbnail /
+   visualizer and its own lane**. You see — and scrub — each source on its own,
+   not only the composite.
+4. **Independent per-source edit markers.** Trim (in/out) and removed ranges are
+   recorded **per source**. A clip can keep camera while dropping audio for a
+   window, reveal a record-only sensor, or carry a gap on one track and not
+   another. Edits are markers over tracks, never re-encodes (the manifest, §5).
+5. **At the behest of the reaper.** Everything captured lives in the rolling
+   buffer under the reaper's eviction contract — **deleted unless saved.**
+   Saving is the single act that promotes content out of the reaper's reach into
+   the durable pool. Ephemeral-by-default is the rule, not a failure mode.
+6. **Total scrub accessibility.** Every source and the whole buffer window are
+   reachable by **scrub**. The user can land on any captured instant, on any
+   track — the representation gets them there (best-effort where footage is thin).
+
+### Where this came from (the evolution)
+
+The directive wasn't designed up front — it was earned. The shape changed
+several times; the principles above are what survived each change:
+
+- **Whole-stream Record → always-on buffer.** v0.2 began with a single Record
+  button capturing the whole stream. It became the **rolling buffer**: going live
+  continuously buffers; there is no Record verb; the durable act is *"Save a
+  clip"* (retroactive). Capture ⊆ broadcast.
+- **One blob → per-source tracks.** A recording stopped being one file and became
+  **per-source fMP4 tracks** — the compartmentalization that makes per-source
+  thumbnails, lanes, visualizers, and edit markers possible at all.
+- **Re-encode → non-destructive manifest.** Editing stopped cutting bytes and
+  became a **manifest** (ranges + per-source enabled state) with a draft↔saved
+  flip — reversible metadata; permanent-delete is the only destructive act.
+- **Stream-position → wall clock.** Alignment moved to the absolute wall clock,
+  which unlocked the **carve** (buffer minus saved), the **two-lane timeline**,
+  the **time machine**, and codec-uniform playback across independently-captured
+  spans.
+- **Player-of-a-clip → a scrubbable substrate.** The UI stopped being "play this
+  clip" and became a **navigable timeline** — collapsed-gap axis, fixed centre
+  playhead, per-source lanes, buttery zoom, scrub-while-playing — the buffer made
+  directly explorable.
+
+The prerogative, in one line: **time-indexed, per-source, non-destructive,
+ephemeral-by-default content the user navigates by wall clock and curates by
+saving.**
+
+---
+
+## 3. The two pools
 
 Content lives in exactly one of two stores, with opposite lifecycles:
 
@@ -68,12 +134,12 @@ are sized worst-case-plus-cushion.
 
 ---
 
-## 3. Capture model
+## 4. Capture model
 
 - **Sources are layers.** The v0.2 layer model: camera, audio, screen, location,
   gyro, compass, identity (+ chat as a source). Identity is an attributed/anon
   *flag*, not a recorded track. Non-camera sources get **visualizers** (Section
-  5) so a data-only or audio-only stream is never a bare panel.
+  6) so a data-only or audio-only stream is never a bare panel.
 - **Air is the single arming control (app).** The dashboard arms what airs;
   recording is a single verb on the live view that captures whatever is on air
   (the per-source Rec toggle was retired). The cross-repo contract still models
@@ -86,7 +152,7 @@ are sized worst-case-plus-cushion.
 
 ---
 
-## 4. The manifest model (recording → clip; draft ↔ saved)
+## 5. The manifest model (recording → clip; draft ↔ saved)
 
 - **A Recording** is the per-source tracks captured for a session.
 - **A Clip is a manifest** over a recording / the buffer: an ordered list of
@@ -109,7 +175,7 @@ are sized worst-case-plus-cushion.
 
 ---
 
-## 5. Content representation (how it's shown, honestly)
+## 6. Content representation (how it's shown, honestly)
 
 The presentation rules that keep the UI true to the model. These are decided
 nuances, not styling — styling lives in DESIGN.md.
@@ -161,7 +227,7 @@ nuances, not styling — styling lives in DESIGN.md.
 
 ---
 
-## 6. Privacy & consent
+## 7. Privacy & consent
 
 - **The indicator is non-negotiable.** While broadcasting, the on-air-vs-
   recording state is always visible.
@@ -177,7 +243,7 @@ nuances, not styling — styling lives in DESIGN.md.
 
 ---
 
-## 7. Time, discovery & the globe
+## 8. Time, discovery & the globe
 
 - **The past is thinner than live, on purpose.** The time machine replays the
   globe at a past instant from **surviving clips only** — not everything that
@@ -197,9 +263,9 @@ nuances, not styling — styling lives in DESIGN.md.
 
 ---
 
-## 8. What the substrate must guarantee (cross-repo)
+## 9. What the substrate must guarantee (cross-repo)
 
-The model (§2–4) and the representation (§5, §7) only hold if the lower repos
+The directive (§2), the model (§3–5), and the representation (§6, §8) only hold if the lower repos
 provide the following. These are the robust, non-negotiable supports — if one
 regresses, the app's content surfaces degrade or lie.
 
@@ -220,7 +286,7 @@ regresses, the app's content surfaces degrade or lie.
   contract (the buffer's self-overwriting promise).
 - **Server-generated buffer thumbnails** (interval JPEGs / sprite / WebVTT) —
   client-side frame extraction *hangs* on a `-c:v copy` HLS VOD, so posters and
-  timeline frames must come from the server (the §5 "honest thumbnails" rule
+  timeline frames must come from the server (the §6 "honest thumbnails" rule
   depends on this).
 - **Telemetry relay** for aired sensor sources (so a viewer's visualizer has
   data, not just a label).
@@ -254,16 +320,16 @@ regresses, the app's content surfaces degrade or lie.
 
 ---
 
-## 9. The seam
+## 10. The seam
 
 Ben owns the component library (`primitives/`, `features/`, `sections/`) +
-DESIGN.md + CONTENT.md §5 (representation). Aaron owns `screens/`, `hooks/`,
-`api/` + the backend / recorder (§8). Content **presentation** is Ben's; content
+DESIGN.md + CONTENT.md §6 (representation). Aaron owns `screens/`, `hooks/`,
+`api/` + the backend / recorder (§9). Content **presentation** is Ben's; content
 **data wiring** is Aaron's. They meet at typed props and the manifest contract.
 
 ---
 
-## 10. Pointers (the weeds live here)
+## 11. Pointers (the weeds live here)
 
 - App detail + decisions: `wrld-app/CLAUDE.md` (Rolling Buffer, Clips, Time
   Machine, and the dated Update sections) and `wrld-app/DESIGN.md` (Section 3 +
