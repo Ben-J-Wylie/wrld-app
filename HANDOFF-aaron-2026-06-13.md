@@ -29,8 +29,12 @@ This doc is the index + the priority order, not a re-statement.
 
 ## Priority queue (across initiatives)
 
-1. ☐ **Finish the clip-editor pass you're in** — scissor/snip persistence + PATCH-trim cases +
-   **`removedByLane`** (per-lane mid-clip deletes). *(HANDOFF-c4-clip-editor)*
+1. ✅ **DONE (Aaron, 2026-06-13)** — the clip-editor backend pass is complete:
+   snip persistence (opaque `splitPoints` on `BufferSession`/`Clip`), all PATCH-trim cases
+   (incl. gapped + trim-after-evict, incl. un-save-a-middle-piece after evict), and
+   **`removedByLane`** (per-source removed ranges → real manifest backing). Wiring contracts
+   in `HANDOFF-clips-saved-persistence-2026-06-11.md` + `HANDOFF-c4-clip-editor-2026-06-12.md`;
+   backend detail in `wrld-backend/CLAUDE.md`. *Owes Ben's on-device pass + the app wiring.*
 
 2. ☐ **Chat persistence → wire to the chat _track_** — chat is already a built source on the design
    side (`FeedKind 'chat'` · `SOURCE_META.chat` · `SourceStage` `case 'chat'` → `SourceChatLog`).
