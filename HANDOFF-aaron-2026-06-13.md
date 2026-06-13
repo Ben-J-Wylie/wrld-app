@@ -36,11 +36,12 @@ This doc is the index + the priority order, not a re-statement.
    in `HANDOFF-clips-saved-persistence-2026-06-11.md` + `HANDOFF-c4-clip-editor-2026-06-12.md`;
    backend detail in `wrld-backend/CLAUDE.md`. *Owes Ben's on-device pass + the app wiring.*
 
-2. ☐ **Chat persistence → wire to the chat _track_** — chat is already a built source on the design
-   side (`FeedKind 'chat'` · `SOURCE_META.chat` · `SourceStage` `case 'chat'` → `SourceChatLog`).
-   Your persisted chat is the single data source for the live overlay, the chat source-view, **and
-   the clip chat track** (route it into the buffer `.jsonl` like any source). No new viewer needed.
-   *(source-visualizers handoff → "⚡ Chat is already a source")*
+2. ✅ **DONE (Aaron, 2026-06-13)** — chat persists into the buffer. The mediasoup `.jsonl` chat
+   sink + durable `ChatMessage` store shipped 2026-06-12; the app seam — sending the **armed
+   source set** (AV + chat/location) to `createRoom` so `room._meta.sources` reaches the recorder
+   (`StreamScreen.recordedSourcesFromConfig` + the `VALID_SOURCES` widen in `wrld-backend`) — is
+   wired. Chat (and location) now record; the clip chat track is real on save. The chat **source
+   *view*** in the rail is still the `SourceStage` swap in item 3. *Needs an on-device pass.*
 
 3. ☐ **Sensor telemetry data path** (lights up the 7 sensor visualizers — all shipped on `main`):
    mediasoup `telemetry`→`telemetryUpdate` relay (Option A, like `chatMessage`); `useTelemetryCapture`

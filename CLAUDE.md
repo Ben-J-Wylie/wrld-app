@@ -2978,3 +2978,44 @@ needed); the fullscreen hook re-locks `PORTRAIT_UP` on exit/unmount.
 Needs an on-device pass after the rebuild: iOS landscape rotation + upright-both-ways,
 the portrait-everywhere-else lock holding across navigation, volume/mute on the live
 WebRTC track, and the overlay layout (close button clear of the notch in landscape).
+
+---
+
+## Updates — June 2026 (Chat persists into the buffer — armed sources reach the recorder)
+
+Item 2 of `HANDOFF-aaron-2026-06-13.md` ("chat persistence → wire to the chat
+track"). The mediasoup buffer `.jsonl` chat sink + the durable `ChatMessage`
+moderation store both already shipped (2026-06-12); the missing seam was **app-side**
+— the recorder only records a data track for a kind in `room._meta.sources`, and the
+app sent `createRoom` only the **AV** set (`camera`/`audio`), so chat (and location,
+and any sensor) never recorded ("nothing writes to it yet").
+
+**Fix (`StreamScreen.tsx` `handleGoLive`):** a new **`recordedSourcesFromConfig(cfg)`**
+maps the armed `captureConfig` (the `air` keys cam→camera, audio→audio, loc→location,
+screen, gyro, compass + the `chat:'on'` flag) to the backend's canonical kind names,
+and `createRoom({ sources })` now sends that **full armed set** instead of `av`.
+`startBroadcasting(av)` + `useBroadcastStore.setLive(av)` stay **AV-only** (getUserMedia
++ the live source rail are unchanged). Capture ⊆ broadcast — the armed data sources are
+aired sources, so they belong in `Stream.sources`.
+
+**Consequences (surfaced, not surprises):**
+- **Chat now records** to the buffer `chat/<sessionId>/<chunkMs>.jsonl` track when
+  chat is armed → the saved-clip chat track (`SourceChatLog` + `progress`) becomes real
+  on save (the backend `promoteBufferClip` already promotes the `chat` data kind).
+- **Location now records** too (it's armed by default and already airs via
+  `locationUpdate`) — a natural down-payment on item 4 ("every source saves"). Gyro/
+  compass would also record once armed, but the app doesn't emit them yet (item 3), so
+  they'd just create empty track dirs — harmless.
+- **Backend:** `VALID_SOURCES` in `internal.ts` had to widen from `['camera','audio']`
+  to the full set or the `streamStarted` Zod enum would reject `chat`/`location` and
+  break go-live. Paired change (see `wrld-backend/CLAUDE.md`).
+- **Viewer source rail:** `Stream.sources` now carries the data kinds, so the viewer
+  rail's `availableKinds` filters to **AV** (`camera`/`audio`) — the switchable
+  chat/sensor source-views are the `SourceStage` telemetry work (item 3). No globe
+  card change (no feature iterates `Stream.sources` into badges).
+
+Pure JS, no native module — hot-reloads, no EAS rebuild. **Needs an on-device pass:**
+go live with chat armed → send chat → confirm `buffers/<userId>/chat/<sessionId>/…jsonl`
+fills, and a saved clip over that window carries the chat track. The mediasoup +
+backend halves are already deployed; this app change + the `VALID_SOURCES` widen are
+what light it up end-to-end.

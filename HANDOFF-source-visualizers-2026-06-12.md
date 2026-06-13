@@ -70,6 +70,15 @@ build on them, not against them:
 
 ### ⚡ Chat is already a source — plug your live-now persistence work into it (don't rebuild a viewer)
 
+> **✅ Persistence wired 2026-06-13 (Aaron).** The two mediasoup chat sinks (buffer `.jsonl`
+> playback track + durable `ChatMessage` moderation store) shipped 2026-06-12; the missing
+> app seam — sending the **armed source set** (not just AV) to `createRoom` so `room._meta.sources`
+> carries `chat` and the recorder writes the chat track — is done (`StreamScreen` `recordedSourcesFromConfig`
+> + `VALID_SOURCES` widen in `wrld-backend`). Chat (and location) now record into the buffer; the
+> clip chat track is real on save. The **viewer source-view** for chat (rail tile → `SourceStage`
+> `case 'chat'` → `SourceChatLog`) is still the SourceStage swap below (item 3) — the rail currently
+> filters to AV. See `wrld-app/CLAUDE.md` "Chat persists into the buffer".
+
 You're making chat persistent on `main` right now. **Chat is one of our sources**, and the design
 layer already ships it end-to-end as a switchable source — so your persistence is the *data*, not a
 new view:

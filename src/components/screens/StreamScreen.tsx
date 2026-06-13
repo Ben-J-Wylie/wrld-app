@@ -116,11 +116,36 @@ const FOOTER_DROP = 30
 
 // The AV subset of the armed capture config that actually streams today
 // (camera/audio). `cam` / `audio` are the FeedKind keys the dashboard uses.
+// Drives getUserMedia (startBroadcasting) + the source rail.
 function avSourcesFromConfig(cfg: CaptureConfig | null): SourceType[] {
   if (!cfg) return []
   const out: SourceType[] = []
   if (cfg.air?.cam) out.push('camera')
   if (cfg.air?.audio) out.push('audio')
+  return out
+}
+
+// The full armed RECORDED source set sent to createRoom → room._meta.sources →
+// which per-source buffer tracks mediasoup records (so a saved clip's chat /
+// telemetry / location track is real). Maps the dashboard's FeedKind air keys +
+// the chat flag to the backend's canonical kind names (the VALID_SOURCES set).
+// AV still drives getUserMedia + the rail; the data kinds only add recorded
+// tracks. Capture ⊆ broadcast — these are the aired sources.
+const AIR_KEY_TO_KIND: Record<string, string> = {
+  cam: 'camera',
+  audio: 'audio',
+  screen: 'screen',
+  loc: 'location',
+  gyro: 'gyro',
+  compass: 'compass',
+}
+function recordedSourcesFromConfig(cfg: CaptureConfig | null): string[] {
+  if (!cfg) return []
+  const out: string[] = []
+  for (const [key, on] of Object.entries(cfg.air ?? {})) {
+    if (on && AIR_KEY_TO_KIND[key]) out.push(AIR_KEY_TO_KIND[key])
+  }
+  if (cfg.chat === 'on') out.push('chat')
   return out
 }
 
@@ -384,8 +409,11 @@ export function StreamScreen() {
   // The available sources as FeedKind, for the rail. Role-aware: broadcastSources
   // is the viewer's stream sources or the broadcaster's live/armed set — so the
   // same rail serves both the viewer and the live broadcaster (source monitor).
+  // Filter to the AV kinds the rail can render today — Stream.sources now also
+  // carries recorded data sources (chat/location/…) whose switchable source-views
+  // are the SourceStage telemetry work (item 3); until then they're not rail tiles.
   const availableKinds = useMemo<FeedKind[]>(
-    () => broadcastSources.map((s) => (s === 'camera' ? 'cam' : 'audio')),
+    () => broadcastSources.filter((s) => s === 'camera' || s === 'audio').map((s) => (s === 'camera' ? 'cam' : 'audio')),
     [broadcastSources],
   )
   // Which source is currently being shown (defaults to the first). Shared by the
@@ -894,6 +922,9 @@ export function StreamScreen() {
       return
     }
     const av = avSourcesFromConfig(c)
+    // The full armed set (AV + data sources like chat/location) — drives which
+    // buffer tracks get recorded. AV alone drives getUserMedia + the live rail.
+    const recordedSources = recordedSourcesFromConfig(c)
 
     setIsRecording(false)
     setActiveRecordingId(null)
@@ -915,7 +946,7 @@ export function StreamScreen() {
         title,
         lat: coords.latitude,
         lng: coords.longitude,
-        sources: av,
+        sources: recordedSources,
         subscribersOnly: c.subscribersOnly,
         locationPrecision,
         ppvEventId: activeBroadcast.get()?.ppvEventId,
