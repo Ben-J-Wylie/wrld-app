@@ -408,7 +408,13 @@ export function GlobeScreenMapbox() {
     setSelectedClusterStreams(null)
     router.push({
       pathname: `/(app)/stream/${stream.mediasoupRoomId}`,
-      params: { streamId: stream.id, sources: (stream.sources ?? []).join(',') },
+      params: {
+        streamId: stream.id,
+        sources: (stream.sources ?? []).join(','),
+        // External cams branch to the HLS viewer (no mediasoup join) — see stream/[id].tsx.
+        isExternal: String(stream.isExternal ?? false),
+        liveUrl: stream.liveUrl ?? '',
+      },
     })
   }
 
@@ -418,7 +424,12 @@ export function GlobeScreenMapbox() {
     dismissBanner()
     router.push({
       pathname: `/(app)/stream/${stream.mediasoupRoomId}`,
-      params: { streamId: stream.id, sources: stream.sources.join(',') },
+      params: {
+        streamId: stream.id,
+        sources: stream.sources.join(','),
+        isExternal: String(stream.isExternal ?? false),
+        liveUrl: stream.liveUrl ?? '',
+      },
     })
   }
 
