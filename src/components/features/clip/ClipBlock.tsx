@@ -23,9 +23,13 @@ export type ClipTone = 'buffered' | 'saved'
 
 // Below this px height the block collapses to a thin labelled bar (no poster / stacked text).
 const COMPACT_H = 44
+// The corner poster is 38px + its left/right inset; below this block width it can't fit, so we
+// swap it for a centred clip glyph (the rotated `film` icon, matching the Clips tab).
+const THUMB_FIT_MIN = 48
 
 type Props = {
   heightPx: number
+  widthPx?: number // the block's drawn width — drives the corner-thumb vs centred-glyph fallback
   label: string // primary (name / time)
   sublabel?: string // duration / sources
   posterUrl?: string | null
@@ -45,7 +49,7 @@ type Props = {
   style?: StyleProp<ViewStyle>
 }
 
-export function ClipBlock({ heightPx, label, sublabel, posterUrl, tone, draft, selected, onSelect, onOpen, dragDir, dragAxis = 'x', reachPx, onCross, style }: Props) {
+export function ClipBlock({ heightPx, widthPx, label, sublabel, posterUrl, tone, draft, selected, onSelect, onOpen, dragDir, dragAxis = 'x', reachPx, onCross, style }: Props) {
   const lastTap = useRef(0)
   const onPress = () => {
     const now = Date.now()
@@ -128,11 +132,19 @@ export function ClipBlock({ heightPx, label, sublabel, posterUrl, tone, draft, s
         style,
       ]}
     >
-      {posterUrl && !compact ? (
-        <Image source={{ uri: posterUrl }} style={StyleSheet.absoluteFill} contentFit="cover" transition={120} />
+      {/* A bordered paper span across the top of the block (with margins). It holds the poster
+          when the box is wide enough; otherwise (too narrow at this zoom) the rotated `film`
+          glyph that matches the Clips tab. `contain` letterboxes/pillarboxes the frame so it
+          stays square inside the span for any aspect ratio. */}
+      {!compact && (widthPx ?? Infinity) < THUMB_FIT_MIN ? (
+        <View style={styles.topSpan} pointerEvents="none">
+          <Icon name="film" size="md" rotate={90} color={theme.colors.text.muted} />
+        </View>
+      ) : posterUrl && !compact ? (
+        <View style={styles.topSpan} pointerEvents="none">
+          <Image source={{ uri: posterUrl }} style={styles.thumbImg} contentFit="contain" transition={120} />
+        </View>
       ) : null}
-      {/* Scrim so the label reads over a poster. */}
-      {posterUrl && !compact ? <View style={styles.scrim} pointerEvents="none" /> : null}
 
       {compact ? (
         <View style={styles.compactRow}>
@@ -143,30 +155,16 @@ export function ClipBlock({ heightPx, label, sublabel, posterUrl, tone, draft, s
         </View>
       ) : (
         <View style={styles.meta}>
-          <Text
-            variant="monoLabel"
-            color={posterUrl ? theme.colors.text.inverse : theme.colors.text.primary}
-            numberOfLines={1}
-          >
+          <Text variant="monoLabel" color={theme.colors.text.primary} numberOfLines={1}>
             {label}
           </Text>
           {sublabel ? (
-            <Text
-              variant="monoCaption"
-              color={posterUrl ? 'rgba(255,255,255,0.85)' : theme.colors.text.muted}
-              numberOfLines={1}
-            >
+            <Text variant="monoCaption" color={theme.colors.text.muted} numberOfLines={1}>
               {sublabel}
             </Text>
           ) : null}
         </View>
       )}
-
-      {saved && !compact ? (
-        <View style={styles.badge} pointerEvents="none">
-          <Icon name="bookmark" size="sm" color={theme.colors.accent.default} />
-        </View>
-      ) : null}
     </Pressable>
   )
 
@@ -207,9 +205,10 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.bg.panelHi,
     borderColor: theme.colors.border.strong,
   },
+  // Saved clips read the same as buffer clips — the lane + title carry the distinction, not colour.
   blockSaved: {
-    backgroundColor: theme.colors.accent.surface,
-    borderColor: theme.colors.accent.border,
+    backgroundColor: theme.colors.bg.panelHi,
+    borderColor: theme.colors.border.strong,
   },
   // Currently shown in the sticky viewer — a stronger accent outline.
   blockSelected: {
@@ -221,9 +220,28 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.accent.default,
     borderStyle: 'dashed',
   },
-  scrim: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(20,16,12,0.35)',
+  // A bordered paper strip spanning the top of the block (with margins), fixed height. Holds the
+  // poster (square via `contain`, pillarboxed on the lightest paper) or the centred clip glyph.
+  // Same stroke as the clip box.
+  topSpan: {
+    position: 'absolute',
+    top: theme.spacing.xs,
+    left: theme.spacing.xs,
+    right: theme.spacing.xs,
+    height: 38,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.colors.bg.primary,
+    borderWidth: 1,
+    borderColor: theme.colors.border.strong,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  // Confined to a square (the span's height) so every thumb is the same size regardless of
+  // orientation — landscape letterboxes top/bottom, portrait pillarboxes left/right.
+  thumbImg: {
+    height: '100%',
+    aspectRatio: 1,
   },
   meta: {
     paddingHorizontal: theme.spacing.sm,
@@ -244,15 +262,4 @@ const styles = StyleSheet.create({
   },
   dotBuffered: { backgroundColor: theme.colors.text.muted },
   dotSaved: { backgroundColor: theme.colors.accent.default },
-  badge: {
-    position: 'absolute',
-    top: theme.spacing.xs,
-    right: theme.spacing.xs,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: theme.colors.bg.primary,
-  },
 })

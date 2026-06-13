@@ -1,18 +1,21 @@
 // src/components/features/clip/ClipsTimeline.tsx
 //
 // The horizontal Clips timeline — the redesigned grid (2026-06-12). A fixed-height region
-// (no page vertical scroll) with three stacked rows that scroll together HORIZONTALLY along a
-// shared collapsed-gap time axis, **oldest/reaper on the LEFT, now on the RIGHT**:
+// (no page vertical scroll). Top-to-bottom it stacks FIVE rows; the clock ruler + the two
+// clip lanes scroll together HORIZONTALLY along a shared collapsed-gap time axis (**oldest/
+// reaper on the LEFT, now on the RIGHT**); the two title rows are fixed bands that name each
+// lane and what happens to its content:
 //
-//   ┌ time ruler ─────────────────────────────────┐
-//   │ BUFFER  [▓▓▓]·[▓▓▓▓]········[▓▓]              │   (footage minus saved ranges)
-//   │ SAVED        [▓▓]       [▓▓▓]                 │   (the carved-out saved clips)
-//   └ reaper ───────────────────────────────► now ─┘
+//   ┌ clock stamps ──────────────────────────────┐
+//   │ ▣ BUFFER  not public · reaper clears it     │  (fixed title band)
+//   │   [▓▓▓]·[▓▓▓▓]········[▓▓]                   │  footage minus saved ranges
+//   │ ▣ SAVED   public · safe from the reaper      │  (fixed title band)
+//   │        [▓▓]       [▓▓▓]                      │  the carved-out saved clips
+//   └ reaper ──────────────────────────────► now ─┘
 //
 // Empty time collapses to thin gap markers (footage never disappears into empty space).
 // Buffer + saved clips never overlap (the carve), so ONE shared time→x axis positions both
 // lanes + the ruler. Pinch zooms; single-tap selects (→ viewer), double-tap opens the editor.
-// Fixed left gutter holds the lane labels; the timeline scrolls to its right.
 //
 // See DESIGN.md Section 3 (Clips landing grid).
 
@@ -27,6 +30,8 @@ import { ClipBlock } from './ClipBlock'
 import { type LaneClip } from './ClipLane'
 
 const RULER_H = 22
+const TITLE_H = 22 // fixed title band above each clip lane (name + reaper/time-machine note)
+const CLIP_INSET_Y = 4 // breathing room between a clip block and the top/bottom of its lane
 const MIN_CLIP_W = 26 // a short clip stays a tappable block
 const GAP_W = 22 // collapsed-gap marker width
 const GAP_THRESHOLD_MS = 45_000 // gaps longer than this get a marker; shorter → a hair of spacing
@@ -178,18 +183,23 @@ export function ClipsTimeline({ buffered, saved, nowMs, selectedId, onSelect, on
     [zoomToFocal, pinchStartSv, pxSv],
   )
 
-  // Each lane fills half the region below the ruler (the divider takes 2px).
-  const laneHeight = Math.max(0, (regionH - RULER_H - 2) / 2)
+  // Five rows fill the region: ruler + 2 title bands + 2 clip lanes. The lanes split what's left.
+  const laneHeight = Math.max(0, (regionH - RULER_H - 2 * TITLE_H) / 2)
+  const bufferTop = RULER_H + TITLE_H
+  const savedTitleTop = bufferTop + laneHeight
+  const savedTop = savedTitleTop + TITLE_H
 
-  const renderLane = (clips: LaneClip[], tone: 'buffered' | 'saved') => (
-    <View style={styles.lane}>
+  const clipH = Math.max(0, laneHeight - 2 * CLIP_INSET_Y)
+  const renderLane = (clips: LaneClip[], tone: 'buffered' | 'saved', topPx: number) => (
+    <View style={[styles.lane, { top: topPx, height: laneHeight, width: contentWidth }]}>
       {clips.map((c) => {
         const p = layout.pos.get(c.id)
         if (!p) return null
         return (
-          <View key={c.id} style={[styles.slot, { left: p.left, width: p.width }]}>
+          <View key={c.id} style={[styles.slot, { left: p.left, width: p.width, top: CLIP_INSET_Y, height: clipH }]}>
             <ClipBlock
-              heightPx={laneHeight} /* fill the lane height; the slot bounds the width */
+              heightPx={clipH} /* inset from the lane top/bottom; the slot bounds the width */
+              widthPx={p.width}
               label={c.label}
               sublabel={c.sublabel}
               posterUrl={c.posterUrl}
@@ -200,7 +210,7 @@ export function ClipsTimeline({ buffered, saved, nowMs, selectedId, onSelect, on
               onOpen={() => onOpen(c, tone)}
               dragAxis="y"
               dragDir={tone === 'buffered' ? 1 : -1}
-              reachPx={laneHeight + 2}
+              reachPx={clipH}
               onCross={() => (tone === 'buffered' ? onSave(c) : onUnsave(c))}
             />
           </View>
@@ -250,31 +260,35 @@ export function ClipsTimeline({ buffered, saved, nowMs, selectedId, onSelect, on
                     <View style={styles.gapRule} />
                   </View>
                 ))}
-                {/* lanes */}
-                <View style={styles.lanes}>
-                  {renderLane(buffered, 'buffered')}
-                  <View style={styles.laneDivider} />
-                  {renderLane(saved, 'saved')}
-                </View>
+                {/* clip lanes (positioned around the fixed title bands) */}
+                {renderLane(buffered, 'buffered', bufferTop)}
+                {renderLane(saved, 'saved', savedTop)}
               </View>
             </ScrollView>
           </GestureDetector>
         )}
       </View>
 
-      {/* Sticky lane titles — top-left of each lane, icon + name inline, don't scroll. */}
+      {/* Fixed title bands — name each lane + what happens to its content. Don't scroll;
+          pointerEvents none so pinch/scroll/drag pass through to the timeline beneath. */}
       {hasAny && regionH > 0 ? (
         <>
-          <View style={[styles.laneTitle, { top: RULER_H + 4 }]} pointerEvents="none">
+          <View style={[styles.titleBand, { top: RULER_H, height: TITLE_H }]} pointerEvents="none">
             <Icon name="film" size="sm" color={theme.colors.text.muted} />
-            <Text variant="monoCaption" color={theme.colors.text.muted}>
-              BUFFER
+            <Text variant="monoLabel" color={theme.colors.text.primary}>
+              Buffer
+            </Text>
+            <Text variant="monoCaption" color={theme.colors.text.muted} numberOfLines={1} style={styles.titleNote}>
+              Not public · reaper clears it
             </Text>
           </View>
-          <View style={[styles.laneTitle, { top: RULER_H + laneHeight + 2 + 4 }]} pointerEvents="none">
+          <View style={[styles.titleBand, { top: savedTitleTop, height: TITLE_H }]} pointerEvents="none">
             <Icon name="bookmark" size="sm" color={theme.colors.accent.default} />
-            <Text variant="monoCaption" color={theme.colors.accent.default}>
-              SAVED
+            <Text variant="monoLabel" color={theme.colors.accent.default}>
+              Saved
+            </Text>
+            <Text variant="monoCaption" color={theme.colors.text.muted} numberOfLines={1} style={styles.titleNote}>
+              Public · reaper-safe
             </Text>
           </View>
         </>
@@ -286,21 +300,28 @@ export function ClipsTimeline({ buffered, saved, nowMs, selectedId, onSelect, on
 const styles = StyleSheet.create({
   region: {
     flex: 1,
+    backgroundColor: theme.colors.bg.elevated, // the clock + clip lanes read in this tone
   },
   scrollArea: {
     flex: 1,
   },
-  // Sticky title chip over the top-left of each lane (paper bg so it reads over a block).
-  laneTitle: {
+  // Fixed full-width title band above each clip lane. Lighter than the lanes, with a hairline
+  // above AND below so every row (ruler · buffer · saved) reads as separated.
+  titleBand: {
     position: 'absolute',
-    left: theme.spacing.xs,
+    left: 0,
+    right: 0,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: theme.spacing.xs,
-    paddingVertical: 1,
-    borderRadius: theme.radius.full,
+    gap: 6,
+    paddingHorizontal: theme.spacing.sm,
     backgroundColor: theme.colors.bg.primary,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: theme.colors.border.subtle,
+  },
+  titleNote: {
+    flex: 1,
   },
   empty: {
     flex: 1,
@@ -313,6 +334,8 @@ const styles = StyleSheet.create({
   tick: {
     position: 'absolute',
     top: 0,
+    height: RULER_H,
+    justifyContent: 'center', // vertically centre the stamp within the clock lane
     alignItems: 'flex-start',
   },
   tickMark: {
@@ -335,22 +358,11 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border.subtle,
     borderStyle: 'dashed',
   },
-  lanes: {
-    position: 'absolute',
-    top: RULER_H,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
   lane: {
-    flex: 1,
-  },
-  laneDivider: {
-    height: 2,
+    position: 'absolute',
+    left: 0,
   },
   slot: {
     position: 'absolute',
-    top: 0,
-    bottom: 0,
   },
 })

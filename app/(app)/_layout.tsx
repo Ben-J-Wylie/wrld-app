@@ -108,16 +108,18 @@ function TabButton({
   label,
   active,
   onPress,
+  iconRotate,
 }: {
   icon: React.ComponentProps<typeof Icon>['name']
   label: string
   active: boolean
   onPress: () => void
+  iconRotate?: number
 }) {
   const color = active ? theme.colors.accent.default : theme.colors.text.muted
   return (
     <Pressable style={styles.tabItem} onPress={onPress} accessibilityRole="button" accessibilityLabel={label}>
-      <Icon name={icon} size="md" color={color} />
+      <Icon name={icon} size="md" color={color} rotate={iconRotate} />
       <Text variant="monoCaption" color={color}>
         {label}
       </Text>
@@ -154,7 +156,7 @@ function AppTabBar() {
           {isLive ? 'Live' : 'Stream'}
         </Text>
       </Pressable>
-      <TabButton icon="film" label="Clips" active={pathname.startsWith('/clip')} onPress={() => router.navigate('/(app)/clips')} />
+      <TabButton icon="film" label="Clips" active={pathname.startsWith('/clip')} onPress={() => router.navigate('/(app)/clips')} iconRotate={90} />
       <TabButton icon="user" label="Me" active={pathname.startsWith('/me')} onPress={() => router.navigate('/(app)/me')} />
     </View>
   )

@@ -29,16 +29,18 @@ type Props = {
   name: keyof typeof Feather.glyphMap
   size?: IconSize | number
   color?: string
+  rotate?: number // degrees clockwise — e.g. 90 to stand a glyph on its end
   accessibilityLabel?: string
 }
 
-export function Icon({ name, size = 'md', color, accessibilityLabel }: Props) {
+export function Icon({ name, size = 'md', color, rotate, accessibilityLabel }: Props) {
   const numericSize = typeof size === 'number' ? size : SIZE_MAP[size]
   return (
     <Feather
       name={name}
       size={numericSize}
       color={color ?? theme.colors.text.primary}
+      style={rotate ? { transform: [{ rotate: `${rotate}deg` }] } : undefined}
       accessibilityLabel={accessibilityLabel}
     />
   )
