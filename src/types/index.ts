@@ -149,4 +149,9 @@ export type Stream = {
   locationPrecision?: 'exact' | 'city' | 'country'
   distanceKm?: number
   distanceMeters?: number
+  // External cams (ext-<slug>) have no mediasoup room — they're watched as a live
+  // HLS pull off the rolling buffer at `liveUrl`, not over WebRTC. The stream view
+  // branches on `isExternal` (play the HLS) instead of joining a room.
+  isExternal?: boolean
+  liveUrl?: string | null
 }
