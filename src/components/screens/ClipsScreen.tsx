@@ -261,11 +261,12 @@ export const ClipsScreen = () => {
   const playheadRef = useRef(0)
   playheadRef.current = playheadMs
 
-  // Scrub-while-playing state. `scrubbingRef` gates the follow + onCenter synchronously; the
-  // `scrubbing` state keeps the viewer poster up (incl. through an async cross-clip jump).
+  // Scrub-while-playing state. `scrubbingRef` gates the follow + onCenter synchronously and is
+  // managed MANUALLY (NOT synced from state — the 60fps playhead re-renders would clobber it back
+  // to a stale value before setScrubbing flushed, un-freezing the player → it would pause). The
+  // `scrubbing` state only drives the viewer poster (held through an async cross-clip jump).
   const [scrubbing, setScrubbing] = useState(false)
   const scrubbingRef = useRef(false)
-  scrubbingRef.current = scrubbing
   const scrubCenterRef = useRef<{ id: string | null; timeMs: number }>({ id: null, timeMs: 0 })
   const pendingPlayAtRef = useRef<number | null>(null)
   const playerIdRef = useRef<string | null>(null)
@@ -365,11 +366,13 @@ export const ClipsScreen = () => {
     if (!scrubbingRef.current) return
     const target = scrubCenterRef.current
     if (!target.id) {
+      scrubbingRef.current = false
       setScrubbing(false)
       return
     }
     if (target.id === playerIdRef.current) {
       // Same clip — just seek + (re)play; drop the poster immediately.
+      scrubbingRef.current = false
       seekTo(target.timeMs)
       if (!player.playing) {
         player.play()
