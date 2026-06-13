@@ -470,6 +470,9 @@ manifest:
   removes a track from disk, reclaims quota); reveal a record-only source.
 - **Identity** — Attributed / Anon. **Location** — `locDisplayPrecision`, only ever
   ≤ the captured ceiling. **Visibility** — public / anon / draft. **Tags.**
+  > ⚠️ **Superseded 2026-06-13** (see CONTENT.md §1.4): identity + location are now
+  > **fully reversible** (blur OR sharpen, either direction) — drop the ≤-ceiling
+  > clamp; capture stores exact coords + real identity.
 
 Most clip components shipped in 12.5 against mock data (ClipCard, ClipPreview,
 Timeline, LayerEditorRow, FeedRow/FeedThumb). Storage usage is already available:
@@ -732,6 +735,10 @@ Fallback when null: `'exact'` (not the user's current setting). Clips where
 the stream was `'off'` are excluded entirely — same rule as the live feed.
 Future: when `Clip.locDisplayPrecision` is added (C4 clip editor work), the
 globe uses `clip.locDisplayPrecision ?? stream.locationPrecision` instead.
+> ⚠️ **Superseded 2026-06-13** (see CONTENT.md §1.4 / §7 / §8): precision is **no
+> longer immutable** — replay/globe read the clip's **current** `locDisplayPrecision`
+> (creator can blur OR sharpen anytime); the platform retains exact coords so
+> sharpening is possible. `off` excludes from discovery only while set to `off`.
 
 **Seek offset** — computed server-side as
 `T_sec − (recording.startedAt_unix_sec + clip.startSec)`, where T is the

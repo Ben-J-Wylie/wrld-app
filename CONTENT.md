@@ -36,11 +36,19 @@
 3. **Editing is non-destructive.** A clip is a *manifest* over footage, never a
    re-encode. The only destructive act a user can take is **permanent delete**
    (which reclaims quota). Everything else — trim, reorder, source on/off,
-   visibility — is reversible metadata.
-4. **The user owns the privacy ceiling at capture time.** Location precision,
-   identity (attributed/anon), and which sources air are chosen per go-live and
-   are immutable for that recording. Edits can only ever *narrow* below the
-   captured ceiling, never widen past it.
+   visibility — is reversible metadata. Delete is real (off disk) **except**
+   reported content, a copy of which the platform holds for moderation beyond the
+   user's reach (§3).
+4. **Privacy is the creator's, and reversible.** Location precision and identity
+   (attributed/anon) are **display-layer choices the creator can change in either
+   direction, any time** — blur *or* sharpen, live or on a saved clip. Capture
+   retains **full fidelity** (exact coords + real identity; the owner is known
+   server-side), so sharpening later is always possible; replay and discovery read
+   the clip's **current** choice, never a value frozen at capture. *(Decided
+   2026-06-13 — supersedes the earlier "immutable ceiling, narrow-only" model; the
+   shipped immutable-precision behaviour is the rework.)* The captured **set of
+   sources** is a historical fact (you can't capture a source retroactively), but a
+   clip may disable any of them (§5).
 5. **Storage is honest and bounded.** Two pools, explicit caps per tier, visible
    usage. The system never quietly grows without bound, and it never silently
    drops content a user chose to keep.
@@ -131,6 +139,14 @@ Content lives in exactly one of two stores, with opposite lifecycles:
 **Per-tier caps** (capture is pinned to the tier — "cap produce", no server
 transcode): Free 24h / 720p · Plus 72h / 1080p · Pro 7d / 1440p. Byte backstops
 are sized worst-case-plus-cushion.
+
+**A third, platform-side hold — moderation.** When content is **reported**, the
+platform copies it to a **separate moderation hold** (not one of the user's two
+pools). It **survives the creator's deletion** and persists until a moderator
+dismisses or deletes it; because it's the platform's hold rather than the user's
+storage, once it is past the rolling-buffer window it **does not count toward the
+creator's quota**. *(Decided 2026-06-13. The review/takedown UI is v0.3; the
+copy-on-report retention is the decided principle now.)*
 
 ---
 
@@ -234,9 +250,11 @@ nuances, not styling — styling lives in DESIGN.md.
 - **The consent step is the relaxable half.** Currently parked for friends-and-
   family; the `RecordConsentSheet` and sensitive/benign badges are shipped and
   re-enabled before any wider exposure.
-- **Precision is per-stream, set at go-live** (exact / city / country / off),
-  immutable for that recording; the globe renders the broadcaster's *captured*
-  choice, not their current account setting. `off` never reaches a client.
+- **Precision is per-stream and reversible** (exact / city / country / off): set at
+  go-live but **editable in either direction afterward** on the clip; the globe and
+  replay render the clip's **current** choice. Capture keeps the exact coordinate so
+  it can be sharpened later. `off` never reaches a client while it is set to `off`.
+  *(Reversibility decided 2026-06-13 — see §1.4.)*
 - **Anonymous is truly anonymous.** No device IDs, no local UUIDs, no backend
   row for a viewer. Identity actions (go live, chat, react, follow, save) are
   what require an account.
@@ -251,10 +269,10 @@ nuances, not styling — styling lives in DESIGN.md.
 - **Forward-only data.** Audience geo, activity heatmaps, analytics — all accrue
   from new activity; nothing is backfilled. The honest story beats a fabricated
   history.
-- **The globe encodes the privacy ceiling visually.** Location precision renders
+- **The globe encodes the privacy choice visually.** Location precision renders
   as a sharp pin (exact), a soft halo (city), or a diffuse haze (country),
-  centred on the *obfuscated* coordinate — the representation itself respects the
-  captured precision. Subscription status reads by colour; the broadcaster's own
+  centred on the *obfuscated* coordinate — the representation respects the clip's
+  **current** precision (reversible, §7). Subscription status reads by colour; the broadcaster's own
   live stream is a black self-pin (excluded from the join drawer; tapping returns
   to the broadcast); pin counts are clusters-only and exclude your own stream.
 - **One pin type for live + past.** A unified `DiscoveryPin` (`stream | clip`) so
@@ -313,8 +331,10 @@ regresses, the app's content surfaces degrade or lie.
 ### Shared contracts
 
 - `SourceType` / `FeedKind` is the seven-source (+ chat) union.
-- Location precision is **immutable at capture** and travels with the
-  stream/clip, not the user.
+- Location precision (and identity) **travel with the clip and are reversible** —
+  the clip's *current* value, not the user's account setting, editable in either
+  direction. Backend stores full fidelity (exact coords + real identity) so a clip
+  can be sharpened; the manifest carries the display choice.
 - The `DiscoveryPin` discriminated union + the seek-offset math are the live↔past
   contract.
 
