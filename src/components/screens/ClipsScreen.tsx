@@ -298,23 +298,12 @@ export const ClipsScreen = () => {
 
   const bufferedLaneRaw = useMemo(() => [...applySplits(carveBuffer(sessions, claims), splitPoints), ...drafts], [sessions, claims, drafts, splitPoints])
   // Window the timeline to the buffer window: drop anything fully older than the reaper boundary
-  // (this is what removes SAVED clips older than the window), and CLAMP a clip straddling the
-  // boundary to it — so the oldest clip visibly shrinks as `windowStartMs` advances (the reaper
-  // eating it), and the timeline is only ever as long as the window.
-  const windowLane = useCallback(
-    (clips: LaneClip[]): LaneClip[] => {
-      if (windowStartMs == null) return clips
-      const out: LaneClip[] = []
-      for (const c of clips) {
-        if (c.endMs <= windowStartMs) continue
-        out.push(c.startMs < windowStartMs ? { ...c, startMs: windowStartMs } : c)
-      }
-      return out
-    },
-    [windowStartMs],
-  )
-  const bufferedLane = useMemo(() => windowLane(bufferedLaneRaw), [bufferedLaneRaw, windowLane])
-  const savedLane = useMemo(() => windowLane(savedLaneAll), [savedLaneAll, windowLane])
+  // (removes SAVED clips older than the window). Clips straddling the boundary stay full-extent —
+  // the timeline draws an advancing reaper MASK over their reaped part (smooth, on the UI thread),
+  // so the consumption looks as fluid as the playhead, with no per-tick layout shift.
+  const inWindow = useCallback((c: LaneClip) => windowStartMs == null || c.endMs > windowStartMs, [windowStartMs])
+  const bufferedLane = useMemo(() => bufferedLaneRaw.filter(inWindow), [bufferedLaneRaw, inWindow])
+  const savedLane = useMemo(() => savedLaneAll.filter(inWindow), [savedLaneAll, inWindow])
   const allClips = useMemo(() => [...bufferedLane, ...savedLane], [bufferedLane, savedLane])
   const hasAny = allClips.length > 0
 
@@ -692,10 +681,21 @@ export const ClipsScreen = () => {
     [seekTo],
   )
 
-  // Clock: a held instant (playback=false). Scrubbing the dial seeks within the clip.
-  // 0 (NOW) when pinned to the live edge; otherwise the held instant behind now. The TimeScrubber
-  // freezes a held (non-live) value, so a paused clock won't drift/bounce across a second.
-  const offsetForClock = followLive ? 0 : Math.max(0, Date.now() - playheadMs)
+  // Riding the reaper edge: the playhead sits on the oldest (being-consumed) instant. The reaper
+  // edge is always exactly `windowMs` behind now, so the clock reads THEN at a CONSTANT offset but
+  // must TICK (the reaper advances with real time) — `liveTick` makes the TimeScrubber tick it live
+  // instead of freezing it. Keep the playhead out of the reaped region (clamp to the edge).
+  const reaperRiding = windowStartMs != null && !playing && !scrubbing && playheadMs <= windowStartMs + 2000
+  useEffect(() => {
+    if (windowStartMs == null || playingRef.current || scrubbingRef.current) return
+    if (playheadRef.current < windowStartMs) {
+      playheadRef.current = windowStartMs
+      setPlayheadMs(windowStartMs)
+    }
+  }, [windowStartMs])
+  // Clock: 0 (NOW) at the live edge; `windowMs` (live-ticking THEN) riding the reaper edge; else the
+  // held instant behind now (frozen by the TimeScrubber so a paused clock doesn't bounce a second).
+  const offsetForClock = followLive ? 0 : reaperRiding ? windowMs : Math.max(0, Date.now() - playheadMs)
   const [clockExpanded, setClockExpanded] = useState(false)
   const [collapseSignal, setCollapseSignal] = useState(0)
 
@@ -961,11 +961,13 @@ export const ClipsScreen = () => {
     [orderedClips, axisTop, reaperBoundaryMs],
   )
   const goTo = useCallback(
-    (timeMs: number, live = false) => {
+    (timeMsRaw: number, live = false) => {
       setSelectedId(null)
       setFollowLive(live) // only the now-edge jump pins the clock to NOW
       // The playhead is authoritative — nav MOVES it (not just the scroll). `now` can sit past the
-      // last footage (the caught-up edge), so don't clamp to lastEnd here as seekTo would.
+      // last footage (the caught-up edge), so don't clamp to lastEnd; but never land in the reaped
+      // region (older than the reaper edge) — clamp up to the window boundary.
+      const timeMs = windowStartMs != null ? Math.max(timeMsRaw, windowStartMs) : timeMsRaw
       playheadRef.current = timeMs
       setPlayheadMs(timeMs)
       setVideoMode(true)
@@ -988,7 +990,7 @@ export const ClipsScreen = () => {
       }
       timelineRef.current?.scrollToTime(timeMs, true)
     },
-    [allClips, player, gapSpanAt],
+    [allClips, player, gapSpanAt, windowStartMs],
   )
   const goPrev = useCallback(() => {
     const c = timelineRef.current?.getCenter()
@@ -1007,10 +1009,11 @@ export const ClipsScreen = () => {
     if (target != null) goTo(target)
   }, [navBoundaries, goTo])
   const goReaper = useCallback(() => {
-    // Not reaping → land in the leading gap (countdown card); reaping → the oldest footage edge.
-    if (reaperBoundaryMs != null) goTo(reaperBoundaryMs)
+    // The reaper edge (now − window): the leading-gap countdown when there's room, or the oldest
+    // footage being consumed (clock ticks THEN at the reaper time) once the window is full.
+    if (windowStartMs != null) goTo(windowStartMs)
     else if (navBoundaries.length) goTo(navBoundaries[0]!)
-  }, [reaperBoundaryMs, navBoundaries, goTo])
+  }, [windowStartMs, navBoundaries, goTo])
   const goNow = useCallback(() => goTo(axisTop, true), [goTo, axisTop])
 
   return (
@@ -1130,7 +1133,8 @@ export const ClipsScreen = () => {
             nowMs={axisTop}
             reaping={reaping}
             reaperLane={reaperLane}
-            reaperBoundaryMs={reaperBoundaryMs}
+            reaperEdgeMs={windowStartMs}
+            windowMs={windowMs}
             selectedId={selectedId}
             onSelect={(c) => {
               setSelectedId(c.id) // tap → highlight + preview poster (no timeline reposition)
@@ -1184,6 +1188,7 @@ export const ClipsScreen = () => {
         <View style={styles.bottomChrome}>
           <TimeScrubber
             offsetMs={offsetForClock}
+            liveTick={reaperRiding}
             onOffsetChange={(off) => {
               if (off <= 0) {
                 goNow() // tap NOW → skip the timeline to the now edge (+ pin the clock to NOW)

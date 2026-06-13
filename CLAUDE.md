@@ -2971,3 +2971,32 @@ needed); the fullscreen hook re-locks `PORTRAIT_UP` on exit/unmount.
 Needs an on-device pass after the rebuild: iOS landscape rotation + upright-both-ways,
 the portrait-everywhere-else lock holding across navigation, volume/mute on the live
 WebRTC track, and the overlay layout (close button clear of the notch in landscape).
+
+---
+
+## Updates — June 2026 (Clips grid: playhead-driven playback + buffer-window reaper UX)
+
+Big pass on the Clips landing grid (`ClipsScreen` + `ClipsTimeline` + `ClipViewer` +
+`TimeScrubber`), all on `design`, all pure JS (hot-reloadable, no native rebuild). Canonical
+detail: **DESIGN.md decision log (2026-06-13)** + CONTENT.md §6. **⚠️ Checkpoint, not a close-out —
+known bugs remain** (Ben is still squashing; flagged below).
+
+- **Playback is playhead-driven** (CONTENT.md §6). One authoritative wall-clock playhead advances by
+  real time (1× footage, 3s rush across a gap); the video + timeline follow. Replaced the old
+  video-drives-playhead model — fixes the stalls / snap-backs / 1969-clock. `locateAt` resolves
+  footage/gap/end; snips play unbroken (no reload on same-URL VOD); never reset by churn.
+- **Seam flash fix** — `ClipViewer` poster is always-mounted + opacity-toggled, with a `coverPoster`
+  flag holding the incoming frame over a between-lane VOD reload (no bg flash).
+- **Clock** — `TimeScrubber` hold-mode freezes a held THEN instant (paused clock no longer bounces a
+  second); new `liveTick` ticks a held THEN live for the reaper-edge case. NOW ↔ now-edge bound.
+- **Buffer-window reaper UX** — grid windowed to `[now−windowHours, now]` (drops saved clips older
+  than the window). Dark head/tail caps; leading reaper gap + "until oldest is reaped" countdown
+  card; trailing gap rushable to now + "since last broadcast" count-up card; per-lane reaper edge
+  (red **sickle** = buffer eaten, black **save** = saved scrolling out); **60fps** reaper mask
+  consuming the oldest clip via `useFrameCallback` (no re-render, no layout drift); periodic 15s
+  buffer refetch so footage shrinks with the backend reaper.
+- **Still owed (known bugs + follow-ups):** on-device pass of the whole thing; the reaper scroll
+  doesn't follow the advancing edge while idle (park-on-edge creeps off-centre); the not-reaping→
+  reaping transition has a one-time GAP_W layout shift; playhead-clamp out of the reaped region is on
+  the 10s tick. Seam discipline holds — these are Ben's `design` components/scaffold; Aaron owns the
+  real buffer/manifest wiring (`screens`/`hooks`/`api`).

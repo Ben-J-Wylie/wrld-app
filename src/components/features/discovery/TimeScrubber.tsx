@@ -119,6 +119,10 @@ type Props = {
   // and the host owns whether the playhead advances (it keeps offsetMs tracking a
   // held absolute instant). The live tick at offset 0 still ticks in both modes.
   playback?: boolean
+  // Hold mode only: tick a HELD (offset > 0) instant live (Date.now() − offset) instead of freezing
+  // it. Used when the offset is constant but the instant advances — e.g. the playhead riding the
+  // reaper edge (always `windowMs` behind now): the clock reads THEN but ticks with the reaper.
+  liveTick?: boolean
   // Wheel-scrub lifecycle (start on the first move, end on lift) — lets a hold-mode host
   // pause playback while spinning and resume on release. Independent of `playback`.
   onScrubStart?: () => void
@@ -143,6 +147,7 @@ export function TimeScrubber({
   collapseSignal = 0,
   onExpandedChange,
   playback = true,
+  liveTick = false,
   onScrubStart,
   onScrubEnd,
   interactive = true,
@@ -244,11 +249,13 @@ export function TimeScrubber({
   }
   const playMs = live
     ? Date.now() - offsetMs // offset 0 → ticks NOW
-    : playback
-      ? paused
-        ? frozenRef.current // globe: post-scrub freeze beat
-        : Date.now() - offsetMs // globe: real-time 1× playback
-      : heldInstant.current // clip editor: host-controlled held instant (no internal drift)
+    : liveTick
+      ? Date.now() - offsetMs // held THEN that must TICK (e.g. riding the reaper edge)
+      : playback
+        ? paused
+          ? frozenRef.current // globe: post-scrub freeze beat
+          : Date.now() - offsetMs // globe: real-time 1× playback
+        : heldInstant.current // clip editor: host-controlled held instant (no internal drift)
   const playhead = new Date(playMs)
 
   // Direction of the latest playhead change → drives the dial slide

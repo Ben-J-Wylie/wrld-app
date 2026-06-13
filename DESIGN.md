@@ -3482,7 +3482,12 @@ on the sublabel and the left ruler.
   width) positions both lanes + the ruler. Reuses `ClipBlock` (sized to the lane height); single-tap
   selects, double-tap opens, **vertical** drag-to-cross (down = save, up = un-save). Presentational —
   the host (`ClipsScreen`) owns the data + select/open/save/un-save callbacks. Props `buffered` ·
-  `saved` · `nowMs` · `selectedId` · `onSelect` · `onOpen` · `onSave` · `onUnsave`.
+  `saved` · `nowMs` · `selectedId` · `onSelect` · `onOpen` · `onSave` · `onUnsave`, plus the
+  **buffer-window reaper** props (2026-06-13): `reaping` · `reaperLane` (`buffered`/`saved` → red
+  sickle / black save) · `reaperEdgeMs` (the `now − window` boundary; the timeline advances it every
+  FRAME via `useFrameCallback` so the **reaper mask** + edge consume the oldest clip at 60fps) ·
+  `windowMs`. Also carries the **leading gap** (`leadGapPx`/`leadFromMs` threaded through the worklet
+  layout — the reaper-room countdown region) and the **dark head/tail caps** beyond the window edges.
   *(The vertical `ClipLane` / `ClipTimeRuler` / `TimeGapMarker` are now gallery-only — the timeline
   superseded them for the grid; `ClipBlock` is shared.)*
 - **`ClipViewer`** — `src/components/features/clip/ClipViewer.tsx`. The **sticky full-width 2:1**
@@ -3493,7 +3498,9 @@ on the sublabel and the left ruler.
   landscape clips both show whole. No play button (the transport owns play/pause). **Single-tap** a
   clip in the grid selects it here (double-tap opens the editor); defaults to the newest. *(Capture
   currently encodes landscape, so buffer video can play rotated — a capture-side fix, NOT an app
-  rotation.)* Props `posterUrl?` · `title?` · `playing?` · `frameSlot?` · `style?`.
+  rotation.)* Props `posterUrl?` · `title?` · `playing?` · **`coverPoster?`** (hold the poster over a
+  between-lane VOD reload — the poster is always-mounted + opacity-toggled so raising it can't flash
+  the bg; 2026-06-13) · `frameSlot?` · `style?`.
 
   The **Clips page playback chrome**: a `BufferTransport` (to-start · prev clip · frame-back ·
   play/pause · frame-forward · next clip · to-end) sits **directly below the viewer**; the
@@ -4530,6 +4537,49 @@ above. The seam is not a separate motion category.
 
 Append-only. Most recent first. Each entry: date, decision, rationale,
 constraint it imposes downstream.
+
+### 2026-06-13 — Clips grid: playhead-driven playback + buffer-window reaper UX
+
+A large pass on the Clips landing grid (`ClipsScreen` + `ClipsTimeline` + `ClipViewer` +
+`TimeScrubber`; all pure JS, hot-reloadable). **Known bugs remain** — this is a checkpoint, not a
+close-out.
+
+- **Playback is playhead-driven (CONTENT.md §6 made real).** One authoritative wall-clock playhead
+  advances by REAL time (1× over footage, a fixed rush across a gap); the video + timeline are
+  *followers*. Replaced the old video-drives-playhead model (the source of stalls, snap-backs, and
+  1969 clocks). A `locateAt(ms)` resolves footage/gap/end; crossing a SNIP plays unbroken (no VOD
+  reload on the same URL); the playhead is never reset by churn (lane drag, re-layout). *Imposes:*
+  any new playback control sets the playhead and lets the followers catch up — never the reverse.
+
+- **Between-lane seam flash → `ClipViewer.coverPoster`.** Crossing two clips in different lanes
+  reloads the VOD (different URL); the brief reload showed the field bg. The poster is now
+  **always mounted, opacity-toggled** (no remount fade), and a `coverPoster` flag holds the incoming
+  clip's frame over the reload. *Imposes:* the poster layer is opacity-driven, not conditionally
+  mounted.
+
+- **`TimeScrubber` hold-mode clock: held-instant freeze + `liveTick`.** In `playback={false}` a held
+  (offset > 0) instant is captured on offset-change and frozen between changes, so the internal 1s
+  tick can't bounce a paused clock across a second. New **`liveTick`** prop ticks a held THEN live
+  (Date.now − offset) for the one case where the offset is constant but the instant advances — the
+  playhead **riding the reaper edge** (always `windowMs` behind now). NOW ↔ now-edge are bound (tap
+  NOW skips the timeline to now; skipping to now reads NOW).
+
+- **Buffer-window reaper UX (`ClipsTimeline`).** The grid is windowed to `[now − windowHours, now]`:
+  clips fully older than the boundary are dropped (removes saved clips older than the window). New
+  visuals: **dark head/tail caps** beyond the window edges; a **leading reaper gap** (threaded
+  through the worklet layout — `leadGapPx`/`leadFromMs`) with a viewer **countdown card** ("until
+  oldest is reaped", seconds) when there's room; a **trailing gap** that's rushable to now with a
+  **"since last broadcast"** count-up card; and, once the window is full, a **per-lane reaper edge** —
+  red rule + **sickle** (buffer footage being eaten) or black rule + **save icon** (a saved clip
+  scrolling out, protected). The edge renders ON TOP of the lanes (badge centred vert + horiz).
+
+- **Reaper consumes the oldest clip at 60fps (UI thread).** A `useFrameCallback` advances the reaper
+  boundary every frame (anchored to the JS edge, re-synced on the slow tick); a content-space
+  **mask** + the badge ride that position, eating the clip from the left as smoothly as the playhead —
+  no React re-render in the loop, no layout shift (clips stay full-extent), so no scroll drift. The
+  frame loop runs ONLY while actively reaping. *Imposes:* don't reintroduce a per-tick data clamp for
+  the consumption (it drifts the left-anchored layout at high zoom). *Open:* the scroll doesn't yet
+  follow the advancing edge while idle (park-on-edge creeps right of centre).
 
 ### 2026-06-09 — Clock-above-footer pattern; Stream ⇄ Dashboard layout parity; footer reshuffle
 

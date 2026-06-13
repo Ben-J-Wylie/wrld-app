@@ -32,6 +32,7 @@ import Animated, {
   useAnimatedReaction,
   useAnimatedStyle,
   useDerivedValue,
+  useFrameCallback,
   useSharedValue,
   withDecay,
   withTiming,
@@ -190,7 +191,11 @@ type Props = {
   reaping?: boolean
   // Which lane the oldest (being-reaped) clip is in → buffer = red sickle, saved = black save icon.
   reaperLane?: 'buffered' | 'saved'
-  reaperBoundaryMs?: number | null
+  // The reaper boundary (now − window) in wall-clock + the window length. The timeline advances the
+  // boundary every FRAME (anchored to these) so the reaper mask + edge consume the oldest clip as
+  // smoothly as the playhead plays. null/0 → no windowing.
+  reaperEdgeMs?: number | null
+  windowMs?: number
   selectedId: string | null
   onSelect: (clip: LaneClip) => void
   onOpen: (clip: LaneClip, kind: 'buffered' | 'saved') => void
@@ -267,9 +272,10 @@ function AnimatedGap({ layout, index, trailing, leading }: { layout: SharedValue
 // The reaper edge at the oldest clip's left edge, within ONE lane. Buffer footage being eaten →
 // red rule + sickle; a saved clip scrolling out (protected) → black rule + save icon. The badge is
 // vertically centred in the lane (so the lane title band can't hide it).
-function AnimatedReaperEdge({ layout, top, height, kind }: { layout: SharedValue<Layout>; top: number; height: number; kind: 'reap' | 'save' }) {
-  // Centre the GAP_W-wide badge on the oldest clip's left edge → the rule lands exactly on it.
-  const style = useAnimatedStyle(() => ({ left: (layout.value.lefts[0] ?? 0) - GAP_W / 2 }))
+function AnimatedReaperEdge({ edgeX, top, height, kind }: { edgeX: SharedValue<number>; top: number; height: number; kind: 'reap' | 'save' }) {
+  // Ride the reaper boundary's content-x (advanced each frame) → the rule + badge creep across the
+  // clip as smoothly as the playhead. Centre the GAP_W-wide badge on it.
+  const style = useAnimatedStyle(() => ({ left: edgeX.value - GAP_W / 2 }))
   const color = kind === 'reap' ? REAPER_RED : REAPER_SAVE
   return (
     <Animated.View style={[styles.reaperEdge, { top, height }, style]} pointerEvents="none">
@@ -282,7 +288,7 @@ function AnimatedReaperEdge({ layout, top, height, kind }: { layout: SharedValue
 }
 
 export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function ClipsTimeline(
-  { buffered, saved, nowMs, reaping, reaperLane = 'buffered', reaperBoundaryMs, selectedId, onSelect, onOpen, onSave, onUnsave, onScrubStart, onScrubEnd, onCenter }: Props,
+  { buffered, saved, nowMs, reaping, reaperLane = 'buffered', reaperEdgeMs, windowMs = 0, selectedId, onSelect, onOpen, onSave, onUnsave, onScrubStart, onScrubEnd, onCenter }: Props,
   ref,
 ) {
   // Combined set drives the shared axis (buffer + saved don't overlap → one timeline). Sorted
@@ -311,9 +317,9 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
 
   // Leading gap (reaper edge): exists only when NOT reaping and there's room before the oldest clip.
   const firstStartMs = segs[0]?.startMs ?? 0
-  const hasLeadGap = !reaping && reaperBoundaryMs != null && segs.length > 0 && reaperBoundaryMs < firstStartMs
+  const hasLeadGap = !reaping && reaperEdgeMs != null && segs.length > 0 && reaperEdgeMs < firstStartMs
   const leadGapPx = hasLeadGap ? GAP_W : 0
-  const leadFromMs = hasLeadGap ? reaperBoundaryMs! : firstStartMs
+  const leadFromMs = hasLeadGap ? reaperEdgeMs! : firstStartMs
   const showReaperEdge = !!reaping && segs.length > 0
 
   const maxDur = useMemo(() => segs.reduce((m, s) => Math.max(m, s.durMs), 0), [segs])
@@ -349,7 +355,39 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
   // drags (in child detectors) run simultaneously, so a 2nd finger can take over mid-drag.
   const twoFingers = useSharedValue(false)
   const pinchRef = useRef<GestureType | undefined>(undefined)
+  // ── reaper boundary, advanced EVERY FRAME (so the mask/edge consume the oldest clip smoothly) ──
+  // Anchored to the JS reaper edge (`reaperEdgeMs`, re-synced on the slow tick) + the frame delta.
+  const reaperNowSv = useSharedValue(0) // current wall-clock, ticking on the UI thread
+  const reaperAnchorSv = useSharedValue(0) // = Date.now() at the last JS resync
+  const reaperFrameBaseSv = useSharedValue(-1) // frame timestamp at the last resync (-1 = re-anchor)
+  const windowMsSv = useSharedValue(0)
+  const reaperOnSv = useSharedValue(0) // 1 when windowing is active (reaperEdgeMs present)
+  useFrameCallback((frame) => {
+    'worklet'
+    if (!reaperOnSv.value) return
+    if (reaperFrameBaseSv.value < 0) reaperFrameBaseSv.value = frame.timeSinceFirstFrame
+    reaperNowSv.value = reaperAnchorSv.value + (frame.timeSinceFirstFrame - reaperFrameBaseSv.value)
+  })
   const layout = useDerivedValue(() => computeLayout(segsSv.value, leadSv.value, trailSv.value, px.value))
+  // The reaper boundary's CONTENT-x (where the mask ends + the edge sits), advanced each frame.
+  const reaperEdgeXSv = useDerivedValue(() => {
+    if (!reaperOnSv.value) return 0
+    return timeToX(reaperNowSv.value - windowMsSv.value, segsSv.value, layout.value, nowSv.value, leadFromSv.value)
+  })
+
+  // Re-anchor the frame clock whenever the JS reaper edge resyncs (the slow now tick). The frame
+  // loop runs ONLY while actively reaping (a clip is being consumed) — otherwise the UI thread idles.
+  useEffect(() => {
+    if (reaperEdgeMs == null || !reaping) {
+      reaperOnSv.value = 0
+      return
+    }
+    reaperOnSv.value = 1
+    windowMsSv.value = windowMs
+    reaperAnchorSv.value = reaperEdgeMs + windowMs // = now at sync (edge = now − window)
+    reaperNowSv.value = reaperEdgeMs + windowMs
+    reaperFrameBaseSv.value = -1 // re-anchor the frame base on the next frame
+  }, [reaperEdgeMs, windowMs, reaping, reaperOnSv, windowMsSv, reaperAnchorSv, reaperNowSv, reaperFrameBaseSv])
 
   // Keep the worklet inputs in sync with the JS-side precompute / measurements.
   useEffect(() => {
@@ -548,6 +586,9 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
   // reaper edge) and right of now (tail). They show "you've hit the end of the buffer." Positioned in
   // VIEWPORT space (not the scrolling content), so they grow into view exactly as an edge reaches centre.
   const headCapStyle = useAnimatedStyle(() => ({ width: Math.max(0, vpSv.value / 2 - scroll.value) }))
+  // The reaper mask (content coords, ON TOP of the clips): covers [0, reaperEdgeX] — the part of the
+  // oldest clip already eaten. reaperEdgeX advances every frame → the clip is consumed smoothly.
+  const reaperMaskStyle = useAnimatedStyle(() => ({ width: Math.max(0, reaperEdgeXSv.value) }))
   const tailCapStyle = useAnimatedStyle(() => {
     const edge = vpSv.value / 2 - scroll.value + layout.value.total // viewport-x of the now edge
     return { left: edge, width: Math.max(0, vpSv.value - edge) }
@@ -624,19 +665,23 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
                   <AnimatedGap key={`gap-${i}`} layout={layout} index={i} />
                 ))}
                 {trailingGap ? <AnimatedGap layout={layout} index={-1} trailing /> : null}
-                {/* reaper edge while actively reaping — red sickle (buffer) / black save (saved),
-                    in the lane the oldest clip lives in, vertically centred so the title can't hide it */}
+                {/* clip lanes (positioned around the fixed title bands) */}
+                {renderLane(buffered, 'buffered', bufferTop)}
+                {renderLane(saved, 'saved', savedTop)}
+                {/* reaper mask — the eaten part of the oldest clip [0, reaperEdgeX], ON TOP of the
+                    lanes so the consumed footage reads as gone; advances every frame. */}
+                {showReaperEdge ? <Animated.View style={[styles.reaperMask, reaperMaskStyle]} pointerEvents="none" /> : null}
+                {/* reaper edge while actively reaping — red sickle (buffer) / black save (saved), in
+                    the lane the oldest clip lives in. Rendered ON TOP of the lanes so the clip block
+                    can't cut off the badge; centred (vert + horiz) on the oldest clip's edge. */}
                 {showReaperEdge ? (
                   <AnimatedReaperEdge
-                    layout={layout}
+                    edgeX={reaperEdgeXSv}
                     top={reaperLane === 'saved' ? savedTop : bufferTop}
                     height={laneHeight}
                     kind={reaperLane === 'saved' ? 'save' : 'reap'}
                   />
                 ) : null}
-                {/* clip lanes (positioned around the fixed title bands) */}
-                {renderLane(buffered, 'buffered', bufferTop)}
-                {renderLane(saved, 'saved', savedTop)}
               </Animated.View>
             </View>
           </GestureDetector>
@@ -698,6 +743,14 @@ const styles = StyleSheet.create({
   },
   headCap: {
     left: 0,
+  },
+  // The consumed (reaped) region over the oldest clip — content coords, left-anchored, full height.
+  reaperMask: {
+    position: 'absolute',
+    left: 0,
+    top: RULER_H,
+    bottom: 0,
+    backgroundColor: theme.colors.bg.panelHi,
   },
   // Reaper edge at the oldest clip's edge — a rule spanning the lane + a badge centred in it.
   reaperEdge: {
