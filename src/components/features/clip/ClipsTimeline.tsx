@@ -14,14 +14,29 @@
 //   └ reaper ──────────────────────────────► now ─┘
 //
 // Empty time collapses to thin gap markers (footage never disappears into empty space).
-// Buffer + saved clips never overlap (the carve), so ONE shared time→x axis positions both
-// lanes + the ruler. Pinch zooms; single-tap selects (→ viewer), double-tap opens the editor.
 //
-// See DESIGN.md Section 3 (Clips landing grid).
+// ── Why this is all reanimated (no ScrollView) ──
+// Pan + pinch run ENTIRELY on the UI thread. Clip / tick / gap positions are animated values
+// derived from two shared values — `px` (px-per-ms zoom) and `scroll` (the content-x under the
+// centre playhead) — so a gesture NEVER touches React state and never re-renders the tree. That
+// is what makes it buttery: no runOnJS-per-frame, no setState-per-frame, no scroll correction
+// lagging the layout. Zoom is a pure layout rescale (clips re-flow to new widths; their content
+// is fixed-size, so nothing stretches), anchored to the centre. React state only commits in
+// coarse zoom steps, purely to flip the thumb↔film-glyph swap. See DESIGN.md Section 3.
 
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
-import { ScrollView, StyleSheet, View } from 'react-native'
-import { useSharedValue, runOnJS } from 'react-native-reanimated'
+import { StyleSheet, View } from 'react-native'
+import Animated, {
+  cancelAnimation,
+  runOnJS,
+  useAnimatedReaction,
+  useAnimatedStyle,
+  useDerivedValue,
+  useSharedValue,
+  withDecay,
+  withTiming,
+  type SharedValue,
+} from 'react-native-reanimated'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import { theme } from '@/tokens/theme'
 import { Text } from '@/components/primitives/Text'
@@ -38,6 +53,8 @@ const GAP_THRESHOLD_MS = 45_000 // gaps longer than this get a marker; shorter �
 const MICRO_GAP_W = 4
 const LONGEST_DEFAULT_W = 150 // default zoom: the longest clip ≈ this wide
 const MAX_PX_PER_MS = 0.2
+const TICK_MIN_GAP = 48 // hide a ruler stamp whose neighbour is closer than this (px)
+const COMMIT_STEP = 0.18 // re-commit px to React (→ thumb/glyph swap) every ~18% zoom change
 
 function pad(n: number) {
   return String(n).padStart(2, '0')
@@ -50,46 +67,34 @@ function clamp(v: number, lo: number, hi: number) {
   return Math.max(lo, Math.min(hi, v))
 }
 
-// ── horizontal collapsed-gap layout (oldest → newest = left → right) ──
-type HPos = { left: number; width: number }
-type HGap = { x: number; width: number }
-type HLayout = { pos: Map<string, HPos>; gaps: HGap[]; contentWidth: number; tickXs: { x: number; label: string }[] }
-function buildHLayout(clips: LaneClip[], pxPerMs: number, nowMs: number): HLayout {
-  const sorted = clips
-    .filter((c) => Number.isFinite(c.startMs) && Number.isFinite(c.endMs) && c.endMs >= c.startMs)
-    .sort((a, b) => a.startMs - b.startMs) // oldest first
-  const pos = new Map<string, HPos>()
-  const gaps: HGap[] = []
-  const tickXs: { x: number; label: string }[] = []
+// ── one segment per clip on the shared axis (oldest → newest = left → right) ──
+// `gapPx` is the fixed-width gap BEFORE this clip (0 · MICRO_GAP_W · GAP_W). Precomputed in JS
+// (changes only when the clip set / now changes), then the cumulative pixel layout is computed
+// from `px` — in a worklet on the UI thread for the live gesture, and in JS for scrollToTime.
+type Seg = { id: string; startMs: number; durMs: number; gapPx: number }
+type Layout = { lefts: number[]; widths: number[]; total: number }
+
+// Cumulative layout at a given zoom. Tagged `worklet` so it runs on the UI thread inside the
+// derived value + gestures; it also runs fine on the JS thread (scrollToTime).
+function computeLayout(segs: Seg[], trailGapPx: number, px: number): Layout {
+  'worklet'
+  const lefts: number[] = []
+  const widths: number[] = []
   let cursor = 0
-  let prevEnd: number | null = null
-  let lastTickX = -Infinity
-  for (const c of sorted) {
-    if (prevEnd != null && c.startMs > prevEnd) {
-      const gapMs = c.startMs - prevEnd
-      if (gapMs > GAP_THRESHOLD_MS) {
-        gaps.push({ x: cursor, width: GAP_W })
-        cursor += GAP_W
-      } else {
-        cursor += MICRO_GAP_W
-      }
-    }
-    const width = Math.max(MIN_CLIP_W, (c.endMs - c.startMs) * pxPerMs)
-    pos.set(c.id, { left: cursor, width })
-    if (cursor - lastTickX > 56) {
-      tickXs.push({ x: cursor, label: fmtTick(c.startMs) })
-      lastTickX = cursor
-    }
-    cursor += width
-    prevEnd = prevEnd == null ? c.endMs : Math.max(prevEnd, c.endMs)
+  for (let i = 0; i < segs.length; i++) {
+    const s = segs[i]!
+    cursor += s.gapPx
+    const w = Math.max(MIN_CLIP_W, s.durMs * px)
+    lefts.push(cursor)
+    widths.push(w)
+    cursor += w
   }
-  // trailing gap to now (the live edge) + a "now" tick at the far right
-  if (prevEnd != null && nowMs > prevEnd + GAP_THRESHOLD_MS) {
-    gaps.push({ x: cursor, width: GAP_W })
-    cursor += GAP_W
-  }
-  tickXs.push({ x: cursor, label: 'now' })
-  return { pos, gaps, contentWidth: cursor, tickXs }
+  cursor += trailGapPx
+  return { lefts, widths, total: cursor }
+}
+function clampW(v: number, lo: number, hi: number) {
+  'worklet'
+  return Math.max(lo, Math.min(hi, v))
 }
 
 type Props = {
@@ -111,187 +116,313 @@ export type ClipsTimelineHandle = {
   scrollToTime: (ms: number, animated?: boolean) => void
 }
 
+// ── animated leaf nodes (each reads the shared `layout` on the UI thread) ──
+function AnimatedClip({
+  layout,
+  index,
+  clipH,
+  children,
+}: {
+  layout: SharedValue<Layout>
+  index: number
+  clipH: number
+  children: React.ReactNode
+}) {
+  const style = useAnimatedStyle(() => ({
+    left: layout.value.lefts[index] ?? 0,
+    width: layout.value.widths[index] ?? MIN_CLIP_W,
+  }))
+  return <Animated.View style={[styles.slot, { top: CLIP_INSET_Y, height: clipH }, style]}>{children}</Animated.View>
+}
+
+function AnimatedTick({ layout, index, label, isNow }: { layout: SharedValue<Layout>; index: number; label: string; isNow?: boolean }) {
+  const style = useAnimatedStyle(() => {
+    const lay = layout.value
+    const x = isNow ? lay.total : (lay.lefts[index] ?? 0)
+    // Fade a stamp whose left neighbour is too close, so labels never crowd when zoomed out.
+    let opacity = 1
+    if (!isNow && index > 0) opacity = x - (lay.lefts[index - 1] ?? 0) < TICK_MIN_GAP ? 0 : 1
+    return { left: x, opacity }
+  })
+  return (
+    <Animated.View style={[styles.tick, style]}>
+      <View style={[styles.tickMark, isNow && styles.tickMarkNow]} />
+      <Text variant="monoCaption" color={isNow ? theme.colors.accent.default : theme.colors.text.subtle}>
+        {label}
+      </Text>
+    </Animated.View>
+  )
+}
+
+function AnimatedGap({ layout, index, trailing }: { layout: SharedValue<Layout>; index: number; trailing?: boolean }) {
+  // A full gap occupies [left-GAP_W, left] before clip `index`; the trailing gap is the last GAP_W.
+  const style = useAnimatedStyle(() => ({ left: trailing ? layout.value.total - GAP_W : (layout.value.lefts[index] ?? 0) - GAP_W }))
+  return (
+    <Animated.View style={[styles.gapBand, { width: GAP_W, top: RULER_H, bottom: 0 }, style]}>
+      <View style={styles.gapRule} />
+    </Animated.View>
+  )
+}
+
 export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function ClipsTimeline(
   { buffered, saved, nowMs, selectedId, onSelect, onOpen, onSave, onUnsave, onScrubStart, onCenter }: Props,
   ref,
 ) {
-  // Combined set drives the shared axis (buffer + saved don't overlap → one timeline).
-  const allClips = useMemo(() => [...buffered, ...saved], [buffered, saved])
-  const maxDur = useMemo(() => allClips.reduce((m, c) => Math.max(m, c.endMs - c.startMs), 0), [allClips])
+  // Combined set drives the shared axis (buffer + saved don't overlap → one timeline). Sorted
+  // oldest→newest with gap-before widths; each clip gets a stable index into the layout arrays.
+  const { segs, trailGapPx, idToIndex, tickIndices, gapIndices, trailingGap } = useMemo(() => {
+    const all = [...buffered, ...saved]
+      .filter((c) => Number.isFinite(c.startMs) && Number.isFinite(c.endMs) && c.endMs >= c.startMs)
+      .sort((a, b) => a.startMs - b.startMs)
+    const out: Seg[] = []
+    const idx: Record<string, number> = {}
+    const gaps: number[] = []
+    let prevEnd: number | null = null
+    for (const c of all) {
+      let gapPx = 0
+      if (prevEnd != null && c.startMs > prevEnd) gapPx = c.startMs - prevEnd > GAP_THRESHOLD_MS ? GAP_W : MICRO_GAP_W
+      if (gapPx >= GAP_W) gaps.push(out.length)
+      idx[c.id] = out.length
+      out.push({ id: c.id, startMs: c.startMs, durMs: c.endMs - c.startMs, gapPx })
+      prevEnd = prevEnd == null ? c.endMs : Math.max(prevEnd, c.endMs)
+    }
+    const trailing = prevEnd != null && nowMs > prevEnd + GAP_THRESHOLD_MS
+    return { segs: out, trailGapPx: trailing ? GAP_W : 0, idToIndex: idx, tickIndices: out.map((_, i) => i), gapIndices: gaps, trailingGap: trailing }
+  }, [buffered, saved, nowMs])
 
+  const maxDur = useMemo(() => segs.reduce((m, s) => Math.max(m, s.durMs), 0), [segs])
   const [viewportW, setViewportW] = useState(0)
   const [regionH, setRegionH] = useState(0)
-  const [pxPerMs, setPxPerMs] = useState(0)
+  // px committed to React — ONLY drives the thumb↔glyph swap (widthPx prop). The live zoom lives
+  // in the `px` shared value; this trails it in coarse steps.
+  const [pxState, setPxState] = useState(0)
+
   const minPx = maxDur > 0 ? MIN_CLIP_W / maxDur : 0
   const maxPx = Math.max(minPx, MAX_PX_PER_MS)
   const defaultPx = maxDur > 0 ? clamp(LONGEST_DEFAULT_W / maxDur, minPx, maxPx) : 0
-  const px = pxPerMs > 0 ? clamp(pxPerMs, minPx, maxPx) : defaultPx
+
+  // ── shared values (UI-thread source of truth) ──
+  const px = useSharedValue(0) // px-per-ms zoom
+  const scroll = useSharedValue(0) // content-x under the centre playhead (= the scroll offset)
+  const segsSv = useSharedValue<Seg[]>(segs)
+  const trailSv = useSharedValue(trailGapPx)
+  const minPxSv = useSharedValue(0)
+  const maxPxSv = useSharedValue(MAX_PX_PER_MS)
+  const vpSv = useSharedValue(0)
+  const pinchStartPx = useSharedValue(0)
+  const anchorIdx = useSharedValue(-1)
+  const anchorFrac = useSharedValue(0)
+  const anchorScrollFrac = useSharedValue(0)
+  const lastCommitPx = useSharedValue(0)
+  const prevCenterIdx = useSharedValue(-2)
+  const layout = useDerivedValue(() => computeLayout(segsSv.value, trailSv.value, px.value))
+
+  // Keep the worklet inputs in sync with the JS-side precompute / measurements.
   useEffect(() => {
-    if (pxPerMs === 0 && defaultPx > 0) setPxPerMs(defaultPx)
-  }, [defaultPx, pxPerMs])
-
-  const layout = useMemo(() => buildHLayout(allClips, px, nowMs), [allClips, px, nowMs])
-  const contentWidth = layout.contentWidth
-  // Half-viewport of empty scroll on each end so the reaper edge (x=0) and the now edge
-  // (x=contentWidth) can each scroll all the way to the fixed centre playhead.
-  const padX = viewportW > 0 ? viewportW / 2 : 0
-  const outerWidth = contentWidth + 2 * padX
-
-  const scrollRef = useRef<ScrollView>(null)
-  const scrollXRef = useRef(0)
-  const pendingScrollX = useRef<number | null>(null)
-  const didInitialScroll = useRef(false)
-  const contentWidthRef = useRef(contentWidth)
-  contentWidthRef.current = contentWidth
-  const pxRef = useRef(px)
-  pxRef.current = px
-  const clipsRef = useRef(allClips)
-  clipsRef.current = allClips
-
+    segsSv.value = segs
+    trailSv.value = trailGapPx
+  }, [segs, trailGapPx, segsSv, trailSv])
   useEffect(() => {
-    if (pendingScrollX.current != null) {
-      const x = pendingScrollX.current
-      pendingScrollX.current = null
-      scrollRef.current?.scrollTo({ x, animated: false })
-      scrollXRef.current = x
-    }
-  }, [px])
-  // Land with "now" (the right edge) centred under the playhead on first content + viewport.
+    minPxSv.value = minPx
+    maxPxSv.value = maxPx
+  }, [minPx, maxPx, minPxSv, maxPxSv])
   useEffect(() => {
-    if (!didInitialScroll.current && contentWidth > 0 && viewportW > 0) {
-      didInitialScroll.current = true
-      const x = Math.max(0, outerWidth - viewportW) // = contentWidth → now under centre
-      requestAnimationFrame(() => scrollRef.current?.scrollTo({ x, animated: false }))
-    }
-  }, [contentWidth, viewportW, outerWidth])
+    vpSv.value = viewportW
+  }, [viewportW, vpSv])
 
-  // Pinch zoom — keep the timeline fraction under the focal pinned across the rescale (the
-  // leading pad is constant, so the focal maps into timeline space by subtracting it).
-  const zoomToFocal = useCallback(
-    (targetPx: number, focalX: number) => {
-      if (viewportW <= 0) return
-      const next = clamp(targetPx, minPx, maxPx)
-      if (Math.abs(next - pxRef.current) < 1e-12) return
-      const pad = viewportW / 2
-      const oldW = contentWidthRef.current
-      const frac = oldW > 0 ? (scrollXRef.current + focalX - pad) / oldW : 0
-      const newW = buildHLayout(clipsRef.current, next, nowMs).contentWidth
-      pendingScrollX.current = clamp(pad + frac * newW - focalX, 0, Math.max(0, newW + 2 * pad - viewportW))
-      setPxPerMs(next)
+  // Seed the zoom + land with "now" centred, once, when the viewport + first content are known.
+  const seeded = useRef(false)
+  useEffect(() => {
+    if (seeded.current || defaultPx <= 0 || viewportW <= 0) return
+    seeded.current = true
+    px.value = defaultPx
+    lastCommitPx.value = defaultPx
+    setPxState(defaultPx)
+    scroll.value = computeLayout(segs, trailGapPx, defaultPx).total // now under the centre
+  }, [defaultPx, viewportW, segs, trailGapPx, px, scroll, lastCommitPx])
+
+  // ── imperative: bring a time instant under the centre playhead (playback reposition + follow) ──
+  const scrollToTime = useCallback(
+    (ms: number, animated = false) => {
+      const p = px.value || defaultPx
+      if (p <= 0) return
+      const lay = computeLayout(segs, trailGapPx, p)
+      let x = lay.total
+      for (let i = 0; i < segs.length; i++) {
+        const s = segs[i]!
+        if (ms >= s.startMs && ms <= s.startMs + s.durMs) {
+          const frac = s.durMs > 0 ? (ms - s.startMs) / s.durMs : 0
+          x = lay.lefts[i]! + frac * lay.widths[i]!
+          break
+        }
+      }
+      const target = clamp(x, 0, lay.total)
+      cancelAnimation(scroll)
+      scroll.value = animated ? withTiming(target, { duration: 240 }) : target
     },
-    [minPx, maxPx, viewportW, nowMs],
+    [segs, trailGapPx, defaultPx, px, scroll],
   )
-  const pxSv = useSharedValue(px)
-  useEffect(() => {
-    pxSv.value = px
-  }, [px, pxSv])
-  const pinchStartSv = useSharedValue(0)
-  const pinch = useMemo(
+  useImperativeHandle(ref, () => ({ scrollToTime }), [scrollToTime])
+
+  // ── report the clip/instant under the centre playhead (only on a CLIP CHANGE — minimal hops) ──
+  const reportCenter = useCallback(
+    (id: string | null, timeMs: number) => {
+      onCenter?.(id, timeMs)
+    },
+    [onCenter],
+  )
+  useAnimatedReaction(
+    () => scroll.value,
+    (s) => {
+      const lay = layout.value
+      let idx = -1
+      for (let i = 0; i < lay.lefts.length; i++) {
+        if (s >= lay.lefts[i]! && s <= lay.lefts[i]! + lay.widths[i]!) {
+          idx = i
+          break
+        }
+      }
+      if (idx === prevCenterIdx.value) return
+      prevCenterIdx.value = idx
+      if (idx >= 0) {
+        const seg = segsSv.value[idx]!
+        const frac = lay.widths[idx]! > 0 ? (s - lay.lefts[idx]!) / lay.widths[idx]! : 0
+        runOnJS(reportCenter)(seg.id, seg.startMs + frac * seg.durMs)
+      } else {
+        runOnJS(reportCenter)(null, 0)
+      }
+    },
+  )
+
+  // ── tap-during-pinch guard (Pressables live in the clip blocks) ──
+  const [pinching, setPinching] = useState(false)
+  const pinchingRef = useRef(false)
+  pinchingRef.current = pinching
+  const commitPx = useCallback((next: number) => {
+    setPxState(next)
+  }, [])
+  const notifyScrubStart = useCallback(() => onScrubStart?.(), [onScrubStart])
+
+  // ── gestures (all UI thread) ──
+  // Pan = 1-finger horizontal scroll with momentum. Pinch = 2-finger zoom anchored to the centre.
+  // maxPointers(1) on the pan + the 2-finger pinch make them naturally exclusive by pointer count,
+  // so a pinch never scrolls; activeOffsetX/failOffsetY keep vertical clip-drags + taps free.
+  const panGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .maxPointers(1)
+        .activeOffsetX([-10, 10])
+        .failOffsetY([-16, 16])
+        .onStart(() => {
+          'worklet'
+          cancelAnimation(scroll)
+          runOnJS(notifyScrubStart)()
+        })
+        .onChange((e) => {
+          'worklet'
+          scroll.value = clampW(scroll.value - e.changeX, 0, layout.value.total)
+        })
+        .onEnd((e) => {
+          'worklet'
+          scroll.value = withDecay({ velocity: -e.velocityX, clamp: [0, layout.value.total], deceleration: 0.997 })
+        }),
+    [scroll, layout, notifyScrubStart],
+  )
+
+  const pinchGesture = useMemo(
     () =>
       Gesture.Pinch()
         .onStart(() => {
           'worklet'
-          pinchStartSv.value = pxSv.value
+          cancelAnimation(scroll)
+          runOnJS(setPinching)(true)
+          pinchStartPx.value = px.value
+          const lay = layout.value
+          const s = scroll.value
+          let idx = -1
+          let frac = 0
+          for (let i = 0; i < lay.lefts.length; i++) {
+            if (s >= lay.lefts[i]! && s <= lay.lefts[i]! + lay.widths[i]!) {
+              idx = i
+              frac = lay.widths[i]! > 0 ? (s - lay.lefts[i]!) / lay.widths[i]! : 0
+              break
+            }
+          }
+          anchorIdx.value = idx
+          anchorFrac.value = frac
+          anchorScrollFrac.value = lay.total > 0 ? s / lay.total : 0
         })
         .onUpdate((e) => {
           'worklet'
-          runOnJS(zoomToFocal)(pinchStartSv.value * e.scale, e.focalX)
+          const next = clampW(pinchStartPx.value * e.scale, minPxSv.value, maxPxSv.value)
+          px.value = next
+          // New layout at `next`, computed inline so the anchor uses fresh positions this frame.
+          const L = computeLayout(segsSv.value, trailSv.value, next)
+          const center = anchorIdx.value >= 0 ? L.lefts[anchorIdx.value]! + anchorFrac.value * L.widths[anchorIdx.value]! : anchorScrollFrac.value * L.total
+          scroll.value = clampW(center, 0, L.total)
+          // Coarse-step commit → React flips the thumb↔glyph swap (positions stay UI-thread smooth).
+          if (lastCommitPx.value <= 0 || Math.abs(next - lastCommitPx.value) / lastCommitPx.value > COMMIT_STEP) {
+            lastCommitPx.value = next
+            runOnJS(commitPx)(next)
+          }
+        })
+        .onFinalize(() => {
+          'worklet'
+          runOnJS(setPinching)(false)
+          runOnJS(commitPx)(px.value)
         }),
-    [zoomToFocal, pinchStartSv, pxSv],
+    [scroll, layout, px, segsSv, trailSv, minPxSv, maxPxSv, pinchStartPx, anchorIdx, anchorFrac, anchorScrollFrac, lastCommitPx, commitPx],
   )
 
-  // ── imperative: bring a time instant under the centre playhead ──
-  // scrollX that centres content-x C is `padX + C - viewportW/2` = C (padX = viewportW/2), so the
-  // target scroll offset is simply the time's content-x. Used to reposition on play + follow.
-  const layoutRef = useRef(layout)
-  layoutRef.current = layout
-  const timeToContentX = useCallback((ms: number) => {
-    const lay = layoutRef.current
-    const clips = clipsRef.current
-    let fallback = 0
-    let bestDist = Infinity
-    for (const c of clips) {
-      const p = lay.pos.get(c.id)
-      if (!p) continue
-      if (ms >= c.startMs && ms <= c.endMs) {
-        const dur = Math.max(1, c.endMs - c.startMs)
-        return p.left + ((ms - c.startMs) / dur) * p.width
-      }
-      const edgeX = ms < c.startMs ? p.left : p.left + p.width
-      const d = ms < c.startMs ? c.startMs - ms : ms - c.endMs
-      if (d < bestDist) {
-        bestDist = d
-        fallback = edgeX
-      }
-    }
-    return fallback
-  }, [])
-  useImperativeHandle(
-    ref,
-    () => ({
-      scrollToTime: (ms: number, animated = false) => {
-        const x = Math.max(0, timeToContentX(ms))
-        scrollRef.current?.scrollTo({ x, animated })
-        scrollXRef.current = x
-      },
-    }),
-    [timeToContentX],
-  )
-  // The clip + instant under the centre playhead. The centred content-x equals the scroll offset
-  // (padX = viewportW/2 cancels), so map the scroll offset → the clip it lands in + the time there.
-  const centerAt = useCallback((scrollX: number): { id: string | null; timeMs: number } => {
-    const lay = layoutRef.current
-    for (const c of clipsRef.current) {
-      const p = lay.pos.get(c.id)
-      if (p && scrollX >= p.left && scrollX <= p.left + p.width) {
-        const frac = p.width > 0 ? (scrollX - p.left) / p.width : 0
-        return { id: c.id, timeMs: c.startMs + frac * (c.endMs - c.startMs) }
-      }
-    }
-    return { id: null, timeMs: 0 }
-  }, [])
+  const gesture = useMemo(() => Gesture.Simultaneous(panGesture, pinchGesture), [panGesture, pinchGesture])
+
+  // Animated content container: width tracks the zoom; translateX positions the centre playhead
+  // (padX − scroll, where padX = viewportW/2). One transform drives the whole timeline's scroll.
+  const contentStyle = useAnimatedStyle(() => ({
+    width: Math.max(layout.value.total, 1),
+    transform: [{ translateX: vpSv.value / 2 - scroll.value }],
+  }))
 
   // Five rows fill the region: ruler + 2 title bands + 2 clip lanes. The lanes split what's left.
   const laneHeight = Math.max(0, (regionH - RULER_H - 2 * TITLE_H) / 2)
   const bufferTop = RULER_H + TITLE_H
   const savedTitleTop = bufferTop + laneHeight
   const savedTop = savedTitleTop + TITLE_H
-
   const clipH = Math.max(0, laneHeight - 2 * CLIP_INSET_Y)
+
   const renderLane = (clips: LaneClip[], tone: 'buffered' | 'saved', topPx: number) => (
-    <View style={[styles.lane, { top: topPx, height: laneHeight, width: contentWidth }]}>
+    <View style={[styles.lane, { top: topPx, height: laneHeight }]}>
       {clips.map((c) => {
-        const p = layout.pos.get(c.id)
-        if (!p) return null
+        const index = idToIndex[c.id]
+        if (index == null) return null
         return (
-          <View key={c.id} style={[styles.slot, { left: p.left, width: p.width, top: CLIP_INSET_Y, height: clipH }]}>
+          <AnimatedClip key={c.id} layout={layout} index={index} clipH={clipH}>
             <ClipBlock
-              heightPx={clipH} /* inset from the lane top/bottom; the slot bounds the width */
-              widthPx={p.width}
+              heightPx={clipH}
+              widthPx={Math.max(MIN_CLIP_W, c.endMs > c.startMs ? (c.endMs - c.startMs) * pxState : MIN_CLIP_W)}
               label={c.label}
               sublabel={c.sublabel}
               posterUrl={c.posterUrl}
               tone={tone}
               draft={!!c.draftId}
               selected={selectedId === c.id}
-              onSelect={() => onSelect(c)}
-              onOpen={() => onOpen(c, tone)}
+              onSelect={() => !pinchingRef.current && onSelect(c)}
+              onOpen={() => !pinchingRef.current && onOpen(c, tone)}
               dragAxis="y"
               dragDir={tone === 'buffered' ? 1 : -1}
               reachPx={clipH}
               onCross={() => (tone === 'buffered' ? onSave(c) : onUnsave(c))}
             />
-          </View>
+          </AnimatedClip>
         )
       })}
     </View>
   )
 
-  const hasAny = allClips.length > 0
+  const hasAny = segs.length > 0
 
   return (
     <View style={styles.region} onLayout={(e) => setRegionH(e.nativeEvent.layout.height)}>
-      {/* Horizontally-scrolling timeline — full width; the lane titles sticky-overlay the left. */}
       <View style={styles.scrollArea} onLayout={(e) => setViewportW(e.nativeEvent.layout.width)}>
         {!hasAny ? (
           <View style={styles.empty}>
@@ -300,48 +431,26 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
             </Text>
           </View>
         ) : (
-          <GestureDetector gesture={pinch}>
-            <ScrollView
-              ref={scrollRef}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              onScrollBeginDrag={() => onScrubStart?.()}
-              onScroll={(e) => {
-                const x = e.nativeEvent.contentOffset.x
-                scrollXRef.current = x
-                if (onCenter) {
-                  const { id, timeMs } = centerAt(x)
-                  onCenter(id, timeMs)
-                }
-              }}
-              scrollEventThrottle={16}
-            >
-              <View style={{ width: outerWidth, height: regionH }}>
-                {/* Timeline content, shifted right by the leading pad so x=0 sits at the centre. */}
-                <View style={{ position: 'absolute', left: padX, top: 0, width: contentWidth, height: regionH }}>
-                  {/* ruler */}
-                  <View style={styles.ruler}>
-                    {layout.tickXs.map((t, i) => (
-                      <View key={i} style={[styles.tick, { left: t.x }]}>
-                        <View style={[styles.tickMark, t.label === 'now' && styles.tickMarkNow]} />
-                        <Text variant="monoCaption" color={t.label === 'now' ? theme.colors.accent.default : theme.colors.text.subtle}>
-                          {t.label}
-                        </Text>
-                      </View>
-                    ))}
-                  </View>
-                  {/* gap markers across both lanes */}
-                  {layout.gaps.map((g, i) => (
-                    <View key={`gap-${i}`} style={[styles.gapBand, { left: g.x, width: g.width, top: RULER_H, bottom: 0 }]}>
-                      <View style={styles.gapRule} />
-                    </View>
+          <GestureDetector gesture={gesture}>
+            <View style={styles.surface}>
+              <Animated.View style={[{ height: regionH }, contentStyle]}>
+                {/* ruler (clock stamps) */}
+                <View style={styles.ruler}>
+                  {tickIndices.map((i) => (
+                    <AnimatedTick key={i} layout={layout} index={i} label={fmtTick(segs[i]!.startMs)} />
                   ))}
-                  {/* clip lanes (positioned around the fixed title bands) */}
-                  {renderLane(buffered, 'buffered', bufferTop)}
-                  {renderLane(saved, 'saved', savedTop)}
+                  <AnimatedTick layout={layout} index={-1} label="now" isNow />
                 </View>
-              </View>
-            </ScrollView>
+                {/* gap markers across both lanes */}
+                {gapIndices.map((i) => (
+                  <AnimatedGap key={`gap-${i}`} layout={layout} index={i} />
+                ))}
+                {trailingGap ? <AnimatedGap layout={layout} index={-1} trailing /> : null}
+                {/* clip lanes (positioned around the fixed title bands) */}
+                {renderLane(buffered, 'buffered', bufferTop)}
+                {renderLane(saved, 'saved', savedTop)}
+              </Animated.View>
+            </View>
           </GestureDetector>
         )}
       </View>
@@ -387,6 +496,10 @@ const styles = StyleSheet.create({
   },
   scrollArea: {
     flex: 1,
+    overflow: 'hidden',
+  },
+  surface: {
+    flex: 1,
   },
   // Fixed vertical playhead at the screen centre. Full region height; the opaque title bands
   // (rendered after) cover it at their rows, so it reads as running under the titles.
@@ -421,6 +534,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   ruler: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
     height: RULER_H,
   },
   tick: {
@@ -453,6 +570,7 @@ const styles = StyleSheet.create({
   lane: {
     position: 'absolute',
     left: 0,
+    right: 0,
   },
   slot: {
     position: 'absolute',

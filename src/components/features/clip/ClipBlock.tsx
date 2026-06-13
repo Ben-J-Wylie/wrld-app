@@ -84,6 +84,7 @@ export function ClipBlock({ heightPx, widthPx, label, sublabel, posterUrl, tone,
       ? Gesture.Pan().activeOffsetY([-8, 8]).failOffsetX([-12, 12])
       : Gesture.Pan().activeOffsetX([-8, 8]).failOffsetY([-12, 12])
     )
+      .maxPointers(1) // single-finger only → a 2-finger pinch never drags a clip between lanes
       .onStart(() => {
         'worklet'
         runOnJS(setDragging)(true)
