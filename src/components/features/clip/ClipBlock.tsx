@@ -12,8 +12,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { Image } from 'expo-image'
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
-import Animated, { useAnimatedStyle, useSharedValue, withTiming, runOnJS } from 'react-native-reanimated'
-import { Gesture, GestureDetector } from 'react-native-gesture-handler'
+import Animated, { useAnimatedStyle, useSharedValue, withTiming, runOnJS, type SharedValue } from 'react-native-reanimated'
+import { Gesture, GestureDetector, type GestureType } from 'react-native-gesture-handler'
 import { Pressable } from '@/components/primitives/Pressable'
 import { Text } from '@/components/primitives/Text'
 import { Icon } from '@/components/primitives/Icon'
@@ -46,10 +46,15 @@ type Props = {
   dragAxis?: 'x' | 'y'
   reachPx?: number
   onCross?: () => void
+  // When the timeline pinch grabs (a 2nd finger lands), the drag must yield: run simultaneously
+  // with the pinch so it can take over mid-drag, and spring the block back the instant the signal
+  // flips (a graceful return to its current lane instead of a half-committed cross).
+  yieldToGesture?: React.MutableRefObject<GestureType | undefined>
+  yieldSignal?: SharedValue<boolean>
   style?: StyleProp<ViewStyle>
 }
 
-export function ClipBlock({ heightPx, widthPx, label, sublabel, posterUrl, tone, draft, selected, onSelect, onOpen, dragDir, dragAxis = 'x', reachPx, onCross, style }: Props) {
+export function ClipBlock({ heightPx, widthPx, label, sublabel, posterUrl, tone, draft, selected, onSelect, onOpen, dragDir, dragAxis = 'x', reachPx, onCross, yieldToGesture, yieldSignal, style }: Props) {
   const lastTap = useRef(0)
   const onPress = () => {
     const now = Date.now()
@@ -79,41 +84,55 @@ export function ClipBlock({ heightPx, widthPx, label, sublabel, posterUrl, tone,
 
   // Drag along `dragAxis`: horizontal for side-by-side lanes, vertical for stacked lanes.
   const isY = dragAxis === 'y'
+  const yieldSv = yieldSignal
   const pan = useRef(
-    (isY
-      ? Gesture.Pan().activeOffsetY([-8, 8]).failOffsetX([-12, 12])
-      : Gesture.Pan().activeOffsetX([-8, 8]).failOffsetY([-12, 12])
-    )
-      .maxPointers(1) // single-finger only → a 2-finger pinch never drags a clip between lanes
-      .onStart(() => {
-        'worklet'
-        runOnJS(setDragging)(true)
-      })
-      .onUpdate((e) => {
-        'worklet'
-        const dir = dirSv.value
-        if (dir === 0) return
-        const reach = reachSv.value
-        const t = isY ? e.translationY : e.translationX
-        tx.value = dir > 0 ? Math.max(0, Math.min(reach, t)) : Math.min(0, Math.max(-reach, t))
-      })
-      .onEnd(() => {
-        'worklet'
-        const dir = dirSv.value
-        const reach = reachSv.value
-        const crossed = dir !== 0 && (dir > 0 ? tx.value >= reach / 2 : tx.value <= -reach / 2)
-        if (crossed) {
-          // Committed: leave tx put — the host optimistically moves the clip to the other lane,
-          // so this block unmounts in place (springing back here caused the "jump back").
-          runOnJS(fireCross)()
-        } else {
-          tx.value = withTiming(0, { duration: 160 })
-        }
-      })
-      .onFinalize(() => {
-        'worklet'
-        runOnJS(setDragging)(false)
-      }),
+    (() => {
+      let g = (isY
+        ? Gesture.Pan().activeOffsetY([-8, 8]).failOffsetX([-12, 12])
+        : Gesture.Pan().activeOffsetX([-8, 8]).failOffsetY([-12, 12])
+      ).maxPointers(1) // single-finger only → a 2-finger pinch never drags a clip between lanes
+      // Run alongside the timeline pinch so a 2nd finger can take over mid-drag.
+      if (yieldToGesture) g = g.simultaneousWithExternalGesture(yieldToGesture)
+      return g
+        .onStart(() => {
+          'worklet'
+          runOnJS(setDragging)(true)
+        })
+        .onUpdate((e) => {
+          'worklet'
+          if (yieldSv && yieldSv.value) {
+            // A 2nd finger landed → yield to the pinch: glide back to this lane, stop dragging.
+            if (tx.value !== 0) tx.value = withTiming(0, { duration: 140 })
+            return
+          }
+          const dir = dirSv.value
+          if (dir === 0) return
+          const reach = reachSv.value
+          const t = isY ? e.translationY : e.translationX
+          tx.value = dir > 0 ? Math.max(0, Math.min(reach, t)) : Math.min(0, Math.max(-reach, t))
+        })
+        .onEnd(() => {
+          'worklet'
+          if (yieldSv && yieldSv.value) {
+            tx.value = withTiming(0, { duration: 140 }) // pinch took over — don't commit a cross
+            return
+          }
+          const dir = dirSv.value
+          const reach = reachSv.value
+          const crossed = dir !== 0 && (dir > 0 ? tx.value >= reach / 2 : tx.value <= -reach / 2)
+          if (crossed) {
+            // Committed: leave tx put — the host optimistically moves the clip to the other lane,
+            // so this block unmounts in place (springing back here caused the "jump back").
+            runOnJS(fireCross)()
+          } else {
+            tx.value = withTiming(0, { duration: 160 })
+          }
+        })
+        .onFinalize(() => {
+          'worklet'
+          runOnJS(setDragging)(false)
+        })
+    })(),
   ).current
 
   const dragStyle = useAnimatedStyle(() => ({ transform: isY ? [{ translateY: tx.value }] : [{ translateX: tx.value }] }))

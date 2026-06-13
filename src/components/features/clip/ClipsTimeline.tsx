@@ -37,7 +37,7 @@ import Animated, {
   withTiming,
   type SharedValue,
 } from 'react-native-reanimated'
-import { Gesture, GestureDetector } from 'react-native-gesture-handler'
+import { Gesture, GestureDetector, type GestureType } from 'react-native-gesture-handler'
 import { theme } from '@/tokens/theme'
 import { Text } from '@/components/primitives/Text'
 import { Icon } from '@/components/primitives/Icon'
@@ -215,6 +215,11 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
   const anchorScrollFrac = useSharedValue(0)
   const lastCommitPx = useSharedValue(0)
   const prevCenterIdx = useSharedValue(-2)
+  // True the instant a 2nd finger lands anywhere on the timeline → pan + clip-drag yield to the
+  // pinch immediately (before pinch even activates on movement). The pinch ref lets the clip
+  // drags (in child detectors) run simultaneously, so a 2nd finger can take over mid-drag.
+  const twoFingers = useSharedValue(false)
+  const pinchRef = useRef<GestureType | undefined>(undefined)
   const layout = useDerivedValue(() => computeLayout(segsSv.value, trailSv.value, px.value))
 
   // Keep the worklet inputs in sync with the JS-side precompute / measurements.
@@ -320,18 +325,32 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
         })
         .onChange((e) => {
           'worklet'
+          if (twoFingers.value) return // a 2nd finger landed → defer to pinch, stop scrolling
           scroll.value = clampW(scroll.value - e.changeX, 0, layout.value.total)
         })
         .onEnd((e) => {
           'worklet'
+          if (twoFingers.value) return // don't fling into a zoom
           scroll.value = withDecay({ velocity: -e.velocityX, clamp: [0, layout.value.total], deceleration: 0.997 })
         }),
-    [scroll, layout, notifyScrubStart],
+    [scroll, layout, notifyScrubStart, twoFingers],
   )
 
   const pinchGesture = useMemo(
     () =>
       Gesture.Pinch()
+        .withRef(pinchRef)
+        .onTouchesDown((e) => {
+          'worklet'
+          if (e.numberOfTouches >= 2) {
+            twoFingers.value = true // the moment a 2nd finger lands — before pinch activates
+            cancelAnimation(scroll)
+          }
+        })
+        .onTouchesUp((e) => {
+          'worklet'
+          if (e.numberOfTouches < 2) twoFingers.value = false
+        })
         .onStart(() => {
           'worklet'
           cancelAnimation(scroll)
@@ -368,10 +387,11 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
         })
         .onFinalize(() => {
           'worklet'
+          twoFingers.value = false
           runOnJS(setPinching)(false)
           runOnJS(commitPx)(px.value)
         }),
-    [scroll, layout, px, segsSv, trailSv, minPxSv, maxPxSv, pinchStartPx, anchorIdx, anchorFrac, anchorScrollFrac, lastCommitPx, commitPx],
+    [scroll, layout, px, segsSv, trailSv, minPxSv, maxPxSv, pinchStartPx, anchorIdx, anchorFrac, anchorScrollFrac, lastCommitPx, commitPx, twoFingers],
   )
 
   const gesture = useMemo(() => Gesture.Simultaneous(panGesture, pinchGesture), [panGesture, pinchGesture])
@@ -412,6 +432,8 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
               dragDir={tone === 'buffered' ? 1 : -1}
               reachPx={clipH}
               onCross={() => (tone === 'buffered' ? onSave(c) : onUnsave(c))}
+              yieldToGesture={pinchRef}
+              yieldSignal={twoFingers}
             />
           </AnimatedClip>
         )
