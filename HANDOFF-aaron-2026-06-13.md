@@ -52,14 +52,19 @@ This doc is the index + the priority order, not a re-statement.
    promoting ALL data tracks empty). *temp=data-absent, motion=derived, torch-on-toggle/loc-trail/
    chat-view deferred. Needs an on-device pass. See `wrld-app/CLAUDE.md` "Sensor telemetry data path".*
 
-4. ☐ **Make every source SAVE, not just stream** (CONTENT.md §2/§6 — "a source isn't done until it
-   both streams and saves"):
-   - **Highest-leverage:** route aired telemetry (+ chat) → the buffer's per-source **`.jsonl`
-     track** (the sidecar exists from C1; nothing writes to it yet). This is what turns "flows live"
-     into "persists" + makes the clip telemetry/loc/chat tracks real.
-   - Prisma: confirm `BufferTrack.kind` covers loc/gyro/compass/motion/accel/speed/temp/torch/chat.
-   - **C6:** play those saved `.jsonl` tracks back in the clip viewer (the design renderers exist:
-     `SourceTelemetryGraph`, `SourceLocationTrail`, `SourceChatLog`).
+4. 🔶 **Make every source SAVE — core DONE (Aaron, 2026-06-13); C6 playback UI remains.**
+   - ✅ **Highest-leverage:** aired telemetry/chat/location now record to the buffer per-source
+     `.jsonl` track (items 2+3), and the **`ts`/`t` data-sample fix** makes them actually *promote*
+     into a saved clip (they were silently promoting empty before). "Flows live" → "persists" done.
+   - ✅ **Prisma:** `BufferTrack.kind`/`ClipTrack.kind` are plain `String` → already cover every kind
+     (comments updated; no migration).
+   - ✅ **API substrate:** `GET /buffer/me/clips` now exposes per-track `dataUrl`/`manifestUrl` so the
+     viewer can fetch saved data tracks.
+   - ☐ **C6 playback UI** (the visible remainder): the renderers are already wired in `ClipEditScreen`
+     (fed `MOCK_*`). Finish = fetch the viewed data source's `.jsonl` → parse to time-indexed samples
+     → feed `SourceTelemetryGraph`/`SourceLocationTrail`/`SourceChatLog` at `viewProgress`. Saved-clip
+     data is consumable now; live-buffer scrubbing also needs a tokenized buffer `.jsonl` serve route
+     + per-session data-track URLs on `GET /buffer/me`. *(see `wrld-backend/CLAUDE.md` "item 4")*
 
 5. ☐ **Content decision A — reversible precision/identity** *(DECIDED 2026-06-13; supersedes the
    immutable model + the shipped behaviour; CONTENT.md §1.4/§7/§8/§9 updated)*:
