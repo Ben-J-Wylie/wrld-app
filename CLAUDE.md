@@ -3140,3 +3140,23 @@ obfuscation is read-time only). So the rework is one real behaviour change:
   unconditionally (doesn't honour an anon clip's `attributed`/`visibility`). Surfacing
   buffer clips with visibility + the clip's current precision/identity is the tracked
   **C4.5** discover-completeness work — larger than item 5's reversibility rework.
+
+---
+
+## Updates — June 2026 (Decision A app prep + front-end handoff to Ben)
+
+Reversible location precision/identity (CONTENT.md §1.4/§7/§8) is implemented on the
+backend (capture keeps full fidelity, no ≤-ceiling ever existed, `clips/discover` reads
+the clip's *current* precision + honours anon identity — see `wrld-backend/CLAUDE.md`
+"Content decision A" + "C4.5"). App side:
+
+- **`ClipEditScreen.saveClip(name, privacy?)`** now accepts + persists
+  `{ locDisplayPrecision, attributed }` via `patchClip` (omitted = leave the clip's
+  current value — a new draft inherits the go-live precision server-side, so this never
+  clobbers). The data seam is ready; the **edit control is Ben's lane**.
+- **Front-end work still needed is collected in `HANDOFF-ben-frontend-2026-06-13.md`:**
+  (1) precision picker + Public/Anon identity segment in `SaveClipSheet` (decision A),
+  (2) a reusable Public/Anon `SegmentedToggle`, (3) a `DiscoveryHandoffCard` `kind:'clip'`
+  variant for the time-machine globe (Watch CTA + anonymous-host rendering — gated on the
+  app clip-pin consumer, still unbuilt). Everything else from items 1–5 (visualizers,
+  `SourceStage`, scissor/snip, C6 renderers) is already Ben's and shipped.

@@ -357,5 +357,7 @@ DESIGN.md + CONTENT.md §6 (representation). Aaron owns `screens/`, `hooks/`,
 - Backend detail: `wrld-backend/CLAUDE.md` (C-series + R-series) and
   `wrld-backend/docs/`.
 - Recorder detail: `wrld-mediasoup/CLAUDE.md`.
-- Live handoffs: `HANDOFF-c4-clip-editor-*.md`,
-  `HANDOFF-clips-saved-persistence-*.md`, `HANDOFF-source-visualizers-*.md`.
+- Live handoffs: `HANDOFF-aaron-2026-06-13.md` (cross-initiative todo, status-tracked),
+  `HANDOFF-ben-frontend-2026-06-13.md` (front-end components still needed),
+  `HANDOFF-c4-clip-editor-*.md`, `HANDOFF-clips-saved-persistence-*.md`,
+  `HANDOFF-source-visualizers-*.md`.
