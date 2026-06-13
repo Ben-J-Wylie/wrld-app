@@ -43,11 +43,14 @@ This doc is the index + the priority order, not a re-statement.
    wired. Chat (and location) now record; the clip chat track is real on save. The chat **source
    *view*** in the rail is still the `SourceStage` swap in item 3. *Needs an on-device pass.*
 
-3. ☐ **Sensor telemetry data path** (lights up the 7 sensor visualizers — all shipped on `main`):
-   mediasoup `telemetry`→`telemetryUpdate` relay (Option A, like `chatMessage`); `useTelemetryCapture`
-   (broadcaster, **`expo-sensors`** → EAS rebuild); `useStreamTelemetry` (viewer); **swap
-   StreamScreen's inline cam/audio switch → `SourceStage`**; widen `SourceType` → `FeedKind`; advertise
-   aired sensor kinds via `Stream.sources`. *(source-visualizers handoff, Part 2)*
+3. ✅ **DONE (Aaron, 2026-06-13)** — sensor telemetry data path. mediasoup `telemetry`→
+   `telemetryUpdate` relay (Option A) + buffer `.jsonl` record; `useTelemetryCapture` (broadcaster —
+   compass/speed via expo-location, gyro/accel via DeviceMotion; **`expo-sensors` already in the dev
+   client → NO EAS rebuild**); `useStreamTelemetry` (viewer, motion derived from accel); StreamScreen's
+   3 media surfaces swapped to **`SourceStage`** with `buildSource`; `SourceType`→`FeedKind`; aired
+   sensor kinds flow via `Stream.sources` (item 2). Also fixed the `ts`/`t` data-sample bug (was
+   promoting ALL data tracks empty). *temp=data-absent, motion=derived, torch-on-toggle/loc-trail/
+   chat-view deferred. Needs an on-device pass. See `wrld-app/CLAUDE.md` "Sensor telemetry data path".*
 
 4. ☐ **Make every source SAVE, not just stream** (CONTENT.md §2/§6 — "a source isn't done until it
    both streams and saves"):

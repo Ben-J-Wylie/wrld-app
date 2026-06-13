@@ -43,7 +43,7 @@ import {
   View,
 } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
+import { useEffect, useMemo, useRef, useState, useCallback, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { captureScreen } from 'react-native-view-shot'
 import { Filter as ProfanityFilter } from 'bad-words'
@@ -61,9 +61,11 @@ import { Text } from '@/components/primitives/Text'
 import { Icon } from '@/components/primitives/Icon'
 import { IconButton } from '@/components/primitives/IconButton'
 import { LivePill } from '@/components/features/stream/LivePill'
-import { AudioVisualizer } from '@/components/features/stream/AudioVisualizer'
 import { SourceRail } from '@/components/features/clip/SourceRail'
 import { SOURCE_META } from '@/components/features/stream/sourceMeta'
+import { SourceStage, type SourceRender } from '@/components/sections/SourceStage'
+import { useStreamTelemetry } from '@/hooks/useStreamTelemetry'
+import { useTelemetryCapture } from '@/hooks/useTelemetryCapture'
 import type { FeedKind } from '@/components/features/broadcast/FeedThumb'
 import { Avatar } from '@/components/primitives/Avatar'
 import { GoLiveRecordBar } from '@/components/features/broadcast/GoLiveRecordBar'
@@ -138,6 +140,28 @@ const AIR_KEY_TO_KIND: Record<string, string> = {
   loc: 'location',
   gyro: 'gyro',
   compass: 'compass',
+  motion: 'motion',
+  accel: 'accel',
+  speed: 'speed',
+  temp: 'temp',
+  torch: 'torch',
+}
+
+// Backend source-kind string → the FeedKind the SourceStage rail/renderer uses.
+// AV + the sensor kinds that render from live telemetry. location ('loc'), chat,
+// and profile are intentionally omitted — their source-views need their own data
+// wiring (loc trail / chat log / host identity) and are separate follow-ups.
+const SOURCE_TO_FEEDKIND: Record<string, FeedKind | undefined> = {
+  camera: 'cam',
+  audio: 'audio',
+  screen: 'screen',
+  compass: 'compass',
+  gyro: 'gyro',
+  motion: 'motion',
+  accel: 'accel',
+  speed: 'speed',
+  temp: 'temp',
+  torch: 'torch',
 }
 function recordedSourcesFromConfig(cfg: CaptureConfig | null): string[] {
   if (!cfg) return []
@@ -286,6 +310,7 @@ export function StreamScreen() {
     sendTip, dismissTip,
     sendGift, dismissGift,
     sendLocationUpdate,
+    sendTelemetry,
     sendBroadcasterPaused, sendBroadcasterResumed, sendBroadcasterOrientation, sendCameraFacing,
   } = useSignaling()
   // Broadcaster: while live, the source set comes from the store (stable
@@ -329,7 +354,7 @@ export function StreamScreen() {
   const broadcaster = isNew
     ? (wrldUser ? { handle: wrldUser.handle, displayName: wrldUser.displayName, avatarUrl: wrldUser.avatarUrl } : null)
     : (streamData?.host ?? null)
-  const [activeSource, setActiveSource] = useState<SourceType | null>(null)
+  const [activeSource, setActiveSource] = useState<FeedKind | null>(null)
   const [controlsVisible, setControlsVisible] = useState(false)
   const [hopError, setHopError] = useState<string | null>(null)
   const [chatOpen, setChatOpen] = useState(false)
@@ -407,23 +432,64 @@ export function StreamScreen() {
   // true; the SourceRail switches which source is shown.
   const isViewerInRoom = !isNew && status === 'in-room' && !streamEnded && !!remoteStream
   // The available sources as FeedKind, for the rail. Role-aware: broadcastSources
-  // is the viewer's stream sources or the broadcaster's live/armed set — so the
-  // same rail serves both the viewer and the live broadcaster (source monitor).
-  // Filter to the AV kinds the rail can render today — Stream.sources now also
-  // carries recorded data sources (chat/location/…) whose switchable source-views
-  // are the SourceStage telemetry work (item 3); until then they're not rail tiles.
+  // is the viewer's stream sources (Stream.sources) or the broadcaster's live/armed
+  // set — so the same rail serves both the viewer and the live broadcaster monitor.
+  // AV + the sensor sources the SourceStage can render from live telemetry. (loc /
+  // profile / chat source-views need their own data wiring — separate follow-ups.)
   const availableKinds = useMemo<FeedKind[]>(
-    () => broadcastSources.filter((s) => s === 'camera' || s === 'audio').map((s) => (s === 'camera' ? 'cam' : 'audio')),
+    () => broadcastSources.map((s) => SOURCE_TO_FEEDKIND[s as string]).filter((k): k is FeedKind => !!k),
     [broadcastSources],
   )
-  // Which source is currently being shown (defaults to the first). Shared by the
-  // viewer and the broadcaster's own monitor.
-  const selectedKind: FeedKind = activeSource
-    ? activeSource === 'camera'
-      ? 'cam'
-      : 'audio'
-    : availableKinds[0] ?? 'cam'
-  const selectSource = (k: FeedKind) => setActiveSource(k === 'cam' ? 'camera' : 'audio')
+  // Which source is currently being shown (defaults to the first).
+  const selectedKind: FeedKind = activeSource ?? availableKinds[0] ?? 'cam'
+  const selectSource = (k: FeedKind) => setActiveSource(k)
+
+  // Viewer-side live decode of the broadcaster's sensor telemetry (latest per kind).
+  // Active whenever we're showing a stream surface (viewer in-room or broadcaster
+  // monitoring its own sensors). audioLevel still comes from the getStats seam.
+  // (isLiveBroadcast is defined below; inline its condition to avoid the TDZ.)
+  const tel = useStreamTelemetry(isViewerInRoom || (isNew && status === 'in-room' && !streamEnded))
+  // Build the SourceStage render for the selected source. cam/screen get the
+  // injected RTCView slot; everything else renders from `tel` / `audioLevel`.
+  const buildSource = useCallback(
+    (kind: FeedKind, camSlot: ReactNode): SourceRender => {
+      switch (kind) {
+        case 'cam':
+        case 'screen':
+          return { kind, slot: camSlot }
+        case 'audio':
+          return { kind: 'audio', level: audioLevel, variant: 'waveform' }
+        case 'compass':
+          return { kind: 'compass', heading: tel.compass?.heading ?? 0 }
+        case 'gyro':
+          return { kind: 'gyro', pitch: tel.gyro?.pitch ?? 0, roll: tel.gyro?.roll ?? 0 }
+        case 'motion':
+          return { kind: 'motion', intensity: tel.motionIntensity ?? 0 }
+        case 'accel':
+          return { kind: 'accel', x: tel.accel?.x ?? 0, y: tel.accel?.y ?? 0, z: tel.accel?.z ?? 0 }
+        case 'speed':
+          return { kind: 'speed', mps: tel.speed?.mps ?? -1 }
+        case 'torch':
+          return { kind: 'torch', on: tel.torch?.on ?? false, level: tel.torch?.level }
+        case 'temp':
+          return { kind: 'temp', celsius: NaN } // no phone sensor → idle
+        default:
+          return { kind: 'audio', level: audioLevel, variant: 'waveform' }
+      }
+    },
+    [tel, audioLevel],
+  )
+  // Has the selected source produced data yet? (idle styling until then)
+  const sourceActive =
+    selectedKind === 'cam' ||
+    selectedKind === 'screen' ||
+    selectedKind === 'audio' ||
+    (selectedKind === 'compass' && !!tel.compass) ||
+    (selectedKind === 'gyro' && !!tel.gyro) ||
+    (selectedKind === 'motion' && tel.motionIntensity !== null) ||
+    (selectedKind === 'accel' && !!tel.accel) ||
+    (selectedKind === 'speed' && !!tel.speed) ||
+    (selectedKind === 'torch' && !!tel.torch)
   // The viewer always gets the dark media surface + translucent control overlay
   // (so a visualizer reads like the video it replaces).
   const showOverlay = showCameraPreview || isViewerInRoom
@@ -434,6 +500,12 @@ export function StreamScreen() {
   // and the live info row (LivePill + avatar + viewer count) that takes the
   // title input's place.
   const isLiveBroadcast = isNew && status === 'in-room' && !streamEnded
+
+  // Broadcaster sensor capture — while live, read the armed sensor sources and
+  // emit `telemetry` (compass/speed via expo-location, gyro/accel via DeviceMotion).
+  // The armed set comes from captureConfig (mapped to backend kind names).
+  const armedKinds = useMemo(() => new Set(recordedSourcesFromConfig(cfg)), [cfg])
+  useTelemetryCapture(armedKinds, sendTelemetry, isLiveBroadcast)
 
   // Physical device orientation (sensed via DeviceMotion — the app UI is
   // portrait-locked, so this is the only way to know how the phone is held).
@@ -1236,7 +1308,14 @@ export function StreamScreen() {
           either way). Audio uses the broadcaster's own mic level. */}
       {isLiveBroadcast && selectedKind !== 'cam' && (
         <View style={[styles.cameraBox, { top: camTop, bottom: camBottom }]}>
-          <AudioVisualizer level={audioLevel} variant="waveform" active style={StyleSheet.absoluteFill} />
+          <SourceStage
+            sources={[selectedKind]}
+            selected={selectedKind}
+            onSelect={selectSource}
+            source={buildSource(selectedKind, null)}
+            active={sourceActive}
+            style={StyleSheet.absoluteFill}
+          />
         </View>
       )}
 
@@ -1256,17 +1335,23 @@ export function StreamScreen() {
           overlay below) switches between the stream's sources. */}
       {isViewerInRoom && (
         <View style={[styles.cameraBox, { top: camTop, bottom: camBottom }]}>
-          {selectedKind === 'cam' ? (
-            <RTCView
-              streamURL={(remoteStream as unknown as { toURL(): string }).toURL()}
-              style={StyleSheet.absoluteFill}
-              objectFit="contain"
-              mirror={false}
-              zOrder={0}
-            />
-          ) : (
-            <AudioVisualizer level={audioLevel} variant="waveform" active style={StyleSheet.absoluteFill} />
-          )}
+          <SourceStage
+            sources={[selectedKind]}
+            selected={selectedKind}
+            onSelect={selectSource}
+            source={buildSource(
+              selectedKind,
+              <RTCView
+                streamURL={(remoteStream as unknown as { toURL(): string }).toURL()}
+                style={StyleSheet.absoluteFill}
+                objectFit="contain"
+                mirror={false}
+                zOrder={0}
+              />,
+            )}
+            active={sourceActive}
+            style={StyleSheet.absoluteFill}
+          />
         </View>
       )}
 
@@ -1782,17 +1867,23 @@ export function StreamScreen() {
           Renders its own RTCView/visualizer of the same stream. */}
       {isFullscreen && isViewerInRoom && (
         <View style={styles.fsRoot}>
-          {selectedKind === 'cam' ? (
-            <RTCView
-              streamURL={(remoteStream as unknown as { toURL(): string }).toURL()}
-              style={StyleSheet.absoluteFill}
-              objectFit="contain"
-              mirror={false}
-              zOrder={1}
-            />
-          ) : (
-            <AudioVisualizer level={audioLevel} variant="waveform" active style={StyleSheet.absoluteFill} />
-          )}
+          <SourceStage
+            sources={[selectedKind]}
+            selected={selectedKind}
+            onSelect={selectSource}
+            source={buildSource(
+              selectedKind,
+              <RTCView
+                streamURL={(remoteStream as unknown as { toURL(): string }).toURL()}
+                style={StyleSheet.absoluteFill}
+                objectFit="contain"
+                mirror={false}
+                zOrder={1}
+              />,
+            )}
+            active={sourceActive}
+            style={StyleSheet.absoluteFill}
+          />
 
           <View style={styles.fsClose}>
             <IconButton

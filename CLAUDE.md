@@ -3019,3 +3019,58 @@ go live with chat armed → send chat → confirm `buffers/<userId>/chat/<sessio
 fills, and a saved clip over that window carries the chat track. The mediasoup +
 backend halves are already deployed; this app change + the `VALID_SOURCES` widen are
 what light it up end-to-end.
+
+---
+
+## Updates — June 2026 (Sensor telemetry data path — visualizers light up)
+
+Item 3 of `HANDOFF-aaron-2026-06-13.md` / Part 2 of the source-visualizers handoff:
+the 7 sensor visualizers (shipped presentational on `design`) now react to real
+broadcaster sensor data. **Transport: Option A** (relay over the signaling WS, like
+`chatMessage`). **No new native module / no EAS rebuild** — `expo-sensors` is already
+in the dev client (`useDeviceOrientation` uses DeviceMotion in prod).
+
+**Decisions taken** (per the handoff's asks): Option A transport · `motion` derived
+**viewer-side** from `accel` (one sensor on the wire) · `temp` UI-present-but-data-
+absent (no reliable phone sensor) · `torch` is a control not a sensor (emitted on
+toggle, not in the capture loop — deferred).
+
+**Wire contract** (`src/lib/mediasoupSignaling.ts`): `TelemetryPayload` discriminated
+by `kind` (compass/gyro/accel/speed/torch, each with `ts`). Broadcaster →
+`{ type:'telemetry', payload }`; server fans out `{ type:'telemetryUpdate', payload }`.
+`sendTelemetry` added to the client + `useSignaling`.
+
+**Broadcaster capture** (`src/hooks/useTelemetryCapture.ts`): while live, reads the
+armed sensor sources and emits — compass via `expo-location` `watchHeadingAsync`,
+speed via `watchPositionAsync.coords.speed` (both already deps), gyro+accel via one
+`expo-sensors` `DeviceMotion` listener (~15 Hz). All guarded — a missing sensor just
+leaves that visualizer idle.
+
+**Viewer consume** (`src/hooks/useStreamTelemetry.ts`): subscribes to `telemetryUpdate`,
+keeps the latest sample per kind (drops stale `ts`), derives `motionIntensity` from
+accel. Single decode point.
+
+**StreamScreen render** — swapped the inline `cam ? RTCView : AudioVisualizer` switch
+at all three media surfaces (broadcaster monitor · viewer · fullscreen) for the
+**`SourceStage`** section (Ben's universal renderer), fed a `buildSource(kind, camSlot)`
+`SourceRender` from `tel`/`audioLevel`/the injected RTCView. `activeSource` widened
+`SourceType → FeedKind`; `availableKinds` now maps `Stream.sources` (which carries the
+armed sensor kinds since item 2) → FeedKind via `SOURCE_TO_FEEDKIND`. The viewer's rail
+shows the sensor sources and their visualizers animate from live data; the broadcaster's
+rail stays AV (self-monitoring sensors is separate — the broadcaster doesn't receive its
+own fan-out). `useTelemetryCapture(armedKinds, sendTelemetry, isLiveBroadcast)` wired.
+
+**Recording (C6 down-payment):** mediasoup also appends each telemetry sample to the
+buffer `.jsonl` track (when the kind is armed/recorded), so saved clips carry the
+telemetry track. Pairs with the backend `ts`/`t` data-sample fix (without which ALL
+data tracks — location, chat, telemetry — promoted empty; see `wrld-backend/CLAUDE.md`).
+
+**Scope notes:** `loc` (trail), `chat` (source-view), `profile` source-views are
+omitted from the rail for now — each needs its own data wiring (path accumulator /
+chat-log mapping / host identity), separate follow-ups. `torch` emission on toggle is
+TODO. Two DeviceMotion listeners (orientation + telemetry) coexist but share one
+`setUpdateInterval` — an on-device tweak if the rate fights.
+
+Pure JS — hot-reloads. **Needs an on-device pass:** broadcaster arms compass/gyro/
+accel/speed → a viewer switches to each source and sees it animate from real motion;
+confirm the saved-clip telemetry track fills.

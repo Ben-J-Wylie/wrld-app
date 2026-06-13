@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { signalingClient } from '@/lib/mediasoupSignaling'
+import { signalingClient, type TelemetryPayload } from '@/lib/mediasoupSignaling'
 import { getClerkToken } from '@/lib/clerkToken'
 import { getDeviceId } from '@/lib/deviceId'
 import { env } from '@/lib/env'
@@ -187,6 +187,7 @@ export function useSignaling() {
   const sendBroadcasterOrientation = useCallback((orientation: 'portrait' | 'landscape', rotationDeg?: number, hold?: string) => signalingClient.sendBroadcasterOrientation(orientation, rotationDeg, hold), [])
   const sendCameraFacing = useCallback((facing: 'user' | 'environment') => signalingClient.sendCameraFacing(facing), [])
   const sendLocationUpdate = useCallback((lat: number, lng: number) => signalingClient.sendLocationUpdate(lat, lng), [])
+  const sendTelemetry = useCallback((payload: TelemetryPayload) => signalingClient.sendTelemetry(payload), [])
   const sendTip = useCallback((amount: number) => signalingClient.sendTip(amount), [])
   const sendGift = useCallback((giftType: string) => signalingClient.sendGift(giftType), [])
 
@@ -225,6 +226,7 @@ export function useSignaling() {
     sendTip,
     sendGift,
     sendLocationUpdate,
+    sendTelemetry,
     connect,
     createRoom,
     joinRoom,
