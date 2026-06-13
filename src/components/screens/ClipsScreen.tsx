@@ -40,10 +40,12 @@ import { useBroadcastStore } from '@/stores/broadcastStore'
 import { bufferApi, type BufferSession } from '@/api/buffer'
 
 const FRAME_MS = 1000 / 30 // one frame at the 30fps capture (transport frame-step)
-// After a seek the player's currentTime lags (and resets to 0 on a cross-clip reload). Until it
-// converges within this of the wall-clock target, the follow honours the TARGET, not the stale
-// stream position — so a scrub resume never flicks to the clip head before snapping back.
-const SEEK_SETTLE_MS = 300
+const GAP_RUSH_MS = 3000 // real-time duration to "rush" the clock across an unbroadcasted-time gap
+const DRIFT_TOL_S = 0.4 // only re-seek the (follower) video if it drifts more than this from the playhead
+// Inter-clip gaps at/below this are split SEAMS (a snip, or adjacent buffer/saved pieces), not real
+// unbroadcasted gaps — the clock plays straight across (no gap card). Matches the timeline's own
+// gap-collapse threshold, so playback and the drawn timeline agree on what counts as a gap.
+const SEAM_GAP_MS = 500
 
 // Dev-only trace to the Metro terminal for diagnosing drag-to-save (stripped in prod).
 const slog = (...args: unknown[]) => {
@@ -184,6 +186,16 @@ export const ClipsScreen = () => {
   // ── lanes: buffer = footage minus saved ranges (carve); saved = the saved clips ──
   const sessions = useMemo(() => buffer?.sessions ?? [], [buffer])
 
+  // ── time reference (now / reaper window) ── now ticks every 10s; the buffer keeps the last
+  // `windowHours` so anything older than `windowStartMs` (the reaper boundary) is reaped/gone.
+  const [nowMs, setNowMs] = useState(() => Date.now())
+  useEffect(() => {
+    const id = setInterval(() => setNowMs(Date.now()), 10_000)
+    return () => clearInterval(id)
+  }, [])
+  const windowMs = (buffer?.windowHours ?? 0) * 3_600_000
+  const windowStartMs = windowMs > 0 ? nowMs - windowMs : null
+
   // Un-save: optimistically drop a clip being deleted (its range un-carves → back to buffer).
   const [pendingDelete, setPendingDelete] = useState<Set<string>>(new Set())
   // In-flight drag-to-save: carved out + placeholdered until the real Clip lands.
@@ -228,7 +240,7 @@ export const ClipsScreen = () => {
   )
   const pendingNotReal = useMemo(() => pendingSaves.filter((ps) => !matchesReal(ps)), [pendingSaves, matchesReal])
 
-  const savedLane = useMemo<LaneClip[]>(() => {
+  const savedLaneAll = useMemo<LaneClip[]>(() => {
     const unsavedIds = new Set(pendingUnsave.map((h) => h.id))
     return [
       ...applySplits(savedLaneReal, splitPoints, true).filter((p) => !unsavedIds.has(p.id)),
@@ -284,7 +296,25 @@ export const ClipsScreen = () => {
     return out
   }, [realSavedData, draftsData, pendingNotReal, pendingUnsave])
 
-  const bufferedLane = useMemo(() => [...applySplits(carveBuffer(sessions, claims), splitPoints), ...drafts], [sessions, claims, drafts, splitPoints])
+  const bufferedLaneRaw = useMemo(() => [...applySplits(carveBuffer(sessions, claims), splitPoints), ...drafts], [sessions, claims, drafts, splitPoints])
+  // Window the timeline to the buffer window: drop anything fully older than the reaper boundary
+  // (this is what removes SAVED clips older than the window), and CLAMP a clip straddling the
+  // boundary to it — so the oldest clip visibly shrinks as `windowStartMs` advances (the reaper
+  // eating it), and the timeline is only ever as long as the window.
+  const windowLane = useCallback(
+    (clips: LaneClip[]): LaneClip[] => {
+      if (windowStartMs == null) return clips
+      const out: LaneClip[] = []
+      for (const c of clips) {
+        if (c.endMs <= windowStartMs) continue
+        out.push(c.startMs < windowStartMs ? { ...c, startMs: windowStartMs } : c)
+      }
+      return out
+    },
+    [windowStartMs],
+  )
+  const bufferedLane = useMemo(() => windowLane(bufferedLaneRaw), [bufferedLaneRaw, windowLane])
+  const savedLane = useMemo(() => windowLane(savedLaneAll), [savedLaneAll, windowLane])
   const allClips = useMemo(() => [...bufferedLane, ...savedLane], [bufferedLane, savedLane])
   const hasAny = allClips.length > 0
 
@@ -318,7 +348,6 @@ export const ClipsScreen = () => {
   const [centerClipId, setCenterClipId] = useState<string | null>(null)
   const selectedClip = useMemo(() => allClips.find((c) => c.id === selectedId) ?? null, [allClips, selectedId])
   const viewerClip = useMemo(() => selectedClip ?? allClips.find((c) => c.id === centerClipId) ?? null, [selectedClip, allClips, centerClipId])
-  const viewerId = viewerClip?.id ?? null
   // Default the viewer to the newest clip — once, on first load (don't re-grab after a blur).
   const didInitSelect = useRef(false)
   useEffect(() => {
@@ -338,6 +367,28 @@ export const ClipsScreen = () => {
   const clipStart = playerClip?.startMs ?? 0
   const clipEnd = playerClip?.endMs ?? 0
   const manifestUrl = playerClip?.manifestUrl ?? null
+
+  // The player's CONTINUOUS VOD range in wall-clock — playback flows across this whole span
+  // (snips inside it are display-only and play through unbroken). Buffer/draft → the source
+  // SESSION's range; a saved piece → its parent saved clip's range; a whole saved clip → itself.
+  const playerInSaved = useMemo(() => savedLane.some((c) => c.id === playerId), [savedLane, playerId])
+  const playerSession = useMemo(() => sessions.find((s) => s.id === playerClip?.sourceSessionId), [sessions, playerClip])
+  const playerParent = useMemo(
+    () => (playerClip?.parentSavedId ? realSavedData.find((c) => c.id === playerClip.parentSavedId) : null),
+    [playerClip, realSavedData],
+  )
+  const vodStart = playerInSaved ? (playerParent ? playerParent.startAtMs : clipStart) : playerSession ? sessionStartMs(playerSession) : clipStart
+  const vodEnd = playerInSaved ? (playerParent ? playerParent.endAtMs : clipEnd) : playerSession ? sessionEndMs(playerSession) : clipEnd
+  const vodStartRef = useRef(0)
+  vodStartRef.current = vodStart
+  // Clips in wall-clock order — the transport clock walks this; `locateAt` resolves footage/gap/end.
+  const orderedClips = useMemo(() => [...allClips].sort((a, b) => a.startMs - b.startMs), [allClips])
+  const orderedRef = useRef(orderedClips)
+  orderedRef.current = orderedClips
+
+  // Gap card: shown while the clock rushes the playhead across unbroadcasted time (the clock owns it
+  // during playback; onCenter owns it during a scrub). A plain title card — no footage behind it.
+  const [gapCard, setGapCard] = useState<{ fromMs: number; toMs: number } | null>(null)
   const player = useVideoPlayer(null, (p) => {
     p.loop = false
   })
@@ -348,6 +399,67 @@ export const ClipsScreen = () => {
   const [playheadMs, setPlayheadMs] = useState(0)
   const playheadRef = useRef(0)
   playheadRef.current = playheadMs
+  // Pinned to the live edge → the clock reads NOW (ticking). Set by skipping to the now end; cleared
+  // by any move away from it (scrub, nav, play). Not a time threshold (nowMs refreshes only every
+  // 10s, so a threshold would flip NOW→THEN between refreshes).
+  const [followLive, setFollowLive] = useState(false)
+  // The footage at the playhead (null in a gap). The PLAYER follows this — so as the clock advances
+  // the playhead across clips/snips/gaps, the loaded VOD tracks it. The VIEWER shows it too, so a
+  // lane drag (which changes the clip's id) can't blank the preview: the playhead's clip is shown.
+  const clipAtPlayhead = useMemo(
+    () => orderedClips.find((c) => playheadMs >= c.startMs - 1 && playheadMs <= c.endMs + 1) ?? null,
+    [orderedClips, playheadMs],
+  )
+  const firstStart = orderedClips[0]?.startMs ?? 0
+  const lastEnd = orderedClips.length ? (orderedClips[orderedClips.length - 1]?.endMs ?? 0) : 0
+  const firstStartRef = useRef(0)
+  firstStartRef.current = firstStart
+  const lastEndRef = useRef(0)
+  lastEndRef.current = lastEnd
+  const nowEdgeRef = useRef(0) // = axisTop (the live/now edge); assigned after axisTop is computed
+  // Locate a wall-clock instant on the collapsed timeline: inside a clip's footage, inside an
+  // inter-clip gap (unbroadcasted time), or past the last footage (caught up to the live edge).
+  // The transport clock advances the playhead 1× through footage and rushes it across a gap; this
+  // is how it knows which — the playhead never waits on the video to decide.
+  const locateAt = useCallback(
+    (ms: number): { mode: 'footage'; clip: LaneClip } | { mode: 'gap'; from: number; to: number } | { mode: 'end' } => {
+      const clips = orderedRef.current
+      for (const c of clips) if (ms >= c.startMs - 1 && ms <= c.endMs + 1) return { mode: 'footage', clip: c }
+      let prevEnd = -Infinity
+      let next: LaneClip | null = null
+      for (const c of clips) {
+        if (c.endMs <= ms && c.endMs > prevEnd) prevEnd = c.endMs
+        if (c.startMs > ms && (!next || c.startMs < next.startMs)) next = c
+      }
+      if (next) {
+        const from = prevEnd > -Infinity ? prevEnd : next.startMs
+        // A split seam (≤ SEAM_GAP_MS) plays straight through as the next clip's footage — no gap
+        // card, no 3s rush. Only a real unbroadcasted gap gets the rush + card.
+        if (next.startMs - from <= SEAM_GAP_MS) return { mode: 'footage', clip: next }
+        return { mode: 'gap', from, to: next.startMs }
+      }
+      // Past all footage → the TRAILING gap (last broadcast → now) is rushable like any other gap.
+      const nowEdge = nowEdgeRef.current
+      if (prevEnd > -Infinity && nowEdge - prevEnd > SEAM_GAP_MS && ms < nowEdge - 1) {
+        return { mode: 'gap', from: prevEnd, to: nowEdge }
+      }
+      return { mode: 'end' } // at/after now, or no trailing gap → caught up to live
+    },
+    [],
+  )
+
+  // Seed the playhead on the newest footage (NOT 0 / 1969) so "play from the playhead" has somewhere
+  // to start. The timeline seeds its own centre at the now edge; play/scroll reconciles the two.
+  const didInitPlayhead = useRef(false)
+  useEffect(() => {
+    if (didInitPlayhead.current || !orderedClips.length) return
+    didInitPlayhead.current = true
+    const newest = orderedClips[orderedClips.length - 1]
+    if (newest) {
+      playheadRef.current = newest.startMs
+      setPlayheadMs(newest.startMs)
+    }
+  }, [orderedClips])
 
   // Scrub-while-playing state. `scrubbingRef` gates the follow + onCenter synchronously and is
   // managed MANUALLY (NOT synced from state — the 60fps playhead re-renders would clobber it back
@@ -355,140 +467,213 @@ export const ClipsScreen = () => {
   // `scrubbing` state only drives the viewer poster (held through an async cross-clip jump).
   const [scrubbing, setScrubbing] = useState(false)
   const scrubbingRef = useRef(false)
-  const pendingPlayAtRef = useRef<number | null>(null)
-  // The wall-clock instant a pending seek is targeting (null once the player has converged to it).
-  const seekTargetRef = useRef<number | null>(null)
+  const scrubResumePlayingRef = useRef(false) // was the player playing when the scrub started?
+  // Show the seeked video frame (not the poster) while paused — set by a seek/scrub, held after.
+  const [videoMode, setVideoMode] = useState(false)
   const playerIdRef = useRef<string | null>(null)
   playerIdRef.current = playerId
 
-  // The player follows the viewer EXCEPT while scrubbing during playback (frozen so audio runs).
-  // On scrub-release we set playerId explicitly to jump.
-  useEffect(() => {
-    if (playingRef.current && scrubbingRef.current) return
-    setPlayerId(viewerId)
-  }, [viewerId])
+  // What the VIEWER shows. A TAP previews the tapped clip's poster WITHOUT moving the playhead
+  // (so play still starts from the centre playhead) — so while a selection is held and we're idle,
+  // show it. Playing / scrubbing / a blurred selection → show the clip at the PLAYHEAD.
+  const showSelection = !!selectedClip && !playing && !scrubbing
+  const displayClip = showSelection ? selectedClip : (clipAtPlayhead ?? viewerClip)
 
-  // Load the player clip when it changes. Normally pause at its start; if a jump is pending
-  // (scrub-release while playing) seek to the target + resume, holding the poster until ready.
+  // The PLAYER (a follower) loads the clip at the PLAYHEAD — so as the clock advances the playhead
+  // across clips/snips, the loaded VOD tracks it. In a gap clipAtPlayhead is null; we KEEP the last
+  // VOD loaded (the clock just pauses it) so re-entering footage doesn't churn a reload.
   useEffect(() => {
-    const playAt = pendingPlayAtRef.current
-    pendingPlayAtRef.current = null
-    if (playAt == null) {
-      setPlaying(false)
-      setPlayheadMs(clipStart)
-      seekTargetRef.current = null
-    } else {
-      // Hold the target through the async reload so the follow doesn't flick to the new clip's head.
-      seekTargetRef.current = clamp(playAt, clipStart, clipEnd)
-      setPlayheadMs(seekTargetRef.current)
+    if (clipAtPlayhead) setPlayerId(clipAtPlayhead.id)
+  }, [clipAtPlayhead])
+
+  // Load the VOD when the player's clip changes, then seek it to the CURRENT playhead (the follower
+  // catches up to the authoritative clock — we never reset the playhead here). Resume if playing.
+  // CRUCIAL: only reload when the URL actually changes. Crossing a SNIP swaps the clip id (piece1→
+  // piece2) but both map to the SAME session VOD — reloading it would stall the seam. Same URL → the
+  // video just keeps playing unbroken (vodStart is identical, so the playhead↔video mapping holds).
+  const loadedUrlRef = useRef<string | null>(null)
+  // True while a cross-VOD swap is in flight → the viewer holds the incoming clip's poster over the
+  // reload so a between-lane seam shows a frame, not the bg (see ClipViewer.coverPoster).
+  const [vodLoading, setVodLoading] = useState(false)
+  useEffect(() => {
+    if (!manifestUrl) {
+      loadedUrlRef.current = null
+      setVodLoading(false)
+      try {
+        player.replace(null)
+      } catch {}
+      return
     }
-    if (manifestUrl) {
-      player
-        .replaceAsync({ uri: manifestUrl, contentType: 'hls' })
-        .then(() => {
-          if (playAt == null) return
-          const t = clamp(playAt, clipStart, clipEnd)
+    if (manifestUrl === loadedUrlRef.current) return // same VOD (e.g. crossing a snip) → no reload
+    loadedUrlRef.current = manifestUrl
+    setVodLoading(true)
+    player
+      .replaceAsync({ uri: manifestUrl, contentType: 'hls' })
+      .then(() => {
+        const want = (playheadRef.current - vodStartRef.current) / 1000
+        try {
+          if (want >= 0) player.currentTime = want
+        } catch {}
+        if (playingRef.current && locateAt(playheadRef.current).mode === 'footage') {
           try {
-            player.currentTime = (t - clipStart) / 1000
+            player.play()
           } catch {}
-          setPlayheadMs(t)
-          player.play()
-          setPlaying(true)
-          timelineRef.current?.scrollToTime(t)
-          setScrubbing(false) // ready → drop the scrub poster (no black flash)
-        })
-        .catch(() => setScrubbing(false))
-    } else {
-      player.replace(null)
-      setScrubbing(false)
-    }
+        }
+        setVodLoading(false)
+      })
+      .catch(() => setVodLoading(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playerId])
 
+  // Move the playhead to a wall-clock instant (frame-step nav, scrubber dial, scrub-release settle).
+  // The playhead is authoritative; we set it, then seek the loaded video to match (best-effort —
+  // the clock re-syncs on the next tick when playing).
   const seekTo = useCallback(
     (ms: number) => {
-      const m = clamp(ms, clipStart, clipEnd)
+      const m = clamp(ms, firstStartRef.current, lastEndRef.current)
+      playheadRef.current = m
       setPlayheadMs(m)
-      seekTargetRef.current = m // the follow honours this until the player converges
-      if (manifestUrl) {
+      setFollowLive(false) // any explicit seek leaves the live edge → clock reads THEN
+      setVideoMode(true) // show the seeked frame, not the poster
+      const want = (m - vodStartRef.current) / 1000
+      if (manifestUrl && want >= 0) {
         try {
-          player.currentTime = (m - clipStart) / 1000
+          player.currentTime = want
         } catch {}
       }
     },
-    [clipStart, clipEnd, manifestUrl, player],
+    [manifestUrl, player],
   )
 
-  // While playing, follow the playhead → recentre the timeline (unless the user is scrubbing).
-  // The playhead is the WALL-CLOCK instant: normally the stream's currentTime, but while a seek
-  // settles it's the TARGET — so a resume never follows the lagging/reset stream position.
+  // ── the transport clock (see CONTENT.md §6) ──
+  // The PLAYHEAD is the single source of truth. While playing it advances by REAL elapsed time —
+  // 1× through footage, a fixed-duration RUSH across an unbroadcasted-time gap (GAP_RUSH_MS, gap
+  // card) — and the video + timeline FOLLOW it. It never derives the playhead from the video's
+  // position and never waits on a VOD reload, so a clip / snip / gap boundary is a seek for the
+  // follower, not a stall for the clock.
   useEffect(() => {
     if (!playing) return
     let raf = 0
-    const tick = () => {
-      const raw = clipStart + player.currentTime * 1000
-      const target = seekTargetRef.current
-      let ph = raw
-      if (target != null) {
-        if (Math.abs(raw - target) <= SEEK_SETTLE_MS) seekTargetRef.current = null // converged
-        else ph = target // hold the target while the seek settles
-      }
-      if (ph >= clipEnd - 16) {
-        player.pause()
-        setPlaying(false)
-        setPlayheadMs(clipEnd)
+    let lastTs: number | null = null
+    const tick = (ts: number) => {
+      if (scrubbingRef.current) {
+        lastTs = ts // the finger owns the playhead while scrubbing; idle the clock
+        raf = requestAnimationFrame(tick)
         return
       }
+      const dt = lastTs == null ? 0 : Math.min(80, ts - lastTs)
+      lastTs = ts
+      let ph = playheadRef.current
+      const loc = locateAt(ph)
+      if (loc.mode === 'end') {
+        // caught up to the live edge — nothing more to play. Pin the clock to NOW; if the last
+        // broadcast ended a while ago, keep the trailing "since last broadcast" card up.
+        try {
+          player.pause()
+        } catch {}
+        const nowEdge = nowEdgeRef.current
+        setGapCard(nowEdge - lastEndRef.current > SEAM_GAP_MS ? { fromMs: lastEndRef.current, toMs: nowEdge } : null)
+        setFollowLive(true)
+        setPlaying(false)
+        return
+      }
+      if (loc.mode === 'gap') {
+        setGapCard({ fromMs: loc.from, toMs: loc.to })
+        if (player.playing)
+          try {
+            player.pause()
+          } catch {}
+        const span = Math.max(1, loc.to - loc.from)
+        ph = ph + dt * (span / GAP_RUSH_MS)
+        if (ph >= loc.to - 1) ph = loc.to // land exactly on the next clip's head
+        playheadRef.current = ph
+        setPlayheadMs(ph)
+        timelineRef.current?.scrollToTime(ph)
+        raf = requestAnimationFrame(tick)
+        return
+      }
+      // footage: the loaded VOD should be this clip — seek-correct only on real drift, then play.
+      setGapCard(null)
+      if (playerIdRef.current === loc.clip.id && player.duration > 0) {
+        const want = (ph - vodStartRef.current) / 1000
+        if (want >= -0.1) {
+          if (Math.abs(player.currentTime - want) > DRIFT_TOL_S) {
+            try {
+              player.seekBy(want - player.currentTime)
+            } catch {}
+          }
+          if (!player.playing)
+            try {
+              player.play()
+            } catch {}
+        }
+      }
+      ph = ph + dt // advance by real time regardless of the video's readiness — it catches up
+      // No hard stop at lastEnd: the playhead flows into the TRAILING gap, where locateAt returns a
+      // rushable gap (3s to now) and then 'end' (caught up). The clamp is just a safety ceiling.
+      playheadRef.current = ph
       setPlayheadMs(ph)
-      if (!scrubbingRef.current) timelineRef.current?.scrollToTime(ph)
+      timelineRef.current?.scrollToTime(ph)
       raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [playing, clipStart, clipEnd, player])
+  }, [playing, player, locateAt])
 
   const togglePlay = useCallback(() => {
-    if (!manifestUrl) return
-    if (player.playing) {
-      player.pause()
+    if (playingRef.current) {
+      setGapCard(null)
+      try {
+        player.pause()
+      } catch {}
       setPlaying(false)
-    } else {
-      // Sync the video to the playhead (a scroll moves the playhead without seeking), then
-      // reposition the timeline so the instant sits under the centre playhead, and play + follow.
-      if (playheadRef.current >= clipEnd - 100) seekTo(clipStart) // restart from the top at the end
-      else seekTo(playheadRef.current)
-      timelineRef.current?.scrollToTime(playheadRef.current, true)
-      player.play()
-      setPlaying(true)
+      return
     }
-  }, [manifestUrl, player, clipEnd, clipStart, seekTo])
+    setFollowLive(false) // playing advances the playhead off the live edge
+    // Play from the PLAYHEAD. If we're at/after the last footage, restart from the top.
+    if (playheadRef.current >= lastEndRef.current - 50) {
+      const first = firstStartRef.current
+      playheadRef.current = first
+      setPlayheadMs(first)
+      timelineRef.current?.scrollToTime(first, true)
+    }
+    setPlaying(true) // the clock takes over — it seeks + plays the video as a follower
+  }, [player])
 
-  // Scrub-release while playing: jump the player to the PRECISE scrubbed instant (computed by the
-  // timeline at release, so a within-clip scrub resumes exactly where you let go) and keep playing.
+  // Smooth scrub: as the timeline scrubs under the playhead, the PLAYHEAD follows the centre
+  // (gap-interpolated) and the loaded video seeks to match (tolerant keyframe seekBy → robust on
+  // the -c:v copy buffer VOD; ~12 Hz). The clock idles while scrubbing; this is the follower drive.
+  useEffect(() => {
+    if (!scrubbing) return
+    const id = setInterval(() => {
+      const c = timelineRef.current?.getCenter()
+      if (!c) return
+      playheadRef.current = c.timeMs
+      setPlayheadMs(c.timeMs) // the playhead follows the scrub
+      if (c.inGap || !c.clipId || c.clipId !== playerIdRef.current) return // gap / not-yet-loaded → no seek
+      if (!player.duration || player.duration <= 0) return
+      const delta = (c.timeMs - vodStartRef.current) / 1000 - player.currentTime
+      if (Math.abs(delta) > 0.05) {
+        try {
+          player.seekBy(delta)
+        } catch {}
+      }
+    }, 80)
+    return () => clearInterval(id)
+  }, [scrubbing, player])
+
+  // Scrub release: settle on the precise release frame. If the drag was over a PLAYING stream,
+  // resume playback 250ms later from there (the `playing` state stayed true the whole time → the
+  // play button never flipped); a paused drag just stays on the frame.
   const onScrubEnd = useCallback(
     (id: string | null, timeMs: number) => {
-      if (!scrubbingRef.current) return
-      if (!id) {
-        scrubbingRef.current = false
-        setScrubbing(false)
-        return
-      }
-      if (id === playerIdRef.current) {
-        // Same clip — just seek + (re)play; drop the poster immediately.
-        scrubbingRef.current = false
-        seekTo(timeMs)
-        if (!player.playing) {
-          player.play()
-          setPlaying(true)
-        }
-        timelineRef.current?.scrollToTime(timeMs)
-        setScrubbing(false)
-      } else {
-        // Different clip — jump: load + seek + play (the load effect drops the poster when ready).
-        scrubbingRef.current = false // re-enable the follow; the poster (state) holds until load
-        pendingPlayAtRef.current = timeMs
-        setPlayerId(id)
-      }
+      if (!scrubbingRef.current) return // fires when the scroll has SETTLED (after any inertia)
+      scrubbingRef.current = false
+      setScrubbing(false)
+      if (id) setCenterClipId(id)
+      if (id && id === playerIdRef.current) seekTo(timeMs) // settle the exact landed frame
+      // Was playing → resume from where the fling LANDED (the settle was the wait; no fixed timer).
+      if (scrubResumePlayingRef.current) player.play()
     },
     [player, seekTo],
   )
@@ -508,7 +693,9 @@ export const ClipsScreen = () => {
   )
 
   // Clock: a held instant (playback=false). Scrubbing the dial seeks within the clip.
-  const offsetForClock = Math.max(0, Date.now() - playheadMs)
+  // 0 (NOW) when pinned to the live edge; otherwise the held instant behind now. The TimeScrubber
+  // freezes a held (non-live) value, so a paused clock won't drift/bounce across a second.
+  const offsetForClock = followLive ? 0 : Math.max(0, Date.now() - playheadMs)
   const [clockExpanded, setClockExpanded] = useState(false)
   const [collapseSignal, setCollapseSignal] = useState(0)
 
@@ -592,6 +779,18 @@ export const ClipsScreen = () => {
   const unsaveClip = useCallback(
     (clip: LaneClip) => {
       if (clip.id.startsWith('pending:')) return // an optimistic placeholder, not a real clip yet
+      // Returning footage to the buffer keeps its boundaries as SNIPS, so it stays a distinct piece
+      // beside adjacent footage (it doesn't silently merge) — survives until mended.
+      const snipSession = clip.sourceSessionId
+      if (snipSession) {
+        setSplitPoints((prev) => {
+          const next = [...prev]
+          for (const atMs of [clip.startMs, clip.endMs]) {
+            if (!next.some((s) => s.sessionId === snipSession && Math.abs(s.atMs - atMs) < 1)) next.push({ sessionId: snipSession, atMs })
+          }
+          return next.length === prev.length ? prev : next
+        })
+      }
       if (clip.parentSavedId) {
         const parentId = clip.parentSavedId
         const parent = realSavedData.find((c) => c.id === parentId)
@@ -630,14 +829,9 @@ export const ClipsScreen = () => {
     [qc, realSavedData, pendingUnsave],
   )
 
-  // ── time reference (now / axis end) ──
-  const [nowMs, setNowMs] = useState(() => Date.now())
-  useEffect(() => {
-    const id = setInterval(() => setNowMs(Date.now()), 10_000)
-    return () => clearInterval(id)
-  }, [])
   // On focus (e.g. returning from the editor after an edit/save), refresh all sources so the
-  // carve + drafts reflect any change.
+  // carve + drafts reflect any change. A periodic buffer refetch keeps the oldest footage shrinking
+  // in step with the backend reaper (so you can watch a clip get eaten, not just on focus).
   const refetchRef = useRef({ refetchBuffer, refetchSaved, refetchDrafts })
   refetchRef.current = { refetchBuffer, refetchSaved, refetchDrafts }
   useFocusEffect(
@@ -648,11 +842,39 @@ export const ClipsScreen = () => {
       refetchRef.current.refetchDrafts()
     }, []),
   )
+  useEffect(() => {
+    const id = setInterval(() => refetchRef.current.refetchBuffer(), 15_000)
+    return () => clearInterval(id)
+  }, [])
   const axisTop = useMemo(() => {
     let newest = nowMs
     for (const c of allClips) if (Number.isFinite(c.endMs) && c.endMs > newest) newest = c.endMs
     return newest
   }, [allClips, nowMs])
+  nowEdgeRef.current = axisTop
+  // The gap card is the TRAILING gap when its FROM is the newest clip's end → reads "since last
+  // broadcast" (counts up). The leading (reaper) gap ends at the oldest clip → counts down. Keyed off
+  // the clips' own edges (NOT axisTop, which drifts on the 10s tick — that flipped the card off too soon).
+  const isTrailingCard = !!gapCard && lastEnd > 0 && gapCard.fromMs >= lastEnd - 1
+  const isReaperCard = !!gapCard && firstStart > 0 && gapCard.toMs <= firstStart + 1
+  const [, setSecondTick] = useState(0)
+  useEffect(() => {
+    if (!isTrailingCard && !isReaperCard) return // both count (up / down) → re-render every second
+    const id = setInterval(() => setSecondTick((t) => (t + 1) % 86_400), 1000)
+    return () => clearInterval(id)
+  }, [isTrailingCard, isReaperCard])
+
+  // Reaper edge = the buffer-window boundary (`windowStartMs`). When the OLDEST clip reaches it the
+  // window is full → that lane's edge is being reaped (no leading gap); the lane decides the colour
+  // (buffer = red sickle, saved = black save). Otherwise there's room → a LEADING gap whose card
+  // counts down to when the current oldest footage ages out (`reapAtMs`).
+  const oldestClip = orderedClips[0] ?? null
+  const reaping = windowStartMs != null && oldestClip != null && oldestClip.startMs <= windowStartMs + 1
+  const reaperLane: 'buffered' | 'saved' = oldestClip != null && savedLane.some((c) => c.id === oldestClip.id) ? 'saved' : 'buffered'
+  const reaperBoundaryMs = windowStartMs != null && !reaping ? windowStartMs : null
+  const reapAtMs = oldestClip != null && windowMs > 0 ? oldestClip.startMs + windowMs : null
+  const reapAtRef = useRef<number | null>(null)
+  reapAtRef.current = reapAtMs
   const openClip = useCallback((clip: LaneClip, kind: 'buffered' | 'saved') => {
     // Pass the window so the editor scopes to a carved buffer interval (whose id is synthetic),
     // and the source session so it can play the right buffer footage.
@@ -719,14 +941,54 @@ export const ClipsScreen = () => {
     }
     return [...set].sort((a, b) => a - b)
   }, [allClips])
+
+  // The unbroadcasted-time gap bracketing a wall-clock instant (for the gap card). Leading (reaper)
+  // → [now−window, oldest]; interior → between two clips; trailing → [last, now].
+  const gapSpanAt = useCallback(
+    (timeMs: number): { fromMs: number; toMs: number } | null => {
+      const first = orderedClips[0]?.startMs
+      if (first != null && reaperBoundaryMs != null && timeMs < first - 1) return { fromMs: reaperBoundaryMs, toMs: first }
+      let prevEnd = -Infinity
+      let nextStart = Infinity
+      for (const c of orderedClips) {
+        if (c.endMs <= timeMs && c.endMs > prevEnd) prevEnd = c.endMs
+        if (c.startMs >= timeMs && c.startMs < nextStart) nextStart = c.startMs
+      }
+      if (prevEnd > -Infinity && nextStart < Infinity && nextStart > prevEnd) return { fromMs: prevEnd, toMs: nextStart }
+      if (prevEnd > -Infinity && nextStart === Infinity && axisTop > prevEnd) return { fromMs: prevEnd, toMs: axisTop }
+      return null
+    },
+    [orderedClips, axisTop, reaperBoundaryMs],
+  )
   const goTo = useCallback(
-    (timeMs: number) => {
+    (timeMs: number, live = false) => {
       setSelectedId(null)
+      setFollowLive(live) // only the now-edge jump pins the clock to NOW
+      // The playhead is authoritative — nav MOVES it (not just the scroll). `now` can sit past the
+      // last footage (the caught-up edge), so don't clamp to lastEnd here as seekTo would.
+      playheadRef.current = timeMs
+      setPlayheadMs(timeMs)
+      setVideoMode(true)
       const clip = allClips.find((c) => timeMs >= c.startMs - 1 && timeMs <= c.endMs + 1)
-      if (clip) setCenterClipId(clip.id)
+      setCenterClipId(clip?.id ?? null)
+      // Gap card at the destination: the trailing region (incl. the now edge) → "since last
+      // broadcast"; an interior gap → "{dur} gap"; footage → none.
+      const nowEdge = nowEdgeRef.current
+      if (!clip && nowEdge - lastEndRef.current > SEAM_GAP_MS && timeMs >= lastEndRef.current - 1) {
+        setGapCard({ fromMs: lastEndRef.current, toMs: nowEdge })
+      } else {
+        setGapCard(clip ? null : gapSpanAt(timeMs))
+      }
+      // Same loaded clip → seek the video here; a different clip loads + seeks via the load effect.
+      if (clip && clip.id === playerIdRef.current) {
+        const want = (timeMs - vodStartRef.current) / 1000
+        try {
+          if (want >= 0) player.currentTime = want
+        } catch {}
+      }
       timelineRef.current?.scrollToTime(timeMs, true)
     },
-    [allClips],
+    [allClips, player, gapSpanAt],
   )
   const goPrev = useCallback(() => {
     const c = timelineRef.current?.getCenter()
@@ -745,9 +1007,11 @@ export const ClipsScreen = () => {
     if (target != null) goTo(target)
   }, [navBoundaries, goTo])
   const goReaper = useCallback(() => {
-    if (navBoundaries.length) goTo(navBoundaries[0]!)
-  }, [navBoundaries, goTo])
-  const goNow = useCallback(() => goTo(axisTop), [goTo, axisTop])
+    // Not reaping → land in the leading gap (countdown card); reaping → the oldest footage edge.
+    if (reaperBoundaryMs != null) goTo(reaperBoundaryMs)
+    else if (navBoundaries.length) goTo(navBoundaries[0]!)
+  }, [reaperBoundaryMs, navBoundaries, goTo])
+  const goNow = useCallback(() => goTo(axisTop, true), [goTo, axisTop])
 
   return (
     <View style={styles.root}>
@@ -769,16 +1033,61 @@ export const ClipsScreen = () => {
             overflow the right edge). */}
         {hasAny ? (
           <View style={styles.viewerWrap}>
-            <ClipViewer
-              posterUrl={viewerClip?.posterUrl}
-              title={viewerClip?.label}
-              playing={playing && !scrubbing}
-              frameSlot={
-                manifestUrl ? (
-                  <VideoView player={player} style={StyleSheet.absoluteFill} nativeControls={false} contentFit="contain" />
-                ) : undefined
-              }
-            />
+            <View style={styles.viewerBox}>
+              <ClipViewer
+                posterUrl={gapCard ? undefined : displayClip?.posterUrl}
+                title={gapCard ? undefined : displayClip?.label}
+                // Show the VIDEO (not poster) when: dragging (scrub playback), playing, or after a
+                // scrub (videoMode). Over a gap → neither (the gap card covers it).
+                playing={(scrubbing || playing || videoMode) && !gapCard}
+                // While a between-lane VOD swap reloads, hold the incoming poster over the bg.
+                coverPoster={vodLoading && !gapCard}
+                frameSlot={
+                  manifestUrl ? (
+                    <VideoView player={player} style={StyleSheet.absoluteFill} nativeControls={false} contentFit="contain" />
+                  ) : undefined
+                }
+              />
+              {/* Gap card — over unbroadcasted time (scrub-through or the play rush). absoluteFills
+                  the viewer exactly: no thumb/footage, just a title over the background. */}
+              {gapCard ? (
+                <View style={styles.gapCard} pointerEvents="none">
+                  <Icon
+                    name={isReaperCard ? 'clock' : isTrailingCard ? 'radio' : 'moon'}
+                    size="lg"
+                    color={theme.colors.text.muted}
+                  />
+                  {isReaperCard ? (
+                    <>
+                      <Text variant="monoLabel" color={theme.colors.text.primary}>
+                        {reapAtRef.current != null ? fmtDur(Math.max(0, reapAtRef.current - Date.now()) / 1000) : '—'}
+                      </Text>
+                      <Text variant="monoCaption" color={theme.colors.text.muted}>
+                        until oldest is reaped
+                      </Text>
+                    </>
+                  ) : isTrailingCard ? (
+                    <>
+                      <Text variant="monoLabel" color={theme.colors.text.primary}>
+                        {fmtDur(Math.max(0, Date.now() - gapCard.fromMs) / 1000)}
+                      </Text>
+                      <Text variant="monoCaption" color={theme.colors.text.muted}>
+                        since last broadcast
+                      </Text>
+                    </>
+                  ) : (
+                    <>
+                      <Text variant="monoLabel" color={theme.colors.text.primary}>
+                        {fmtDur((gapCard.toMs - gapCard.fromMs) / 1000)} gap
+                      </Text>
+                      <Text variant="monoCaption" color={theme.colors.text.muted}>
+                        not broadcast
+                      </Text>
+                    </>
+                  )}
+                </View>
+              ) : null}
+            </View>
           </View>
         ) : null}
         {/* Transport directly below the viewer (it drives it); the clock stays at the bottom. */}
@@ -796,8 +1105,8 @@ export const ClipsScreen = () => {
             onToEnd={goNow} // 7th — snap the now (live) edge to the playhead
             canPrev={navBoundaries.length > 1}
             canNext={navBoundaries.length > 1}
-            canFrameBack={!!manifestUrl && playheadMs > clipStart}
-            canFrameForward={!!manifestUrl && playheadMs < clipEnd}
+            canFrameBack={!!manifestUrl && playheadMs > vodStart}
+            canFrameForward={!!manifestUrl && playheadMs < vodEnd}
             style={styles.transport}
           />
         ) : null}
@@ -819,28 +1128,32 @@ export const ClipsScreen = () => {
             buffered={bufferedLane}
             saved={savedLane}
             nowMs={axisTop}
+            reaping={reaping}
+            reaperLane={reaperLane}
+            reaperBoundaryMs={reaperBoundaryMs}
             selectedId={selectedId}
             onSelect={(c) => {
-              setSelectedId(c.id) // tap → highlight + drive the viewer (no timeline reposition)
+              setSelectedId(c.id) // tap → highlight + preview poster (no timeline reposition)
               setCenterClipId(null)
+              setVideoMode(false) // show the tapped clip's poster, not a stale scrub frame
             }}
             onScrubStart={() => {
               setSelectedId(null) // any scrub blurs the selection
-              // Scrub WHILE PLAYING: free the scroll + follow the scrub, but don't stop playback.
-              if (playingRef.current) {
-                scrubbingRef.current = true
-                setScrubbing(true)
-              }
+              setFollowLive(false) // scrubbing leaves the live edge
+              setGapCard(null)
+              scrubResumePlayingRef.current = playingRef.current
+              scrubbingRef.current = true
+              setScrubbing(true)
+              setVideoMode(true) // show the seeked video frame (scrub playback) for any drag
+              // Dragging PAUSES playback (keep the `playing` state → the play button doesn't change).
+              if (playingRef.current) player.pause()
             }}
-            onCenter={(id) => {
-              // Paused → the viewer follows the centred clip. Playing+scrubbing → the viewer poster
-              // follows the scrub (player stays frozen); the precise resume instant comes from
-              // onScrubEnd at release, so we only track the centred clip here.
-              if (!playingRef.current) {
-                if (id) setCenterClipId(id)
-              } else if (scrubbingRef.current) {
-                if (id) setCenterClipId(id)
-              }
+            onCenter={(id, timeMs, inGap) => {
+              // While PLAYING (not scrubbing) the transport clock owns the playhead + gap card —
+              // ignore the follow-driven onCenter so they don't fight. Scrubbing / idle → follow.
+              if (playingRef.current && !scrubbingRef.current) return
+              if (id) setCenterClipId(id)
+              setGapCard(inGap ? gapSpanAt(timeMs) : null)
             }}
             onScrubEnd={onScrubEnd}
             onOpen={openClip}
@@ -871,7 +1184,15 @@ export const ClipsScreen = () => {
         <View style={styles.bottomChrome}>
           <TimeScrubber
             offsetMs={offsetForClock}
-            onOffsetChange={(off) => seekTo(Date.now() - off)}
+            onOffsetChange={(off) => {
+              if (off <= 0) {
+                goNow() // tap NOW → skip the timeline to the now edge (+ pin the clock to NOW)
+                return
+              }
+              const t = Date.now() - off
+              seekTo(t)
+              timelineRef.current?.scrollToTime(t, true) // dial scrub → bring the instant under the playhead
+            }}
             playback={false}
             collapseSignal={collapseSignal}
             onExpandedChange={setClockExpanded}
@@ -906,6 +1227,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.lg,
     marginTop: theme.spacing.md,
   },
+  // Holds the viewer + the gap card so the card absoluteFills the viewer EXACTLY (same size).
+  viewerBox: {
+    width: '100%',
+  },
+  // Full-cover gap card — fills the viewer exactly; hides footage/poster, just a title.
+  gapCard: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: theme.radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+    backgroundColor: theme.colors.bg.panel,
+  },
   transport: {
     paddingHorizontal: theme.spacing.lg,
     marginTop: theme.spacing.sm,
@@ -915,13 +1249,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.sm,
   },
-  // Centred over the playhead (which is at the timeline's horizontal centre).
+  // Bottom-right of the timeline, just above the clock.
   scissorRow: {
     position: 'absolute',
-    top: theme.spacing.sm,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
+    bottom: theme.spacing.sm,
+    right: theme.spacing.sm,
+    alignItems: 'flex-end',
   },
   scissorBtn: {
     width: 36,

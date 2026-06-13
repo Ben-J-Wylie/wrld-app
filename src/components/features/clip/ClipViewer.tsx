@@ -25,20 +25,31 @@ type Props = {
   title?: string | null
   // True while the host's player is playing — hides the poster so the video shows through.
   playing?: boolean
+  // True while the host is swapping the VOD (a cross-VOD seam). Forces the poster on top of the
+  // video so the brief reload shows the incoming clip's frame, not the bg — unbroken across seams.
+  coverPoster?: boolean
   // The host's `VideoView` (or any frame layer), rendered full-bleed behind the chrome.
   frameSlot?: ReactNode
   style?: StyleProp<ViewStyle>
 }
 
-export function ClipViewer({ posterUrl, title, playing, frameSlot, style }: Props) {
+export function ClipViewer({ posterUrl, title, playing, coverPoster, frameSlot, style }: Props) {
   const hasClip = !!frameSlot || !!posterUrl
+  // The poster stays MOUNTED whenever there's a posterUrl and only its opacity toggles — so raising
+  // it (paused, or covering a reload) is instant, with no remount fade that would flash the bg.
+  const showPoster = !!posterUrl && (coverPoster || !playing)
 
   return (
     <View style={[styles.frame, style]}>
       {frameSlot}
-      {/* Poster covers the video until play starts (and whenever paused/ended). */}
-      {posterUrl && !playing ? (
-        <Image source={{ uri: posterUrl }} style={StyleSheet.absoluteFill} contentFit="contain" transition={120} />
+      {/* Poster: covers the video while paused/ended, and while a cross-VOD seam reloads. */}
+      {posterUrl ? (
+        <Image
+          source={{ uri: posterUrl }}
+          style={[StyleSheet.absoluteFill, { opacity: showPoster ? 1 : 0 }]}
+          contentFit="contain"
+          transition={120}
+        />
       ) : null}
 
       {!hasClip ? (
@@ -65,7 +76,7 @@ const styles = StyleSheet.create({
   frame: {
     width: '100%',
     aspectRatio: 2, // full width, half-height
-    backgroundColor: '#000', // letterbox / pillarbox bars
+    backgroundColor: theme.colors.bg.panel, // letterbox / pillarbox bars (matches the gap card)
     borderRadius: theme.radius.md,
     overflow: 'hidden',
     alignItems: 'center',

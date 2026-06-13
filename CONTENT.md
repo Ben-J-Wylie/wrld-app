@@ -197,6 +197,20 @@ nuances, not styling — styling lives in DESIGN.md.
   can each reach centre. Play plays *from the playhead* and the timeline follows
   it frame-by-frame. Scrolling **blurs the selection** and the viewer follows
   whatever clip is under the playhead (best-effort).
+- **Playback is playhead-driven — one authoritative wall clock.** A single
+  playhead *instant* is the source of truth; the video player and the timeline
+  are **followers** (the player seeks/plays to match it, the timeline scrolls to
+  centre it, the viewer shows the footage at it). The playhead advances by REAL
+  time — 1× over footage, a fixed rush rate across a gap — and is driven by the
+  finger while scrubbing (and by inertia until the scroll settles). It is
+  **never** derived from the video's stream position (a lagging, VOD-bounded
+  signal), and **never** reset by incidental state changes (a lane drag, a
+  re-layout). A clip / lane / gap boundary is a *seek for the follower* (reload
+  the next VOD), **not a stop for the playhead** — the playhead crosses
+  boundaries continuously and the video catches up. This is §2 principle 2
+  ("alignment is by time, not stream position") made operational; **stalls,
+  snap-backs, and 1969 clocks are all symptoms of inverting it** (letting the
+  video drive the playhead).
 - **Zoom rescales time, never content.** Pinch is a layout rescale of the time
   axis (clip widths grow/shrink) — *not* a transform scale — so thumbs and labels
   never distort. It's anchored to centre (scales evenly left/right), runs on the

@@ -230,11 +230,26 @@ export function TimeScrubber({
     }
   }, [offsetMs])
 
-  // `paused` only freezes the playhead while actually in the past — when live
-  // (offset 0) the clock must always tick, even if a stale `paused` lingers.
-  const playMs = playback && paused && offsetMs > 0 ? frozenRef.current : Date.now() - offsetMs
-  const playhead = new Date(playMs)
   const live = offsetMs <= 0
+  // Hold mode (clip editor, playback=false): the displayed instant is the host's HELD playhead —
+  // captured when offsetMs last changes and FROZEN between changes. Without this the internal 1s
+  // tick (advancing Date.now()) would drift a paused clock forward, then a host re-render snaps it
+  // back → the seconds bounce. Live (offset 0) always ticks; playback mode (globe) keeps the
+  // real-time 1× tick + the post-scrub freeze.
+  const heldPrevOffset = useRef(offsetMs)
+  const heldInstant = useRef(Date.now() - offsetMs)
+  if (heldPrevOffset.current !== offsetMs) {
+    heldPrevOffset.current = offsetMs
+    heldInstant.current = Date.now() - offsetMs
+  }
+  const playMs = live
+    ? Date.now() - offsetMs // offset 0 → ticks NOW
+    : playback
+      ? paused
+        ? frozenRef.current // globe: post-scrub freeze beat
+        : Date.now() - offsetMs // globe: real-time 1× playback
+      : heldInstant.current // clip editor: host-controlled held instant (no internal drift)
+  const playhead = new Date(playMs)
 
   // Direction of the latest playhead change → drives the dial slide
   // (+1 newer = scroll down, −1 older = scroll up). Updated after render.
