@@ -26,7 +26,7 @@ import { PageTabs } from '@/components/features/navigation/PageTabs'
 import { Text } from '@/components/primitives/Text'
 import { Icon } from '@/components/primitives/Icon'
 import { type LaneClip } from '@/components/features/clip/ClipLane'
-import { ClipsTimeline } from '@/components/features/clip/ClipsTimeline'
+import { ClipsTimeline, type ClipsTimelineHandle } from '@/components/features/clip/ClipsTimeline'
 import { ClipViewer } from '@/components/features/clip/ClipViewer'
 import { BufferTransport } from '@/components/features/clip/BufferTransport'
 import { TimeScrubber } from '@/components/features/discovery/TimeScrubber'
@@ -223,39 +223,48 @@ export const ClipsScreen = () => {
   }, [matchesReal])
 
   // ── sticky viewer selection ──
-  // Single-tap a clip → preview it in the viewer; default to the newest clip.
+  // `selectedId` = the tapped clip (red highlight). Scrolling the timeline while paused BLURS the
+  // selection (selectedId → null); the viewer then follows whatever clip is under the centre
+  // playhead (`centerClipId`). Viewer + player key off `viewerClip` = selected ?? centered.
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [centerClipId, setCenterClipId] = useState<string | null>(null)
   const selectedClip = useMemo(() => allClips.find((c) => c.id === selectedId) ?? null, [allClips, selectedId])
+  const viewerClip = useMemo(() => selectedClip ?? allClips.find((c) => c.id === centerClipId) ?? null, [selectedClip, allClips, centerClipId])
+  const viewerId = viewerClip?.id ?? null
+  // Default the viewer to the newest clip — once, on first load (don't re-grab after a blur).
+  const didInitSelect = useRef(false)
   useEffect(() => {
-    if ((!selectedId || !allClips.some((c) => c.id === selectedId)) && allClips.length) {
-      const newest = allClips.reduce((a, b) => (b.endMs > a.endMs ? b : a))
-      setSelectedId(newest.id)
-    }
-  }, [allClips, selectedId])
+    if (didInitSelect.current || !allClips.length) return
+    didInitSelect.current = true
+    setSelectedId(allClips.reduce((a, b) => (b.endMs > a.endMs ? b : a)).id)
+  }, [allClips])
 
   // ── playback: the selected clip drives one video player; the bottom transport + clock
   // control it. For a buffered session, manifestUrl is the session VOD and the clip window
   // is the whole session, so video [0,dur] maps to [clipStart, clipEnd]. Saved clips have no
   // manifest yet → poster only (handoff). ──
-  const clipStart = selectedClip?.startMs ?? 0
-  const clipEnd = selectedClip?.endMs ?? 0
-  const manifestUrl = selectedClip?.manifestUrl ?? null
+  const clipStart = viewerClip?.startMs ?? 0
+  const clipEnd = viewerClip?.endMs ?? 0
+  const manifestUrl = viewerClip?.manifestUrl ?? null
   const player = useVideoPlayer(null, (p) => {
     p.loop = false
   })
+  const timelineRef = useRef<ClipsTimelineHandle>(null)
   const [playing, setPlaying] = useState(false)
+  const playingRef = useRef(false)
+  playingRef.current = playing
   const [playheadMs, setPlayheadMs] = useState(0)
   const playheadRef = useRef(0)
   playheadRef.current = playheadMs
 
-  // Load (or clear) the clip's video when the selection changes; reset to its start.
+  // Load (or clear) the viewer clip's video when it changes; reset the playhead to its start.
   useEffect(() => {
     setPlaying(false)
     setPlayheadMs(clipStart)
     if (manifestUrl) player.replaceAsync({ uri: manifestUrl, contentType: 'hls' }).catch(() => {})
     else player.replace(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId])
+  }, [viewerId])
 
   const seekTo = useCallback(
     (ms: number) => {
@@ -283,6 +292,7 @@ export const ClipsScreen = () => {
         return
       }
       setPlayheadMs(ph)
+      timelineRef.current?.scrollToTime(ph) // keep the playing instant under the centre playhead
       raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
@@ -295,7 +305,11 @@ export const ClipsScreen = () => {
       player.pause()
       setPlaying(false)
     } else {
+      // Sync the video to the playhead (a scroll moves the playhead without seeking), then
+      // reposition the timeline so the instant sits under the centre playhead, and play + follow.
       if (playheadRef.current >= clipEnd - 100) seekTo(clipStart) // restart from the top at the end
+      else seekTo(playheadRef.current)
+      timelineRef.current?.scrollToTime(playheadRef.current, true)
       player.play()
       setPlaying(true)
     }
@@ -303,7 +317,7 @@ export const ClipsScreen = () => {
 
   // Prev / next clip = select the time-adjacent clip in the grid.
   const ordered = useMemo(() => [...allClips].sort((a, b) => a.startMs - b.startMs), [allClips])
-  const selIdx = ordered.findIndex((c) => c.id === selectedId)
+  const selIdx = ordered.findIndex((c) => c.id === viewerId)
   const canPrev = selIdx > 0
   const canNext = selIdx >= 0 && selIdx < ordered.length - 1
 
@@ -479,8 +493,8 @@ export const ClipsScreen = () => {
         {hasAny ? (
           <View style={styles.viewerWrap}>
             <ClipViewer
-              posterUrl={selectedClip?.posterUrl}
-              title={selectedClip?.label}
+              posterUrl={viewerClip?.posterUrl}
+              title={viewerClip?.label}
               playing={playing}
               frameSlot={
                 manifestUrl ? (
@@ -524,11 +538,22 @@ export const ClipsScreen = () => {
         <View style={styles.timelineWrap} onTouchStart={() => clockExpanded && setCollapseSignal((s) => s + 1)}>
           {/* Horizontal timeline — reaper left, now right; collapsed gaps; pinch to zoom. */}
           <ClipsTimeline
+            ref={timelineRef}
             buffered={bufferedLane}
             saved={savedLane}
             nowMs={axisTop}
             selectedId={selectedId}
-            onSelect={(c) => setSelectedId(c.id)}
+            onSelect={(c) => {
+              setSelectedId(c.id) // tap → highlight + drive the viewer (no timeline reposition)
+              setCenterClipId(null)
+            }}
+            onScrubStart={() => {
+              if (!playingRef.current) setSelectedId(null) // scroll while paused → blur the selection
+            }}
+            onCenter={(id) => {
+              // While paused, the viewer follows the clip under the centre playhead.
+              if (!playingRef.current && id) setCenterClipId(id)
+            }}
             onOpen={openClip}
             onSave={saveClip}
             onUnsave={unsaveClip}

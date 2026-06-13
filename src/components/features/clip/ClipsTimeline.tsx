@@ -19,7 +19,7 @@
 //
 // See DESIGN.md Section 3 (Clips landing grid).
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { ScrollView, StyleSheet, View } from 'react-native'
 import { useSharedValue, runOnJS } from 'react-native-reanimated'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
@@ -101,9 +101,20 @@ type Props = {
   onOpen: (clip: LaneClip, kind: 'buffered' | 'saved') => void
   onSave: (clip: LaneClip) => void // drag a buffer block DOWN → save
   onUnsave: (clip: LaneClip) => void // drag a saved block UP → un-save
+  onScrubStart?: () => void // the user began dragging the timeline (→ blur the selection)
+  onCenter?: (clipId: string | null, timeMs: number) => void // clip/instant under the centre playhead
 }
 
-export function ClipsTimeline({ buffered, saved, nowMs, selectedId, onSelect, onOpen, onSave, onUnsave }: Props) {
+// Imperative handle so the host can drive the scroll from playback — bring a time instant under
+// the fixed centre playhead (reposition on play, then follow frame-by-frame as it plays).
+export type ClipsTimelineHandle = {
+  scrollToTime: (ms: number, animated?: boolean) => void
+}
+
+export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function ClipsTimeline(
+  { buffered, saved, nowMs, selectedId, onSelect, onOpen, onSave, onUnsave, onScrubStart, onCenter }: Props,
+  ref,
+) {
   // Combined set drives the shared axis (buffer + saved don't overlap → one timeline).
   const allClips = useMemo(() => [...buffered, ...saved], [buffered, saved])
   const maxDur = useMemo(() => allClips.reduce((m, c) => Math.max(m, c.endMs - c.startMs), 0), [allClips])
@@ -121,6 +132,10 @@ export function ClipsTimeline({ buffered, saved, nowMs, selectedId, onSelect, on
 
   const layout = useMemo(() => buildHLayout(allClips, px, nowMs), [allClips, px, nowMs])
   const contentWidth = layout.contentWidth
+  // Half-viewport of empty scroll on each end so the reaper edge (x=0) and the now edge
+  // (x=contentWidth) can each scroll all the way to the fixed centre playhead.
+  const padX = viewportW > 0 ? viewportW / 2 : 0
+  const outerWidth = contentWidth + 2 * padX
 
   const scrollRef = useRef<ScrollView>(null)
   const scrollXRef = useRef(0)
@@ -141,25 +156,27 @@ export function ClipsTimeline({ buffered, saved, nowMs, selectedId, onSelect, on
       scrollXRef.current = x
     }
   }, [px])
-  // Land at "now" (the far right) on first content + measured viewport.
+  // Land with "now" (the right edge) centred under the playhead on first content + viewport.
   useEffect(() => {
     if (!didInitialScroll.current && contentWidth > 0 && viewportW > 0) {
       didInitialScroll.current = true
-      const x = Math.max(0, contentWidth - viewportW)
+      const x = Math.max(0, outerWidth - viewportW) // = contentWidth → now under centre
       requestAnimationFrame(() => scrollRef.current?.scrollTo({ x, animated: false }))
     }
-  }, [contentWidth, viewportW])
+  }, [contentWidth, viewportW, outerWidth])
 
-  // Pinch zoom — keep the content fraction under the focal pinned across the rescale.
+  // Pinch zoom — keep the timeline fraction under the focal pinned across the rescale (the
+  // leading pad is constant, so the focal maps into timeline space by subtracting it).
   const zoomToFocal = useCallback(
     (targetPx: number, focalX: number) => {
       if (viewportW <= 0) return
       const next = clamp(targetPx, minPx, maxPx)
       if (Math.abs(next - pxRef.current) < 1e-12) return
+      const pad = viewportW / 2
       const oldW = contentWidthRef.current
-      const frac = oldW > 0 ? (scrollXRef.current + focalX) / oldW : 0
-      const nextLayout = buildHLayout(clipsRef.current, next, nowMs)
-      pendingScrollX.current = clamp(frac * nextLayout.contentWidth - focalX, 0, Math.max(0, nextLayout.contentWidth - viewportW))
+      const frac = oldW > 0 ? (scrollXRef.current + focalX - pad) / oldW : 0
+      const newW = buildHLayout(clipsRef.current, next, nowMs).contentWidth
+      pendingScrollX.current = clamp(pad + frac * newW - focalX, 0, Math.max(0, newW + 2 * pad - viewportW))
       setPxPerMs(next)
     },
     [minPx, maxPx, viewportW, nowMs],
@@ -182,6 +199,57 @@ export function ClipsTimeline({ buffered, saved, nowMs, selectedId, onSelect, on
         }),
     [zoomToFocal, pinchStartSv, pxSv],
   )
+
+  // ── imperative: bring a time instant under the centre playhead ──
+  // scrollX that centres content-x C is `padX + C - viewportW/2` = C (padX = viewportW/2), so the
+  // target scroll offset is simply the time's content-x. Used to reposition on play + follow.
+  const layoutRef = useRef(layout)
+  layoutRef.current = layout
+  const timeToContentX = useCallback((ms: number) => {
+    const lay = layoutRef.current
+    const clips = clipsRef.current
+    let fallback = 0
+    let bestDist = Infinity
+    for (const c of clips) {
+      const p = lay.pos.get(c.id)
+      if (!p) continue
+      if (ms >= c.startMs && ms <= c.endMs) {
+        const dur = Math.max(1, c.endMs - c.startMs)
+        return p.left + ((ms - c.startMs) / dur) * p.width
+      }
+      const edgeX = ms < c.startMs ? p.left : p.left + p.width
+      const d = ms < c.startMs ? c.startMs - ms : ms - c.endMs
+      if (d < bestDist) {
+        bestDist = d
+        fallback = edgeX
+      }
+    }
+    return fallback
+  }, [])
+  useImperativeHandle(
+    ref,
+    () => ({
+      scrollToTime: (ms: number, animated = false) => {
+        const x = Math.max(0, timeToContentX(ms))
+        scrollRef.current?.scrollTo({ x, animated })
+        scrollXRef.current = x
+      },
+    }),
+    [timeToContentX],
+  )
+  // The clip + instant under the centre playhead. The centred content-x equals the scroll offset
+  // (padX = viewportW/2 cancels), so map the scroll offset → the clip it lands in + the time there.
+  const centerAt = useCallback((scrollX: number): { id: string | null; timeMs: number } => {
+    const lay = layoutRef.current
+    for (const c of clipsRef.current) {
+      const p = lay.pos.get(c.id)
+      if (p && scrollX >= p.left && scrollX <= p.left + p.width) {
+        const frac = p.width > 0 ? (scrollX - p.left) / p.width : 0
+        return { id: c.id, timeMs: c.startMs + frac * (c.endMs - c.startMs) }
+      }
+    }
+    return { id: null, timeMs: 0 }
+  }, [])
 
   // Five rows fill the region: ruler + 2 title bands + 2 clip lanes. The lanes split what's left.
   const laneHeight = Math.max(0, (regionH - RULER_H - 2 * TITLE_H) / 2)
@@ -237,37 +305,52 @@ export function ClipsTimeline({ buffered, saved, nowMs, selectedId, onSelect, on
               ref={scrollRef}
               horizontal
               showsHorizontalScrollIndicator={false}
+              onScrollBeginDrag={() => onScrubStart?.()}
               onScroll={(e) => {
-                scrollXRef.current = e.nativeEvent.contentOffset.x
+                const x = e.nativeEvent.contentOffset.x
+                scrollXRef.current = x
+                if (onCenter) {
+                  const { id, timeMs } = centerAt(x)
+                  onCenter(id, timeMs)
+                }
               }}
               scrollEventThrottle={16}
             >
-              <View style={{ width: contentWidth, height: regionH }}>
-                {/* ruler */}
-                <View style={styles.ruler}>
-                  {layout.tickXs.map((t, i) => (
-                    <View key={i} style={[styles.tick, { left: t.x }]}>
-                      <View style={[styles.tickMark, t.label === 'now' && styles.tickMarkNow]} />
-                      <Text variant="monoCaption" color={t.label === 'now' ? theme.colors.accent.default : theme.colors.text.subtle}>
-                        {t.label}
-                      </Text>
+              <View style={{ width: outerWidth, height: regionH }}>
+                {/* Timeline content, shifted right by the leading pad so x=0 sits at the centre. */}
+                <View style={{ position: 'absolute', left: padX, top: 0, width: contentWidth, height: regionH }}>
+                  {/* ruler */}
+                  <View style={styles.ruler}>
+                    {layout.tickXs.map((t, i) => (
+                      <View key={i} style={[styles.tick, { left: t.x }]}>
+                        <View style={[styles.tickMark, t.label === 'now' && styles.tickMarkNow]} />
+                        <Text variant="monoCaption" color={t.label === 'now' ? theme.colors.accent.default : theme.colors.text.subtle}>
+                          {t.label}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                  {/* gap markers across both lanes */}
+                  {layout.gaps.map((g, i) => (
+                    <View key={`gap-${i}`} style={[styles.gapBand, { left: g.x, width: g.width, top: RULER_H, bottom: 0 }]}>
+                      <View style={styles.gapRule} />
                     </View>
                   ))}
+                  {/* clip lanes (positioned around the fixed title bands) */}
+                  {renderLane(buffered, 'buffered', bufferTop)}
+                  {renderLane(saved, 'saved', savedTop)}
                 </View>
-                {/* gap markers across both lanes */}
-                {layout.gaps.map((g, i) => (
-                  <View key={`gap-${i}`} style={[styles.gapBand, { left: g.x, width: g.width, top: RULER_H, bottom: 0 }]}>
-                    <View style={styles.gapRule} />
-                  </View>
-                ))}
-                {/* clip lanes (positioned around the fixed title bands) */}
-                {renderLane(buffered, 'buffered', bufferTop)}
-                {renderLane(saved, 'saved', savedTop)}
               </View>
             </ScrollView>
           </GestureDetector>
         )}
       </View>
+
+      {/* Fixed centre playhead — a vertical rule pinned to the screen centre, spanning the lanes.
+          Rendered before the title bands so it reads as running *under* them. Not draggable. */}
+      {hasAny && regionH > 0 && viewportW > 0 ? (
+        <View style={[styles.playhead, { left: viewportW / 2 - 1 }]} pointerEvents="none" />
+      ) : null}
 
       {/* Fixed title bands — name each lane + what happens to its content. Don't scroll;
           pointerEvents none so pinch/scroll/drag pass through to the timeline beneath. */}
@@ -295,7 +378,7 @@ export function ClipsTimeline({ buffered, saved, nowMs, selectedId, onSelect, on
       ) : null}
     </View>
   )
-}
+})
 
 const styles = StyleSheet.create({
   region: {
@@ -304,6 +387,15 @@ const styles = StyleSheet.create({
   },
   scrollArea: {
     flex: 1,
+  },
+  // Fixed vertical playhead at the screen centre. Full region height; the opaque title bands
+  // (rendered after) cover it at their rows, so it reads as running under the titles.
+  playhead: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: 2,
+    backgroundColor: theme.colors.accent.default,
   },
   // Fixed full-width title band above each clip lane. Lighter than the lanes, with a hairline
   // above AND below so every row (ruler · buffer · saved) reads as separated.

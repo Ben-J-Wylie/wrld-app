@@ -21,6 +21,13 @@ instance working in this repo is immediately oriented.
 > Ben, Aaron, and a small friends-and-family group). v0.3 = next major
 > milestone after v0.2 — known commitments listed below.
 
+> **Content north star:** [`CONTENT.md`](CONTENT.md) is the cross-repo philosophy
+> for how WRLD captures, stores, edits, and surfaces content — the *why* behind
+> the buffer/saved two-pool model, the non-destructive clip manifest (draft ↔
+> saved), the carve, capture ⊆ broadcast, the privacy ceiling, and the time
+> machine. Principles land there; the weeds stay in the per-repo CLAUDE.md +
+> `HANDOFF-*.md` + DESIGN.md. Keep it honest as the model evolves.
+
 ---
 
 ## What WRLD is

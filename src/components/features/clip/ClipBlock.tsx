@@ -142,7 +142,9 @@ export function ClipBlock({ heightPx, widthPx, label, sublabel, posterUrl, tone,
         </View>
       ) : posterUrl && !compact ? (
         <View style={styles.topSpan} pointerEvents="none">
-          <Image source={{ uri: posterUrl }} style={styles.thumbImg} contentFit="contain" transition={120} />
+          <View style={styles.thumbFrame}>
+            <Image source={{ uri: posterUrl }} style={styles.thumbImg} contentFit="contain" transition={120} />
+          </View>
         </View>
       ) : null}
 
@@ -237,11 +239,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  // Confined to a square (the span's height) so every thumb is the same size regardless of
-  // orientation — landscape letterboxes top/bottom, portrait pillarboxes left/right.
-  thumbImg: {
+  // A square frame around the poster (the span's height) — every thumb is the same size
+  // regardless of orientation, with an additional inward-rounded stroke on its left/right.
+  thumbFrame: {
     height: '100%',
     aspectRatio: 1,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.border.strong,
+    backgroundColor: theme.colors.bg.primary,
+    overflow: 'hidden',
+  },
+  thumbImg: {
+    width: '100%',
+    height: '100%',
   },
   meta: {
     paddingHorizontal: theme.spacing.sm,
