@@ -159,7 +159,9 @@ export function ExternalStreamScreen() {
         </View>
       ) : null}
 
-      {/* Top chrome: back · LIVE · host identity. */}
+      {/* Top chrome: back · LIVE · host identity. Hidden in fullscreen — the
+          fullscreen overlay supplies its own close + audio controls. */}
+      {!isFullscreen ? (
       <SafeAreaView edges={['top']} style={styles.header} pointerEvents="box-none">
         <View style={styles.headerRow}>
           <Pressable onPress={back} hitSlop={12} style={styles.backBtn}>
@@ -192,19 +194,15 @@ export function ExternalStreamScreen() {
           ) : null}
         </View>
       </SafeAreaView>
+      ) : null}
 
-      {/* Fullscreen viewer — edge-to-edge over the chrome, with a close button +
-          audio controls. Rotates to landscape only for landscape cams (detected
-          from the track). Shares the same player as the inline VideoView above. */}
+      {/* Fullscreen controls — a transparent overlay above the single VideoView
+          (which already fills the screen and rotates with the orientation lock).
+          We do NOT mount a second VideoView: expo-video can't bind one player to
+          two surfaces at once (SurfaceVideoView throws on Android). Rotates to
+          landscape only for landscape cams (detected from the track). */}
       {isFullscreen && liveUrl ? (
-        <View style={styles.fsRoot}>
-          <VideoView
-            player={player}
-            style={StyleSheet.absoluteFill}
-            nativeControls={false}
-            contentFit="contain"
-          />
-
+        <View style={styles.fsControls} pointerEvents="box-none">
           <View style={styles.fsClose}>
             <IconButton
               name="minimize"
@@ -264,7 +262,7 @@ const styles = StyleSheet.create({
   identity: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs, flex: 1 },
   identityText: { flex: 1 },
   title: { opacity: 0.85 },
-  fsRoot: { ...StyleSheet.absoluteFillObject, backgroundColor: '#000', zIndex: 100 },
+  fsControls: { ...StyleSheet.absoluteFillObject, zIndex: 100 },
   fsClose: { position: 'absolute', top: theme.spacing.lg, right: theme.spacing.lg },
   fsControlsBar: {
     position: 'absolute',
