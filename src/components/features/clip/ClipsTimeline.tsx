@@ -107,6 +107,7 @@ type Props = {
   onSave: (clip: LaneClip) => void // drag a buffer block DOWN → save
   onUnsave: (clip: LaneClip) => void // drag a saved block UP → un-save
   onScrubStart?: () => void // the user began dragging the timeline (→ blur the selection)
+  onScrubEnd?: () => void // the drag ended (→ commit a scrub-while-playing jump)
   onCenter?: (clipId: string | null, timeMs: number) => void // clip/instant under the centre playhead
 }
 
@@ -165,7 +166,7 @@ function AnimatedGap({ layout, index, trailing }: { layout: SharedValue<Layout>;
 }
 
 export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function ClipsTimeline(
-  { buffered, saved, nowMs, selectedId, onSelect, onOpen, onSave, onUnsave, onScrubStart, onCenter }: Props,
+  { buffered, saved, nowMs, selectedId, onSelect, onOpen, onSave, onUnsave, onScrubStart, onScrubEnd, onCenter }: Props,
   ref,
 ) {
   // Combined set drives the shared axis (buffer + saved don't overlap → one timeline). Sorted
@@ -307,6 +308,7 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
     setPxState(next)
   }, [])
   const notifyScrubStart = useCallback(() => onScrubStart?.(), [onScrubStart])
+  const notifyScrubEnd = useCallback(() => onScrubEnd?.(), [onScrubEnd])
 
   // ── gestures (all UI thread) ──
   // Pan = 1-finger horizontal scroll with momentum. Pinch = 2-finger zoom anchored to the centre.
@@ -330,10 +332,11 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
         })
         .onEnd((e) => {
           'worklet'
+          runOnJS(notifyScrubEnd)()
           if (twoFingers.value) return // don't fling into a zoom
           scroll.value = withDecay({ velocity: -e.velocityX, clamp: [0, layout.value.total], deceleration: 0.997 })
         }),
-    [scroll, layout, notifyScrubStart, twoFingers],
+    [scroll, layout, notifyScrubStart, notifyScrubEnd, twoFingers],
   )
 
   const pinchGesture = useMemo(

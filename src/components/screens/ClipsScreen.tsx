@@ -239,13 +239,17 @@ export const ClipsScreen = () => {
     setSelectedId(allClips.reduce((a, b) => (b.endMs > a.endMs ? b : a)).id)
   }, [allClips])
 
-  // ── playback: the selected clip drives one video player; the bottom transport + clock
-  // control it. For a buffered session, manifestUrl is the session VOD and the clip window
-  // is the whole session, so video [0,dur] maps to [clipStart, clipEnd]. Saved clips have no
-  // manifest yet → poster only (handoff). ──
-  const clipStart = viewerClip?.startMs ?? 0
-  const clipEnd = viewerClip?.endMs ?? 0
-  const manifestUrl = viewerClip?.manifestUrl ?? null
+  // ── playback ──
+  // The PLAYER plays `playerClip`; the VIEWER poster shows `viewerClip`. They're the same EXCEPT
+  // while scrubbing during playback: the player stays frozen on its clip (audio keeps running)
+  // while the timeline + viewer poster follow the scrub; on release we jump the player to the
+  // scrubbed instant and play from there. For a buffered session the manifest is the session VOD
+  // and the clip window is the whole session, so video [0,dur] maps to [clipStart, clipEnd].
+  const [playerId, setPlayerId] = useState<string | null>(null)
+  const playerClip = useMemo(() => allClips.find((c) => c.id === playerId) ?? null, [allClips, playerId])
+  const clipStart = playerClip?.startMs ?? 0
+  const clipEnd = playerClip?.endMs ?? 0
+  const manifestUrl = playerClip?.manifestUrl ?? null
   const player = useVideoPlayer(null, (p) => {
     p.loop = false
   })
@@ -257,14 +261,54 @@ export const ClipsScreen = () => {
   const playheadRef = useRef(0)
   playheadRef.current = playheadMs
 
-  // Load (or clear) the viewer clip's video when it changes; reset the playhead to its start.
+  // Scrub-while-playing state. `scrubbingRef` gates the follow + onCenter synchronously; the
+  // `scrubbing` state keeps the viewer poster up (incl. through an async cross-clip jump).
+  const [scrubbing, setScrubbing] = useState(false)
+  const scrubbingRef = useRef(false)
+  scrubbingRef.current = scrubbing
+  const scrubCenterRef = useRef<{ id: string | null; timeMs: number }>({ id: null, timeMs: 0 })
+  const pendingPlayAtRef = useRef<number | null>(null)
+  const playerIdRef = useRef<string | null>(null)
+  playerIdRef.current = playerId
+
+  // The player follows the viewer EXCEPT while scrubbing during playback (frozen so audio runs).
+  // On scrub-release we set playerId explicitly to jump.
   useEffect(() => {
-    setPlaying(false)
-    setPlayheadMs(clipStart)
-    if (manifestUrl) player.replaceAsync({ uri: manifestUrl, contentType: 'hls' }).catch(() => {})
-    else player.replace(null)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (playingRef.current && scrubbingRef.current) return
+    setPlayerId(viewerId)
   }, [viewerId])
+
+  // Load the player clip when it changes. Normally pause at its start; if a jump is pending
+  // (scrub-release while playing) seek to the target + resume, holding the poster until ready.
+  useEffect(() => {
+    const playAt = pendingPlayAtRef.current
+    pendingPlayAtRef.current = null
+    if (playAt == null) {
+      setPlaying(false)
+      setPlayheadMs(clipStart)
+    }
+    if (manifestUrl) {
+      player
+        .replaceAsync({ uri: manifestUrl, contentType: 'hls' })
+        .then(() => {
+          if (playAt == null) return
+          const t = clamp(playAt, clipStart, clipEnd)
+          try {
+            player.currentTime = (t - clipStart) / 1000
+          } catch {}
+          setPlayheadMs(t)
+          player.play()
+          setPlaying(true)
+          timelineRef.current?.scrollToTime(t)
+          setScrubbing(false) // ready → drop the scrub poster (no black flash)
+        })
+        .catch(() => setScrubbing(false))
+    } else {
+      player.replace(null)
+      setScrubbing(false)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playerId])
 
   const seekTo = useCallback(
     (ms: number) => {
@@ -279,7 +323,8 @@ export const ClipsScreen = () => {
     [clipStart, clipEnd, manifestUrl, player],
   )
 
-  // While playing, follow the video's currentTime → playhead; stop at the clip end.
+  // While playing, follow currentTime → playhead. Recentre the timeline UNLESS the user is
+  // scrubbing (leave the scroll under their finger). Stop at the clip end.
   useEffect(() => {
     if (!playing) return
     let raf = 0
@@ -292,7 +337,7 @@ export const ClipsScreen = () => {
         return
       }
       setPlayheadMs(ph)
-      timelineRef.current?.scrollToTime(ph) // keep the playing instant under the centre playhead
+      if (!scrubbingRef.current) timelineRef.current?.scrollToTime(ph)
       raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
@@ -314,6 +359,31 @@ export const ClipsScreen = () => {
       setPlaying(true)
     }
   }, [manifestUrl, player, clipEnd, clipStart, seekTo])
+
+  // Scrub-release while playing: jump the player to the scrubbed instant and keep playing.
+  const onScrubEnd = useCallback(() => {
+    if (!scrubbingRef.current) return
+    const target = scrubCenterRef.current
+    if (!target.id) {
+      setScrubbing(false)
+      return
+    }
+    if (target.id === playerIdRef.current) {
+      // Same clip — just seek + (re)play; drop the poster immediately.
+      seekTo(target.timeMs)
+      if (!player.playing) {
+        player.play()
+        setPlaying(true)
+      }
+      timelineRef.current?.scrollToTime(target.timeMs)
+      setScrubbing(false)
+    } else {
+      // Different clip — jump: load + seek + play (the load effect drops the poster when ready).
+      scrubbingRef.current = false // re-enable the follow; the poster (state) holds until load
+      pendingPlayAtRef.current = target.timeMs
+      setPlayerId(target.id)
+    }
+  }, [player, seekTo])
 
   // Prev / next clip = select the time-adjacent clip in the grid.
   const ordered = useMemo(() => [...allClips].sort((a, b) => a.startMs - b.startMs), [allClips])
@@ -495,7 +565,7 @@ export const ClipsScreen = () => {
             <ClipViewer
               posterUrl={viewerClip?.posterUrl}
               title={viewerClip?.label}
-              playing={playing}
+              playing={playing && !scrubbing}
               frameSlot={
                 manifestUrl ? (
                   <VideoView player={player} style={StyleSheet.absoluteFill} nativeControls={false} contentFit="contain" />
@@ -548,12 +618,24 @@ export const ClipsScreen = () => {
               setCenterClipId(null)
             }}
             onScrubStart={() => {
-              if (!playingRef.current) setSelectedId(null) // scroll while paused → blur the selection
+              setSelectedId(null) // any scrub blurs the selection
+              // Scrub WHILE PLAYING: free the scroll + follow the scrub, but don't stop playback.
+              if (playingRef.current) {
+                scrubbingRef.current = true
+                setScrubbing(true)
+              }
             }}
-            onCenter={(id) => {
-              // While paused, the viewer follows the clip under the centre playhead.
-              if (!playingRef.current && id) setCenterClipId(id)
+            onCenter={(id, timeMs) => {
+              // Paused → the viewer follows the centred clip. Playing+scrubbing → the viewer poster
+              // follows the scrub (player stays frozen) and we remember where to jump on release.
+              if (!playingRef.current) {
+                if (id) setCenterClipId(id)
+              } else if (scrubbingRef.current) {
+                if (id) setCenterClipId(id)
+                scrubCenterRef.current = { id, timeMs }
+              }
             }}
+            onScrubEnd={onScrubEnd}
             onOpen={openClip}
             onSave={saveClip}
             onUnsave={unsaveClip}
