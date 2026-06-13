@@ -38,6 +38,10 @@ import { useBroadcastStore } from '@/stores/broadcastStore'
 import { bufferApi, type BufferSession } from '@/api/buffer'
 
 const FRAME_MS = 1000 / 30 // one frame at the 30fps capture (transport frame-step)
+// After a seek the player's currentTime lags (and resets to 0 on a cross-clip reload). Until it
+// converges within this of the wall-clock target, the follow honours the TARGET, not the stale
+// stream position — so a scrub resume never flicks to the clip head before snapping back.
+const SEEK_SETTLE_MS = 300
 
 // Dev-only trace to the Metro terminal for diagnosing drag-to-save (stripped in prod).
 const slog = (...args: unknown[]) => {
@@ -267,8 +271,9 @@ export const ClipsScreen = () => {
   // `scrubbing` state only drives the viewer poster (held through an async cross-clip jump).
   const [scrubbing, setScrubbing] = useState(false)
   const scrubbingRef = useRef(false)
-  const scrubCenterRef = useRef<{ id: string | null; timeMs: number }>({ id: null, timeMs: 0 })
   const pendingPlayAtRef = useRef<number | null>(null)
+  // The wall-clock instant a pending seek is targeting (null once the player has converged to it).
+  const seekTargetRef = useRef<number | null>(null)
   const playerIdRef = useRef<string | null>(null)
   playerIdRef.current = playerId
 
@@ -287,6 +292,11 @@ export const ClipsScreen = () => {
     if (playAt == null) {
       setPlaying(false)
       setPlayheadMs(clipStart)
+      seekTargetRef.current = null
+    } else {
+      // Hold the target through the async reload so the follow doesn't flick to the new clip's head.
+      seekTargetRef.current = clamp(playAt, clipStart, clipEnd)
+      setPlayheadMs(seekTargetRef.current)
     }
     if (manifestUrl) {
       player
@@ -315,6 +325,7 @@ export const ClipsScreen = () => {
     (ms: number) => {
       const m = clamp(ms, clipStart, clipEnd)
       setPlayheadMs(m)
+      seekTargetRef.current = m // the follow honours this until the player converges
       if (manifestUrl) {
         try {
           player.currentTime = (m - clipStart) / 1000
@@ -324,13 +335,20 @@ export const ClipsScreen = () => {
     [clipStart, clipEnd, manifestUrl, player],
   )
 
-  // While playing, follow currentTime → playhead. Recentre the timeline UNLESS the user is
-  // scrubbing (leave the scroll under their finger). Stop at the clip end.
+  // While playing, follow the playhead → recentre the timeline (unless the user is scrubbing).
+  // The playhead is the WALL-CLOCK instant: normally the stream's currentTime, but while a seek
+  // settles it's the TARGET — so a resume never follows the lagging/reset stream position.
   useEffect(() => {
     if (!playing) return
     let raf = 0
     const tick = () => {
-      const ph = clipStart + player.currentTime * 1000
+      const raw = clipStart + player.currentTime * 1000
+      const target = seekTargetRef.current
+      let ph = raw
+      if (target != null) {
+        if (Math.abs(raw - target) <= SEEK_SETTLE_MS) seekTargetRef.current = null // converged
+        else ph = target // hold the target while the seek settles
+      }
       if (ph >= clipEnd - 16) {
         player.pause()
         setPlaying(false)
@@ -361,32 +379,35 @@ export const ClipsScreen = () => {
     }
   }, [manifestUrl, player, clipEnd, clipStart, seekTo])
 
-  // Scrub-release while playing: jump the player to the scrubbed instant and keep playing.
-  const onScrubEnd = useCallback(() => {
-    if (!scrubbingRef.current) return
-    const target = scrubCenterRef.current
-    if (!target.id) {
-      scrubbingRef.current = false
-      setScrubbing(false)
-      return
-    }
-    if (target.id === playerIdRef.current) {
-      // Same clip — just seek + (re)play; drop the poster immediately.
-      scrubbingRef.current = false
-      seekTo(target.timeMs)
-      if (!player.playing) {
-        player.play()
-        setPlaying(true)
+  // Scrub-release while playing: jump the player to the PRECISE scrubbed instant (computed by the
+  // timeline at release, so a within-clip scrub resumes exactly where you let go) and keep playing.
+  const onScrubEnd = useCallback(
+    (id: string | null, timeMs: number) => {
+      if (!scrubbingRef.current) return
+      if (!id) {
+        scrubbingRef.current = false
+        setScrubbing(false)
+        return
       }
-      timelineRef.current?.scrollToTime(target.timeMs)
-      setScrubbing(false)
-    } else {
-      // Different clip — jump: load + seek + play (the load effect drops the poster when ready).
-      scrubbingRef.current = false // re-enable the follow; the poster (state) holds until load
-      pendingPlayAtRef.current = target.timeMs
-      setPlayerId(target.id)
-    }
-  }, [player, seekTo])
+      if (id === playerIdRef.current) {
+        // Same clip — just seek + (re)play; drop the poster immediately.
+        scrubbingRef.current = false
+        seekTo(timeMs)
+        if (!player.playing) {
+          player.play()
+          setPlaying(true)
+        }
+        timelineRef.current?.scrollToTime(timeMs)
+        setScrubbing(false)
+      } else {
+        // Different clip — jump: load + seek + play (the load effect drops the poster when ready).
+        scrubbingRef.current = false // re-enable the follow; the poster (state) holds until load
+        pendingPlayAtRef.current = timeMs
+        setPlayerId(id)
+      }
+    },
+    [player, seekTo],
+  )
 
   // Prev / next clip = select the time-adjacent clip in the grid.
   const ordered = useMemo(() => [...allClips].sort((a, b) => a.startMs - b.startMs), [allClips])
@@ -628,14 +649,14 @@ export const ClipsScreen = () => {
                 setScrubbing(true)
               }
             }}
-            onCenter={(id, timeMs) => {
+            onCenter={(id) => {
               // Paused → the viewer follows the centred clip. Playing+scrubbing → the viewer poster
-              // follows the scrub (player stays frozen) and we remember where to jump on release.
+              // follows the scrub (player stays frozen); the precise resume instant comes from
+              // onScrubEnd at release, so we only track the centred clip here.
               if (!playingRef.current) {
                 if (id) setCenterClipId(id)
               } else if (scrubbingRef.current) {
                 if (id) setCenterClipId(id)
-                scrubCenterRef.current = { id, timeMs }
               }
             }}
             onScrubEnd={onScrubEnd}

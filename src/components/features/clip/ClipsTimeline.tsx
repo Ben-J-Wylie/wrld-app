@@ -107,7 +107,10 @@ type Props = {
   onSave: (clip: LaneClip) => void // drag a buffer block DOWN → save
   onUnsave: (clip: LaneClip) => void // drag a saved block UP → un-save
   onScrubStart?: () => void // the user began dragging the timeline (→ blur the selection)
-  onScrubEnd?: () => void // the drag ended (→ commit a scrub-while-playing jump)
+  // The drag ended; carries the PRECISE clip + instant under the centre playhead at release
+  // (computed fresh from the scroll position — not the last clip-change), so a within-clip scrub
+  // resumes from exactly where you let go.
+  onScrubEnd?: (clipId: string | null, timeMs: number) => void
   onCenter?: (clipId: string | null, timeMs: number) => void // clip/instant under the centre playhead
 }
 
@@ -308,7 +311,7 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
     setPxState(next)
   }, [])
   const notifyScrubStart = useCallback(() => onScrubStart?.(), [onScrubStart])
-  const notifyScrubEnd = useCallback(() => onScrubEnd?.(), [onScrubEnd])
+  const notifyScrubEnd = useCallback((id: string | null, timeMs: number) => onScrubEnd?.(id, timeMs), [onScrubEnd])
 
   // ── gestures (all UI thread) ──
   // Pan = 1-finger horizontal scroll with momentum. Pinch = 2-finger zoom anchored to the centre.
@@ -332,11 +335,27 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
         })
         .onEnd((e) => {
           'worklet'
-          runOnJS(notifyScrubEnd)()
+          // Precise centre at release → the host resumes playback from exactly here.
+          const lay = layout.value
+          const s = scroll.value
+          let idx = -1
+          for (let i = 0; i < lay.lefts.length; i++) {
+            if (s >= lay.lefts[i]! && s <= lay.lefts[i]! + lay.widths[i]!) {
+              idx = i
+              break
+            }
+          }
+          if (idx >= 0) {
+            const seg = segsSv.value[idx]!
+            const frac = lay.widths[idx]! > 0 ? (s - lay.lefts[idx]!) / lay.widths[idx]! : 0
+            runOnJS(notifyScrubEnd)(seg.id, seg.startMs + frac * seg.durMs)
+          } else {
+            runOnJS(notifyScrubEnd)(null, 0)
+          }
           if (twoFingers.value) return // don't fling into a zoom
           scroll.value = withDecay({ velocity: -e.velocityX, clamp: [0, layout.value.total], deceleration: 0.997 })
         }),
-    [scroll, layout, notifyScrubStart, notifyScrubEnd, twoFingers],
+    [scroll, layout, segsSv, notifyScrubStart, notifyScrubEnd, twoFingers],
   )
 
   const pinchGesture = useMemo(
