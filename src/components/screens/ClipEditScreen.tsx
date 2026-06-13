@@ -1577,7 +1577,17 @@ export const ClipEditScreen = () => {
   const canFrameForward = playheadMs < Date.now() - 1
   useEffect(() => () => stopReverse(), [])
 
-  async function saveClip(clipName: string) {
+  // `privacy` carries the clip's REVERSIBLE display choices (decision A): location
+  // precision + identity (attributed/anon). Both are blur-or-sharpen, any time —
+  // the backend stores full fidelity and has no ≤-ceiling. SEAM: the controls live
+  // in `SaveClipSheet` (Ben's feature) + an in-place edit on a focused saved clip;
+  // when that surface emits them, pass them here (and call `editClipPrivacy` for an
+  // already-saved clip). Omitted fields are left to the clip's current value (a new
+  // draft inherits the go-live precision server-side), so this never clobbers.
+  async function saveClip(
+    clipName: string,
+    privacy?: { locDisplayPrecision?: 'exact' | 'city' | 'country' | 'off'; attributed?: boolean },
+  ) {
     if (!bracket) return
     const { inMs, outMs } = bracket
     const durationSec = Math.max(1, Math.round((outMs - inMs) / 1000))
@@ -1613,6 +1623,9 @@ export const ClipEditScreen = () => {
         ...(sid ? { ranges: [{ bufferSessionId: sid, startAtMs: Math.round(inMs), endAtMs: Math.round(outMs) }] } : {}),
         sources: sourcesFromLanes(clipLanes),
         title: name,
+        // Reversible privacy (decision A) — only sent when the sheet provides them.
+        ...(privacy?.locDisplayPrecision !== undefined ? { locDisplayPrecision: privacy.locDisplayPrecision } : {}),
+        ...(privacy?.attributed !== undefined ? { attributed: privacy.attributed } : {}),
       })
       if (!editingSavedId) await bufferApi.saveDraft(id) // an already-saved clip is already materialised
       clipId = id
@@ -1943,6 +1956,11 @@ export const ClipEditScreen = () => {
         </View>
       )}
 
+      {/* Decision A (reversible precision/identity): when SaveClipSheet surfaces the
+          precision picker + identity toggle and emits them via onSave, forward them —
+          `onSave={(name, privacy) => saveClip(name, privacy)}`. saveClip already
+          accepts + persists `{ locDisplayPrecision, attributed }`; the backend is
+          unbounded (blur OR sharpen). Sheet UI is Ben's lane; this wiring is ready. */}
       <SaveClipSheet
         visible={saveSheetOpen}
         durationLabel={bracket ? `${fmtDur((bracket.outMs - bracket.inMs) / 1000)} clip` : undefined}
