@@ -8,6 +8,43 @@ noted). Detail for each is in the spec sections further down.
 
 ---
 
+## ⤷ UPDATE 2026-06-13 — scissor / snip shipped (Ben, `design` → `main`)
+
+The Clips grid gained a **scissor** (cut at the playhead), a **bandaid** (un-snip), and
+**transport navigation** — all on `main`. The model, and the new backend gaps it exposes:
+
+**The snip model (app).** A snip is **pure local metadata** — a `splitPoint {sessionId, atMs}` that
+subdivides the *display* of a clip into two pieces, **in whichever lane the clip is in**. There is
+still **one source of truth per clip**: the buffer session / the backend `Clip` is untouched. A snip
+keeps both pieces in their current lane; dragging is the only thing that moves a piece or persists.
+- **Buffer piece → drag down** = save (existing `POST /buffer/me/clips`, R3). ✅ works.
+- **Saved piece → drag up** = un-save *that range only*, by **trimming the parent's manifest**:
+  the app sends `PATCH /buffer/me/clips/:id` with `ranges = the KEPT ranges` (parent minus the
+  dragged piece). The piece returns to buffer; the rest stays saved. If nothing's left → `DELETE`.
+  Optimistic via a hole punched in the parent's carve claim; reverts on failure.
+- **Bandaid** removes a `splitPoint` (rejoin) — only offered when both pieces are still **same-lane**.
+
+**Aaron — next steps the snip work needs:**
+1. **Confirm `PATCH ranges` covers the un-save-a-piece cases** (this is the load-bearing call):
+   - trim one end (single kept range),
+   - **un-save a middle piece → TWO kept ranges with a gap** (a gapped/discontinuous manifest),
+   - **trim-after-evict** — re-cut from the clip's own copy when the buffer footage is gone
+     (the C4 handoff says PATCH supports this; the app now depends on it for saved-piece un-save).
+   The app sends `ranges: [{ bufferSessionId, startAtMs, endAtMs }]` (the authoritative full list).
+   Multi-session clips: confirm the right `bufferSessionId` is preserved per kept range.
+2. **Persist snips (decide the model).** Split points are **local — they reset on reload** (only a
+   *saved* piece survives, because it's a real `Clip`; the buffer remainder re-derives). Options:
+   keep snips ephemeral (materialise only on save — current behaviour), **or** persist each piece as
+   a **draft `Clip`** so a cut survives reload. This is the same open "buffer snips durable?" question
+   as the draft-manifest item below — pick one model for buffer-side cuts.
+3. Everything else (R3 promote, R2 storage, C4 manifest editing, C6 telemetry) is unchanged below.
+
+**Pure-app, no backend** (FYI, already on `main`): the scissor/bandaid button, the transport 1/2/6/7
+boundary-scroll nav, and the snip-vs-gap visual (touching borders = snip; lighter empty band =
+unbroadcasted time).
+
+---
+
 ## ✅ DONE (Aaron, landed)
 
 - **R3** — `POST /buffer/me/clips` promotes a wall-clock window across sessions into a durable `Clip`.
