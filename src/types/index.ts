@@ -139,6 +139,10 @@ export type Stream = {
   title: string
   lat: number
   lng: number
+  // IANA timezone of the broadcaster's location (e.g. "America/New_York"),
+  // derived server-side from the real coordinates. Used to show the
+  // broadcaster's local time on the stream screens.
+  timezone?: string | null
   startedAt: string // ISO timestamp
   viewerCount: number
   thumbnailUrl?: string | null

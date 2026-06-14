@@ -21,6 +21,7 @@ import { IconButton } from '@/components/primitives/IconButton'
 import { Avatar } from '@/components/primitives/Avatar'
 import { LivePill } from '@/components/features/stream/LivePill'
 import { useStreamByRoom } from '@/hooks/useStream'
+import { useBroadcasterClock } from '@/hooks/useBroadcasterClock'
 import { useFullscreenVideo } from '@/hooks/useFullscreenVideo'
 import { theme } from '@/tokens/theme'
 
@@ -124,6 +125,7 @@ export function ExternalStreamScreen() {
   }
 
   const host = stream?.host
+  const broadcasterLocalTime = useBroadcasterClock(stream?.timezone)
 
   return (
     <View style={styles.root}>
@@ -173,6 +175,7 @@ export function ExternalStreamScreen() {
                 </Text>
                 <Text variant="monoCaption" color={theme.colors.text.inverse} numberOfLines={1}>
                   @{host.handle}
+                  {broadcasterLocalTime ? ` · ${broadcasterLocalTime}` : ''}
                 </Text>
               </View>
             </View>
