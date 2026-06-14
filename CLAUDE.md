@@ -3362,24 +3362,26 @@ without per-tick dip or clip-drop flash (single- and multi-session buffers).
 
 ## Clips timeline — north star vs current gaps (2026-06-13, on-device)
 
-The definitive target is **CONTENT.md §6 "The Clips-timeline north star"** (now **6** invariants). This
-tracks what's confirmed good and what's been built since the 2026-06-13 on-device pass. (Ben confirmed
-drag-to-save **duplicate fixed**; #3 smooth; #4/#2/#5 reworked; #1 + #6 below.)
+The definitive target is **CONTENT.md §6 "The Clips-timeline north star"** (now **6** invariants).
+**✅ ALL SIX CONFIRMED SMOOTH ON DEVICE (2026-06-14)** — Ben: "definitely smoother on all fronts."
 
 | # | North-star invariant | Status / what shipped |
 |---|---|---|
-| 1 | Going live → Clips shows a clip **building on the now edge in real time**, no fetch wait. | **Fixed (needs device pass).** Was a ~10 s appear delay (clip only showed once the buffer fetch returned an open session). Now an **OPTIMISTIC live clip** is synthesized from `broadcastStore.liveSince` (stamped at go-live) the instant Clips opens — `ClipsScreen.optimisticLive`, session id `OPT_LIVE_SESSION`, injected into `bufferedLaneRaw`. The timeline's per-frame `extendLive` grows it to `nowUI` (smooth realtime build). Dropped the moment `realLiveSessionId` (newest open session) lands; real footage takes over ≈seamlessly. Save/open guarded against the synthetic session. |
-| 2 | Stop → a **trailing gap forms** and grows ("since last broadcast"). | **Reworked.** Live tail keyed off the **newest open session** (was a stale ghost session). On stop, `liveSessionId` → null → `trailingGap` forms; `isLive`/`liveSince` cleared in the store. |
+| 1 | Going live → Clips shows a clip **building on the now edge in real time**, no fetch wait. | **✅ Fixed.** Was a ~10 s appear delay (the optimistic clip was dropped the instant `realLiveSessionId` arrived (~2 s), but the real HLS footage hadn't flushed yet → "No clips yet" until ~7 s). Now **ONE persistent live block** (`ClipsScreen.liveClip`) spans `[liveSince → now]` the whole time we're live, present from go-live; it adopts the real session's manifest/poster + `sourceSessionId` once that session exists (the real session is excluded from the normal carve so it isn't drawn twice). `liveSince` stamped at go-live in `broadcastStore`. Confirmed `liveClip/hasAny true` from ~3 s straight through the handoff. |
+| 2 | Stop → a **trailing gap forms** and grows ("since last broadcast"). | **✅** Live tail keyed off the **newest open session** (was a stale ghost session). On stop, `liveSessionId` → null → `trailingGap` forms; `isLive`/`liveSince` cleared in the store. |
 | 3 | Play · drag · resume stays smooth. | ✅ **Smooth** — keep, don't regress. |
-| 4 | now edge → clock **NOW + ticking**; reaper edge → **THEN + ticking** toward eviction. | **Reworked.** `getCenter` returns `atNow`/`atReaper`; `ClipsScreen` drives `followLive`/`ridingReaper` from them in scrub-follow / `onScrubEnd` / `goTo` / `goNow` / `goReaper`. NOW pins clock offset to 0 (ticks); reaper THEN ticks via `TimeScrubber liveTick`. |
-| 5 | Reaper consumes **smoothly while dragging and while playing** — no jumps. | **Reworked.** Latch/pin suspended during pan/play (`panningSv`/`playingSv`); monotonic `reaperNowSv` (forward-only clamp); rush-aware `reaperEdgeX`. |
-| 6 | **Reaping + playing + broadcasting locked in sync** (no ~1 s cadence anywhere). | **Fixed (needs device pass).** Root cause of the per-1 s step during playback was JS-thread saturation from 60 fps `setPlayheadMs`. Now `commitPlayhead` **throttles the JS state to ~12 Hz** while `playheadRef` + `scrollToTime` stay per-frame, so reaper edge / playhead / now edge all glide on the one UI-thread clock. |
+| 4 | now edge → clock **NOW + ticking**; reaper edge → **THEN + ticking** toward eviction. | **✅** `getCenter` returns `atNow`/`atReaper`; `ClipsScreen` drives `followLive`/`ridingReaper` from them in scrub-follow / `onScrubEnd` / `goTo` / `goNow` / `goReaper`. NOW pins clock offset to 0 (ticks); reaper THEN ticks via `TimeScrubber liveTick`. |
+| 5 | Reaper consumes **smoothly while dragging and while playing** — no jumps. | **✅** Latch/pin suspended during pan/play (`panningSv`/`playingSv`); monotonic `reaperNowSv` (forward-only clamp); rush-aware `reaperEdgeX`. |
+| 6 | **Reaping + playing + broadcasting locked in sync** (no ~1 s cadence anywhere). | **✅ Fixed — root cause was a stalled clock, not the throttle.** The reanimated `useFrameCallback` clock (`frame.timeSinceFirstFrame`) **freezes during video playback** (heavy main-thread work starves the UI-thread frame timer) — it advanced ~3 frames then stalled ~10 frames then jumped a full second, so the live build/now/reaper edges stepped 1 s at a time. **Fix:** drive the continuous clock from a JS `requestAnimationFrame` loop in `ClipsScreen` (always-on while focused) that feeds the timeline a server-aligned now via `ClipsTimelineHandle.setNowUi()` every frame — the same JS clock that drives scroll smoothly. The timeline takes the **monotonic max** of the JS clock and its own frame clock (JS wins during playback; frame callback wins if the RAF isn't running). The earlier `commitPlayhead` ~12 Hz throttle stays (keeps JS-state churn down) but wasn't the cause. |
 
 **Server-clock alignment (done):** `GET /buffer/me` returns `serverNowMs`; `ClipsScreen` eases
 `serverOffset = serverNowMs − Date.now()` and runs `nowMs = Date.now() + serverOffset`, so the
 reaper/now edges align with the server-clock-anchored clip geometry (no device skew).
 
-**Still owed:** an on-device pass of #1 (instant optimistic build + seamless handoff to real footage)
-and #6 (no 1 s cadence with all three active). The `[reaper-trace]` + `[clips-save]` `__DEV__` logs are
-still in to support it; strip them once confirmed. Backend follow-up (Aaron): reap/close ghost sessions
+**Cleanup owed:** strip the `[reaper-trace]` + `[clips-save]` `__DEV__` logs (now that all six are
+confirmed) in a one-line follow-up — incl. the `setNowUi` JS-RAF clock, the GATE/JUMP/FRAME probes,
+the discontinuity detector (`prevScrollSv`/`prevTotalSv`/jerk), and the `rNow`/`liveDur` FRAME fields.
+Note the residual `JUMP` lines during play are benign (the jerk detector at threshold 4 catching the
+~4 px/frame playback-follow oscillation — sub-pixel, not a visible jump). Backend follow-up (Aaron):
+reap/close ghost sessions
 (0-duration, no `endedAt`) so they never masquerade as the live tail.
