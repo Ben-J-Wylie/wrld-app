@@ -309,6 +309,30 @@ nuances, not styling — styling lives in DESIGN.md.
   keyframe seeks. The representation is allowed to be *thinner*, never broken or
   wrong. "As best it can" is a stated stance.
 
+### The Clips-timeline north star (the definitive target)
+
+The five invariants the live/reaper timeline must satisfy. These are the bar — if
+the build disagrees, the build is wrong. (Current status + the gaps to close are
+tracked in CLAUDE.md "Clips timeline — north star vs current gaps".)
+
+1. **Live build is immediate and smooth.** The instant you go live, opening Clips
+   shows a clip **building on the now edge in real time** — growing continuously,
+   frame by frame, on the device's own clock. No wait for a fetch to "discover" the
+   clip; no 5-second length steps. The footage block tracks `nowUI` as it's recorded.
+2. **Stop → a trailing gap forms and grows.** When you stop the stream, a gap
+   appears between the clip's tail and the now edge, and it grows ("since last
+   broadcast"). The now edge keeps advancing; the footage doesn't.
+3. **Play · drag · resume stays smooth.** Scrubbing, playback, drag-to-save, and
+   resume-after-scrub remain fluid — never regressed by the live/reaper machinery.
+4. **The clock tells the truth at both edges, and ticks.** Drag to the **now edge**
+   → the clock reads **NOW** and is **ticking**. Drag to the **reaper edge** → it
+   reads **THEN** and is **ticking** (counting toward eviction). A parked clock at an
+   edge is never frozen — both edges advance with real time.
+5. **The reaper consumes smoothly, always.** Once reaping starts, the reaper edge
+   (red sickle on buffer · black save on saved) consumes footage smoothly — **while
+   you drag the timeline and while playback runs** — with no jumps. One monotonic
+   clock drives it; nothing makes it stutter or retreat.
+
 ---
 
 ## 7. Privacy & consent
