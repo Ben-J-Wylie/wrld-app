@@ -204,11 +204,12 @@ export const ClipsScreen = () => {
   // session, hours old, whose `endedAt` was never set) earlier in the chronological list; `find`
   // returned that ghost as "live", so liveTailId never matched the real recording (liveIdx stayed −1
   // → extendLive never ran → the clip stepped on refetch instead of building smoothly).
-  const realLiveSessionId = useMemo(() => {
+  const realLiveSession = useMemo(() => {
     if (!isLive) return null
-    for (let i = sessions.length - 1; i >= 0; i--) if (sessions[i]!.endedAt == null) return sessions[i]!.id
+    for (let i = sessions.length - 1; i >= 0; i--) if (sessions[i]!.endedAt == null) return sessions[i]!
     return null
   }, [isLive, sessions])
+  const realLiveSessionId = realLiveSession?.id ?? null
 
   // [reaper-trace] On each buffer refetch, log every session's geometry as "seconds ago" so we can
   // see whether the backend changes the oldest session's start/end across refetches (the suspected
@@ -363,34 +364,40 @@ export const ClipsScreen = () => {
     return out
   }, [realSavedData, draftsData, pendingNotReal, pendingUnsave])
 
-  // #1 INSTANT live build. While broadcasting, synthesize an OPTIMISTIC live clip from `liveSince`
-  // (stamped at go-live) the instant we go live — before the backend's buffer session reaches the
-  // /buffer/me fetch (~seconds). Its synthetic session id is the live tail, so the timeline's
-  // extendLive grows it to nowUI per-frame (smooth realtime build with zero appear-delay). It's
-  // dropped the moment the real session lands (`realLiveSessionId` set → null here), and the real
-  // footage — covering ≈the same span — takes over with no visible seam.
-  const optimisticLive = useMemo<LaneClip | null>(() => {
-    if (!isLive || liveSince == null || realLiveSessionId) return null
+  // #1 INSTANT live build — ONE persistent live block, present the WHOLE time we're live. It spans
+  // [liveSince → now] from the instant of go-live (liveSince is stamped then), so the clip appears
+  // immediately and NEVER disappears. The bug before: I dropped the optimistic clip the moment the
+  // real session id arrived (~2s) — but the real HLS footage hasn't flushed yet (zero-width for
+  // ~5–7s), so the screen fell back to "No clips yet" until it caught up. Now the SAME block carries
+  // the real session's manifest/poster once that session exists (gaining playability without changing
+  // geometry), and its sourceSessionId binds to the real session so saving targets real footage. The
+  // timeline's extendLive grows endMs to nowUI per-frame (smooth build). Dropped only when NOT live —
+  // then the real session's normal carved clip (now full-duration) takes over as a past clip.
+  const liveClip = useMemo<LaneClip | null>(() => {
+    if (!isLive || liveSince == null) return null
     return {
       id: OPT_LIVE_ID,
       startMs: liveSince,
       endMs: nowMs,
       label: 'Live',
       sublabel: fmtDur(Math.max(0, nowMs - liveSince) / 1000),
-      posterUrl: null,
-      manifestUrl: null,
-      sourceSessionId: OPT_LIVE_SESSION,
+      posterUrl: realLiveSession?.thumbnailUrl ?? null,
+      manifestUrl: realLiveSession?.manifestUrl ?? null,
+      sourceSessionId: realLiveSessionId ?? OPT_LIVE_SESSION,
     }
-  }, [isLive, liveSince, realLiveSessionId, nowMs])
-  // The live tail the timeline extends to nowUI: the real open session once it exists, else the
-  // optimistic synthetic session, else null (not broadcasting).
-  const liveSessionId = realLiveSessionId ?? (optimisticLive ? OPT_LIVE_SESSION : null)
+  }, [isLive, liveSince, nowMs, realLiveSession, realLiveSessionId])
+  // The live tail the timeline extends to nowUI: the live block's session (real once it exists, else
+  // the synthetic placeholder), else null (not broadcasting).
+  const liveSessionId = liveClip ? liveClip.sourceSessionId : null
 
   const bufferedLaneRaw = useMemo(() => {
-    const base = [...applySplits(carveBuffer(sessions, claims), splitPoints), ...drafts]
-    if (optimisticLive) base.push(optimisticLive)
+    // While live, the real open session IS the single persistent liveClip — exclude it from the normal
+    // carve so it isn't drawn twice (a zero-width-then-growing duplicate beside the live block).
+    const carveSessions = realLiveSessionId ? sessions.filter((s) => s.id !== realLiveSessionId) : sessions
+    const base = [...applySplits(carveBuffer(carveSessions, claims), splitPoints), ...drafts]
+    if (liveClip) base.push(liveClip)
     return base
-  }, [sessions, claims, drafts, splitPoints, optimisticLive])
+  }, [sessions, claims, drafts, splitPoints, liveClip, realLiveSessionId])
   // Window the timeline to the buffer window: drop anything fully older than the reaper boundary
   // (removes SAVED clips older than the window). Clips straddling the boundary stay full-extent —
   // the timeline draws an advancing reaper MASK over their reaped part (smooth, on the UI thread),
@@ -408,20 +415,19 @@ export const ClipsScreen = () => {
   // build machinery (frame loop / extendLive) to run — if it's false the clip can't build smoothly.
   useEffect(() => {
     if (!__DEV__) return
-    const optimistic = isLive && liveSince != null && !realLiveSessionId
     console.log(
       '[reaper-trace] GATE',
       '· isLive', isLive,
       '· liveSinceAgo', liveSince != null ? `${Math.round((Date.now() - liveSince) / 1000)}s` : '—',
       '· realLiveSession', realLiveSessionId?.slice(-6) ?? '—',
-      '· optimistic', optimistic,
+      '· liveClip', !!liveClip,
       '· buf/sav', `${bufferedLane.length}/${savedLane.length}`,
       '· hasAny', hasAny,
       '· windowH', buffer?.windowHours ?? '—',
       '· windowOn', windowMs > 0 && windowStartMs != null,
       '· sessions', sessions.length,
     )
-  }, [isLive, liveSince, realLiveSessionId, bufferedLane.length, savedLane.length, hasAny, buffer?.windowHours, windowMs, windowStartMs, sessions.length])
+  }, [isLive, liveSince, realLiveSessionId, liveClip, bufferedLane.length, savedLane.length, hasAny, buffer?.windowHours, windowMs, windowStartMs, sessions.length])
 
   // Prune pending saves once the real list has caught up.
   useEffect(() => {
