@@ -520,6 +520,26 @@ export const ClipsScreen = () => {
     p.loop = false
   })
   const timelineRef = useRef<ClipsTimelineHandle>(null)
+  // ── the single continuous clock, driven from JS ── The timeline's reanimated frame-callback clock
+  // (frame.timeSinceFirstFrame) STALLS during video playback — heavy main-thread work freezes it for
+  // ~10 frames, so the live build / now edge stepped 1 s at a time. This JS requestAnimationFrame loop
+  // runs the WHOLE time the screen is focused and feeds the timeline a smooth server-aligned "now"
+  // every frame (the same JS clock that already drives scroll smoothly during play). The timeline
+  // takes the monotonic max of this and its own frame clock, so motion is smooth whether idle or
+  // playing. (CONTENT.md §6 — one continuous clock for every frontier.)
+  const serverNowRef = useRef(serverNow)
+  serverNowRef.current = serverNow
+  useFocusEffect(
+    useCallback(() => {
+      let raf = 0
+      const tick = () => {
+        timelineRef.current?.setNowUi(serverNowRef.current())
+        raf = requestAnimationFrame(tick)
+      }
+      raf = requestAnimationFrame(tick)
+      return () => cancelAnimationFrame(raf)
+    }, []),
+  )
   const [playing, setPlaying] = useState(false)
   const playingRef = useRef(false)
   playingRef.current = playing

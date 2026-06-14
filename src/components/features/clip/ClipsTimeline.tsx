@@ -285,6 +285,12 @@ type Props = {
 export type ClipsTimelineHandle = {
   scrollToTime: (ms: number, animated?: boolean) => void
   getCenter: () => { clipId: string | null; timeMs: number; pxPerMs: number; inGap: boolean; atNow: boolean; atReaper: boolean }
+  // Feed the continuous UI clock from the host's JS requestAnimationFrame loop. The reanimated
+  // frame-callback clock (frame.timeSinceFirstFrame) STALLS during video playback (heavy main-thread
+  // work), so reaperNowSv froze between 1 s re-anchors → the live build stepped 1 s at a time. The JS
+  // RAF clock stays smooth (it drives scroll fine during play), so we feed it in and take the monotonic
+  // max of both clocks: JS wins during playback, the frame callback wins if the RAF isn't running.
+  setNowUi: (ms: number) => void
 }
 
 // ── animated leaf nodes (each reads the shared `layout` on the UI thread) ──
@@ -747,7 +753,22 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
     const r = resolveAt(scroll.value, sgs, lay, nowSv.value, leadFromSv.value)
     return { ...r, pxPerMs: p, atNow: scroll.value >= lay.total - EDGE_EPS, atReaper: ridingSv.value === 1 }
   }, [defaultPx, px, scroll, segsSv, leadSv, trailSv, nowSv, leadFromSv, ridingSv])
-  useImperativeHandle(ref, () => ({ scrollToTime, getCenter }), [scrollToTime, getCenter])
+  // Continuous UI clock fed from the host's JS RAF loop. Monotonic max with whatever the frame
+  // callback has accumulated, and re-anchor the frame callback to this value so it resumes from here
+  // (not from a stale lower timeSinceFirstFrame) if/when the RAF stops. Also nudges segsSv so the live
+  // build advances on this clock even if the frame callback's timer is stalled (playback).
+  const setNowUi = useCallback(
+    (ms: number) => {
+      if (ms <= reaperNowSv.value) return
+      reaperNowSv.value = ms
+      reaperAnchorSv.value = ms
+      reaperFrameBaseSv.value = -1 // re-anchor the frame-callback delta to this fed value
+      nowSv.value = ms
+      if (liveIdxSv.value >= 0) segsSv.value = extendLive(baseSegsSv.value, liveIdxSv.value, ms)
+    },
+    [reaperNowSv, reaperAnchorSv, reaperFrameBaseSv, nowSv, liveIdxSv, segsSv, baseSegsSv],
+  )
+  useImperativeHandle(ref, () => ({ scrollToTime, getCenter, setNowUi }), [scrollToTime, getCenter, setNowUi])
 
   // ── report the clip/instant/inGap under the centre playhead (on a clip OR gap-state change) ──
   const reportCenter = useCallback(
