@@ -545,7 +545,13 @@ export const ClipsScreen = () => {
   playingRef.current = playing
   const [playheadMs, setPlayheadMs] = useState(0)
   const playheadRef = useRef(0)
-  playheadRef.current = playheadMs
+  // While PLAYING the tick loop owns playheadRef (advances it at 60fps; commitPlayhead pushes it to
+  // state at ~12Hz). Do NOT sync ref←state during play: a re-render between commits (the 12Hz commit
+  // itself, the 1s nowMs tick, a 5s buffer refetch, …) would rewind playheadRef to the last committed
+  // value and discard the frames advanced since — the playhead then ran at ~55% of real time and the
+  // now/reaper fronts (true wall-clock) overtook it. Every non-tick setter (init/scrub/seek/nav) sets
+  // playheadRef explicitly alongside setPlayheadMs, so the idle-only sync below loses nothing.
+  if (!playingRef.current) playheadRef.current = playheadMs
   // Clock edge state. `followLive` = at the now edge → NOW (ticking). `ridingReaper` = at the reaper
   // edge → THEN, ticking toward eviction. Both are driven by the timeline's pixel-precise `atNow` /
   // `atReaper` flags (via getCenter) — not re-derived from playheadMs in a mismatched clock/rush
