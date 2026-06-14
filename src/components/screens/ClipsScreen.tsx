@@ -194,6 +194,14 @@ export const ClipsScreen = () => {
   // keep the tail extending and suppress the trailing gap for ~15s. `isLive` flips the instant you
   // stop → the tail freezes and the "since last broadcast" gap forms right away.
   const liveSessionId = useMemo(() => (isLive ? (sessions.find((s) => s.endedAt == null)?.id ?? null) : null), [isLive, sessions])
+  // [reaper-trace] #1 live-build diagnostic: is the live session resolving while broadcasting? If
+  // isLive but liveSessionId is null, the open session hasn't reached the buffer fetch yet (the
+  // ~10s appear delay). Once set, the timeline's extendLive should grow it per-frame (watch FRAME
+  // `total` climb smoothly vs step). Stripped in prod.
+  useEffect(() => {
+    if (!__DEV__) return
+    console.log('[reaper-trace] LIVE · isLive', isLive, '· liveSessionId', liveSessionId?.slice(-6) ?? '—', '· sessions', sessions.length, '· windowH', buffer?.windowHours)
+  }, [isLive, liveSessionId, sessions.length, buffer?.windowHours])
 
   // [reaper-trace] On each buffer refetch, log every session's geometry as "seconds ago" so we can
   // see whether the backend changes the oldest session's start/end across refetches (the suspected

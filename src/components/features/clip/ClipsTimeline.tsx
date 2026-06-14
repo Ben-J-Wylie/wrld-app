@@ -479,8 +479,8 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
   const ridingSv = useSharedValue(0)
   // [reaper-trace] dev-only frame sampler + transition loggers (stripped in prod via __DEV__).
   const frameLogSv = useSharedValue(0)
-  const logFrame = useCallback((scrollV: number, edgeV: number, riding: number, total: number, edgeScreen: number) => {
-    if (__DEV__) console.log('[reaper-trace] FRAME scroll', Math.round(scrollV), 'edge', Math.round(edgeV), 'edgeScreen', Math.round(edgeScreen), 'riding', riding, 'total', Math.round(total))
+  const logFrame = useCallback((scrollV: number, edgeV: number, riding: number, total: number, edgeScreen: number, liveI: number) => {
+    if (__DEV__) console.log('[reaper-trace] FRAME scroll', Math.round(scrollV), 'edge', Math.round(edgeV), 'edgeScreen', Math.round(edgeScreen), 'riding', riding, 'total', Math.round(total), 'liveIdx', liveI)
   }, [])
   const logRiding = useCallback((on: number, scrollV: number, edgeV: number) => {
     if (__DEV__) console.log('[reaper-trace] RIDING', on ? 'LATCH' : 'RELEASE', 'scroll', Math.round(scrollV), 'edge', Math.round(edgeV))
@@ -527,7 +527,7 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
     if (frameLogSv.value >= 30) {
       frameLogSv.value = 0
       const effVis = ridingSv.value ? edgeX : scroll.value
-      runOnJS(logFrame)(scroll.value, edgeX, ridingSv.value, total, vpSv.value / 2 - effVis + edgeX)
+      runOnJS(logFrame)(scroll.value, edgeX, ridingSv.value, total, vpSv.value / 2 - effVis + edgeX, liveIdxSv.value)
     }
   })
   // The reaper boundary's CONTENT-x (where the mask ends + the edge sits), advanced each frame —
