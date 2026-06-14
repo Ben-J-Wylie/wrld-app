@@ -169,6 +169,9 @@ export function ExternalStreamScreen() {
             <View style={styles.identity}>
               <Avatar displayName={host.displayName} avatarUrl={host.avatarUrl} size={28} />
               <View style={styles.identityText}>
+                <Text variant="bodyEmphasized" color={theme.colors.text.inverse} numberOfLines={1}>
+                  {host.displayName}
+                </Text>
                 <Text variant="monoCaption" color={theme.colors.text.inverse} numberOfLines={1}>
                   @{host.handle}
                 </Text>
