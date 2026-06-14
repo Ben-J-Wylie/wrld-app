@@ -632,6 +632,19 @@ export const ClipsScreen = () => {
     if (!playing) return
     let raf = 0
     let lastTs: number | null = null
+    let lastCommitTs = 0
+    // The playhead REF + the timeline scroll advance every frame (smooth). But committing playheadMs
+    // to React state every frame = 60 re-renders/sec of this heavy screen, which saturates the JS
+    // thread and makes the per-frame scrollToTime (→ the timeline) janky/step even though the native
+    // video stays smooth. Commit React state at ~12 Hz instead — the clock + clip-follow don't need
+    // 60 fps, and the timeline scroll (a shared value) stays buttery because scrollToTime still runs
+    // every frame. This is what keeps the playhead, now edge and reaper edge locked in sync (§6).
+    const commitPlayhead = (ph: number, ts: number) => {
+      if (ts - lastCommitTs >= 80) {
+        lastCommitTs = ts
+        setPlayheadMs(ph)
+      }
+    }
     const tick = (ts: number) => {
       if (scrubbingRef.current) {
         lastTs = ts // the finger owns the playhead while scrubbing; idle the clock
@@ -664,7 +677,7 @@ export const ClipsScreen = () => {
         ph = ph + dt * (span / GAP_RUSH_MS)
         if (ph >= loc.to - 1) ph = loc.to // land exactly on the next clip's head
         playheadRef.current = ph
-        setPlayheadMs(ph)
+        commitPlayhead(ph, ts)
         timelineRef.current?.scrollToTime(ph)
         raf = requestAnimationFrame(tick)
         return
@@ -689,7 +702,7 @@ export const ClipsScreen = () => {
       // No hard stop at lastEnd: the playhead flows into the TRAILING gap, where locateAt returns a
       // rushable gap (3s to now) and then 'end' (caught up). The clamp is just a safety ceiling.
       playheadRef.current = ph
-      setPlayheadMs(ph)
+      commitPlayhead(ph, ts)
       timelineRef.current?.scrollToTime(ph)
       raf = requestAnimationFrame(tick)
     }
