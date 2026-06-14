@@ -21,6 +21,7 @@ import { IconButton } from '@/components/primitives/IconButton'
 import { Avatar } from '@/components/primitives/Avatar'
 import { LivePill } from '@/components/features/stream/LivePill'
 import { useStreamByRoom } from '@/hooks/useStream'
+import { useBroadcasterClock } from '@/hooks/useBroadcasterClock'
 import { useFullscreenVideo } from '@/hooks/useFullscreenVideo'
 import { theme } from '@/tokens/theme'
 
@@ -124,7 +125,7 @@ export function ExternalStreamScreen() {
   }
 
   const host = stream?.host
-  const title = stream?.title ?? ''
+  const broadcasterLocalTime = useBroadcasterClock(stream?.timezone)
 
   return (
     <View style={styles.root}>
@@ -169,14 +170,13 @@ export function ExternalStreamScreen() {
             <View style={styles.identity}>
               <Avatar displayName={host.displayName} avatarUrl={host.avatarUrl} size={28} />
               <View style={styles.identityText}>
+                <Text variant="bodyEmphasized" color={theme.colors.text.inverse} numberOfLines={1}>
+                  {host.displayName}
+                </Text>
                 <Text variant="monoCaption" color={theme.colors.text.inverse} numberOfLines={1}>
                   @{host.handle}
+                  {broadcasterLocalTime ? ` · ${broadcasterLocalTime}` : ''}
                 </Text>
-                {title ? (
-                  <Text variant="monoCaption" color={theme.colors.text.inverse} numberOfLines={1} style={styles.title}>
-                    {title}
-                  </Text>
-                ) : null}
               </View>
             </View>
           ) : null}
@@ -245,7 +245,6 @@ const styles = StyleSheet.create({
   backBtn: { padding: theme.spacing.xs },
   identity: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs, flex: 1 },
   identityText: { flex: 1 },
-  title: { opacity: 0.85 },
   fsControls: { ...StyleSheet.absoluteFillObject, zIndex: 100 },
   fsClose: { position: 'absolute', top: theme.spacing.lg, right: theme.spacing.lg },
   fsControlsBar: {

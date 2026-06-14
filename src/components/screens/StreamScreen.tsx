@@ -64,6 +64,7 @@ import { LivePill } from '@/components/features/stream/LivePill'
 import { SourceRail } from '@/components/features/clip/SourceRail'
 import { SOURCE_META } from '@/components/features/stream/sourceMeta'
 import { SourceStage, type SourceRender } from '@/components/sections/SourceStage'
+import { useBroadcasterClock } from '@/hooks/useBroadcasterClock'
 import { useStreamTelemetry } from '@/hooks/useStreamTelemetry'
 import { useTelemetryCapture } from '@/hooks/useTelemetryCapture'
 import type { FeedKind } from '@/components/features/broadcast/FeedThumb'
@@ -354,6 +355,8 @@ export function StreamScreen() {
   const broadcaster = isNew
     ? (wrldUser ? { handle: wrldUser.handle, displayName: wrldUser.displayName, avatarUrl: wrldUser.avatarUrl } : null)
     : (streamData?.host ?? null)
+  // Broadcaster's local time, shown to viewers next to their identity.
+  const broadcasterLocalTime = useBroadcasterClock(streamData?.timezone)
   const [activeSource, setActiveSource] = useState<FeedKind | null>(null)
   const [controlsVisible, setControlsVisible] = useState(false)
   const [hopError, setHopError] = useState<string | null>(null)
@@ -1523,6 +1526,7 @@ export function StreamScreen() {
                   </Text>
                   <Text variant="monoCaption" color={theme.colors.text.muted}>
                     @{broadcaster.handle}
+                    {broadcasterLocalTime ? ` · ${broadcasterLocalTime}` : ''}
                   </Text>
                 </View>
               ) : undefined
