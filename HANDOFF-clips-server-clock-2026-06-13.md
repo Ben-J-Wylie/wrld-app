@@ -1,5 +1,13 @@
 # Handoff — Aaron: a server-"now" reference for the Clips timeline (2026-06-13)
 
+> **✅ RESOLVED 2026-06-13.** Aaron shipped `serverNowMs` on `GET /buffer/me`
+> (`serverNowMs = Date.now()`, epoch ms). The app wired the slew (`nowUI = Date.now() +
+> eased(serverNowMs − Date.now())`) in `ClipsScreen`. Both confirmations answered: (1) `latestAt`
+> is **not** server-now (it's last `endedAt ?? now`) → `serverNowMs` is the right call; (2) live
+> `mediaDurationSec` is **not** monotonic alone, but the end edge `startedAt + mediaStartOffsetMs +
+> mediaDurationSec` **is** — and the app already derives the live end from that quantity. Kept below
+> for the record.
+
 **TL;DR:** Add a **`serverNowMs`** field to the `GET /buffer/me` response. That's the only ask.
 Nothing is blocking — the app already runs a smooth device-clock version; this is the robustness
 upgrade that removes device↔server clock skew from the reaper/now edges.

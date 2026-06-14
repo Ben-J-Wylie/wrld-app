@@ -3342,12 +3342,16 @@ What landed (all `design`, pure JS — hot-reload, no native rebuild):
   `mediaStartOffsetMs` + `mediaDurationSec` — never front-end `now − start` math. `nowUI` is currently
   **device-clock** (`Date.now()`), which matches the already-smooth playhead.
 
-> **Backend ask (robustness upgrade, NOT blocking) → `HANDOFF-clips-server-clock-2026-06-13.md`.**
-> The clips are server-clock anchored but `nowUI` is device-clock; device↔server skew would misplace
-> the reaper/now edges relative to the footage. Fix: add **`serverNowMs`** to `GET /buffer/me` so the
-> app can run `nowUI = deviceFrameClock + (serverNowMs − Date.now())` (slewed). Two confirmations
-> requested: what `latestAt` represents, and that the live `mediaDurationSec` is monotonic. Mirrored
-> in `wrld-backend/CLAUDE.md` stacked-work.
+> **Server-clock alignment — ✅ DONE 2026-06-13 (`HANDOFF-clips-server-clock-2026-06-13.md`).**
+> Aaron shipped `serverNowMs` on `GET /buffer/me`; the app wired the slew in `ClipsScreen`:
+> `serverOffset = eased(serverNowMs − Date.now())` per fetch → `nowMs = Date.now() + serverOffset`,
+> so `nowUI` (and both edges + the live build) runs in the **server clock domain** the clip geometry
+> is anchored to — device↔server skew removed. Falls back to the device clock when the field is
+> absent. The live end is derived from the monotonic `startedAt + mediaStartOffsetMs +
+> mediaDurationSec` (a head roll-off shrinks `mediaDurationSec` but `mediaStartOffsetMs` rises by the
+> same Δ, so the end edge is invariant — confirmed with Aaron). The `live`/`riding` TimeScrubber
+> clock readout still uses device `Date.now()` (skew cancels for held instants; sub-second cosmetic
+> offset on the live readout only — the timeline geometry is fully server-aligned).
 
 **`[reaper-trace]` dev logging is still in** (all `__DEV__`-gated, stripped in prod) for Ben's
 on-device verification from `main`; strip in a one-line follow-up once confirmed smooth. **Needs an

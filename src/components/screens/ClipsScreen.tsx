@@ -204,6 +204,17 @@ export const ClipsScreen = () => {
     console.log('[reaper-trace] BUFFER refetch · windowH', buffer?.windowHours, '· sessions', rows.join(' '))
   }, [buffer])
 
+  // ── server-clock alignment (the skew-free "now") ──
+  // Clip geometry is server-clock anchored (`startedAt` + offsets), but the device clock can be
+  // skewed. We run our "now" in the SERVER domain: `serverOffset = serverNowMs − Date.now()`,
+  // measured every fetch and EASED (network-latency jitter is smoothed; the true skew is stable).
+  // `serverNow()` = device clock + that offset. Falls back to the device clock when the backend
+  // doesn't send `serverNowMs`. The downstream nowUI clamp is monotonic, so a backward correction
+  // never snaps the edge — it just flattens briefly; easing keeps every correction tiny.
+  const serverOffsetRef = useRef(0)
+  const hasServerOffsetRef = useRef(false)
+  const serverNow = useCallback(() => Date.now() + serverOffsetRef.current, [])
+
   // ── time reference (now / reaper window) ── now ticks every 1s so the JS-side window boundary
   // (`windowStartMs`, which drives clip-drops + the reaper edge re-anchor) tracks the wall clock
   // closely. The reaper MASK glides continuously on the UI thread (real time); if `nowMs` only
@@ -213,9 +224,19 @@ export const ClipsScreen = () => {
   // as one continuous wall-clock motion. (The network refetch stays at 15s — see below.)
   const [nowMs, setNowMs] = useState(() => Date.now())
   useEffect(() => {
-    const id = setInterval(() => setNowMs(Date.now()), 1_000)
+    const id = setInterval(() => setNowMs(serverNow()), 1_000)
     return () => clearInterval(id)
-  }, [])
+  }, [serverNow])
+  // Re-measure + ease the server offset on each fetch, and apply it immediately (don't wait for the
+  // 1s tick). First measurement snaps; later ones ease (0.25) to absorb per-fetch latency jitter.
+  useEffect(() => {
+    const s = buffer?.serverNowMs
+    if (s == null) return
+    const target = s - Date.now()
+    serverOffsetRef.current = hasServerOffsetRef.current ? serverOffsetRef.current + (target - serverOffsetRef.current) * 0.25 : target
+    hasServerOffsetRef.current = true
+    setNowMs(serverNow())
+  }, [buffer?.serverNowMs, serverNow])
   const windowMs = (buffer?.windowHours ?? 0) * 3_600_000
   const windowStartMs = windowMs > 0 ? nowMs - windowMs : null
 
@@ -866,11 +887,11 @@ export const ClipsScreen = () => {
   refetchRef.current = { refetchBuffer, refetchSaved, refetchDrafts }
   useFocusEffect(
     useCallback(() => {
-      setNowMs(Date.now())
+      setNowMs(serverNow())
       refetchRef.current.refetchBuffer()
       refetchRef.current.refetchSaved()
       refetchRef.current.refetchDrafts()
-    }, []),
+    }, [serverNow]),
   )
   useEffect(() => {
     const id = setInterval(() => refetchRef.current.refetchBuffer(), 15_000)

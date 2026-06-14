@@ -70,6 +70,11 @@ export type BufferGroup = {
 export type BufferDescriptor = {
   earliestAt: string | null
   latestAt: string
+  // The server's wall-clock (epoch ms) when this response was built. The Clips timeline runs its
+  // "now" clock in the SERVER domain — `nowUI = Date.now() + (serverNowMs − Date.now())`, slewed per
+  // fetch — so the reaper/now edges align with the server-clock-anchored clip geometry (no device skew).
+  // Optional for back-compat with an older backend (the app falls back to the device clock).
+  serverNowMs?: number
   windowHours: number
   // Whole camera buffer concatenated into one VOD HLS playlist (all sessions
   // back-to-back, real-time gaps collapsed). LEGACY: can wedge native players
