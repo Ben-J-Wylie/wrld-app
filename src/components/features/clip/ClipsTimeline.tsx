@@ -51,6 +51,7 @@ const TITLE_H = 22 // fixed title band above each clip lane (name + reaper/time-
 const CLIP_INSET_Y = 4 // breathing room between a clip block and the top/bottom of its lane
 const MIN_CLIP_W = 26 // a short clip stays a tappable block
 const GAP_W = 22 // collapsed (fixed-width) gap marker — the playhead glides across these pixels
+const EDGE_EPS = 3 // px proximity that counts as "at" the now edge (for the clock's NOW/THEN state)
 const GAP_THRESHOLD_MS = 500 // unbroadcasted time longer than this is a traversable gap; below = a snip
 const GAP_RUSH_MS = 3000 // a gap is consumed in this fixed real-time (mirrors the transport playhead's rush)
 const LONGEST_DEFAULT_W = 150 // default zoom: the longest clip ≈ this wide
@@ -280,7 +281,7 @@ type Props = {
 // read back the clip + instant currently under the playhead (for the scissor cut).
 export type ClipsTimelineHandle = {
   scrollToTime: (ms: number, animated?: boolean) => void
-  getCenter: () => { clipId: string | null; timeMs: number; pxPerMs: number; inGap: boolean }
+  getCenter: () => { clipId: string | null; timeMs: number; pxPerMs: number; inGap: boolean; atNow: boolean; atReaper: boolean }
 }
 
 // ── animated leaf nodes (each reads the shared `layout` on the UI thread) ──
@@ -652,12 +653,17 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
 
   // ── imperative: bring a time instant under the centre playhead (playback reposition + follow) ──
   // Maps via timeToX → glides across gap pixels (so the rush + scroll-to-time traverse a gap).
+  // NB getCenter/scrollToTime read the SHARED (extended) values — segsSv (live tail built to nowUI),
+  // leadSv/trailSv/nowSv/leadFromSv — so they agree with what's rendered. Using the server `segs`
+  // here put the "now edge" at the server media end while the rendered edge sat at nowUI, so the
+  // clock never registered NOW and goNow under-scrolled.
   const scrollToTime = useCallback(
     (ms: number, animated = false) => {
       const p = px.value || defaultPx
       if (p <= 0) return
-      const lay = computeLayout(segs, leadGapPx, trailGapPx, p)
-      const target = clamp(timeToX(ms, segs, lay, nowMs, leadFromMs), 0, lay.total)
+      const sgs = segsSv.value
+      const lay = computeLayout(sgs, leadSv.value, trailSv.value, p)
+      const target = clamp(timeToX(ms, sgs, lay, nowSv.value, leadFromSv.value), 0, lay.total)
       // A host-driven move (playback follow, nav, dial) to a non-edge instant releases the reaper
       // ride, so the frame-lock stops pinning scroll to the edge and lets playback scroll forward.
       // Moving TO the edge (transport button-1) leaves it to re-latch via the frame-lock.
@@ -665,15 +671,19 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
       cancelAnimation(scroll)
       scroll.value = animated ? withTiming(target, { duration: 240 }) : target
     },
-    [segs, leadGapPx, trailGapPx, leadFromMs, defaultPx, px, scroll, nowMs, reaperEdgeXSv, ridingSv],
+    [defaultPx, px, scroll, segsSv, leadSv, trailSv, nowSv, leadFromSv, reaperEdgeXSv, ridingSv],
   )
-  // The clip + instant + inGap currently under the centre playhead (read on demand).
+  // The clip + instant + inGap currently under the centre playhead (read on demand). `atNow` /
+  // `atReaper` are pixel-precise edge flags the host uses to drive the clock (NOW vs THEN+tick) —
+  // robust across the rush-vs-linear mapping and clock domains that broke the old timeMs thresholds.
   const getCenter = useCallback(() => {
     const p = px.value || defaultPx
-    if (p <= 0 || !segs.length) return { clipId: null, timeMs: 0, pxPerMs: 0, inGap: false }
-    const lay = computeLayout(segs, leadGapPx, trailGapPx, p)
-    return { ...resolveAt(scroll.value, segs, lay, nowMs, leadFromMs), pxPerMs: p }
-  }, [segs, leadGapPx, trailGapPx, leadFromMs, defaultPx, px, scroll, nowMs])
+    const sgs = segsSv.value
+    if (p <= 0 || !sgs.length) return { clipId: null, timeMs: 0, pxPerMs: 0, inGap: false, atNow: false, atReaper: false }
+    const lay = computeLayout(sgs, leadSv.value, trailSv.value, p)
+    const r = resolveAt(scroll.value, sgs, lay, nowSv.value, leadFromSv.value)
+    return { ...r, pxPerMs: p, atNow: scroll.value >= lay.total - EDGE_EPS, atReaper: ridingSv.value === 1 }
+  }, [defaultPx, px, scroll, segsSv, leadSv, trailSv, nowSv, leadFromSv, ridingSv])
   useImperativeHandle(ref, () => ({ scrollToTime, getCenter }), [scrollToTime, getCenter])
 
   // ── report the clip/instant/inGap under the centre playhead (on a clip OR gap-state change) ──

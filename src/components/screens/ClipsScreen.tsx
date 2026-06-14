@@ -188,10 +188,12 @@ export const ClipsScreen = () => {
 
   // ── lanes: buffer = footage minus saved ranges (carve); saved = the saved clips ──
   const sessions = useMemo(() => buffer?.sessions ?? [], [buffer])
-  // The open (still-recording) session, if any. Its footage block should BUILD smoothly to "now"
-  // while broadcasting rather than stepping on the 15s refetch — the timeline extends this session's
-  // segment to its own smooth UI clock. `endedAt == null` is the server's "still live" signal.
-  const liveSessionId = useMemo(() => sessions.find((s) => s.endedAt == null)?.id ?? null, [sessions])
+  // The open (still-recording) session, if any → its footage block builds smoothly to "now" while
+  // broadcasting (the timeline extends it to nowUI). Gate on `isLive` (broadcastStore — immediate)
+  // AND `endedAt == null`: the buffer's `endedAt` lags by a refetch, so on STOP it would otherwise
+  // keep the tail extending and suppress the trailing gap for ~15s. `isLive` flips the instant you
+  // stop → the tail freezes and the "since last broadcast" gap forms right away.
+  const liveSessionId = useMemo(() => (isLive ? (sessions.find((s) => s.endedAt == null)?.id ?? null) : null), [isLive, sessions])
 
   // [reaper-trace] On each buffer refetch, log every session's geometry as "seconds ago" so we can
   // see whether the backend changes the oldest session's start/end across refetches (the suspected
@@ -454,10 +456,12 @@ export const ClipsScreen = () => {
   const [playheadMs, setPlayheadMs] = useState(0)
   const playheadRef = useRef(0)
   playheadRef.current = playheadMs
-  // Pinned to the live edge → the clock reads NOW (ticking). Set by skipping to the now end; cleared
-  // by any move away from it (scrub, nav, play). Not a time threshold (nowMs refreshes only every
-  // 10s, so a threshold would flip NOW→THEN between refreshes).
+  // Clock edge state. `followLive` = at the now edge → NOW (ticking). `ridingReaper` = at the reaper
+  // edge → THEN, ticking toward eviction. Both are driven by the timeline's pixel-precise `atNow` /
+  // `atReaper` flags (via getCenter) — not re-derived from playheadMs in a mismatched clock/rush
+  // domain (which never registered the edges). Set on scrub-follow / settle / nav; cleared on a move.
   const [followLive, setFollowLive] = useState(false)
+  const [ridingReaper, setRidingReaper] = useState(false)
   // The footage at the playhead (null in a gap). The PLAYER follows this — so as the clock advances
   // the playhead across clips/snips/gaps, the loaded VOD tracks it. The VIEWER shows it too, so a
   // lane drag (which changes the clip's id) can't blank the preview: the playhead's clip is shown.
@@ -589,6 +593,7 @@ export const ClipsScreen = () => {
       playheadRef.current = m
       setPlayheadMs(m)
       setFollowLive(false) // any explicit seek leaves the live edge → clock reads THEN
+      setRidingReaper(false)
       setVideoMode(true) // show the seeked frame, not the poster
       const want = (m - vodStartRef.current) / 1000
       if (manifestUrl && want >= 0) {
@@ -685,6 +690,7 @@ export const ClipsScreen = () => {
       return
     }
     setFollowLive(false) // playing advances the playhead off the live edge
+    setRidingReaper(false)
     // Play from the PLAYHEAD. If we're at/after the last footage, restart from the top.
     if (playheadRef.current >= lastEndRef.current - 50) {
       const first = firstStartRef.current
@@ -705,10 +711,9 @@ export const ClipsScreen = () => {
       if (!c) return
       playheadRef.current = c.timeMs
       setPlayheadMs(c.timeMs) // the playhead follows the scrub
-      // Scrubbed all the way to the now edge → the clock reads NOW (ticking), not THEN. The timeline
-      // clamps the centre time to `nowEdge` at full-right, so this latches exactly at the edge and
-      // clears the instant you scrub back off it.
-      setFollowLive(c.timeMs >= nowEdgeRef.current - 1)
+      // Edge state from the timeline's pixel-precise flags → clock NOW (now edge) / THEN+tick (reaper).
+      setFollowLive(c.atNow)
+      setRidingReaper(c.atReaper)
       if (c.inGap || !c.clipId || c.clipId !== playerIdRef.current) return // gap / not-yet-loaded → no seek
       if (!player.duration || player.duration <= 0) return
       const delta = (c.timeMs - vodStartRef.current) / 1000 - player.currentTime
@@ -731,9 +736,11 @@ export const ClipsScreen = () => {
       setScrubbing(false)
       if (id) setCenterClipId(id)
       if (id && id === playerIdRef.current) seekTo(timeMs) // settle the exact landed frame
-      // Settled on the now edge → pin the clock to NOW. (At the edge `id` is null, so the seekTo
-      // above — which clears followLive — never runs; set it explicitly here after, regardless.)
-      if (timeMs >= nowEdgeRef.current - 1) setFollowLive(true)
+      // Settle the clock edge state from where the scroll LANDED (pixel-precise). seekTo above clears
+      // both, so read + apply after it.
+      const c = timelineRef.current?.getCenter()
+      setFollowLive(!!c?.atNow)
+      setRidingReaper(!!c?.atReaper)
       // Was playing → resume from where the fling LANDED (the settle was the wait; no fixed timer).
       if (scrubResumePlayingRef.current) player.play()
     },
@@ -754,11 +761,7 @@ export const ClipsScreen = () => {
     [seekTo],
   )
 
-  // Riding the reaper edge: the playhead sits on the oldest (being-consumed) instant. The reaper
-  // edge is always exactly `windowMs` behind now, so the clock reads THEN at a CONSTANT offset but
-  // must TICK (the reaper advances with real time) — `liveTick` makes the TimeScrubber tick it live
-  // instead of freezing it. Keep the playhead out of the reaped region (clamp to the edge).
-  const reaperRiding = windowStartMs != null && !playing && !scrubbing && playheadMs <= windowStartMs + 2000
+  // Keep the playhead out of the reaped region (clamp it up to the reaper edge while idle).
   useEffect(() => {
     if (windowStartMs == null || playingRef.current || scrubbingRef.current) return
     if (playheadRef.current < windowStartMs) {
@@ -768,7 +771,7 @@ export const ClipsScreen = () => {
   }, [windowStartMs])
   // Clock: 0 (NOW) at the live edge; `windowMs` (live-ticking THEN) riding the reaper edge; else the
   // held instant behind now (frozen by the TimeScrubber so a paused clock doesn't bounce a second).
-  const offsetForClock = followLive ? 0 : reaperRiding ? windowMs : Math.max(0, Date.now() - playheadMs)
+  const offsetForClock = followLive ? 0 : ridingReaper ? windowMs : Math.max(0, Date.now() - playheadMs)
   const [clockExpanded, setClockExpanded] = useState(false)
   const [collapseSignal, setCollapseSignal] = useState(0)
 
@@ -1059,9 +1062,10 @@ export const ClipsScreen = () => {
     [orderedClips, axisTop, reaperBoundaryMs],
   )
   const goTo = useCallback(
-    (timeMsRaw: number, live = false) => {
+    (timeMsRaw: number, live = false, reaper = false) => {
       setSelectedId(null)
-      setFollowLive(live) // only the now-edge jump pins the clock to NOW
+      setFollowLive(live) // now-edge jump → clock NOW
+      setRidingReaper(reaper) // reaper-edge jump → clock THEN, ticking toward eviction
       // The playhead is authoritative — nav MOVES it (not just the scroll). `now` can sit past the
       // last footage (the caught-up edge), so don't clamp to lastEnd; but never land in the reaped
       // region (older than the reaper edge) — clamp up to the window boundary.
@@ -1109,8 +1113,8 @@ export const ClipsScreen = () => {
   const goReaper = useCallback(() => {
     // The reaper edge (now − window): the leading-gap countdown when there's room, or the oldest
     // footage being consumed (clock ticks THEN at the reaper time) once the window is full.
-    if (windowStartMs != null) goTo(windowStartMs)
-    else if (navBoundaries.length) goTo(navBoundaries[0]!)
+    if (windowStartMs != null) goTo(windowStartMs, false, true)
+    else if (navBoundaries.length) goTo(navBoundaries[0]!, false, true)
   }, [windowStartMs, navBoundaries, goTo])
   const goNow = useCallback(() => goTo(axisTop, true), [goTo, axisTop])
 
@@ -1241,7 +1245,8 @@ export const ClipsScreen = () => {
             }}
             onScrubStart={() => {
               setSelectedId(null) // any scrub blurs the selection
-              setFollowLive(false) // scrubbing leaves the live edge
+              setFollowLive(false) // scrubbing leaves the live edge (re-latched by the follow loop)
+              setRidingReaper(false)
               setGapCard(null)
               scrubResumePlayingRef.current = playingRef.current
               scrubbingRef.current = true
@@ -1286,7 +1291,7 @@ export const ClipsScreen = () => {
         <View style={styles.bottomChrome}>
           <TimeScrubber
             offsetMs={offsetForClock}
-            liveTick={reaperRiding}
+            liveTick={ridingReaper}
             onOffsetChange={(off) => {
               if (off <= 0) {
                 goNow() // tap NOW → skip the timeline to the now edge (+ pin the clock to NOW)
