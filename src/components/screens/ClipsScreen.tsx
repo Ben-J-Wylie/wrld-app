@@ -706,6 +706,13 @@ export const ClipsScreen = () => {
     let raf = 0
     let lastTs: number | null = null
     let lastCommitTs = 0
+    // [clip-sync] diagnostics: is the playhead keeping pace with the now/reaper fronts? The playhead
+    // advances by a CLAMPED RAF delta (min(80, ts−lastTs)); the fronts advance by unclamped serverNow().
+    // Every frame >80ms (playback jank) the playhead loses (rawDt−80) ms → it drifts BEHIND the fronts,
+    // which is why now/reaper catch up + the reaper passes it. clampLoss = total ms the playhead has
+    // shed vs real time. gap = nowUi − playhead (should hold steady at 1× play; growth = the drift).
+    let clampLoss = 0
+    let lastSyncTs = 0
     // The playhead REF + the timeline scroll advance every frame (smooth). But committing playheadMs
     // to React state every frame = 60 re-renders/sec of this heavy screen, which saturates the JS
     // thread and makes the per-frame scrollToTime (→ the timeline) janky/step even though the native
@@ -724,8 +731,17 @@ export const ClipsScreen = () => {
         raf = requestAnimationFrame(tick)
         return
       }
-      const dt = lastTs == null ? 0 : Math.min(80, ts - lastTs)
+      const rawDt = lastTs == null ? 0 : ts - lastTs
+      const dt = lastTs == null ? 0 : Math.min(80, rawDt)
       lastTs = ts
+      if (__DEV__) {
+        clampLoss += rawDt - dt
+        if (ts - lastSyncTs >= 500) {
+          lastSyncTs = ts
+          const nowUi = serverNow()
+          console.log('[clip-sync] rawDt', Math.round(rawDt), 'dt', Math.round(dt), 'clampLoss', Math.round(clampLoss), 'ph', Math.round(playheadRef.current % 100000), 'nowUi', Math.round(nowUi % 100000), 'gap', Math.round(nowUi - playheadRef.current))
+        }
+      }
       let ph = playheadRef.current
       const loc = locateAt(ph)
       if (loc.mode === 'end') {
