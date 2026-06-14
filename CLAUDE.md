@@ -3374,6 +3374,16 @@ The definitive target is **CONTENT.md §6 "The Clips-timeline north star"** (now
 | 5 | Reaper consumes **smoothly while dragging and while playing** — no jumps. | **✅** Latch/pin suspended during pan/play (`panningSv`/`playingSv`); monotonic `reaperNowSv` (forward-only clamp); rush-aware `reaperEdgeX`. |
 | 6 | **Reaping + playing + broadcasting locked in sync** (no ~1 s cadence anywhere). | **✅ Fixed — root cause was a stalled clock, not the throttle.** The reanimated `useFrameCallback` clock (`frame.timeSinceFirstFrame`) **freezes during video playback** (heavy main-thread work starves the UI-thread frame timer) — it advanced ~3 frames then stalled ~10 frames then jumped a full second, so the live build/now/reaper edges stepped 1 s at a time. **Fix:** drive the continuous clock from a JS `requestAnimationFrame` loop in `ClipsScreen` (always-on while focused) that feeds the timeline a server-aligned now via `ClipsTimelineHandle.setNowUi()` every frame — the same JS clock that drives scroll smoothly. The timeline takes the **monotonic max** of the JS clock and its own frame clock (JS wins during playback; frame callback wins if the RAF isn't running). The earlier `commitPlayhead` ~12 Hz throttle stays (keeps JS-state churn down) but wasn't the cause. |
 
+**Playhead keeps pace with the fronts (done 2026-06-14):** a follow-on to #6 — during broadcast +
+reap + play the now/reaper fronts were overtaking (and the reaper passing) the playhead. The
+`[clip-sync]` probe showed the playhead advancing ~55% of real time with negligible clamp loss → it
+was being **rewound**, not throttled. Cause: `playheadRef.current = playheadMs` ran on EVERY render, so
+any re-render between the ~12 Hz `commitPlayhead` snapshots (the commit itself, the 1 s `nowMs` tick, a
+5 s buffer refetch) reset the ref to the last committed value and discarded the 60 fps frames advanced
+since. Fix: while playing the tick OWNS `playheadRef` — `if (!playingRef.current) playheadRef.current =
+playheadMs` (every non-tick setter sets the ref explicitly anyway). Confirmed: `gap = nowUi − playhead`
+now holds flat (~3.1 s) at 1× play instead of climbing.
+
 **Server-clock alignment (done):** `GET /buffer/me` returns `serverNowMs`; `ClipsScreen` eases
 `serverOffset = serverNowMs − Date.now()` and runs `nowMs = Date.now() + serverOffset`, so the
 reaper/now edges align with the server-clock-anchored clip geometry (no device skew).
