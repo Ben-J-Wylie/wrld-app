@@ -84,8 +84,11 @@ function fmtDur(sec: number) {
 // a pure display computation.
 type Claim = { sessionId: string; startMs: number; endMs: number }
 // An in-flight drag-to-save: carves its range out + shows a saved-lane placeholder until the
-// real Clip lands (then it's pruned and the real clip takes over seamlessly).
-type PendingSave = { tempId: string; sessionId: string; startMs: number; endMs: number; label: string; posterUrl?: string | null; manifestUrl?: string | null }
+// real Clip lands (then it's pruned and the real clip takes over seamlessly). `realClipId` is set
+// once the save POST resolves — pruning matches on that EXACT id (robust), not just on bounds (the
+// backend may snap the saved range to segment boundaries, so a bounds-only match can miss and leave
+// the placeholder forever = a duplicate of the clip in the saved lane).
+type PendingSave = { tempId: string; sessionId: string; startMs: number; endMs: number; label: string; posterUrl?: string | null; manifestUrl?: string | null; realClipId?: string }
 function bufEntry(s: BufferSession, a: number, b: number): LaneClip {
   return {
     id: `${s.id}~${Math.round(a)}`,
@@ -274,9 +277,12 @@ export const ClipsScreen = () => {
     [realSavedData, sessions],
   )
 
-  // A pending save stays "pending" until a real saved clip with a matching window arrives.
+  // A pending save stays "pending" until its real saved clip arrives. Match on the EXACT clip id the
+  // save POST returned (robust — survives the backend snapping the saved range to segment boundaries);
+  // fall back to a bounds match for the window before the POST resolves (and the draft path).
   const matchesReal = useCallback(
     (ps: PendingSave) =>
+      (ps.realClipId != null && realSavedData.some((c) => c.id === ps.realClipId)) ||
       realSavedData.some(
         (c) => c.bufferSessionId === ps.sessionId && Math.abs(c.startAtMs - ps.startMs) < MATCH_TOL_MS && Math.abs(c.endAtMs - ps.endMs) < MATCH_TOL_MS,
       ),
@@ -358,6 +364,22 @@ export const ClipsScreen = () => {
       return next.length === prev.length ? prev : next
     })
   }, [matchesReal])
+
+  // [clips-save] Duplicate-hunt: log pending vs real on every change so a lingering placeholder (the
+  // "duplicate of itself" in the saved lane) is visible — and we can see WHY it didn't match.
+  useEffect(() => {
+    if (!__DEV__) return
+    slog(
+      'state · saved',
+      savedLane.length,
+      '· buffer',
+      bufferedLane.length,
+      '· pending',
+      pendingSaves.map((ps) => `${ps.tempId.slice(-10)}{real:${ps.realClipId?.slice(-6) ?? '—'} matched:${matchesReal(ps)} ${Math.round(ps.startMs / 1000) % 100000}→${Math.round(ps.endMs / 1000) % 100000}}`),
+      '· real',
+      realSavedData.map((c) => `${c.id.slice(-6)}{${Math.round(c.startAtMs / 1000) % 100000}→${Math.round(c.endAtMs / 1000) % 100000}}`),
+    )
+  }, [pendingSaves, realSavedData, savedLane.length, bufferedLane.length, matchesReal])
 
   // Prune un-save holes once the parent's real ranges no longer cover them (the trim landed) or
   // the parent is gone.
@@ -811,6 +833,9 @@ export const ClipsScreen = () => {
         .saveClip(payload)
         .then((res) => {
           slog('SAVE OK → clipId', res.clipId, '— refetching saved lane')
+          // Tag the placeholder with the real id so it's pruned by EXACT id when the clip lands
+          // (not just by bounds, which the backend may snap) — otherwise it lingers as a duplicate.
+          setPendingSaves((prev) => prev.map((p) => (p.tempId === tempId ? { ...p, realClipId: res.clipId } : p)))
           refetchSavedSoon()
         })
         .catch((err: unknown) => {
