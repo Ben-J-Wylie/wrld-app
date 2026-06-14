@@ -188,12 +188,21 @@ export const ClipsScreen = () => {
 
   // ── lanes: buffer = footage minus saved ranges (carve); saved = the saved clips ──
   const sessions = useMemo(() => buffer?.sessions ?? [], [buffer])
-  // The open (still-recording) session, if any → its footage block builds smoothly to "now" while
+  // The open (still-recording) session → its footage block builds smoothly to "now" while
   // broadcasting (the timeline extends it to nowUI). Gate on `isLive` (broadcastStore — immediate)
   // AND `endedAt == null`: the buffer's `endedAt` lags by a refetch, so on STOP it would otherwise
   // keep the tail extending and suppress the trailing gap for ~15s. `isLive` flips the instant you
   // stop → the tail freezes and the "since last broadcast" gap forms right away.
-  const liveSessionId = useMemo(() => (isLive ? (sessions.find((s) => s.endedAt == null)?.id ?? null) : null), [isLive, sessions])
+  //
+  // Pick the NEWEST open session, not the first. The backend can leave a stale ghost (a 0-duration
+  // session, hours old, whose `endedAt` was never set) earlier in the chronological list; `find`
+  // returned that ghost as "live", so liveTailId never matched the real recording (liveIdx stayed −1
+  // → extendLive never ran → the clip stepped on refetch instead of building smoothly).
+  const liveSessionId = useMemo(() => {
+    if (!isLive) return null
+    for (let i = sessions.length - 1; i >= 0; i--) if (sessions[i]!.endedAt == null) return sessions[i]!.id
+    return null
+  }, [isLive, sessions])
   // [reaper-trace] #1 live-build diagnostic: is the live session resolving while broadcasting? If
   // isLive but liveSessionId is null, the open session hasn't reached the buffer fetch yet (the
   // ~10s appear delay). Once set, the timeline's extendLive should grow it per-frame (watch FRAME
