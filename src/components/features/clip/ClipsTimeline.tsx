@@ -362,8 +362,22 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
 ) {
   // Combined set drives the shared axis (buffer + saved don't overlap → one timeline). Sorted
   // oldest→newest with gap-before widths; each clip gets a stable index into the layout arrays.
-  // `liveIdx` = the newest seg belonging to the open session (the one that builds to nowUI).
+  // `liveIdx` = the live tail seg (the one that builds to nowUI).
   const { segs, trailGapPx, idToIndex, tickIndices, gapIndices, trailingGap, liveIdx } = useMemo(() => {
+    // The live tail = the BUFFERED clip of the open session with the latest end — the only piece that
+    // grows to nowUI. A SAVED clip / pending-save copy / draft / middle remainder of the open session
+    // also carries its sourceSessionId, so matching by session alone marked *those* live and grew them
+    // ("the saved copy keeps extending"). Pin it to the one growing buffer tail (no draft), by id.
+    let liveTailId: string | null = null
+    if (liveSessionId) {
+      let maxEnd = -Infinity
+      for (const c of buffered) {
+        if (c.sourceSessionId === liveSessionId && !c.draftId && c.endMs > maxEnd) {
+          maxEnd = c.endMs
+          liveTailId = c.id
+        }
+      }
+    }
     const all = [...buffered, ...saved]
       .filter((c) => Number.isFinite(c.startMs) && Number.isFinite(c.endMs) && c.endMs >= c.startMs)
       .sort((a, b) => a.startMs - b.startMs)
@@ -378,7 +392,7 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
       let gapPx = 0
       if (prevEnd != null && c.startMs - prevEnd > GAP_THRESHOLD_MS) gapPx = GAP_W
       if (gapPx > 0) gaps.push(out.length)
-      if (liveSessionId && c.sourceSessionId === liveSessionId) live = out.length // newest live seg wins
+      if (c.id === liveTailId) live = out.length // only the growing buffer tail extends
       idx[c.id] = out.length
       out.push({ id: c.id, startMs: c.startMs, durMs: c.endMs - c.startMs, gapPx })
       prevEnd = prevEnd == null ? c.endMs : Math.max(prevEnd, c.endMs)
