@@ -407,10 +407,14 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
       prevEnd = prevEnd == null ? c.endMs : Math.max(prevEnd, c.endMs)
     }
     // No trailing gap while broadcasting — the live seg builds all the way to nowUI, so there's no
-    // empty span between the newest footage and now.
-    const trailing = !liveSessionId && prevEnd != null && nowMs > prevEnd + GAP_THRESHOLD_MS
+    // empty span between the newest footage and now. The instant broadcast STOPS (liveSessionId →
+    // null) the gap forms (north-star #2). Deliberately keyed off liveSessionId ALONE, NOT `nowMs`:
+    // depending on the 1 s clock here rebuilt `segs` (and re-ran the layout effect's scroll re-pin)
+    // every second, which fought the per-frame play/reaper loops — the per-second jump. The footage
+    // geometry must change only when the FOOTAGE changes, never merely because a second passed.
+    const trailing = !liveSessionId && prevEnd != null
     return { segs: out, trailGapPx: trailing ? GAP_W : 0, idToIndex: idx, tickIndices: out.map((_, i) => i), gapIndices: gaps, trailingGap: trailing, liveIdx: live }
-  }, [buffered, saved, nowMs, liveSessionId])
+  }, [buffered, saved, liveSessionId])
 
   // Leading gap: a FIXED GAP_W marker before the oldest clip, present whenever windowing is active —
   // and crucially NEVER removed (removing it when reaping starts was the 22px snap that bounced:
@@ -509,6 +513,12 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
     // (catch-up after the screen was backgrounded) is fine; a backward one is the drift dip, clamped out.
     // This is the single "nowUI" clock — it drives BOTH the reaper edge (below) AND the live build.
     reaperNowSv.value = Math.max(reaperNowSv.value, reaperAnchorSv.value + (frame.timeSinceFirstFrame - reaperFrameBaseSv.value))
+    // SINGLE-CLOCK: nowSv (the "now" reference fed to EVERY mapping — reaper edge, trailing-gap,
+    // scrollToTime, getCenter, gestures) tracks the continuous UI-thread clock, NOT the 1 s React
+    // `nowMs` state. Sampling now off a 1 s state was the per-second jump: the trailing-gap / now-edge
+    // mappings stepped 1 s at a time while the frame loop glided. With nowSv == reaperNowSv every
+    // moving frontier reads the same continuous clock, so nothing has a 1 s cadence. (CONTENT.md §6.)
+    nowSv.value = reaperNowSv.value
     // Live build: grow the open session's seg to nowUI each frame (smooth) — same clock as the edge.
     if (liveIdxSv.value >= 0) segsSv.value = extendLive(baseSegsSv.value, liveIdxSv.value, reaperNowSv.value)
     // ── invariant: the reaper edge never passes the centre playhead ──
@@ -588,9 +598,13 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
     const p = px.value || defaultPx
     const prev = prevLayoutInputs.current
     const scrollBefore = scroll.value // [reaper-trace] capture before any re-pin
-    // Capture the centre's instant in the OLD layout BEFORE swapping segs (linear center-preserve,
-    // used only when NOT riding the reaper edge).
-    const repin = !!prev && p > 0 && prev.segs.length > 0 && !ridingSv.value
+    // The "now" reference for all mappings is the CONTINUOUS UI-thread clock (reaperNowSv), never the
+    // 1 s `nowMs` state — so a reconcile uses the same clock the per-frame loops use (no 1 s seam).
+    const nowUi = reaperNowSv.value || nowMs
+    // Capture the centre's instant in the OLD layout BEFORE swapping segs (linear center-preserve).
+    // SKIP the scroll re-pin while RIDING the reaper edge OR PLAYING — those frontiers own scroll on
+    // the frame/RAF loop; re-pinning here once a second fought them and produced the per-second jump.
+    const repin = !!prev && p > 0 && prev.segs.length > 0 && !ridingSv.value && !playingSv.value
     let centerTime = 0
     if (repin) {
       const oldLay = computeLayout(prev!.segs, prev!.lead, prev!.trail, p)
@@ -605,16 +619,16 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
     trailSv.value = trailGapPx
     leadSv.value = leadGapPx
     leadFromSv.value = leadFromMs
-    nowSv.value = nowMs
+    nowSv.value = nowUi
     if (p > 0) {
       const newLay = computeLayout(segs, leadGapPx, trailGapPx, p)
       if (ridingSv.value) {
         // Riding → re-pin scroll to the reaper edge in the NEW layout (the SAME rush mapping the
         // frame-lock uses), ATOMICALLY with segs, so a clip-drop is seamless with zero stale frames.
         const B = reaperNowSv.value - windowMs
-        scroll.value = clamp(reaperEdgeX(B, segs, newLay, nowMs, leadFromMs), 0, newLay.total)
+        scroll.value = clamp(reaperEdgeX(B, segs, newLay, nowUi, leadFromMs), 0, newLay.total)
       } else if (repin) {
-        scroll.value = clamp(timeToX(centerTime, segs, newLay, nowMs, leadFromMs), 0, newLay.total)
+        scroll.value = clamp(timeToX(centerTime, segs, newLay, nowUi, leadFromMs), 0, newLay.total)
       }
     }
     // [reaper-trace] Did the reaper edge's SCREEN position jump across this reconcile? If edgeScreen
@@ -623,7 +637,7 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
       const B = reaperNowSv.value - windowMs
       const half = vpSv.value / 2
       const newL = computeLayout(segs, leadGapPx, trailGapPx, p)
-      const newEdge = reaperEdgeX(B, segs, newL, nowMs, leadFromMs)
+      const newEdge = reaperEdgeX(B, segs, newL, nowUi, leadFromMs)
       // edgeScreen uses the ACTUAL visual anchor (effScroll = reaperEdgeX while riding, else scroll).
       const edgeScreenAfter = half - (ridingSv.value ? newEdge : scroll.value) + newEdge
       let beforeStr = '-'
@@ -640,8 +654,11 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
         'edgeScreen', beforeStr, '→', Math.round(edgeScreenAfter),
       )
     }
-    prevLayoutInputs.current = { segs, lead: leadGapPx, trail: trailGapPx, leadFrom: leadFromMs, now: nowMs }
-  }, [segs, liveIdx, trailGapPx, leadGapPx, leadFromMs, nowMs, windowMs, segsSv, baseSegsSv, liveIdxSv, trailSv, leadSv, leadFromSv, nowSv, px, scroll, defaultPx, ridingSv, reaperNowSv, vpSv])
+    prevLayoutInputs.current = { segs, lead: leadGapPx, trail: trailGapPx, leadFrom: leadFromMs, now: nowUi }
+    // NOTE: `nowMs` is deliberately NOT a dependency — the effect must fire only when the FOOTAGE
+    // geometry changes (data/refetch/drop/save), never once a second. Time progression is the frame
+    // loop's job (the continuous clock); a per-second reconcile here was the jump.
+  }, [segs, liveIdx, trailGapPx, leadGapPx, leadFromMs, windowMs, segsSv, baseSegsSv, liveIdxSv, trailSv, leadSv, leadFromSv, nowSv, px, scroll, defaultPx, ridingSv, playingSv, reaperNowSv, vpSv])
   useEffect(() => {
     minPxSv.value = minPx
     maxPxSv.value = maxPx
