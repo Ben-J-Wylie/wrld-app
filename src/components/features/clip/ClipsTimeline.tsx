@@ -255,6 +255,9 @@ type Props = {
   // UI clock (nowUI) instead of stepping on the server refetch — so the live clip + the now edge grow
   // per-frame, riding the SAME clock as the reaper edge (both edges, one clock).
   liveSessionId?: string | null
+  // True while playback is driving the scroll → suspends the reaper riding-latch so it can't grab the
+  // scroll out from under the playhead (the same grab/release jumpiness a drag causes).
+  playing?: boolean
   // Which lane the oldest (being-reaped) clip is in → buffer = red sickle, saved = black save icon.
   reaperLane?: 'buffered' | 'saved'
   // The reaper boundary (now − window) in wall-clock + the window length. The timeline advances the
@@ -358,7 +361,7 @@ function AnimatedReaperEdge({ edgeX, top, height, badgeTop, kind }: { edgeX: Sha
 }
 
 export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function ClipsTimeline(
-  { buffered, saved, nowMs, liveSessionId, reaperLane = 'buffered', reaperEdgeMs, windowMs = 0, selectedId, onSelect, onOpen, onSave, onUnsave, onScrubStart, onScrubEnd, onCenter }: Props,
+  { buffered, saved, nowMs, liveSessionId, playing = false, reaperLane = 'buffered', reaperEdgeMs, windowMs = 0, selectedId, onSelect, onOpen, onSave, onUnsave, onScrubStart, onScrubEnd, onCenter }: Props,
   ref,
 ) {
   // Combined set drives the shared axis (buffer + saved don't overlap → one timeline). Sorted
@@ -477,6 +480,13 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
   // a layout shift (a clip leaving the set) slides scroll with the edge → no bounce. Released when
   // the user scrolls away toward newer footage.
   const ridingSv = useSharedValue(0)
+  // 1 while a pan or playback is ACTIVELY driving the scroll. The riding latch/pin is suspended then
+  // — otherwise the lock grabs the scroll mid-drag (pin to centre → ignore the drag), releases when
+  // the drag exceeds the threshold (scroll jumps free), and re-grabs on the way back: a latch/release
+  // cycle that reads as the reaper line jumping. While suspended the edge still advances via
+  // reaperEdgeXSv (renders at its content position, moving with scroll + consumption — smooth).
+  const panningSv = useSharedValue(0)
+  const playingSv = useSharedValue(0)
   // [reaper-trace] dev-only frame sampler + transition loggers (stripped in prod via __DEV__).
   const frameLogSv = useSharedValue(0)
   const logFrame = useCallback((scrollV: number, edgeV: number, riding: number, total: number, edgeScreen: number, liveI: number) => {
@@ -512,10 +522,10 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
       // centre — the dropped clip's reaped pixels are simply replaced by the void, nothing reappears.
       // The now edge is pulled toward centre as footage is eaten, until the window is fully evicted.
       scroll.value = Math.min(edgeX, total)
-    } else if (scroll.value <= edgeX + 1.5) {
-      // Scroll reached the edge (button-1, or scrubbed left into it) → snap on and LATCH riding.
-      // Floors the scroll too: a left-scroll can't enter the already-reaped void. Cancel any leftover
-      // fling decay so it can't keep driving scroll against the lock.
+    } else if (!panningSv.value && !playingSv.value && scroll.value <= edgeX + 1.5) {
+      // Scroll SETTLED at the edge while idle (button-1, or scrubbed left into it) → snap on + LATCH.
+      // Suspended during an active pan/playback so the lock can't grab the scroll mid-gesture (that
+      // grab/release cycle was the jumpiness). Floors the scroll: a left-scroll can't enter the void.
       cancelAnimation(scroll)
       scroll.value = Math.min(edgeX, total)
       ridingSv.value = 1
@@ -639,6 +649,12 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
   useEffect(() => {
     vpSv.value = viewportW
   }, [viewportW, vpSv])
+  // Playback drives the scroll → suspend the reaper riding-latch (and release any active ride) so the
+  // lock can't grab the scroll out from under the playhead.
+  useEffect(() => {
+    playingSv.value = playing ? 1 : 0
+    if (playing) ridingSv.value = 0
+  }, [playing, playingSv, ridingSv])
 
   // Seed the zoom + land with "now" centred, once, when the viewport + first content are known.
   const seeded = useRef(false)
@@ -737,18 +753,19 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
         .onStart(() => {
           'worklet'
           cancelAnimation(scroll)
+          // The user is taking control → release any ride + mark panning so the frame-lock won't grab
+          // the scroll mid-drag (that grab/release cycle was the reaper jumpiness).
+          if (ridingSv.value) {
+            ridingSv.value = 0
+            runOnJS(logRiding)(0, scroll.value, reaperEdgeXSv.value)
+          }
+          panningSv.value = 1
           runOnJS(notifyScrubStart)()
         })
         .onChange((e) => {
           'worklet'
           if (twoFingers.value) return // a 2nd finger landed → defer to pinch, stop scrolling
           scroll.value = clampW(scroll.value - e.changeX, 0, layout.value.total)
-          // Scrolling away from the reaper edge toward newer footage releases the ride (hysteresis so
-          // a jitter at the edge doesn't drop it). The frame-lock then only floors at the edge.
-          if (ridingSv.value && scroll.value > reaperEdgeXSv.value + 8) {
-            ridingSv.value = 0
-            runOnJS(logRiding)(0, scroll.value, reaperEdgeXSv.value)
-          }
         })
         .onEnd((e) => {
           'worklet'
@@ -765,8 +782,14 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
             const r = resolveAt(scroll.value, segsSv.value, layout.value, nowSv.value, leadFromSv.value)
             runOnJS(notifyScrubEnd)(r.clipId, r.timeMs)
           })
+        })
+        .onFinalize(() => {
+          'worklet'
+          // Gesture done (the withDecay momentum continues) → drop the panning guard so a fling that
+          // settles at the reaper edge can latch into a smooth ride.
+          panningSv.value = 0
         }),
-    [scroll, layout, segsSv, nowSv, leadFromSv, notifyScrubStart, notifyScrubEnd, twoFingers, ridingSv, reaperEdgeXSv, logRiding],
+    [scroll, layout, segsSv, nowSv, leadFromSv, notifyScrubStart, notifyScrubEnd, twoFingers, ridingSv, reaperEdgeXSv, logRiding, panningSv],
   )
 
   const pinchGesture = useMemo(

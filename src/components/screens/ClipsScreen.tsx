@@ -1242,6 +1242,7 @@ export const ClipsScreen = () => {
             saved={savedLane}
             nowMs={axisTop}
             liveSessionId={liveSessionId}
+            playing={playing}
             reaperLane={reaperLane}
             reaperEdgeMs={windowStartMs}
             windowMs={windowMs}
