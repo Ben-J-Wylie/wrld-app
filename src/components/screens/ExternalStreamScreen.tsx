@@ -124,7 +124,6 @@ export function ExternalStreamScreen() {
   }
 
   const host = stream?.host
-  const title = stream?.title ?? ''
 
   return (
     <View style={styles.root}>
@@ -175,11 +174,6 @@ export function ExternalStreamScreen() {
                 <Text variant="monoCaption" color={theme.colors.text.inverse} numberOfLines={1}>
                   @{host.handle}
                 </Text>
-                {title ? (
-                  <Text variant="monoCaption" color={theme.colors.text.inverse} numberOfLines={1} style={styles.title}>
-                    {title}
-                  </Text>
-                ) : null}
               </View>
             </View>
           ) : null}
@@ -248,7 +242,6 @@ const styles = StyleSheet.create({
   backBtn: { padding: theme.spacing.xs },
   identity: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs, flex: 1 },
   identityText: { flex: 1 },
-  title: { opacity: 0.85 },
   fsControls: { ...StyleSheet.absoluteFillObject, zIndex: 100 },
   fsClose: { position: 'absolute', top: theme.spacing.lg, right: theme.spacing.lg },
   fsControlsBar: {
