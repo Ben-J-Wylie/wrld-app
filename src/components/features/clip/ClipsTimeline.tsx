@@ -364,17 +364,22 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
   // oldest→newest with gap-before widths; each clip gets a stable index into the layout arrays.
   // `liveIdx` = the live tail seg (the one that builds to nowUI).
   const { segs, trailGapPx, idToIndex, tickIndices, gapIndices, trailingGap, liveIdx } = useMemo(() => {
-    // The live tail = the BUFFERED clip of the open session with the latest end — the only piece that
-    // grows to nowUI. A SAVED clip / pending-save copy / draft / middle remainder of the open session
-    // also carries its sourceSessionId, so matching by session alone marked *those* live and grew them
-    // ("the saved copy keeps extending"). Pin it to the one growing buffer tail (no draft), by id.
+    // The live tail = the BUFFERED clip of the open session that REACHES the live edge (the newest
+    // footage end across both lanes) — the only piece that grows to nowUI. Matching by session alone
+    // also caught saved/pending-save/draft/remainder pieces and grew them ("the saved copy keeps
+    // extending"); matching the buffered *max-end* alone caught the remainder LEFT BEHIND when the tail
+    // is dragged to save (the saved copy then holds the edge), growing a bogus copy over the saved
+    // range. So require the candidate to reach the global newest end: if the tail was saved, no buffer
+    // clip reaches it → nothing extends (until new footage forms a fresh tail).
     let liveTailId: string | null = null
     if (liveSessionId) {
-      let maxEnd = -Infinity
+      let newest = -Infinity
+      for (const c of buffered) if (c.endMs > newest) newest = c.endMs
+      for (const c of saved) if (c.endMs > newest) newest = c.endMs
       for (const c of buffered) {
-        if (c.sourceSessionId === liveSessionId && !c.draftId && c.endMs > maxEnd) {
-          maxEnd = c.endMs
+        if (c.sourceSessionId === liveSessionId && !c.draftId && c.endMs >= newest - 2) {
           liveTailId = c.id
+          break
         }
       }
     }
