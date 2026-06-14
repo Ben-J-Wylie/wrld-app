@@ -15,6 +15,9 @@ type Command = 'endStream' | 'startRecording' | 'stopRecording'
 
 type BroadcastState = {
   isLive: boolean
+  // Wall-clock (ms) when this broadcast went live. Lets the Clips screen show an OPTIMISTIC live clip
+  // building from go-live immediately, before the backend has created the buffer session (~seconds).
+  liveSince: number | null
   isRecording: boolean
   sources: SourceType[]
   // One-shot command from a remote control surface (e.g. the dashboard);
@@ -31,13 +34,15 @@ type BroadcastState = {
 
 export const useBroadcastStore = create<BroadcastState>((set) => ({
   isLive: false,
+  liveSince: null,
   isRecording: false,
   sources: [],
   command: null,
   commandNonce: 0,
-  setLive: (sources) => set({ isLive: true, sources }),
+  // Stamp liveSince only on the transition into live (preserve it across source changes).
+  setLive: (sources) => set((s) => ({ isLive: true, sources, liveSince: s.isLive ? s.liveSince : Date.now() })),
   setRecording: (isRecording) => set({ isRecording }),
-  clear: () => set({ isLive: false, isRecording: false, sources: [] }),
+  clear: () => set({ isLive: false, isRecording: false, sources: [], liveSince: null }),
   sendCommand: (command) => set((s) => ({ command, commandNonce: s.commandNonce + 1 })),
   consumeCommand: () => set({ command: null }),
 }))

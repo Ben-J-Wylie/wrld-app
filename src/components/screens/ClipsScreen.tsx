@@ -54,6 +54,11 @@ const slog = (...args: unknown[]) => {
 
 const MATCH_TOL_MS = 2000 // window tolerance matching an optimistic save to its real Clip
 const MIN_REMAINDER_MS = 1000 // don't show carved remainders shorter than this
+// The optimistic live clip — synthesized from go-live so the build is INSTANT, before the backend
+// creates the real buffer session (~seconds). Its synthetic session id marks it as the live tail so
+// the timeline extends it to nowUI; it's dropped the moment the real session appears.
+const OPT_LIVE_SESSION = 'live:optimistic'
+const OPT_LIVE_ID = 'live:optimistic'
 
 const sessionStartMs = (s: BufferSession) => Date.parse(s.startedAt) + (s.mediaStartOffsetMs ?? 0)
 // `?? 0` matters: a brand-new live session can have BOTH duration fields undefined.
@@ -177,6 +182,7 @@ export const ClipsScreen = () => {
   const insets = useSafeAreaInsets()
   const { isSignedIn } = useAuth()
   const isLive = useBroadcastStore((s) => s.isLive)
+  const liveSince = useBroadcastStore((s) => s.liveSince)
   const qc = useQueryClient()
   const { data: buffer, refetch: refetchBuffer } = useBuffer(!!isSignedIn, isLive)
   const { data: savedData, refetch: refetchSaved } = useSavedClips(!!isSignedIn)
@@ -198,19 +204,11 @@ export const ClipsScreen = () => {
   // session, hours old, whose `endedAt` was never set) earlier in the chronological list; `find`
   // returned that ghost as "live", so liveTailId never matched the real recording (liveIdx stayed −1
   // → extendLive never ran → the clip stepped on refetch instead of building smoothly).
-  const liveSessionId = useMemo(() => {
+  const realLiveSessionId = useMemo(() => {
     if (!isLive) return null
     for (let i = sessions.length - 1; i >= 0; i--) if (sessions[i]!.endedAt == null) return sessions[i]!.id
     return null
   }, [isLive, sessions])
-  // [reaper-trace] #1 live-build diagnostic: is the live session resolving while broadcasting? If
-  // isLive but liveSessionId is null, the open session hasn't reached the buffer fetch yet (the
-  // ~10s appear delay). Once set, the timeline's extendLive should grow it per-frame (watch FRAME
-  // `total` climb smoothly vs step). Stripped in prod.
-  useEffect(() => {
-    if (!__DEV__) return
-    console.log('[reaper-trace] LIVE · isLive', isLive, '· liveSessionId', liveSessionId?.slice(-6) ?? '—', '· sessions', sessions.length, '· windowH', buffer?.windowHours)
-  }, [isLive, liveSessionId, sessions.length, buffer?.windowHours])
 
   // [reaper-trace] On each buffer refetch, log every session's geometry as "seconds ago" so we can
   // see whether the backend changes the oldest session's start/end across refetches (the suspected
@@ -365,7 +363,34 @@ export const ClipsScreen = () => {
     return out
   }, [realSavedData, draftsData, pendingNotReal, pendingUnsave])
 
-  const bufferedLaneRaw = useMemo(() => [...applySplits(carveBuffer(sessions, claims), splitPoints), ...drafts], [sessions, claims, drafts, splitPoints])
+  // #1 INSTANT live build. While broadcasting, synthesize an OPTIMISTIC live clip from `liveSince`
+  // (stamped at go-live) the instant we go live — before the backend's buffer session reaches the
+  // /buffer/me fetch (~seconds). Its synthetic session id is the live tail, so the timeline's
+  // extendLive grows it to nowUI per-frame (smooth realtime build with zero appear-delay). It's
+  // dropped the moment the real session lands (`realLiveSessionId` set → null here), and the real
+  // footage — covering ≈the same span — takes over with no visible seam.
+  const optimisticLive = useMemo<LaneClip | null>(() => {
+    if (!isLive || liveSince == null || realLiveSessionId) return null
+    return {
+      id: OPT_LIVE_ID,
+      startMs: liveSince,
+      endMs: nowMs,
+      label: 'Live',
+      sublabel: fmtDur(Math.max(0, nowMs - liveSince) / 1000),
+      posterUrl: null,
+      manifestUrl: null,
+      sourceSessionId: OPT_LIVE_SESSION,
+    }
+  }, [isLive, liveSince, realLiveSessionId, nowMs])
+  // The live tail the timeline extends to nowUI: the real open session once it exists, else the
+  // optimistic synthetic session, else null (not broadcasting).
+  const liveSessionId = realLiveSessionId ?? (optimisticLive ? OPT_LIVE_SESSION : null)
+
+  const bufferedLaneRaw = useMemo(() => {
+    const base = [...applySplits(carveBuffer(sessions, claims), splitPoints), ...drafts]
+    if (optimisticLive) base.push(optimisticLive)
+    return base
+  }, [sessions, claims, drafts, splitPoints, optimisticLive])
   // Window the timeline to the buffer window: drop anything fully older than the reaper boundary
   // (removes SAVED clips older than the window). Clips straddling the boundary stay full-extent —
   // the timeline draws an advancing reaper MASK over their reaped part (smooth, on the UI thread),
@@ -849,6 +874,9 @@ export const ClipsScreen = () => {
       }
       const sessionId = clip.sourceSessionId
       if (!sessionId) return
+      // Can't save the optimistic live placeholder — it has no real footage on the backend yet.
+      // (It's replaced by the real session within seconds; save then.)
+      if (sessionId === OPT_LIVE_SESSION) return
       // The backend requires a non-empty `kinds` — resolve from the covered session(s).
       const kindSet = new Set<string>()
       for (const s of sessions) {
@@ -1007,6 +1035,8 @@ export const ClipsScreen = () => {
   const reapAtRef = useRef<number | null>(null)
   reapAtRef.current = reapAtMs
   const openClip = useCallback((clip: LaneClip, kind: 'buffered' | 'saved') => {
+    // The optimistic live placeholder has no real footage yet — don't open the editor on it.
+    if (clip.sourceSessionId === OPT_LIVE_SESSION) return
     // Pass the window so the editor scopes to a carved buffer interval (whose id is synthetic),
     // and the source session so it can play the right buffer footage.
     router.navigate({

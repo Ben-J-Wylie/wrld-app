@@ -3362,20 +3362,24 @@ without per-tick dip or clip-drop flash (single- and multi-session buffers).
 
 ## Clips timeline — north star vs current gaps (2026-06-13, on-device)
 
-The definitive target is **CONTENT.md §6 "The Clips-timeline north star"** (5 invariants). This is the
-work-toward list: what's confirmed good, and the gaps observed on device. (Ben confirmed the
-drag-to-save **duplicate is fixed**; the rest below is open.)
+The definitive target is **CONTENT.md §6 "The Clips-timeline north star"** (now **6** invariants). This
+tracks what's confirmed good and what's been built since the 2026-06-13 on-device pass. (Ben confirmed
+drag-to-save **duplicate fixed**; #3 smooth; #4/#2/#5 reworked; #1 + #6 below.)
 
-| # | North-star invariant | Actual on device | Suspect / where to look |
-|---|---|---|---|
-| 1 | Going live → Clips shows a clip **building on the now edge in real time**, growing continuously, no fetch wait. | ~**10 s** before a clip appears, then length **steps every ~5 s**. | Two parts: (a) the **appear delay** — the app only shows the clip once the buffer fetch returns a session with `endedAt==null` + first flushed media; needs either backend creating the `BufferSession` at go-live, or an **optimistic live clip** from go-live time. (b) the **stepping** — the per-frame `extendLive` (live tail → `nowUI`) isn't smoothing it, so verify `liveSessionId` resolves, `liveTailId` is found (buffered tail reaching newest), and `reaperOnSv` is on (it gates the frame loop incl. `extendLive`; off when `windowMs==0`/buffer still loading). |
-| 2 | Stop → a **trailing gap forms** between the clip tail and the now edge, and grows. | **No gap forms.** | `trailingGap` is gated `!liveSessionId`. After stop, `liveSessionId` (= `sessions.find(endedAt==null)`) likely **lingers** until the next buffer refetch picks up the closed session (≤15 s) — so the gap is suppressed. Consider keying "live" off `broadcastStore.isLive` (immediate) and/or refetching the buffer on stop. |
-| 3 | Play · drag · resume stays smooth. | ✅ **Smooth.** | Keep it — don't regress. |
-| 4 | Drag to **now edge** → clock **NOW + ticking**; drag to **reaper edge** → clock **THEN + ticking** toward eviction. | Now edge: clock **doesn't read NOW**, not ticking. Reaper edge: reads **THEN** but **not ticking**. | `followLive` isn't latching on scrub-to-now (the `c.timeMs >= nowEdgeRef − 1` check in the scrub-follow / `onScrubEnd`) — may have regressed under the server-clock slew (`nowEdge`/`axisTop` vs the scrubbed `timeMs` domains). `reaperRiding` THEN should tick via `TimeScrubber liveTick` — verify `reaperRiding` is true at the edge and `liveTick` actually advances. Note the `live`/`riding` TimeScrubber readout still uses device `Date.now()` (documented), but it should still *tick*. |
-| 5 | Reaper consumes **smoothly while dragging and while playing** — no jumps. | Reaper line is **jumpy** on both drag and play. | The live build now writes `segsSv` **every frame** (`extendLive`) → the derived `layout` + `reaperEdgeXSv` recompute every frame; check this isn't introducing per-frame jitter into the reaper edge during scrub/play (e.g. total growing under an active scroll). Re-verify the monotonic `nowUI` clamp + `effScroll` hold during scrub/play, not just when idle-riding. |
+| # | North-star invariant | Status / what shipped |
+|---|---|---|
+| 1 | Going live → Clips shows a clip **building on the now edge in real time**, no fetch wait. | **Fixed (needs device pass).** Was a ~10 s appear delay (clip only showed once the buffer fetch returned an open session). Now an **OPTIMISTIC live clip** is synthesized from `broadcastStore.liveSince` (stamped at go-live) the instant Clips opens — `ClipsScreen.optimisticLive`, session id `OPT_LIVE_SESSION`, injected into `bufferedLaneRaw`. The timeline's per-frame `extendLive` grows it to `nowUI` (smooth realtime build). Dropped the moment `realLiveSessionId` (newest open session) lands; real footage takes over ≈seamlessly. Save/open guarded against the synthetic session. |
+| 2 | Stop → a **trailing gap forms** and grows ("since last broadcast"). | **Reworked.** Live tail keyed off the **newest open session** (was a stale ghost session). On stop, `liveSessionId` → null → `trailingGap` forms; `isLive`/`liveSince` cleared in the store. |
+| 3 | Play · drag · resume stays smooth. | ✅ **Smooth** — keep, don't regress. |
+| 4 | now edge → clock **NOW + ticking**; reaper edge → **THEN + ticking** toward eviction. | **Reworked.** `getCenter` returns `atNow`/`atReaper`; `ClipsScreen` drives `followLive`/`ridingReaper` from them in scrub-follow / `onScrubEnd` / `goTo` / `goNow` / `goReaper`. NOW pins clock offset to 0 (ticks); reaper THEN ticks via `TimeScrubber liveTick`. |
+| 5 | Reaper consumes **smoothly while dragging and while playing** — no jumps. | **Reworked.** Latch/pin suspended during pan/play (`panningSv`/`playingSv`); monotonic `reaperNowSv` (forward-only clamp); rush-aware `reaperEdgeX`. |
+| 6 | **Reaping + playing + broadcasting locked in sync** (no ~1 s cadence anywhere). | **Fixed (needs device pass).** Root cause of the per-1 s step during playback was JS-thread saturation from 60 fps `setPlayheadMs`. Now `commitPlayhead` **throttles the JS state to ~12 Hz** while `playheadRef` + `scrollToTime` stay per-frame, so reaper edge / playhead / now edge all glide on the one UI-thread clock. |
 
-**Honest note:** #4 and #5 are behaviors earlier passes *attempted* (the `followLive`-on-scroll latch,
-the monotonic reaper clock); they're not landing on device, so the next pass should re-diagnose fresh
-(likely interactions with the server-clock slew and the per-frame live-build `segsSv` writes) rather
-than assume the earlier logic is active. The `[reaper-trace]` + `[clips-save]` `__DEV__` logs are still
-in to support that pass.
+**Server-clock alignment (done):** `GET /buffer/me` returns `serverNowMs`; `ClipsScreen` eases
+`serverOffset = serverNowMs − Date.now()` and runs `nowMs = Date.now() + serverOffset`, so the
+reaper/now edges align with the server-clock-anchored clip geometry (no device skew).
+
+**Still owed:** an on-device pass of #1 (instant optimistic build + seamless handoff to real footage)
+and #6 (no 1 s cadence with all three active). The `[reaper-trace]` + `[clips-save]` `__DEV__` logs are
+still in to support it; strip them once confirmed. Backend follow-up (Aaron): reap/close ghost sessions
+(0-duration, no `endedAt`) so they never masquerade as the live tail.

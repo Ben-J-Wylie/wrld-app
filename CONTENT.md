@@ -332,6 +332,12 @@ tracked in CLAUDE.md "Clips timeline — north star vs current gaps".)
    (red sickle on buffer · black save on saved) consumes footage smoothly — **while
    you drag the timeline and while playback runs** — with no jumps. One monotonic
    clock drives it; nothing makes it stutter or retreat.
+6. **Reaping + playing + broadcasting are locked in sync.** When all three happen at
+   once, the **reaper edge, the playhead, and the now edge advance together** — same
+   clock, same frame. None of them steps every ~1s while another glides; there is no
+   visible 1-second cadence anywhere. The single monotonic UI clock drives every
+   frontier on the UI thread; JS-side state (the playhead value, the window boundary,
+   refetches) is throttled/decoupled so it never imposes its tick rate on the motion.
 
 ---
 
