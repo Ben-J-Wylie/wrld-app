@@ -3310,3 +3310,46 @@ attach the `Report`.
   tooling (admin read/serve routes + the `wrld-admin` UI), which isn't built.
 - **Next app work when the initiative resumes:** the clip-report ⚑ button. Everything
   else (moderator review/takedown) is `wrld-admin` + backend, not `wrld-app`.
+
+---
+
+## Updates — June 2026 (Clips timeline: single-clock model — smooth build + smooth reap)
+
+Reworked the Clips-grid timeline (`ClipsScreen` + `ClipsTimeline`) around ONE principle (now stated
+in CONTENT.md §6): **a single continuous monotonic clock is "now," and every position is
+`timeToX(instant)` off it — the same shape that already makes scroll/play/drag smooth, finally applied
+to the two reaper/now edges and the live build.** This resolves a long bounce/stall saga whose root
+was *three* clocks (server clip geometry · device `nowMs` · the animation-frame clock) reconciling at
+different rates — every bounce was a seam between them.
+
+What landed (all `design`, pure JS — hot-reload, no native rebuild):
+- **One smooth `nowUI` clock** (the UI-thread frame clock) drives the reaper edge AND the now edge.
+  It is **monotonic** — the wall-clock re-anchor may pull it *forward* (catch-up after backgrounding)
+  but never *backward* (the backward drift-snap was the per-tick bounce; clamped out).
+- **Smooth realtime live build.** The open session's segment (`endedAt == null`, passed as
+  `liveSessionId`) is **extended to `nowUI` per-frame** (`extendLive` in `ClipsTimeline`) instead of
+  stepping on the 15s `mediaDurationSec` refetch. So the live clip + the now edge grow continuously,
+  riding the *same* clock as the reaper edge — both edges, one clock. No trailing gap while live.
+- **Reaper edge never passes centre + pulls the now edge in** via a sticky `riding` lock (`scroll`
+  tracks the edge exactly while parked at it); the visual derives from `reaperEdgeXSv` (not the
+  separately-written `scroll`), so a clip-drop can't desync the picture (no `scroll`/decay lag flash).
+- **Leading gap kept, never removed.** A fixed `GAP_W` marker before the oldest clip; the reaper MASK
+  sweeps across it (rushing the final ~3s) rather than the gap being deleted (its deletion was a 22px
+  layout snap). Reads as a light "room" band, then reaped void — no pop.
+- **Time-anchored view** (`scroll = timeToX(P)`, re-pinned on every clip-set change) so reaper drops /
+  refetches never slide footage under the centre playhead.
+- **Clip geometry is server-derived** (confirmed): a clip's start/length come from `startedAt` +
+  `mediaStartOffsetMs` + `mediaDurationSec` — never front-end `now − start` math. `nowUI` is currently
+  **device-clock** (`Date.now()`), which matches the already-smooth playhead.
+
+> **Backend ask (robustness upgrade, NOT blocking) → `HANDOFF-clips-server-clock-2026-06-13.md`.**
+> The clips are server-clock anchored but `nowUI` is device-clock; device↔server skew would misplace
+> the reaper/now edges relative to the footage. Fix: add **`serverNowMs`** to `GET /buffer/me` so the
+> app can run `nowUI = deviceFrameClock + (serverNowMs − Date.now())` (slewed). Two confirmations
+> requested: what `latestAt` represents, and that the live `mediaDurationSec` is monotonic. Mirrored
+> in `wrld-backend/CLAUDE.md` stacked-work.
+
+**`[reaper-trace]` dev logging is still in** (all `__DEV__`-gated, stripped in prod) for Ben's
+on-device verification from `main`; strip in a one-line follow-up once confirmed smooth. **Needs an
+on-device pass** — the live build growing smoothly while broadcasting, and the reaper edge consuming
+without per-tick dip or clip-drop flash (single- and multi-session buffers).

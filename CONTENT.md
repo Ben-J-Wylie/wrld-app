@@ -265,6 +265,22 @@ nuances, not styling — styling lives in DESIGN.md.
   ("alignment is by time, not stream position") made operational; **stalls,
   snap-backs, and 1969 clocks are all symptoms of inverting it** (letting the
   video drive the playhead).
+- **Gap traversal is fixed-duration, for every frontier — not time-linear.** The
+  timeline collapses empty time to a fixed-width marker (above); the temporal
+  analogue is that *every* frontier crosses a gap in a fixed `GAP_RUSH_MS` (≈3s),
+  never at wall-clock rate. The **playhead** rushes a gap the moment it enters
+  one. The **reaper frontier** (the eviction edge, pinned to the real boundary
+  `now − window`) can't take 3s on entry without lying about what's gone, so it
+  parks at the just-eaten edge through the gap's long empty span and rushes the
+  collapsed pixels in the *final* 3s before the footage on the gap's far side
+  begins evicting — arriving at each clip exactly as it ages out. Footage is
+  always consumed at 1×. This holds for the leading gap (rushes 3s before the
+  first clip evicts), interior gaps, and the trailing gap. The reaper edge also
+  **never passes the centre playhead**: parked at the edge, the frontier stays at
+  centre and the now edge is pulled toward it as footage is eaten, until the
+  window is fully evicted (head meets now → the no-clips state). Both frontiers
+  obey one law — the collapsed gap is crossed in fixed time, footage in real
+  time — so consumption reads identically whether played or reaped.
 - **Zoom rescales time, never content.** Pinch is a layout rescale of the time
   axis (clip widths grow/shrink) — *not* a transform scale — so thumbs and labels
   never distort. It's anchored to centre (scales evenly left/right), runs on the

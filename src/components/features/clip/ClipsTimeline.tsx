@@ -24,7 +24,7 @@
 // is fixed-size, so nothing stretches), anchored to the centre. React state only commits in
 // coarse zoom steps, purely to flip the thumb↔film-glyph swap. See DESIGN.md Section 3.
 
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { StyleSheet, View } from 'react-native'
 import Animated, {
   cancelAnimation,
@@ -52,6 +52,7 @@ const CLIP_INSET_Y = 4 // breathing room between a clip block and the top/bottom
 const MIN_CLIP_W = 26 // a short clip stays a tappable block
 const GAP_W = 22 // collapsed (fixed-width) gap marker — the playhead glides across these pixels
 const GAP_THRESHOLD_MS = 500 // unbroadcasted time longer than this is a traversable gap; below = a snip
+const GAP_RUSH_MS = 3000 // a gap is consumed in this fixed real-time (mirrors the transport playhead's rush)
 const LONGEST_DEFAULT_W = 150 // default zoom: the longest clip ≈ this wide
 const MAX_PX_PER_MS = 0.2
 const TICK_MIN_GAP = 48 // hide a ruler stamp whose neighbour is closer than this (px)
@@ -100,6 +101,22 @@ function computeLayout(segs: Seg[], leadGapPx: number, trailGapPx: number, px: n
 function clampW(v: number, lo: number, hi: number) {
   'worklet'
   return Math.max(lo, Math.min(hi, v))
+}
+
+// Extend the LIVE (open) session's segment to the smooth nowUI clock, so the now edge + the live
+// block grow per-frame (a smooth realtime build) instead of stepping on the 15s server refetch. Only
+// the live seg's duration changes — never its start, never any other seg — so older footage and the
+// reaper edge are untouched. `dur` can only grow (max with the server duration), so the build is
+// monotonic. Worklet-tagged (runs in the frame loop + JS).
+function extendLive(base: Seg[], liveIdx: number, nowUiMs: number): Seg[] {
+  'worklet'
+  if (liveIdx < 0 || liveIdx >= base.length) return base
+  const s = base[liveIdx]!
+  const dur = Math.max(s.durMs, nowUiMs - s.startMs)
+  if (dur === s.durMs) return base
+  const out = base.slice()
+  out[liveIdx] = { ...s, durMs: dur }
+  return out
 }
 
 // ── continuous time ⇄ x mapping (interpolates LINEARLY across gap pixels) ──
@@ -180,15 +197,63 @@ function resolveAt(x: number, segs: Seg[], lay: Layout, nowMs: number, leadFromM
   return { clipId: null, timeMs: lastEnd, inGap: true }
 }
 
+// ── the reaper frontier's content-x (gap-rush mapping) ──
+// Where the eviction boundary `B` (= now − window) sits in pixels. Footage is consumed at 1× —
+// linear in the clip, exactly like timeToX. A GAP, instead of being crossed time-linearly (which
+// makes the frontier crawl across the collapsed gap pixels for the gap's whole real duration), is
+// consumed in the FINAL GAP_RUSH_MS before the footage on its FAR side begins evicting: the frontier
+// parks at the just-eaten edge through the gap's long empty span, then rushes the collapsed pixels in
+// the last 3s, landing on the next clip exactly as it ages out. This mirrors the transport playhead's
+// fixed-duration gap rush (see timeToX vs the host clock), but stays pinned to the REAL boundary so it
+// never reports footage gone before it is. Leading, interior, and trailing gaps all obey it.
+function reaperEdgeX(B: number, segs: Seg[], lay: Layout, nowMs: number, leadFromMs: number): number {
+  'worklet'
+  if (!segs.length) return 0
+  const firstStart = segs[0]!.startMs
+  // Leading gap [leadFromMs, firstStart] → pixels [0, leadGapPx]; rush the last GAP_RUSH_MS.
+  if (lay.leadGapPx > 0 && B < firstStart) {
+    if (B <= firstStart - GAP_RUSH_MS) return 0
+    return clampW((B - (firstStart - GAP_RUSH_MS)) / GAP_RUSH_MS, 0, 1) * lay.leadGapPx
+  }
+  if (B <= firstStart) return lay.lefts[0]!
+  for (let i = 0; i < segs.length; i++) {
+    const seg = segs[i]!
+    const left = lay.lefts[i]!
+    const width = lay.widths[i]!
+    // interior gap before this clip → park at the previous clip's tail, rush the last GAP_RUSH_MS.
+    if (i > 0 && seg.gapPx > 0) {
+      const prevEnd = segs[i - 1]!.startMs + segs[i - 1]!.durMs
+      if (B > prevEnd && B < seg.startMs) {
+        const gapLeft = left - seg.gapPx
+        if (B <= seg.startMs - GAP_RUSH_MS) return gapLeft
+        return gapLeft + clampW((B - (seg.startMs - GAP_RUSH_MS)) / GAP_RUSH_MS, 0, 1) * seg.gapPx
+      }
+    }
+    // footage → 1× (linear in the clip)
+    if (B >= seg.startMs && B <= seg.startMs + seg.durMs) {
+      const f = seg.durMs > 0 ? (B - seg.startMs) / seg.durMs : 0
+      return left + f * width
+    }
+  }
+  // trailing gap [lastEnd, nowMs] → [lastRight, total]; rush the last GAP_RUSH_MS before now.
+  const li = segs.length - 1
+  const lastEnd = segs[li]!.startMs + segs[li]!.durMs
+  const lastRight = lay.lefts[li]! + lay.widths[li]!
+  if (B > lastEnd && lay.total > lastRight) {
+    if (B <= nowMs - GAP_RUSH_MS) return lastRight
+    return lastRight + clampW((B - (nowMs - GAP_RUSH_MS)) / GAP_RUSH_MS, 0, 1) * (lay.total - lastRight)
+  }
+  return lastRight
+}
+
 type Props = {
   buffered: LaneClip[]
   saved: LaneClip[]
   nowMs: number
-  // Reaper edge. When NOT reaping, the buffer has room before the oldest footage → a LEADING gap
-  // from `reaperBoundaryMs` (now − window) to the oldest clip (the host shows the countdown card
-  // when the playhead rests there). When `reaping`, the buffer is full → no leading gap; the oldest
-  // edge turns red with a sickle.
-  reaping?: boolean
+  // The open (still-recording) session id, or null. Its segment BUILDS smoothly to the timeline's own
+  // UI clock (nowUI) instead of stepping on the server refetch — so the live clip + the now edge grow
+  // per-frame, riding the SAME clock as the reaper edge (both edges, one clock).
+  liveSessionId?: string | null
   // Which lane the oldest (being-reaped) clip is in → buffer = red sickle, saved = black save icon.
   reaperLane?: 'buffered' | 'saved'
   // The reaper boundary (now − window) in wall-clock + the window length. The timeline advances the
@@ -269,18 +334,22 @@ function AnimatedGap({ layout, index, trailing, leading }: { layout: SharedValue
   )
 }
 
-// The reaper edge at the oldest clip's left edge, within ONE lane. Buffer footage being eaten →
-// red rule + sickle; a saved clip scrolling out (protected) → black rule + save icon. The badge is
-// vertically centred in the lane (so the lane title band can't hide it).
-function AnimatedReaperEdge({ edgeX, top, height, kind }: { edgeX: SharedValue<number>; top: number; height: number; kind: 'reap' | 'save' }) {
+// The reaper edge — ONE vertical rule spanning the WHOLE timeline (ruler + both lanes) at the
+// reaper boundary's content-x, so the time/buffer/saved rows move as one (it reads under the fixed
+// title bands, like the centre playhead). Only the BADGE sits in the lane whose footage is being
+// consumed — buffer → red sickle, saved → black save. Because the rule is full-height, a buffer→
+// saved transition just recolours it + slides the badge; the rule never teleports between lanes.
+function AnimatedReaperEdge({ edgeX, top, height, badgeTop, kind }: { edgeX: SharedValue<number>; top: number; height: number; badgeTop: number; kind: 'reap' | 'save' }) {
   // Ride the reaper boundary's content-x (advanced each frame) → the rule + badge creep across the
-  // clip as smoothly as the playhead. Centre the GAP_W-wide badge on it.
-  const style = useAnimatedStyle(() => ({ left: edgeX.value - GAP_W / 2 }))
+  // clip as smoothly as the playhead. Centre the GAP_W-wide column on it. Hidden until the frontier
+  // has actually consumed something (edgeX > 0) — so during a long pre-reap countdown, when it's
+  // parked at the very oldest start, nothing shows (the host's countdown card speaks instead).
+  const style = useAnimatedStyle(() => ({ left: edgeX.value - GAP_W / 2, opacity: edgeX.value > 0.5 ? 1 : 0 }))
   const color = kind === 'reap' ? REAPER_RED : REAPER_SAVE
   return (
     <Animated.View style={[styles.reaperEdge, { top, height }, style]} pointerEvents="none">
       <View style={[styles.reaperRule, { backgroundColor: color }]} />
-      <View style={[styles.reaperBadge, { backgroundColor: color }]}>
+      <View style={[styles.reaperBadge, { backgroundColor: color, top: badgeTop }]}>
         <MaterialCommunityIcons name={kind === 'reap' ? 'sickle' : 'content-save'} size={14} color={theme.colors.bg.primary} />
       </View>
     </Animated.View>
@@ -288,18 +357,20 @@ function AnimatedReaperEdge({ edgeX, top, height, kind }: { edgeX: SharedValue<n
 }
 
 export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function ClipsTimeline(
-  { buffered, saved, nowMs, reaping, reaperLane = 'buffered', reaperEdgeMs, windowMs = 0, selectedId, onSelect, onOpen, onSave, onUnsave, onScrubStart, onScrubEnd, onCenter }: Props,
+  { buffered, saved, nowMs, liveSessionId, reaperLane = 'buffered', reaperEdgeMs, windowMs = 0, selectedId, onSelect, onOpen, onSave, onUnsave, onScrubStart, onScrubEnd, onCenter }: Props,
   ref,
 ) {
   // Combined set drives the shared axis (buffer + saved don't overlap → one timeline). Sorted
   // oldest→newest with gap-before widths; each clip gets a stable index into the layout arrays.
-  const { segs, trailGapPx, idToIndex, tickIndices, gapIndices, trailingGap } = useMemo(() => {
+  // `liveIdx` = the newest seg belonging to the open session (the one that builds to nowUI).
+  const { segs, trailGapPx, idToIndex, tickIndices, gapIndices, trailingGap, liveIdx } = useMemo(() => {
     const all = [...buffered, ...saved]
       .filter((c) => Number.isFinite(c.startMs) && Number.isFinite(c.endMs) && c.endMs >= c.startMs)
       .sort((a, b) => a.startMs - b.startMs)
     const out: Seg[] = []
     const idx: Record<string, number> = {}
     const gaps: number[] = []
+    let live = -1
     let prevEnd: number | null = null
     for (const c of all) {
       // Snip (contiguous footage) → touching, no marker. Real unbroadcasted-time gap → a fixed
@@ -307,20 +378,34 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
       let gapPx = 0
       if (prevEnd != null && c.startMs - prevEnd > GAP_THRESHOLD_MS) gapPx = GAP_W
       if (gapPx > 0) gaps.push(out.length)
+      if (liveSessionId && c.sourceSessionId === liveSessionId) live = out.length // newest live seg wins
       idx[c.id] = out.length
       out.push({ id: c.id, startMs: c.startMs, durMs: c.endMs - c.startMs, gapPx })
       prevEnd = prevEnd == null ? c.endMs : Math.max(prevEnd, c.endMs)
     }
-    const trailing = prevEnd != null && nowMs > prevEnd + GAP_THRESHOLD_MS
-    return { segs: out, trailGapPx: trailing ? GAP_W : 0, idToIndex: idx, tickIndices: out.map((_, i) => i), gapIndices: gaps, trailingGap: trailing }
-  }, [buffered, saved, nowMs])
+    // No trailing gap while broadcasting — the live seg builds all the way to nowUI, so there's no
+    // empty span between the newest footage and now.
+    const trailing = !liveSessionId && prevEnd != null && nowMs > prevEnd + GAP_THRESHOLD_MS
+    return { segs: out, trailGapPx: trailing ? GAP_W : 0, idToIndex: idx, tickIndices: out.map((_, i) => i), gapIndices: gaps, trailingGap: trailing, liveIdx: live }
+  }, [buffered, saved, nowMs, liveSessionId])
 
-  // Leading gap (reaper edge): exists only when NOT reaping and there's room before the oldest clip.
+  // Leading gap: a FIXED GAP_W marker before the oldest clip, present whenever windowing is active —
+  // and crucially NEVER removed (removing it when reaping starts was the 22px snap that bounced:
+  // total 194→172, a layout shift no scroll value can hide). Instead the gap stays put and the reaper
+  // MASK sweeps across it (rushing the final GAP_RUSH_MS) and then on into the clip. The oldest
+  // clip's content position is constant, so there's no layout shift → no bounce. Visually: while
+  // there's still time before the oldest footage the gap reads as a light band ("room"); once the
+  // mask reaches it, it reads as reaped void — a continuous transition, no pop. So the user always
+  // sees a gap between the reaper and the oldest clip while time remains.
   const firstStartMs = segs[0]?.startMs ?? 0
-  const hasLeadGap = !reaping && reaperEdgeMs != null && segs.length > 0 && reaperEdgeMs < firstStartMs
+  const hasLeadGap = reaperEdgeMs != null && segs.length > 0
   const leadGapPx = hasLeadGap ? GAP_W : 0
-  const leadFromMs = hasLeadGap ? reaperEdgeMs! : firstStartMs
-  const showReaperEdge = !!reaping && segs.length > 0
+  // Scrub/centre mapping floor: the boundary while there's room, clamped to the clip start once
+  // reaping (no scrubbable room left of the footage).
+  const leadFromMs = hasLeadGap ? Math.min(reaperEdgeMs!, firstStartMs) : firstStartMs
+  // The frontier (mask + edge) is mounted whenever windowing is active; it self-hides (0-width mask,
+  // opacity-0 edge) until it has actually consumed something, so it only appears as it engages.
+  const showReaperFrontier = reaperEdgeMs != null && segs.length > 0
 
   const maxDur = useMemo(() => segs.reduce((m, s) => Math.max(m, s.durMs), 0), [segs])
   const [viewportW, setViewportW] = useState(0)
@@ -336,7 +421,12 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
   // ── shared values (UI-thread source of truth) ──
   const px = useSharedValue(0) // px-per-ms zoom
   const scroll = useSharedValue(0) // content-x under the centre playhead (= the scroll offset)
+  // segsSv = the EXTENDED segs (live seg built to nowUI), the one everything renders from. baseSegsSv
+  // holds the raw server segs; the frame loop derives segsSv = extendLive(base, liveIdx, nowUI) each
+  // frame so the live build is smooth. (When not broadcasting, liveIdx < 0 and segsSv == base.)
   const segsSv = useSharedValue<Seg[]>(segs)
+  const baseSegsSv = useSharedValue<Seg[]>(segs)
+  const liveIdxSv = useSharedValue(liveIdx)
   const trailSv = useSharedValue(trailGapPx)
   const leadSv = useSharedValue(leadGapPx)
   const leadFromSv = useSharedValue(leadFromMs)
@@ -362,41 +452,166 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
   const reaperFrameBaseSv = useSharedValue(-1) // frame timestamp at the last resync (-1 = re-anchor)
   const windowMsSv = useSharedValue(0)
   const reaperOnSv = useSharedValue(0) // 1 when windowing is active (reaperEdgeMs present)
+  // 1 while the centre is RIDING the reaper edge (parked at it) — sticky across clip-drops. While
+  // riding, the frame-lock is the SOLE scroll authority and tracks the edge EXACTLY (up and down) so
+  // a layout shift (a clip leaving the set) slides scroll with the edge → no bounce. Released when
+  // the user scrolls away toward newer footage.
+  const ridingSv = useSharedValue(0)
+  // [reaper-trace] dev-only frame sampler + transition loggers (stripped in prod via __DEV__).
+  const frameLogSv = useSharedValue(0)
+  const logFrame = useCallback((scrollV: number, edgeV: number, riding: number, total: number, edgeScreen: number) => {
+    if (__DEV__) console.log('[reaper-trace] FRAME scroll', Math.round(scrollV), 'edge', Math.round(edgeV), 'edgeScreen', Math.round(edgeScreen), 'riding', riding, 'total', Math.round(total))
+  }, [])
+  const logRiding = useCallback((on: number, scrollV: number, edgeV: number) => {
+    if (__DEV__) console.log('[reaper-trace] RIDING', on ? 'LATCH' : 'RELEASE', 'scroll', Math.round(scrollV), 'edge', Math.round(edgeV))
+  }, [])
+  // Cumulative pixel layout at the live zoom (UI thread). Declared before the frame callback so the
+  // worklet below can read it (reanimated captures closure refs at definition time).
+  const layout = useDerivedValue(() => computeLayout(segsSv.value, leadSv.value, trailSv.value, px.value))
   useFrameCallback((frame) => {
     'worklet'
     if (!reaperOnSv.value) return
     if (reaperFrameBaseSv.value < 0) reaperFrameBaseSv.value = frame.timeSinceFirstFrame
-    reaperNowSv.value = reaperAnchorSv.value + (frame.timeSinceFirstFrame - reaperFrameBaseSv.value)
+    // MONOTONIC: the reaper clock can only advance. reaperNow is re-anchored to the wall clock (nowMs)
+    // each tick, but advances BETWEEN ticks on the animation-frame clock — the two drift, so a naive
+    // re-anchor snaps reaperNow backward by a few px → the mask retreats → a per-tick bounce. The real
+    // boundary (now − window) is monotonic, so clamp: only ever take the larger value. A forward snap
+    // (catch-up after the screen was backgrounded) is fine; a backward one is the drift dip, clamped out.
+    // This is the single "nowUI" clock — it drives BOTH the reaper edge (below) AND the live build.
+    reaperNowSv.value = Math.max(reaperNowSv.value, reaperAnchorSv.value + (frame.timeSinceFirstFrame - reaperFrameBaseSv.value))
+    // Live build: grow the open session's seg to nowUI each frame (smooth) — same clock as the edge.
+    if (liveIdxSv.value >= 0) segsSv.value = extendLive(baseSegsSv.value, liveIdxSv.value, reaperNowSv.value)
+    // ── invariant: the reaper edge never passes the centre playhead ──
+    // The edge's content-x at this frame (the boundary now − window, via the gap-rush mapping):
+    const edgeX = reaperEdgeX(reaperNowSv.value - windowMsSv.value, segsSv.value, layout.value, nowSv.value, leadFromSv.value)
+    const total = layout.value.total
+    if (ridingSv.value) {
+      // Riding the edge → lock scroll TO it EXACTLY (up AND down). This is the key to no-bounce: when
+      // a clip leaves the set the layout's x=0 shifts and `edgeX` jumps (e.g. to 0); scroll follows it
+      // down in the same breath, so the edge stays pinned at centre and the mask stays exactly at
+      // centre — the dropped clip's reaped pixels are simply replaced by the void, nothing reappears.
+      // The now edge is pulled toward centre as footage is eaten, until the window is fully evicted.
+      scroll.value = Math.min(edgeX, total)
+    } else if (scroll.value <= edgeX + 1.5) {
+      // Scroll reached the edge (button-1, or scrubbed left into it) → snap on and LATCH riding.
+      // Floors the scroll too: a left-scroll can't enter the already-reaped void. Cancel any leftover
+      // fling decay so it can't keep driving scroll against the lock.
+      cancelAnimation(scroll)
+      scroll.value = Math.min(edgeX, total)
+      ridingSv.value = 1
+      runOnJS(logRiding)(1, scroll.value, edgeX)
+    }
+    // [reaper-trace] sample the steady state ~2×/s. edgeScreen uses the ACTUAL visual anchor (effScroll
+    // = reaperEdgeX while riding, else scroll) so it matches what's on screen.
+    frameLogSv.value += 1
+    if (frameLogSv.value >= 30) {
+      frameLogSv.value = 0
+      const effVis = ridingSv.value ? edgeX : scroll.value
+      runOnJS(logFrame)(scroll.value, edgeX, ridingSv.value, total, vpSv.value / 2 - effVis + edgeX)
+    }
   })
-  const layout = useDerivedValue(() => computeLayout(segsSv.value, leadSv.value, trailSv.value, px.value))
-  // The reaper boundary's CONTENT-x (where the mask ends + the edge sits), advanced each frame.
+  // The reaper boundary's CONTENT-x (where the mask ends + the edge sits), advanced each frame —
+  // via the gap-rush mapping (footage 1×, gaps consumed in a fixed GAP_RUSH_MS).
   const reaperEdgeXSv = useDerivedValue(() => {
     if (!reaperOnSv.value) return 0
-    return timeToX(reaperNowSv.value - windowMsSv.value, segsSv.value, layout.value, nowSv.value, leadFromSv.value)
+    return reaperEdgeX(reaperNowSv.value - windowMsSv.value, segsSv.value, layout.value, nowSv.value, leadFromSv.value)
   })
 
   // Re-anchor the frame clock whenever the JS reaper edge resyncs (the slow now tick). The frame
-  // loop runs ONLY while actively reaping (a clip is being consumed) — otherwise the UI thread idles.
+  // loop runs whenever windowing is active (a buffer window exists) — not only once a clip is being
+  // eaten — so the LEADING gap can rush in its final 3s BEFORE the first clip starts evicting. The
+  // frontier is invisible (0-width mask, hidden edge) while parked far from any footage, so this
+  // costs one timeToX-class compare per frame and nothing visual until it engages.
   useEffect(() => {
-    if (reaperEdgeMs == null || !reaping) {
+    if (reaperEdgeMs == null) {
       reaperOnSv.value = 0
+      ridingSv.value = 0
       return
     }
     reaperOnSv.value = 1
     windowMsSv.value = windowMs
-    reaperAnchorSv.value = reaperEdgeMs + windowMs // = now at sync (edge = now − window)
-    reaperNowSv.value = reaperEdgeMs + windowMs
+    // MONOTONIC re-anchor: never let the wall-clock resync pull reaperNow BACKWARD (the drift dip).
+    // Take max(current, wall), anchor from THAT, and reset the frame base so the per-frame advance
+    // continues seamlessly from it — forward catch-up is allowed, backward is clamped out.
+    const mono = Math.max(reaperNowSv.value, reaperEdgeMs + windowMs)
+    reaperNowSv.value = mono
+    reaperAnchorSv.value = mono
     reaperFrameBaseSv.value = -1 // re-anchor the frame base on the next frame
-  }, [reaperEdgeMs, windowMs, reaping, reaperOnSv, windowMsSv, reaperAnchorSv, reaperNowSv, reaperFrameBaseSv])
+  }, [reaperEdgeMs, windowMs, reaperOnSv, ridingSv, windowMsSv, reaperAnchorSv, reaperNowSv, reaperFrameBaseSv])
 
-  // Keep the worklet inputs in sync with the JS-side precompute / measurements.
-  useEffect(() => {
-    segsSv.value = segs
+  // Keep the worklet inputs in sync with the JS-side precompute / measurements — AND preserve the
+  // wall-clock instant under the centre playhead across the change. The timeline lays out by pixels;
+  // when the footage set changes (a reaper drop, a 15s refetch, a save/un-save) the layout shifts,
+  // and without re-pinning the content would slide under the fixed playhead — footage popping in/out.
+  // So: capture the centre's instant in the OLD layout, apply the new inputs, then re-pin scroll to
+  // the SAME instant in the NEW layout.
+  //
+  // Two deliberate details:
+  //  • useLAYOUTeffect, not useEffect — so segsSv (and the derived `layout`) update SYNCHRONOUSLY with
+  //    the React render that re-keyed the clip blocks. A plain effect runs after paint, leaving one
+  //    frame where new clip blocks are positioned against the OLD layout → the bounce.
+  //  • While RIDING the reaper edge, skip the scroll re-pin entirely — the frame-lock owns scroll then
+  //    and tracks the edge via reaperEdgeX (the rush mapping). Re-pinning here would use the LINEAR
+  //    timeToX, which disagrees with the rush mapping across a gap and would fight the lock.
+  const prevLayoutInputs = useRef<{ segs: Seg[]; lead: number; trail: number; leadFrom: number; now: number } | null>(null)
+  useLayoutEffect(() => {
+    const p = px.value || defaultPx
+    const prev = prevLayoutInputs.current
+    const scrollBefore = scroll.value // [reaper-trace] capture before any re-pin
+    // Capture the centre's instant in the OLD layout BEFORE swapping segs (linear center-preserve,
+    // used only when NOT riding the reaper edge).
+    const repin = !!prev && p > 0 && prev.segs.length > 0 && !ridingSv.value
+    let centerTime = 0
+    if (repin) {
+      const oldLay = computeLayout(prev!.segs, prev!.lead, prev!.trail, p)
+      centerTime = resolveAt(scroll.value, prev!.segs, oldLay, prev!.now, prev!.leadFrom).timeMs
+    }
+    // Publish the raw server segs as the base + the live index, then the EXTENDED segs (live seg built
+    // to nowUI) as what everything renders from. The frame loop keeps segsSv growing per-frame; this
+    // sets it synchronously on a data change so JS reads right after are already current.
+    baseSegsSv.value = segs
+    liveIdxSv.value = liveIdx
+    segsSv.value = extendLive(segs, liveIdx, reaperNowSv.value)
     trailSv.value = trailGapPx
     leadSv.value = leadGapPx
     leadFromSv.value = leadFromMs
     nowSv.value = nowMs
-  }, [segs, trailGapPx, leadGapPx, leadFromMs, nowMs, segsSv, trailSv, leadSv, leadFromSv, nowSv])
+    if (p > 0) {
+      const newLay = computeLayout(segs, leadGapPx, trailGapPx, p)
+      if (ridingSv.value) {
+        // Riding → re-pin scroll to the reaper edge in the NEW layout (the SAME rush mapping the
+        // frame-lock uses), ATOMICALLY with segs, so a clip-drop is seamless with zero stale frames.
+        const B = reaperNowSv.value - windowMs
+        scroll.value = clamp(reaperEdgeX(B, segs, newLay, nowMs, leadFromMs), 0, newLay.total)
+      } else if (repin) {
+        scroll.value = clamp(timeToX(centerTime, segs, newLay, nowMs, leadFromMs), 0, newLay.total)
+      }
+    }
+    // [reaper-trace] Did the reaper edge's SCREEN position jump across this reconcile? If edgeScreen
+    // before≠after, that delta IS the visible bounce; `path` says which branch produced it.
+    if (__DEV__ && p > 0) {
+      const B = reaperNowSv.value - windowMs
+      const half = vpSv.value / 2
+      const newL = computeLayout(segs, leadGapPx, trailGapPx, p)
+      const newEdge = reaperEdgeX(B, segs, newL, nowMs, leadFromMs)
+      // edgeScreen uses the ACTUAL visual anchor (effScroll = reaperEdgeX while riding, else scroll).
+      const edgeScreenAfter = half - (ridingSv.value ? newEdge : scroll.value) + newEdge
+      let beforeStr = '-'
+      if (prev) {
+        const oldL = computeLayout(prev.segs, prev.lead, prev.trail, p)
+        const oldEdge = reaperEdgeX(B, prev.segs, oldL, prev.now, prev.leadFrom)
+        beforeStr = `${Math.round(half - (ridingSv.value ? oldEdge : scrollBefore) + oldEdge)}`
+      }
+      console.log(
+        '[reaper-trace] RECONCILE',
+        'segs', (prev?.segs.length ?? 0), '→', segs.length,
+        'path', ridingSv.value ? 'RIDING' : repin ? 'linear' : 'none',
+        'scroll', Math.round(scrollBefore), '→', Math.round(scroll.value),
+        'edgeScreen', beforeStr, '→', Math.round(edgeScreenAfter),
+      )
+    }
+    prevLayoutInputs.current = { segs, lead: leadGapPx, trail: trailGapPx, leadFrom: leadFromMs, now: nowMs }
+  }, [segs, liveIdx, trailGapPx, leadGapPx, leadFromMs, nowMs, windowMs, segsSv, baseSegsSv, liveIdxSv, trailSv, leadSv, leadFromSv, nowSv, px, scroll, defaultPx, ridingSv, reaperNowSv, vpSv])
   useEffect(() => {
     minPxSv.value = minPx
     maxPxSv.value = maxPx
@@ -424,10 +639,14 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
       if (p <= 0) return
       const lay = computeLayout(segs, leadGapPx, trailGapPx, p)
       const target = clamp(timeToX(ms, segs, lay, nowMs, leadFromMs), 0, lay.total)
+      // A host-driven move (playback follow, nav, dial) to a non-edge instant releases the reaper
+      // ride, so the frame-lock stops pinning scroll to the edge and lets playback scroll forward.
+      // Moving TO the edge (transport button-1) leaves it to re-latch via the frame-lock.
+      if (target > reaperEdgeXSv.value + 8) ridingSv.value = 0
       cancelAnimation(scroll)
       scroll.value = animated ? withTiming(target, { duration: 240 }) : target
     },
-    [segs, leadGapPx, trailGapPx, leadFromMs, defaultPx, px, scroll, nowMs],
+    [segs, leadGapPx, trailGapPx, leadFromMs, defaultPx, px, scroll, nowMs, reaperEdgeXSv, ridingSv],
   )
   // The clip + instant + inGap currently under the centre playhead (read on demand).
   const getCenter = useCallback(() => {
@@ -495,6 +714,12 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
           'worklet'
           if (twoFingers.value) return // a 2nd finger landed → defer to pinch, stop scrolling
           scroll.value = clampW(scroll.value - e.changeX, 0, layout.value.total)
+          // Scrolling away from the reaper edge toward newer footage releases the ride (hysteresis so
+          // a jitter at the edge doesn't drop it). The frame-lock then only floors at the edge.
+          if (ridingSv.value && scroll.value > reaperEdgeXSv.value + 8) {
+            ridingSv.value = 0
+            runOnJS(logRiding)(0, scroll.value, reaperEdgeXSv.value)
+          }
         })
         .onEnd((e) => {
           'worklet'
@@ -512,7 +737,7 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
             runOnJS(notifyScrubEnd)(r.clipId, r.timeMs)
           })
         }),
-    [scroll, layout, segsSv, nowSv, leadFromSv, notifyScrubStart, notifyScrubEnd, twoFingers],
+    [scroll, layout, segsSv, nowSv, leadFromSv, notifyScrubStart, notifyScrubEnd, twoFingers, ridingSv, reaperEdgeXSv, logRiding],
   )
 
   const pinchGesture = useMemo(
@@ -575,22 +800,28 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
 
   const gesture = useMemo(() => Gesture.Simultaneous(panGesture, pinchGesture), [panGesture, pinchGesture])
 
-  // Animated content container: width tracks the zoom; translateX positions the centre playhead
-  // (padX − scroll, where padX = viewportW/2). One transform drives the whole timeline's scroll.
-  const contentStyle = useAnimatedStyle(() => ({
-    width: Math.max(layout.value.total, 1),
-    transform: [{ translateX: vpSv.value / 2 - scroll.value }],
-  }))
+  // Animated content container: width tracks the zoom; translateX positions the centre playhead.
+  // While RIDING, the transform derives from `reaperEdgeXSv` (the SAME derived value the mask uses),
+  // NOT the separately-written `scroll`. This is the no-flash fix: on a clip-drop, `reaperEdgeXSv`
+  // and `layout` both recompute from `segsSv` atomically, so the edge, mask and clips move together;
+  // `scroll` is a separate shared value that can lag by a frame (a leftover withDecay can even defeat
+  // its re-pin), which is exactly the 199→54 one-frame flash the trace caught. `scroll` is still kept
+  // in sync by the frame-lock for gesture/centre logic, but the picture no longer depends on it.
+  const contentStyle = useAnimatedStyle(() => {
+    const eff = ridingSv.value ? reaperEdgeXSv.value : scroll.value
+    return { width: Math.max(layout.value.total, 1), transform: [{ translateX: vpSv.value / 2 - eff }] }
+  })
 
   // Dark caps beyond the buffer window — the empty viewport area left of the oldest footage (head =
   // reaper edge) and right of now (tail). They show "you've hit the end of the buffer." Positioned in
   // VIEWPORT space (not the scrolling content), so they grow into view exactly as an edge reaches centre.
-  const headCapStyle = useAnimatedStyle(() => ({ width: Math.max(0, vpSv.value / 2 - scroll.value) }))
+  const headCapStyle = useAnimatedStyle(() => ({ width: Math.max(0, vpSv.value / 2 - (ridingSv.value ? reaperEdgeXSv.value : scroll.value)) }))
   // The reaper mask (content coords, ON TOP of the clips): covers [0, reaperEdgeX] — the part of the
   // oldest clip already eaten. reaperEdgeX advances every frame → the clip is consumed smoothly.
   const reaperMaskStyle = useAnimatedStyle(() => ({ width: Math.max(0, reaperEdgeXSv.value) }))
   const tailCapStyle = useAnimatedStyle(() => {
-    const edge = vpSv.value / 2 - scroll.value + layout.value.total // viewport-x of the now edge
+    const eff = ridingSv.value ? reaperEdgeXSv.value : scroll.value
+    const edge = vpSv.value / 2 - eff + layout.value.total // viewport-x of the now edge
     return { left: edge, width: Math.max(0, vpSv.value - edge) }
   })
 
@@ -668,17 +899,19 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
                 {/* clip lanes (positioned around the fixed title bands) */}
                 {renderLane(buffered, 'buffered', bufferTop)}
                 {renderLane(saved, 'saved', savedTop)}
-                {/* reaper mask — the eaten part of the oldest clip [0, reaperEdgeX], ON TOP of the
-                    lanes so the consumed footage reads as gone; advances every frame. */}
-                {showReaperEdge ? <Animated.View style={[styles.reaperMask, reaperMaskStyle]} pointerEvents="none" /> : null}
-                {/* reaper edge while actively reaping — red sickle (buffer) / black save (saved), in
-                    the lane the oldest clip lives in. Rendered ON TOP of the lanes so the clip block
-                    can't cut off the badge; centred (vert + horiz) on the oldest clip's edge. */}
-                {showReaperEdge ? (
+                {/* reaper mask — the consumed span [0, reaperEdgeX], ON TOP of the lanes so eaten
+                    footage reads as gone; advances every frame (0-width until the frontier engages). */}
+                {showReaperFrontier ? <Animated.View style={[styles.reaperMask, reaperMaskStyle]} pointerEvents="none" /> : null}
+                {/* reaper edge while actively reaping — a full-height rule (ruler + both lanes) so
+                    the rows move as one, with the badge in the lane the oldest clip lives in (red
+                    sickle = buffer eaten · black save = saved scrolling out). Rendered ON TOP of the
+                    lanes so a clip block can't cut off the badge. */}
+                {showReaperFrontier ? (
                   <AnimatedReaperEdge
                     edgeX={reaperEdgeXSv}
-                    top={reaperLane === 'saved' ? savedTop : bufferTop}
-                    height={laneHeight}
+                    top={0}
+                    height={regionH}
+                    badgeTop={(reaperLane === 'saved' ? savedTop : bufferTop) + (laneHeight - 22) / 2}
                     kind={reaperLane === 'saved' ? 'save' : 'reap'}
                   />
                 ) : null}
@@ -744,20 +977,21 @@ const styles = StyleSheet.create({
   headCap: {
     left: 0,
   },
-  // The consumed (reaped) region over the oldest clip — content coords, left-anchored, full height.
+  // The consumed (reaped) region over the oldest clip — content coords, left-anchored. Spans the
+  // FULL height (top: 0, incl. the ruler) so the reaped void reaches centre in every row, matching
+  // the head cap + the lanes; masking at RULER_H left the ruler's dark edge short of centre by the
+  // boundary's offset into the oldest clip (a visible misalignment while reaping).
   reaperMask: {
     position: 'absolute',
     left: 0,
-    top: RULER_H,
+    top: 0,
     bottom: 0,
     backgroundColor: theme.colors.bg.panelHi,
   },
-  // Reaper edge at the oldest clip's edge — a rule spanning the lane + a badge centred in it.
+  // Reaper edge — a full-height rule (spans the column) + a badge whose `top` is set per active lane.
   reaperEdge: {
     position: 'absolute',
     width: GAP_W,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   reaperRule: {
     position: 'absolute',
@@ -767,6 +1001,8 @@ const styles = StyleSheet.create({
     width: 2,
   },
   reaperBadge: {
+    position: 'absolute',
+    left: GAP_W / 2 - 11,
     width: 22,
     height: 22,
     borderRadius: 11,

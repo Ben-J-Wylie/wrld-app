@@ -185,12 +185,35 @@ export const ClipsScreen = () => {
 
   // ── lanes: buffer = footage minus saved ranges (carve); saved = the saved clips ──
   const sessions = useMemo(() => buffer?.sessions ?? [], [buffer])
+  // The open (still-recording) session, if any. Its footage block should BUILD smoothly to "now"
+  // while broadcasting rather than stepping on the 15s refetch — the timeline extends this session's
+  // segment to its own smooth UI clock. `endedAt == null` is the server's "still live" signal.
+  const liveSessionId = useMemo(() => sessions.find((s) => s.endedAt == null)?.id ?? null, [sessions])
 
-  // ── time reference (now / reaper window) ── now ticks every 10s; the buffer keeps the last
-  // `windowHours` so anything older than `windowStartMs` (the reaper boundary) is reaped/gone.
+  // [reaper-trace] On each buffer refetch, log every session's geometry as "seconds ago" so we can
+  // see whether the backend changes the oldest session's start/end across refetches (the suspected
+  // 15s-cadence bounce). Stripped in prod.
+  useEffect(() => {
+    if (!__DEV__) return
+    const t = Date.now()
+    const rows = (buffer?.sessions ?? []).map((s) => {
+      const start = Date.parse(s.startedAt) + (s.mediaStartOffsetMs ?? 0)
+      const end = start + (s.mediaDurationSec ?? s.durationSec ?? 0) * 1000
+      return `${s.id.slice(-4)}[${Math.round((t - start) / 1000)}s→${Math.round((t - end) / 1000)}s]`
+    })
+    console.log('[reaper-trace] BUFFER refetch · windowH', buffer?.windowHours, '· sessions', rows.join(' '))
+  }, [buffer])
+
+  // ── time reference (now / reaper window) ── now ticks every 1s so the JS-side window boundary
+  // (`windowStartMs`, which drives clip-drops + the reaper edge re-anchor) tracks the wall clock
+  // closely. The reaper MASK glides continuously on the UI thread (real time); if `nowMs` only
+  // ticked every 10s, the mask would run up to 10s ahead and the boundary would then lurch forward
+  // in one step — a clip drop + re-anchor you can see as a stall-then-pop. At 1s the smooth mask and
+  // the discrete drop reconcile within a frame's worth of footage (sub-pixel), so consumption reads
+  // as one continuous wall-clock motion. (The network refetch stays at 15s — see below.)
   const [nowMs, setNowMs] = useState(() => Date.now())
   useEffect(() => {
-    const id = setInterval(() => setNowMs(Date.now()), 10_000)
+    const id = setInterval(() => setNowMs(Date.now()), 1_000)
     return () => clearInterval(id)
   }, [])
   const windowMs = (buffer?.windowHours ?? 0) * 3_600_000
@@ -639,6 +662,10 @@ export const ClipsScreen = () => {
       if (!c) return
       playheadRef.current = c.timeMs
       setPlayheadMs(c.timeMs) // the playhead follows the scrub
+      // Scrubbed all the way to the now edge → the clock reads NOW (ticking), not THEN. The timeline
+      // clamps the centre time to `nowEdge` at full-right, so this latches exactly at the edge and
+      // clears the instant you scrub back off it.
+      setFollowLive(c.timeMs >= nowEdgeRef.current - 1)
       if (c.inGap || !c.clipId || c.clipId !== playerIdRef.current) return // gap / not-yet-loaded → no seek
       if (!player.duration || player.duration <= 0) return
       const delta = (c.timeMs - vodStartRef.current) / 1000 - player.currentTime
@@ -661,6 +688,9 @@ export const ClipsScreen = () => {
       setScrubbing(false)
       if (id) setCenterClipId(id)
       if (id && id === playerIdRef.current) seekTo(timeMs) // settle the exact landed frame
+      // Settled on the now edge → pin the clock to NOW. (At the edge `id` is null, so the seekTo
+      // above — which clears followLive — never runs; set it explicitly here after, regardless.)
+      if (timeMs >= nowEdgeRef.current - 1) setFollowLive(true)
       // Was playing → resume from where the fling LANDED (the settle was the wait; no fixed timer).
       if (scrubResumePlayingRef.current) player.play()
     },
@@ -871,6 +901,28 @@ export const ClipsScreen = () => {
   const oldestClip = orderedClips[0] ?? null
   const reaping = windowStartMs != null && oldestClip != null && oldestClip.startMs <= windowStartMs + 1
   const reaperLane: 'buffered' | 'saved' = oldestClip != null && savedLane.some((c) => c.id === oldestClip.id) ? 'saved' : 'buffered'
+
+  // [reaper-trace] Log the lane/boundary state whenever the clip COUNT or the oldest clip's identity
+  // changes — i.e. exactly when a clip drops or appears. Reveals drop cadence (1s tick vs 15s refetch)
+  // and whether the oldest clip's id/window shifts. Stripped in prod.
+  const laneTraceRef = useRef('')
+  useEffect(() => {
+    if (!__DEV__) return
+    const t = Date.now()
+    const sig = `${bufferedLane.length}/${savedLane.length}|${oldestClip?.id ?? '-'}`
+    if (sig === laneTraceRef.current) return
+    const dropped = laneTraceRef.current.split('|')[0] !== `${bufferedLane.length}/${savedLane.length}`
+    laneTraceRef.current = sig
+    console.log(
+      '[reaper-trace] LANES',
+      dropped ? '⟵DROP/ADD' : '',
+      'buf/sav', `${bufferedLane.length}/${savedLane.length}`,
+      'reaping', reaping,
+      'lane', reaperLane,
+      'oldest', oldestClip ? `${oldestClip.id.slice(-12)} [${Math.round((t - oldestClip.startMs) / 1000)}s→${Math.round((t - oldestClip.endMs) / 1000)}s]` : '-',
+      'windowStart', windowStartMs != null ? `${Math.round((t - windowStartMs) / 1000)}s ago` : '-',
+    )
+  }, [bufferedLane.length, savedLane.length, oldestClip, reaping, reaperLane, windowStartMs])
   const reaperBoundaryMs = windowStartMs != null && !reaping ? windowStartMs : null
   const reapAtMs = oldestClip != null && windowMs > 0 ? oldestClip.startMs + windowMs : null
   const reapAtRef = useRef<number | null>(null)
@@ -1131,7 +1183,7 @@ export const ClipsScreen = () => {
             buffered={bufferedLane}
             saved={savedLane}
             nowMs={axisTop}
-            reaping={reaping}
+            liveSessionId={liveSessionId}
             reaperLane={reaperLane}
             reaperEdgeMs={windowStartMs}
             windowMs={windowMs}
