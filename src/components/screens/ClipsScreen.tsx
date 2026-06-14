@@ -401,6 +401,28 @@ export const ClipsScreen = () => {
   const allClips = useMemo(() => [...bufferedLane, ...savedLane], [bufferedLane, savedLane])
   const hasAny = allClips.length > 0
 
+  // [reaper-trace] APPEAR-DELAY gate. Fires whenever any gate flips — at go-live + when the real
+  // session lands. Tells us EXACTLY why a clip isn't building yet: optimistic must be true the instant
+  // we're live (if false → which of isLive/liveSince/realLiveSessionId killed it); hasAny must be true
+  // to render the timeline at all; windowOn (windowMs>0 + reaperEdgeMs set) must be true for the smooth
+  // build machinery (frame loop / extendLive) to run — if it's false the clip can't build smoothly.
+  useEffect(() => {
+    if (!__DEV__) return
+    const optimistic = isLive && liveSince != null && !realLiveSessionId
+    console.log(
+      '[reaper-trace] GATE',
+      '· isLive', isLive,
+      '· liveSinceAgo', liveSince != null ? `${Math.round((Date.now() - liveSince) / 1000)}s` : '—',
+      '· realLiveSession', realLiveSessionId?.slice(-6) ?? '—',
+      '· optimistic', optimistic,
+      '· buf/sav', `${bufferedLane.length}/${savedLane.length}`,
+      '· hasAny', hasAny,
+      '· windowH', buffer?.windowHours ?? '—',
+      '· windowOn', windowMs > 0 && windowStartMs != null,
+      '· sessions', sessions.length,
+    )
+  }, [isLive, liveSince, realLiveSessionId, bufferedLane.length, savedLane.length, hasAny, buffer?.windowHours, windowMs, windowStartMs, sessions.length])
+
   // Prune pending saves once the real list has caught up.
   useEffect(() => {
     setPendingSaves((prev) => {

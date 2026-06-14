@@ -479,6 +479,13 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
   const reaperFrameBaseSv = useSharedValue(-1) // frame timestamp at the last resync (-1 = re-anchor)
   const windowMsSv = useSharedValue(0)
   const reaperOnSv = useSharedValue(0) // 1 when windowing is active (reaperEdgeMs present)
+  // [reaper-trace] discontinuity detector: a UI-thread observer of scroll + layout.total. The visible
+  // "jump" is a sudden frame-to-frame change in scroll (footage teleports) or total (now edge teleports)
+  // — whoever wrote it (frame loop / RAF play loop / layout effect). prevScroll/prevTotal hold last frame.
+  const prevScrollSv = useSharedValue(-1)
+  const prevTotalSv = useSharedValue(-1)
+  const prevDeltaSv = useSharedValue(0) // last frame's scroll delta — for jerk (2nd-difference) detection
+  const prevTotalDeltaSv = useSharedValue(0) // last frame's total delta — jerk on the now edge (live build)
   // 1 while the centre is RIDING the reaper edge (parked at it) — sticky across clip-drops. While
   // riding, the frame-lock is the SOLE scroll authority and tracks the edge EXACTLY (up and down) so
   // a layout shift (a clip leaving the set) slides scroll with the edge → no bounce. Released when
@@ -498,6 +505,9 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
   }, [])
   const logRiding = useCallback((on: number, scrollV: number, edgeV: number) => {
     if (__DEV__) console.log('[reaper-trace] RIDING', on ? 'LATCH' : 'RELEASE', 'scroll', Math.round(scrollV), 'edge', Math.round(edgeV))
+  }, [])
+  const logJump = useCallback((dScroll: number, dTotal: number, riding: number, playing: number, panning: number, total: number, segLen: number) => {
+    if (__DEV__) console.log('[reaper-trace] JUMP Δscroll', Math.round(dScroll), 'Δtotal', Math.round(dTotal), 'riding', riding, 'playing', playing, 'panning', panning, 'total', Math.round(total), 'segs', segLen)
   }, [])
   // Cumulative pixel layout at the live zoom (UI thread). Declared before the frame callback so the
   // worklet below can read it (reanimated captures closure refs at definition time).
@@ -541,7 +551,26 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
       ridingSv.value = 1
       runOnJS(logRiding)(1, scroll.value, edgeX)
     }
-    // [reaper-trace] sample the steady state ~2×/s. edgeScreen uses the ACTUAL visual anchor (effScroll
+    // [reaper-trace] DISCONTINUITY: a sudden frame-to-frame change in the VISUAL anchor (effScroll =
+    // edgeX while riding, else scroll) or in total IS the jump, whoever wrote it. Detected on the UI
+    // thread so it catches RAF-loop + layout-effect writes too. Ignore the first frame + active pinch.
+    const effNow = ridingSv.value ? edgeX : scroll.value
+    if (prevScrollSv.value >= 0 && !twoFingers.value) {
+      const dS = effNow - prevScrollSv.value
+      const dT = total - prevTotalSv.value
+      // Jerk: a smooth ramp (steady playback, even fast at fine zoom) has near-constant delta, so
+      // dS−prevDelta ≈ 0. A one-frame teleport spikes it. Flag jerk OR a sudden total (now-edge) step.
+      const jerk = dS - prevDeltaSv.value
+      const totalJerk = dT - prevTotalDeltaSv.value
+      if (Math.abs(jerk) > 4 || Math.abs(totalJerk) > 4) {
+        runOnJS(logJump)(dS, dT, ridingSv.value, playingSv.value, panningSv.value, total, segsSv.value.length)
+      }
+      prevDeltaSv.value = dS
+      prevTotalDeltaSv.value = dT
+    }
+    prevScrollSv.value = effNow
+    prevTotalSv.value = total
+    // sample the steady state ~2×/s. edgeScreen uses the ACTUAL visual anchor (effScroll
     // = reaperEdgeX while riding, else scroll) so it matches what's on screen.
     frameLogSv.value += 1
     if (frameLogSv.value >= 30) {
