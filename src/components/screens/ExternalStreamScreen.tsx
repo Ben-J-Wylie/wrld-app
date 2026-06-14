@@ -11,14 +11,13 @@
 // `isExternal=true`; everything else still renders the WebRTC StreamScreen.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native'
+import { ActivityIndicator, StyleSheet, View } from 'react-native'
 import { useLocalSearchParams, router, useFocusEffect } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useVideoPlayer, VideoView } from 'expo-video'
 import { Text } from '@/components/primitives/Text'
-import { Icon } from '@/components/primitives/Icon'
 import { IconButton } from '@/components/primitives/IconButton'
-import { Avatar } from '@/components/primitives/Avatar'
+import { ScreenHeader } from '@/components/sections/ScreenHeader'
 import { LivePill } from '@/components/features/stream/LivePill'
 import { useStreamByRoom } from '@/hooks/useStream'
 import { useBroadcasterClock } from '@/hooks/useBroadcasterClock'
@@ -47,6 +46,9 @@ export function ExternalStreamScreen() {
   const { isFullscreen, enter: enterFullscreen, exit: exitFullscreen } = useFullscreenVideo()
   const [videoIsLandscape, setVideoIsLandscape] = useState(true)
   const [muted, setMuted] = useState(false)
+  // Measured bottom edge of the branded header so the video box can sit just
+  // below it (matching the creator StreamScreen's camera box).
+  const [headerBottom, setHeaderBottom] = useState(0)
   const recoveries = useRef(0)
   const recoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -129,68 +131,89 @@ export function ExternalStreamScreen() {
 
   return (
     <View style={styles.root}>
-      {liveUrl ? (
-        <VideoView
-          player={player}
-          style={StyleSheet.absoluteFill}
-          nativeControls={false}
-          // contain so a landscape cam shows whole (letterboxed) rather than cropped.
-          contentFit="contain"
-        />
-      ) : null}
+      {/* Video box — sits below the branded header normally, expands to fill the
+          whole screen in fullscreen (one VideoView; expo-video can't bind a
+          player to two surfaces). Declared before the header so the header
+          paints on top. */}
+      <View style={[styles.videoBox, isFullscreen ? styles.videoBoxFull : { top: headerBottom }]}>
+        {liveUrl ? (
+          <VideoView
+            player={player}
+            style={StyleSheet.absoluteFill}
+            nativeControls={false}
+            // contain so a landscape cam shows whole (letterboxed) rather than cropped.
+            contentFit="contain"
+          />
+        ) : null}
 
-      {/* Connecting / error states over the black field. */}
-      {phase !== 'playing' ? (
-        <View style={styles.center} pointerEvents="none">
-          {phase === 'loading' ? (
-            <>
-              <ActivityIndicator color={theme.colors.text.inverse} />
+        {/* Connecting / error states over the black field. */}
+        {phase !== 'playing' ? (
+          <View style={styles.center} pointerEvents="none">
+            {phase === 'loading' ? (
+              <>
+                <ActivityIndicator color={theme.colors.text.inverse} />
+                <Text variant="monoCaption" color={theme.colors.text.inverse} style={styles.centerText}>
+                  Connecting…
+                </Text>
+              </>
+            ) : (
               <Text variant="monoCaption" color={theme.colors.text.inverse} style={styles.centerText}>
-                Connecting…
+                {liveUrl ? 'This cam is offline right now.' : 'This cam is unavailable.'}
               </Text>
-            </>
-          ) : (
-            <Text variant="monoCaption" color={theme.colors.text.inverse} style={styles.centerText}>
-              {liveUrl ? 'This cam is offline right now.' : 'This cam is unavailable.'}
-            </Text>
-          )}
-        </View>
-      ) : null}
+            )}
+          </View>
+        ) : null}
 
-      {/* Top chrome: back · LIVE · host identity. Hidden in fullscreen — the
-          fullscreen overlay supplies its own close + audio controls. */}
-      {!isFullscreen ? (
-      <SafeAreaView edges={['top']} style={styles.header} pointerEvents="box-none">
-        <View style={styles.headerRow}>
-          <Pressable onPress={back} hitSlop={12} style={styles.backBtn}>
-            <Icon name="chevron-left" size="lg" color={theme.colors.text.inverse} />
-          </Pressable>
-          <LivePill size="sm" />
-          {host ? (
-            <View style={styles.identity}>
-              <Avatar displayName={host.displayName} avatarUrl={host.avatarUrl} size={28} />
-              <View style={styles.identityText}>
-                <Text variant="bodyEmphasized" color={theme.colors.text.inverse} numberOfLines={1}>
-                  {host.displayName}
-                </Text>
-                <Text variant="monoCaption" color={theme.colors.text.inverse} numberOfLines={1}>
-                  @{host.handle}
-                  {broadcasterLocalTime ? ` · ${broadcasterLocalTime}` : ''}
-                </Text>
-              </View>
+        {/* LIVE + fullscreen affordances live on the video frame (like the
+            creator screen's frame controls), not in the header. */}
+        {!isFullscreen ? (
+          <>
+            <View style={styles.liveOverlay}>
+              <LivePill size="sm" />
             </View>
-          ) : null}
-          {liveUrl && phase === 'playing' ? (
-            <IconButton
-              name="maximize"
-              variant="surface"
-              size="md"
-              onPress={() => enterFullscreen(videoIsLandscape)}
-              accessibilityLabel="Fullscreen"
+            {liveUrl && phase === 'playing' ? (
+              <View style={styles.maxOverlay}>
+                <IconButton
+                  name="maximize"
+                  variant="surface"
+                  size="md"
+                  onPress={() => enterFullscreen(videoIsLandscape)}
+                  accessibilityLabel="Fullscreen"
+                />
+              </View>
+            ) : null}
+          </>
+        ) : null}
+      </View>
+
+      {/* Branded header — same as the creator stream screen: logo + WRLD on the
+          left with a back chevron, broadcaster identity (display name + tiny
+          @handle · local time) right-justified. Hidden in fullscreen. */}
+      {!isFullscreen ? (
+        <SafeAreaView edges={['top']} style={styles.header} pointerEvents="box-none">
+          <View
+            style={styles.headerBorder}
+            onLayout={(e) => setHeaderBottom(e.nativeEvent.layout.y + e.nativeEvent.layout.height)}
+          >
+            <ScreenHeader
+              onBack={back}
+              right={
+                host ? (
+                  <View style={styles.viewerTitle}>
+                    <Text variant="heading" numberOfLines={1}>
+                      {host.displayName}
+                    </Text>
+                    <Text variant="monoCaption" color={theme.colors.text.muted}>
+                      @{host.handle}
+                      {broadcasterLocalTime ? ` · ${broadcasterLocalTime}` : ''}
+                    </Text>
+                  </View>
+                ) : undefined
+              }
+              style={styles.previewHeaderPad}
             />
-          ) : null}
-        </View>
-      </SafeAreaView>
+          </View>
+        </SafeAreaView>
       ) : null}
 
       {/* Fullscreen controls — a transparent overlay above the single VideoView
@@ -226,7 +249,11 @@ export function ExternalStreamScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#000' },
+  root: { flex: 1, backgroundColor: theme.colors.bg.primary },
+  // Black video frame below the header; `top` set inline to the header bottom.
+  videoBox: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: '#000' },
+  // Fullscreen: the frame covers the whole screen (header is hidden).
+  videoBoxFull: { top: 0 },
   center: {
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
@@ -234,17 +261,19 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
   },
   centerText: { marginTop: theme.spacing.xs },
-  header: { position: 'absolute', top: 0, left: 0, right: 0 },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.md,
-    paddingTop: theme.spacing.sm,
+  // Opaque branded header pinned to the top, painting over the video frame edge.
+  header: { position: 'absolute', top: 0, left: 0, right: 0, backgroundColor: theme.colors.bg.primary, zIndex: 10 },
+  headerBorder: {
+    paddingBottom: theme.spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border.subtle,
   },
-  backBtn: { padding: theme.spacing.xs },
-  identity: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs, flex: 1 },
-  identityText: { flex: 1 },
+  previewHeaderPad: { paddingTop: theme.spacing.sm },
+  // Broadcaster identity in the header's right slot, stacked + right-justified.
+  viewerTitle: { alignItems: 'flex-end' },
+  // LIVE pill + fullscreen button overlaid on the video frame.
+  liveOverlay: { position: 'absolute', top: theme.spacing.sm, left: theme.spacing.md },
+  maxOverlay: { position: 'absolute', top: theme.spacing.sm, right: theme.spacing.md },
   fsControls: { ...StyleSheet.absoluteFillObject, zIndex: 100 },
   fsClose: { position: 'absolute', top: theme.spacing.lg, right: theme.spacing.lg },
   fsControlsBar: {
