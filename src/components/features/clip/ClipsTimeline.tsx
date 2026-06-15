@@ -614,9 +614,12 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
     // 1 s `nowMs` state — so a reconcile uses the same clock the per-frame loops use (no 1 s seam).
     const nowUi = reaperNowSv.value || nowMs
     // Capture the centre's instant in the OLD layout BEFORE swapping segs (linear center-preserve).
-    // SKIP the scroll re-pin while RIDING the reaper edge OR PLAYING — those frontiers own scroll on
-    // the frame/RAF loop; re-pinning here once a second fought them and produced the per-second jump.
-    const repin = !!prev && p > 0 && prev.segs.length > 0 && !ridingSv.value && !playingSv.value
+    // SKIP the scroll re-pin while RIDING the reaper edge, FOLLOWING the now edge, OR PLAYING — those
+    // frontiers own scroll on the frame/RAF loop; re-pinning here once a second fought them. For the now
+    // edge it re-pinned to the BASE (1s-stepped) total while the loop pins the CONTINUOUS (extended)
+    // total → the per-second sawtooth jitter the reaper ride never had (its anchor is the unchanging
+    // oldest end). The now-edge branch below re-pins to the EXTENDED total instead, atomically.
+    const repin = !!prev && p > 0 && prev.segs.length > 0 && !ridingSv.value && !playingSv.value && !followNowSv.value
     let centerTime = 0
     if (repin) {
       const oldLay = computeLayout(prev!.segs, prev!.lead, prev!.trail, p)
@@ -625,9 +628,10 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
     // Publish the raw server segs as the base + the live index, then the EXTENDED segs (live seg built
     // to nowUI) as what everything renders from. The frame loop keeps segsSv growing per-frame; this
     // sets it synchronously on a data change so JS reads right after are already current.
+    const extended = extendLive(segs, liveIdx, reaperNowSv.value)
     baseSegsSv.value = segs
     liveIdxSv.value = liveIdx
-    segsSv.value = extendLive(segs, liveIdx, reaperNowSv.value)
+    segsSv.value = extended
     trailSv.value = trailGapPx
     leadSv.value = leadGapPx
     leadFromSv.value = leadFromMs
@@ -639,6 +643,10 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
         // frame-lock uses), ATOMICALLY with segs, so a clip-drop is seamless with zero stale frames.
         const B = reaperNowSv.value - windowMs
         scroll.value = clamp(reaperEdgeX(B, segs, newLay, nowUi, leadFromMs), 0, newLay.total)
+      } else if (followNowSv.value) {
+        // Following the now edge → pin to the CONTINUOUS (extended) total, atomically with segs. Using
+        // the extended layout (not the base `newLay`) is what removes the per-second snap-back jitter.
+        scroll.value = computeLayout(extended, leadGapPx, trailGapPx, p).total
       } else if (repin) {
         scroll.value = clamp(timeToX(centerTime, segs, newLay, nowUi, leadFromMs), 0, newLay.total)
       }
@@ -647,7 +655,7 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
     // NOTE: `nowMs` is deliberately NOT a dependency — the effect must fire only when the FOOTAGE
     // geometry changes (data/refetch/drop/save), never once a second. Time progression is the frame
     // loop's job (the continuous clock); a per-second reconcile here was the jump.
-  }, [segs, liveIdx, trailGapPx, leadGapPx, leadFromMs, windowMs, segsSv, baseSegsSv, liveIdxSv, trailSv, leadSv, leadFromSv, nowSv, px, scroll, defaultPx, ridingSv, playingSv, reaperNowSv, vpSv])
+  }, [segs, liveIdx, trailGapPx, leadGapPx, leadFromMs, windowMs, segsSv, baseSegsSv, liveIdxSv, trailSv, leadSv, leadFromSv, nowSv, px, scroll, defaultPx, ridingSv, playingSv, followNowSv, reaperNowSv, vpSv])
   useEffect(() => {
     minPxSv.value = minPx
     maxPxSv.value = maxPx
