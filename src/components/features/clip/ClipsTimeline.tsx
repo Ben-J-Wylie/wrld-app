@@ -917,21 +917,29 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
   // `scroll` is a separate shared value that can lag by a frame (a leftover withDecay can even defeat
   // its re-pin), which is exactly the 199→54 one-frame flash the trace caught. `scroll` is still kept
   // in sync by the frame-lock for gesture/centre logic, but the picture no longer depends on it.
+  // The visual anchor (content-x at the centre playhead). DERIVED — not the separately-written
+  // `scroll` — so the transform recomputes ATOMICALLY with `layout` at render time, the way the reaper
+  // ride already does. Riding → the reaper edge (rush mapping); following now → `layout.total` (the
+  // continuous now edge, same derived clock as the clips); else → `scroll`. Using `scroll` for an edge
+  // ride let the playhead position lag the layout by a frame → the high-zoom jitter the reaper never
+  // had. (`scroll` is still maintained by the frame loop for gesture/centre logic; the PICTURE no longer
+  // depends on it while stuck to a frontier.)
+  const effScrollSv = useDerivedValue(() =>
+    ridingSv.value ? reaperEdgeXSv.value : followNowSv.value ? layout.value.total : scroll.value,
+  )
   const contentStyle = useAnimatedStyle(() => {
-    const eff = ridingSv.value ? reaperEdgeXSv.value : scroll.value
-    return { width: Math.max(layout.value.total, 1), transform: [{ translateX: vpSv.value / 2 - eff }] }
+    return { width: Math.max(layout.value.total, 1), transform: [{ translateX: vpSv.value / 2 - effScrollSv.value }] }
   })
 
   // Dark caps beyond the buffer window — the empty viewport area left of the oldest footage (head =
   // reaper edge) and right of now (tail). They show "you've hit the end of the buffer." Positioned in
   // VIEWPORT space (not the scrolling content), so they grow into view exactly as an edge reaches centre.
-  const headCapStyle = useAnimatedStyle(() => ({ width: Math.max(0, vpSv.value / 2 - (ridingSv.value ? reaperEdgeXSv.value : scroll.value)) }))
+  const headCapStyle = useAnimatedStyle(() => ({ width: Math.max(0, vpSv.value / 2 - effScrollSv.value) }))
   // The reaper mask (content coords, ON TOP of the clips): covers [0, reaperEdgeX] — the part of the
   // oldest clip already eaten. reaperEdgeX advances every frame → the clip is consumed smoothly.
   const reaperMaskStyle = useAnimatedStyle(() => ({ width: Math.max(0, reaperEdgeXSv.value) }))
   const tailCapStyle = useAnimatedStyle(() => {
-    const eff = ridingSv.value ? reaperEdgeXSv.value : scroll.value
-    const edge = vpSv.value / 2 - eff + layout.value.total // viewport-x of the now edge
+    const edge = vpSv.value / 2 - effScrollSv.value + layout.value.total // viewport-x of the now edge
     return { left: edge, width: Math.max(0, vpSv.value - edge) }
   })
 
