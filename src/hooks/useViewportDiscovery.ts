@@ -206,8 +206,21 @@ export function useViewportDiscovery(opts?: {
     const { pinZoom, countMin } = knobsRef.current
     const baseZ = Math.max(0, Math.min(MAX_TILE_ZOOM, Math.floor(zoom)))
     const nextMode: 'pins' | 'count' = zoom >= pinZoom ? 'pins' : 'count'
-    const z = nextMode === 'count' ? Math.max(baseZ, countMin) : baseZ
-    const tiles = tilesForBounds(bounds, z)
+    // Count mode = globe overview. Subscribe to the WHOLE WORLD at the count
+    // zoom (clamped so the set fits the tile cap) instead of the viewport bbox:
+    // on an auto-rotating globe getVisibleBounds jitters frame-to-frame (worse
+    // on Android), so a bbox-derived set churns → markers prune + re-add →
+    // flicker. The world set is stable (sent once; rotation is a no-op), so
+    // bubbles persist as the globe spins. Pins mode (zoomed in) uses the bbox.
+    let z: number
+    let tiles: string[]
+    if (nextMode === 'count') {
+      z = Math.min(Math.max(baseZ, countMin), 5) // 4^5 = 1024 ≤ tilesForBounds cap
+      tiles = tilesForBounds({ west: -180, south: -85, east: 180, north: 85 }, z)
+    } else {
+      z = baseZ
+      tiles = tilesForBounds(bounds, z)
+    }
     const tileSet = new Set(tiles)
     const prev = subRef.current
     const sameMode = prev.mode === nextMode
