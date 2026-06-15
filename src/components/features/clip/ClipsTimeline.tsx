@@ -54,7 +54,7 @@ const GAP_W = 22 // collapsed (fixed-width) gap marker — the playhead glides a
 const EDGE_EPS = 3 // px proximity that counts as "at" the now edge (for the clock's NOW/THEN state)
 const GAP_THRESHOLD_MS = 500 // unbroadcasted time longer than this is a traversable gap; below = a snip
 const GAP_RUSH_MS = 3000 // a gap is consumed in this fixed real-time (mirrors the transport playhead's rush)
-const LONGEST_DEFAULT_W = 64 // default zoom: the longest clip ≈ this wide (lower = wider/zoomed-out initial view)
+const LONGEST_DEFAULT_W = 50 // default zoom: the longest clip ≈ this wide (lower = wider/zoomed-out initial view)
 const MAX_PX_PER_MS = 0.2
 const TICK_MIN_GAP = 48 // hide a ruler stamp whose neighbour is closer than this (px)
 const COMMIT_STEP = 0.18 // re-commit px to React (→ thumb/glyph swap) every ~18% zoom change
