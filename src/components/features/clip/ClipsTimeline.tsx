@@ -554,6 +554,12 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
       scroll.value = Math.min(edgeX, total)
       ridingSv.value = 1
     }
+    // Hard floor (every frame): scroll can never sit LEFT of the reaper edge — the eviction boundary
+    // is the floor. The pan only re-floors on change events, but the edge advances each frame, so a
+    // held drag at the edge would otherwise fall behind it ("drag a little further past the reaper").
+    // followNow pins to the now edge (always right of this); riding already sits at the edge. This only
+    // pushes forward (never left), so a forward wheel/scrub off the edge is unaffected.
+    if (!followNowSv.value && scroll.value < edgeX) scroll.value = edgeX
   })
   // The reaper boundary's CONTENT-x (where the mask ends + the edge sits), advanced each frame —
   // via the gap-rush mapping (footage 1×, gaps consumed in a fixed GAP_RUSH_MS).

@@ -232,6 +232,12 @@ export const ClipsScreen = () => {
   }, [buffer?.serverNowMs])
   const windowMs = (buffer?.windowHours ?? 0) * 3_600_000
   const windowStartMs = windowMs > 0 ? nowMs - windowMs : null
+  // The LIVE reaper boundary (now − window), read off the continuous wall clock — not the 1s `nowMs`
+  // state, which lags the advancing edge by up to a second. The playhead instant must never sit behind
+  // this (it's the eviction edge); `windowMsRef` lets callbacks read the current window.
+  const windowMsRef = useRef(0)
+  windowMsRef.current = windowMs
+  const reaperEdgeNow = useCallback(() => (windowMsRef.current > 0 ? serverNow() - windowMsRef.current : null), [])
 
   // Un-save: optimistically drop a clip being deleted (its range un-carves → back to buffer).
   const [pendingDelete, setPendingDelete] = useState<Set<string>>(new Set())
@@ -634,7 +640,10 @@ export const ClipsScreen = () => {
       // (the withDecay settle won't fire onScrubEnd once cancelled). Same guard as togglePlay.
       scrubbingRef.current = false
       setScrubbing(false)
-      const m = clamp(ms, firstStartRef.current, lastEndRef.current)
+      // Floor at the reaper edge (not just the oldest clip start) so a seek/scrub can't land the
+      // playhead BEHIND the eviction boundary — the common cause of "dragging a little past the reaper".
+      const floor = Math.max(reaperEdgeNow() ?? -Infinity, firstStartRef.current)
+      const m = clamp(ms, floor, lastEndRef.current)
       playheadRef.current = m
       setPlayheadMs(m)
       setFollowLive(false) // any explicit seek leaves the live edge → clock reads THEN
@@ -647,7 +656,7 @@ export const ClipsScreen = () => {
         } catch {}
       }
     },
-    [manifestUrl, player],
+    [manifestUrl, player, reaperEdgeNow],
   )
 
   // ── the transport clock (see CONTENT.md §6) ──
@@ -688,7 +697,10 @@ export const ClipsScreen = () => {
       const rawDt = lastClock == null ? 0 : nowClock - lastClock
       const dt = lastClock == null ? 0 : Math.max(0, Math.min(PLAYHEAD_MAX_STEP_MS, rawDt))
       lastClock = nowClock
-      let ph = playheadRef.current
+      // Floor the playhead at the LIVE reaper edge every frame — it advances continuously (1×) and the
+      // playhead also plays at 1×, so without this a playhead that started a hair behind (a stale instant)
+      // would stay behind forever. The idle clamp effect skips while playing; this is its play-time analog.
+      let ph = Math.max(playheadRef.current, reaperEdgeNow() ?? -Infinity)
       const loc = locateAt(ph)
       if (loc.mode === 'end') {
         // caught up to the live edge — nothing more to play. Pin the clock to NOW; if the last
@@ -745,7 +757,7 @@ export const ClipsScreen = () => {
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [playing, player, locateAt])
+  }, [playing, player, locateAt, reaperEdgeNow])
 
   const togglePlay = useCallback(() => {
     if (playingRef.current) {
@@ -767,6 +779,20 @@ export const ClipsScreen = () => {
       setFollowLive(false)
       return
     }
+    // Riding the REAPER edge can't be paused → bump the playhead AHEAD off the eviction edge (to the
+    // oldest un-reaped footage, never BEHIND the advancing reaper) and play forward. The 1s clamp can
+    // leave the instant up to ~1s behind the live edge, so playing from it would start behind.
+    if (ridingReaperRef.current) {
+      scrubbingRef.current = false
+      setScrubbing(false)
+      const ahead = Math.max(reaperEdgeNow() ?? firstStartRef.current, firstStartRef.current)
+      playheadRef.current = ahead
+      setPlayheadMs(ahead)
+      setRidingReaper(false)
+      timelineRef.current?.scrollToTime(ahead, true)
+      setPlaying(true)
+      return
+    }
     // Clear any in-flight scrub gate. After the finger lifts, the timeline's `withDecay` keeps
     // `scrubbing` true until it SETTLES (then onScrubEnd clears it). Pressing play interrupts that
     // decay (the play tick's scrollToTime cancels the animation), so its settle callback fires with
@@ -784,7 +810,7 @@ export const ClipsScreen = () => {
       timelineRef.current?.scrollToTime(first, true)
     }
     setPlaying(true) // the clock takes over — it seeks + plays the video as a follower
-  }, [player])
+  }, [player, reaperEdgeNow])
 
   // Smooth scrub: as the timeline scrubs under the playhead, the PLAYHEAD follows the centre
   // (gap-interpolated) and the loaded video seeks to match (tolerant keyframe seekBy → robust on
