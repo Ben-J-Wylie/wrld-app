@@ -256,7 +256,11 @@ nuances, not styling — styling lives in DESIGN.md.
   are **followers** (the player seeks/plays to match it, the timeline scrolls to
   centre it, the viewer shows the footage at it). The playhead advances by REAL
   time — 1× over footage, a fixed rush rate across a gap — and is driven by the
-  finger while scrubbing (and by inertia until the scroll settles). It is
+  finger while scrubbing (and by inertia until the scroll settles). "Advances by
+  real time" means it **reads** elapsed time off the one wall clock
+  (`playStartInstant + (serverNow() − playStartClock)`), **not** by accumulating
+  per-frame deltas — an accumulator is a second clock that drifts (see *The
+  universal wall clock* below). It is
   **never** derived from the video's stream position (a lagging, VOD-bounded
   signal), and **never** reset by incidental state changes (a lane drag, a
   re-layout). A clip / lane / gap boundary is a *seek for the follower* (reload
@@ -338,6 +342,87 @@ tracked in CLAUDE.md "Clips timeline — north star vs current gaps".)
    visible 1-second cadence anywhere. The single monotonic UI clock drives every
    frontier on the UI thread; JS-side state (the playhead value, the window boundary,
    refetches) is throttled/decoupled so it never imposes its tick rate on the motion.
+
+### The universal wall clock — read it, never keep your own
+
+The most-violated principle in this codebase, stated plainly so we stop
+rediscovering it: **there is exactly one clock — the server-aligned wall clock
+(`serverNow()` = device time + the measured server offset) — and everything that
+represents a *position in time* must be computed by READING it, never by keeping its
+own running count.**
+
+There are two ways to "track time," and only one is allowed:
+
+- **Read the clock (allowed).** Your position is a pure function of the current
+  reading: `position = f(serverNow())`. The now edge *is* `serverNow()`; the reaper
+  edge is `serverNow() − window`; the playhead during 1× playback is
+  `playStartInstant + (serverNow() − playStartClock)`. Ask any time and you're
+  correct — a dropped frame or a hitch can't make you wrong, because the next read is
+  the truth again. Nothing drifts.
+- **Accumulate your own ticks (forbidden).** You hold a running total and nudge it
+  each frame (`pos += elapsedSinceLastFrame`). That's a *stopwatch*, not a clock — a
+  second clock. Miss a nudge and you're behind forever; cap the nudge (our
+  `min(80, …)`) and you can never catch back up. Stopwatches always eventually drift,
+  and *every* symptom we've chased — the fronts overtaking the playhead, the 1-second
+  step, the bounce — has been a stopwatch diverging from the wall clock.
+
+Consequences we keep getting wrong:
+
+- **"Single source of truth" ≠ "keeps its own time."** The playhead is the source of
+  truth for *position* — the one thing the video chases — but it, too, is only a
+  *reader* of the wall clock. It does not get its own stopwatch.
+- **The video is the only follower, and is never a clock.** The physical decoder has
+  its own messy pace (it buffers, stalls on a seek, runs a hair fast/slow). That is
+  fine and unavoidable — *as long as we never ask the video what time it is.* The
+  abstraction (edges, playhead, timeline, the bottom clock) is one clock; the video
+  pixels are a dog on a leash that may briefly trail and catch up. (This generalises
+  the existing rule: *never derive the playhead from the video's position.*)
+- **One clock — not merely "a clock."** Reading is necessary but not sufficient: you
+  must read the *same* clock as everything else. Raw device `Date.now()` and
+  server-aligned `serverNow()` are two different clocks; a readout drawn on the device
+  clock skews against edges drawn on the server clock. The universal clock is the
+  **server-aligned** one.
+
+Realistic expectation: one clock for every *time position* — every edge, every
+playhead, every digital readout — is achievable and is the bar. The only thing that
+will never be perfectly on the clock is the *video itself*, and it doesn't have to
+be, because it follows the playhead rather than telling it the time.
+
+#### Inventory — surfaces that must follow the universal wall clock
+
+Every time-position keeper in the app and whether it currently obeys. Anything that
+ACCUMULATES, or that READS the **device** clock instead of the server-aligned one, is
+a latent second clock and is flagged. (Network polls, sensor sampling, and animation
+timers are out of scope — they don't represent a position in time.)
+
+- ✅ **`serverNow()` — `ClipsScreen`** — the master: device time + measured server
+  offset. The universal clock everything else must read.
+- ✅ **Now edge + reaper edge — `ClipsTimeline`** — fed `serverNow()` every frame via
+  the JS-RAF `setNowUi`; their positions read the clock. *Residual:* the reanimated
+  frame-callback accumulator (`reaperNowSv += timeSinceFirstFrame`) survives as a
+  monotonic-max fallback — a dormant second clock; retire it so only the read remains.
+- ⚠️ **Clips playhead — `ClipsScreen` play tick** — `ph += min(80, ts − lastTs)`: a
+  clamped stopwatch, the active divergence (the fronts overtake it under load). Must
+  become `playStartInstant + (serverNow() − playStartClock)`. **[primary fix]**
+- ⚠️ **Clips clock readout + card countdowns — `ClipsScreen`** — `offsetForClock`,
+  "footage clears in", "since last broadcast" read **device `Date.now()`**, not
+  `serverNow()`. The 1-second `secondTick` is only a re-render trigger (fine); the
+  *values* must read the universal clock.
+- ⚠️ **The bottom ticking clock — `TimeScrubber`** — displayed instant is
+  `Date.now() − offsetMs`: it READS (good) but reads the **device** clock, so the
+  readout skews against the server-aligned edges. Feed it `serverNow()`. Applies to
+  both uses — the globe time-machine and the clip-editor buffer clock.
+- ⚠️ **Clip editor — `ClipEditScreen`** — a parallel surface with the same model: its
+  playhead follows via a 1-second `setInterval → setPlayheadMs(Date.now())`, and
+  `offsetForClock` / buffer bounds read **device `Date.now()`**. Same treatment — read
+  the universal clock; advance the playhead by elapsed-since-read, not a 1-second
+  setState.
+- 🔵 **`useBroadcasterClock`** — a time-of-day display (reads the device clock, formats
+  to a timezone). Low stakes — it shows local wall time, not a content position; align
+  to the server clock only if skew ever matters.
+
+Legend: ✅ reads the universal clock · ⚠️ flagged (accumulates, or reads the device
+clock) · 🔵 reads the device clock but low-stakes (a clock display, not a frontier).
 
 ---
 
