@@ -554,9 +554,11 @@ export const ClipsScreen = () => {
   followLiveRef.current = followLive
   const ridingReaperRef = useRef(false)
   ridingReaperRef.current = ridingReaper
-  // Riding either edge IS "playing" (the clock ticks + the playhead moves vs the footage), even though
-  // the footage-playback tick isn't running. The transport play icon reflects this.
-  const transportPlaying = playing || followLive || ridingReaper
+  // Riding either edge IS motion vs the footage (the clock ticks, the playhead isn't static), so the
+  // transport play icon reflects it. The two edges differ: the now-edge ride (or footage playback) is
+  // PAUSABLE → a regular pause icon; the reaper ride CAN'T be paused (it eats on a timer) → a distinct
+  // slashed-pause icon (`reaping`). A press still plays FORWARD off the reaper (the natural escape).
+  const pausablePlaying = playing || followLive
   // The footage at the playhead (null in a gap). The PLAYER follows this — so as the clock advances
   // the playhead across clips/snips/gaps, the loaded VOD tracks it. The VIEWER shows it too, so a
   // lane drag (which changes the clip's id) can't blank the preview: the playhead's clip is shown.
@@ -1357,7 +1359,8 @@ export const ClipsScreen = () => {
         {/* Transport directly below the viewer (it drives it); the clock stays at the bottom. */}
         {hasAny ? (
           <BufferTransport
-            playing={transportPlaying}
+            playing={pausablePlaying}
+            reaping={ridingReaper}
             onToStart={goReaper} // 1st — snap the reaper (oldest) edge to the playhead
             onPrevClip={goPrev} // 2nd — previous clip head/tail to the playhead
             onFrameBack={() => seekTo(playheadRef.current - FRAME_MS)}

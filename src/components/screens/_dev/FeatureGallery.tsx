@@ -2187,10 +2187,12 @@ function ClipsTimelineDemo() {
 
 function BufferTransportDemo() {
   const [playing, setPlaying] = useState(false)
+  const [reaping, setReaping] = useState(false)
   return (
-    <View style={{ width: 320 }}>
+    <View style={{ width: 320, gap: 12 }}>
       <BufferTransport
         playing={playing}
+        reaping={reaping}
         onToStart={() => {}}
         onPrevClip={() => {}}
         onFrameBack={() => {}}
@@ -2201,6 +2203,10 @@ function BufferTransportDemo() {
         onNextClip={() => {}}
         onToEnd={() => {}}
       />
+      {/* play · pause · reaping (slashed-pause = riding the reaper, can't pause) */}
+      <Pressable variant="default" onPress={() => setReaping((r) => !r)} style={{ alignSelf: 'flex-start' }}>
+        <Text variant="caption">{reaping ? 'reaping (slashed-pause) — tap for normal' : 'tap for reaping state'}</Text>
+      </Pressable>
     </View>
   )
 }

@@ -24,6 +24,11 @@ const HOLD_MS = 240 // press longer than this → hold (play) instead of a singl
 
 type Props = {
   playing: boolean
+  // Riding the reaper edge: motion vs the footage that CAN'T be paused (the reaper eats on a timer).
+  // Shows a distinct slashed-pause icon — "playing, but pause is unavailable here". Takes precedence
+  // over `playing` for the icon. (You leave the reaper ride via a drag / a forward transport button /
+  // wheeling the clock ahead / NOW — or pressing this, which plays forward off the oldest edge.)
+  reaping?: boolean
   onToStart: () => void
   onPrevClip: () => void
   onFrameBack: () => void
@@ -42,6 +47,7 @@ type Props = {
 
 export function BufferTransport({
   playing,
+  reaping = false,
   onToStart,
   onPrevClip,
   onFrameBack,
@@ -72,10 +78,20 @@ export function BufferTransport({
         variant="default"
         onPress={onTogglePlay}
         accessibilityRole="button"
-        accessibilityLabel={playing ? 'Pause' : 'Play'}
+        accessibilityLabel={reaping ? 'Playing — riding the reaper edge (can’t pause)' : playing ? 'Pause' : 'Play'}
         style={styles.playBtn}
       >
-        <Icon name={playing ? 'pause' : 'play'} size={20} color={theme.colors.text.inverse} />
+        {reaping ? (
+          <View style={styles.slashWrap}>
+            <Icon name="pause" size={20} color={theme.colors.text.inverse} />
+            {/* Slashed-pause = "playing, but pause is unavailable". The accent-coloured channel under
+                the white line separates the slash from the white pause bars so it reads clearly. */}
+            <View style={styles.slashChannel} pointerEvents="none" />
+            <View style={styles.slashLine} pointerEvents="none" />
+          </View>
+        ) : (
+          <Icon name={playing ? 'pause' : 'play'} size={20} color={theme.colors.text.inverse} />
+        )}
       </Pressable>
       <HoldStepButton
         icon="chevron-right"
@@ -189,5 +205,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: theme.colors.accent.default,
+  },
+  slashWrap: {
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // The diagonal "can't pause" slash: a thin white line sitting in a slightly wider accent-coloured
+  // channel, so it stays legible where it crosses the white pause bars.
+  slashChannel: {
+    position: 'absolute',
+    width: 30,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: theme.colors.accent.default,
+    transform: [{ rotate: '-45deg' }],
+  },
+  slashLine: {
+    position: 'absolute',
+    width: 30,
+    height: 2.5,
+    borderRadius: 2,
+    backgroundColor: theme.colors.text.inverse,
+    transform: [{ rotate: '-45deg' }],
   },
 })

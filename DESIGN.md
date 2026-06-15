@@ -3423,8 +3423,8 @@ Direction (drag-right = earlier) is flippable. (Was PanResponder pre-2026-06-07.
 - **Location:** `src/components/features/clip/BufferTransport.tsx` *(built 2026-06-07)*
 - **Variants:** `default`
 - **Sizes:** row of seven; 40-wide step buttons + a 48 accent play/pause circle (`gap: sm`)
-- **States:** `playing` (glyph) · prev/next/frame `disabled` at the buffer edges
-- **Props (built):** `playing`, `onToStart`, `onPrevClip`, `onFrameBack`, `onFrameBackHold(held)`, `onTogglePlay`, `onFrameForward`, `onFrameForwardHold(held)`, `onNextClip`, `onToEnd`, `canPrev?`, `canNext?`, `canFrameBack?`, `canFrameForward?`
+- **States:** play / pause / **reaping** (a third play-button state — a **slashed pause**, used only while the playhead rides the reaper edge: motion vs the footage that can't be paused, since the reaper eats on a timer) · prev/next/frame `disabled` at the buffer edges
+- **Props (built):** `playing`, **`reaping?`** *(slashed-pause; takes precedence over `playing` for the glyph — added 2026-06-15)*, `onToStart`, `onPrevClip`, `onFrameBack`, `onFrameBackHold(held)`, `onTogglePlay`, `onFrameForward`, `onFrameForwardHold(held)`, `onNextClip`, `onToEnd`, `canPrev?`, `canNext?`, `canFrameBack?`, `canFrameForward?`
 
 **Code does (built · 7-button rework 2026-06-10):** The transport row beneath the buffer
 field (above the clock): **|◀ head · ‹‹ prev clip edge · ‹ frame back · ▶/❚❚ · frame
