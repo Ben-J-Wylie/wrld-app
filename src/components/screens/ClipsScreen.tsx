@@ -624,6 +624,9 @@ export const ClipsScreen = () => {
   const [scrubbing, setScrubbing] = useState(false)
   const scrubbingRef = useRef(false)
   const scrubResumePlayingRef = useRef(false) // was the player playing when the scrub started?
+  // True while the CLOCK (TimeScrubber) is being wheeled → suppress the timeline's reaper latch so the
+  // playhead can be wheeled forward OFF the reaper edge without being re-pinned.
+  const [clockScrubbing, setClockScrubbing] = useState(false)
   // Show the seeked video frame (not the poster) while paused — set by a seek/scrub, held after.
   const [videoMode, setVideoMode] = useState(false)
   const playerIdRef = useRef<string | null>(null)
@@ -1398,6 +1401,8 @@ export const ClipsScreen = () => {
             liveSessionId={liveSessionId}
             playing={playing}
             followNow={followLive}
+            suppressRide={clockScrubbing}
+            onRidingChange={setRidingReaper} // mirror the timeline's true riding state → reaper clock + icon
             reaperLane={reaperLane}
             reaperEdgeMs={windowStartMs}
             windowMs={windowMs}
@@ -1473,7 +1478,12 @@ export const ClipsScreen = () => {
                 player.pause()
                 setPlaying(false)
               }
+              // Wheeling the clock leaves any edge ride → suppress the reaper latch so the playhead can
+              // move forward off the edge (the latch re-engages on release if it lands back at the edge).
+              setClockScrubbing(true)
+              setFollowLive(false)
             }}
+            onScrubEnd={() => setClockScrubbing(false)}
           />
         </View>
       ) : null}

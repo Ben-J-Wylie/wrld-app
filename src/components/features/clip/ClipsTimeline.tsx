@@ -261,6 +261,13 @@ type Props = {
   // True when the host is following the NOW edge (clock reads NOW). Pins scroll to the now edge so the
   // playhead STICKS to it as the live build grows it — the now-edge analog of riding the reaper edge.
   followNow?: boolean
+  // Suppress the reaper riding-latch (and release any active ride) — e.g. while the host is wheeling
+  // the CLOCK, so the playhead can be moved forward OFF the reaper edge without the latch re-pinning it.
+  suppressRide?: boolean
+  // Continuous report of whether the centre is RIDING the reaper edge (the timeline's autonomous
+  // `ridingSv`). The host mirrors this into its reaper-clock + transport state so they never desync
+  // (an autonomous catch-up, or a clock-wheel landing on the edge, both update it).
+  onRidingChange?: (riding: boolean) => void
   // Which lane the oldest (being-reaped) clip is in → buffer = red sickle, saved = black save icon.
   reaperLane?: 'buffered' | 'saved'
   // The reaper boundary (now − window) in wall-clock + the window length. The timeline advances the
@@ -379,7 +386,7 @@ function AnimatedReaperEdge({ edgeX, top, height, badgeTop, kind }: { edgeX: Sha
 }
 
 export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function ClipsTimeline(
-  { buffered, saved, nowMs, liveSessionId, playing = false, followNow = false, reaperLane = 'buffered', reaperEdgeMs, windowMs = 0, selectedId, onSelect, onOpen, onSave, onUnsave, onScrubStart, onScrubEnd, onCenter }: Props,
+  { buffered, saved, nowMs, liveSessionId, playing = false, followNow = false, suppressRide = false, reaperLane = 'buffered', reaperEdgeMs, windowMs = 0, selectedId, onSelect, onOpen, onSave, onUnsave, onScrubStart, onScrubEnd, onCenter, onRidingChange }: Props,
   ref,
 ) {
   // Combined set drives the shared axis (buffer + saved don't overlap → one timeline). Sorted
@@ -515,6 +522,7 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
   const panningSv = useSharedValue(0)
   const playingSv = useSharedValue(0)
   const followNowSv = useSharedValue(0) // 1 while pinning scroll to the now edge (host followLive)
+  const suppressRideSv = useSharedValue(0) // 1 while the host suppresses the reaper latch (clock wheel)
   // [reaper-trace] dev-only frame sampler + transition loggers (stripped in prod via __DEV__).
   const frameLogSv = useSharedValue(0)
   const logFrame = useCallback((scrollV: number, edgeV: number, riding: number, total: number, edgeScreen: number, liveI: number, rNow: number, liveDur: number) => {
@@ -556,7 +564,7 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
       // Following the NOW edge → stick scroll to it as the live build grows `total` (the now-edge
       // analog of riding). Suspended during a pan/pinch so a drag can leave the edge.
       scroll.value = total
-    } else if (!panningSv.value && !playingSv.value && scroll.value <= edgeX + 1.5) {
+    } else if (!panningSv.value && !playingSv.value && !suppressRideSv.value && scroll.value <= edgeX + 1.5) {
       // Scroll SETTLED at the edge while idle (button-1, or scrubbed left into it) → snap on + LATCH.
       // Suspended during an active pan/playback so the lock can't grab the scroll mid-gesture (that
       // grab/release cycle was the jumpiness). Floors the scroll: a left-scroll can't enter the void.
@@ -720,6 +728,20 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
     followNowSv.value = followNow ? 1 : 0
     if (followNow) ridingSv.value = 0
   }, [followNow, followNowSv, ridingSv])
+  // Clock-wheel (or any host scrub of the clock) → suppress the reaper latch + release any active ride
+  // so the playhead can move forward off the edge without being re-pinned.
+  useEffect(() => {
+    suppressRideSv.value = suppressRide ? 1 : 0
+    if (suppressRide) ridingSv.value = 0
+  }, [suppressRide, suppressRideSv, ridingSv])
+  // Continuous mirror of the riding state → host (so the reaper clock + transport icon never desync).
+  const notifyRiding = useCallback((r: number) => onRidingChange?.(r === 1), [onRidingChange])
+  useAnimatedReaction(
+    () => ridingSv.value,
+    (r, prev) => {
+      if (prev != null && r !== prev) runOnJS(notifyRiding)(r)
+    },
+  )
 
   // Seed the zoom + land with "now" centred, once, when the viewport + first content are known.
   const seeded = useRef(false)
