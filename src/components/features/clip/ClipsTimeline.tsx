@@ -258,6 +258,9 @@ type Props = {
   // True while playback is driving the scroll → suspends the reaper riding-latch so it can't grab the
   // scroll out from under the playhead (the same grab/release jumpiness a drag causes).
   playing?: boolean
+  // True when the host is following the NOW edge (clock reads NOW). Pins scroll to the now edge so the
+  // playhead STICKS to it as the live build grows it — the now-edge analog of riding the reaper edge.
+  followNow?: boolean
   // Which lane the oldest (being-reaped) clip is in → buffer = red sickle, saved = black save icon.
   reaperLane?: 'buffered' | 'saved'
   // The reaper boundary (now − window) in wall-clock + the window length. The timeline advances the
@@ -367,7 +370,7 @@ function AnimatedReaperEdge({ edgeX, top, height, badgeTop, kind }: { edgeX: Sha
 }
 
 export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function ClipsTimeline(
-  { buffered, saved, nowMs, liveSessionId, playing = false, reaperLane = 'buffered', reaperEdgeMs, windowMs = 0, selectedId, onSelect, onOpen, onSave, onUnsave, onScrubStart, onScrubEnd, onCenter }: Props,
+  { buffered, saved, nowMs, liveSessionId, playing = false, followNow = false, reaperLane = 'buffered', reaperEdgeMs, windowMs = 0, selectedId, onSelect, onOpen, onSave, onUnsave, onScrubStart, onScrubEnd, onCenter }: Props,
   ref,
 ) {
   // Combined set drives the shared axis (buffer + saved don't overlap → one timeline). Sorted
@@ -502,6 +505,7 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
   // reaperEdgeXSv (renders at its content position, moving with scroll + consumption — smooth).
   const panningSv = useSharedValue(0)
   const playingSv = useSharedValue(0)
+  const followNowSv = useSharedValue(0) // 1 while pinning scroll to the now edge (host followLive)
   // [reaper-trace] dev-only frame sampler + transition loggers (stripped in prod via __DEV__).
   const frameLogSv = useSharedValue(0)
   const logFrame = useCallback((scrollV: number, edgeV: number, riding: number, total: number, edgeScreen: number, liveI: number, rNow: number, liveDur: number) => {
@@ -539,6 +543,10 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
       // centre — the dropped clip's reaped pixels are simply replaced by the void, nothing reappears.
       // The now edge is pulled toward centre as footage is eaten, until the window is fully evicted.
       scroll.value = Math.min(edgeX, total)
+    } else if (followNowSv.value && !panningSv.value && !twoFingers.value) {
+      // Following the NOW edge → stick scroll to it as the live build grows `total` (the now-edge
+      // analog of riding). Suspended during a pan/pinch so a drag can leave the edge.
+      scroll.value = total
     } else if (!panningSv.value && !playingSv.value && scroll.value <= edgeX + 1.5) {
       // Scroll SETTLED at the edge while idle (button-1, or scrubbed left into it) → snap on + LATCH.
       // Suspended during an active pan/playback so the lock can't grab the scroll mid-gesture (that
@@ -697,6 +705,12 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
     playingSv.value = playing ? 1 : 0
     if (playing) ridingSv.value = 0
   }, [playing, playingSv, ridingSv])
+  // Follow the now edge (host followLive) → pin scroll to it (the frame callback does the per-frame
+  // stick). Releasing the reaper ride so the two edge-follows don't fight.
+  useEffect(() => {
+    followNowSv.value = followNow ? 1 : 0
+    if (followNow) ridingSv.value = 0
+  }, [followNow, followNowSv, ridingSv])
 
   // Seed the zoom + land with "now" centred, once, when the viewport + first content are known.
   const seeded = useRef(false)
@@ -819,7 +833,10 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
         .onChange((e) => {
           'worklet'
           if (twoFingers.value) return // a 2nd finger landed → defer to pinch, stop scrolling
-          scroll.value = clampW(scroll.value - e.changeX, 0, layout.value.total)
+          // Floor at the reaper edge (not 0): the playhead can't be dragged PAST the reaper edge into
+          // the reaped void — symmetric with the now edge (ceiling = total). reaperEdgeXSv is 0 when
+          // windowing is off, so this is the same as before when there's no reaper.
+          scroll.value = clampW(scroll.value - e.changeX, reaperEdgeXSv.value, layout.value.total)
         })
         .onEnd((e) => {
           'worklet'
@@ -830,7 +847,7 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
             runOnJS(notifyScrubEnd)(r.clipId, r.timeMs)
             return
           }
-          scroll.value = withDecay({ velocity: -e.velocityX, clamp: [0, layout.value.total], deceleration: 0.997 }, (finished) => {
+          scroll.value = withDecay({ velocity: -e.velocityX, clamp: [reaperEdgeXSv.value, layout.value.total], deceleration: 0.997 }, (finished) => {
             'worklet'
             if (!finished) return // cancelled by a new gesture → don't resume
             const r = resolveAt(scroll.value, segsSv.value, layout.value, nowSv.value, leadFromSv.value)

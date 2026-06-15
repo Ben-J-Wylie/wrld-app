@@ -677,6 +677,10 @@ export const ClipsScreen = () => {
   // the clock re-syncs on the next tick when playing).
   const seekTo = useCallback(
     (ms: number) => {
+      // A programmatic seek cancels any in-flight scrub decay → clear the scrub gate so it can't orphan
+      // (the withDecay settle won't fire onScrubEnd once cancelled). Same guard as togglePlay.
+      scrubbingRef.current = false
+      setScrubbing(false)
       const m = clamp(ms, firstStartRef.current, lastEndRef.current)
       playheadRef.current = m
       setPlayheadMs(m)
@@ -812,6 +816,13 @@ export const ClipsScreen = () => {
       setPlaying(false)
       return
     }
+    // Clear any in-flight scrub gate. After the finger lifts, the timeline's `withDecay` keeps
+    // `scrubbing` true until it SETTLES (then onScrubEnd clears it). Pressing play interrupts that
+    // decay (the play tick's scrollToTime cancels the animation), so its settle callback fires with
+    // finished=false and onScrubEnd never runs — leaving scrubbingRef stuck true, which makes the play
+    // tick early-return every frame (play icon on, playhead frozen). Clear it here so play can advance.
+    scrubbingRef.current = false
+    setScrubbing(false)
     setFollowLive(false) // playing advances the playhead off the live edge
     setRidingReaper(false)
     // Play from the PLAYHEAD. If we're at/after the last footage, restart from the top.
@@ -1191,6 +1202,8 @@ export const ClipsScreen = () => {
   )
   const goTo = useCallback(
     (timeMsRaw: number, live = false, reaper = false) => {
+      scrubbingRef.current = false // a transport/nav jump cancels any in-flight scrub decay (see seekTo)
+      setScrubbing(false)
       setSelectedId(null)
       setFollowLive(live) // now-edge jump → clock NOW
       setRidingReaper(reaper) // reaper-edge jump → clock THEN, ticking toward eviction
@@ -1363,6 +1376,7 @@ export const ClipsScreen = () => {
             nowMs={axisTop}
             liveSessionId={liveSessionId}
             playing={playing}
+            followNow={followLive}
             reaperLane={reaperLane}
             reaperEdgeMs={windowStartMs}
             windowMs={windowMs}
