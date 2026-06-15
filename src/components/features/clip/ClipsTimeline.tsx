@@ -305,6 +305,10 @@ export type ClipsTimelineHandle = {
   // Snap + stick the centre to the reaper edge (no sliver) and latch the ride — the reaper's analog of
   // the now-edge follow. The host calls it when a drag settles within reach of the reaper.
   snapToReaper: () => void
+  // Footage-playback render anchor. `stampPlayAnchor(ms)` enters UI-thread-derived 1× playback from the
+  // given instant; `clearPlayDrive()` returns to the JS-written scroll (gap / pause / scrub). See §6.
+  stampPlayAnchor: (ms: number) => void
+  clearPlayDrive: () => void
 }
 
 // ── animated leaf nodes (each reads the shared `layout` on the UI thread) ──
@@ -518,6 +522,15 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
   // reaperEdgeXSv (renders at its content position, moving with scroll + consumption — smooth).
   const panningSv = useSharedValue(0)
   const playingSv = useSharedValue(0)
+  // ── footage-playback render anchor (CONTENT.md §6: derive the position, don't snapshot it) ──
+  // During 1× footage playback the picture must NOT translate by the JS-written `scroll` (it lands at
+  // JS-RAF times, out of phase with vsync → the whole content jitters in sync at high zoom). Instead the
+  // host stamps an anchor at footage-entry and the picture derives the playhead on the UI thread from the
+  // SAME `reaperNowSv` the footage uses: ph = anchorMs + (reaperNowSv − anchorClock) (1×). Both move
+  // together at vsync → smooth, like the reaper ride. Gaps (rush rate) fall back to `scroll` (brief).
+  const playDriveSv = useSharedValue(0) // 1 while deriving the footage-playback position on the UI thread
+  const playAnchorMsSv = useSharedValue(0) // playhead instant at the anchor
+  const playAnchorClockSv = useSharedValue(0) // reaperNowSv at the anchor
   const followNowSv = useSharedValue(0) // 1 while pinning scroll to the now edge (host followLive)
   const suppressRideSv = useSharedValue(0) // 1 while the host suppresses the reaper latch (clock wheel)
   // Cumulative pixel layout at the live zoom (UI thread). Declared before the frame callback so the
@@ -746,6 +759,20 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
     scroll.value = Math.min(reaperEdgeXSv.value, layout.value.total)
     ridingSv.value = 1
   }, [scroll, reaperEdgeXSv, layout, ridingSv])
+
+  // Enter UI-thread-derived 1× footage playback from `ms`. Anchor the clock to the CURRENT reaperNowSv
+  // (the same value the derivation reads) so ph derives back to exactly `ms` at entry → no seam.
+  const stampPlayAnchor = useCallback(
+    (ms: number) => {
+      playAnchorMsSv.value = ms
+      playAnchorClockSv.value = reaperNowSv.value
+      playDriveSv.value = 1
+    },
+    [playAnchorMsSv, playAnchorClockSv, playDriveSv, reaperNowSv],
+  )
+  const clearPlayDrive = useCallback(() => {
+    playDriveSv.value = 0
+  }, [playDriveSv])
   // The universal wall clock, pushed from the host's JS RAF loop (serverNow every frame). This is now
   // the SOLE driver of reaperNowSv (the frame-timer accumulator is retired). Monotonic (forward-only),
   // mirrors nowSv for every mapping, and advances the live build (extendLive) on the same clock.
@@ -758,7 +785,11 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
     },
     [reaperNowSv, nowSv, liveIdxSv, segsSv, baseSegsSv],
   )
-  useImperativeHandle(ref, () => ({ scrollToTime, getCenter, setNowUi, snapToReaper }), [scrollToTime, getCenter, setNowUi, snapToReaper])
+  useImperativeHandle(
+    ref,
+    () => ({ scrollToTime, getCenter, setNowUi, snapToReaper, stampPlayAnchor, clearPlayDrive }),
+    [scrollToTime, getCenter, setNowUi, snapToReaper, stampPlayAnchor, clearPlayDrive],
+  )
 
   // ── report the clip/instant/inGap under the centre playhead (on a clip OR gap-state change) ──
   const reportCenter = useCallback(
@@ -924,9 +955,17 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
   // ride let the playhead position lag the layout by a frame → the high-zoom jitter the reaper never
   // had. (`scroll` is still maintained by the frame loop for gesture/centre logic; the PICTURE no longer
   // depends on it while stuck to a frontier.)
-  const effScrollSv = useDerivedValue(() =>
-    ridingSv.value ? reaperEdgeXSv.value : followNowSv.value ? layout.value.total : scroll.value,
-  )
+  const effScrollSv = useDerivedValue(() => {
+    if (ridingSv.value) return reaperEdgeXSv.value
+    if (followNowSv.value) return layout.value.total
+    if (playDriveSv.value) {
+      // 1× footage playback derived on the UI thread from reaperNowSv (same clock as the footage) →
+      // smooth at vsync. Falls back to `scroll` the instant the host clears the drive (gap / pause / scrub).
+      const ph = playAnchorMsSv.value + (reaperNowSv.value - playAnchorClockSv.value)
+      return timeToX(ph, segsSv.value, layout.value, nowSv.value, leadFromSv.value)
+    }
+    return scroll.value
+  })
   const contentStyle = useAnimatedStyle(() => {
     return { width: Math.max(layout.value.total, 1), transform: [{ translateX: vpSv.value / 2 - effScrollSv.value }] }
   })

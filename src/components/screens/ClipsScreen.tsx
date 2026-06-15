@@ -659,6 +659,24 @@ export const ClipsScreen = () => {
     [manifestUrl, player, reaperEdgeNow],
   )
 
+  // Footage-playback PICTURE drive (CONTENT.md §6: derive the position on the UI thread, don't snapshot
+  // the JS-written scroll). While deriving, the timeline renders the playhead from reaperNowSv (smooth at
+  // vsync) instead of the JS scroll (which jitters the whole content in sync at high zoom). enter on
+  // footage-entry, exit on gap/end/pause/scrub. The JS `scroll` is still maintained for getCenter/video.
+  const playDriveRef = useRef(false)
+  const enterDrive = useCallback((ph: number) => {
+    if (!playDriveRef.current) {
+      playDriveRef.current = true
+      timelineRef.current?.stampPlayAnchor(ph)
+    }
+  }, [])
+  const exitDrive = useCallback(() => {
+    if (playDriveRef.current) {
+      playDriveRef.current = false
+      timelineRef.current?.clearPlayDrive()
+    }
+  }, [])
+
   // ── the transport clock (see CONTENT.md §6) ──
   // The PLAYHEAD is the single source of truth. While playing it advances by REAL elapsed time —
   // 1× through footage, a fixed-duration RUSH across an unbroadcasted-time gap (GAP_RUSH_MS, gap
@@ -703,6 +721,7 @@ export const ClipsScreen = () => {
       let ph = Math.max(playheadRef.current, reaperEdgeNow() ?? -Infinity)
       const loc = locateAt(ph)
       if (loc.mode === 'end') {
+        exitDrive()
         // caught up to the live edge — nothing more to play. Pin the clock to NOW; if the last
         // broadcast ended a while ago, keep the trailing "since last broadcast" card up.
         try {
@@ -715,6 +734,7 @@ export const ClipsScreen = () => {
         return
       }
       if (loc.mode === 'gap') {
+        exitDrive() // the rush rate ≠ 1× → the UI-derived anchor doesn't apply; JS scroll drives the gap
         setGapCard({ fromMs: loc.from, toMs: loc.to })
         if (player.playing)
           try {
@@ -751,13 +771,17 @@ export const ClipsScreen = () => {
       // No hard stop at lastEnd: the playhead flows into the TRAILING gap, where locateAt returns a
       // rushable gap (3s to now) and then 'end' (caught up).
       playheadRef.current = ph
+      enterDrive(ph) // footage at 1× → the picture derives smoothly on the UI thread from here
       commitPlayhead(ph, ts)
-      timelineRef.current?.scrollToTime(ph)
+      timelineRef.current?.scrollToTime(ph) // keep `scroll` current for getCenter/video (picture uses the anchor)
       raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
-  }, [playing, player, locateAt, reaperEdgeNow])
+    return () => {
+      cancelAnimationFrame(raf)
+      exitDrive() // stop deriving the playback picture when playback ends (pause / unmount / new session)
+    }
+  }, [playing, player, locateAt, reaperEdgeNow, enterDrive, exitDrive])
 
   const togglePlay = useCallback(() => {
     if (playingRef.current) {
@@ -1352,6 +1376,7 @@ export const ClipsScreen = () => {
               setFollowLive(false) // scrubbing leaves the live edge (re-latched by the follow loop)
               setRidingReaper(false)
               setGapCard(null)
+              exitDrive() // the finger owns scroll now → stop deriving the playback picture
               scrubResumePlayingRef.current = playingRef.current
               scrubbingRef.current = true
               setScrubbing(true)

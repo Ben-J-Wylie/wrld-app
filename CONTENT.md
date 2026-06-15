@@ -314,6 +314,18 @@ nuances, not styling — styling lives in DESIGN.md.
   eats on a timer regardless of the user; the icon is a status indicator, pressing it
   does nothing). You leave either ride only by *moving* — a drag away, a forward
   transport step, or wheeling the clock ahead — never by the play button.
+- **Derive the rendered position; never snapshot it.** This is the *universal wall
+  clock* rule (read, don't copy) carried from *time* to *position*. The picture's
+  scroll/translate must be **computed at render time from the same clock the footage
+  uses** (the UI-thread clock + the live layout), so the playhead and the footage move
+  **together**. A separately-written copy of the position — a JS-thread scroll pushed
+  across to the UI thread, or a value snapshotted a frame before the layout it's drawn
+  against recomputed — lands out of phase with the render and shows up as **jitter**
+  (a constant high-zoom shimmer, or the whole content jittering in sync). The reaper
+  ride was always smooth because it derives from `reaperEdgeX`; the now-edge ride and
+  1× footage **playback** must derive the same way (`anchorInstant + (clock − anchorClock)`
+  on the UI thread), not render the JS scroll. *(The JS scroll is still kept current for
+  gesture/centre logic; the picture just no longer depends on it while riding/playing.)*
 - **Zoom rescales time, never content.** Pinch is a layout rescale of the time
   axis (clip widths grow/shrink) — *not* a transform scale — so thumbs and labels
   never distort. It's anchored to centre (scales evenly left/right), runs on the
