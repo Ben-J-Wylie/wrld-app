@@ -50,10 +50,6 @@ const DRIFT_TOL_S = 0.4 // only re-seek the (follower) video if it drifts more t
 // gap-collapse threshold, so playback and the drawn timeline agree on what counts as a gap.
 const SEAM_GAP_MS = 500
 
-// Dev-only trace to the Metro terminal for diagnosing drag-to-save (stripped in prod).
-const slog = (...args: unknown[]) => {
-  if (__DEV__) console.log('[clips-save]', ...args)
-}
 
 const MATCH_TOL_MS = 2000 // window tolerance matching an optimistic save to its real Clip
 const MIN_REMAINDER_MS = 1000 // don't show carved remainders shorter than this
@@ -190,10 +186,6 @@ export const ClipsScreen = () => {
   const { data: buffer, refetch: refetchBuffer } = useBuffer(!!isSignedIn, isLive)
   const { data: savedData, refetch: refetchSaved } = useSavedClips(!!isSignedIn)
   const { data: draftsData, refetch: refetchDrafts } = useDrafts(!!isSignedIn)
-  // Trace what the saved-clip list returns (does a just-saved clip show up?).
-  useEffect(() => {
-    slog('GET /buffer/me/clips →', savedData?.length ?? 0, 'saved clip(s)', (savedData ?? []).map((c) => c.id))
-  }, [savedData])
 
   // ── lanes: buffer = footage minus saved ranges (carve); saved = the saved clips ──
   const sessions = useMemo(() => buffer?.sessions ?? [], [buffer])
@@ -213,20 +205,6 @@ export const ClipsScreen = () => {
     return null
   }, [isLive, sessions])
   const realLiveSessionId = realLiveSession?.id ?? null
-
-  // [reaper-trace] On each buffer refetch, log every session's geometry as "seconds ago" so we can
-  // see whether the backend changes the oldest session's start/end across refetches (the suspected
-  // 15s-cadence bounce). Stripped in prod.
-  useEffect(() => {
-    if (!__DEV__) return
-    const t = Date.now()
-    const rows = (buffer?.sessions ?? []).map((s) => {
-      const start = Date.parse(s.startedAt) + (s.mediaStartOffsetMs ?? 0)
-      const end = start + (s.mediaDurationSec ?? s.durationSec ?? 0) * 1000
-      return `${s.id.slice(-4)}[${Math.round((t - start) / 1000)}s→${Math.round((t - end) / 1000)}s]`
-    })
-    console.log('[reaper-trace] BUFFER refetch · windowH', buffer?.windowHours, '· sessions', rows.join(' '))
-  }, [buffer])
 
   // ── server-clock alignment (the skew-free "now") ── the UNIVERSAL wall clock lives in
   // `@/lib/serverClock` (CONTENT.md §6) so every surface reads the SAME clock; this screen feeds it
@@ -402,27 +380,6 @@ export const ClipsScreen = () => {
   const allClips = useMemo(() => [...bufferedLane, ...savedLane], [bufferedLane, savedLane])
   const hasAny = allClips.length > 0
 
-  // [reaper-trace] APPEAR-DELAY gate. Fires whenever any gate flips — at go-live + when the real
-  // session lands. Tells us EXACTLY why a clip isn't building yet: optimistic must be true the instant
-  // we're live (if false → which of isLive/liveSince/realLiveSessionId killed it); hasAny must be true
-  // to render the timeline at all; windowOn (windowMs>0 + reaperEdgeMs set) must be true for the smooth
-  // build machinery (frame loop / extendLive) to run — if it's false the clip can't build smoothly.
-  useEffect(() => {
-    if (!__DEV__) return
-    console.log(
-      '[reaper-trace] GATE',
-      '· isLive', isLive,
-      '· liveSinceAgo', liveSince != null ? `${Math.round((Date.now() - liveSince) / 1000)}s` : '—',
-      '· realLiveSession', realLiveSessionId?.slice(-6) ?? '—',
-      '· liveClip', !!liveClip,
-      '· buf/sav', `${bufferedLane.length}/${savedLane.length}`,
-      '· hasAny', hasAny,
-      '· windowH', buffer?.windowHours ?? '—',
-      '· windowOn', windowMs > 0 && windowStartMs != null,
-      '· sessions', sessions.length,
-    )
-  }, [isLive, liveSince, realLiveSessionId, liveClip, bufferedLane.length, savedLane.length, hasAny, buffer?.windowHours, windowMs, windowStartMs, sessions.length])
-
   // Prune pending saves once the real list has caught up.
   useEffect(() => {
     setPendingSaves((prev) => {
@@ -430,22 +387,6 @@ export const ClipsScreen = () => {
       return next.length === prev.length ? prev : next
     })
   }, [matchesReal])
-
-  // [clips-save] Duplicate-hunt: log pending vs real on every change so a lingering placeholder (the
-  // "duplicate of itself" in the saved lane) is visible — and we can see WHY it didn't match.
-  useEffect(() => {
-    if (!__DEV__) return
-    slog(
-      'state · saved',
-      savedLane.length,
-      '· buffer',
-      bufferedLane.length,
-      '· pending',
-      pendingSaves.map((ps) => `${ps.tempId.slice(-10)}{real:${ps.realClipId?.slice(-6) ?? '—'} matched:${matchesReal(ps)} ${Math.round(ps.startMs / 1000) % 100000}→${Math.round(ps.endMs / 1000) % 100000}}`),
-      '· real',
-      realSavedData.map((c) => `${c.id.slice(-6)}{${Math.round(c.startAtMs / 1000) % 100000}→${Math.round(c.endAtMs / 1000) % 100000}}`),
-    )
-  }, [pendingSaves, realSavedData, savedLane.length, bufferedLane.length, matchesReal])
 
   // Prune un-save holes once the parent's real ranges no longer cover them (the trim landed) or
   // the parent is gone.
@@ -718,17 +659,13 @@ export const ClipsScreen = () => {
   useEffect(() => {
     if (!playing) return
     let raf = 0
-    let lastTs: number | null = null // RAF timestamp — used ONLY for the commit throttle + log cadence
-    let lastClock: number | null = null // serverNow() at the previous tick — the playhead's clock source
+    // serverNow() at the previous tick — the playhead's clock source. It advances by the WALL-CLOCK
+    // delta (serverNow() − lastClock), the SAME clock the now/reaper fronts read — so a janky 150ms
+    // frame advances both by 150ms and they can't diverge (CONTENT.md §6: read the clock, don't
+    // accumulate frame-timer ticks). The delta is guarded max(0, min(PLAYHEAD_MAX_STEP_MS, …)) for a
+    // backward clock tick / a backgrounding suspension.
+    let lastClock: number | null = null
     let lastCommitTs = 0
-    // [clip-sync] diagnostics: is the playhead keeping pace with the now/reaper fronts? The playhead now
-    // advances by the WALL-CLOCK delta (serverNow() − lastClock), the SAME clock the fronts read — so a
-    // janky 150ms frame advances both by 150ms and they can't diverge (CONTENT.md §6: read the clock,
-    // don't accumulate frame-timer ticks). dt is guarded max(0, min(PLAYHEAD_MAX_STEP_MS, …)) for a
-    // backward clock tick / a backgrounding suspension. clampLoss should now stay ~0; gap = nowUi −
-    // playhead should HOLD steady at 1× play (growth would mean a regression).
-    let clampLoss = 0
-    let lastSyncTs = 0
     // The playhead REF + the timeline scroll advance every frame (smooth). But committing playheadMs
     // to React state every frame = 60 re-renders/sec of this heavy screen, which saturates the JS
     // thread and makes the per-frame scrollToTime (→ the timeline) janky/step even though the native
@@ -744,22 +681,13 @@ export const ClipsScreen = () => {
     const tick = (ts: number) => {
       const nowClock = serverNow()
       if (scrubbingRef.current) {
-        lastTs = ts // the finger owns the playhead while scrubbing; idle the clock
-        lastClock = nowClock // re-anchor so resume-after-scrub isn't a huge wall-clock jump
+        lastClock = nowClock // the finger owns the playhead while scrubbing; re-anchor the clock
         raf = requestAnimationFrame(tick)
         return
       }
       const rawDt = lastClock == null ? 0 : nowClock - lastClock
       const dt = lastClock == null ? 0 : Math.max(0, Math.min(PLAYHEAD_MAX_STEP_MS, rawDt))
-      lastTs = ts
       lastClock = nowClock
-      if (__DEV__) {
-        clampLoss += Math.max(0, rawDt - dt) // ms shed to the backgrounding guard (should stay ~0 in play)
-        if (ts - lastSyncTs >= 500) {
-          lastSyncTs = ts
-          console.log('[clip-sync] rawDt', Math.round(rawDt), 'dt', Math.round(dt), 'clampLoss', Math.round(clampLoss), 'ph', Math.round(playheadRef.current % 100000), 'nowUi', Math.round(nowClock % 100000), 'gap', Math.round(nowClock - playheadRef.current))
-        }
-      }
       let ph = playheadRef.current
       const loc = locateAt(ph)
       if (loc.mode === 'end') {
@@ -949,7 +877,6 @@ export const ClipsScreen = () => {
   // synchronous server-side (returns once the clip is `ready`), so on success the
   // clip appears on the next refetch. Surface failures (quota / no-footage / promote
   // error) instead of swallowing them — silent failure is why a save "won't stick".
-  // `[clips-save]` traces print to the Metro terminal (dev only) for diagnosing.
   // Drag a buffered remainder right → save just its window. Optimistically carve it out +
   // placeholder it in the saved lane; the real Clip prunes the placeholder when it lands.
   const saveClip = useCallback(
@@ -991,11 +918,9 @@ export const ClipsScreen = () => {
         { tempId, sessionId, startMs: clip.startMs, endMs: clip.endMs, label: clip.label, posterUrl: clip.posterUrl, manifestUrl: clip.manifestUrl },
       ])
       const payload = { startAtMs: Math.round(clip.startMs), endAtMs: Math.round(clip.endMs), name: clip.label, kinds }
-      slog('POST /buffer/me/clips →', payload, `(window ${Math.round((payload.endAtMs - payload.startAtMs) / 1000)}s)`)
       bufferApi
         .saveClip(payload)
         .then((res) => {
-          slog('SAVE OK → clipId', res.clipId, '— refetching saved lane')
           // Tag the placeholder with the real id so it's pruned by EXACT id when the clip lands
           // (not just by bounds, which the backend may snap) — otherwise it lingers as a duplicate.
           setPendingSaves((prev) => prev.map((p) => (p.tempId === tempId ? { ...p, realClipId: res.clipId } : p)))
@@ -1004,7 +929,6 @@ export const ClipsScreen = () => {
         .catch((err: unknown) => {
           setPendingSaves((prev) => prev.filter((p) => p.tempId !== tempId)) // revert the optimistic carve
           const e = err as { response?: { status?: number; data?: { message?: string; error?: string } }; message?: string }
-          slog('SAVE FAILED — status', e.response?.status, '— body', JSON.stringify(e.response?.data), '— msg', e.message)
           const msg = e.response?.data?.message ?? e.response?.data?.error ?? e.message ?? 'Could not save clip'
           Alert.alert('Save failed', msg)
         })
@@ -1111,27 +1035,6 @@ export const ClipsScreen = () => {
   const reaping = windowStartMs != null && oldestClip != null && oldestClip.startMs <= windowStartMs + 1
   const reaperLane: 'buffered' | 'saved' = oldestClip != null && savedLane.some((c) => c.id === oldestClip.id) ? 'saved' : 'buffered'
 
-  // [reaper-trace] Log the lane/boundary state whenever the clip COUNT or the oldest clip's identity
-  // changes — i.e. exactly when a clip drops or appears. Reveals drop cadence (1s tick vs 15s refetch)
-  // and whether the oldest clip's id/window shifts. Stripped in prod.
-  const laneTraceRef = useRef('')
-  useEffect(() => {
-    if (!__DEV__) return
-    const t = Date.now()
-    const sig = `${bufferedLane.length}/${savedLane.length}|${oldestClip?.id ?? '-'}`
-    if (sig === laneTraceRef.current) return
-    const dropped = laneTraceRef.current.split('|')[0] !== `${bufferedLane.length}/${savedLane.length}`
-    laneTraceRef.current = sig
-    console.log(
-      '[reaper-trace] LANES',
-      dropped ? '⟵DROP/ADD' : '',
-      'buf/sav', `${bufferedLane.length}/${savedLane.length}`,
-      'reaping', reaping,
-      'lane', reaperLane,
-      'oldest', oldestClip ? `${oldestClip.id.slice(-12)} [${Math.round((t - oldestClip.startMs) / 1000)}s→${Math.round((t - oldestClip.endMs) / 1000)}s]` : '-',
-      'windowStart', windowStartMs != null ? `${Math.round((t - windowStartMs) / 1000)}s ago` : '-',
-    )
-  }, [bufferedLane.length, savedLane.length, oldestClip, reaping, reaperLane, windowStartMs])
   const reaperBoundaryMs = windowStartMs != null && !reaping ? windowStartMs : null
   const reapAtMs = oldestClip != null && windowMs > 0 ? oldestClip.startMs + windowMs : null
   const reapAtRef = useRef<number | null>(null)

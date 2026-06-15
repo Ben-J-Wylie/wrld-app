@@ -502,13 +502,6 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
   const reaperNowSv = useSharedValue(0) // the universal wall clock (serverNow), pushed by setNowUi
   const windowMsSv = useSharedValue(0)
   const reaperOnSv = useSharedValue(0) // 1 when windowing is active (reaperEdgeMs present)
-  // [reaper-trace] discontinuity detector: a UI-thread observer of scroll + layout.total. The visible
-  // "jump" is a sudden frame-to-frame change in scroll (footage teleports) or total (now edge teleports)
-  // — whoever wrote it (frame loop / RAF play loop / layout effect). prevScroll/prevTotal hold last frame.
-  const prevScrollSv = useSharedValue(-1)
-  const prevTotalSv = useSharedValue(-1)
-  const prevDeltaSv = useSharedValue(0) // last frame's scroll delta — for jerk (2nd-difference) detection
-  const prevTotalDeltaSv = useSharedValue(0) // last frame's total delta — jerk on the now edge (live build)
   // 1 while the centre is RIDING the reaper edge (parked at it) — sticky across clip-drops. While
   // riding, the frame-lock is the SOLE scroll authority and tracks the edge EXACTLY (up and down) so
   // a layout shift (a clip leaving the set) slides scroll with the edge → no bounce. Released when
@@ -523,17 +516,6 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
   const playingSv = useSharedValue(0)
   const followNowSv = useSharedValue(0) // 1 while pinning scroll to the now edge (host followLive)
   const suppressRideSv = useSharedValue(0) // 1 while the host suppresses the reaper latch (clock wheel)
-  // [reaper-trace] dev-only frame sampler + transition loggers (stripped in prod via __DEV__).
-  const frameLogSv = useSharedValue(0)
-  const logFrame = useCallback((scrollV: number, edgeV: number, riding: number, total: number, edgeScreen: number, liveI: number, rNow: number, liveDur: number) => {
-    if (__DEV__) console.log('[reaper-trace] FRAME scroll', Math.round(scrollV), 'edge', Math.round(edgeV), 'edgeScreen', Math.round(edgeScreen), 'riding', riding, 'total', Math.round(total), 'liveIdx', liveI, 'rNow', Math.round(rNow % 100000), 'liveDur', Math.round(liveDur))
-  }, [])
-  const logRiding = useCallback((on: number, scrollV: number, edgeV: number) => {
-    if (__DEV__) console.log('[reaper-trace] RIDING', on ? 'LATCH' : 'RELEASE', 'scroll', Math.round(scrollV), 'edge', Math.round(edgeV))
-  }, [])
-  const logJump = useCallback((dScroll: number, dTotal: number, riding: number, playing: number, panning: number, total: number, segLen: number) => {
-    if (__DEV__) console.log('[reaper-trace] JUMP Δscroll', Math.round(dScroll), 'Δtotal', Math.round(dTotal), 'riding', riding, 'playing', playing, 'panning', panning, 'total', Math.round(total), 'segs', segLen)
-  }, [])
   // Cumulative pixel layout at the live zoom (UI thread). Declared before the frame callback so the
   // worklet below can read it (reanimated captures closure refs at definition time).
   const layout = useDerivedValue(() => computeLayout(segsSv.value, leadSv.value, trailSv.value, px.value))
@@ -571,35 +553,6 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
       cancelAnimation(scroll)
       scroll.value = Math.min(edgeX, total)
       ridingSv.value = 1
-      runOnJS(logRiding)(1, scroll.value, edgeX)
-    }
-    // [reaper-trace] DISCONTINUITY: a sudden frame-to-frame change in the VISUAL anchor (effScroll =
-    // edgeX while riding, else scroll) or in total IS the jump, whoever wrote it. Detected on the UI
-    // thread so it catches RAF-loop + layout-effect writes too. Ignore the first frame + active pinch.
-    const effNow = ridingSv.value ? edgeX : scroll.value
-    if (prevScrollSv.value >= 0 && !twoFingers.value) {
-      const dS = effNow - prevScrollSv.value
-      const dT = total - prevTotalSv.value
-      // Jerk: a smooth ramp (steady playback, even fast at fine zoom) has near-constant delta, so
-      // dS−prevDelta ≈ 0. A one-frame teleport spikes it. Flag jerk OR a sudden total (now-edge) step.
-      const jerk = dS - prevDeltaSv.value
-      const totalJerk = dT - prevTotalDeltaSv.value
-      if (Math.abs(jerk) > 4 || Math.abs(totalJerk) > 4) {
-        runOnJS(logJump)(dS, dT, ridingSv.value, playingSv.value, panningSv.value, total, segsSv.value.length)
-      }
-      prevDeltaSv.value = dS
-      prevTotalDeltaSv.value = dT
-    }
-    prevScrollSv.value = effNow
-    prevTotalSv.value = total
-    // sample the steady state ~2×/s. edgeScreen uses the ACTUAL visual anchor (effScroll
-    // = reaperEdgeX while riding, else scroll) so it matches what's on screen.
-    frameLogSv.value += 1
-    if (frameLogSv.value >= 12) {
-      frameLogSv.value = 0
-      const effVis = ridingSv.value ? edgeX : scroll.value
-      const liveDur = liveIdxSv.value >= 0 ? (segsSv.value[liveIdxSv.value]?.durMs ?? -1) : -1
-      runOnJS(logFrame)(scroll.value, edgeX, ridingSv.value, total, vpSv.value / 2 - effVis + edgeX, liveIdxSv.value, reaperNowSv.value, liveDur)
     }
   })
   // The reaper boundary's CONTENT-x (where the mask ends + the edge sits), advanced each frame —
@@ -647,7 +600,6 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
   useLayoutEffect(() => {
     const p = px.value || defaultPx
     const prev = prevLayoutInputs.current
-    const scrollBefore = scroll.value // [reaper-trace] capture before any re-pin
     // The "now" reference for all mappings is the CONTINUOUS UI-thread clock (reaperNowSv), never the
     // 1 s `nowMs` state — so a reconcile uses the same clock the per-frame loops use (no 1 s seam).
     const nowUi = reaperNowSv.value || nowMs
@@ -680,29 +632,6 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
       } else if (repin) {
         scroll.value = clamp(timeToX(centerTime, segs, newLay, nowUi, leadFromMs), 0, newLay.total)
       }
-    }
-    // [reaper-trace] Did the reaper edge's SCREEN position jump across this reconcile? If edgeScreen
-    // before≠after, that delta IS the visible bounce; `path` says which branch produced it.
-    if (__DEV__ && p > 0) {
-      const B = reaperNowSv.value - windowMs
-      const half = vpSv.value / 2
-      const newL = computeLayout(segs, leadGapPx, trailGapPx, p)
-      const newEdge = reaperEdgeX(B, segs, newL, nowUi, leadFromMs)
-      // edgeScreen uses the ACTUAL visual anchor (effScroll = reaperEdgeX while riding, else scroll).
-      const edgeScreenAfter = half - (ridingSv.value ? newEdge : scroll.value) + newEdge
-      let beforeStr = '-'
-      if (prev) {
-        const oldL = computeLayout(prev.segs, prev.lead, prev.trail, p)
-        const oldEdge = reaperEdgeX(B, prev.segs, oldL, prev.now, prev.leadFrom)
-        beforeStr = `${Math.round(half - (ridingSv.value ? oldEdge : scrollBefore) + oldEdge)}`
-      }
-      console.log(
-        '[reaper-trace] RECONCILE',
-        'segs', (prev?.segs.length ?? 0), '→', segs.length,
-        'path', ridingSv.value ? 'RIDING' : repin ? 'linear' : 'none',
-        'scroll', Math.round(scrollBefore), '→', Math.round(scroll.value),
-        'edgeScreen', beforeStr, '→', Math.round(edgeScreenAfter),
-      )
     }
     prevLayoutInputs.current = { segs, lead: leadGapPx, trail: trailGapPx, leadFrom: leadFromMs, now: nowUi }
     // NOTE: `nowMs` is deliberately NOT a dependency — the effect must fire only when the FOOTAGE
@@ -854,10 +783,7 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
           cancelAnimation(scroll)
           // The user is taking control → release any ride + mark panning so the frame-lock won't grab
           // the scroll mid-drag (that grab/release cycle was the reaper jumpiness).
-          if (ridingSv.value) {
-            ridingSv.value = 0
-            runOnJS(logRiding)(0, scroll.value, reaperEdgeXSv.value)
-          }
+          ridingSv.value = 0
           panningSv.value = 1
           runOnJS(notifyScrubStart)()
         })
@@ -891,7 +817,7 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
           // settles at the reaper edge can latch into a smooth ride.
           panningSv.value = 0
         }),
-    [scroll, layout, segsSv, nowSv, leadFromSv, notifyScrubStart, notifyScrubEnd, twoFingers, ridingSv, reaperEdgeXSv, logRiding, panningSv],
+    [scroll, layout, segsSv, nowSv, leadFromSv, notifyScrubStart, notifyScrubEnd, twoFingers, ridingSv, reaperEdgeXSv, panningSv],
   )
 
   const pinchGesture = useMemo(
