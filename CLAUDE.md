@@ -3388,13 +3388,26 @@ now holds flat (~3.1 s) at 1× play instead of climbing.
 `serverOffset = serverNowMs − Date.now()` and runs `nowMs = Date.now() + serverOffset`, so the
 reaper/now edges align with the server-clock-anchored clip geometry (no device skew).
 
-**Cleanup owed:** strip the `[reaper-trace]` + `[clips-save]` `__DEV__` logs (now that all six are
-confirmed) in a one-line follow-up — incl. the `setNowUi` JS-RAF clock, the GATE/JUMP/FRAME probes,
-the discontinuity detector (`prevScrollSv`/`prevTotalSv`/jerk), and the `rNow`/`liveDur` FRAME fields.
-Note the residual `JUMP` lines during play are benign (the jerk detector at threshold 4 catching the
-~4 px/frame playback-follow oscillation — sub-pixel, not a visible jump). Backend follow-up (Aaron):
-reap/close ghost sessions
-(0-duration, no `endedAt`) so they never masquerade as the live tail.
+**Universal wall clock (done 2026-06-15):** the whole saga's foundation — `src/lib/serverClock.ts`
+(`serverNow()` / `feedServerNow()`), the ONE server-aligned clock every surface reads (CONTENT.md §6
+"The universal wall clock"). Everything that represents a time position reads it (never accumulates a
+frame-timer, never reads raw `Date.now()`): the now/reaper edges (`setNowUi`), the playhead (advances by
+the wall-clock delta — telescopes to a clock read, drift-free), the clock readouts + card countdowns,
+`TimeScrubber` (globe + editor), `ClipEditScreen`, `useBroadcasterClock`. The `ClipsTimeline`
+frame-timer accumulator was retired (sole driver = `setNowUi`).
+
+**Edge behaviour (done 2026-06-15):** drag clamps at the reaper edge (can't enter the void) and the now
+edge; the playhead **sticks** to the now edge (`followNow` pin) the way it rides the reaper; the clip
+geometry **shrinks from the left** at the reaper (each clip's left clamps to `reaperEdgeX` → its own
+rounded-left corner, no hard mask crop); play-after-drag no longer misfires (the orphaned scrub gate is
+cleared on play/seek/nav); **riding = playing** with a distinct **slashed-pause** for the
+can't-pause reaper ride; and `ridingReaper` is a continuous **mirror** of the timeline's `ridingSv`
+(`onRidingChange`) — plus `suppressRide` lets the clock-wheel move forward off the reaper edge.
+
+**Probes stripped (2026-06-15):** all `[reaper-trace]` / `[clip-sync]` / `[clips-save]` `__DEV__` logs +
+their diagnostic-only shared values are removed. **The Clips-timeline clock saga is complete.** Backend
+follow-up still open (Aaron): reap/close ghost sessions (0-duration, no `endedAt`) so they never
+masquerade as the live tail.
 
 ---
 

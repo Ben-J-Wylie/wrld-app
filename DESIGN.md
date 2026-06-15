@@ -3488,8 +3488,17 @@ on the sublabel and the left ruler.
   FRAME via `useFrameCallback` so the **reaper mask** + edge consume the oldest clip at 60fps) ·
   `windowMs`. Also carries the **leading gap** (`leadGapPx`/`leadFromMs` threaded through the worklet
   layout — the reaper-room countdown region) and the **dark head/tail caps** beyond the window edges.
-  *(The vertical `ClipLane` / `ClipTimeRuler` / `TimeGapMarker` are now gallery-only — the timeline
-  superseded them for the grid; `ClipBlock` is shared.)*
+  **Edge behaviour (2026-06-15):** the clip geometry **shrinks from the left** at the reaper — each
+  clip's left edge clamps to `reaperEdgeX`, so the oldest clip shows its own **rounded-left corner**
+  (not a flat mask crop), mirroring how the now edge grows-from-the-right with a rounded-right corner;
+  drag clamps at the reaper edge (can't enter the reaped void). New props: **`followNow`** (pin scroll
+  to the now edge so the playhead sticks to it as the live build grows — the now-edge analog of riding
+  the reaper), **`suppressRide`** (release/suspend the reaper latch while the host wheels the clock, so
+  the playhead can move forward off the edge), **`onRidingChange(riding)`** (continuous report of the
+  autonomous `ridingSv` so the host's reaper-clock + transport icon mirror it, never desync). The
+  universal-clock `setNowUi(ms)` on the imperative handle is the **sole** driver of the reaper/now
+  edges (CONTENT.md §6). *(The vertical `ClipLane` / `ClipTimeRuler` / `TimeGapMarker` are now
+  gallery-only — the timeline superseded them for the grid; `ClipBlock` is shared.)*
 - **`ClipViewer`** — `src/components/features/clip/ClipViewer.tsx`. The **sticky full-width 2:1**
   (half-height) preview above the buffered/saved bar (the host pads it for equal L/R margins).
   **Presentational:** the host owns the video player (so the bottom transport + clock can drive it)

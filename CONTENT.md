@@ -285,6 +285,25 @@ nuances, not styling — styling lives in DESIGN.md.
   window is fully evicted (head meets now → the no-clips state). Both frontiers
   obey one law — the collapsed gap is crossed in fixed time, footage in real
   time — so consumption reads identically whether played or reaped.
+- **The two edges are symmetric, and bound the playhead.** Footage **grows from
+  the right** at the now edge (the live clip extends, rounded-right corner + the
+  dark tail cap beyond) and **shrinks from the left** at the reaper edge (the
+  oldest clip's left edge tracks the eviction boundary, showing its own
+  rounded-left corner + the dark void beyond) — never a hard crop; the geometry
+  is the clip's, both ends. The playhead **cannot be dragged past either edge**:
+  it clamps at the reaper edge (can't enter the reaped void) and at the now edge
+  (can't outrun live), exactly as the now edge has always clamped. It **sticks**
+  to whichever edge it's parked on — riding the reaper as footage ages past it, or
+  following the now edge as the live build grows — so it's never static relative to
+  the footage there.
+- **Riding an edge is playing; the reaper can't be paused.** Parked on either edge
+  the clock ticks and the playhead moves vs the footage, so the transport reads as
+  *playing*. The now-edge ride is pausable (freeze → it becomes a static THEN). The
+  reaper ride is **not** — the reaper eats on a timer regardless of the user — so it
+  shows a distinct **slashed-pause** ("playing, can't pause"); the way off is to
+  move forward (play / a forward step / wheel the clock ahead) or drag away. The
+  riding state is read from the **one** place that owns it (the timeline's latch),
+  never guessed, so the clock + icon never desync from what's actually moving.
 - **Zoom rescales time, never content.** Pinch is a layout rescale of the time
   axis (clip widths grow/shrink) — *not* a transform scale — so thumbs and labels
   never distort. It's anchored to centre (scales evenly left/right), runs on the
