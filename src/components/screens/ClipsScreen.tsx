@@ -779,20 +779,10 @@ export const ClipsScreen = () => {
       setFollowLive(false)
       return
     }
-    // Riding the REAPER edge can't be paused → bump the playhead AHEAD off the eviction edge (to the
-    // oldest un-reaped footage, never BEHIND the advancing reaper) and play forward. The 1s clamp can
-    // leave the instant up to ~1s behind the live edge, so playing from it would start behind.
-    if (ridingReaperRef.current) {
-      scrubbingRef.current = false
-      setScrubbing(false)
-      const ahead = Math.max(reaperEdgeNow() ?? firstStartRef.current, firstStartRef.current)
-      playheadRef.current = ahead
-      setPlayheadMs(ahead)
-      setRidingReaper(false)
-      timelineRef.current?.scrollToTime(ahead, true)
-      setPlaying(true)
-      return
-    }
+    // Riding the REAPER edge can't be paused (it eats on a timer) — the slashed-pause is a STATUS
+    // indicator, not a control. Pressing it does nothing (no bump, no playback). You leave the reaper
+    // ride the same way you reach it: drag away / a forward transport button / wheeling the clock ahead.
+    if (ridingReaperRef.current) return
     // Clear any in-flight scrub gate. After the finger lifts, the timeline's `withDecay` keeps
     // `scrubbing` true until it SETTLES (then onScrubEnd clears it). Pressing play interrupts that
     // decay (the play tick's scrollToTime cancels the animation), so its settle callback fires with
@@ -810,7 +800,7 @@ export const ClipsScreen = () => {
       timelineRef.current?.scrollToTime(first, true)
     }
     setPlaying(true) // the clock takes over — it seeks + plays the video as a follower
-  }, [player, reaperEdgeNow])
+  }, [player])
 
   // Smooth scrub: as the timeline scrubs under the playhead, the PLAYHEAD follows the centre
   // (gap-interpolated) and the loaded video seeks to match (tolerant keyframe seekBy → robust on
@@ -850,10 +840,22 @@ export const ClipsScreen = () => {
       // Settle the clock edge state from where the scroll LANDED (pixel-precise). seekTo above clears
       // both, so read + apply after it.
       const c = timelineRef.current?.getCenter()
+      const atEdge = !!c?.atNow || !!c?.atReaper
       setFollowLive(!!c?.atNow)
       setRidingReaper(!!c?.atReaper)
-      // Was playing → resume from where the fling LANDED (the settle was the wait; no fixed timer).
-      if (scrubResumePlayingRef.current) player.play()
+      // Landed on an EDGE → ride it (now edge follows, reaper edge rides) — like dragging to the now
+      // edge. Stop footage playback so the ride owns the motion; don't resume. Off an edge → resume
+      // from where the fling LANDED (if we were playing; the settle was the wait, no fixed timer).
+      if (atEdge) {
+        if (playingRef.current) {
+          try {
+            player.pause()
+          } catch {}
+          setPlaying(false)
+        }
+      } else if (scrubResumePlayingRef.current) {
+        player.play()
+      }
     },
     [player, seekTo],
   )
