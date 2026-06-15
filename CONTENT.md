@@ -418,39 +418,41 @@ This is deliberate, and it's why a connectivity blip is harmless:
 
 #### Inventory — surfaces that must follow the universal wall clock
 
-Every time-position keeper in the app and whether it currently obeys. Anything that
-ACCUMULATES, or that READS the **device** clock instead of the server-aligned one, is
-a latent second clock and is flagged. (Network polls, sensor sampling, and animation
-timers are out of scope — they don't represent a position in time.)
+Every time-position keeper in the app and whether it obeys. **All flagged items were
+resolved 2026-06-15** — the universal clock now lives in `src/lib/serverClock.ts`
+(`serverNow()` / `feedServerNow()`) and every surface reads it. (Network polls, sensor
+sampling, animation timers, and pure *duration* deltas are out of scope — a delta is
+offset-invariant, so device vs server doesn't matter there.)
 
-- ✅ **`serverNow()` — `ClipsScreen`** — the master: device time + measured server
-  offset. The universal clock everything else must read.
-- ✅ **Now edge + reaper edge — `ClipsTimeline`** — fed `serverNow()` every frame via
-  the JS-RAF `setNowUi`; their positions read the clock. *Residual:* the reanimated
-  frame-callback accumulator (`reaperNowSv += timeSinceFirstFrame`) survives as a
-  monotonic-max fallback — a dormant second clock; retire it so only the read remains.
-- ⚠️ **Clips playhead — `ClipsScreen` play tick** — `ph += min(80, ts − lastTs)`: a
-  clamped stopwatch, the active divergence (the fronts overtake it under load). Must
-  become `playStartInstant + (serverNow() − playStartClock)`. **[primary fix]**
-- ⚠️ **Clips clock readout + card countdowns — `ClipsScreen`** — `offsetForClock`,
-  "footage clears in", "since last broadcast" read **device `Date.now()`**, not
-  `serverNow()`. The 1-second `secondTick` is only a re-render trigger (fine); the
-  *values* must read the universal clock.
-- ⚠️ **The bottom ticking clock — `TimeScrubber`** — displayed instant is
-  `Date.now() − offsetMs`: it READS (good) but reads the **device** clock, so the
-  readout skews against the server-aligned edges. Feed it `serverNow()`. Applies to
-  both uses — the globe time-machine and the clip-editor buffer clock.
-- ⚠️ **Clip editor — `ClipEditScreen`** — a parallel surface with the same model: its
-  playhead follows via a 1-second `setInterval → setPlayheadMs(Date.now())`, and
-  `offsetForClock` / buffer bounds read **device `Date.now()`**. Same treatment — read
-  the universal clock; advance the playhead by elapsed-since-read, not a 1-second
-  setState.
-- 🔵 **`useBroadcasterClock`** — a time-of-day display (reads the device clock, formats
-  to a timezone). Low stakes — it shows local wall time, not a content position; align
-  to the server clock only if skew ever matters.
+- ✅ **`serverNow()` — `src/lib/serverClock.ts`** — the master, now a shared module:
+  device time + measured, eased server offset; fed `serverNowMs` by `ClipsScreen` and
+  `ClipEditScreen`. The one clock everything reads.
+- ✅ **Now edge + reaper edge — `ClipsTimeline`** — driven SOLELY by `serverNow()` via
+  the JS-RAF `setNowUi`. *The frame-timer accumulator (`reaperNowSv += timeSinceFirstFrame`)
+  is RETIRED* — it stalled during playback and let the edges run ahead of the JS-clock
+  playhead during a hitch; now edges + live build + playhead ride one clock and
+  stall/resume together. (A 1s server-read floor remains only to bootstrap before the
+  first `setNowUi` push.)
+- ✅ **Clips playhead — `ClipsScreen` play tick** — now advances by the WALL-CLOCK delta
+  (`serverNow() − lastClock`), which telescopes to `playStart + (serverNow() − startClock)`
+  — i.e. it IS the read, drift-free. The lossy `min(80)` clamp is gone, replaced by a
+  `max(0, min(PLAYHEAD_MAX_STEP_MS=1000, …))` backgrounding/backward-tick guard that
+  never bites on routine jank. *(Was the active divergence — the fronts overtaking it.)*
+- ✅ **Clips clock readout + card countdowns — `ClipsScreen`** — `offsetForClock`,
+  "footage clears in", "since last broadcast", and the dial-scrub seek-back read
+  `serverNow()`. (The 1-second `secondTick` is only a re-render trigger — left as is.)
+- ✅ **The bottom ticking clock — `TimeScrubber`** — reads `serverNow()` throughout
+  (instant = `serverNow() − offsetMs`), so the readout no longer skews against the
+  edges. Covers both uses — the globe time-machine and the clip-editor buffer clock.
+- ✅ **Clip editor — `ClipEditScreen`** — reads `serverNow()` for every "now"/live-edge/
+  playhead position (bounds, follow, offset, cards, gap ends, transport, dial-scrub, and
+  its internal playback clock), and feeds the shared clock from its own buffer query.
+- ✅ **`useBroadcasterClock`** — the time-of-day readout now formats `serverNow()` rather
+  than raw `new Date()`, so even it matches the universal clock.
 
-Legend: ✅ reads the universal clock · ⚠️ flagged (accumulates, or reads the device
-clock) · 🔵 reads the device clock but low-stakes (a clock display, not a frontier).
+Legend: ✅ reads the universal clock. *Out of scope (intentionally left on `Date.now()`):*
+pure duration/timestamp measures — seek-throttle stamps, thumbnail-gen timing, the
+reverse-scrub frame delta — because a delta cancels the offset and is rate-identical.
 
 ---
 

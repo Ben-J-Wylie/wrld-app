@@ -480,9 +480,7 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
   const pinchRef = useRef<GestureType | undefined>(undefined)
   // ── reaper boundary, advanced EVERY FRAME (so the mask/edge consume the oldest clip smoothly) ──
   // Anchored to the JS reaper edge (`reaperEdgeMs`, re-synced on the slow tick) + the frame delta.
-  const reaperNowSv = useSharedValue(0) // current wall-clock, ticking on the UI thread
-  const reaperAnchorSv = useSharedValue(0) // = Date.now() at the last JS resync
-  const reaperFrameBaseSv = useSharedValue(-1) // frame timestamp at the last resync (-1 = re-anchor)
+  const reaperNowSv = useSharedValue(0) // the universal wall clock (serverNow), pushed by setNowUi
   const windowMsSv = useSharedValue(0)
   const reaperOnSv = useSharedValue(0) // 1 when windowing is active (reaperEdgeMs present)
   // [reaper-trace] discontinuity detector: a UI-thread observer of scroll + layout.total. The visible
@@ -518,22 +516,15 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
   // Cumulative pixel layout at the live zoom (UI thread). Declared before the frame callback so the
   // worklet below can read it (reanimated captures closure refs at definition time).
   const layout = useDerivedValue(() => computeLayout(segsSv.value, leadSv.value, trailSv.value, px.value))
-  useFrameCallback((frame) => {
+  useFrameCallback(() => {
     'worklet'
     if (!reaperOnSv.value) return
-    if (reaperFrameBaseSv.value < 0) reaperFrameBaseSv.value = frame.timeSinceFirstFrame
-    // MONOTONIC: the reaper clock can only advance. reaperNow is re-anchored to the wall clock (nowMs)
-    // each tick, but advances BETWEEN ticks on the animation-frame clock — the two drift, so a naive
-    // re-anchor snaps reaperNow backward by a few px → the mask retreats → a per-tick bounce. The real
-    // boundary (now − window) is monotonic, so clamp: only ever take the larger value. A forward snap
-    // (catch-up after the screen was backgrounded) is fine; a backward one is the drift dip, clamped out.
-    // This is the single "nowUI" clock — it drives BOTH the reaper edge (below) AND the live build.
-    reaperNowSv.value = Math.max(reaperNowSv.value, reaperAnchorSv.value + (frame.timeSinceFirstFrame - reaperFrameBaseSv.value))
-    // SINGLE-CLOCK: nowSv (the "now" reference fed to EVERY mapping — reaper edge, trailing-gap,
-    // scrollToTime, getCenter, gestures) tracks the continuous UI-thread clock, NOT the 1 s React
-    // `nowMs` state. Sampling now off a 1 s state was the per-second jump: the trailing-gap / now-edge
-    // mappings stepped 1 s at a time while the frame loop glided. With nowSv == reaperNowSv every
-    // moving frontier reads the same continuous clock, so nothing has a 1 s cadence. (CONTENT.md §6.)
+    // SINGLE CLOCK (CONTENT.md §6): reaperNowSv IS the universal wall clock (serverNow), pushed every
+    // JS frame by the host's setNowUi. The frame callback no longer keeps its OWN time — the retired
+    // frame-timer accumulator (timeSinceFirstFrame) was a second clock that STALLED during video
+    // playback AND let the edges run ahead of the (JS-clock) playhead during a JS hitch. Now the edges,
+    // the live build, and the playhead all ride the one serverNow clock and stall/resume together.
+    // nowSv mirrors it for every mapping (reaper edge, trailing-gap, scrollToTime, getCenter, gestures).
     nowSv.value = reaperNowSv.value
     // Live build: grow the open session's seg to nowUI each frame (smooth) — same clock as the edge.
     if (liveIdxSv.value >= 0) segsSv.value = extendLive(baseSegsSv.value, liveIdxSv.value, reaperNowSv.value)
@@ -606,14 +597,12 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
     }
     reaperOnSv.value = 1
     windowMsSv.value = windowMs
-    // MONOTONIC re-anchor: never let the wall-clock resync pull reaperNow BACKWARD (the drift dip).
-    // Take max(current, wall), anchor from THAT, and reset the frame base so the per-frame advance
-    // continues seamlessly from it — forward catch-up is allowed, backward is clamped out.
-    const mono = Math.max(reaperNowSv.value, reaperEdgeMs + windowMs)
-    reaperNowSv.value = mono
-    reaperAnchorSv.value = mono
-    reaperFrameBaseSv.value = -1 // re-anchor the frame base on the next frame
-  }, [reaperEdgeMs, windowMs, reaperOnSv, ridingSv, windowMsSv, reaperAnchorSv, reaperNowSv, reaperFrameBaseSv])
+    // Bootstrap / monotonic floor from the 1s server-read (`reaperEdgeMs + windowMs` is the host's
+    // server-aligned nowMs): ensures reaperNowSv has a sane value before setNowUi's first push and
+    // never sits at 0. setNowUi (continuous serverNow — the SAME clock, just per-frame) dominates;
+    // this is only the floor. Forward-only, so a backward resync never retreats the edge.
+    reaperNowSv.value = Math.max(reaperNowSv.value, reaperEdgeMs + windowMs)
+  }, [reaperEdgeMs, windowMs, reaperOnSv, ridingSv, windowMsSv, reaperNowSv])
 
   // Keep the worklet inputs in sync with the JS-side precompute / measurements — AND preserve the
   // wall-clock instant under the centre playhead across the change. The timeline lays out by pixels;
@@ -753,20 +742,17 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
     const r = resolveAt(scroll.value, sgs, lay, nowSv.value, leadFromSv.value)
     return { ...r, pxPerMs: p, atNow: scroll.value >= lay.total - EDGE_EPS, atReaper: ridingSv.value === 1 }
   }, [defaultPx, px, scroll, segsSv, leadSv, trailSv, nowSv, leadFromSv, ridingSv])
-  // Continuous UI clock fed from the host's JS RAF loop. Monotonic max with whatever the frame
-  // callback has accumulated, and re-anchor the frame callback to this value so it resumes from here
-  // (not from a stale lower timeSinceFirstFrame) if/when the RAF stops. Also nudges segsSv so the live
-  // build advances on this clock even if the frame callback's timer is stalled (playback).
+  // The universal wall clock, pushed from the host's JS RAF loop (serverNow every frame). This is now
+  // the SOLE driver of reaperNowSv (the frame-timer accumulator is retired). Monotonic (forward-only),
+  // mirrors nowSv for every mapping, and advances the live build (extendLive) on the same clock.
   const setNowUi = useCallback(
     (ms: number) => {
       if (ms <= reaperNowSv.value) return
       reaperNowSv.value = ms
-      reaperAnchorSv.value = ms
-      reaperFrameBaseSv.value = -1 // re-anchor the frame-callback delta to this fed value
       nowSv.value = ms
       if (liveIdxSv.value >= 0) segsSv.value = extendLive(baseSegsSv.value, liveIdxSv.value, ms)
     },
-    [reaperNowSv, reaperAnchorSv, reaperFrameBaseSv, nowSv, liveIdxSv, segsSv, baseSegsSv],
+    [reaperNowSv, nowSv, liveIdxSv, segsSv, baseSegsSv],
   )
   useImperativeHandle(ref, () => ({ scrollToTime, getCenter, setNowUi }), [scrollToTime, getCenter, setNowUi])
 

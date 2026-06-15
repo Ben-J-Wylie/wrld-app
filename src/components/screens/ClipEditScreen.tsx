@@ -52,6 +52,7 @@ import { SourceChatLog } from '@/components/features/clip/SourceChatLog'
 import { useAuth } from '@clerk/clerk-expo'
 import { useVideoPlayer, VideoView } from 'expo-video'
 import { useBuffer } from '@/hooks/useBuffer'
+import { serverNow, feedServerNow } from '@/lib/serverClock'
 import { useDataTrack } from '@/hooks/useDataTrack'
 import { toGraphValues, readingAt, toTrail, trailPositionAt, toChatLog } from '@/lib/dataTrackRender'
 import { useSavedClips } from '@/hooks/useSavedClips'
@@ -237,6 +238,11 @@ export const ClipEditScreen = () => {
   const { data: savedClipsData } = useSavedClips(!!isSignedIn)
   const qc = useQueryClient()
   const sessions = buffer?.sessions ?? EMPTY_SESSIONS
+  // Feed the universal wall clock (CONTENT.md §6) so this screen's `serverNow()` reads the same
+  // server-aligned clock as everywhere else even when opened without visiting the Clips grid first.
+  useEffect(() => {
+    if (buffer?.serverNowMs != null) feedServerNow(buffer.serverNowMs)
+  }, [buffer?.serverNowMs])
 
   // ── focus clip (opened from the Clips grid) ──────────────────────────────────
   // When navigated with `clipId` + `kind`, the editor scopes to THAT clip's own
@@ -324,8 +330,8 @@ export const ClipEditScreen = () => {
     }))
   }, [focusClip, sessions])
   const segments = focused ? focusSegments : bufferSegments
-  const bufferStartMs = focused ? focusClip!.startMs : sessions.length ? sessionStartMs(sessions[0]!) : Date.now()
-  const bufferEndMs = focused ? focusClip!.endMs : Date.now()
+  const bufferStartMs = focused ? focusClip!.startMs : sessions.length ? sessionStartMs(sessions[0]!) : serverNow()
+  const bufferEndMs = focused ? focusClip!.endMs : serverNow()
 
   // Leading "eviction" edge: the buffer keeps `windowHours` of footage, so the oldest
   // frame (bufferStartMs) is deleted at bufferStartMs + window. While the oldest footage
@@ -355,7 +361,7 @@ export const ClipEditScreen = () => {
   // (placed at ~now), the 1s tick advances it to now so the clock + timeline auto-
   // follow the live edge. The clock (TimeScrubber) runs in controlled `playback=false`
   // mode and derives its offset from this absolute instant.
-  const [playheadMs, setPlayheadMs] = useState(() => Date.now() - 2 * H)
+  const [playheadMs, setPlayheadMs] = useState(() => serverNow() - 2 * H)
   const [following, setFollowing] = useState(false)
   // True while the user is dragging the field / timeline / clock. The field shows the
   // static server frame under the playhead during a scrub (no video seek = no stutter),
@@ -372,7 +378,7 @@ export const ClipEditScreen = () => {
     const id = setInterval(() => {
       setClockTick((t) => (t + 1) % 60)
       // Focused single-clip view never follows a live edge.
-      if (!focusedRef.current && followingRef.current) setPlayheadMs(Date.now())
+      if (!focusedRef.current && followingRef.current) setPlayheadMs(serverNow())
     }, 1000)
     return () => clearInterval(id)
   }, [])
@@ -380,20 +386,20 @@ export const ClipEditScreen = () => {
   const clampPlayhead = (ms: number) =>
     focused
       ? clamp(ms, focusClip!.startMs, focusClip!.endMs)
-      : clamp(ms, hasLeadingGap ? leadStartMs : bufferStartMs, Date.now())
+      : clamp(ms, hasLeadingGap ? leadStartMs : bufferStartMs, serverNow())
   // Place the playhead at an absolute instant (held); start following only if it
   // lands at the live edge.
   function placePlayhead(ms: number) {
     const m = clampPlayhead(ms)
     playheadRef.current = m
     setPlayheadMs(m)
-    setFollowing(!focused && m >= Date.now() - 1500)
+    setFollowing(!focused && m >= serverNow() - 1500)
   }
   // When following the live edge, the clock reads exactly 0 (NOW) and live-ticks;
   // otherwise it's the held instant's distance behind now. (Deriving it as
-  // Date.now()-playheadMs alone drifts up to ~1s between ticks → reads THEN even at
+  // serverNow()-playheadMs alone drifts up to ~1s between ticks → reads THEN even at
   // the live head, which is why NOW looked stuck.)
-  const offsetForClock = following ? 0 : Math.max(0, Date.now() - playheadMs)
+  const offsetForClock = following ? 0 : Math.max(0, serverNow() - playheadMs)
   // While the TimeScrubber clock is expanded, lock the screen scroll so vertical
   // wheel drags aren't stolen by the ScrollView. Touching anything that isn't the
   // clock bumps collapseSignal → the clock collapses → scroll restores.
@@ -457,9 +463,9 @@ export const ClipEditScreen = () => {
     const prev = [...sessions].reverse().find((s) => sessionEndMs(s) <= playheadMs)
     const next = sessions.find((s) => sessionStartMs(s) > playheadMs)
     if (prev && next) return { title: 'GAP', detail: fmtGap(sessionStartMs(next) - sessionEndMs(prev)) }
-    if (prev && !next) return { title: 'SINCE LAST BROADCAST', detail: fmtClock(Date.now() - sessionEndMs(prev)) }
+    if (prev && !next) return { title: 'SINCE LAST BROADCAST', detail: fmtClock(serverNow() - sessionEndMs(prev)) }
     if (!prev && next && hasLeadingGap) {
-      return { title: 'FOOTAGE CLEARS IN', detail: fmtClock(Math.max(0, bufferStartMs + windowMs - Date.now())) }
+      return { title: 'FOOTAGE CLEARS IN', detail: fmtClock(Math.max(0, bufferStartMs + windowMs - serverNow())) }
     }
     return undefined
   })()
@@ -759,7 +765,7 @@ export const ClipEditScreen = () => {
   // (playing) or froze (stalled) since then.
   const lastVtRef = useRef(0)
   const lastVtWallRef = useRef(0)
-  // While Date.now() < this, the follow glue is suppressed (a play-start / seek just
+  // While serverNow() < this, the follow glue is suppressed (a play-start / seek just
   // happened, the video is buffering toward the target — don't let it snap the playhead
   // back to the keyframe it landed on).
   const glueSuppressUntilRef = useRef(0)
@@ -771,7 +777,7 @@ export const ClipEditScreen = () => {
   // Suppress the video-follow glue for a beat (after a play-start / seek). Called wherever
   // we kick the video to a new position so the post-seek buffer can't pull the playhead back.
   function suppressGlue() {
-    glueSuppressUntilRef.current = Date.now() + GLUE_SUPPRESS_MS
+    glueSuppressUntilRef.current = serverNow() + GLUE_SUPPRESS_MS
   }
 
   const seekTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -847,7 +853,7 @@ export const ClipEditScreen = () => {
     }
     if (pendingSeek.current == null) return
     if (player.status !== 'readyToPlay') return // busy — statusChange will re-flush
-    lastSeekAt.current = Date.now()
+    lastSeekAt.current = serverNow()
     const sec = pendingSeek.current
     pendingSeek.current = null
     seekCountRef.current += 1
@@ -864,7 +870,7 @@ export const ClipEditScreen = () => {
   // flush so the final landing frame is always applied (subject to the ready gate).
   function scheduleSeek(sec: number) {
     pendingSeek.current = sec
-    const since = Date.now() - lastSeekAt.current
+    const since = serverNow() - lastSeekAt.current
     if (since >= SEEK_THROTTLE_MS) flushSeek()
     else if (!seekTimer.current) seekTimer.current = setTimeout(flushSeek, SEEK_THROTTLE_MS - since)
   }
@@ -941,7 +947,7 @@ export const ClipEditScreen = () => {
       const en = sessionEndMs(cc[i]!.s)
       const nextStart = i + 1 < cc.length ? sessionStartMs(cc[i + 1]!.s) : null
       if (ms >= en && (nextStart == null || ms < nextStart)) {
-        return { start: en, end: nextStart ?? Date.now(), hasNext: nextStart != null }
+        return { start: en, end: nextStart ?? serverNow(), hasNext: nextStart != null }
       }
     }
     return null
@@ -1116,7 +1122,7 @@ export const ClipEditScreen = () => {
       // GAP RUSH — every frame.
       if (gapRushRef.current) {
         const r = gapRushRef.current
-        const f = clamp((Date.now() - r.startWall) / r.hold, 0, 1)
+        const f = clamp((serverNow() - r.startWall) / r.hold, 0, 1)
         const ph = r.from + f * (r.to - r.from)
         playheadRef.current = ph
         setPlayheadMs(ph)
@@ -1129,13 +1135,13 @@ export const ClipEditScreen = () => {
             setPlaying(false)
             setFollowing(true)
           } else {
-            playClockRef.current = { wall: Date.now(), ph: r.to } // resume footage at next clip
+            playClockRef.current = { wall: serverNow(), ph: r.to } // resume footage at next clip
           }
         }
         return
       }
       // FOOTAGE — throttled to ~200ms.
-      const now = Date.now()
+      const now = serverNow()
       if (now - lastFootage < 200) return
       lastFootage = now
       if (!playClockRef.current) {
@@ -1189,7 +1195,7 @@ export const ClipEditScreen = () => {
         const gap = cameraGapAround(ph)
         if (gap) {
           gapRushRef.current = {
-            startWall: Date.now(),
+            startWall: serverNow(),
             from: gap.start,
             to: gap.end,
             hold: GAP_RUSH_MS,
@@ -1346,7 +1352,7 @@ export const ClipEditScreen = () => {
       vlog(`thumb gen: ${wanted.length} cells in window (cache ${thumbCache.current.size})`)
       const missing = wanted.filter((w) => !thumbCache.current.has(w.bucket))
       if (missing.length) {
-        const t0 = Date.now()
+        const t0 = serverNow()
         try {
           const imgs = await withTimeout(
             thumbPlayer.generateThumbnailsAsync(
@@ -1361,10 +1367,10 @@ export const ClipEditScreen = () => {
           })
           if (thumbCache.current.size > 240) thumbCache.current.clear()
           thumbFailRef.current = 0
-          vlog(`thumb gen +${imgs.length} in ${Date.now() - t0}ms (cache ${thumbCache.current.size})`)
+          vlog(`thumb gen +${imgs.length} in ${serverNow() - t0}ms (cache ${thumbCache.current.size})`)
         } catch (e) {
           thumbFailRef.current += 1
-          vlog(`thumb gen failed after ${Date.now() - t0}ms (#${thumbFailRef.current})`, e)
+          vlog(`thumb gen failed after ${serverNow() - t0}ms (#${thumbFailRef.current})`, e)
           // Repeated hangs → generateThumbnailsAsync isn't viable on this source
           // (exact-frame extraction on the -c:v copy HLS VOD). Stop trying; the
           // timeline keeps its sprocket filmstrip.
@@ -1442,7 +1448,7 @@ export const ClipEditScreen = () => {
       if (st > ms) nextStart = Math.min(nextStart, st)
     }
     if (prevEnd === -Infinity) return hasLeadingGap ? { start: leadStartMs, end: bufferStartMs } : null
-    if (nextStart === Infinity) return { start: prevEnd, end: Date.now() }
+    if (nextStart === Infinity) return { start: prevEnd, end: serverNow() }
     return { start: prevEnd, end: nextStart }
   }
 
@@ -1529,7 +1535,7 @@ export const ClipEditScreen = () => {
   // to the buffer end. Guarding against bufferStartMs here is what disabled the 2nd tap.
   const floorMs = hasLeadingGap ? leadStartMs : bufferStartMs
   const canPrev = bufferEndMs > 0 && playheadMs > floorMs + 1000
-  const canNext = bufferEndMs > 0 && playheadMs < Date.now() - 1000
+  const canNext = bufferEndMs > 0 && playheadMs < serverNow() - 1000
 
   // ── Frame step + hold-to-play (the transport's ‹ / › buttons) ───────────────
   const reverseRaf = useRef<number | null>(null)
@@ -1544,9 +1550,9 @@ export const ClipEditScreen = () => {
   function startReverse() {
     if (reverseRaf.current != null) return
     if (playingRef.current) setPlaying(false)
-    let last = Date.now()
+    let last = serverNow()
     const step = () => {
-      const now = Date.now()
+      const now = serverNow()
       const next = playheadRef.current - (now - last)
       last = now
       placePlayhead(next)
@@ -1574,7 +1580,7 @@ export const ClipEditScreen = () => {
     else stopReverse()
   }
   const canFrameBack = playheadMs > floorMs + 1
-  const canFrameForward = playheadMs < Date.now() - 1
+  const canFrameForward = playheadMs < serverNow() - 1
   useEffect(() => () => stopReverse(), [])
 
   // `privacy` carries the clip's REVERSIBLE display choices (decision A): location
@@ -2011,8 +2017,8 @@ export const ClipEditScreen = () => {
               }}
               onFrameForward={() => frameStep(1)}
               onFrameForwardHold={frameForwardHold}
-              onNextClip={() => jumpTo(nextClipTarget() ?? Date.now())}
-              onToEnd={() => jumpTo(Date.now())}
+              onNextClip={() => jumpTo(nextClipTarget() ?? serverNow())}
+              onToEnd={() => jumpTo(serverNow())}
               canPrev={canPrev}
               canNext={canNext}
               canFrameBack={canFrameBack}
@@ -2029,7 +2035,7 @@ export const ClipEditScreen = () => {
         <View style={styles.clockDock}>
           <TimeScrubber
             offsetMs={offsetForClock}
-            onOffsetChange={(v) => placePlayhead(Date.now() - v)}
+            onOffsetChange={(v) => placePlayhead(serverNow() - v)}
             onScrubStart={handleScrubStart}
             onScrubEnd={handleScrubEnd}
             onExpandedChange={setClockExpanded}
