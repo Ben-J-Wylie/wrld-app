@@ -47,7 +47,10 @@ import { streamsApi } from '@/api/streams'
 import { theme } from '@/tokens/theme'
 import { useAuthStore } from '@/stores/authStore'
 import { useLocation } from '@/hooks/useLocation'
-import { useDiscoverySocket } from '@/hooks/useDiscoverySocket'
+import { useViewportDiscovery, type TileCount } from '@/hooks/useViewportDiscovery'
+import { useStreamsNear } from '@/hooks/useStreamsNear'
+import { usePublicConfig, configNumber } from '@/hooks/usePublicConfig'
+import { PIN_ZOOM_THRESHOLD, COUNT_MIN_ZOOM } from '@/lib/tiles'
 import { Text } from '@/components/primitives/Text'
 import { Pill } from '@/components/primitives/Pill'
 import { ScreenHeader } from '@/components/sections/ScreenHeader'
@@ -158,13 +161,33 @@ type BannerData =
 
 export function GlobeScreenMapbox() {
   const { coords } = useLocation()
-  // Live discovery feed. TIME MACHINE SEAM (Aaron / backend): when
-  // `timeOffsetMs > 0` the user has scrubbed into the past — the playhead is
-  // `Date.now() - timeOffsetMs`, advancing in real time. Swap this for a
-  // historical "surviving clips near, at playhead" query keyed off the offset
-  // (re-fetching as the playhead advances) so the globe replays that moment.
-  // Until that lands, the globe keeps showing the live feed regardless.
-  const streams = useDiscoverySocket()
+  // ── Map pins: viewport tile-subscription feed (P2) ─────────────────────────
+  // `streams` here = the pins in the current viewport (individual pins at high
+  // zoom; empty at low zoom, where `counts` carries per-tile bubbles instead).
+  // The admin-tunable zoom knobs come from RemoteConfig (fallback = tiles.ts).
+  // If the backend's Redis flag is off, the hook falls back to the legacy global
+  // snapshot (mode 'legacy' → all live streams as pins), so the map still works.
+  //
+  // TIME MACHINE SEAM (Aaron / backend): when `timeOffsetMs > 0` the user has
+  // scrubbed into the past — swap this live viewport feed for a historical
+  // "surviving clips at playhead" query. Until that lands, the globe shows the
+  // live viewport feed regardless.
+  const { config } = usePublicConfig()
+  const pinZoomThreshold = configNumber(config, 'PIN_ZOOM_THRESHOLD', PIN_ZOOM_THRESHOLD)
+  const countMinZoom = configNumber(config, 'COUNT_MIN_ZOOM', COUNT_MIN_ZOOM)
+  const { pins: streams, counts, setView } = useViewportDiscovery({ pinZoomThreshold, countMinZoom })
+  const setViewRef = useRef(setView)
+  setViewRef.current = setView
+
+  // ── Drawer / search / LIVE count: nearest streams via bounded REST ─────────
+  // The viewport feed only knows what's on screen (and nothing individual at low
+  // zoom), so the drawer's "Nearby now" list, the search box, and the LIVE pill
+  // read from streamsApi.near instead. A generous radius keeps it populated at
+  // today's sparse global scale (server caps at 100 nearest); it tightens to
+  // genuinely-nearby as density grows. Falls back to (20,0) before a GPS fix so
+  // the drawer isn't empty for location-denied users.
+  const nearbyQuery = useStreamsNear(coords?.latitude ?? 20, coords?.longitude ?? 0, 20000)
+  const nearbyStreams = nearbyQuery.data ?? []
   const insets = useSafeAreaInsets()
   // The viewer's own user id — used to identify their own live stream on the
   // globe: it's excluded from the drawer + cards, its pin renders black, and
@@ -199,6 +222,9 @@ export function GlobeScreenMapbox() {
 
   const cameraRef = useRef<React.ElementRef<typeof Camera>>(null)
   const sourceRef = useRef<ShapeSource>(null)
+  const mapViewRef = useRef<React.ElementRef<typeof Mapbox.MapView>>(null)
+  const mapZoomRef = useRef(1.5)
+  const lastViewPushRef = useRef(0)
   const hasAutoOrientedRef  = useRef(false)
   const mapReadyRef         = useRef(false)
   const pendingOrientRef    = useRef<[number, number] | null>(null)
@@ -278,6 +304,33 @@ export function GlobeScreenMapbox() {
     }, 4000)
   }
 
+  // Push the current viewport (the tiles the map shows) to the discovery
+  // subscription. Throttled — onCameraChanged fires continuously (incl. the 80ms
+  // auto-rotate tick); the hook additionally debounces + skips unchanged tile sets.
+  const pushViewport = useCallback(() => {
+    const map = mapViewRef.current
+    if (!map) return
+    map.getVisibleBounds()
+      .then((b) => {
+        if (!b) return
+        const [[east, north], [west, south]] = b as [[number, number], [number, number]]
+        setViewRef.current({ west, south, east, north }, mapZoomRef.current)
+      })
+      .catch(() => {})
+  }, [])
+  const throttledPushViewport = useCallback(() => {
+    const t = Date.now()
+    if (t - lastViewPushRef.current < 400) return
+    lastViewPushRef.current = t
+    pushViewport()
+  }, [pushViewport])
+
+  // Re-subscribe when the admin-tunable knobs arrive/change (config loads after
+  // the map, or an admin edits them + the app refreshes).
+  useEffect(() => {
+    pushViewport()
+  }, [pinZoomThreshold, countMinZoom, pushViewport])
+
   function handleCameraChanged(state: {
     properties: { center: number[]; zoom: number }
     gestures: { isGestureActive: boolean }
@@ -285,6 +338,8 @@ export function GlobeScreenMapbox() {
     const [lng, lat] = state.properties.center as [number, number]
     setMapCenterLat(lat)
     setMapZoom(state.properties.zoom)
+    mapZoomRef.current = state.properties.zoom
+    throttledPushViewport()
     if (state.gestures.isGestureActive) {
       rotLngRef.current = ((lng + 360) % 360)
       rotLatRef.current = lat
@@ -333,6 +388,8 @@ export function GlobeScreenMapbox() {
         animationDuration: 0,
       })
     }
+    // Initial viewport subscription once the camera has settled.
+    setTimeout(pushViewport, 400)
   }
 
   useEffect(() => {
@@ -369,7 +426,7 @@ export function GlobeScreenMapbox() {
   // ── Filtered streams (query + chip) ────────────────────────────────────────
 
   const visibleStreams = useMemo(() => {
-    const all = streams ?? []
+    const all = nearbyStreams
     // A streamer never sees their own stream in the drawer. All other
     // curation rules below are unchanged.
     let out = all.filter(s => !isSelfStream(s))
@@ -398,7 +455,7 @@ export function GlobeScreenMapbox() {
     // Order by viewer count desc for now (until a real "trending"
     // weighting lands).
     return out.slice().sort((a, b) => b.viewerCount - a.viewerCount)
-  }, [streams, chipId, query, isSelfStream])
+  }, [nearbyStreams, chipId, query, isSelfStream])
 
   // ── Navigation ────────────────────────────────────────────────────────────
 
@@ -471,7 +528,37 @@ export function GlobeScreenMapbox() {
       })),
   }
 
+  // Count bubbles (low zoom): one per populated tile, drawn at the cluster
+  // centroid the server snapped to a real pin. Empty in pins mode.
+  const countsGeoJSON = {
+    type: 'FeatureCollection' as const,
+    features: counts.map((c: TileCount) => ({
+      type: 'Feature' as const,
+      geometry: { type: 'Point' as const, coordinates: [c.lng, c.lat] },
+      properties: {
+        tile: c.tile,
+        count: c.count,
+        label: c.count >= 1000 ? `${(c.count / 1000).toFixed(c.count >= 10000 ? 0 : 1)}k` : `${c.count}`,
+      },
+    })),
+  }
+
   // ── Pin tap handling ──────────────────────────────────────────────────────
+
+  // Tapping a count bubble drills in toward it (no card — there's no single
+  // stream to show at low zoom). Each step crosses into finer tiles / eventually
+  // the pins regime.
+  function handleCountPress(e: { features: any[] }) {
+    pauseRotation()
+    const f = e.features[0]
+    const coordinates = f?.geometry?.coordinates as [number, number] | undefined
+    if (!coordinates) return
+    cameraRef.current?.setCamera({
+      centerCoordinate: coordinates,
+      zoomLevel: Math.min(mapZoomRef.current + 3, 14),
+      animationDuration: 600,
+    })
+  }
 
   async function handleSourcePress(e: { features: any[] }) {
     pauseRotation()
@@ -506,7 +593,7 @@ export function GlobeScreenMapbox() {
     }
   }
 
-  const liveCount = streams.length
+  const liveCount = nearbyStreams.length
 
   // ── Drawer animation + state coupling ──────────────────────────────────────
 
@@ -675,6 +762,7 @@ export function GlobeScreenMapbox() {
         pointerEvents="box-none"
       >
       <Mapbox.MapView
+        ref={mapViewRef}
         style={StyleSheet.absoluteFill}
         styleURL={Mapbox.StyleURL.Light}
         projection="globe"
@@ -796,6 +884,32 @@ export function GlobeScreenMapbox() {
               circleOpacity: 0.25,
               circleBlur: 1,
               circleStrokeWidth: 0,
+            }}
+          />
+        </ShapeSource>
+
+        {/* Count bubbles — server-side per-tile aggregates at low zoom. Populated
+            only in count mode (empty in pins mode), so they never overlap the
+            individual pins above. Tap drills in. */}
+        <ShapeSource id="tile-counts" shape={countsGeoJSON} onPress={handleCountPress}>
+          <CircleLayer
+            id="count-circles"
+            style={{
+              circleColor: PIN_RED,
+              circleRadius: ['step', ['get', 'count'], 18, 10, 22, 100, 26, 1000, 30] as any,
+              circleStrokeWidth: 2,
+              circleStrokeColor: PIN_BORDER,
+              circleOpacity: 0.95,
+            }}
+          />
+          <SymbolLayer
+            id="count-labels"
+            style={{
+              textField: ['get', 'label'] as any,
+              textSize: 13,
+              textColor: PIN_BORDER,
+              textAllowOverlap: true,
+              textIgnorePlacement: true,
             }}
           />
         </ShapeSource>

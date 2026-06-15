@@ -3395,3 +3395,60 @@ Note the residual `JUMP` lines during play are benign (the jerk detector at thre
 ~4 px/frame playback-follow oscillation — sub-pixel, not a visible jump). Backend follow-up (Aaron):
 reap/close ghost sessions
 (0-duration, no `endedAt`) so they never masquerade as the live tail.
+
+---
+
+## Updates — June 2026 (P4 — globe on the viewport tile-subscription protocol)
+
+P4 of the globe-discovery scaling plan (`wrld-backend/docs/design/globe-discovery-scaling.md`).
+The live globe now speaks the **viewport tile-subscription protocol** (P2, already
+deployed backend-side + on the web) instead of pulling the global snapshot. **Backend
+unchanged** — the app just connects with `?viewport=1`. Doubles as the structural fix
+for the globe re-render jank (per-event re-renders are now coalesced to one/frame).
+
+### New files (mirror the web)
+- **`src/lib/tiles.ts`** — slippy `z/x/y` math, **byte-identical** to
+  `wrld-backend/src/lib/tiles.ts` + `wrld-web/src/lib/tiles.ts`. Keep in sync.
+- **`src/hooks/useViewportDiscovery.ts`** — RN port of the web hook. Connects
+  `…/streams/discovery?viewport=1`; returns `{ pins, counts, mode, setView }`; holds
+  pins/counts in refs; coalesces state flushes to one `requestAnimationFrame`;
+  legacy-`snapshot` fallback (Redis off → all live streams as pins). Knobs
+  (`PIN_ZOOM_THRESHOLD`/`COUNT_MIN_ZOOM`) via opts (fallback = tiles.ts), in a ref so
+  the long-lived subscribe closure reads current values.
+
+### `GlobeScreenMapbox` integration
+- **Map pins** come from `useViewportDiscovery` (named `streams`, so the geoJSON /
+  pin-tap / card-sync code is unchanged). **Count bubbles** (low zoom) render from a
+  new `tile-counts` `ShapeSource` (red circle + abbreviated-count label); tapping one
+  drills in (`cameraRef.setCamera` zoom+3). Pins source + counts source are mutually
+  exclusive by zoom (the hook only populates one regime), so they never overlap.
+  Self-pin (black), subscription colours, precision halos, clustering — all unchanged.
+- **Drawer "Nearby now" / search / LIVE pill** now read **`useStreamsNear(lat, lng, 20000)`**
+  (bounded REST — server caps at 100 nearest) instead of the global feed. Decision
+  (Aaron, June 2026): the viewport feed only knows on-screen pins (nothing individual at
+  low zoom), so the list surfaces use `near`. The generous radius keeps the drawer
+  populated at today's sparse global scale and tightens to genuinely-nearby as density
+  grows; falls back to `(20,0)` before a GPS fix so it's not empty for location-denied users.
+- **`setView` wiring:** a throttled `pushViewport()` (≥400ms; the hook also debounces +
+  skips unchanged tile sets) calls `mapViewRef.getVisibleBounds()` → `setView`, fired
+  from `onCameraChanged` (so auto-rotation + pans re-subscribe) + on map load + when the
+  config knobs change. Admin knob edits apply on app relaunch (+30s server config cache).
+- **Config:** reads `PIN_ZOOM_THRESHOLD` / `COUNT_MIN_ZOOM` from `usePublicConfig`
+  (admin-tunable RemoteConfig; "Globe discovery" section in the admin panel).
+
+### Known semantic shifts (intended, per P2 design)
+- **LIVE pill = nearby count** (up to 100 nearest), not a global total. A global count
+  would need a dedicated cheap endpoint.
+- **Open stream card's viewer count is static at tap time** — `viewer_count_updated` is
+  intentionally dropped from the globe feed under viewport mode (counts belong to the
+  stream, fetched on tap). The card still shows the count from pin-load.
+- **Drawer refreshes every ~60s** (the `near` query interval) rather than live-via-WS.
+
+### Status / not device-tested
+`tsc --noEmit` clean; no new native module (no EAS rebuild). **Needs an on-device pass**
+(Android priority): count bubbles at the default low-zoom globe, drill-in on bubble tap,
+individual pins when zoomed past `PIN_ZOOM_THRESHOLD`, smooth re-subscribe on
+pan/rotate, the "Nearby now" drawer populating from `near`, and that rotation no longer
+stutters as cams stream in the background. The time-machine seam is unchanged (historical
+clips still Aaron's unbuilt backend; the live feed is now viewport). **P5** = retire the
+legacy global-snapshot path once both clients have soaked on viewport.
