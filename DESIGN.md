@@ -3497,7 +3497,11 @@ on the sublabel and the left ruler.
   the playhead can move forward off the edge), **`onRidingChange(riding)`** (continuous report of the
   autonomous `ridingSv` so the host's reaper-clock + transport icon mirror it, never desync). The
   universal-clock `setNowUi(ms)` on the imperative handle is the **sole** driver of the reaper/now
-  edges (CONTENT.md §6). *(The vertical `ClipLane` / `ClipTimeRuler` / `TimeGapMarker` are now
+  edges (CONTENT.md §6). **Magnetic frontiers (2026-06-15):** `getCenter().atNow`/`atReaper` are
+  **geometric** "within `EDGE_SNAP` (12px) of an edge" flags (not the latch state), so a drag sticks to
+  either edge identically + reliably (a drag-while-playing can't leave the old sliver / wrong icon); a
+  new **`snapToReaper()`** imperative pins the centre exactly to the reaper edge + latches the ride (the
+  reaper's analog of the now-edge follow), called when a drag settles within reach. *(The vertical `ClipLane` / `ClipTimeRuler` / `TimeGapMarker` are now
   gallery-only — the timeline superseded them for the grid; `ClipBlock` is shared.)*
 - **`ClipViewer`** — `src/components/features/clip/ClipViewer.tsx`. The **sticky full-width 2:1**
   (half-height) preview above the buffered/saved bar (the host pads it for equal L/R margins).

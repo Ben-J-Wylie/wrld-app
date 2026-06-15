@@ -292,18 +292,28 @@ nuances, not styling — styling lives in DESIGN.md.
   rounded-left corner + the dark void beyond) — never a hard crop; the geometry
   is the clip's, both ends. The playhead **cannot be dragged past either edge**:
   it clamps at the reaper edge (can't enter the reaped void) and at the now edge
-  (can't outrun live), exactly as the now edge has always clamped. It **sticks**
-  to whichever edge it's parked on — riding the reaper as footage ages past it, or
-  following the now edge as the live build grows — so it's never static relative to
-  the footage there.
-- **Riding an edge is playing; the reaper can't be paused.** Parked on either edge
+  (can't outrun live).
+- **Frontiers are magnetic — one ride-state, read from geometry.** The playhead is
+  either FREE (static, or playing footage between the edges) or STUCK TO A FRONTIER.
+  The two frontiers behave **identically**: whenever the playhead comes within reach
+  of one — by a drag in *any* state (play or pause), by the reaper catching up to a
+  parked playhead, or by playback reaching now — it **snaps to and sticks** to it
+  *exactly* (no sliver). While stuck the clock **ticks** (NOW at the now edge, THEN
+  at the reaper edge) and footage playback **yields** to the ride. "Which frontier
+  the playhead is on" is decided in **one** place — the timeline's geometry (is the
+  centre within the snap zone of an edge) — and the clock + transport icon **mirror**
+  that single truth; they are never set independently, guessed from the play state,
+  or left to a race. *(This is why the reaper ride must not depend on an autonomous
+  latch firing at the right instant: a drag-while-playing would defeat it, leaving a
+  sliver and the wrong icon. Geometry is the source of truth; the latch is just one
+  way to enter it.)*
+- **Riding a frontier is playing; the reaper can't be paused.** Stuck on either edge
   the clock ticks and the playhead moves vs the footage, so the transport reads as
-  *playing*. The now-edge ride is pausable (freeze → it becomes a static THEN). The
-  reaper ride is **not** — the reaper eats on a timer regardless of the user — so it
-  shows a distinct **slashed-pause** ("playing, can't pause"); the way off is to
-  move forward (play / a forward step / wheel the clock ahead) or drag away. The
-  riding state is read from the **one** place that owns it (the timeline's latch),
-  never guessed, so the clock + icon never desync from what's actually moving.
+  *playing*: a **pause** icon at the now edge (pausable → freeze to a static THEN), a
+  distinct **slashed-pause** at the reaper edge ("playing, can't pause" — the reaper
+  eats on a timer regardless of the user; the icon is a status indicator, pressing it
+  does nothing). You leave either ride only by *moving* — a drag away, a forward
+  transport step, or wheeling the clock ahead — never by the play button.
 - **Zoom rescales time, never content.** Pinch is a layout rescale of the time
   axis (clip widths grow/shrink) — *not* a transform scale — so thumbs and labels
   never distort. It's anchored to centre (scales evenly left/right), runs on the

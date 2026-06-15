@@ -52,6 +52,7 @@ const CLIP_INSET_Y = 4 // breathing room between a clip block and the top/bottom
 const MIN_CLIP_W = 26 // a short clip stays a tappable block
 const GAP_W = 22 // collapsed (fixed-width) gap marker — the playhead glides across these pixels
 const EDGE_EPS = 3 // px proximity that counts as "at" the now edge (for the clock's NOW/THEN state)
+const EDGE_SNAP = 12 // px "within reach" of a frontier → the playhead snaps and sticks to it (now OR reaper)
 const GAP_THRESHOLD_MS = 500 // unbroadcasted time longer than this is a traversable gap; below = a snip
 const GAP_RUSH_MS = 3000 // a gap is consumed in this fixed real-time (mirrors the transport playhead's rush)
 const LONGEST_DEFAULT_W = 50 // default zoom: the longest clip ≈ this wide (lower = wider/zoomed-out initial view)
@@ -301,6 +302,9 @@ export type ClipsTimelineHandle = {
   // RAF clock stays smooth (it drives scroll fine during play), so we feed it in and take the monotonic
   // max of both clocks: JS wins during playback, the frame callback wins if the RAF isn't running.
   setNowUi: (ms: number) => void
+  // Snap + stick the centre to the reaper edge (no sliver) and latch the ride — the reaper's analog of
+  // the now-edge follow. The host calls it when a drag settles within reach of the reaper.
+  snapToReaper: () => void
 }
 
 // ── animated leaf nodes (each reads the shared `layout` on the UI thread) ──
@@ -712,16 +716,28 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
     [defaultPx, px, scroll, segsSv, leadSv, trailSv, nowSv, leadFromSv, reaperEdgeXSv, ridingSv],
   )
   // The clip + instant + inGap currently under the centre playhead (read on demand). `atNow` /
-  // `atReaper` are pixel-precise edge flags the host uses to drive the clock (NOW vs THEN+tick) —
-  // robust across the rush-vs-linear mapping and clock domains that broke the old timeMs thresholds.
+  // `atReaper` are GEOMETRIC "within reach of a frontier" flags (a single EDGE_SNAP zone for both),
+  // so the host sticks to either edge the same way — independent of the autonomous reaper latch's
+  // timing (which a drag-while-playing could defeat, leaving a sliver + the wrong icon).
   const getCenter = useCallback(() => {
     const p = px.value || defaultPx
     const sgs = segsSv.value
     if (p <= 0 || !sgs.length) return { clipId: null, timeMs: 0, pxPerMs: 0, inGap: false, atNow: false, atReaper: false }
     const lay = computeLayout(sgs, leadSv.value, trailSv.value, p)
     const r = resolveAt(scroll.value, sgs, lay, nowSv.value, leadFromSv.value)
-    return { ...r, pxPerMs: p, atNow: scroll.value >= lay.total - EDGE_EPS, atReaper: ridingSv.value === 1 }
-  }, [defaultPx, px, scroll, segsSv, leadSv, trailSv, nowSv, leadFromSv, ridingSv])
+    const atNow = scroll.value >= lay.total - EDGE_SNAP
+    const atReaper = !atNow && reaperOnSv.value === 1 && scroll.value <= reaperEdgeXSv.value + EDGE_SNAP
+    return { ...r, pxPerMs: p, atNow, atReaper }
+  }, [defaultPx, px, scroll, segsSv, leadSv, trailSv, nowSv, leadFromSv, reaperEdgeXSv, reaperOnSv])
+
+  // Snap + STICK to the reaper edge (the reaper's analog of the now-edge follow). Pins scroll exactly to
+  // the edge (no sliver) and latches the ride; the host calls this when a drag/scrub settles within reach
+  // of the reaper, then mirrors the riding state back for the clock + slashed-pause icon.
+  const snapToReaper = useCallback(() => {
+    cancelAnimation(scroll)
+    scroll.value = Math.min(reaperEdgeXSv.value, layout.value.total)
+    ridingSv.value = 1
+  }, [scroll, reaperEdgeXSv, layout, ridingSv])
   // The universal wall clock, pushed from the host's JS RAF loop (serverNow every frame). This is now
   // the SOLE driver of reaperNowSv (the frame-timer accumulator is retired). Monotonic (forward-only),
   // mirrors nowSv for every mapping, and advances the live build (extendLive) on the same clock.
@@ -734,7 +750,7 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
     },
     [reaperNowSv, nowSv, liveIdxSv, segsSv, baseSegsSv],
   )
-  useImperativeHandle(ref, () => ({ scrollToTime, getCenter, setNowUi }), [scrollToTime, getCenter, setNowUi])
+  useImperativeHandle(ref, () => ({ scrollToTime, getCenter, setNowUi, snapToReaper }), [scrollToTime, getCenter, setNowUi, snapToReaper])
 
   // ── report the clip/instant/inGap under the centre playhead (on a clip OR gap-state change) ──
   const reportCenter = useCallback(

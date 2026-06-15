@@ -843,6 +843,10 @@ export const ClipsScreen = () => {
       const atEdge = !!c?.atNow || !!c?.atReaper
       setFollowLive(!!c?.atNow)
       setRidingReaper(!!c?.atReaper)
+      // Within reach of the reaper → SNAP + stick exactly to it (no sliver) and latch the ride; the now
+      // edge sticks via followLive→followNow. (Geometric atNow/atReaper, so a drag-while-playing sticks
+      // reliably — independent of the autonomous latch's timing.)
+      if (c?.atReaper) timelineRef.current?.snapToReaper()
       // Landed on an EDGE → ride it (now edge follows, reaper edge rides) — like dragging to the now
       // edge. Stop footage playback so the ride owns the motion; don't resume. Off an edge → resume
       // from where the fling LANDED (if we were playing; the settle was the wait, no fixed timer).
