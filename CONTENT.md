@@ -388,6 +388,34 @@ playhead, every digital readout — is achievable and is the bar. The only thing
 will never be perfectly on the clock is the *video itself*, and it doesn't have to
 be, because it follows the playhead rather than telling it the time.
 
+#### Robustness — going offline does not disturb the clock
+
+The universal clock is **local, not a live network read**: `serverNow() = Date.now()
++ serverOffset`, where `serverOffset` is a *cached* value measured the last time a
+`/buffer/me` response carried `serverNowMs` (`serverOffset = serverNowMs − Date.now()`).
+This is deliberate, and it's why a connectivity blip is harmless:
+
+- **Offline keeps ticking.** The device clock doesn't stop when the network drops, so
+  `serverNow()` keeps advancing smoothly on `Date.now()` + the frozen offset. No stall,
+  no jump. (Were `serverNow()` a live server call, offline *would* freeze it — the
+  local-clock-plus-offset design is what makes it robust.)
+- **Offline is a *data* event, not a *clock* event.** What pauses is the footage — the
+  buffer stops growing, segments stop arriving — so the now edge keeps marching
+  (correctly: real time is passing) while the live footage stops extending and a **gap
+  forms**. That gap is the right behaviour, not a bug.
+- **Reconnect eases, never snaps.** The next fetch re-measures the offset and blends
+  toward it (0.25 ease, not a jump), and the now-clock is **monotonic** (forward-only),
+  so any drift accrued while offline is absorbed gently and can never visibly retreat.
+- **The genuine edge cases are adjacent, and minor.** (1) The *device clock itself*
+  jumping — a manual time change, time-zone/DST shift, or OS NTP correction moves
+  `Date.now()`, hence `serverNow()`; a backward jump is caught by the monotonic clamp,
+  a forward jump is a transient until the next fetch nets it out via the offset. (2) A
+  small *latency bias* — `serverNowMs` is the server's time at response build, read
+  after the return trip, so the offset is biased by ~the response leg (tens of ms);
+  irrelevant at second-scale footage alignment, and the easing smooths the jitter. (The
+  NTP-style fix — measure round-trip, subtract half — exists if precision ever matters;
+  it doesn't here.)
+
 #### Inventory — surfaces that must follow the universal wall clock
 
 Every time-position keeper in the app and whether it currently obeys. Anything that
