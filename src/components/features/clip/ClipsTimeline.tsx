@@ -969,6 +969,28 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
   const contentStyle = useAnimatedStyle(() => {
     return { width: Math.max(layout.value.total, 1), transform: [{ translateX: vpSv.value / 2 - effScrollSv.value }] }
   })
+  // [pic] dev sampler: is the playback PICTURE actually deriving on the UI thread (drive=1), and is the
+  // rendered anchor (effScroll) + the clock (reaperNow) advancing EVENLY at vsync? Uneven dEff/dNow at a
+  // steady zoom = the residual jitter. Sampled ~3×/s on the UI frame clock, stripped in prod.
+  const traceCntSv = useSharedValue(0)
+  const tracePrevEffSv = useSharedValue(0)
+  const tracePrevNowSv = useSharedValue(0)
+  const tracePic = useCallback((drive: number, ride: number, now: number, eff: number, dEff: number, dNow: number) => {
+    if (__DEV__) console.log('[pic] drive', drive, 'ride', ride, 'followNow', now, 'eff', eff, 'dEff', dEff, 'dNow', dNow)
+  }, [])
+  useFrameCallback(() => {
+    'worklet'
+    if (!__DEV__) return
+    traceCntSv.value += 1
+    if (traceCntSv.value < 20) return
+    traceCntSv.value = 0
+    const eff = effScrollSv.value
+    const dEff = eff - tracePrevEffSv.value
+    const dNow = reaperNowSv.value - tracePrevNowSv.value
+    tracePrevEffSv.value = eff
+    tracePrevNowSv.value = reaperNowSv.value
+    runOnJS(tracePic)(playDriveSv.value, ridingSv.value, followNowSv.value, Math.round(eff), Math.round(dEff * 100) / 100, Math.round(dNow))
+  })
 
   // Dark caps beyond the buffer window — the empty viewport area left of the oldest footage (head =
   // reaper edge) and right of now (tail). They show "you've hit the end of the buffer." Positioned in
