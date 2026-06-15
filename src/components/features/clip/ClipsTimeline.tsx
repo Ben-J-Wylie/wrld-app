@@ -301,17 +301,26 @@ function AnimatedClip({
   layout,
   index,
   clipH,
+  reaperEdgeX,
   children,
 }: {
   layout: SharedValue<Layout>
   index: number
   clipH: number
+  reaperEdgeX: SharedValue<number>
   children: React.ReactNode
 }) {
-  const style = useAnimatedStyle(() => ({
-    left: layout.value.lefts[index] ?? 0,
-    width: layout.value.widths[index] ?? MIN_CLIP_W,
-  }))
+  // The clip geometry SHRINKS FROM THE LEFT as the reaper consumes it (and GROWS FROM THE RIGHT via the
+  // live build) — symmetric with the now edge. Clamp the left edge to the reaper boundary: the oldest
+  // clip then stops at reaperEdgeX and renders its OWN rounded-left corner + border there (just like the
+  // now edge shows the rounded-right corner), instead of being flat-cropped by the dark void. A
+  // fully-reaped clip collapses to width 0; reaperEdgeX is 0 when windowing is off, so this is a no-op there.
+  const style = useAnimatedStyle(() => {
+    const l0 = layout.value.lefts[index] ?? 0
+    const w0 = layout.value.widths[index] ?? MIN_CLIP_W
+    const left = Math.max(l0, reaperEdgeX.value)
+    return { left, width: Math.max(0, l0 + w0 - left) }
+  })
   return <Animated.View style={[styles.slot, { top: CLIP_INSET_Y, height: clipH }, style]}>{children}</Animated.View>
 }
 
@@ -962,7 +971,7 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
         const index = idToIndex[c.id]
         if (index == null) return null
         return (
-          <AnimatedClip key={c.id} layout={layout} index={index} clipH={clipH}>
+          <AnimatedClip key={c.id} layout={layout} index={index} clipH={clipH} reaperEdgeX={reaperEdgeXSv}>
             <ClipBlock
               heightPx={clipH}
               widthPx={Math.max(MIN_CLIP_W, c.endMs > c.startMs ? (c.endMs - c.startMs) * pxState : MIN_CLIP_W)}
