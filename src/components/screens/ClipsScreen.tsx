@@ -37,10 +37,13 @@ import { useBuffer } from '@/hooks/useBuffer'
 import { useSavedClips } from '@/hooks/useSavedClips'
 import { useDrafts } from '@/hooks/useDrafts'
 import { useBroadcastStore } from '@/stores/broadcastStore'
+import { serverNow, feedServerNow } from '@/lib/serverClock'
 import { bufferApi, type BufferSession } from '@/api/buffer'
 
 const FRAME_MS = 1000 / 30 // one frame at the 30fps capture (transport frame-step)
 const GAP_RUSH_MS = 3000 // real-time duration to "rush" the clock across an unbroadcasted-time gap
+const PLAYHEAD_MAX_STEP_MS = 1000 // backgrounding guard: cap a single playhead advance. Routine jank is
+// sub-second so it passes through fully (no drift); only a true app suspension is capped (no wild leap).
 const DRIFT_TOL_S = 0.4 // only re-seek the (follower) video if it drifts more than this from the playhead
 // Inter-clip gaps at/below this are split SEAMS (a snip, or adjacent buffer/saved pieces), not real
 // unbroadcasted gaps — the clock plays straight across (no gap card). Matches the timeline's own
@@ -225,16 +228,10 @@ export const ClipsScreen = () => {
     console.log('[reaper-trace] BUFFER refetch · windowH', buffer?.windowHours, '· sessions', rows.join(' '))
   }, [buffer])
 
-  // ── server-clock alignment (the skew-free "now") ──
-  // Clip geometry is server-clock anchored (`startedAt` + offsets), but the device clock can be
-  // skewed. We run our "now" in the SERVER domain: `serverOffset = serverNowMs − Date.now()`,
-  // measured every fetch and EASED (network-latency jitter is smoothed; the true skew is stable).
-  // `serverNow()` = device clock + that offset. Falls back to the device clock when the backend
-  // doesn't send `serverNowMs`. The downstream nowUI clamp is monotonic, so a backward correction
-  // never snaps the edge — it just flattens briefly; easing keeps every correction tiny.
-  const serverOffsetRef = useRef(0)
-  const hasServerOffsetRef = useRef(false)
-  const serverNow = useCallback(() => Date.now() + serverOffsetRef.current, [])
+  // ── server-clock alignment (the skew-free "now") ── the UNIVERSAL wall clock lives in
+  // `@/lib/serverClock` (CONTENT.md §6) so every surface reads the SAME clock; this screen feeds it
+  // the backend's `serverNowMs` and reads `serverNow()` like everyone else. The downstream nowUI
+  // clamp is monotonic, so a backward correction never snaps the edge — easing keeps it tiny.
 
   // ── time reference (now / reaper window) ── now ticks every 1s so the JS-side window boundary
   // (`windowStartMs`, which drives clip-drops + the reaper edge re-anchor) tracks the wall clock
@@ -243,21 +240,18 @@ export const ClipsScreen = () => {
   // in one step — a clip drop + re-anchor you can see as a stall-then-pop. At 1s the smooth mask and
   // the discrete drop reconcile within a frame's worth of footage (sub-pixel), so consumption reads
   // as one continuous wall-clock motion. (The network refetch stays at 15s — see below.)
-  const [nowMs, setNowMs] = useState(() => Date.now())
+  const [nowMs, setNowMs] = useState(() => serverNow())
   useEffect(() => {
     const id = setInterval(() => setNowMs(serverNow()), 1_000)
     return () => clearInterval(id)
-  }, [serverNow])
+  }, [])
   // Re-measure + ease the server offset on each fetch, and apply it immediately (don't wait for the
   // 1s tick). First measurement snaps; later ones ease (0.25) to absorb per-fetch latency jitter.
   useEffect(() => {
-    const s = buffer?.serverNowMs
-    if (s == null) return
-    const target = s - Date.now()
-    serverOffsetRef.current = hasServerOffsetRef.current ? serverOffsetRef.current + (target - serverOffsetRef.current) * 0.25 : target
-    hasServerOffsetRef.current = true
+    if (buffer?.serverNowMs == null) return
+    feedServerNow(buffer.serverNowMs)
     setNowMs(serverNow())
-  }, [buffer?.serverNowMs, serverNow])
+  }, [buffer?.serverNowMs])
   const windowMs = (buffer?.windowHours ?? 0) * 3_600_000
   const windowStartMs = windowMs > 0 ? nowMs - windowMs : null
 
@@ -527,13 +521,11 @@ export const ClipsScreen = () => {
   // every frame (the same JS clock that already drives scroll smoothly during play). The timeline
   // takes the monotonic max of this and its own frame clock, so motion is smooth whether idle or
   // playing. (CONTENT.md §6 — one continuous clock for every frontier.)
-  const serverNowRef = useRef(serverNow)
-  serverNowRef.current = serverNow
   useFocusEffect(
     useCallback(() => {
       let raf = 0
       const tick = () => {
-        timelineRef.current?.setNowUi(serverNowRef.current())
+        timelineRef.current?.setNowUi(serverNow())
         raf = requestAnimationFrame(tick)
       }
       raf = requestAnimationFrame(tick)
@@ -710,13 +702,15 @@ export const ClipsScreen = () => {
   useEffect(() => {
     if (!playing) return
     let raf = 0
-    let lastTs: number | null = null
+    let lastTs: number | null = null // RAF timestamp — used ONLY for the commit throttle + log cadence
+    let lastClock: number | null = null // serverNow() at the previous tick — the playhead's clock source
     let lastCommitTs = 0
-    // [clip-sync] diagnostics: is the playhead keeping pace with the now/reaper fronts? The playhead
-    // advances by a CLAMPED RAF delta (min(80, ts−lastTs)); the fronts advance by unclamped serverNow().
-    // Every frame >80ms (playback jank) the playhead loses (rawDt−80) ms → it drifts BEHIND the fronts,
-    // which is why now/reaper catch up + the reaper passes it. clampLoss = total ms the playhead has
-    // shed vs real time. gap = nowUi − playhead (should hold steady at 1× play; growth = the drift).
+    // [clip-sync] diagnostics: is the playhead keeping pace with the now/reaper fronts? The playhead now
+    // advances by the WALL-CLOCK delta (serverNow() − lastClock), the SAME clock the fronts read — so a
+    // janky 150ms frame advances both by 150ms and they can't diverge (CONTENT.md §6: read the clock,
+    // don't accumulate frame-timer ticks). dt is guarded max(0, min(PLAYHEAD_MAX_STEP_MS, …)) for a
+    // backward clock tick / a backgrounding suspension. clampLoss should now stay ~0; gap = nowUi −
+    // playhead should HOLD steady at 1× play (growth would mean a regression).
     let clampLoss = 0
     let lastSyncTs = 0
     // The playhead REF + the timeline scroll advance every frame (smooth). But committing playheadMs
@@ -732,20 +726,22 @@ export const ClipsScreen = () => {
       }
     }
     const tick = (ts: number) => {
+      const nowClock = serverNow()
       if (scrubbingRef.current) {
         lastTs = ts // the finger owns the playhead while scrubbing; idle the clock
+        lastClock = nowClock // re-anchor so resume-after-scrub isn't a huge wall-clock jump
         raf = requestAnimationFrame(tick)
         return
       }
-      const rawDt = lastTs == null ? 0 : ts - lastTs
-      const dt = lastTs == null ? 0 : Math.min(80, rawDt)
+      const rawDt = lastClock == null ? 0 : nowClock - lastClock
+      const dt = lastClock == null ? 0 : Math.max(0, Math.min(PLAYHEAD_MAX_STEP_MS, rawDt))
       lastTs = ts
+      lastClock = nowClock
       if (__DEV__) {
-        clampLoss += rawDt - dt
+        clampLoss += Math.max(0, rawDt - dt) // ms shed to the backgrounding guard (should stay ~0 in play)
         if (ts - lastSyncTs >= 500) {
           lastSyncTs = ts
-          const nowUi = serverNow()
-          console.log('[clip-sync] rawDt', Math.round(rawDt), 'dt', Math.round(dt), 'clampLoss', Math.round(clampLoss), 'ph', Math.round(playheadRef.current % 100000), 'nowUi', Math.round(nowUi % 100000), 'gap', Math.round(nowUi - playheadRef.current))
+          console.log('[clip-sync] rawDt', Math.round(rawDt), 'dt', Math.round(dt), 'clampLoss', Math.round(clampLoss), 'ph', Math.round(playheadRef.current % 100000), 'nowUi', Math.round(nowClock % 100000), 'gap', Math.round(nowClock - playheadRef.current))
         }
       }
       let ph = playheadRef.current
@@ -793,9 +789,11 @@ export const ClipsScreen = () => {
             } catch {}
         }
       }
-      ph = ph + dt // advance by real time regardless of the video's readiness — it catches up
+      ph = ph + dt // advance by WALL-CLOCK elapsed (1×) regardless of the video's readiness — it catches up.
+      // Summing true wall-clock deltas telescopes to playStart + (serverNow() − startClock) — i.e. it
+      // IS the clock read, drift-free; only a backgrounding suspension (capped above) breaks the sum.
       // No hard stop at lastEnd: the playhead flows into the TRAILING gap, where locateAt returns a
-      // rushable gap (3s to now) and then 'end' (caught up). The clamp is just a safety ceiling.
+      // rushable gap (3s to now) and then 'end' (caught up).
       playheadRef.current = ph
       commitPlayhead(ph, ts)
       timelineRef.current?.scrollToTime(ph)
@@ -896,7 +894,7 @@ export const ClipsScreen = () => {
   }, [windowStartMs])
   // Clock: 0 (NOW) at the live edge; `windowMs` (live-ticking THEN) riding the reaper edge; else the
   // held instant behind now (frozen by the TimeScrubber so a paused clock doesn't bounce a second).
-  const offsetForClock = followLive ? 0 : ridingReaper ? windowMs : Math.max(0, Date.now() - playheadMs)
+  const offsetForClock = followLive ? 0 : ridingReaper ? windowMs : Math.max(0, serverNow() - playheadMs)
   const [clockExpanded, setClockExpanded] = useState(false)
   const [collapseSignal, setCollapseSignal] = useState(0)
 
@@ -1295,7 +1293,7 @@ export const ClipsScreen = () => {
                   {isReaperCard ? (
                     <>
                       <Text variant="monoLabel" color={theme.colors.text.primary}>
-                        {reapAtRef.current != null ? fmtDur(Math.max(0, reapAtRef.current - Date.now()) / 1000) : '—'}
+                        {reapAtRef.current != null ? fmtDur(Math.max(0, reapAtRef.current - serverNow()) / 1000) : '—'}
                       </Text>
                       <Text variant="monoCaption" color={theme.colors.text.muted}>
                         until oldest is reaped
@@ -1304,7 +1302,7 @@ export const ClipsScreen = () => {
                   ) : isTrailingCard ? (
                     <>
                       <Text variant="monoLabel" color={theme.colors.text.primary}>
-                        {fmtDur(Math.max(0, Date.now() - gapCard.fromMs) / 1000)}
+                        {fmtDur(Math.max(0, serverNow() - gapCard.fromMs) / 1000)}
                       </Text>
                       <Text variant="monoCaption" color={theme.colors.text.muted}>
                         since last broadcast
@@ -1428,7 +1426,7 @@ export const ClipsScreen = () => {
                 goNow() // tap NOW → skip the timeline to the now edge (+ pin the clock to NOW)
                 return
               }
-              const t = Date.now() - off
+              const t = serverNow() - off
               seekTo(t)
               timelineRef.current?.scrollToTime(t, true) // dial scrub → bring the instant under the playhead
             }}

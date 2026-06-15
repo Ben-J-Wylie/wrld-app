@@ -5,7 +5,7 @@
 // see CLAUDE.md + DESIGN.md decision log.)
 //
 // Model: a single `offsetMs` behind the present (0 = live). The playhead =
-// `Date.now() - offsetMs`, recomputed every second, so:
+// `serverNow() - offsetMs`, recomputed every second, so:
 //   • offset 0  → reads as a live ticking clock; the globe is live.
 //   • offset >0 → the playhead ticks forward from the scrubbed instant at 1×
 //     (real-time PLAYBACK), and the globe replays the surviving clips/pins
@@ -33,6 +33,7 @@ import {
 import { Pressable } from '@/components/primitives/Pressable'
 import { Text } from '@/components/primitives/Text'
 import { theme } from '@/tokens/theme'
+import { serverNow } from '@/lib/serverClock'
 
 type FieldKey = 'year' | 'month' | 'day' | 'hour' | 'minute' | 'second'
 
@@ -115,11 +116,11 @@ type Props = {
   onExpandedChange?: (expanded: boolean) => void
   // Playback after a past-scrub. true (default, globe): scrub into the past, hold a
   // beat, then resume real-time playback. false (clip editor): controlled HOLD — no
-  // internal freeze/resume; the displayed instant is exactly `Date.now() - offsetMs`,
+  // internal freeze/resume; the displayed instant is exactly `serverNow() - offsetMs`,
   // and the host owns whether the playhead advances (it keeps offsetMs tracking a
   // held absolute instant). The live tick at offset 0 still ticks in both modes.
   playback?: boolean
-  // Hold mode only: tick a HELD (offset > 0) instant live (Date.now() − offset) instead of freezing
+  // Hold mode only: tick a HELD (offset > 0) instant live (serverNow() − offset) instead of freezing
   // it. Used when the offset is constant but the instant advances — e.g. the playhead riding the
   // reaper edge (always `windowMs` behind now): the clock reads THEN but ticks with the reaper.
   liveTick?: boolean
@@ -212,7 +213,7 @@ export function TimeScrubber({
   // a beat before real-time playback resumes (`paused` freezes the displayed
   // playhead at `frozenRef`). Scrubbing all the way to live ticks immediately.
   const [paused, setPaused] = useState(false)
-  const frozenRef = useRef(Date.now() - offsetMs)
+  const frozenRef = useRef(serverNow() - offsetMs)
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(
     () => () => {
@@ -238,23 +239,23 @@ export function TimeScrubber({
   const live = offsetMs <= 0
   // Hold mode (clip editor, playback=false): the displayed instant is the host's HELD playhead —
   // captured when offsetMs last changes and FROZEN between changes. Without this the internal 1s
-  // tick (advancing Date.now()) would drift a paused clock forward, then a host re-render snaps it
+  // tick (advancing serverNow()) would drift a paused clock forward, then a host re-render snaps it
   // back → the seconds bounce. Live (offset 0) always ticks; playback mode (globe) keeps the
   // real-time 1× tick + the post-scrub freeze.
   const heldPrevOffset = useRef(offsetMs)
-  const heldInstant = useRef(Date.now() - offsetMs)
+  const heldInstant = useRef(serverNow() - offsetMs)
   if (heldPrevOffset.current !== offsetMs) {
     heldPrevOffset.current = offsetMs
-    heldInstant.current = Date.now() - offsetMs
+    heldInstant.current = serverNow() - offsetMs
   }
   const playMs = live
-    ? Date.now() - offsetMs // offset 0 → ticks NOW
+    ? serverNow() - offsetMs // offset 0 → ticks NOW
     : liveTick
-      ? Date.now() - offsetMs // held THEN that must TICK (e.g. riding the reaper edge)
+      ? serverNow() - offsetMs // held THEN that must TICK (e.g. riding the reaper edge)
       : playback
         ? paused
           ? frozenRef.current // globe: post-scrub freeze beat
-          : Date.now() - offsetMs // globe: real-time 1× playback
+          : serverNow() - offsetMs // globe: real-time 1× playback
         : heldInstant.current // clip editor: host-controlled held instant (no internal drift)
   const playhead = new Date(playMs)
 
@@ -273,7 +274,7 @@ export function TimeScrubber({
   onChangeRef.current = onOffsetChange
   const expandedRef = useRef(expanded)
   expandedRef.current = expanded
-  const maxOffset = Date.now() - new Date(minYear, 0, 1).getTime()
+  const maxOffset = serverNow() - new Date(minYear, 0, 1).getTime()
 
   // Absolute-from-gesture-start scrub: no drift from stale offset reads.
   function scrub(key: FieldKey, startPlayhead: Date, delta: number) {
@@ -286,7 +287,7 @@ export function TimeScrubber({
       onScrubStartRef.current?.()
     }
     const next = stepDate(startPlayhead, key, delta)
-    let newOffset = Date.now() - next.getTime()
+    let newOffset = serverNow() - next.getTime()
     if (newOffset < 0) newOffset = 0
     if (newOffset > maxOffset) newOffset = maxOffset
     onChangeRef.current(newOffset)
@@ -294,7 +295,7 @@ export function TimeScrubber({
     if (newOffset <= 0) {
       setPaused(false) // reached live → tick real time, even mid-drag
     } else {
-      frozenRef.current = Date.now() - newOffset // in the past → hold the instant
+      frozenRef.current = serverNow() - newOffset // in the past → hold the instant
       setPaused(true)
     }
   }
@@ -313,7 +314,7 @@ export function TimeScrubber({
     }
     if (holdTimer.current) clearTimeout(holdTimer.current)
     holdTimer.current = setTimeout(() => {
-      onChangeRef.current(Date.now() - frozenRef.current)
+      onChangeRef.current(serverNow() - frozenRef.current)
       setPaused(false)
       holdTimer.current = null
     }, 500)
@@ -427,7 +428,7 @@ function Field({
       onMoveShouldSetPanResponder: () => true,
       onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: () => {
-        startPlayhead.current = new Date(Date.now() - offsetRef.current)
+        startPlayhead.current = new Date(serverNow() - offsetRef.current)
         moved.current = false
       },
       onPanResponderMove: (_, g) => {
@@ -473,7 +474,7 @@ function Field({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current])
 
-  const nowMs = Date.now()
+  const nowMs = serverNow()
 
   return (
     <View
