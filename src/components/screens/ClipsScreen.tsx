@@ -550,6 +550,13 @@ export const ClipsScreen = () => {
   // domain (which never registered the edges). Set on scrub-follow / settle / nav; cleared on a move.
   const [followLive, setFollowLive] = useState(false)
   const [ridingReaper, setRidingReaper] = useState(false)
+  const followLiveRef = useRef(false)
+  followLiveRef.current = followLive
+  const ridingReaperRef = useRef(false)
+  ridingReaperRef.current = ridingReaper
+  // Riding either edge IS "playing" (the clock ticks + the playhead moves vs the footage), even though
+  // the footage-playback tick isn't running. The transport play icon reflects this.
+  const transportPlaying = playing || followLive || ridingReaper
   // The footage at the playhead (null in a gap). The PLAYER follows this — so as the clock advances
   // the playhead across clips/snips/gaps, the loaded VOD tracks it. The VIEWER shows it too, so a
   // lane drag (which changes the clip's id) can't blank the preview: the playhead's clip is shown.
@@ -814,6 +821,17 @@ export const ClipsScreen = () => {
         player.pause()
       } catch {}
       setPlaying(false)
+      return
+    }
+    // Riding the NOW edge counts as playing (live) → the press PAUSES it: freeze the playhead at the
+    // current live edge and detach, so `now` advances away from it and it reads as a static THEN
+    // (counting up from the moment you paused). The reaper edge is handled below (you can't pause the
+    // reaper — it eats on a timer — so a press plays FORWARD off it, the natural escape).
+    if (followLiveRef.current) {
+      const edge = nowEdgeRef.current
+      playheadRef.current = edge
+      setPlayheadMs(edge)
+      setFollowLive(false)
       return
     }
     // Clear any in-flight scrub gate. After the finger lifts, the timeline's `withDecay` keeps
@@ -1339,7 +1357,7 @@ export const ClipsScreen = () => {
         {/* Transport directly below the viewer (it drives it); the clock stays at the bottom. */}
         {hasAny ? (
           <BufferTransport
-            playing={playing}
+            playing={transportPlaying}
             onToStart={goReaper} // 1st — snap the reaper (oldest) edge to the playhead
             onPrevClip={goPrev} // 2nd — previous clip head/tail to the playhead
             onFrameBack={() => seekTo(playheadRef.current - FRAME_MS)}
