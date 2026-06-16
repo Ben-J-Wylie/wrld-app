@@ -504,6 +504,23 @@ export function StreamScreen() {
   // title input's place.
   const isLiveBroadcast = isNew && status === 'in-room' && !streamEnded
 
+  // Publish the live local camera feed to the shared store so the Clips page can show the ACTUAL live
+  // view (not the seconds-behind buffer VOD) when the playhead rides the now edge. Mirrors the stream
+  // page's front-camera mirroring. Cleared whenever we're not live-with-camera (and on unmount).
+  useEffect(() => {
+    const live = isLiveBroadcast && !!localStream && isCameraArmed
+    try {
+      useBroadcastStore
+        .getState()
+        .setLiveStream(live ? (localStream as unknown as { toURL(): string }).toURL() : null, facingMode === 'user')
+    } catch {}
+    return () => {
+      try {
+        useBroadcastStore.getState().setLiveStream(null, false)
+      } catch {}
+    }
+  }, [isLiveBroadcast, localStream, isCameraArmed, facingMode])
+
   // Broadcaster sensor capture — while live, read the armed sensor sources and
   // emit `telemetry` (compass/speed via expo-location, gyro/accel via DeviceMotion).
   // The armed set comes from captureConfig (mapped to backend kind names).

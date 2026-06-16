@@ -33,6 +33,7 @@ import { ClipViewer } from '@/components/features/clip/ClipViewer'
 import { BufferTransport } from '@/components/features/clip/BufferTransport'
 import { TimeScrubber } from '@/components/features/discovery/TimeScrubber'
 import { useVideoPlayer, VideoView } from 'expo-video'
+import { RTCView } from 'react-native-webrtc'
 import { useBuffer } from '@/hooks/useBuffer'
 import { useSavedClips } from '@/hooks/useSavedClips'
 import { useDrafts } from '@/hooks/useDrafts'
@@ -204,6 +205,11 @@ export const ClipsScreen = () => {
   const { isSignedIn } = useAuth()
   const isLive = useBroadcastStore((s) => s.isLive)
   const liveSince = useBroadcastStore((s) => s.liveSince)
+  // The broadcaster's live camera feed (published by StreamScreen). Shown in the viewer when the
+  // playhead rides the now edge — the buffer VOD's live edge trails real-time by seconds, so at "now"
+  // the actual low-latency feed is the right media (same view as the stream page). See §6.
+  const liveStreamUrl = useBroadcastStore((s) => s.liveStreamUrl)
+  const liveMirror = useBroadcastStore((s) => s.liveMirror)
   const qc = useQueryClient()
   const { data: buffer, refetch: refetchBuffer } = useBuffer(!!isSignedIn, isLive)
   const { data: savedData, refetch: refetchSaved } = useSavedClips(!!isSignedIn)
@@ -621,6 +627,12 @@ export const ClipsScreen = () => {
   // show it. Playing / scrubbing / a blurred selection → show the clip at the PLAYHEAD.
   const showSelection = !!selectedClip && !playing && !scrubbing
   const displayClip = showSelection ? selectedClip : (clipAtPlayhead ?? viewerClip)
+
+  // Riding the now edge while broadcasting → show the ACTUAL live camera feed (same as the stream
+  // page), not the buffer VOD (whose live edge trails real-time by seconds). The moment you scrub
+  // back into the past, followLive flips off and the viewer returns to the VOD. (CONTENT.md §6:
+  // the live edge's media is the live stream; the past's media is the recording.)
+  const showLiveFeed = followLive && isLive && !!liveStreamUrl && !scrubbing
 
   // The PLAYER (a follower) loads the clip at the PLAYHEAD — so as the clock advances the playhead
   // across clips/snips, the loaded VOD tracks it. In a gap clipAtPlayhead is null; we KEEP the last
@@ -1345,13 +1357,17 @@ export const ClipsScreen = () => {
               <ClipViewer
                 posterUrl={gapCard ? undefined : displayClip?.posterUrl}
                 title={gapCard ? undefined : displayClip?.label}
-                // Show the VIDEO (not poster) when: dragging (scrub playback), playing, or after a
-                // scrub (videoMode). Over a gap → neither (the gap card covers it).
-                playing={(scrubbing || playing || videoMode) && !gapCard}
-                // While a between-lane VOD swap reloads, hold the incoming poster over the bg.
-                coverPoster={vodLoading && !gapCard}
+                // Show the VIDEO (not poster) when: at the live edge (live feed), dragging (scrub
+                // playback), playing, or after a scrub (videoMode). Over a gap → neither (gap card).
+                playing={showLiveFeed || ((scrubbing || playing || videoMode) && !gapCard)}
+                // While a between-lane VOD swap reloads, hold the incoming poster over the bg (never
+                // over the live feed — that's already a live frame, not a reloading VOD).
+                coverPoster={vodLoading && !gapCard && !showLiveFeed}
                 frameSlot={
-                  manifestUrl ? (
+                  showLiveFeed ? (
+                    // The actual live camera (low-latency), same as the stream page. mirror matches it.
+                    <RTCView streamURL={liveStreamUrl!} style={StyleSheet.absoluteFill} objectFit="contain" mirror={liveMirror} zOrder={0} />
+                  ) : manifestUrl ? (
                     <VideoView player={player} style={StyleSheet.absoluteFill} nativeControls={false} contentFit="contain" />
                   ) : undefined
                 }

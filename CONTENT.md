@@ -572,6 +572,18 @@ This is the same spine as the universal clock above: the representation leads an
 editable; the media is a follower. (See also §3 — saving a still-growing live clip is a model
 edit allowed now; the byte-level promotion of in-flight buffer bytes is the server seam.)
 
+### The live edge's media is the live stream, not the recording
+
+A recording always trails real-time: the buffer's HLS is encoded + segmented + flushed seconds
+behind "now," so asking the *recorded VOD* for the live instant can never look right — you get
+footage from a few seconds ago, or nothing. So **the media for a given instant depends on which
+instant it is**: the *past* is served by the recording (the VOD, seeked); the *live edge* is served
+by the **live stream itself** (the low-latency camera feed already in hand). On the Clips page, when
+the playhead rides the now edge while you're broadcasting, the viewer shows the **actual live feed —
+the same view as the stream page** — and the instant you scrub back into the past it swaps to the
+VOD. One playhead, two media sources, chosen by where you are. (`broadcastStore.liveStreamUrl`
+published by `StreamScreen`; shown by `ClipsScreen` when `followLive`; decided 2026-06-16.)
+
 ---
 
 ## 7. Privacy & consent
