@@ -584,6 +584,73 @@ the same view as the stream page** — and the instant you scrub back into the p
 VOD. One playhead, two media sources, chosen by where you are. (`broadcastStore.liveStreamUrl`
 published by `StreamScreen`; shown by `ClipsScreen` when `followLive`; decided 2026-06-16.)
 
+### The recording lag & the dead zone (OPEN — the live-replay quandary, needs Aaron)
+
+> **Status: understood, not yet handled. Captured 2026-06-16 to address with Aaron (it's cross-repo —
+> the real cure is recorder/backend-side).** This is the heart of why "scrub the recent past while
+> broadcasting" doesn't show what you expect.
+
+**The core fact.** While you broadcast, your video exists as two completely different things with two
+completely different latencies:
+
+1. **The live feed** (WebRTC) — real-time, sub-second. "Now."
+2. **The recording** (HLS on disk) — every segment must be **encoded → uploaded → written →
+   finalized → added to the playlist**, and players deliberately **hold back** the newest segment or
+   two so they don't run off the end. Net: the **freshest *recorded* frame is routinely 20–40s behind
+   the live moment.**
+
+So at any instant while live, footage lives in **three zones**:
+
+```
+[ ——— recorded & available ——— ][ ——— DEAD ZONE ——— ][ now ]
+  older footage, seeks & plays    already happened, but        live feed
+  fine (this is the VOD)           NOT written/served yet        only (WebRTC)
+```
+
+- **Now** is covered by the live feed (the `followLive` swap above).
+- The **recorded VOD** covers footage old enough to have finished writing.
+- The **dead zone** (~the recording lag, tens of seconds) is time that *has already happened* but
+  whose recording **isn't ready yet**. There is **no frame to show there** — the VOD doesn't have it,
+  and the live feed is "now," not the trailing instant.
+
+**Why this is THE quandary (the honest constraint).** The representation (the playhead/clock) can sit
+anywhere — but the *media* simply does not exist for the dead-zone instants yet. This is the sharpest
+case of "the representation leads, the media follows": here the media can't follow at all, for a
+bounded recent window, by physics of the pipeline. We cannot make it show "2 seconds ago" because
+2-seconds-ago footage hasn't been recorded/served yet.
+
+**How it manifests** (both are the same root cause):
+- *Playhead a couple seconds behind now → shows footage from ~30s ago.* The playhead is in the dead
+  zone; the player shows the newest frame it actually has, which is the far (old) edge of the
+  available zone.
+- *No preview of the building clip until you snip it.* Scrubbing near the live edge sits in the dead
+  zone (nothing recorded). Snipping and looking at the **earlier** piece shows footage old enough to
+  have finished recording. The snip unlocks nothing — you just moved to footage that exists.
+
+**A second, compounding contributor (app-side, partly fixable):** the player loads the recording's
+playlist **once** and can hold a **stale snapshot** of "what's been written." So even footage that
+*did* finish recording after the load stays invisible until the playlist is re-read. This **widens**
+the dead zone beyond the true recorder lag. (A live/EVENT-type playlist that the player refreshes —
+or a periodic app-side reload — shrinks this half; see options below.)
+
+**The handling options (decide with Aaron):**
+- **(A) Extend the live feed** to cover the last few seconds before now (not just the exact edge).
+  Accurate-ish for a *small* window; misleading if the dead zone is large (the live feed is "now," not
+  the trailing instant).
+- **(B) Treat the dead zone as a gap** — a "recording catching up…" state instead of a stale,
+  lying frame. Honest (CONTENT.md's whole spine), and it degrades the dead zone the way real gaps
+  already degrade. *Leading candidate.*
+- **(C) Shrink the dead zone** — refresh the playlist app-side (kills the stale-snapshot half) and,
+  recorder-side, shorter segments + less hold-back + faster finalize (kills the real-lag half). Costs
+  a reload hitch app-side; the recorder change is the durable cure.
+- **The real cure is server-side** (`wrld-mediasoup` + `wrld-backend`): the dead zone is *manufactured*
+  by the recording pipeline's latency. App-side handling can only mask it; the substrate decides how
+  wide it is. See §9.
+
+**Next step when Aaron is online:** measure the actual dead-zone width on our setup, and split it into
+(i) true recorder flush/hold-back lag vs (ii) the app's stale-playlist snapshot — the fixes differ.
+Then pick **B** (honest placeholder) for whatever lag remains + **C** (shrink it at both ends).
+
 ---
 
 ## 7. Privacy & consent
@@ -645,6 +712,15 @@ regresses, the app's content surfaces degrade or lie.
   media timeline, so sensor overlays replay in sync.
 - Per-track `recordingReady`; the **reaper** enforces the window + byte-cap
   contract (the buffer's self-overwriting promise).
+- **Minimise the recording lag / dead zone** (§6 "The recording lag & the dead
+  zone" — OPEN). The gap between the live moment and the freshest *recorded*
+  frame is manufactured here: segment duration + finalize/flush latency + the
+  player hold-back set how wide the dead zone is (the recent-past window the app
+  *cannot* replay while live). **Shorter segments + faster finalize + less
+  hold-back shrink it at the source** — the only durable cure; app-side handling
+  can only mask what's left. Pairs with a **live/EVENT-type playlist the player
+  can refresh** (so newly-written segments become visible without a full reload),
+  which kills the app's stale-snapshot half of the gap.
 - **Server-generated buffer thumbnails** (interval JPEGs / sprite / WebVTT) —
   client-side frame extraction *hangs* on a `-c:v copy` HLS VOD, so posters and
   timeline frames must come from the server (the §6 "honest thumbnails" rule

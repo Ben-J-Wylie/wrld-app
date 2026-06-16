@@ -3479,3 +3479,43 @@ pan/rotate, the "Nearby now" drawer populating from `near`, and that rotation no
 stutters as cams stream in the background. The time-machine seam is unchanged (historical
 clips still Aaron's unbuilt backend; the live feed is now viewport). **P5** = retire the
 legacy global-snapshot path once both clients have soaked on viewport.
+
+---
+
+## Updates — June 2026 (Clips page: live-while-broadcasting playback + the dead-zone quandary)
+
+A run of Clips-page (`ClipsScreen` + `ClipsTimeline` + `ClipBlock`) refinements on `design`,
+all pure JS (hot-reload, no native rebuild), merged to `main` continuously. Then the big
+open item — the **live-replay dead zone** — was captured in CONTENT.md for Aaron.
+
+**Shipped this session (all on `main`):**
+- **Lane-drag camera hold** (`holdCamera` / `onLaneDragChange`) — a cross-lane drag mid-playback
+  holds the timeline camera so the block is a stable target; snip/mend stay ungated. Plus the
+  **now-frontier guard** (the still-growing live segment can't be dragged; a snip frees the bounded
+  pieces behind it via `applySplits`) and **`carveLiveBlock`** (saving a live piece carves its range
+  out so there's no duplicate). **Live-block start anchored** to the real session start (not the
+  optimistic `liveSince`) → no pre-start sliver / "no playable footage" save fail.
+- **Two real bugs surfaced via a data-only go-live:** `captureConfig` now deep-merges `air` per-key
+  (a partial persisted `air` was silently disarming camera/audio); `broadcastStore.liveSince` reads
+  `serverNow()` (was `Date.now()` — universal-clock violation).
+- **Now-edge live feed** — riding the now edge while broadcasting shows the **actual live camera
+  feed** (RTCView of `broadcastStore.liveStreamUrl`, published by `StreamScreen`), not the
+  seconds-behind VOD. CONTENT.md §6 "the live edge's media is the live stream."
+- **Playback hardening** (ported from `ClipEditScreen`): tolerant + back-pressured seeks (seekBy,
+  ready-gated, latest-target-wins) + a stuck-`loading`/`error` **recovery** (refetch token +
+  `replaceAsync`, capped + backoff, poster fallback); **play-from-paused seek-kick** (a paused
+  expo-video player needs a seek to start rendering); **preview-play while scrubbing** (play muted →
+  continuous repaint, settle-pause on release) for fluid scrub. Scrub cadence tightened (40ms
+  throttle / 50ms follow).
+
+**OPEN — the live-replay dead zone (`CONTENT.md` §6 "The recording lag & the dead zone"):** the
+heart of "scrub the recent past while broadcasting shows 30s-old footage / no preview of the building
+clip." Root cause: the **recording trails the live moment by 20–40s** (encode → upload → write →
+finalize → playlist + player hold-back), so a recent-past window — the **dead zone** — has *already
+happened* but **isn't recorded/served yet**. There is **no correct frame** to show there (the VOD
+lacks it; the live feed is "now"). Compounded app-side by the player holding a **stale playlist
+snapshot**. **Handling is undecided** (leading: **B** honest "catching up" placeholder + **C** shrink
+the zone — app-side playlist refresh + recorder-side shorter segments / less hold-back). **The durable
+cure is recorder/backend-side** (CONTENT.md §9 "Minimise the recording lag / dead zone"). **Next step
+with Aaron:** measure the actual dead-zone width + split true recorder lag vs the app's stale snapshot
+(the fixes differ). Captured 2026-06-16; nothing built yet.
