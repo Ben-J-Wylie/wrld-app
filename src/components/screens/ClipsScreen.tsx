@@ -176,6 +176,28 @@ function carveBuffer(sessions: BufferSession[], claims: Claim[]): LaneClip[] {
   }
   return out
 }
+// Carve the saved/pending ranges out of the LIVE block too (the live-session analog of carveBuffer).
+// The live block bypasses carveBuffer (it's built from `nowMs`, not a session's recorded duration), so
+// without this, saving a piece of the ongoing broadcast leaves its buffered copy behind = a DUPLICATE
+// beside the new saved block. Subtract the live session's claims from [liveSince, now] → the unsaved
+// remainder pieces; the last still reaches `now` (the frontier is non-saveable, so no claim covers it).
+function carveLiveBlock(live: LaneClip, claims: Claim[]): LaneClip[] {
+  const sid = live.sourceSessionId
+  const cuts = claims
+    .filter((c) => c.sessionId === sid)
+    .map((c) => [Math.max(live.startMs, c.startMs), Math.min(live.endMs, c.endMs)] as [number, number])
+    .filter(([a, b]) => b > a)
+    .sort((x, y) => x[0] - y[0])
+  if (!cuts.length) return [live]
+  const out: LaneClip[] = []
+  let cursor = live.startMs
+  for (const [a, b] of cuts) {
+    if (a - cursor > MIN_REMAINDER_MS) out.push({ ...live, id: `${sid}~${Math.round(cursor)}`, startMs: cursor, endMs: a })
+    cursor = Math.max(cursor, b)
+  }
+  if (live.endMs - cursor > MIN_REMAINDER_MS) out.push({ ...live, id: `${sid}~${Math.round(cursor)}`, startMs: cursor, endMs: live.endMs })
+  return out
+}
 
 export const ClipsScreen = () => {
   const insets = useSafeAreaInsets()
@@ -378,7 +400,10 @@ export const ClipsScreen = () => {
     // draggable/saveable clips, while only the LAST piece reaches `now` (the still-growing frontier,
     // which the timeline detects as the live tail and renders non-draggable). No snips → one piece, as
     // before. (CONTENT.md §6: editing the model is orthogonal to playing it — snip the live stream too.)
-    if (liveClip) base.push(...applySplits([liveClip], splitPoints))
+    // carveLiveBlock first removes any saved/pending ranges (so saving a live piece doesn't leave a
+    // duplicate buffered copy beside the new saved block), then applySplits divides the remainder at
+    // the snip points.
+    if (liveClip) base.push(...applySplits(carveLiveBlock(liveClip, claims), splitPoints))
     return base
   }, [sessions, claims, drafts, splitPoints, liveClip, realLiveSessionId])
   // Window the timeline to the buffer window: drop anything fully older than the reaper boundary
