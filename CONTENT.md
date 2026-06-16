@@ -401,10 +401,14 @@ time-bearing surface (the clip editor, multi-source lanes, the time machine):
    was tried and **retired** because it froze during video playback — the clock is
    a JS `requestAnimationFrame` loop (`setNowUi`) pushing `serverNow()` to the UI
    thread, robust to the playback main-thread stall.
-2. **The playhead is the single source of truth.** It advances by *elapsed wall
-   time* (1× footage, fixed rush across a gap); the video and timeline **follow**
-   it. Position is never derived from the video's `currentTime` (which stalls on a
-   VOD reload).
+2. **The playhead is the single source of truth *during playback*.** While playing
+   it advances by *elapsed wall time* (1× footage, fixed rush across a gap) and the
+   video + timeline **follow** it — position is never derived from the video's
+   `currentTime` (which stalls on a VOD reload). In the other modes the *input*
+   drives and the playhead follows: while **scrubbing** the finger owns the scroll
+   (the playhead settles to where it lands), and while **riding an edge** the now /
+   reaper frontier owns the motion. The truly universal invariant is #1 — every
+   mode reads the one clock; *which thing* leads just changes with the mode.
 3. **Derive the rendered position; never snapshot it.** The visual anchor
    (`effScrollSv`) is a `useDerivedValue` off the layout-atomic clock — not a JS
    `scroll` value sampled a frame ago. Snapshotting across the JS↔UI thread boundary
