@@ -560,6 +560,13 @@ model edit; the only thing playback complicates is the *grab target*, not the ed
   while the clock keeps its truth; on release the follow re-latches. Nothing is lost — the
   rolling buffer keeps recording server-side regardless of the app's playhead. (`ClipsTimeline`
   `holdCamera` + `ClipBlock` `onDragActive`; decided 2026-06-16.)
+- **The now-frontier segment can't be saved — but a snip frees the rest.** The one piece still
+  *growing* at the now edge has no fixed end, so it isn't a saveable unit — its drag doesn't even
+  initiate (rendered with no gesture). Snipping it, though, carves off a *bounded* earlier piece
+  that drags to the saved lane like any other clip. So you save the ongoing broadcast by cutting a
+  fixed length off its tail, never by grabbing the live edge itself. (The timeline detects the
+  growing piece — the one reaching the newest end — and only that one is pinned; everything behind
+  a snip is free. Same for a live broadcast as for a past clip.)
 
 This is the same spine as the universal clock above: the representation leads and is always
 editable; the media is a follower. (See also §3 — saving a still-growing live clip is a model

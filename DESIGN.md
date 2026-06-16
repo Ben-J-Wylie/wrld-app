@@ -3507,7 +3507,12 @@ on the sublabel and the left ruler.
   holds at the current scroll, so riding/following/playback-drive all yield) — the host sets it during a
   grab so a clip dragged across lanes mid-playback is a **stable target** (it doesn't scroll out from
   under the finger). The clock + live build keep advancing underneath; only the *view* holds. Editing the
-  model (lane membership) is orthogonal to playing it (CONTENT.md §6). *(The vertical `ClipLane` / `ClipTimeRuler` / `TimeGapMarker` are now
+  model (lane membership) is orthogonal to playing it (CONTENT.md §6). **Now-frontier guard (2026-06-16):**
+  the still-growing live segment — the `liveTailId` piece reaching the newest end — renders with **no drag
+  gesture at all** (`dragDir`/`onCross`/`onDragActive` omitted → `ClipBlock` returns the static branch), so
+  a clip touching the now frontier can't be dragged to saved (its end is undefined). The host (`ClipsScreen`)
+  runs the live block through `applySplits` so a snip carves off a *bounded* earlier piece that IS draggable
+  — saving the ongoing broadcast by cutting a fixed tail, never by grabbing the live edge. *(The vertical `ClipLane` / `ClipTimeRuler` / `TimeGapMarker` are now
   gallery-only — the timeline superseded them for the grid; `ClipBlock` is shared.)*
 - **`ClipViewer`** — `src/components/features/clip/ClipViewer.tsx`. The **sticky full-width 2:1**
   (half-height) preview above the buffered/saved bar (the host pads it for equal L/R margins).

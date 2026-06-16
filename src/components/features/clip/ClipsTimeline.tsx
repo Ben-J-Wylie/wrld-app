@@ -408,7 +408,7 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
   // Combined set drives the shared axis (buffer + saved don't overlap → one timeline). Sorted
   // oldest→newest with gap-before widths; each clip gets a stable index into the layout arrays.
   // `liveIdx` = the live tail seg (the one that builds to nowUI).
-  const { segs, trailGapPx, idToIndex, tickIndices, gapIndices, trailingGap, liveIdx } = useMemo(() => {
+  const { segs, trailGapPx, idToIndex, tickIndices, gapIndices, trailingGap, liveIdx, liveTailId } = useMemo(() => {
     // The live tail = the BUFFERED clip of the open session that REACHES the live edge (the newest
     // footage end across both lanes) — the only piece that grows to nowUI. Matching by session alone
     // also caught saved/pending-save/draft/remainder pieces and grew them ("the saved copy keeps
@@ -454,7 +454,7 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
     // every second, which fought the per-frame play/reaper loops — the per-second jump. The footage
     // geometry must change only when the FOOTAGE changes, never merely because a second passed.
     const trailing = !liveSessionId && prevEnd != null
-    return { segs: out, trailGapPx: trailing ? GAP_W : 0, idToIndex: idx, tickIndices: out.map((_, i) => i), gapIndices: gaps, trailingGap: trailing, liveIdx: live }
+    return { segs: out, trailGapPx: trailing ? GAP_W : 0, idToIndex: idx, tickIndices: out.map((_, i) => i), gapIndices: gaps, trailingGap: trailing, liveIdx: live, liveTailId }
   }, [buffered, saved, liveSessionId])
 
   // Leading gap: a FIXED GAP_W marker before the oldest clip, present whenever windowing is active —
@@ -1044,10 +1044,14 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
               onSelect={() => !pinchingRef.current && onSelect(c)}
               onOpen={() => !pinchingRef.current && onOpen(c, tone)}
               dragAxis="y"
-              dragDir={tone === 'buffered' ? 1 : -1}
-              reachPx={laneReach}
-              onCross={() => (tone === 'buffered' ? onSave(c) : onUnsave(c))}
-              onDragActive={onLaneDragChange}
+              {...(c.id === liveTailId
+                ? {} // the still-growing segment AT the now frontier can't be saved — no drag at all
+                : {
+                    dragDir: tone === 'buffered' ? 1 : -1,
+                    reachPx: laneReach,
+                    onCross: () => (tone === 'buffered' ? onSave(c) : onUnsave(c)),
+                    onDragActive: onLaneDragChange,
+                  })}
               yieldToGesture={pinchRef}
               yieldSignal={twoFingers}
             />

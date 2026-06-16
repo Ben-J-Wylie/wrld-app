@@ -373,7 +373,12 @@ export const ClipsScreen = () => {
     // carve so it isn't drawn twice (a zero-width-then-growing duplicate beside the live block).
     const carveSessions = realLiveSessionId ? sessions.filter((s) => s.id !== realLiveSessionId) : sessions
     const base = [...applySplits(carveBuffer(carveSessions, claims), splitPoints), ...drafts]
-    if (liveClip) base.push(liveClip)
+    // The live block is ONE [liveSince → now] piece, but a snip on it divides it like any other clip:
+    // applySplits cuts at the live session's split points so the EARLIER (bounded) pieces become normal
+    // draggable/saveable clips, while only the LAST piece reaches `now` (the still-growing frontier,
+    // which the timeline detects as the live tail and renders non-draggable). No snips → one piece, as
+    // before. (CONTENT.md §6: editing the model is orthogonal to playing it — snip the live stream too.)
+    if (liveClip) base.push(...applySplits([liveClip], splitPoints))
     return base
   }, [sessions, claims, drafts, splitPoints, liveClip, realLiveSessionId])
   // Window the timeline to the buffer window: drop anything fully older than the reaper boundary
