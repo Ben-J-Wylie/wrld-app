@@ -375,12 +375,19 @@ export const ClipsScreen = () => {
   // then the real session's normal carved clip (now full-duration) takes over as a past clip.
   const liveClip = useMemo<LaneClip | null>(() => {
     if (!isLive || liveSince == null) return null
+    // Anchor the start to the REAL footage start once the session exists, NOT the optimistic go-live
+    // instant (liveSince). The backend session starts a beat after go-live, so [liveSince, realStart]
+    // is a no-footage region — anchoring there left a phantom buffered sliver before the start when
+    // saving a piece that includes it (the real saved range begins at realStart) and could fail the
+    // save outright ("No playable footage in the selected range"). Before the real session lands,
+    // liveSince still drives the instant build (no real footage to save yet anyway → save is blocked).
+    const startMs = realLiveSession ? sessionStartMs(realLiveSession) : liveSince
     return {
       id: OPT_LIVE_ID,
-      startMs: liveSince,
+      startMs,
       endMs: nowMs,
       label: 'Live',
-      sublabel: fmtDur(Math.max(0, nowMs - liveSince) / 1000),
+      sublabel: fmtDur(Math.max(0, nowMs - startMs) / 1000),
       posterUrl: realLiveSession?.thumbnailUrl ?? null,
       manifestUrl: realLiveSession?.manifestUrl ?? null,
       sourceSessionId: realLiveSessionId ?? OPT_LIVE_SESSION,
