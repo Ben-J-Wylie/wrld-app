@@ -3555,7 +3555,11 @@ on the sublabel and the left ruler.
   present); correct **per-cell thumbnails are a later pass** (server-generated; the dead-zone + zoom
   make client extraction unreliable). `FILM_MAX_CELLS` caps a very wide (zoomed-in) clip. Without
   `cellLeftSv` (gallery) the strip is static (phase 0). Below `COMPACT_H` (44) the block
-  **collapses to a thin labelled bar** (no strip). Double-tap → `onOpen`. **Drag-to-cross:** a `dragDir` (1 = right→saved, −1 = left→buffered) +
+  **collapses to a thin labelled bar** (no strip). **Smooth:** the strip is `memo`'d on the **cell
+  count** (a sub-cell width change — the 1 s nowMs tick, the per-frame live build — doesn't re-render
+  the cell Views) and **rasterized** (`shouldRasterizeIOS` / `renderToHardwareTextureAndroid`) so the
+  per-frame translate (skating, reaper consumption) is a cheap GPU texture move. Double-tap →
+  `onOpen`. **Drag-to-cross:** a `dragDir` (1 = right→saved, −1 = left→buffered) +
   `reachPx` + `onCross` make it draggable horizontally (RNGH `Pan`, `activeOffsetX`/`failOffsetY`
   so vertical scrolls fall through); past halfway commits `onCross`, else springs back; lifts
   (shadow) while dragging. **`onDragActive(active)`** (2026-06-16) fires on the drag's `onStart`
