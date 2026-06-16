@@ -16,16 +16,62 @@ import Animated, { useAnimatedStyle, useSharedValue, withTiming, runOnJS, type S
 import { Gesture, GestureDetector, type GestureType } from 'react-native-gesture-handler'
 import { Pressable } from '@/components/primitives/Pressable'
 import { Text } from '@/components/primitives/Text'
-import { Icon } from '@/components/primitives/Icon'
 import { theme } from '@/tokens/theme'
 
 export type ClipTone = 'buffered' | 'saved'
 
-// Below this px height the block collapses to a thin labelled bar (no poster / stacked text).
+// Below this px height the block collapses to a thin labelled bar (no film strip / stacked text).
 const COMPACT_H = 44
-// The corner poster is 38px + its left/right inset; below this block width it can't fit, so we
-// swap it for a centred clip glyph (the rotated `film` icon, matching the Clips tab).
-const THUMB_FIT_MIN = 48
+
+// ── film strip (the top band) ──
+// The top band is a FILM STRIP: square rounded cells with a sprocket-hole band above and below.
+// The cell size is CONSTANT regardless of zoom (the clip widens → MORE cells fit; it never stretches
+// a cell). Cells are phase-anchored to the GLOBAL timeline grid (`cellLeftSv`, the clip's animated
+// content-left), so they (a) skate as the timeline scrolls — revealed at the now edge, consumed at the
+// reaper edge — and (b) LINE UP across a snip seam (adjacent pieces of one session share the grid).
+const FILM_SPROCKET_H = 6 // height of each sprocket band (top + bottom)
+const FILM_GAP = 4 // gap between cells
+const FILM_CELL = 22 // square cell size — CONSTANT across zoom
+const FILM_PITCH = FILM_CELL + FILM_GAP // one cell's footprint on the grid
+const FILM_SPK_PITCH = FILM_PITCH / 2 // two sprockets per cell
+const FILM_SPK_W = 4
+const FILM_MAX_CELLS = 140 // backstop so a very wide (zoomed-in) clip can't render unbounded cells
+
+// One repeating film strip, translated to sit on the global cell grid (so it skates + seam-aligns).
+function FilmRow({ cellLeftSv, widthPx, posterUrl }: { cellLeftSv?: SharedValue<number>; widthPx?: number; posterUrl?: string | null }) {
+  const cells = Math.min(FILM_MAX_CELLS, Math.max(1, Math.ceil(((widthPx ?? FILM_PITCH) + FILM_PITCH * 2) / FILM_PITCH)))
+  const sprockets = cells * 2
+  // Translate the whole strip by the clip's content-left modulo the pitch → its cells land on the
+  // global grid (k·PITCH). For the reaper-clamped oldest clip cellLeftSv is animated, so the strip
+  // skates and the leftmost cells clip away (consumed); for the rest it's static + the content scroll
+  // moves it for free. A static fallback (phase 0) covers the gallery (no SV).
+  const rowStyle = useAnimatedStyle(() => {
+    const left = cellLeftSv ? cellLeftSv.value : 0
+    const phase = ((left % FILM_PITCH) + FILM_PITCH) % FILM_PITCH
+    return { transform: [{ translateX: -phase }] }
+  })
+  return (
+    <Animated.View style={[styles.filmRow, rowStyle, { width: cells * FILM_PITCH }]} pointerEvents="none">
+      <View style={styles.sprocketBand}>
+        {Array.from({ length: sprockets }).map((_, i) => (
+          <View key={i} style={styles.sprocket} />
+        ))}
+      </View>
+      <View style={styles.cellBand}>
+        {Array.from({ length: cells }).map((_, i) => (
+          <View key={i} style={styles.filmCell}>
+            {posterUrl ? <Image source={{ uri: posterUrl }} style={styles.filmImg} contentFit="cover" transition={120} /> : null}
+          </View>
+        ))}
+      </View>
+      <View style={styles.sprocketBand}>
+        {Array.from({ length: sprockets }).map((_, i) => (
+          <View key={i} style={styles.sprocket} />
+        ))}
+      </View>
+    </Animated.View>
+  )
+}
 
 type Props = {
   heightPx: number
@@ -55,10 +101,14 @@ type Props = {
   // flips (a graceful return to its current lane instead of a half-committed cross).
   yieldToGesture?: React.MutableRefObject<GestureType | undefined>
   yieldSignal?: SharedValue<boolean>
+  // The clip's animated content-left (from AnimatedClip). Phase-anchors the film strip to the global
+  // timeline grid so cells skate (revealed at now, consumed at the reaper) + line up across snip seams.
+  // Omitted (gallery) → a static strip (phase 0).
+  cellLeftSv?: SharedValue<number>
   style?: StyleProp<ViewStyle>
 }
 
-export function ClipBlock({ heightPx, widthPx, label, sublabel, posterUrl, tone, draft, selected, onSelect, onOpen, dragDir, dragAxis = 'x', reachPx, onCross, onDragActive, yieldToGesture, yieldSignal, style }: Props) {
+export function ClipBlock({ heightPx, widthPx, label, sublabel, posterUrl, tone, draft, selected, onSelect, onOpen, dragDir, dragAxis = 'x', reachPx, onCross, onDragActive, yieldToGesture, yieldSignal, cellLeftSv, style }: Props) {
   const lastTap = useRef(0)
   const onPress = () => {
     const now = Date.now()
@@ -161,19 +211,14 @@ export function ClipBlock({ heightPx, widthPx, label, sublabel, posterUrl, tone,
         style,
       ]}
     >
-      {/* A bordered paper span across the top of the block (with margins). It holds the poster
-          when the box is wide enough; otherwise (too narrow at this zoom) the rotated `film`
-          glyph that matches the Clips tab. `contain` letterboxes/pillarboxes the frame so it
-          stays square inside the span for any aspect ratio. */}
-      {!compact && (widthPx ?? Infinity) < THUMB_FIT_MIN ? (
+      {/* A bordered paper band across the top of the block (with margins): the FILM STRIP — square
+          rounded cells between two sprocket-hole bands. Constant cell size across zoom; cells are
+          phase-anchored to the global timeline grid so they skate (revealed at now, consumed at the
+          reaper) and line up across snip seams. Frames are placeholders for now (posterUrl repeated
+          if present) — correct per-cell thumbs are a later pass. Overflow clips to the band. */}
+      {!compact ? (
         <View style={styles.topSpan} pointerEvents="none">
-          <Icon name="film" size="md" rotate={90} color={theme.colors.text.muted} />
-        </View>
-      ) : posterUrl && !compact ? (
-        <View style={styles.topSpan} pointerEvents="none">
-          <View style={styles.thumbFrame}>
-            <Image source={{ uri: posterUrl }} style={styles.thumbImg} contentFit="contain" transition={120} />
-          </View>
+          <FilmRow cellLeftSv={cellLeftSv} widthPx={widthPx} posterUrl={posterUrl} />
         </View>
       ) : null}
 
@@ -251,9 +296,9 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.accent.default,
     borderStyle: 'dashed',
   },
-  // A bordered paper strip spanning the top of the block (with margins), fixed height. Holds the
-  // poster (square via `contain`, pillarboxed on the lightest paper) or the centred clip glyph.
-  // Same stroke as the clip box.
+  // The film-strip band spanning the top of the block (with margins), fixed height. Holds the
+  // FilmRow (sprockets · cells · sprockets); overflow clips the strip to the band so cells reveal/
+  // consume cleanly at the edges. Same stroke as the clip box.
   topSpan: {
     position: 'absolute',
     top: theme.spacing.xs,
@@ -264,22 +309,48 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.bg.primary,
     borderWidth: 1,
     borderColor: theme.colors.border.strong,
-    alignItems: 'center',
-    justifyContent: 'center',
     overflow: 'hidden',
   },
-  // A square frame around the poster (the span's height) — every thumb is the same size
-  // regardless of orientation, with an additional inward-rounded stroke on its left/right.
-  thumbFrame: {
-    height: '100%',
-    aspectRatio: 1,
-    borderRadius: 8,
+  // The translated film strip: a column of [sprocket band · cell band · sprocket band], left-anchored
+  // and shifted onto the global grid. Sizes to its content width (the rendered cells).
+  filmRow: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    flexDirection: 'column',
+    justifyContent: 'space-between',
+    paddingVertical: 1,
+  },
+  // A horizontal band of sprocket holes (top + bottom), denser than the cells (two per cell).
+  sprocketBand: {
+    height: FILM_SPROCKET_H,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  sprocket: {
+    width: FILM_SPK_W,
+    height: 3,
+    borderRadius: 1.5,
+    marginRight: FILM_SPK_PITCH - FILM_SPK_W,
+    backgroundColor: theme.colors.border.strong,
+  },
+  // The row of square rounded film cells (the frames), constant size regardless of zoom.
+  cellBand: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  filmCell: {
+    width: FILM_CELL,
+    height: FILM_CELL,
+    marginRight: FILM_GAP,
+    borderRadius: 4,
     borderWidth: 1,
     borderColor: theme.colors.border.strong,
-    backgroundColor: theme.colors.bg.primary,
+    backgroundColor: theme.colors.bg.panelHi,
     overflow: 'hidden',
   },
-  thumbImg: {
+  filmImg: {
     width: '100%',
     height: '100%',
   },

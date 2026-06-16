@@ -24,7 +24,7 @@
 // is fixed-size, so nothing stretches), anchored to the centre. React state only commits in
 // coarse zoom steps, purely to flip the thumb↔film-glyph swap. See DESIGN.md Section 3.
 
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { cloneElement, forwardRef, isValidElement, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { StyleSheet, View } from 'react-native'
 import Animated, {
   cancelAnimation,
@@ -338,13 +338,22 @@ function AnimatedClip({
   // clip then stops at reaperEdgeX and renders its OWN rounded-left corner + border there (just like the
   // now edge shows the rounded-right corner), instead of being flat-cropped by the dark void. A
   // fully-reaped clip collapses to width 0; reaperEdgeX is 0 when windowing is off, so this is a no-op there.
+  // The clamped content-left (shrink-from-left at the reaper) as a shared value — also handed to the
+  // ClipBlock so its film strip phase-anchors to the global grid (cells skate + seam-align).
+  const leftSv = useDerivedValue(() => Math.max(layout.value.lefts[index] ?? 0, reaperEdgeX.value))
   const style = useAnimatedStyle(() => {
     const l0 = layout.value.lefts[index] ?? 0
     const w0 = layout.value.widths[index] ?? MIN_CLIP_W
-    const left = Math.max(l0, reaperEdgeX.value)
+    const left = leftSv.value
     return { left, width: Math.max(0, l0 + w0 - left) }
   })
-  return <Animated.View style={[styles.slot, { top: CLIP_INSET_Y, height: clipH }, style]}>{children}</Animated.View>
+  return (
+    <Animated.View style={[styles.slot, { top: CLIP_INSET_Y, height: clipH }, style]}>
+      {isValidElement(children)
+        ? cloneElement(children as React.ReactElement<{ cellLeftSv?: SharedValue<number> }>, { cellLeftSv: leftSv })
+        : children}
+    </Animated.View>
+  )
 }
 
 function AnimatedTick({ layout, index, label, isNow }: { layout: SharedValue<Layout>; index: number; label: string; isNow?: boolean }) {

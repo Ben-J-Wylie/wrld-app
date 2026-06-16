@@ -3544,16 +3544,25 @@ on the sublabel and the left ruler.
   across both lanes where empty time was collapsed — dashed rules above/below a paper pill with a
   `more-vertical` glyph + the skipped duration (e.g. "3h 12m"). Props `height` · `label` · `style?`.
 - **`ClipBlock`** — `src/components/features/clip/ClipBlock.tsx`. One clip drawn to scale;
-  `tone: 'buffered'` (neutral paper) · `'saved'` (accent-tinted, bookmark badge). Poster +
-  name/duration when tall; **collapses to a thin labelled bar** below `COMPACT_H` (44).
-  Double-tap → `onOpen`. **Drag-to-cross:** a `dragDir` (1 = right→saved, −1 = left→buffered) +
+  `tone: 'buffered'` (neutral paper) · `'saved'` (accent-tinted, bookmark badge). The top band is a
+  **film strip (2026-06-16)** — square rounded cells between two sprocket-hole bands; **cell size is
+  CONSTANT across zoom** (the clip widens → more cells, never stretched). Cells are phase-anchored to
+  the **global timeline grid** via **`cellLeftSv`** (the clip's animated content-left, handed down by
+  `ClipsTimeline`'s `AnimatedClip` through `cloneElement`): they **skate** as the timeline scrolls —
+  revealed at the now edge, consumed (clipped) at the reaper edge — and **line up across a snip seam**
+  (every clip phases to the same `k·PITCH` grid, so adjacent pieces of one session are continuous).
+  Cells don't sit flush with the edges. Frames are placeholders for now (the `posterUrl` repeated if
+  present); correct **per-cell thumbnails are a later pass** (server-generated; the dead-zone + zoom
+  make client extraction unreliable). `FILM_MAX_CELLS` caps a very wide (zoomed-in) clip. Without
+  `cellLeftSv` (gallery) the strip is static (phase 0). Below `COMPACT_H` (44) the block
+  **collapses to a thin labelled bar** (no strip). Double-tap → `onOpen`. **Drag-to-cross:** a `dragDir` (1 = right→saved, −1 = left→buffered) +
   `reachPx` + `onCross` make it draggable horizontally (RNGH `Pan`, `activeOffsetX`/`failOffsetY`
   so vertical scrolls fall through); past halfway commits `onCross`, else springs back; lifts
   (shadow) while dragging. **`onDragActive(active)`** (2026-06-16) fires on the drag's `onStart`
   (true) / `onFinalize` (false) — `onFinalize` always fires, so a cross/cancel can't strand it — letting
   the host hold the timeline camera for the grab (see `ClipsTimeline` `holdCamera`). Props `heightPx` ·
-  `label` · `sublabel?` · `posterUrl?` · `tone` · `onOpen?` · `dragDir?` · `dragAxis?` · `reachPx?` ·
-  `onCross?` · `onDragActive?`.
+  `widthPx?` (drives the cell count) · `label` · `sublabel?` · `posterUrl?` · `tone` · `onOpen?` ·
+  `dragDir?` · `dragAxis?` · `reachPx?` · `onCross?` · `onDragActive?` · `cellLeftSv?`.
 - **`ClipLane`** — `src/components/features/clip/ClipLane.tsx`. A full-width column that positions
   its `LaneClip[]` from a host **`posOf(id) → { top, height }`** map (`ClipPos`) — the per-clip
   collapsed layout (with the height floor already reserved) lives in the host, so the lane just
