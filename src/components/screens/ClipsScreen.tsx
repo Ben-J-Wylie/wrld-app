@@ -659,7 +659,10 @@ export const ClipsScreen = () => {
   // LATEST target, one in flight (busy → the statusChange handler re-flushes); (3) RECOVER — if it
   // wedges in `loading` past a watchdog OR errors, refetch a fresh token + replaceAsync, capped +
   // backed off, poster on exhaustion. (The grid had the naive version; this is the editor's proven one.)
-  const SEEK_THROTTLE_MS = 120
+  // Coalesce window for seeks. Kept SMALL: the readyToPlay gate already guarantees one seek in
+  // flight at a time, so this only needs to avoid a tight loop when seeks complete instantly — a
+  // bigger value (the editor's 120) just adds visible scrub latency (the "chunky" feel).
+  const SEEK_THROTTLE_MS = 40
   const MAX_HEAL = 4
   const pendingSeekSec = useRef<number | null>(null)
   const seekTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -937,6 +940,29 @@ export const ClipsScreen = () => {
     }
   }, [playing, player, locateAt, reaperEdgeNow, enterDrive, exitDrive])
 
+  // Start/stop the VIDEO when `playing` flips. CRUCIAL: a paused expo-video player does NOT begin
+  // rendering on play() alone — it needs a seek to "kick" it. Without this the clock/timeline advanced
+  // on play but the footage stayed frozen until a scrub's seek nudged it (the reported bug). So on
+  // play, do a tolerant seek to the current frame, then play(); on stop, pause. (Mirrors the editor.)
+  useEffect(() => {
+    if (playing) {
+      if (!manifestUrlRef.current) return
+      pendingSeekSec.current = null
+      try {
+        const want = (playheadRef.current - vodStartRef.current) / 1000
+        if (want >= 0) {
+          const d = want - player.currentTime
+          if (Math.abs(d) >= 0.05) player.seekBy(d) // the kick — repaints + readies the paused player
+        }
+        player.play()
+      } catch {}
+    } else {
+      try {
+        player.pause()
+      } catch {}
+    }
+  }, [playing, player])
+
   const togglePlay = useCallback(() => {
     if (playingRef.current) {
       setGapCard(null)
@@ -995,7 +1021,7 @@ export const ClipsScreen = () => {
       setRidingReaper(c.atReaper)
       if (c.inGap || !c.clipId || c.clipId !== playerIdRef.current) return // gap / not-yet-loaded → no seek
       scheduleSeek(c.timeMs) // tolerant + ready-gated (won't pile seeks while the player is loading)
-    }, 80)
+    }, 50)
     return () => clearInterval(id)
   }, [scrubbing, player, scheduleSeek])
 
