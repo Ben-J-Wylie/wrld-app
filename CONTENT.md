@@ -533,10 +533,37 @@ offset-invariant, so device vs server doesn't matter there.)
   its internal playback clock), and feeds the shared clock from its own buffer query.
 - ✅ **`useBroadcasterClock`** — the time-of-day readout now formats `serverNow()` rather
   than raw `new Date()`, so even it matches the universal clock.
+- ✅ **`broadcastStore.setLive` → `liveSince`** *(missed surface, fixed 2026-06-16)* — the
+  go-live timestamp that anchors the Clips timeline's OPTIMISTIC live clip start was stamped
+  with raw `Date.now()`, so under any device↔server skew the optimistic block's start sat in
+  the wrong clock domain (mispositioned against the `serverNow()`-aligned axis). Now reads
+  `serverNow()`. The last straggler off the universal clock.
 
 Legend: ✅ reads the universal clock. *Out of scope (intentionally left on `Date.now()`):*
 pure duration/timestamp measures — seek-throttle stamps, thumbnail-gen timing, the
 reverse-scrub frame delta — because a delta cancels the offset and is rate-identical.
+
+### Editing the model is orthogonal to playing it
+
+Snip, mend, and lane membership (save / un-save) are mutations of the **representation**
+— the manifest of split points + which lane a clip lives in — not of the media. The model
+is always yours and always live, so these edits must behave **identically whether the
+playhead is parked or advancing, broadcasting or not.** Playback state is never a gate on a
+model edit; the only thing playback complicates is the *grab target*, not the edit itself.
+
+- **A snip is a pin dropped in a river.** Cutting drops a permanent mark at an instant; the
+  playhead keeps flowing; the mark stays put and recedes behind it. Cutting never stops the
+  flow, the flow never erases the cut. (Snip/mend are ungated — they work mid-playback as-is.)
+- **A lane-drag holds the camera, not the clock.** The one obstacle to dragging a clip across
+  lanes mid-playback is that the block scrolls out from under the finger. So for the duration
+  of the grab the *view* holds (the auto-camera — riding / following / playback-drive — yields)
+  while the clock keeps its truth; on release the follow re-latches. Nothing is lost — the
+  rolling buffer keeps recording server-side regardless of the app's playhead. (`ClipsTimeline`
+  `holdCamera` + `ClipBlock` `onDragActive`; decided 2026-06-16.)
+
+This is the same spine as the universal clock above: the representation leads and is always
+editable; the media is a follower. (See also §3 — saving a still-growing live clip is a model
+edit allowed now; the byte-level promotion of in-flight buffer bytes is the server seam.)
 
 ---
 

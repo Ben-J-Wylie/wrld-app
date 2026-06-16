@@ -46,6 +46,10 @@ type Props = {
   dragAxis?: 'x' | 'y'
   reachPx?: number
   onCross?: () => void
+  // Fired (true) when a lane-drag gesture begins, (false) when it finalises. The host uses this to
+  // HOLD the timeline camera for the duration of the grab so a clip being dragged across lanes while
+  // playback runs is a stable target (it doesn't scroll out from under the finger). See ClipsScreen.
+  onDragActive?: (active: boolean) => void
   // When the timeline pinch grabs (a 2nd finger lands), the drag must yield: run simultaneously
   // with the pinch so it can take over mid-drag, and spring the block back the instant the signal
   // flips (a graceful return to its current lane instead of a half-committed cross).
@@ -54,7 +58,7 @@ type Props = {
   style?: StyleProp<ViewStyle>
 }
 
-export function ClipBlock({ heightPx, widthPx, label, sublabel, posterUrl, tone, draft, selected, onSelect, onOpen, dragDir, dragAxis = 'x', reachPx, onCross, yieldToGesture, yieldSignal, style }: Props) {
+export function ClipBlock({ heightPx, widthPx, label, sublabel, posterUrl, tone, draft, selected, onSelect, onOpen, dragDir, dragAxis = 'x', reachPx, onCross, onDragActive, yieldToGesture, yieldSignal, style }: Props) {
   const lastTap = useRef(0)
   const onPress = () => {
     const now = Date.now()
@@ -81,6 +85,9 @@ export function ClipBlock({ heightPx, widthPx, label, sublabel, posterUrl, tone,
   const onCrossRef = useRef(onCross)
   onCrossRef.current = onCross
   const fireCross = () => onCrossRef.current?.()
+  const onDragActiveRef = useRef(onDragActive)
+  onDragActiveRef.current = onDragActive
+  const fireDragActive = (active: boolean) => onDragActiveRef.current?.(active)
 
   // Drag along `dragAxis`: horizontal for side-by-side lanes, vertical for stacked lanes.
   const isY = dragAxis === 'y'
@@ -97,6 +104,7 @@ export function ClipBlock({ heightPx, widthPx, label, sublabel, posterUrl, tone,
         .onStart(() => {
           'worklet'
           runOnJS(setDragging)(true)
+          runOnJS(fireDragActive)(true) // → host holds the timeline camera for the grab
         })
         .onUpdate((e) => {
           'worklet'
@@ -131,6 +139,7 @@ export function ClipBlock({ heightPx, widthPx, label, sublabel, posterUrl, tone,
         .onFinalize(() => {
           'worklet'
           runOnJS(setDragging)(false)
+          runOnJS(fireDragActive)(false) // → host releases the camera hold (onFinalize ALWAYS fires, even on a cross/cancel)
         })
     })(),
   ).current

@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { SourceType } from '@/types'
+import { serverNow } from '@/lib/serverClock'
 
 // Global broadcast state shared across screens so the Go Live / Record
 // controls look and read the same on the dashboard and the stream view
@@ -39,8 +40,10 @@ export const useBroadcastStore = create<BroadcastState>((set) => ({
   sources: [],
   command: null,
   commandNonce: 0,
-  // Stamp liveSince only on the transition into live (preserve it across source changes).
-  setLive: (sources) => set((s) => ({ isLive: true, sources, liveSince: s.isLive ? s.liveSince : Date.now() })),
+  // Stamp liveSince only on the transition into live (preserve it across source changes). Reads the
+  // UNIVERSAL wall clock (serverNow), not raw Date.now() — the Clips timeline positions the optimistic
+  // live clip by serverNow(), so a device↔server skew would otherwise misplace its start (CONTENT.md §6).
+  setLive: (sources) => set((s) => ({ isLive: true, sources, liveSince: s.isLive ? s.liveSince : serverNow() })),
   setRecording: (isRecording) => set({ isRecording }),
   clear: () => set({ isLive: false, isRecording: false, sources: [], liveSince: null }),
   sendCommand: (command) => set((s) => ({ command, commandNonce: s.commandNonce + 1 })),

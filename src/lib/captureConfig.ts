@@ -52,8 +52,13 @@ export async function loadCaptureConfig(): Promise<CaptureConfig> {
     const raw = await AsyncStorage.getItem(KEY)
     if (!raw) return DEFAULT_CAPTURE_CONFIG
     const parsed = JSON.parse(raw) as Partial<CaptureConfig>
-    // Top-level spread fills any field a previous version didn't persist.
-    const merged = { ...DEFAULT_CAPTURE_CONFIG, ...parsed }
+    // Top-level spread fills any scalar field a previous version didn't persist.
+    // `air` is a NESTED map, so it must be merged PER-KEY — a plain top-level spread
+    // would let a partial persisted `air` (e.g. one from an older source-model that
+    // predates/omits the `cam`/`audio` keys) REPLACE the defaults wholesale, silently
+    // disarming camera + audio → a data-only go-live (no preview, no recorded footage).
+    // Per-key merge keeps an explicit `cam:false` but restores any ABSENT default to on.
+    const merged = { ...DEFAULT_CAPTURE_CONFIG, ...parsed, air: { ...DEFAULT_CAPTURE_CONFIG.air, ...(parsed.air ?? {}) } }
     // Migrate the renamed precision value (bluedot → exact, 2026-06-04).
     if ((merged.precision as string) === 'bluedot') merged.precision = 'exact'
     return merged

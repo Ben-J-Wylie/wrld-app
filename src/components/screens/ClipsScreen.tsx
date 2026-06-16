@@ -888,6 +888,49 @@ export const ClipsScreen = () => {
     [player, seekTo],
   )
 
+  // ── lane-drag (cross a clip to the other lane) ──
+  // Editing the model (a clip's lane membership) is orthogonal to playing the model, so save/un-save
+  // must work mid-playback exactly as it does when stopped. The only obstacle is the grab TARGET:
+  // while the camera auto-moves (playing / following the now edge / riding the reaper) the block scrolls
+  // out from under the finger. So for the duration of the grab we HOLD the camera (the block sits still,
+  // a stable target) and the playhead (a clean resume with no catch-up snap). Nothing is lost — the
+  // rolling buffer keeps recording server-side regardless of the app playhead. Snip stays ungated and
+  // flowing (that's where "the playhead continues forward" is visible); only the drag holds the view.
+  const [laneHold, setLaneHold] = useState(false)
+  const laneHoldRef = useRef(false)
+  const laneHoldResumeRef = useRef(false)
+  const onLaneDragChange = useCallback(
+    (active: boolean) => {
+      if (active) {
+        if (scrubbingRef.current || laneHoldRef.current) return // already held (an in-flight scrub/drag)
+        const moving = playingRef.current || followLiveRef.current || ridingReaperRef.current
+        if (!moving) return // stopped + static camera → the block is already a stable target; drag as-is
+        laneHoldRef.current = true
+        laneHoldResumeRef.current = playingRef.current
+        exitDrive() // stop the UI-thread playback drive so the frozen camera can't keep auto-advancing
+        setFollowLive(false) // release the now-edge follow + reaper ride so the auto-camera fully yields
+        setRidingReaper(false)
+        scrubbingRef.current = true // hold the playhead clock → release has no catch-up snap
+        setLaneHold(true) // → ClipsTimeline holdCamera: freeze scroll wherever it is
+        if (playingRef.current) {
+          try {
+            player.pause()
+          } catch {}
+        }
+      } else {
+        if (!laneHoldRef.current) return // we didn't engage a hold (stopped drag) → nothing to release
+        laneHoldRef.current = false
+        scrubbingRef.current = false
+        setLaneHold(false)
+        if (laneHoldResumeRef.current)
+          try {
+            player.play()
+          } catch {}
+        laneHoldResumeRef.current = false
+      }
+    },
+    [player, exitDrive],
+  )
 
   // Frame-step: tap seeks one frame; hold repeats.
   const holdRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -1361,6 +1404,8 @@ export const ClipsScreen = () => {
             playing={playing}
             followNow={followLive}
             suppressRide={clockScrubbing}
+            holdCamera={laneHold} // freeze the camera during a lane-drag grab (stable target mid-playback)
+            onLaneDragChange={onLaneDragChange}
             onRidingChange={setRidingReaper} // mirror the timeline's true riding state → reaper clock + icon
             reaperLane={reaperLane}
             reaperEdgeMs={windowStartMs}

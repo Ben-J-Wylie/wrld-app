@@ -3501,7 +3501,13 @@ on the sublabel and the left ruler.
   **geometric** "within `EDGE_SNAP` (12px) of an edge" flags (not the latch state), so a drag sticks to
   either edge identically + reliably (a drag-while-playing can't leave the old sliver / wrong icon); a
   new **`snapToReaper()`** imperative pins the centre exactly to the reaper edge + latches the ride (the
-  reaper's analog of the now-edge follow), called when a drag settles within reach. *(The vertical `ClipLane` / `ClipTimeRuler` / `TimeGapMarker` are now
+  reaper's analog of the now-edge follow), called when a drag settles within reach. **Lane-drag camera
+  hold (2026-06-16):** **`onLaneDragChange(active)`** reports when a `ClipBlock` cross-lane drag begins/ends,
+  and **`holdCamera`** freezes the scroll (the frame-callback's scroll writes early-return + `effScrollSv`
+  holds at the current scroll, so riding/following/playback-drive all yield) — the host sets it during a
+  grab so a clip dragged across lanes mid-playback is a **stable target** (it doesn't scroll out from
+  under the finger). The clock + live build keep advancing underneath; only the *view* holds. Editing the
+  model (lane membership) is orthogonal to playing it (CONTENT.md §6). *(The vertical `ClipLane` / `ClipTimeRuler` / `TimeGapMarker` are now
   gallery-only — the timeline superseded them for the grid; `ClipBlock` is shared.)*
 - **`ClipViewer`** — `src/components/features/clip/ClipViewer.tsx`. The **sticky full-width 2:1**
   (half-height) preview above the buffered/saved bar (the host pads it for equal L/R margins).
@@ -3538,8 +3544,11 @@ on the sublabel and the left ruler.
   Double-tap → `onOpen`. **Drag-to-cross:** a `dragDir` (1 = right→saved, −1 = left→buffered) +
   `reachPx` + `onCross` make it draggable horizontally (RNGH `Pan`, `activeOffsetX`/`failOffsetY`
   so vertical scrolls fall through); past halfway commits `onCross`, else springs back; lifts
-  (shadow) while dragging. Props `heightPx` · `label` · `sublabel?` · `posterUrl?` · `tone` ·
-  `onOpen?` · `dragDir?` · `reachPx?` · `onCross?`.
+  (shadow) while dragging. **`onDragActive(active)`** (2026-06-16) fires on the drag's `onStart`
+  (true) / `onFinalize` (false) — `onFinalize` always fires, so a cross/cancel can't strand it — letting
+  the host hold the timeline camera for the grab (see `ClipsTimeline` `holdCamera`). Props `heightPx` ·
+  `label` · `sublabel?` · `posterUrl?` · `tone` · `onOpen?` · `dragDir?` · `dragAxis?` · `reachPx?` ·
+  `onCross?` · `onDragActive?`.
 - **`ClipLane`** — `src/components/features/clip/ClipLane.tsx`. A full-width column that positions
   its `LaneClip[]` from a host **`posOf(id) → { top, height }`** map (`ClipPos`) — the per-clip
   collapsed layout (with the height floor already reserved) lives in the host, so the lane just

@@ -288,6 +288,14 @@ type Props = {
   onScrubEnd?: (clipId: string | null, timeMs: number) => void
   // clip/instant under the centre playhead; `inGap` = the playhead is over unbroadcasted time.
   onCenter?: (clipId: string | null, timeMs: number, inGap: boolean) => void
+  // A lane-drag (cross to the other lane) began (true) / finalised (false). The host uses it to HOLD
+  // the camera (`holdCamera`) for the grab so a clip dragged across lanes mid-playback is a stable
+  // target — it doesn't scroll out from under the finger. (Model edit is orthogonal to playback.)
+  onLaneDragChange?: (active: boolean) => void
+  // Freeze the camera (scroll) wherever it is — the auto-camera (riding the reaper, following the now
+  // edge, the playback drive) all yield. The clock + live build keep advancing underneath; only the
+  // VIEW holds. Used during a lane-drag grab so the dragged block is stable.
+  holdCamera?: boolean
 }
 
 // Imperative handle so the host can drive the scroll from playback — bring a time instant under
@@ -394,7 +402,7 @@ function AnimatedReaperEdge({ edgeX, top, height, badgeTop, kind }: { edgeX: Sha
 }
 
 export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function ClipsTimeline(
-  { buffered, saved, nowMs, liveSessionId, playing = false, followNow = false, suppressRide = false, reaperLane = 'buffered', reaperEdgeMs, windowMs = 0, selectedId, onSelect, onOpen, onSave, onUnsave, onScrubStart, onScrubEnd, onCenter, onRidingChange }: Props,
+  { buffered, saved, nowMs, liveSessionId, playing = false, followNow = false, suppressRide = false, holdCamera = false, reaperLane = 'buffered', reaperEdgeMs, windowMs = 0, selectedId, onSelect, onOpen, onSave, onUnsave, onScrubStart, onScrubEnd, onCenter, onRidingChange, onLaneDragChange }: Props,
   ref,
 ) {
   // Combined set drives the shared axis (buffer + saved don't overlap → one timeline). Sorted
@@ -538,6 +546,7 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
   const playAnchorClockSv = useSharedValue(0) // reaperNowSv at the anchor
   const followNowSv = useSharedValue(0) // 1 while pinning scroll to the now edge (host followLive)
   const suppressRideSv = useSharedValue(0) // 1 while the host suppresses the reaper latch (clock wheel)
+  const holdCameraSv = useSharedValue(0) // 1 while the host holds the camera (a lane-drag grab) — scroll freezes
   // Cumulative pixel layout at the live zoom (UI thread). Declared before the frame callback so the
   // worklet below can read it (reanimated captures closure refs at definition time).
   const layout = useDerivedValue(() => computeLayout(segsSv.value, leadSv.value, trailSv.value, px.value))
@@ -553,6 +562,9 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
     nowSv.value = reaperNowSv.value
     // Live build: grow the open session's seg to nowUI each frame (smooth) — same clock as the edge.
     if (liveIdxSv.value >= 0) segsSv.value = extendLive(baseSegsSv.value, liveIdxSv.value, reaperNowSv.value)
+    // Camera held (a lane-drag grab): the clock + live build above keep running, but the VIEW freezes —
+    // skip every scroll write so the grabbed block stays put under the finger. Released → follow re-latches.
+    if (holdCameraSv.value) return
     // ── invariant: the reaper edge never passes the centre playhead ──
     // The edge's content-x at this frame (the boundary now − window, via the gap-rush mapping):
     const edgeX = reaperEdgeX(reaperNowSv.value - windowMsSv.value, segsSv.value, layout.value, nowSv.value, leadFromSv.value)
@@ -699,6 +711,13 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
     suppressRideSv.value = suppressRide ? 1 : 0
     if (suppressRide) ridingSv.value = 0
   }, [suppressRide, suppressRideSv, ridingSv])
+  // Camera hold (a lane-drag grab) → freeze scroll exactly where it is + release any ride/follow so the
+  // auto-camera can't drag the grabbed block out from under the finger. The clock + live build keep
+  // advancing; only the view holds. Released on grab end → the host re-latches its follow/ride.
+  useEffect(() => {
+    holdCameraSv.value = holdCamera ? 1 : 0
+    if (holdCamera) ridingSv.value = 0
+  }, [holdCamera, holdCameraSv, ridingSv])
   // Continuous mirror of the riding state → host (so the reaper clock + transport icon never desync).
   const notifyRiding = useCallback((r: number) => onRidingChange?.(r === 1), [onRidingChange])
   useAnimatedReaction(
@@ -972,6 +991,7 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
   // had. (`scroll` is still maintained by the frame loop for gesture/centre logic; the PICTURE no longer
   // depends on it while stuck to a frontier.)
   const effScrollSv = useDerivedValue(() => {
+    if (holdCameraSv.value) return scroll.value // camera frozen (lane-drag grab) → hold the view, ignore the auto-camera
     if (ridingSv.value) return reaperEdgeXSv.value
     if (followNowSv.value) return layout.value.total
     if (playDriveSv.value) {
@@ -1027,6 +1047,7 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
               dragDir={tone === 'buffered' ? 1 : -1}
               reachPx={laneReach}
               onCross={() => (tone === 'buffered' ? onSave(c) : onUnsave(c))}
+              onDragActive={onLaneDragChange}
               yieldToGesture={pinchRef}
               yieldSignal={twoFingers}
             />
