@@ -650,6 +650,109 @@ export const ClipsScreen = () => {
   // True while a cross-VOD swap is in flight → the viewer holds the incoming clip's poster over the
   // reload so a between-lane seam shows a frame, not the bg (see ClipViewer.coverPoster).
   const [vodLoading, setVodLoading] = useState(false)
+
+  // ── seek controller (ported from ClipEditScreen: tolerant · back-pressured · self-healing) ──
+  // Precise `currentTime =` seeks WEDGE AVPlayer/ExoPlayer in `loading` forever on the buffer's
+  // -c:v copy HLS after enough of them — the "stale frame / wrong footage" on PAST footage. So:
+  // (1) seek TOLERANTLY (seekBy → nearest keyframe, never wedges; the clock owns the exact position,
+  // so frame-accuracy isn't needed); (2) BACKPRESSURE — only seek when readyToPlay, always to the
+  // LATEST target, one in flight (busy → the statusChange handler re-flushes); (3) RECOVER — if it
+  // wedges in `loading` past a watchdog OR errors, refetch a fresh token + replaceAsync, capped +
+  // backed off, poster on exhaustion. (The grid had the naive version; this is the editor's proven one.)
+  const SEEK_THROTTLE_MS = 120
+  const MAX_HEAL = 4
+  const pendingSeekSec = useRef<number | null>(null)
+  const seekTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastSeekAtRef = useRef(0)
+  const loadWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const healAttemptsRef = useRef(0)
+  const healingRef = useRef(false)
+  const healTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [playerError, setPlayerError] = useState(false)
+  const manifestUrlRef = useRef<string | null>(null)
+  manifestUrlRef.current = manifestUrl
+  const refetchBufferRef = useRef(refetchBuffer)
+  refetchBufferRef.current = refetchBuffer
+
+  const flushSeek = useCallback(() => {
+    if (seekTimerRef.current) {
+      clearTimeout(seekTimerRef.current)
+      seekTimerRef.current = null
+    }
+    if (pendingSeekSec.current == null) return
+    if (player.status !== 'readyToPlay') return // busy → statusChange re-flushes the latest target
+    const sec = pendingSeekSec.current
+    pendingSeekSec.current = null
+    lastSeekAtRef.current = serverNow()
+    try {
+      const delta = sec - player.currentTime
+      if (Math.abs(delta) >= 0.05) player.seekBy(delta)
+    } catch {}
+  }, [player])
+
+  // Seek the video to a wall-clock instant — coalesced to ~one seek per SEEK_THROTTLE_MS, ready-gated.
+  const scheduleSeek = useCallback(
+    (ms: number) => {
+      const sec = (ms - vodStartRef.current) / 1000
+      if (sec < 0) return
+      pendingSeekSec.current = sec
+      const since = serverNow() - lastSeekAtRef.current
+      if (since >= SEEK_THROTTLE_MS) flushSeek()
+      else if (!seekTimerRef.current) seekTimerRef.current = setTimeout(flushSeek, SEEK_THROTTLE_MS - since)
+    },
+    [flushSeek],
+  )
+
+  const recoverPlayer = useCallback(() => {
+    if (healingRef.current) return
+    if (healAttemptsRef.current >= MAX_HEAL) {
+      setPlayerError(true) // exhausted → fall back to the poster (no tight loop, no freeze)
+      return
+    }
+    healingRef.current = true
+    healAttemptsRef.current += 1
+    const backoff = Math.min(500 * 2 ** (healAttemptsRef.current - 1), 4000)
+    if (healTimerRef.current) clearTimeout(healTimerRef.current)
+    healTimerRef.current = setTimeout(async () => {
+      healTimerRef.current = null
+      try {
+        await refetchBufferRef.current() // fresh tokenized URLs (covers a token expiry)
+        const url = manifestUrlRef.current
+        if (url) {
+          await player.replaceAsync({ uri: url, contentType: 'hls' })
+          loadedUrlRef.current = url
+          pendingSeekSec.current = (playheadRef.current - vodStartRef.current) / 1000
+          flushSeek()
+        }
+      } catch {
+        // swallow — the next statusChange (still loading / error) re-arms recovery
+      } finally {
+        healingRef.current = false
+      }
+    }, backoff)
+  }, [player, flushSeek])
+
+  // statusChange watcher: readyToPlay → reset the heal budget + flush the latest pending seek; stuck
+  // in `loading` past the watchdog OR `error` → recover. One place (matches the editor).
+  useEffect(() => {
+    const sub = player.addListener('statusChange', ({ status }) => {
+      if (loadWatchdogRef.current) {
+        clearTimeout(loadWatchdogRef.current)
+        loadWatchdogRef.current = null
+      }
+      if (status === 'loading') {
+        loadWatchdogRef.current = setTimeout(() => recoverPlayer(), 2500)
+      } else if (status === 'readyToPlay') {
+        healAttemptsRef.current = 0
+        setPlayerError(false)
+        if (pendingSeekSec.current != null) flushSeek()
+      } else if (status === 'error') {
+        recoverPlayer()
+      }
+    })
+    return () => sub.remove()
+  }, [player, flushSeek, recoverPlayer])
+
   useEffect(() => {
     if (!manifestUrl) {
       loadedUrlRef.current = null
@@ -661,13 +764,20 @@ export const ClipsScreen = () => {
     }
     if (manifestUrl === loadedUrlRef.current) return // same VOD (e.g. crossing a snip) → no reload
     loadedUrlRef.current = manifestUrl
+    healAttemptsRef.current = 0 // fresh clip → full recovery budget + clear any poster fallback
+    setPlayerError(false)
     setVodLoading(true)
     player
       .replaceAsync({ uri: manifestUrl, contentType: 'hls' })
       .then(() => {
+        // TOLERANT seek (keyframe) after load — a precise `currentTime =` can wedge the -c:v copy
+        // HLS player in `loading`; seekBy snaps to the nearest keyframe and never wedges.
         const want = (playheadRef.current - vodStartRef.current) / 1000
         try {
-          if (want >= 0) player.currentTime = want
+          if (want >= 0) {
+            const d = want - player.currentTime
+            if (Math.abs(d) >= 0.05) player.seekBy(d)
+          }
         } catch {}
         if (playingRef.current && locateAt(playheadRef.current).mode === 'footage') {
           try {
@@ -698,14 +808,9 @@ export const ClipsScreen = () => {
       setFollowLive(false) // any explicit seek leaves the live edge → clock reads THEN
       setRidingReaper(false)
       setVideoMode(true) // show the seeked frame, not the poster
-      const want = (m - vodStartRef.current) / 1000
-      if (manifestUrl && want >= 0) {
-        try {
-          player.currentTime = want
-        } catch {}
-      }
+      if (manifestUrl) scheduleSeek(m) // tolerant + back-pressured (no wedge); the player follows
     },
-    [manifestUrl, player, reaperEdgeNow],
+    [manifestUrl, reaperEdgeNow, scheduleSeek],
   )
 
   // Footage-playback PICTURE drive (CONTENT.md §6: derive the position on the UI thread, don't snapshot
@@ -889,16 +994,10 @@ export const ClipsScreen = () => {
       setFollowLive(c.atNow)
       setRidingReaper(c.atReaper)
       if (c.inGap || !c.clipId || c.clipId !== playerIdRef.current) return // gap / not-yet-loaded → no seek
-      if (!player.duration || player.duration <= 0) return
-      const delta = (c.timeMs - vodStartRef.current) / 1000 - player.currentTime
-      if (Math.abs(delta) > 0.05) {
-        try {
-          player.seekBy(delta)
-        } catch {}
-      }
+      scheduleSeek(c.timeMs) // tolerant + ready-gated (won't pile seeks while the player is loading)
     }, 80)
     return () => clearInterval(id)
-  }, [scrubbing, player])
+  }, [scrubbing, player, scheduleSeek])
 
   // Scrub release: settle on the precise release frame. If the drag was over a PLAYING stream,
   // resume playback 250ms later from there (the `playing` state stayed true the whole time → the
@@ -1298,16 +1397,12 @@ export const ClipsScreen = () => {
       } else {
         setGapCard(clip ? null : gapSpanAt(timeMs))
       }
-      // Same loaded clip → seek the video here; a different clip loads + seeks via the load effect.
-      if (clip && clip.id === playerIdRef.current) {
-        const want = (timeMs - vodStartRef.current) / 1000
-        try {
-          if (want >= 0) player.currentTime = want
-        } catch {}
-      }
+      // Same loaded clip → seek the video here (tolerant + ready-gated); a different clip loads +
+      // seeks via the load effect.
+      if (clip && clip.id === playerIdRef.current) scheduleSeek(timeMs)
       timelineRef.current?.scrollToTime(timeMs, true)
     },
-    [allClips, player, gapSpanAt, windowStartMs],
+    [allClips, gapSpanAt, windowStartMs, scheduleSeek],
   )
   const goPrev = useCallback(() => {
     const c = timelineRef.current?.getCenter()
@@ -1359,7 +1454,8 @@ export const ClipsScreen = () => {
                 title={gapCard ? undefined : displayClip?.label}
                 // Show the VIDEO (not poster) when: at the live edge (live feed), dragging (scrub
                 // playback), playing, or after a scrub (videoMode). Over a gap → neither (gap card).
-                playing={showLiveFeed || ((scrubbing || playing || videoMode) && !gapCard)}
+                // playerError (recovery exhausted) → fall back to the poster, not a wedged video frame.
+                playing={showLiveFeed || ((scrubbing || playing || videoMode) && !gapCard && !playerError)}
                 // While a between-lane VOD swap reloads, hold the incoming poster over the bg (never
                 // over the live feed — that's already a live frame, not a reloading VOD).
                 coverPoster={vodLoading && !gapCard && !showLiveFeed}
