@@ -672,6 +672,13 @@ export const ClipsScreen = () => {
   const healingRef = useRef(false)
   const healTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [playerError, setPlayerError] = useState(false)
+  // Preview-play (the smooth-scrub trick): while dragging, the player PLAYS (muted) so it renders
+  // continuously forward — far smoother than discrete keyframe seeks on -c:v copy footage, which
+  // repaint chunkily. We keep seeking it to the finger; on release we pause on the LANDED frame once
+  // the final seek settles (wantSettle). Mirrors ClipEditScreen's previewSeek / maybeSettlePause.
+  const previewingRef = useRef(false)
+  const wantSettleRef = useRef(false)
+  const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null) // fallback pause if no readyToPlay fires
   const manifestUrlRef = useRef<string | null>(null)
   manifestUrlRef.current = manifestUrl
   const refetchBufferRef = useRef(refetchBuffer)
@@ -749,6 +756,19 @@ export const ClipsScreen = () => {
         healAttemptsRef.current = 0
         setPlayerError(false)
         if (pendingSeekSec.current != null) flushSeek()
+        // Settle: once the final scrub seek has landed (nothing pending + ready), pause the
+        // preview-play on that exact frame. (Keep flushing while seeks are still pending.)
+        else if (wantSettleRef.current) {
+          wantSettleRef.current = false
+          previewingRef.current = false
+          if (settleTimerRef.current) {
+            clearTimeout(settleTimerRef.current)
+            settleTimerRef.current = null
+          }
+          try {
+            player.pause()
+          } catch {}
+        }
       } else if (status === 'error') {
         recoverPlayer()
       }
@@ -948,7 +968,10 @@ export const ClipsScreen = () => {
     if (playing) {
       if (!manifestUrlRef.current) return
       pendingSeekSec.current = null
+      previewingRef.current = false // real playback now owns the player (not a muted scrub preview)
+      wantSettleRef.current = false
       try {
+        player.muted = false // real playback has audio (preview-scrub muted it)
         const want = (playheadRef.current - vodStartRef.current) / 1000
         if (want >= 0) {
           const d = want - player.currentTime
@@ -1019,8 +1042,27 @@ export const ClipsScreen = () => {
       // Edge state from the timeline's pixel-precise flags → clock NOW (now edge) / THEN+tick (reaper).
       setFollowLive(c.atNow)
       setRidingReaper(c.atReaper)
-      if (c.inGap || !c.clipId || c.clipId !== playerIdRef.current) return // gap / not-yet-loaded → no seek
-      scheduleSeek(c.timeMs) // tolerant + ready-gated (won't pile seeks while the player is loading)
+      if (c.inGap || !c.clipId || c.clipId !== playerIdRef.current) {
+        // over a gap / unloaded clip → no footage to render; drop preview-play so it doesn't run on.
+        if (previewingRef.current) {
+          previewingRef.current = false
+          try {
+            player.pause()
+          } catch {}
+        }
+        return
+      }
+      // Smooth scrub: keep the player PLAYING (muted) so it repaints continuously while we seek it to
+      // the finger — far smoother than discrete seeks on keyframe-only footage. Settle-pauses on release.
+      if (!previewingRef.current) {
+        previewingRef.current = true
+        wantSettleRef.current = false
+        try {
+          player.muted = true
+          player.play()
+        } catch {}
+      }
+      scheduleSeek(c.timeMs) // position it at the finger (tolerant + ready-gated)
     }, 50)
     return () => clearInterval(id)
   }, [scrubbing, player, scheduleSeek])
@@ -1048,15 +1090,27 @@ export const ClipsScreen = () => {
       // Landed on an EDGE → ride it (now edge follows, reaper edge rides) — like dragging to the now
       // edge. Stop footage playback so the ride owns the motion; don't resume. Off an edge → resume
       // from where the fling LANDED (if we were playing; the settle was the wait, no fixed timer).
-      if (atEdge) {
-        if (playingRef.current) {
+      if (!atEdge && scrubResumePlayingRef.current) {
+        // resume REAL playback from the landed frame — unmute (the scrub preview muted it)
+        previewingRef.current = false
+        try {
+          player.muted = false
+          player.play()
+        } catch {}
+      } else {
+        // edge ride OR paused scrub → pause the preview-play on the landed frame once it settles.
+        if (atEdge && playingRef.current) setPlaying(false)
+        wantSettleRef.current = true
+        // Fallback: if the landing seek was a no-op there's no readyToPlay to settle on → pause anyway.
+        if (settleTimerRef.current) clearTimeout(settleTimerRef.current)
+        settleTimerRef.current = setTimeout(() => {
+          if (!wantSettleRef.current) return
+          wantSettleRef.current = false
+          previewingRef.current = false
           try {
             player.pause()
           } catch {}
-          setPlaying(false)
-        }
-      } else if (scrubResumePlayingRef.current) {
-        player.play()
+        }, 280)
       }
     },
     [player, seekTo],
