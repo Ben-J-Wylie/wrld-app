@@ -3404,10 +3404,24 @@ cleared on play/seek/nav); **riding = playing** with a distinct **slashed-pause*
 can't-pause reaper ride; and `ridingReaper` is a continuous **mirror** of the timeline's `ridingSv`
 (`onRidingChange`) — plus `suppressRide` lets the clock-wheel move forward off the reaper edge.
 
-**Probes stripped (2026-06-15):** all `[reaper-trace]` / `[clip-sync]` / `[clips-save]` `__DEV__` logs +
-their diagnostic-only shared values are removed. **The Clips-timeline clock saga is complete.** Backend
-follow-up still open (Aaron): reap/close ghost sessions (0-duration, no `endedAt`) so they never
-masquerade as the live tail.
+**Probes stripped (2026-06-15):** all `[reaper-trace]` / `[clip-sync]` / `[clips-save]` / `[play]` /
+`[pic]` `__DEV__` logs + their diagnostic-only shared values are removed. **The Clips-timeline clock
+saga is complete.** Backend follow-up still open (Aaron): reap/close ghost sessions (0-duration, no
+`endedAt`) so they never masquerade as the live tail.
+
+**⛳ MILESTONE — `clips-timeline-clock-v1` (2026-06-15).** This state is the **definitive reference
+baseline** for content-timeline handling — tagged in git, principle-captured in **CONTENT.md §6
+"⛳ Milestone — the Clips-timeline clock is solved"**. Closes the freeze bug (a cancelled pan fired
+only `onFinalize`, not `onEnd`, so `notifyScrubEnd` was skipped and `scrubbingRef` stuck true →
+"stopped playing but pause icon showing"; fixed with an `onFinalize` backstop in
+`ClipsTimeline`'s pan gesture). The one acknowledged residual is a *very* subtle ~120fps clock-pacing
+shimmer while the playhead advances (the `setNowUi` RAF feeds the clock at ~60fps; the panel refreshes
+at 120fps) — **principled, not a hack** (the picture is correctly *derived* from the universal clock;
+only the clock's feed rate is sub-display) and **inert for clip editing** (editing reads held instants —
+brackets, trims, scrubbed positions — never the live-advancing clock). Future work **springboards from
+this tag and may only improve it.** Spine to re-read on resume: `src/lib/serverClock.ts`,
+`ClipsScreen.tsx` (transport + `setNowUi`), `ClipsTimeline.tsx` (`effScrollSv` + magnetic frontiers +
+gesture backstop).
 
 ---
 

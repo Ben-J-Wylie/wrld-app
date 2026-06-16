@@ -521,6 +521,11 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
   // cycle that reads as the reaper line jumping. While suspended the edge still advances via
   // reaperEdgeXSv (renders at its content position, moving with scroll + consumption — smooth).
   const panningSv = useSharedValue(0)
+  // 1 once the pan's `onEnd` has run for this gesture. A pan that's CANCELLED (a pinch takes over, or the
+  // system cancels it) fires only `onFinalize`, NOT `onEnd` — so without a backstop `notifyScrubEnd` never
+  // fires, `scrubbingRef` stays stuck true, and the play tick idles forever while `playing` stays true (the
+  // "stops playing but shows the pause button" freeze). `onFinalize` reads this to backstop the scrub-end.
+  const onEndRanSv = useSharedValue(0)
   const playingSv = useSharedValue(0)
   // ── footage-playback render anchor (CONTENT.md §6: derive the position, don't snapshot it) ──
   // During 1× footage playback the picture must NOT translate by the JS-written `scroll` (it lands at
@@ -846,6 +851,7 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
           // the scroll mid-drag (that grab/release cycle was the reaper jumpiness).
           ridingSv.value = 0
           panningSv.value = 1
+          onEndRanSv.value = 0 // fresh gesture — arm the onFinalize backstop
           runOnJS(notifyScrubStart)()
         })
         .onChange((e) => {
@@ -858,6 +864,7 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
         })
         .onEnd((e) => {
           'worklet'
+          onEndRanSv.value = 1 // onEnd ran → onFinalize must NOT backstop (the decay/this branch owns the end)
           // Report the SETTLED centre (after inertia) so playback resumes where the fling LANDS,
           // not where the finger lifted. twoFingers (pinch took over) → settle immediately.
           if (twoFingers.value) {
@@ -877,8 +884,17 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
           // Gesture done (the withDecay momentum continues) → drop the panning guard so a fling that
           // settles at the reaper edge can latch into a smooth ride.
           panningSv.value = 0
+          // BACKSTOP: if `onEnd` never ran, this pan was CANCELLED (a pinch took over, or the system
+          // cancelled it). `onFinalize` ALWAYS fires, so it's the only place we can guarantee the
+          // scrub-end. Without this, `notifyScrubEnd` is skipped, `scrubbingRef` stays stuck true, and
+          // the play tick idles forever while `playing` stays true — the freeze. Settle at the current
+          // (un-flung) position; a cancelled gesture has no inertia to report.
+          if (onEndRanSv.value === 0) {
+            const r = resolveAt(scroll.value, segsSv.value, layout.value, nowSv.value, leadFromSv.value)
+            runOnJS(notifyScrubEnd)(r.clipId, r.timeMs)
+          }
         }),
-    [scroll, layout, segsSv, nowSv, leadFromSv, notifyScrubStart, notifyScrubEnd, twoFingers, ridingSv, reaperEdgeXSv, panningSv],
+    [scroll, layout, segsSv, nowSv, leadFromSv, notifyScrubStart, notifyScrubEnd, twoFingers, ridingSv, reaperEdgeXSv, panningSv, onEndRanSv],
   )
 
   const pinchGesture = useMemo(
@@ -969,29 +985,6 @@ export const ClipsTimeline = forwardRef<ClipsTimelineHandle, Props>(function Cli
   const contentStyle = useAnimatedStyle(() => {
     return { width: Math.max(layout.value.total, 1), transform: [{ translateX: vpSv.value / 2 - effScrollSv.value }] }
   })
-  // [pic] dev sampler: is the playback PICTURE actually deriving on the UI thread (drive=1), and is the
-  // rendered anchor (effScroll) + the clock (reaperNow) advancing EVENLY at vsync? Uneven dEff/dNow at a
-  // steady zoom = the residual jitter. Sampled ~3×/s on the UI frame clock, stripped in prod.
-  const traceCntSv = useSharedValue(0)
-  const tracePrevEffSv = useSharedValue(0)
-  const tracePrevNowSv = useSharedValue(0)
-  const tracePic = useCallback((drive: number, ride: number, now: number, eff: number, dEff: number, dNow: number) => {
-    if (__DEV__) console.log('[pic] drive', drive, 'ride', ride, 'followNow', now, 'eff', eff, 'dEff', dEff, 'dNow', dNow)
-  }, [])
-  useFrameCallback(() => {
-    'worklet'
-    if (!__DEV__) return
-    traceCntSv.value += 1
-    if (traceCntSv.value < 20) return
-    traceCntSv.value = 0
-    const eff = effScrollSv.value
-    const dEff = eff - tracePrevEffSv.value
-    const dNow = reaperNowSv.value - tracePrevNowSv.value
-    tracePrevEffSv.value = eff
-    tracePrevNowSv.value = reaperNowSv.value
-    runOnJS(tracePic)(playDriveSv.value, ridingSv.value, followNowSv.value, Math.round(eff), Math.round(dEff * 100) / 100, Math.round(dNow))
-  })
-
   // Dark caps beyond the buffer window — the empty viewport area left of the oldest footage (head =
   // reaper edge) and right of now (tail). They show "you've hit the end of the buffer." Positioned in
   // VIEWPORT space (not the scrolling content), so they grow into view exactly as an edge reaches centre.

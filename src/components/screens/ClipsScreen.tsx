@@ -668,14 +668,12 @@ export const ClipsScreen = () => {
     if (!playDriveRef.current) {
       playDriveRef.current = true
       timelineRef.current?.stampPlayAnchor(ph)
-      if (__DEV__) console.log('[play] enterDrive · ph', Math.round(ph % 100000))
     }
   }, [])
   const exitDrive = useCallback(() => {
     if (playDriveRef.current) {
       playDriveRef.current = false
       timelineRef.current?.clearPlayDrive()
-      if (__DEV__) console.log('[play] exitDrive')
     }
   }, [])
 
@@ -687,7 +685,6 @@ export const ClipsScreen = () => {
   // follower, not a stall for the clock.
   useEffect(() => {
     if (!playing) return
-    if (__DEV__) console.log('[play] PLAY effect MOUNT')
     let raf = 0
     // serverNow() at the previous tick — the playhead's clock source. It advances by the WALL-CLOCK
     // delta (serverNow() − lastClock), the SAME clock the now/reaper fronts read — so a janky 150ms
@@ -708,21 +705,12 @@ export const ClipsScreen = () => {
         setPlayheadMs(ph)
       }
     }
-    let wasIdle = false // [play] trace: tick idle (scrubbing) ↔ advancing transitions
     const tick = (ts: number) => {
       const nowClock = serverNow()
       if (scrubbingRef.current) {
-        if (__DEV__ && !wasIdle) {
-          wasIdle = true
-          console.log('[play] tick → IDLE (scrubbingRef true)')
-        }
         lastClock = nowClock // the finger owns the playhead while scrubbing; re-anchor the clock
         raf = requestAnimationFrame(tick)
         return
-      }
-      if (__DEV__ && wasIdle) {
-        wasIdle = false
-        console.log('[play] tick → ADVANCE (scrubbingRef false)')
       }
       const rawDt = lastClock == null ? 0 : nowClock - lastClock
       const dt = lastClock == null ? 0 : Math.max(0, Math.min(PLAYHEAD_MAX_STEP_MS, rawDt))
@@ -790,7 +778,6 @@ export const ClipsScreen = () => {
     }
     raf = requestAnimationFrame(tick)
     return () => {
-      if (__DEV__) console.log('[play] PLAY effect CLEANUP')
       cancelAnimationFrame(raf)
       exitDrive() // stop deriving the playback picture when playback ends (pause / unmount / new session)
     }
@@ -869,7 +856,6 @@ export const ClipsScreen = () => {
   // play button never flipped); a paused drag just stays on the frame.
   const onScrubEnd = useCallback(
     (id: string | null, timeMs: number) => {
-      if (__DEV__) console.log('[play] scrubEnd · scrubbingRef was', scrubbingRef.current, '· wasPlaying', scrubResumePlayingRef.current)
       if (!scrubbingRef.current) return // fires when the scroll has SETTLED (after any inertia)
       scrubbingRef.current = false
       setScrubbing(false)
@@ -879,7 +865,6 @@ export const ClipsScreen = () => {
       // both, so read + apply after it.
       const c = timelineRef.current?.getCenter()
       const atEdge = !!c?.atNow || !!c?.atReaper
-      if (__DEV__) console.log('[play] scrubEnd settle · atNow', !!c?.atNow, '· atReaper', !!c?.atReaper, '· willResume', !atEdge && scrubResumePlayingRef.current)
       setFollowLive(!!c?.atNow)
       setRidingReaper(!!c?.atReaper)
       // Within reach of the reaper → SNAP + stick exactly to it (no sliver) and latch the ride; the now
@@ -1387,7 +1372,6 @@ export const ClipsScreen = () => {
               setVideoMode(false) // show the tapped clip's poster, not a stale scrub frame
             }}
             onScrubStart={() => {
-              if (__DEV__) console.log('[play] scrubStart · playing', playingRef.current, '· drive', playDriveRef.current)
               setSelectedId(null) // any scrub blurs the selection
               setFollowLive(false) // scrubbing leaves the live edge (re-latched by the follow loop)
               setRidingReaper(false)

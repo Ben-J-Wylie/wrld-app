@@ -384,6 +384,45 @@ tracked in CLAUDE.md "Clips timeline — north star vs current gaps".)
    frontier on the UI thread; JS-side state (the playhead value, the window boundary,
    refetches) is throttled/decoupled so it never imposes its tick rate on the motion.
 
+### ⛳ Milestone — the Clips-timeline clock is solved (2026-06-15, tag `clips-timeline-clock-v1`)
+
+**This is the reference baseline. Future content-handling work springboards from
+here and may only improve the principled code and the user experience — never
+regress below this bar.** All six north-star invariants above are **confirmed
+smooth on device** ("definitely smoother on all fronts" — Ben). The long
+bounce/stall/jitter saga is closed.
+
+The model that got us here — the thing to *keep*, and to apply to every new
+time-bearing surface (the clip editor, multi-source lanes, the time machine):
+
+1. **One clock, read — never accumulated.** Everything reads `serverNow()` (the
+   universal wall clock, §"read it, never keep your own" below). No surface keeps
+   its own stopwatch; no surface reads raw `Date.now()`. A frame-timer accumulator
+   was tried and **retired** because it froze during video playback — the clock is
+   a JS `requestAnimationFrame` loop (`setNowUi`) pushing `serverNow()` to the UI
+   thread, robust to the playback main-thread stall.
+2. **The playhead is the single source of truth.** It advances by *elapsed wall
+   time* (1× footage, fixed rush across a gap); the video and timeline **follow**
+   it. Position is never derived from the video's `currentTime` (which stalls on a
+   VOD reload).
+3. **Derive the rendered position; never snapshot it.** The visual anchor
+   (`effScrollSv`) is a `useDerivedValue` off the layout-atomic clock — not a JS
+   `scroll` value sampled a frame ago. Snapshotting across the JS↔UI thread boundary
+   was the high-zoom jitter; deriving removed it.
+4. **Frontiers are magnetic and symmetric.** The now edge and reaper edge are one
+   geometric ride-state, read from position (`getCenter().atNow/atReaper`), not a
+   timing-dependent latch. Riding a frontier *is* playing; the reaper can't be paused
+   (slashed-pause). No "bump" verbs — drag to an edge and it rides.
+5. **The scrub-end is guaranteed.** A cancelled pan (a pinch takes over) fires only
+   `onFinalize`, so `onFinalize` backstops `notifyScrubEnd` when `onEnd` didn't run —
+   the gate that gives playback its turn back can never get stuck.
+
+Code anchors (the spine — read these first when resuming): `src/lib/serverClock.ts`
+(the clock), `src/components/screens/ClipsScreen.tsx` (the playhead transport + the
+`setNowUi` RAF loop + scrub/edge state), `src/components/features/clip/ClipsTimeline.tsx`
+(`effScrollSv` derivation, the magnetic frontiers, the reaper mask, the gesture
+backstop). The matching git tag `clips-timeline-clock-v1` marks the exact tree.
+
 ### The universal wall clock — read it, never keep your own
 
 The most-violated principle in this codebase, stated plainly so we stop
