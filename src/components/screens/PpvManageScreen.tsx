@@ -91,7 +91,7 @@ export function PpvManageScreen() {
   function handleEnd() {
     Alert.alert(
       'End event',
-      `End "${event?.title}"? This finishes the event (ending the live broadcast if one is running) and lets you stream normally again. Ticket holders keep their access — no refunds.`,
+      `End "${event?.title}"? Ends the live broadcast (if one's running) and clears the PPV requirement so you can stream normally. Ticket holders aren't refunded — use Cancel & refund instead to refund them.`,
       [
         { text: 'Keep event', style: 'cancel' },
         {
