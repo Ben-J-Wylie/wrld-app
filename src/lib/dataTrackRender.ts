@@ -7,6 +7,40 @@ import type { DataSample } from '@/hooks/useDataTrack'
 const clamp01 = (x: number) => Math.max(0, Math.min(1, x))
 const num = (s: DataSample, k: string): number => (typeof s[k] === 'number' ? (s[k] as number) : 0)
 
+// ── time-based sampling (clip PLAYBACK) ──────────────────────────────────────
+// Recorded sources replay through the SAME live visualizers as a live stream, fed the value AT the
+// playhead. Samples carry wall-clock `ts`; the playhead is wall-clock too, so we look up by time
+// (accurate for sparse/event tracks like torch, not just evenly-spaced ones). Oldest → newest.
+
+// The sample in effect at wall-clock `atMs` — the latest with ts ≤ atMs (the held state); before the
+// first sample, the first one; null when empty.
+export function sampleAt(samples: DataSample[], atMs: number): DataSample | null {
+  if (!samples.length) return null
+  let lo = 0
+  let hi = samples.length - 1
+  if (atMs < samples[0]!.ts) return samples[0]!
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1
+    if (samples[mid]!.ts <= atMs) lo = mid
+    else hi = mid - 1
+  }
+  return samples[lo]!
+}
+
+// The location trail UP TO `atMs` — so the path draws (and the pin moves) as the clip plays.
+export function trailUpTo(samples: DataSample[], atMs: number): [number, number][] {
+  return samples
+    .filter((s) => s.ts <= atMs && typeof s.lng === 'number' && typeof s.lat === 'number')
+    .map((s) => [s.lng as number, s.lat as number])
+}
+
+// Chat messages UP TO `atMs` — so the log unfolds as the clip plays (not the whole transcript).
+export function chatUpTo(samples: DataSample[], atMs: number): { handle: string; text: string }[] {
+  return samples
+    .filter((s) => s.ts <= atMs && typeof s.text === 'string')
+    .map((s) => ({ handle: typeof s.handle === 'string' ? s.handle : 'unknown', text: s.text as string }))
+}
+
 // Normalise a telemetry track to a 0..1 line for SourceTelemetryGraph.
 export function toGraphValues(samples: DataSample[], kind: string): number[] {
   return samples.map((s) => {

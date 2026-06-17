@@ -31,7 +31,7 @@ import { type LaneClip } from '@/components/features/clip/ClipLane'
 import { ClipsTimeline, type ClipsTimelineHandle } from '@/components/features/clip/ClipsTimeline'
 import { ClipViewer } from '@/components/features/clip/ClipViewer'
 import { SourceRail } from '@/components/features/clip/SourceRail'
-import { ClipSourceView, type ClipSourceRender } from '@/components/sections/ClipSourceView'
+import { ClipSourceView } from '@/components/sections/ClipSourceView'
 import { SourceStage, type SourceRender } from '@/components/sections/SourceStage'
 import { SOURCE_META, SOURCE_RAIL_ORDER } from '@/components/features/stream/sourceMeta'
 import { useLocalTelemetry } from '@/hooks/useLocalTelemetry'
@@ -41,7 +41,7 @@ import type { FeedKind } from '@/components/features/broadcast/FeedThumb'
 import { BufferTransport } from '@/components/features/clip/BufferTransport'
 import { TimeScrubber } from '@/components/features/discovery/TimeScrubber'
 import { useDataTrack } from '@/hooks/useDataTrack'
-import { toGraphValues, readingAt, toTrail, trailPositionAt, toChatLog } from '@/lib/dataTrackRender'
+import { sampleAt, trailUpTo, chatUpTo } from '@/lib/dataTrackRender'
 import { useVideoPlayer, VideoView } from 'expo-video'
 import { RTCView } from 'react-native-webrtc'
 import { useBuffer } from '@/hooks/useBuffer'
@@ -568,17 +568,18 @@ export const ClipsScreen = () => {
   if (!playingRef.current) playheadRef.current = playheadMs
 
   // ── source switching ── the rail is the SHARED canonical suite, IDENTICAL to the stream view
-  // (`SOURCE_RAIL_ORDER`, dashboard-ordered). `cam` is the video frame; data sources render via
-  // ClipSourceView from the session's `.jsonl` tracks at the playhead; a source the clip didn't
-  // capture / can't replay (profile/motion/temp/torch) shows an honest idle (camera-parity, §6).
+  // (`SOURCE_RAIL_ORDER`, dashboard-ordered). `cam` is the video frame; every other source REPLAYS
+  // through the SAME live `SourceStage` visualizers (circle compass, gyro, accel xyz, speed dial,
+  // torch lamp, location trail, chat log) — fed the recorded sample AT THE PLAYHEAD (time-accurate
+  // via each sample's wall-clock `ts`), so the past replays exactly as it was captured.
   const { data: currentUser } = useCurrentUser()
   const [view, setView] = useState<FeedKind>('cam')
   const availableViews = SOURCE_RAIL_ORDER
   const isCameraView = view === 'cam'
-  // The buffer track kind backing the viewed source (null = no track → idle).
+  // The buffer track kind backing the viewed source (null = no recorded track for this kind).
   const bufferKindForView = FEEDKIND_TO_BUFFER[view]
 
-  // The playhead's position within the played session, 0..1 — the progress the data renderers light.
+  // Position within the played session, 0..1 — drives the audio placeholder waveform's light-up.
   const viewProgress = useMemo(() => {
     if (!playerSession) return 0
     const st = sessionStartMs(playerSession)
@@ -586,56 +587,42 @@ export const ClipsScreen = () => {
     return clamp((playheadMs - st) / Math.max(1, en - st), 0, 1)
   }, [playerSession, playheadMs])
 
-  // Fetch the viewed data track for the played session ([] while camera / loading / evicted / no track).
-  const currentDataUrl = isCameraView || !bufferKindForView ? null : playerSession?.dataUrls?.[bufferKindForView]
+  // Fetch the viewed data track for the played session ([] while camera / audio / loading / evicted).
+  const currentDataUrl = isCameraView || view === 'audio' || !bufferKindForView ? null : playerSession?.dataUrls?.[bufferKindForView]
   const dataSamples = useDataTrack(currentDataUrl)
-  const dataTrail = useMemo(() => toTrail(dataSamples), [dataSamples])
 
-  // The resolved RECORDED picture for a non-camera source (camera stays the ClipViewer frameSlot
-  // video). FeedKinds with a recorded renderer; the rest fall to the idle render below.
-  const clipSourceRender = useMemo<ClipSourceRender | null>(() => {
+  // The RECORDED source picture — the live `SourceRender` shape, sampled at the playhead, rendered by
+  // SourceStage (same visualizers as live). audio is excluded (no per-sample loudness track → it keeps
+  // its placeholder waveform below); camera is the frameSlot video.
+  const recordedSource = useMemo<SourceRender | null>(() => {
+    if (isCameraView || view === 'audio') return null
+    const s = sampleAt(dataSamples, playheadMs)
+    const nf = (k: string) => (s && typeof s[k] === 'number' ? (s[k] as number) : 0)
     switch (view) {
-      case 'audio':
-        return { kind: 'audio', peaks: PLACEHOLDER_PEAKS, progress: viewProgress }
-      case 'loc':
-        return { kind: 'location', path: dataTrail, position: trailPositionAt(dataTrail, viewProgress) }
       case 'compass':
+        return { kind: 'compass', heading: nf('heading') }
       case 'gyro':
+        return { kind: 'gyro', pitch: nf('pitch'), roll: nf('roll') }
       case 'accel':
+        return { kind: 'accel', x: nf('x'), y: nf('y'), z: nf('z') }
       case 'speed':
-        return {
-          kind: view,
-          values: dataSamples.length ? toGraphValues(dataSamples, view) : [],
-          progress: viewProgress,
-          reading: dataSamples.length ? readingAt(dataSamples, view, viewProgress) : '—',
-        }
+        return { kind: 'speed', mps: s ? nf('mps') : -1 }
+      case 'torch':
+        return { kind: 'torch', on: !!(s && s.on) }
+      case 'loc': {
+        const path = trailUpTo(dataSamples, playheadMs) // trail grows as the clip plays
+        return { kind: 'loc', path, position: path[path.length - 1] }
+      }
       case 'chat':
-        return { kind: 'chat', messages: toChatLog(dataSamples), progress: viewProgress }
-      default:
-        return null
-    }
-  }, [view, viewProgress, dataSamples, dataTrail])
-
-  // Honest idle for a non-camera source with no live feed AND no recorded render (profile / motion /
-  // temp / torch / screen). A SourceStage visualizer rendered INACTIVE — "no data here", not the
-  // camera bleeding through. profile uses the owner's identity (the clips buffer is always theirs).
-  const idleSourceRender = useMemo<SourceRender | null>(() => {
-    if (isCameraView || clipSourceRender) return null
-    switch (view) {
+        return { kind: 'chat', messages: chatUpTo(dataSamples, playheadMs) } // log unfolds with the playhead
       case 'profile':
         return { kind: 'profile', displayName: currentUser?.displayName ?? '—', handle: currentUser?.handle ?? '', avatarUrl: currentUser?.avatarUrl ?? null, attributed: true }
-      case 'motion':
-        return { kind: 'motion', intensity: 0 }
-      case 'temp':
-        return { kind: 'temp', celsius: NaN }
-      case 'torch':
-        return { kind: 'torch', on: false }
-      case 'screen':
-        return { kind: 'screen', slot: null }
       default:
         return null
     }
-  }, [isCameraView, clipSourceRender, view, currentUser])
+  }, [isCameraView, view, dataSamples, playheadMs, currentUser])
+  // Active (lit, not dimmed) when there's data to replay — always for identity; data-backed otherwise.
+  const recordedActive = view === 'profile' || dataSamples.length > 0
 
   // Clock edge state. `followLive` = at the now edge → NOW (ticking). `ridingReaper` = at the reaper
   // edge → THEN, ticking toward eviction. Both are driven by the timeline's pixel-precise `atNow` /
@@ -1688,18 +1675,19 @@ export const ClipsScreen = () => {
                   ) : undefined
                 }
                 // A non-camera source covers the (still-mounted, still-audible) video with its picture.
-                // At the now edge while live it's the LIVE source (SourceStage); otherwise the recorded
-                // track (ClipSourceView). location/chat have no live tap yet → recorded fallback (SP4).
+                // At the now edge while live → the LIVE source; otherwise the RECORDED source replayed
+                // at the playhead — both through the same SourceStage visualizers. audio keeps its
+                // placeholder waveform (no per-sample loudness track; the VOD audio still plays).
                 sourceSlot={
-                  !isCameraView
-                    ? liveSourceRender
+                  isCameraView
+                    ? undefined
+                    : atLiveEdge && liveSourceRender
                       ? <SourceStage sources={[view]} selected={view} onSelect={() => {}} source={liveSourceRender} style={StyleSheet.absoluteFill} />
-                      : clipSourceRender
-                        ? <ClipSourceView source={clipSourceRender} />
-                        : idleSourceRender
-                          ? <SourceStage sources={[view]} selected={view} onSelect={() => {}} source={idleSourceRender} active={false} style={StyleSheet.absoluteFill} />
+                      : view === 'audio'
+                        ? <ClipSourceView source={{ kind: 'audio', peaks: PLACEHOLDER_PEAKS, progress: viewProgress }} />
+                        : recordedSource
+                          ? <SourceStage sources={[view]} selected={view} onSelect={() => {}} source={recordedSource} active={recordedActive} style={StyleSheet.absoluteFill} />
                           : undefined
-                    : undefined
                 }
               />
               {/* Gap card — over unbroadcasted time (scrub-through or the play rush). absoluteFills
