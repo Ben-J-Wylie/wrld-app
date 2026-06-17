@@ -26,6 +26,7 @@ const EMPTY: StreamTelemetry = {
   accel: null,
   speed: null,
   torch: null,
+  location: null,
   motionIntensity: null,
 }
 
@@ -39,6 +40,7 @@ export function useLocalTelemetry(kind: string | null, enabled: boolean): Stream
   const wantAccel = kind === 'accel' || kind === 'motion'
   const wantCompass = kind === 'compass'
   const wantSpeed = kind === 'speed'
+  const wantLocation = kind === 'location'
 
   // DeviceMotion → gyro attitude + accel vector (one listener feeds both).
   useEffect(() => {
@@ -124,6 +126,35 @@ export function useLocalTelemetry(kind: string | null, enabled: boolean): Stream
       sub?.remove()
     }
   }, [enabled, wantSpeed])
+
+  // Location self-monitor (SP5) — the broadcaster's own position for the local
+  // location source view; the consumer accumulates the trail (same as the
+  // viewer's useStreamTelemetry.location path). Mirrors the speed watcher.
+  useEffect(() => {
+    if (!enabled || !wantLocation) return
+    let sub: Location.LocationSubscription | null = null
+    let cancelled = false
+    ;(async () => {
+      try {
+        const s = await Location.watchPositionAsync(
+          { accuracy: Location.Accuracy.Balanced, timeInterval: 1000, distanceInterval: 0 },
+          (pos) =>
+            setTel((prev) => ({
+              ...prev,
+              location: { kind: 'location', ts: Date.now(), lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy ?? undefined },
+            })),
+        )
+        if (cancelled) s.remove()
+        else sub = s
+      } catch {
+        /* position unavailable */
+      }
+    })()
+    return () => {
+      cancelled = true
+      sub?.remove()
+    }
+  }, [enabled, wantLocation])
 
   return tel
 }

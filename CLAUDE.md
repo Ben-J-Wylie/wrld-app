@@ -3318,8 +3318,23 @@ location relay · SP6 persist/save audit + screen). The SP2/SP3(non-loc)/SP4 sta
 | **SP2** | Ben | `design` | **Preview parity / honest idle.** Audio has no real-time source before Go Live (no WebRTC sender → no `getStats`; no AnalyserNode; no audio dep), so it reads as a **dim idle** in preview (`sourceActive` gates audio on live/viewer) rather than a fake-flat waveform; temp is always idle (no phone sensor). `screen` is not in the rail (no capture). | ✅ done 2026-06-16 (audio/temp idle; an explicit "live on air" caption is a later nicety) |
 | **SP3** | Ben | `design` | **Complete the stream rail: chat · profile as live views** (`chat` → `SourceChatLog` from `chatMessages`; `profile` → `SourceIdentityCard` from the host/broadcaster). `loc` still omitted until SP5. | ✅ done 2026-06-16 (chat + profile; loc on SP5) |
 | **SP4** | Ben | `design` | **Now-edge live feed for ALL sources on the clips page.** Riding the now edge shows the live SELECTED source: camera (RTC), **audio** (`broadcastStore.liveAudioLevel`, published by `StreamScreen`), **sensors** (`useLocalTelemetry` read locally on `ClipsScreen`) — via `SourceStage`; past → recorded `ClipSourceView`. `loc`/`chat` live taps not here yet → recorded fallback. | ✅ done 2026-06-16 (cam/audio/sensors; loc on SP5, chat-live later) |
-| **SP5** | Aaron | mediasoup + backend | **Live location relay** (the one substrate gap) — mediasoup relays `location` like telemetry; viewer accumulates a trail; broadcaster self-trail local. Unblocks loc in SP3/SP4. | open |
-| **SP6** | Ben + Aaron | both | **Persist/save parity audit + screen source.** Confirm every armed source writes a track AND promotes into a saved clip (sensors/chat/location ✓ via item 2 + C6; audit torch on-toggle emit/record). **Screen** source end-to-end (capture/produce + live view + record) is the largest remaining gap — likely its own slice. | open · audit anytime; screen larger |
+| **SP5** | Aaron | mediasoup + backend | **Live location relay** (the one substrate gap) — mediasoup relays `location` like telemetry; viewer accumulates a trail; broadcaster self-trail local. Unblocks loc in SP3/SP4. | ✅ **data side done 2026-06-17** — mediasoup fans `locationUpdate` → `telemetryUpdate{kind:location}` to viewers (option **b**: off the existing `locationUpdate`, no double-record); `TelemetryPayload`+`useStreamTelemetry` decode `location`; `useLocalTelemetry` self-samples it. **Trail render (accumulate `[lng,lat][]` → `SourceLocationTrail`) is Ben's** — and Ben must NOT also emit `location` from `useTelemetryCapture` (would double-fan + double-record). |
+| **SP6** | Ben + Aaron | both | **Persist/save parity audit + screen source.** Confirm every armed source writes a track AND promotes into a saved clip (sensors/chat/location ✓ via item 2 + C6; audit torch on-toggle emit/record). **Screen** source end-to-end (capture/produce + live view + record) is the largest remaining gap — likely its own slice. | **SP6a audit done 2026-06-17** (see note below); **SP6b screen DEFERRED to v0.3**; **torch control = open (needs a `SourceStage`/`TorchVisualizer` toggle — Ben; real device LED is a separate device spike)** |
+
+> **SP6a torch findings (2026-06-17).** The torch **substrate is fully ready**: `TelemetryPayload`
+> already has `{kind:'torch',on,level?}`; mediasoup `DATA_KINDS` includes `torch` and the
+> kind-agnostic `telemetry` handler records it when armed; `bufferClipService` promotes it
+> generically (non-media kind → copy `.jsonl`). The recorder records **`armed ∩ DATA_KINDS`**,
+> and `DATA_KINDS` = the full data-source set (location/gyro/compass/chat/accel/speed/torch;
+> temp has no sensor) — so no hardcoded-subset gap. **What's missing is a CONTROL:** nothing
+> emits `{kind:'torch',on}`. It needs an interactive toggle on the broadcaster's `SourceStage`/
+> `TorchVisualizer` (Ben's `sections/`+`features/` lane) → on toggle: `signalingClient.sendTelemetry({kind:'torch',ts,on})`
+> + drive `buildSource('torch')` off a local `torchOn` state (the broadcaster's `monitorTel.torch`
+> is never set — torch isn't a sensor). **Real device flashlight is OUT for now:** react-native-webrtc
+> 124 has no torch API, and `applyConstraints` would reset the pinned capture resolution — so the
+> torch source is a **signaled on/off channel** (morse/state), not the physical LED. The LED is a
+> separate device-specific spike (likely a native module that contends with WebRTC's camera).
+> **SP6b screen: deferred to v0.3** (mark the `screen` rail view honest-idle).
 
 ### Seam (unchanged)
 Ben owns `primitives/`/`features/`/`sections/` + DESIGN.md + CONTENT.md §6 (the rail, the
