@@ -73,7 +73,6 @@ import type { FeedKind } from '@/components/features/broadcast/FeedThumb'
 import { Avatar } from '@/components/primitives/Avatar'
 import { GoLiveRecordBar } from '@/components/features/broadcast/GoLiveRecordBar'
 import { LiveClockBar, LIVE_CLOCK_BAR_H } from '@/components/features/discovery/LiveClockBar'
-import { BroadcasterRow } from '@/components/features/user/BroadcasterRow'
 import {
   ChatMessage as ChatMessageRow,
   type ChatRole,
@@ -1509,6 +1508,13 @@ export function StreamScreen() {
               🚀 TIP
             </Text>
           </Pressable>
+          {broadcaster?.handle && (
+            <FollowButton
+              compact
+              handle={broadcaster.handle}
+              onAuthRequest={!isSignedIn ? () => setAuthModalVisible(true) : undefined}
+            />
+          )}
           <IconButton
             name="flag"
             variant="surface"
@@ -1523,12 +1529,16 @@ export function StreamScreen() {
             onPress={() => enterFullscreen(videoIsLandscape)}
             accessibilityLabel="Fullscreen"
           />
+          <IconButton
+            name="log-out"
+            variant="surface"
+            size="md"
+            onPress={handleLeave}
+            accessibilityLabel="Leave stream"
+          />
         </View>
       )}
 
-      {isViewerInRoom && (
-        <Pressable style={StyleSheet.absoluteFill} onPress={handleTap} />
-      )}
 
       {/* Header — logo + page name ("Go Live" → "Live" once live), matching the
           dashboard's bordered header. For the broadcaster the row below swaps
@@ -1683,41 +1693,11 @@ export function StreamScreen() {
             </View>
           )}
 
-          {/* ── In room (viewer) ─────────────────────────────────── */}
-          {/* Broadcaster live UI is rendered as overlays outside `content`
-              (top-left cluster in the header + bottom record/End-Stream
-              footer); this box is viewer-only now. */}
-          {!isNew && status === 'in-room' && !streamEnded && !!remoteStream && (
-            <View style={[styles.roomInfo, showOverlay && styles.roomInfoOverlay]}>
-              <View style={styles.liveRow}>
-                <LivePill />
-                {!showOverlay && roomId && (
-                  <Text variant="monoCaption" color={theme.colors.text.muted}>
-                    {roomId}
-                  </Text>
-                )}
-              </View>
-
-              {broadcaster && (
-                <View style={styles.broadcasterWrap}>
-                  <BroadcasterRow
-                    avatarUrl={broadcaster.avatarUrl}
-                    displayName={broadcaster.displayName}
-                    handle={broadcaster.handle}
-                    showFollowButton={false}
-                  />
-                  {broadcaster.handle && (
-                    <FollowButton
-                      handle={broadcaster.handle}
-                      onAuthRequest={!isSignedIn ? () => setAuthModalVisible(true) : undefined}
-                    />
-                  )}
-                </View>
-              )}
-
-              <Button label="Leave" onPress={handleLeave} variant="primary" />
-            </View>
-          )}
+          {/* Viewer in-room: no overlay panel here anymore. The LIVE/identity readout is the
+              `profile` source view (SourceIdentityCard — same card the broadcaster sees), and the
+              actions (tip · follow · report · leave · fullscreen) live in the always-visible top
+              cluster (`viewerActions`). The old roomInfo panel (LivePill + BroadcasterRow + Follow
+              + Leave) was retired 2026-06-17. */}
 
           {/* ── Error ────────────────────────────────────────────── */}
           {status === 'error' && displayError === 'Subscription required' && !isNew ? (
