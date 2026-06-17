@@ -92,8 +92,13 @@ const FEEDKIND_TO_BUFFER: Partial<Record<FeedKind, BufferTrackKind>> = {
 const PLACEHOLDER_PEAKS = Array.from({ length: 56 }, (_, i) => 0.3 + 0.55 * Math.abs(Math.sin(i * 0.5)))
 
 const sessionStartMs = (s: BufferSession) => Date.parse(s.startedAt) + (s.mediaStartOffsetMs ?? 0)
-// `?? 0` matters: a brand-new live session can have BOTH duration fields undefined.
-const sessionEndMs = (s: BufferSession) => sessionStartMs(s) + (s.mediaDurationSec ?? s.durationSec ?? 0) * 1000
+// A session's length: its flushed MEDIA when there is media (camera/audio — the footage length, which
+// trails wall-clock by encoder warm-up/latency), else its WALL-CLOCK span (`durationSec`). Without the
+// fallback a DATA-ONLY session (location/sensors, no camera) has mediaDurationSec 0 → zero width → it
+// vanishes from the timeline once the broadcast stops (Ben 2026-06-17). `?? 0` for a brand-new live
+// session that has both fields undefined.
+const sessionEndMs = (s: BufferSession) =>
+  sessionStartMs(s) + ((s.mediaDurationSec ?? 0) > 0 ? s.mediaDurationSec! : (s.durationSec ?? 0)) * 1000
 
 function clamp(v: number, lo: number, hi: number) {
   return Math.max(lo, Math.min(hi, v))
