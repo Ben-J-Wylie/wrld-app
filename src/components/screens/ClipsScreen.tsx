@@ -491,13 +491,8 @@ export const ClipsScreen = () => {
   const [centerClipId, setCenterClipId] = useState<string | null>(null)
   const selectedClip = useMemo(() => allClips.find((c) => c.id === selectedId) ?? null, [allClips, selectedId])
   const viewerClip = useMemo(() => selectedClip ?? allClips.find((c) => c.id === centerClipId) ?? null, [selectedClip, allClips, centerClipId])
-  // Default the viewer to the newest clip — once, on first load (don't re-grab after a blur).
-  const didInitSelect = useRef(false)
-  useEffect(() => {
-    if (didInitSelect.current || !allClips.length) return
-    didInitSelect.current = true
-    setSelectedId(allClips.reduce((a, b) => (b.endMs > a.endMs ? b : a)).id)
-  }, [allClips])
+  // No auto-selection on open — the page defaults to RIDING THE NOW EDGE (below), so the viewer
+  // follows the live/now edge rather than highlighting a past clip. (Tapping a clip still selects it.)
 
   // ── playback ──
   // The PLAYER plays `playerClip`; the VIEWER poster shows `viewerClip`. They're the same EXCEPT
@@ -703,17 +698,18 @@ export const ClipsScreen = () => {
     [],
   )
 
-  // Seed the playhead on the newest footage (NOT 0 / 1969) so "play from the playhead" has somewhere
-  // to start. The timeline seeds its own centre at the now edge; play/scroll reconciles the two.
+  // Default the playhead to RIDING THE NOW EDGE on open (Ben 2026-06-17): clock reads NOW and the
+  // viewer follows the live/now edge — the live feed while broadcasting, else the trailing
+  // "since last broadcast" state. `nowEdgeRef` (= axisTop, the now edge) is set during render, so
+  // it's current by the time this post-render effect runs. The timeline self-centres on the now edge.
   const didInitPlayhead = useRef(false)
   useEffect(() => {
     if (didInitPlayhead.current || !orderedClips.length) return
     didInitPlayhead.current = true
-    const newest = orderedClips[orderedClips.length - 1]
-    if (newest) {
-      playheadRef.current = newest.startMs
-      setPlayheadMs(newest.startMs)
-    }
+    const edge = nowEdgeRef.current
+    playheadRef.current = edge
+    setPlayheadMs(edge)
+    setFollowLive(true)
   }, [orderedClips])
 
   // Scrub-while-playing state. `scrubbingRef` gates the follow + onCenter synchronously and is
