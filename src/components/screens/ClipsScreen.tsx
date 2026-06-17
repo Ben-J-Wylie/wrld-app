@@ -33,7 +33,7 @@ import { ClipViewer } from '@/components/features/clip/ClipViewer'
 import { SourceRail } from '@/components/features/clip/SourceRail'
 import { ClipSourceView } from '@/components/sections/ClipSourceView'
 import { SourceStage, type SourceRender } from '@/components/sections/SourceStage'
-import { SOURCE_META, SOURCE_RAIL_ORDER, KIND_TO_FEEDKIND } from '@/components/features/stream/sourceMeta'
+import { SOURCE_META, SOURCE_RAIL_ORDER, KIND_TO_FEEDKIND, pickDefaultView } from '@/components/features/stream/sourceMeta'
 import { useLocalTelemetry } from '@/hooks/useLocalTelemetry'
 import { useLocationTrail } from '@/hooks/useLocationTrail'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
@@ -580,9 +580,10 @@ export const ClipsScreen = () => {
     }
     return SOURCE_RAIL_ORDER.filter((k) => set.has(k))
   }, [playerSession, manifestUrl])
-  // Fall back to camera (or the first available) when the held view isn't in this clip's set.
+  // When the held view isn't in this clip's set, fall back to the most important captured source
+  // (default-view priority — camera first, … location, identity last).
   useEffect(() => {
-    if (!availableViews.includes(view)) setView(availableViews.includes('cam') ? 'cam' : (availableViews[0] ?? 'cam'))
+    if (!availableViews.includes(view)) setView(pickDefaultView(availableViews))
   }, [availableViews, view])
   const isCameraView = view === 'cam'
   // The buffer track kind backing the viewed source (null = no recorded track for this kind).

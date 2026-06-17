@@ -62,7 +62,7 @@ import { Icon } from '@/components/primitives/Icon'
 import { IconButton } from '@/components/primitives/IconButton'
 import { LivePill } from '@/components/features/stream/LivePill'
 import { SourceRail } from '@/components/features/clip/SourceRail'
-import { SOURCE_META, SOURCE_RAIL_ORDER, KIND_TO_FEEDKIND } from '@/components/features/stream/sourceMeta'
+import { SOURCE_META, SOURCE_RAIL_ORDER, KIND_TO_FEEDKIND, pickDefaultView } from '@/components/features/stream/sourceMeta'
 import { SourceStage, type SourceRender } from '@/components/sections/SourceStage'
 import { useBroadcasterClock } from '@/hooks/useBroadcasterClock'
 import { useStreamTelemetry } from '@/hooks/useStreamTelemetry'
@@ -441,14 +441,10 @@ export function StreamScreen() {
     }
     return SOURCE_RAIL_ORDER.filter((k) => set.has(k))
   }, [isNew, cfg, broadcastSources])
-  // Which source is shown — the held selection if it's still armed; else camera if armed (the natural
-  // default, even though identity leads the rail order); else the first armed source.
+  // Which source is shown — the held selection if it's still armed; else the most important armed
+  // source by the default-view priority (camera first, … location, identity last).
   const selectedKind: FeedKind =
-    activeSource && availableKinds.includes(activeSource)
-      ? activeSource
-      : availableKinds.includes('cam')
-        ? 'cam'
-        : (availableKinds[0] ?? 'cam')
+    activeSource && availableKinds.includes(activeSource) ? activeSource : pickDefaultView(availableKinds)
   const selectSource = (k: FeedKind) => setActiveSource(k)
 
   // Viewer-side live decode of the broadcaster's sensor telemetry (latest per kind), from the
