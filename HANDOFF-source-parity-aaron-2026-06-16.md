@@ -9,7 +9,28 @@ shows the live source). The staged rollout is **`wrld-app/CLAUDE.md` → "Source
 (SP0–SP6)"**. This doc is the *index of the parts that are yours* — exactly what we need from you,
 in priority order. It does not restate Ben's design/app work.
 
-## ✅ OPEN ITEMS FOR AARON — ALL DONE on `main` (2026-06-17), on-device verify owed
+## ← BACK TO BEN (2026-06-17, Aaron): backend slice COMPLETE + deployed — only on-device verify owed
+**All four backend items are built, pushed, and live on `api.wrld.cam` + `media.wrld.cam`** (api
+container rebuilt, mediasoup restarted on the Hetzner box). **There is no remaining backend code
+work for this initiative.** Including the `audiolevel` `dataUrls` gap you confirmed on-device — fixed
++ deployed (`b3258c5`, see item 4). Your `AudioVisualizer` history-mode wiring should now light up
+the moment a session has `audiolevel` samples.
+
+**Over to you, Ben — two on-device verifications (CI can't run mediasoup, so these are the real proof):**
+1. **Data-only clip (item 1):** arm ONLY location (no camera/audio) → go live → stop → confirm the
+   session shows in the Clips timeline with non-zero width + persists, and saving it yields a clip
+   with the `location` `.jsonl` track.
+2. **Audio waveform replay (item 4):** on a **new app build**, do an audio go-live → stop → confirm
+   `GET /buffer/me` now returns `dataUrls.audiolevel` (it does post-`b3258c5`) AND the recorded
+   samples drive your `AudioVisualizer` history mode. (Sessions from old builds will have the URL but
+   an empty track — see the note in item 4.)
+
+If either fails on-device, send me the `GET /buffer/me` payload for the session and I'll dig in.
+Separately: **v0.3** still has SP6b (screen share + real device torch LED). Original item list below.
+
+---
+
+## ✅ OPEN ITEMS FOR AARON — ALL DONE on `main` (2026-06-17)
 The app side of source-parity is done + on `main` (armed/captured rails, clip-source replay through
 the live visualizers sampled at the playhead, now-edge default, camera-off preview). The backend
 items below are now **all built + deployed** (api rebuilt, mediasoup restarted, all 3 repos pushed).
@@ -34,13 +55,18 @@ items below are now **all built + deployed** (api rebuilt, mediasoup restarted, 
    same as live). The clips timeline reads it from **`session.dataUrls.audiolevel`** (the buffer
    path the other data tracks use). `audiolevel` is a companion of the audio source (filtered out of
    the rail via `KIND_TO_FEEDKIND`) — rendered inside the audio waveform, not as a standalone rail item.
-   **⚠️ CONFIRMED GAP (2026-06-17, on-device):** for an audio-armed clip, `GET /buffer/me` returns
-   `audiolevel` in the session's **`kinds`** but NOT in its **`dataUrls`** (probed:
-   `kinds=audio|location|chat|audiolevel`, `dataUrls=location|chat`). location/chat/compass replay
-   fine (they're in `dataUrls`); audio stays flat because `dataUrls.audiolevel` is absent. **Please
-   add the `audiolevel` track's tokenized URL to each session's `dataUrls` map** in `GET /buffer/me`
-   — then the clip audio waveform replays (the app wiring is done and waiting on that one key). The
-   rail itself is correct (audio shows, via `kinds`); only the waveform DATA is missing.
+   **✅ GAP RESOLVED + DEPLOYED (2026-06-17, Aaron — `b3258c5`).** Root cause: the per-session
+   `dataUrls` map in `GET /buffer/me` (and the `/buffer/stream/:id/:kind/data.jsonl` serve route)
+   are both gated by a single `DATA_KINDS` constant in `buffer.ts` that didn't list `audiolevel` —
+   so the track recorded + showed in `kinds`, but its URL was filtered out. Added `audiolevel` to
+   `DATA_KINDS` (+ `KNOWN_KINDS`); one constant, both effects — `session.dataUrls.audiolevel` is now
+   present AND the serve route streams it (route + `readSessionData` are kind-generic). **Live on
+   `api.wrld.cam`** (verified in the running container: `DATA_KINDS` includes `audiolevel`).
+   **Note for the on-device retest:** the URL now appears, but the `.jsonl` will be **empty** for any
+   session recorded by an **old app build** (mediasoup opens the `audiolevel` companion file whenever
+   audio records, but only the new build's `useAudioLevelCapture` writes samples into it). So the
+   waveform fills only once a broadcaster on a **new build** does an audio go-live — that's the true
+   end-to-end test, not a backend gap.
 
 > **On-device done-bar (item 1 — Aaron/Ben to verify):** arm ONLY location (no camera/audio) → go live
 > → stop → the location-only session appears in the Clips timeline with non-zero width and persists,
