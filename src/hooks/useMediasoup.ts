@@ -2,7 +2,7 @@ import { useState, useCallback, useRef } from 'react'
 import { Device } from 'mediasoup-client'
 import { ReactNative106 } from 'mediasoup-client/handlers/ReactNative106'
 import type { Transport } from 'mediasoup-client/types'
-import { mediaDevices, MediaStream, registerGlobals } from 'react-native-webrtc'
+import { mediaDevices, MediaStream, RTCPeerConnection, registerGlobals } from 'react-native-webrtc'
 import { signalingClient } from '@/lib/mediasoupSignaling'
 import { maxCaptureHeight, maxVideoBitrate } from '@/lib/tierCaps'
 import { useAuthStore } from '@/stores/authStore'
@@ -72,6 +72,48 @@ export function useMediasoup() {
   // broadcaster's own mic) + its getStats poll; torn down in cleanup().
   const audioStatsRef = useRef<{ getStats(): Promise<unknown> } | null>(null)
   const audioLevelTimer = useRef<ReturnType<typeof setInterval> | null>(null)
+  // PREVIEW audio meter: a throwaway local RTCPeerConnection that holds the mic track so
+  // getStats() yields `media-source.audioLevel` BEFORE going live (there's no producer/sender
+  // to meter in preview otherwise). Torn down on go-live (the real producer poll takes over),
+  // on a source change, and in cleanup().
+  const meterPcRef = useRef<RTCPeerConnection | null>(null)
+
+  // Tear down whatever is currently driving audioLevel (preview meter PC and/or the poll).
+  const stopAudioMeter = useCallback(() => {
+    if (audioLevelTimer.current) {
+      clearInterval(audioLevelTimer.current)
+      audioLevelTimer.current = null
+    }
+    audioStatsRef.current = null
+    if (meterPcRef.current) {
+      try {
+        meterPcRef.current.close() // closes the PC's sender; the track lives on in localStream
+      } catch {}
+      meterPcRef.current = null
+    }
+    setAudioLevel(0)
+  }, [])
+
+  // Start a preview meter for the mic in `stream`. A local offer (no remote, no server) is enough
+  // to activate the sender so its source-side `audioLevel` reports — so the audio visualizer moves
+  // in preview, always, not just when live. Best-effort: on any failure the visualizer stays idle.
+  const startPreviewMeter = useCallback(async (stream: MediaStream) => {
+    stopAudioMeter()
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const audioTrack = (stream as any).getAudioTracks?.()[0]
+      if (!audioTrack) return
+      const pc = new RTCPeerConnection({})
+      pc.addTrack(audioTrack, stream)
+      const offer = await pc.createOffer({})
+      await pc.setLocalDescription(offer)
+      meterPcRef.current = pc
+      audioStatsRef.current = pc as unknown as { getStats(): Promise<unknown> }
+      audioLevelTimer.current = startAudioLevelPoll(audioStatsRef.current, setAudioLevel)
+    } catch {
+      stopAudioMeter() // metering unavailable → idle, no worse than before
+    }
+  }, [stopAudioMeter])
 
   async function buildDevice(): Promise<Device> {
     const device = new Device({ handlerFactory: ReactNative106.createFactory() })
@@ -111,6 +153,7 @@ export function useMediasoup() {
     const key = `${wantsCamera ? 'c' : ''}${wantsAudio ? 'a' : ''}`
     // No AV armed → nothing to preview.
     if (!wantsCamera && !wantsAudio) {
+      stopAudioMeter()
       if (localStreamRef.current) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         localStreamRef.current.getTracks().forEach((t: any) => t.stop())
@@ -122,7 +165,8 @@ export function useMediasoup() {
     }
     // Already previewing the same AV set → keep the live stream as-is.
     if (localStreamRef.current && previewSourcesRef.current === key) return
-    // Different set → stop the old preview tracks first.
+    // Different set → stop the old preview tracks (+ meter) first.
+    stopAudioMeter()
     if (localStreamRef.current) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       localStreamRef.current.getTracks().forEach((t: any) => t.stop())
@@ -143,13 +187,18 @@ export function useMediasoup() {
         const s = vt?.getSettings?.() ?? {}
         setVideoIsLandscape(typeof s.width === 'number' && typeof s.height === 'number' && s.width > s.height)
       }
+      // Meter the mic in PREVIEW so the audio visualizer is live before go-live (always, not just live).
+      if (wantsAudio) startPreviewMeter(stream)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not access camera')
     }
-  }, [])
+  }, [stopAudioMeter, startPreviewMeter])
 
   const startBroadcasting = useCallback(async (sources: SourceType[]) => {
     setError(null)
+    // Drop the preview meter PC (it holds the mic track) before producing — the live producer's
+    // own getStats poll (below) becomes the audioLevel source. Closing the PC doesn't stop the track.
+    stopAudioMeter()
     try {
       const device = await buildDevice()
 
@@ -291,7 +340,7 @@ export function useMediasoup() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start broadcast')
     }
-  }, [])
+  }, [stopAudioMeter])
 
   const startViewing = useCallback(async (producers: Array<{ id: string; kind: string }>) => {
     setError(null)
@@ -337,12 +386,7 @@ export function useMediasoup() {
   }, [remoteStream])
 
   const cleanup = useCallback(() => {
-    if (audioLevelTimer.current) {
-      clearInterval(audioLevelTimer.current)
-      audioLevelTimer.current = null
-    }
-    audioStatsRef.current = null
-    setAudioLevel(0)
+    stopAudioMeter() // clears the poll + closes the preview meter PC
     sendTransport.current?.close()
     recvTransport.current?.close()
     sendTransport.current = null
@@ -356,7 +400,7 @@ export function useMediasoup() {
     setError(null)
     setFacingMode('environment')
     setVideoIsLandscape(false)
-  }, [])
+  }, [stopAudioMeter])
 
   return { localStream, remoteStream, audioLevel, error, facingMode, videoIsLandscape, setRemoteAudioVolume, startPreview, startBroadcasting, startViewing, switchCamera, cleanup }
 }

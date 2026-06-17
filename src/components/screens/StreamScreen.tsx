@@ -511,16 +511,15 @@ export function StreamScreen() {
     [monitorTel, audioLevel, chatMessages, broadcaster, locTrail, torchOn, toggleTorch, isNew],
   )
   // Has the selected source produced data yet? (idle/dim styling until then — honest, never faked).
-  // audio has a real meter ONLY once live (producer getStats) or as a viewer (consumer getStats);
-  // in broadcaster preview there's no sender to meter, so it reads as idle (SP2). temp has no phone
-  // sensor → always idle. chat/profile/cam/screen are always live surfaces. (isLiveBroadcast is
-  // defined below — inline its condition here to avoid the TDZ.)
+  // audio is metered for the broadcaster whenever audio is armed — in PREVIEW (a local meter PC)
+  // AND live — and for a viewer in-room (consumer getStats). temp has no phone sensor → always idle.
+  // chat/profile/cam/screen are always live surfaces.
   const sourceActive =
     selectedKind === 'cam' ||
     selectedKind === 'screen' ||
     selectedKind === 'profile' ||
     selectedKind === 'chat' ||
-    (selectedKind === 'audio' && (isViewerInRoom || (isNew && status === 'in-room' && !streamEnded))) ||
+    (selectedKind === 'audio' && ((isNew && broadcastSources.includes('audio')) || isViewerInRoom)) ||
     (selectedKind === 'compass' && !!monitorTel.compass) ||
     (selectedKind === 'gyro' && !!monitorTel.gyro) ||
     (selectedKind === 'motion' && monitorTel.motionIntensity !== null) ||
