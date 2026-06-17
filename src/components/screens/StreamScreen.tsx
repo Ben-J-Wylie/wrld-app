@@ -101,6 +101,8 @@ import { activeBroadcast } from '@/lib/activeBroadcast'
 import { useBroadcastStore } from '@/stores/broadcastStore'
 import { loadCaptureConfig, saveCaptureConfig, DEFAULT_CAPTURE_CONFIG, type CaptureConfig } from '@/lib/captureConfig'
 import { streamsApi } from '@/api/streams'
+import { ppvApi } from '@/api/ppvEvents'
+import { onPpvSocketEvent } from '@/lib/ppvSocketEvents'
 import { recordingsApi } from '@/api/recordings'
 import { usersApi } from '@/api/users'
 import { useSignaling } from '@/hooks/useSignaling'
@@ -330,7 +332,7 @@ export function StreamScreen() {
   const {
     localStream, remoteStream, audioLevel, error: mediaError, facingMode, videoIsLandscape,
     setRemoteAudioVolume,
-    startPreview, startBroadcasting, startViewing, switchCamera, cleanup,
+    startPreview, startBroadcasting, startViewing, consumeProducer, switchCamera, cleanup,
   } = useMediasoup()
   const { isSignedIn } = useAuth()
   const insets = useSafeAreaInsets()
@@ -391,6 +393,10 @@ export function StreamScreen() {
   // Guards against double-navigation when multiple end signals arrive simultaneously
   // (e.g. broadcasterLeft WS message + viewer WS close in the same render cycle).
   const navigatingRef = useRef(false)
+  // PPV pause: the broadcaster stopped but the event is still live — hold here and
+  // wait for the resume push instead of leaving to the globe.
+  const [paused, setPaused] = useState(false)
+  const pausedRef = useRef(false)
   const pendingSnapshotUri = useRef<string | null>(null)
   // Keeps the newest chat message pinned to the bottom (hugging the composer).
   const chatScrollRef = useRef<ScrollView>(null)
@@ -784,11 +790,45 @@ export function StreamScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adminEnded])
 
+  // Broadcaster left. For a PPV stream this may be a PAUSE (event still live)
+  // rather than a real end. getCreatorEvents only returns scheduled/live events,
+  // so finding this event = paused (hold + wait for the resume push); missing it
+  // = ended/cancelled (leave). Non-PPV streams leave immediately, as before.
   useEffect(() => {
-    if (!streamEnded || isNew) return
-    exitToGlobe('ended')
+    if (!streamEnded || isNew || navigatingRef.current || pausedRef.current) return
+    const ppvId = streamByRoom?.ppvEvent?.id
+    const hostHandle = streamByRoom?.host?.handle ?? broadcaster?.handle
+    if (ppvId && hostHandle) {
+      cleanup()
+      disconnect()
+      ppvApi.getCreatorEvents(hostHandle)
+        .then((events) => {
+          if (events.some((e) => e.id === ppvId)) { pausedRef.current = true; setPaused(true) }
+          else exitToGlobe('ended')
+        })
+        .catch(() => exitToGlobe('ended'))
+    } else {
+      exitToGlobe('ended')
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [streamEnded])
+
+  // While paused, wait for the creator to go live again (new room → rejoin) or
+  // end the event (→ leave). Pushes arrive over the user socket.
+  useEffect(() => {
+    if (!paused) return
+    const ppvId = streamByRoom?.ppvEvent?.id
+    return onPpvSocketEvent((e) => {
+      if (ppvId && e.eventId !== ppvId) return
+      if (e.type === 'ppv_event_live' && e.mediasoupRoomId) {
+        pausedRef.current = false
+        router.replace({ pathname: '/(app)/stream/[id]', params: { id: e.mediasoupRoomId, sources: '' } })
+      } else if (e.type === 'ppv_event_ended') {
+        exitToGlobe('ended')
+      }
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paused])
 
   useEffect(() => {
     if (status !== 'dropped' || isNew) return
@@ -807,13 +847,24 @@ export function StreamScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isNew])
 
+  // Viewer: consume tracks the broadcaster produces AFTER we joined (the
+  // 'newProducer' push). Covers joining an empty room at go-live / on a PPV
+  // resume — otherwise the screen stays black until a rejoin.
+  useEffect(() => {
+    if (isNew) return
+    return signalingClient.onMessage((msg) => {
+      if (msg.type === 'newProducer') consumeProducer({ id: msg.id, kind: msg.kind })
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isNew])
+
   // Fallback: poll stream status every 10s.
   // Catches cases where neither broadcasterLeft nor a clean WS close arrive
   // (Android force-kill delay, iOS graceful-leave race, server-side quirks).
   useEffect(() => {
     if (isNew || !streamId || status !== 'in-room') return
     const pollId = setInterval(async () => {
-      if (navigatingRef.current) { clearInterval(pollId); return }
+      if (navigatingRef.current || pausedRef.current) { clearInterval(pollId); return }
       try {
         const s = await streamsApi.get(streamId)
         if (!s.isLive) {
@@ -893,6 +944,8 @@ export function StreamScreen() {
         }
       }
       navigatingRef.current = false
+      pausedRef.current = false
+      setPaused(false)
       cleanup()
       handleJoin()
       return () => {
@@ -1359,6 +1412,18 @@ export function StreamScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* PPV pause — hold here and rejoin automatically when the creator resumes. */}
+      {paused && (
+        <View style={styles.pausedOverlay}>
+          <Text variant="heading">⏸️</Text>
+          <Text variant="bodyEmphasized" color={theme.colors.text.primary}>The creator paused the stream</Text>
+          <Text variant="caption" color={theme.colors.text.muted} style={styles.pausedNote}>
+            Hang tight — we&apos;ll bring you back automatically when they resume.
+          </Text>
+          <ActivityIndicator color={theme.colors.text.muted} />
+          <Button label="Back to Globe" variant="secondary" onPress={() => { setPaused(false); router.navigate('/(app)/globe') }} />
+        </View>
+      )}
       {/* Camera — bounded in a box from below the top chrome (header / title
           input) down to the top of the clock.
           iOS broadcaster: WRLDCameraPreview (the gimbal layer) — keeps the scene
@@ -2092,6 +2157,16 @@ export function StreamScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.bg.primary },
+  pausedOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 100,
+    backgroundColor: theme.colors.bg.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: theme.spacing.md,
+    padding: theme.spacing.xl,
+  },
+  pausedNote: { textAlign: 'center' },
   // WRLD clock dock — flush above the app footer, spanning full width.
   clockDock: { position: 'absolute', left: 0, right: 0, bottom: 0 },
   // Camera box — bounded below the top chrome (inline `top`) to just above the

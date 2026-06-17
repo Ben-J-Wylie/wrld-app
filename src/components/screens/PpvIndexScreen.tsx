@@ -48,7 +48,7 @@ function EventCard({ event, isSignedIn, currentUserId }: { event: PpvEvent; isSi
   const isMyEvent = !!currentUserId && event.hostId === currentUserId
   // hasAccess from the discover endpoint (set when viewer is authenticated)
   const hasAccess = event.hasAccess ?? false
-  const canJoin = isLive && hasAccess && !!event.streamId
+  const canJoin = isLive && hasAccess && !!event.streamRoomId
 
   function handlePress() {
     if (isMyEvent) {
@@ -57,9 +57,10 @@ function EventCard({ event, isSignedIn, currentUserId }: { event: PpvEvent; isSi
       return
     }
     if (canJoin) {
+      // /stream/[id] joins by mediasoup room, not the DB stream id.
       router.push({
         pathname: '/(app)/stream/[id]',
-        params: { id: event.streamId!, sources: '' },
+        params: { id: event.streamRoomId!, streamId: event.streamId ?? '', sources: '' },
       })
       return
     }

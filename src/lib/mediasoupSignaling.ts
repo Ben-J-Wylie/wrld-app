@@ -59,6 +59,7 @@ export type ServerMessage =
   | { type: 'transportConnected' }
   | { type: 'produced'; id: string; roomId: string }
   | { type: 'consumed'; id: string; producerId: string; kind: string; rtpParameters: unknown }
+  | { type: 'newProducer'; id: string; kind: string }
   | { type: 'broadcasterLeft' }
   | { type: 'broadcasterPaused' }
   | { type: 'broadcasterResumed' }

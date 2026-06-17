@@ -105,8 +105,9 @@ export function PpvManageScreen() {
               qc.invalidateQueries({ queryKey: ['my-ppv-events'] })
               qc.invalidateQueries({ queryKey: ['my-scheduled-ppv-events'] })
               refetch()
-            } catch {
-              Alert.alert('Error', 'Could not end event')
+            } catch (e: unknown) {
+              const msg = e instanceof Error ? e.message : 'Could not end event'
+              Alert.alert('Error', msg)
             } finally {
               setEnding(false)
             }
@@ -133,6 +134,10 @@ export function PpvManageScreen() {
   const isScheduled = event.status === 'scheduled'
   const isLive = event.status === 'live'
   const canGoLive = isScheduled || isLive
+  // "End event" clears the go-live gate — only meaningful once the show is/was
+  // live. Ending a not-yet-aired event with ticket holders strands them with no
+  // refund (and the server rejects it), so pre-show with buyers, force Cancel.
+  const canEnd = isLive || (isScheduled && event.purchaseCount === 0)
   const netRevenue = event.netRevenueCents ?? 0
   const grossRevenue = event.grossRevenueCents ?? 0
 
@@ -233,7 +238,7 @@ export function PpvManageScreen() {
             })}
           />
         )}
-        {(isScheduled || isLive) && (
+        {canEnd && (
           <Button
             label={ending ? 'Ending…' : 'End event'}
             variant="secondary"

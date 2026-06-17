@@ -1,6 +1,7 @@
 import { ActivityIndicator, Alert, Linking, StyleSheet, View } from 'react-native'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router'
+import { onPpvSocketEvent } from '@/lib/ppvSocketEvents'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '@clerk/clerk-expo'
 import { theme } from '@/tokens/theme'
@@ -11,9 +12,6 @@ import { Text } from '@/components/primitives/Text'
 import { HelpText } from '@/components/primitives/HelpText'
 import { Icon } from '@/components/primitives/Icon'
 import { ppvApi } from '@/api/ppvEvents'
-
-// Poll interval for the waiting room (30 s)
-const WAITING_ROOM_POLL_MS = 30_000
 
 function formatCountdown(targetIso: string): string {
   const diff = new Date(targetIso).getTime() - Date.now()
@@ -44,8 +42,9 @@ export function PpvEventDetailScreen() {
   const [purchasing, setPurchasing] = useState(false)
   const [accessStatus, setAccessStatus] = useState<{ hasAccess: boolean; free: boolean } | null>(null)
   // Live event status for the waiting room — refreshed by polling
-  const [liveStatus, setLiveStatus] = useState<{ status: string; streamId: string | null } | null>(null)
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [liveStatus, setLiveStatus] = useState<{ status: string; roomId: string | null } | null>(null)
+  const [eventOver, setEventOver] = useState<'ended' | 'cancelled' | null>(null)
+  const [cancelling, setCancelling] = useState(false)
 
   // Try cache first (seeded by ProfileScreen), then fetch if needed
   const cachedEvents = handle
@@ -78,36 +77,62 @@ export function PpvEventDetailScreen() {
     return () => clearInterval(interval)
   }, [event?.scheduledAt])
 
-  // Waiting room: poll event status when scheduled + has access.
-  // Once the event goes live we show the join button immediately.
+  // Waiting room: a ticket holder waiting for a scheduled event gets the live/ended
+  // pushes over the user socket — no polling, however far out the event is.
   const hasAccessLocal = accessStatus?.hasAccess ?? event?.hasAccess ?? false
   const isScheduledLocally = (liveStatus?.status ?? event?.status) === 'scheduled'
-  const shouldPoll = isSignedIn && hasAccessLocal && isScheduledLocally
+  const waitingForLive = isSignedIn && hasAccessLocal && isScheduledLocally
 
-  useEffect(() => {
-    if (!shouldPoll) {
-      if (pollRef.current) clearInterval(pollRef.current)
-      return
-    }
-
-    async function checkStatus() {
-      try {
-        // Re-fetch creator events to get updated status + streamId
-        if (!handle) return
-        const events = await ppvApi.getCreatorEvents(handle)
+  // One-shot catch-up on focus — covers a push that landed before this screen
+  // mounted or while the socket was briefly down. Needs the creator handle.
+  useFocusEffect(useCallback(() => {
+    if (!waitingForLive || !handle) return
+    ppvApi.getCreatorEvents(handle)
+      .then(events => {
         const updated = events.find(e => e.id === id)
-        if (updated) setLiveStatus({ status: updated.status, streamId: updated.streamId ?? null })
-      } catch {
-        // ignore
-      }
-    }
+        if (updated) setLiveStatus({ status: updated.status, roomId: updated.streamRoomId ?? null })
+      })
+      .catch(() => {})
+  }, [waitingForLive, handle, id]))
 
-    checkStatus()
-    pollRef.current = setInterval(checkStatus, WAITING_ROOM_POLL_MS)
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current)
+  // Live/ended pushes drive the waiting room (no polling).
+  useEffect(() => onPpvSocketEvent((e) => {
+    if (e.eventId !== id) return
+    if (e.type === 'ppv_event_live') {
+      setLiveStatus({ status: 'live', roomId: e.mediasoupRoomId ?? null })
+    } else if (e.type === 'ppv_event_ended') {
+      setEventOver(e.reason === 'cancelled' ? 'cancelled' : 'ended')
     }
-  }, [shouldPoll, id, handle])
+  }), [id])
+
+  function handleCancelPurchase() {
+    if (!event) return
+    Alert.alert(
+      'Cancel your ticket?',
+      `You'll be refunded $${(event.priceUsd / 100).toFixed(2)}. You can buy again any time before the event starts.`,
+      [
+        { text: 'Keep ticket', style: 'cancel' },
+        {
+          text: 'Cancel & refund',
+          style: 'destructive',
+          onPress: async () => {
+            setCancelling(true)
+            try {
+              await ppvApi.cancelPurchase(id)
+              setAccessStatus({ hasAccess: false, free: false })
+              qc.invalidateQueries({ queryKey: ['ppv-events-profile', handle] })
+              Alert.alert('Refunded', 'Your ticket was cancelled and refunded.')
+            } catch (e: unknown) {
+              const msg = e instanceof Error ? e.message : 'Could not cancel your ticket.'
+              Alert.alert('Error', msg)
+            } finally {
+              setCancelling(false)
+            }
+          },
+        },
+      ],
+    )
+  }
 
   async function handlePurchase() {
     if (!isSignedIn) {
@@ -139,7 +164,8 @@ export function PpvEventDetailScreen() {
   const isFreeAccess = accessStatus?.free ?? false
   // Use polling-updated status when available, fall back to the event data
   const currentStatus = liveStatus?.status ?? event?.status
-  const currentStreamId = liveStatus?.streamId ?? event?.streamId ?? null
+  // The mediasoup room to join — what /stream/[id] expects (not the DB stream id).
+  const currentRoomId = liveStatus?.roomId ?? event?.streamRoomId ?? null
   const isLive = currentStatus === 'live'
 
   if (isLoading && !event) {
@@ -227,19 +253,29 @@ export function PpvEventDetailScreen() {
       </View>
 
       {/* ── Access / purchase ───────────────────────────────── */}
-      {hasAccess ? (
+      {eventOver ? (
+        <View style={styles.accessGranted}>
+          <Text variant="bodyEmphasized">
+            {eventOver === 'cancelled' ? 'This event was cancelled' : 'This event has ended'}
+          </Text>
+          {eventOver === 'cancelled' && hasAccess && !isFreeAccess && (
+            <Text variant="caption" color={theme.colors.text.muted}>Your ticket has been refunded.</Text>
+          )}
+          <Button label="Back to events" variant="secondary" onPress={() => router.back()} />
+        </View>
+      ) : hasAccess ? (
         <View style={styles.accessGranted}>
           <Icon name="check-circle" size="md" color={theme.colors.accent.default} />
           <Text variant="bodyEmphasized" color={theme.colors.accent.default}>
             {isFreeAccess ? 'Free access — you\'re a subscriber' : 'Access purchased ✓'}
           </Text>
-          {isLive && currentStreamId ? (
+          {isLive && currentRoomId ? (
             // Event is live and viewer has access — show the join button
             <Button
               label="Join now →"
               onPress={() => router.push({
                 pathname: '/(app)/stream/[id]',
-                params: { id: currentStreamId, sources: '' },
+                params: { id: currentRoomId, sources: '' },
               })}
             />
           ) : isLive ? (
@@ -248,13 +284,21 @@ export function PpvEventDetailScreen() {
               The stream is live — join from the creator's profile.
             </Text>
           ) : (
-            // Scheduled — waiting room
+            // Scheduled — waiting room (live push arrives over the socket, no polling)
             <View style={styles.waitingRoom}>
               <ActivityIndicator size="small" color={theme.colors.text.muted} />
               <Text variant="caption" color={theme.colors.text.muted}>
-                Waiting for the stream to start… checking every 30 seconds.
+                You&apos;re in — we&apos;ll bring you in automatically when it starts.
               </Text>
             </View>
+          )}
+          {!isFreeAccess && currentStatus === 'scheduled' && (
+            <Button
+              label={cancelling ? 'Cancelling…' : 'Cancel ticket & refund'}
+              variant="secondary"
+              onPress={handleCancelPurchase}
+              disabled={cancelling}
+            />
           )}
         </View>
       ) : (
