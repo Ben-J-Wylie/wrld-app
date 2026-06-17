@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { env } from '@/lib/env'
 import { useAuthStore } from '@/stores/authStore'
 import { CURRENT_USER_KEY } from '@/hooks/useCurrentUser'
+import { emitPpvSocketEvent } from '@/lib/ppvSocketEvents'
 import type { Recording, User, WalletData } from '@/types'
 
 // Convert https://api.wrld.cam → wss://api.wrld.cam/ws
@@ -63,6 +64,10 @@ export function useUserSocket(enabled: boolean) {
                 prev ? { ...prev, ...event.patch } : prev,
               )
             }
+          }
+
+          if (event.type === 'ppv_event_live' || event.type === 'ppv_event_ended') {
+            emitPpvSocketEvent(event)
           }
 
           if (event.type === 'recording_updated') {

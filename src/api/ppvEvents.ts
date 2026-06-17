@@ -91,6 +91,14 @@ export const ppvApi = {
     return res.data
   },
 
+  // Viewer: cancel own ticket + refund (only while the event is still scheduled)
+  cancelPurchase: async (eventId: string): Promise<{ ok: boolean; refunded: boolean }> => {
+    const res = await apiClient.post<{ ok: boolean; refunded: boolean }>(
+      `/ppv-events/${eventId}/cancel-purchase`,
+    )
+    return res.data
+  },
+
   // Viewer: check access status
   getAccessStatus: async (eventId: string): Promise<{ hasAccess: boolean; free: boolean }> => {
     const res = await apiClient.get<{ hasAccess: boolean; free: boolean }>(

@@ -67,6 +67,10 @@ export function useMediasoup() {
 
   const sendTransport = useRef<Transport | null>(null)
   const recvTransport = useRef<Transport | null>(null)
+  // Viewer device + consumed producer ids — used to consume tracks that appear
+  // AFTER we joined (the 'newProducer' push), e.g. joining at go-live / PPV resume.
+  const deviceRef = useRef<Device | null>(null)
+  const consumedRef = useRef<Set<string>>(new Set())
   const localStreamRef = useRef<MediaStream | null>(null)
   // Retain the audio stats source (consumer for a viewer, producer for the
   // broadcaster's own mic) + its getStats poll; torn down in cleanup().
@@ -372,6 +376,8 @@ export function useMediasoup() {
     setError(null)
     try {
       const device = await buildDevice()
+      deviceRef.current = device
+      consumedRef.current = new Set()
 
       const params = await signalingClient.createTransport('recv')
       const transport = device.createRecvTransport(params as never)
@@ -386,6 +392,7 @@ export function useMediasoup() {
         const consumeParams = await signalingClient.consume(producer.id, device.rtpCapabilities)
         const consumer = await transport.consume(consumeParams as never)
         ms.addTrack(consumer.track as never)
+        consumedRef.current.add(producer.id)
         // Keep the audio consumer + start a getStats loudness poll for the audio
         // visualizer (RN-WebRTC has no AnalyserNode; inbound-rtp.audioLevel is it).
         if ((consumer as unknown as { kind: string }).kind === 'audio') {
@@ -397,6 +404,34 @@ export function useMediasoup() {
       setRemoteStream(ms as unknown as MediaStream)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start viewing')
+    }
+  }, [])
+
+  // Consume a track that appeared AFTER we joined (server 'newProducer' push) —
+  // e.g. we joined an empty room right at go-live or on a PPV resume. Reuses the
+  // existing recv transport + device so the video shows up without a black screen.
+  const consumeProducer = useCallback(async (producer: { id: string; kind: string }) => {
+    const transport = recvTransport.current
+    const device = deviceRef.current
+    if (!transport || !device || consumedRef.current.has(producer.id)) return
+    consumedRef.current.add(producer.id)
+    try {
+      const consumeParams = await signalingClient.consume(producer.id, device.rtpCapabilities)
+      const consumer = await transport.consume(consumeParams as never)
+      // New MediaStream (not addTrack on the old one) so RTCView re-binds via a
+      // fresh .toURL() and renders the newly-arrived track.
+      setRemoteStream((prev) => {
+        const existing = prev as unknown as { getTracks(): unknown[] } | null
+        const tracks = existing ? [...existing.getTracks(), consumer.track] : [consumer.track]
+        return new MediaStream(tracks as never) as unknown as MediaStream
+      })
+      if ((consumer as unknown as { kind: string }).kind === 'audio') {
+        audioStatsRef.current = consumer as unknown as { getStats(): Promise<unknown> }
+        if (audioLevelTimer.current) clearInterval(audioLevelTimer.current)
+        audioLevelTimer.current = startAudioLevelPoll(audioStatsRef.current, setAudioLevel)
+      }
+    } catch {
+      consumedRef.current.delete(producer.id) // let a later push retry
     }
   }, [])
 
@@ -417,6 +452,8 @@ export function useMediasoup() {
     recvTransport.current?.close()
     sendTransport.current = null
     recvTransport.current = null
+    deviceRef.current = null
+    consumedRef.current = new Set()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     localStreamRef.current?.getTracks().forEach((t: any) => t.stop())
     localStreamRef.current = null
@@ -428,5 +465,5 @@ export function useMediasoup() {
     setVideoIsLandscape(false)
   }, [stopAudioMeter])
 
-  return { localStream, remoteStream, audioLevel, error, facingMode, videoIsLandscape, setRemoteAudioVolume, startPreview, startBroadcasting, startViewing, switchCamera, cleanup }
+  return { localStream, remoteStream, audioLevel, error, facingMode, videoIsLandscape, setRemoteAudioVolume, startPreview, startBroadcasting, startViewing, consumeProducer, switchCamera, cleanup }
 }

@@ -113,6 +113,7 @@ export type PpvEvent = {
   hostId: string
   host?: { id: string; handle: string; displayName: string; avatarUrl: string | null }
   streamId: string | null
+  streamRoomId?: string | null   // live mediasoup room — what /stream/[id] joins
   title: string
   description: string | null
   scheduledAt: string      // ISO UTC
@@ -150,6 +151,9 @@ export type Stream = {
   mediasoupRoomId?: string | null
   sources: SourceType[]
   subscribersOnly?: boolean
+  // Present when this live stream is a PPV event broadcast — lets the viewer UI
+  // badge it as PPV + show the event title, and detect pause vs end.
+  ppvEvent?: { id: string; title: string; status: string } | null
   locationPrecision?: 'exact' | 'city' | 'country'
   distanceKm?: number
   distanceMeters?: number

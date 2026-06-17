@@ -91,7 +91,7 @@ export function PpvManageScreen() {
   function handleEnd() {
     Alert.alert(
       'End event',
-      `End "${event?.title}"? This finishes the event (ending the live broadcast if one is running) and lets you stream normally again. Ticket holders keep their access — no refunds.`,
+      `End "${event?.title}"? Ends the live broadcast (if one's running) and clears the PPV requirement so you can stream normally. Ticket holders aren't refunded — use Cancel & refund instead to refund them.`,
       [
         { text: 'Keep event', style: 'cancel' },
         {
@@ -105,8 +105,9 @@ export function PpvManageScreen() {
               qc.invalidateQueries({ queryKey: ['my-ppv-events'] })
               qc.invalidateQueries({ queryKey: ['my-scheduled-ppv-events'] })
               refetch()
-            } catch {
-              Alert.alert('Error', 'Could not end event')
+            } catch (e: unknown) {
+              const msg = e instanceof Error ? e.message : 'Could not end event'
+              Alert.alert('Error', msg)
             } finally {
               setEnding(false)
             }
@@ -133,6 +134,10 @@ export function PpvManageScreen() {
   const isScheduled = event.status === 'scheduled'
   const isLive = event.status === 'live'
   const canGoLive = isScheduled || isLive
+  // "End event" clears the go-live gate — only meaningful once the show is/was
+  // live. Ending a not-yet-aired event with ticket holders strands them with no
+  // refund (and the server rejects it), so pre-show with buyers, force Cancel.
+  const canEnd = isLive || (isScheduled && event.purchaseCount === 0)
   const netRevenue = event.netRevenueCents ?? 0
   const grossRevenue = event.grossRevenueCents ?? 0
 
@@ -233,7 +238,7 @@ export function PpvManageScreen() {
             })}
           />
         )}
-        {(isScheduled || isLive) && (
+        {canEnd && (
           <Button
             label={ending ? 'Ending…' : 'End event'}
             variant="secondary"
