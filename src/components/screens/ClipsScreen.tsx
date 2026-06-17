@@ -591,12 +591,23 @@ export const ClipsScreen = () => {
   const currentDataUrl = isCameraView || view === 'audio' || !bufferKindForView ? null : playerSession?.dataUrls?.[bufferKindForView]
   const dataSamples = useDataTrack(currentDataUrl)
 
-  // The RECORDED source picture — the live `SourceRender` shape, sampled at the playhead, rendered by
+  // The wall-clock instant to sample the recorded track at. When the playhead is WITHIN the played
+  // session → the playhead (replay). When it's outside (paused / previewing a clip the playhead
+  // isn't on) → the session END, so the readout shows the full captured extent instead of an empty
+  // placeholder. (The samples' ts are session wall-clock; the playhead can sit on another clip.)
+  const sampledMs = useMemo(() => {
+    if (!playerSession) return playheadMs
+    const a = sessionStartMs(playerSession)
+    const b = sessionEndMs(playerSession)
+    return playheadMs >= a && playheadMs <= b ? playheadMs : b
+  }, [playerSession, playheadMs])
+
+  // The RECORDED source picture — the live `SourceRender` shape, sampled at `sampledMs`, rendered by
   // SourceStage (same visualizers as live). audio is excluded (no per-sample loudness track → it keeps
   // its placeholder waveform below); camera is the frameSlot video.
   const recordedSource = useMemo<SourceRender | null>(() => {
     if (isCameraView || view === 'audio') return null
-    const s = sampleAt(dataSamples, playheadMs)
+    const s = sampleAt(dataSamples, sampledMs)
     const nf = (k: string) => (s && typeof s[k] === 'number' ? (s[k] as number) : 0)
     switch (view) {
       case 'compass':
@@ -610,17 +621,17 @@ export const ClipsScreen = () => {
       case 'torch':
         return { kind: 'torch', on: !!(s && s.on) }
       case 'loc': {
-        const path = trailUpTo(dataSamples, playheadMs) // trail grows as the clip plays
+        const path = trailUpTo(dataSamples, sampledMs) // trail grows as the clip plays; full when paused/outside
         return { kind: 'loc', path, position: path[path.length - 1] }
       }
       case 'chat':
-        return { kind: 'chat', messages: chatUpTo(dataSamples, playheadMs) } // log unfolds with the playhead
+        return { kind: 'chat', messages: chatUpTo(dataSamples, sampledMs) } // log unfolds with the playhead
       case 'profile':
         return { kind: 'profile', displayName: currentUser?.displayName ?? '—', handle: currentUser?.handle ?? '', avatarUrl: currentUser?.avatarUrl ?? null, attributed: true }
       default:
         return null
     }
-  }, [isCameraView, view, dataSamples, playheadMs, currentUser])
+  }, [isCameraView, view, dataSamples, sampledMs, currentUser])
   // Active (lit, not dimmed) when there's data to replay — always for identity; data-backed otherwise.
   const recordedActive = view === 'profile' || dataSamples.length > 0
 

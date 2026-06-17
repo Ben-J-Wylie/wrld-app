@@ -28,10 +28,14 @@ export function sampleAt(samples: DataSample[], atMs: number): DataSample | null
 }
 
 // The location trail UP TO `atMs` — so the path draws (and the pin moves) as the clip plays.
+// Position is a HELD signal: before the first fix, hold the earliest known point (a single pin), so
+// the map shows at the head of the clip rather than going blank (matches sampleAt's held behaviour).
 export function trailUpTo(samples: DataSample[], atMs: number): [number, number][] {
-  return samples
-    .filter((s) => s.ts <= atMs && typeof s.lng === 'number' && typeof s.lat === 'number')
-    .map((s) => [s.lng as number, s.lat as number])
+  const pts = samples.filter((s) => typeof s.lng === 'number' && typeof s.lat === 'number')
+  if (!pts.length) return []
+  const upTo = pts.filter((s) => s.ts <= atMs).map((s) => [s.lng as number, s.lat as number] as [number, number])
+  if (upTo.length) return upTo
+  return [[pts[0]!.lng as number, pts[0]!.lat as number]] // before the first fix → hold the earliest point
 }
 
 // Chat messages UP TO `atMs` — so the log unfolds as the clip plays (not the whole transcript).
