@@ -62,7 +62,7 @@ import { Icon } from '@/components/primitives/Icon'
 import { IconButton } from '@/components/primitives/IconButton'
 import { LivePill } from '@/components/features/stream/LivePill'
 import { SourceRail } from '@/components/features/clip/SourceRail'
-import { SOURCE_META } from '@/components/features/stream/sourceMeta'
+import { SOURCE_META, SOURCE_RAIL_ORDER } from '@/components/features/stream/sourceMeta'
 import { SourceStage, type SourceRender } from '@/components/sections/SourceStage'
 import { useBroadcasterClock } from '@/hooks/useBroadcasterClock'
 import { useStreamTelemetry } from '@/hooks/useStreamTelemetry'
@@ -152,12 +152,11 @@ const AIR_KEY_TO_KIND: Record<string, string> = {
   torch: 'torch',
 }
 
-// The full source rail shown on the stream view at all times (Ben, 2026-06-16). Every renderable
-// source — clicking one switches the media surface to its live readout. Sources with no live data
-// read as an honest idle visualizer (audio in preview, temp — no phone sensor). Ordered to match
-// the DASHBOARD (identity · chat · cam · audio · sensors · torch — accel sits under motion as it
-// does there). `loc` + `screen` omitted until their live paths land (loc → SP5; screen → SP6).
-const FULL_SOURCE_RAIL: FeedKind[] = ['profile', 'chat', 'cam', 'audio', 'compass', 'gyro', 'motion', 'accel', 'speed', 'temp', 'torch']
+// The full source rail is the SHARED canonical suite (`SOURCE_RAIL_ORDER`) — identical to the clips
+// page, dashboard-ordered. Every source is present; clicking one switches the media surface to its
+// live readout, and a source with no live data shows an honest idle visualizer (`loc` until the SP5
+// relay; audio in preview; temp — no phone sensor).
+const FULL_SOURCE_RAIL: FeedKind[] = SOURCE_RAIL_ORDER
 
 function recordedSourcesFromConfig(cfg: CaptureConfig | null): string[] {
   if (!cfg) return []
@@ -472,6 +471,8 @@ export function StreamScreen() {
           return { kind: 'torch', on: monitorTel.torch?.on ?? false, level: monitorTel.torch?.level }
         case 'temp':
           return { kind: 'temp', celsius: NaN } // no phone sensor → idle
+        case 'loc':
+          return { kind: 'loc', path: [] } // live trail needs the SP5 relay → idle placeholder until then
         case 'chat':
           return { kind: 'chat', messages: chatMessages.map((m) => ({ handle: m.from, text: m.text })) }
         case 'profile':
