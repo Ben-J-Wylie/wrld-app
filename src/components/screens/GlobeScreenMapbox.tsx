@@ -157,6 +157,7 @@ type BannerData =
   | { kind: 'disconnected'; broadcasterHandle: string | null }
   | { kind: 'ended' }
   | { kind: 'kicked' }
+  | { kind: 'cancelled' }
   | { kind: 'resumed'; stream: Stream; broadcasterHandle: string | null }
 
 export function GlobeScreenMapbox() {
@@ -249,7 +250,9 @@ export function GlobeScreenMapbox() {
           ? { kind: 'ended' }
           : signal.kind === 'kicked'
             ? { kind: 'kicked' }
-            : { kind: 'disconnected', broadcasterHandle: signal.broadcasterHandle },
+            : signal.kind === 'cancelled'
+              ? { kind: 'cancelled' }
+              : { kind: 'disconnected', broadcasterHandle: signal.broadcasterHandle },
       )
     }, []),
   )

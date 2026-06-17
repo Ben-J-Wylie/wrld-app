@@ -95,7 +95,7 @@ import { useInvalidateCurrentUser } from '@/hooks/useCurrentUser'
 import { useInvalidateWallet } from '@/hooks/useWallet'
 import { useDeviceOrientation, RECORD_ROTATION_DEG } from '@/hooks/useDeviceOrientation'
 import { theme } from '@/tokens/theme'
-import { signalStreamDisconnected, signalStreamEnded, signalKicked } from '@/lib/streamSignals'
+import { signalStreamDisconnected, signalStreamEnded, signalKicked, signalEventCancelled } from '@/lib/streamSignals'
 import { signalingClient } from '@/lib/mediasoupSignaling'
 import { activeBroadcast } from '@/lib/activeBroadcast'
 import { useBroadcastStore } from '@/stores/broadcastStore'
@@ -766,7 +766,7 @@ export function StreamScreen() {
   // Single exit point for all viewer stream-end scenarios.
   // navigatingRef ensures only the first trigger wins when multiple signals
   // arrive in the same render cycle (e.g. broadcasterLeft + WS close together).
-  function exitToGlobe(kind: 'ended' | 'disconnected' | 'kicked') {
+  function exitToGlobe(kind: 'ended' | 'disconnected' | 'kicked' | 'cancelled') {
     if (navigatingRef.current) return
     navigatingRef.current = true
     cleanup()
@@ -775,6 +775,8 @@ export function StreamScreen() {
       signalStreamEnded()
     } else if (kind === 'kicked') {
       signalKicked()
+    } else if (kind === 'cancelled') {
+      signalEventCancelled()
     } else {
       signalStreamDisconnected(broadcaster?.handle ?? null)
     }
@@ -813,22 +815,25 @@ export function StreamScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [streamEnded])
 
-  // While paused, wait for the creator to go live again (new room → rejoin) or
-  // end the event (→ leave). Pushes arrive over the user socket.
+  // PPV pushes over the user socket — active for any PPV stream (not just while
+  // paused) so a creator ending or CANCELLING mid-watch is surfaced (cancel →
+  // refund notice). Resume (new room → rejoin) only acts when we're paused.
   useEffect(() => {
-    if (!paused) return
     const ppvId = streamByRoom?.ppvEvent?.id
+    if (isNew || !ppvId) return
     return onPpvSocketEvent((e) => {
-      if (ppvId && e.eventId !== ppvId) return
+      if (e.eventId !== ppvId) return
       if (e.type === 'ppv_event_live' && e.mediasoupRoomId) {
-        pausedRef.current = false
-        router.replace({ pathname: '/(app)/stream/[id]', params: { id: e.mediasoupRoomId, sources: '' } })
+        if (pausedRef.current) {
+          pausedRef.current = false
+          router.replace({ pathname: '/(app)/stream/[id]', params: { id: e.mediasoupRoomId, sources: '' } })
+        }
       } else if (e.type === 'ppv_event_ended') {
-        exitToGlobe('ended')
+        exitToGlobe(e.reason === 'cancelled' ? 'cancelled' : 'ended')
       }
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [paused])
+  }, [streamByRoom?.ppvEvent?.id, isNew])
 
   useEffect(() => {
     if (status !== 'dropped' || isNew) return

@@ -30,7 +30,7 @@ import { Text } from '@/components/primitives/Text'
 import { Icon } from '@/components/primitives/Icon'
 import { theme } from '@/tokens/theme'
 
-export type StreamStateVariant = 'disconnected' | 'ended' | 'resumed' | 'kicked'
+export type StreamStateVariant = 'disconnected' | 'ended' | 'resumed' | 'kicked' | 'cancelled'
 
 type Props = {
   variant: StreamStateVariant
@@ -45,6 +45,7 @@ const DEFAULT_DISMISS_MS: Record<StreamStateVariant, number | undefined> = {
   disconnected: 5 * 60 * 1000,
   resumed: undefined,
   kicked: 8000,
+  cancelled: undefined, // persists until the viewer dismisses it (refund notice)
 }
 
 export function StreamStateBanner({
@@ -98,6 +99,11 @@ export function StreamStateBanner({
         {variant === 'kicked' && (
           <Text variant="body" color={theme.colors.text.primary} numberOfLines={1}>
             You have been removed from this stream
+          </Text>
+        )}
+        {variant === 'cancelled' && (
+          <Text variant="body" color={theme.colors.text.primary} numberOfLines={2}>
+            This pay-per-view event was cancelled — you&apos;ll be refunded.
           </Text>
         )}
       </View>
