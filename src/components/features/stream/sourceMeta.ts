@@ -34,8 +34,11 @@ export const SOURCE_META: Record<FeedKind, { icon: IconName; label: string }> = 
 // ambient temperature has no instrument on real phones (deprecated 2026-06-17). `screen` is
 // excluded until it has a capture/render path (SP6). A source a frame can't render yet shows an
 // honest idle (camera-parity, CONTENT.md §6) — location idle on the live stream until the SP5 relay.
+// Order of importance for the rail (Ben 2026-06-17): camera · audio · compass · gyro · accel ·
+// location · speed · torch · identity. `chat` is kept at the end (not in the importance list, but
+// needed so an armed chat source / the clip chat-replay track still appears).
 export const SOURCE_RAIL_ORDER: FeedKind[] = [
-  'profile', 'loc', 'chat', 'cam', 'audio', 'compass', 'gyro', 'accel', 'speed', 'torch',
+  'cam', 'audio', 'compass', 'gyro', 'accel', 'loc', 'speed', 'torch', 'profile', 'chat',
 ]
 
 // Backend / buffer track-kind name → FeedKind. The rail shows ARMED (live) / CAPTURED (clip)

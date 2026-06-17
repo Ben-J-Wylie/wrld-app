@@ -458,12 +458,17 @@ export function StreamScreen() {
   // Broadcaster self-monitor: the relay fans telemetry out to VIEWERS, never back to the sender,
   // so a broadcaster can't watch its own sensors over the wire. Read the selected sensor locally
   // (preview AND live) and feed the SAME render path. Only the viewed sensor is subscribed.
-  const localTel = useLocalTelemetry(isNew ? selectedKind : null, isNew && (showCameraPreview || (status === 'in-room' && !streamEnded)))
+  // Read the broadcaster's own sensor for the selected source in PREVIEW (status idle, camera on OR
+  // off) AND live (in-room) — so a camera-off preview's id/location/sensor view has real data.
+  const localTel = useLocalTelemetry(isNew ? selectedKind : null, isNew && (status === 'idle' || (status === 'in-room' && !streamEnded)))
   // The readings the media surface renders: the broadcaster's own (local) vs the viewer's (fan-out).
   const monitorTel = isNew ? localTel : tel
   // SP5 — accumulate live location samples into a [lng,lat] trail for the location source view
   // (broadcaster's own via localTel, viewer's via the fan-out tel.location). Resets off-surface.
-  const locTrail = useLocationTrail(monitorTel.location, showCameraPreview || (isNew && status === 'in-room' && !streamEnded) || isViewerInRoom)
+  const locTrail = useLocationTrail(
+    monitorTel.location,
+    (isNew && (status === 'idle' || (status === 'in-room' && !streamEnded))) || isViewerInRoom,
+  )
   // SP6a — torch is a CONTROL, not a phone sensor (RN-WebRTC has no torch API; this is a signaled
   // on/off channel — the lamp UI, not the device LED). The broadcaster holds the on/off state and
   // emits it; mediasoup fans it to viewers + records it when torch is armed (Aaron's data path).
@@ -551,6 +556,10 @@ export function StreamScreen() {
   // and the live info row (LivePill + avatar + viewer count) that takes the
   // title input's place.
   const isLiveBroadcast = isNew && status === 'in-room' && !streamEnded
+  // Broadcaster ARMING/preview state on the stream page (pre-live, signed in) — REGARDLESS of camera.
+  // The source view + rail must render here too: with camera off, the selected source (id / location /
+  // sensor) fills the surface so the page isn't blank until go-live (Ben 2026-06-17).
+  const isBroadcasterPreview = isNew && status === 'idle' && !streamEnded && !!isSignedIn
 
   // Publish the live local camera feed to the shared store so the Clips page can show the ACTUAL live
   // view (not the seconds-behind buffer VOD) when the playhead rides the now edge. Mirrors the stream
@@ -1386,11 +1395,11 @@ export function StreamScreen() {
         </View>
       )}
 
-      {/* Broadcaster source monitor — when monitoring a non-camera source (in preview OR
-          live), its visualizer fills the camera's place (the camera keeps streaming either
-          way). Sensors read locally (monitorTel); audio uses the broadcaster's own mic level.
-          The always-present left rail (below) switches the source. */}
-      {isNew && (showCameraPreview || isLiveBroadcast) && selectedKind !== 'cam' && (
+      {/* Broadcaster source monitor — the selected non-camera source's visualizer fills the surface,
+          in ARMING/preview (camera on OR off) AND live. With camera off this is what the broadcaster
+          sees pre-live (id / location / sensor) instead of a blank screen. Sensors read locally
+          (monitorTel); audio uses the broadcaster's own mic level. The left rail (below) switches it. */}
+      {isNew && (showCameraPreview || isBroadcasterPreview || isLiveBroadcast) && selectedKind !== 'cam' && (
         <View style={[styles.cameraBox, { top: camTop, bottom: camBottom }]}>
           <SourceStage
             sources={[selectedKind]}
@@ -1431,7 +1440,7 @@ export function StreamScreen() {
       {/* Full source rail — ALWAYS present on a media surface (broadcaster preview, live, or
           viewer), as a HORIZONTAL band between the bottom button and the chat-tools line. Tapping
           a source switches the media box above to that source's live readout. (Ben, 2026-06-16.) */}
-      {(showCameraPreview || isLiveBroadcast || isViewerInRoom) && (
+      {(showCameraPreview || isBroadcasterPreview || isLiveBroadcast || isViewerInRoom) && (
         <View style={[styles.sourceRailBar, { bottom: railBottom, height: RAIL_BAR_H }]} pointerEvents="box-none">
           <SourceRail
             orientation="horizontal"
