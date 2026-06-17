@@ -117,6 +117,9 @@ import type { TipEvent, GiftEvent } from '@/hooks/useSignaling'
 // as the dashboard's Go Live button (same value), so the shared control
 // doesn't jump when navigating between the two pages.
 const FOOTER_DROP = 30
+// Height reserved for the horizontal source rail band that sits between the bottom button and the
+// chat-tools line (broadcaster) / above the clock (viewer). The camera box bottom is lifted by this.
+const RAIL_BAR_H = 40
 
 // The AV subset of the armed capture config that actually streams today
 // (camera/audio). `cam` / `audio` are the FeedKind keys the dashboard uses.
@@ -150,11 +153,11 @@ const AIR_KEY_TO_KIND: Record<string, string> = {
 }
 
 // The full source rail shown on the stream view at all times (Ben, 2026-06-16). Every renderable
-// source, in display order — clicking one switches the media surface to its live readout. Sources
-// with no live data read as an honest idle visualizer (audio in preview, temp — no phone sensor).
-// `loc` is omitted until the live-location relay lands (SP5, Aaron); chat + profile are wired
-// (SP3). Camera leads.
-const FULL_SOURCE_RAIL: FeedKind[] = ['cam', 'audio', 'compass', 'gyro', 'motion', 'accel', 'speed', 'torch', 'temp', 'chat', 'profile']
+// source — clicking one switches the media surface to its live readout. Sources with no live data
+// read as an honest idle visualizer (audio in preview, temp — no phone sensor). Ordered to match
+// the DASHBOARD (identity · chat · cam · audio · sensors · torch — accel sits under motion as it
+// does there). `loc` + `screen` omitted until their live paths land (loc → SP5; screen → SP6).
+const FULL_SOURCE_RAIL: FeedKind[] = ['profile', 'chat', 'cam', 'audio', 'compass', 'gyro', 'motion', 'accel', 'speed', 'temp', 'torch']
 
 function recordedSourcesFromConfig(cfg: CaptureConfig | null): string[] {
   if (!cfg) return []
@@ -672,14 +675,15 @@ export function StreamScreen() {
   // for things that float just ABOVE that 54-tall button — the preview
   // camera-flip button and the live chat composer both sit here so they clear it.
   const footerPad = Math.max(theme.spacing.sm, insets.bottom + theme.spacing.md - FOOTER_DROP)
-  // Camera box bottom. Broadcaster: sit just ABOVE the Go Live / End Stream
-  // button (button height 54 + footerPad below it + the clock), with an `sm`
-  // gap above the button — so the page reads input → camera → button → clock
-  // with the SAME spacing as the dashboard (header → scroll → button → clock).
-  // Viewer: there's no button, so the camera runs down to the clock top.
-  const camBottom = isNew
+  // The horizontal source-rail band sits just above the bottom button (broadcaster) or just above
+  // the clock (viewer). Everything above it (camera + the chat-tools line) is lifted to clear it,
+  // so the page reads input → camera → chat tools → SOURCE RAIL → button → clock.
+  const railBottom = isNew
     ? footerPad + LIVE_CLOCK_BAR_H + 54 + theme.spacing.sm
-    : LIVE_CLOCK_BAR_H
+    : LIVE_CLOCK_BAR_H + theme.spacing.sm
+  // Camera box bottom — lifted above the rail band (button height 54 + footerPad + clock already
+  // under the rail). `sm` gaps keep the dashboard's input → camera → button → clock rhythm.
+  const camBottom = railBottom + RAIL_BAR_H + theme.spacing.sm
   // Shared bottom anchor for the chat toggle · input · send so they sit on one
   // line just INSIDE the bottom edge of the camera frame, overlaid on the video
   // — identical for broadcaster and viewer. Keyboard up → hug the top of the
@@ -1388,12 +1392,13 @@ export function StreamScreen() {
         </View>
       )}
 
-      {/* Full source rail — ALWAYS on the left while on a media surface (broadcaster preview,
-          live broadcaster, or viewer). Tapping a source switches the media box above to that
-          source's live readout. (Ben, 2026-06-16.) */}
+      {/* Full source rail — ALWAYS present on a media surface (broadcaster preview, live, or
+          viewer), as a HORIZONTAL band between the bottom button and the chat-tools line. Tapping
+          a source switches the media box above to that source's live readout. (Ben, 2026-06-16.) */}
       {(showCameraPreview || isLiveBroadcast || isViewerInRoom) && (
-        <View style={[styles.leftRail, { top: camTop, bottom: camBottom }]} pointerEvents="box-none">
+        <View style={[styles.sourceRailBar, { bottom: railBottom, height: RAIL_BAR_H }]} pointerEvents="box-none">
           <SourceRail
+            orientation="horizontal"
             sources={availableKinds.map((k) => ({ key: k, iconName: SOURCE_META[k].icon, label: SOURCE_META[k].label }))}
             value={selectedKind}
             onChange={(k) => selectSource(k as FeedKind)}
@@ -2249,12 +2254,13 @@ const styles = StyleSheet.create({
     bottom: '38%',
   },
 
-  // Full source rail — left edge, vertically centred within the camera box (top/bottom set
-  // inline to camTop/camBottom). Always present on a media surface; clear of the bottom chat/
-  // record chrome. `box-none` wrapper so only the rail buttons capture touches.
-  leftRail: {
+  // Full source rail — horizontal band, centred, between the bottom button and the chat-tools
+  // line (`bottom`/`height` set inline). `box-none` wrapper so only the rail buttons capture touches.
+  sourceRailBar: {
     position: 'absolute',
-    left: theme.spacing.md,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
     justifyContent: 'center',
   },
   // Camera flip — top-right of the camera frame; `top` is set inline to

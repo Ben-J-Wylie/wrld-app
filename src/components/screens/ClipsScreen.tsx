@@ -68,11 +68,12 @@ const OPT_LIVE_SESSION = 'live:optimistic'
 const OPT_LIVE_ID = 'live:optimistic'
 
 // ── source switching (the viewer's source rail) ── which captured tracks the clip viewer can
-// replay, in rail order. `camera` is the video frame (ClipViewer's frameSlot); the rest render
-// via ClipSourceView from the session's `.jsonl` data tracks at the playhead. `screen` is excluded
-// (its own video track isn't in the camera manifest); audio shows a placeholder waveform while the
-// VOD audio plays (there's no per-sample amplitude track).
-const SOURCE_VIEW_ORDER: BufferTrackKind[] = ['camera', 'audio', 'location', 'compass', 'gyro', 'accel', 'speed', 'chat']
+// replay. `camera` is the video frame (ClipViewer's frameSlot); the rest render via ClipSourceView
+// from the session's `.jsonl` data tracks at the playhead. `screen` is excluded (its own video
+// track isn't in the camera manifest); audio shows a placeholder waveform while the VOD audio
+// plays (there's no per-sample amplitude track). DASHBOARD ORDER (location · chat · camera · audio
+// · sensors) so the clip rail reads the same as the arming screen.
+const SOURCE_VIEW_ORDER: BufferTrackKind[] = ['location', 'chat', 'camera', 'audio', 'compass', 'gyro', 'accel', 'speed']
 const SOURCE_VIEW_META: Record<string, { iconName: SourceRailItem['iconName']; label: string }> = {
   camera: { iconName: 'video', label: 'Camera' },
   audio: { iconName: 'mic', label: 'Audio' },
@@ -571,9 +572,9 @@ export const ClipsScreen = () => {
   const [view, setView] = useState<BufferTrackKind>('camera')
   const availableViews = useMemo<BufferTrackKind[]>(() => {
     const kinds = new Set(playerSession?.kinds ?? [])
-    const out = SOURCE_VIEW_ORDER.filter((k) => k !== 'camera' && kinds.has(k))
-    // Camera leads whenever there's playable video (a manifest), even for an evicted-session saved clip.
-    if (manifestUrl || kinds.has('camera')) out.unshift('camera')
+    // Keep dashboard order; camera shows whenever there's playable video (a manifest), even for an
+    // evicted-session saved clip. (view defaults to camera regardless of its rail position.)
+    const out = SOURCE_VIEW_ORDER.filter((k) => (k === 'camera' ? !!manifestUrl || kinds.has('camera') : kinds.has(k)))
     return out.length ? out : ['camera']
   }, [playerSession, manifestUrl])
   // Fall back to camera when the played clip doesn't have the current source (e.g. after switching clips).
@@ -1642,6 +1643,7 @@ export const ClipsScreen = () => {
           <View style={styles.viewerWrap}>
             <View style={styles.viewerBox}>
               <ClipViewer
+                style={styles.viewer}
                 posterUrl={gapCard ? undefined : displayClip?.posterUrl}
                 title={gapCard ? undefined : displayClip?.label}
                 // Show the VIDEO (not poster) when: at the live edge (live feed), dragging (scrub
@@ -1670,16 +1672,6 @@ export const ClipsScreen = () => {
                         ? <ClipSourceView source={clipSourceRender} />
                         : undefined
                     : undefined
-                }
-                // The source switch — only when the played clip captured more than one source.
-                rail={
-                  availableViews.length > 1 ? (
-                    <SourceRail
-                      sources={availableViews.map((k) => ({ key: k, iconName: SOURCE_VIEW_META[k]!.iconName, label: SOURCE_VIEW_META[k]!.label }))}
-                      value={view}
-                      onChange={(k) => setView(k as BufferTrackKind)}
-                    />
-                  ) : undefined
                 }
               />
               {/* Gap card — over unbroadcasted time (scrub-through or the play rush). absoluteFills
@@ -1723,6 +1715,18 @@ export const ClipsScreen = () => {
                 </View>
               ) : null}
             </View>
+          </View>
+        ) : null}
+        {/* Source switch — a HORIZONTAL rail above the transport, switching which captured source the
+            viewer shows (dashboard order). Only when the played clip captured more than one source. */}
+        {hasAny && availableViews.length > 1 ? (
+          <View style={styles.clipRailBar}>
+            <SourceRail
+              orientation="horizontal"
+              sources={availableViews.map((k) => ({ key: k, iconName: SOURCE_VIEW_META[k]!.iconName, label: SOURCE_VIEW_META[k]!.label }))}
+              value={view}
+              onChange={(k) => setView(k as BufferTrackKind)}
+            />
           </View>
         ) : null}
         {/* Transport directly below the viewer (it drives it); the clock stays at the bottom. */}
@@ -1881,6 +1885,16 @@ const styles = StyleSheet.create({
   // Holds the viewer + the gap card so the card absoluteFills the viewer EXACTLY (same size).
   viewerBox: {
     width: '100%',
+  },
+  // Taller preview than the component default (aspectRatio 2 → 1.7); the timeline lanes derive their
+  // height from the remaining region, so a taller preview narrows the buffer/saved lanes (Ben, 2026-06-16).
+  viewer: {
+    aspectRatio: 1.7,
+  },
+  // Horizontal source rail between the preview and the transport.
+  clipRailBar: {
+    alignItems: 'center',
+    marginTop: theme.spacing.sm,
   },
   // Full-cover gap card — fills the viewer exactly; hides footage/poster, just a title.
   gapCard: {
