@@ -56,6 +56,18 @@
    lifecycle, precision, frame, state — must be true to the underlying content.
    Where it can't show the full truth it degrades visibly (thinner), never
    fabricates or misleads. (Section 6 is this principle, made concrete.)
+7. **Every source is first-class — camera-parity.** The camera is not privileged;
+   it is just the *default* source. Every source (audio, screen, location, gyro,
+   compass, speed, chat, …) gets the **same treatment at every stage** the camera
+   does: a **live self-preview for the broadcaster — broadcasting or not** (you
+   monitor each source live, exactly as you monitor the camera, the moment it's
+   armed); **live consumption by viewers**; a **write to the server buffer**; and
+   **saveability** into clips. And it is **previewable on every viewer frame** —
+   the stream page, the clips page, someone else's stream — switchable
+   source-by-source, with the **now edge showing the live source feed** the way the
+   camera does (§6). Where a source's live path isn't built yet it degrades visibly
+   (principle 6), but the *model* treats all sources identically — nothing about the
+   camera's pipeline is special to the camera.
 
 ---
 
@@ -572,17 +584,42 @@ This is the same spine as the universal clock above: the representation leads an
 editable; the media is a follower. (See also §3 — saving a still-growing live clip is a model
 edit allowed now; the byte-level promotion of in-flight buffer bytes is the server seam.)
 
-### The live edge's media is the live stream, not the recording
+### Every source is a live surface, on every frame (camera-parity)
+
+This is §1 principle 7 made concrete for representation. A **frame** is any place the app shows
+a source's picture — the stream page (broadcaster preview *and* live), the clips-page viewer, and
+someone else's stream. The rule: **every frame can show any available source, switchable
+source-by-source via a rail, and each shows that source live in the moment** — the same way the
+camera frame does. There is no "camera frame plus some lesser sensor widgets"; there is one frame
+that renders whichever source is selected, and the camera is just the default selection.
+
+- **The broadcaster self-previews every source, broadcasting or not.** The moment a source is
+  armed (or armable) it has a live readout the broadcaster can monitor — the camera preview, the
+  mic level, the compass needle, the speed dial — before Go Live and during it. A source's live
+  feed never fans back from the server to its own sender, so the broadcaster's self-preview reads
+  the device **locally**; the viewer reads the **fan-out**. Same frame, same component, two data
+  taps chosen by role.
+- **Selecting a source is a view switch, never a capture change.** Monitoring audio doesn't stop
+  the camera; what airs/records is the armed set, independent of which source you're looking at
+  (§2 — the composite is a *view* over the tracks).
+- **Honest degradation (principle 6).** Where a source has no real-time source on a device (e.g.
+  ambient temperature) or its live path isn't wired yet, the frame shows that source's **idle**
+  state — never a faked reading. A source with no live preview in a given state (e.g. mic level
+  before a WebRTC sender exists in preview) reads as idle, not as broken.
+
+### The live edge's media is the live source, not the recording
 
 A recording always trails real-time: the buffer's HLS is encoded + segmented + flushed seconds
-behind "now," so asking the *recorded VOD* for the live instant can never look right — you get
-footage from a few seconds ago, or nothing. So **the media for a given instant depends on which
-instant it is**: the *past* is served by the recording (the VOD, seeked); the *live edge* is served
-by the **live stream itself** (the low-latency camera feed already in hand). On the Clips page, when
-the playhead rides the now edge while you're broadcasting, the viewer shows the **actual live feed —
-the same view as the stream page** — and the instant you scrub back into the past it swaps to the
-VOD. One playhead, two media sources, chosen by where you are. (`broadcastStore.liveStreamUrl`
-published by `StreamScreen`; shown by `ClipsScreen` when `followLive`; decided 2026-06-16.)
+behind "now," so asking the *recorded VOD/track* for the live instant can never look right — you get
+data from a few seconds ago, or nothing. So **the media for a given instant depends on which
+instant it is**: the *past* is served by the recording (the VOD/track, seeked); the *live edge* is
+served by the **live source itself** — the low-latency feed already in hand (the camera stream, the
+live audio level, the live telemetry / location / chat sample). On the Clips page, when the playhead
+rides the now edge while you're broadcasting, the viewer shows the **actual live source — the same
+view as the stream page** — and the instant you scrub back into the past it swaps to the
+recording. One playhead, two media sources per source-kind, chosen by where you are. (Camera shipped:
+`broadcastStore.liveStreamUrl` published by `StreamScreen`; shown by `ClipsScreen` when `followLive`;
+decided 2026-06-16. Generalising the now-edge swap to the non-camera sources is the open work.)
 
 ### The recording lag & the dead zone (OPEN — the live-replay quandary, needs Aaron)
 
@@ -727,6 +764,13 @@ regresses, the app's content surfaces degrade or lie.
   depends on this).
 - **Telemetry relay** for aired sensor sources (so a viewer's visualizer has
   data, not just a label).
+- **A live tap for every armed source (§1 principle 7).** Each armed source must
+  be **consumable live by viewers** and at the **now edge** of the clips frame —
+  camera/screen as WebRTC media, audio as a level, and sensor / **location** / chat
+  over the relay — *and* written to the buffer *and* promotable into a saved clip.
+  Same obligation for every source; the camera's path is not a special case.
+  (Sensor + chat relays shipped; the **live location** relay and the non-camera
+  now-edge swap are the open pieces.)
 
 ### Backend — `wrld-backend`
 
@@ -773,6 +817,9 @@ DESIGN.md + CONTENT.md §6 (representation). Aaron owns `screens/`, `hooks/`,
 - App detail + decisions: `wrld-app/CLAUDE.md` (Rolling Buffer, Clips, Time
   Machine, and the dated Update sections) and `wrld-app/DESIGN.md` (Section 3 +
   decision log).
+- **Camera-parity for every source** (§1 principle 7 / §6 / §9) — the staged
+  build-out is the **"Source-parity rollout (SP0–SP6)"** section in
+  `wrld-app/CLAUDE.md`.
 - Backend detail: `wrld-backend/CLAUDE.md` (C-series + R-series) and
   `wrld-backend/docs/`.
 - Recorder detail: `wrld-mediasoup/CLAUDE.md`.

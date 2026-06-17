@@ -3289,6 +3289,53 @@ attach the `Report`.
 
 ---
 
+## Source-parity rollout (camera-parity for every source) — June 2026
+
+> **Principle: CONTENT.md §1 principle 7 + §6 "Every source is a live surface, on every
+> frame" + §9 "A live tap for every armed source."** The camera is not privileged — it's the
+> *default* source. Every source must get the SAME treatment at every stage: a live
+> self-preview for the broadcaster (broadcasting or not), live consumption by viewers, a write
+> to the server buffer, saveability into clips, a switchable preview on **every** viewer frame
+> (stream page · clips page · someone else's stream), and a now-edge that shows the **live**
+> source feed the way the camera does. This rollout drives the build to that bar; honest
+> degradation (idle, never faked) holds wherever a stage isn't wired yet.
+
+This supersedes nothing — it's the umbrella the source-visualizers initiative (telemetry data
+path) and the clip-view switching feed into. The wire contracts (telemetry/chat relay,
+`SourceStage`, `ClipSourceView`, `useLocalTelemetry`) already exist; this tracks closing the
+gaps to full parity.
+
+**What we need from Aaron is tracked in `HANDOFF-source-parity-aaron-2026-06-16.md`** (SP5 live
+location relay · SP6 persist/save audit + screen). The SP2/SP3(non-loc)/SP4 stages are Ben/`design`.
+
+### Stages (SP0–SP6)
+
+| Stage | Owner | Branch / repo | What | Status / depends on |
+|---|---|---|---|---|
+| **SP0** | Ben | `design` | **Principle + contracts.** CONTENT.md §1.7 / §6 / §9 written; the relay + render contracts (`telemetry`/`telemetryUpdate`, chat relay, `SourceStage`/`ClipSourceView`, `SourceRender`) defined. | ✅ done 2026-06-16 |
+| **SP1a** | Ben | `design` | **Stream view: full always-present left rail** (AV + 7 sensors), every state (preview · live broadcaster · viewer). Broadcaster self-previews its own sensors **locally** (`useLocalTelemetry`, preview+live); viewer reads the fan-out (`useStreamTelemetry`). | ✅ done 2026-06-16 |
+| **SP1b** | Ben | `design` | **Clip view: source switching** over recorded tracks (`ClipSourceView` section + `ClipViewer.rail`/`sourceSlot`; `useDataTrack` at the playhead). | ✅ done 2026-06-16 |
+| **SP2** | Ben (+ Aaron substrate) | `design` | **Preview parity for the remaining sources.** Audio has no real-time source before Go Live (no WebRTC sender → no `getStats`; no AnalyserNode; no audio dep) → ship an **explicit idle "live once on air"** treatment in preview (don't fake it), OR decide a real preview meter (new native dep + mic contention — likely no). Idle/honest states audited for temp/torch/screen. | open · SP1a |
+| **SP3** | Ben (+ Aaron) | `design` + `main` | **Complete the stream rail: loc · chat · profile as live views.** chat (relay exists) → rail view via `SourceChatLog`; profile (host identity) → `SourceIdentityCard`; **loc blocked on the live-location relay (SP5)** — ship chat+profile now, loc when SP5 lands. | open · chat/profile now; loc on SP5 |
+| **SP4** | Ben | `design` | **Now-edge live feed for ALL sources on the clips page.** Generalise the camera-only now-edge swap (CONTENT.md §6) so riding the now edge shows the live SELECTED source (audio level, sensors, …), not just the camera RTC. Needs the live taps available on the clips page (extend `broadcastStore` / a shared live-source provider beyond `liveStreamUrl`). | open · SP1a + SP5 (for loc) |
+| **SP5** | Aaron | mediasoup + backend | **Live location relay** (the one substrate gap) — mediasoup relays `location` like telemetry; viewer accumulates a trail; broadcaster self-trail local. Unblocks loc in SP3/SP4. | open |
+| **SP6** | Ben + Aaron | both | **Persist/save parity audit + screen source.** Confirm every armed source writes a track AND promotes into a saved clip (sensors/chat/location ✓ via item 2 + C6; audit torch on-toggle emit/record). **Screen** source end-to-end (capture/produce + live view + record) is the largest remaining gap — likely its own slice. | open · audit anytime; screen larger |
+
+### Seam (unchanged)
+Ben owns `primitives/`/`features/`/`sections/` + DESIGN.md + CONTENT.md §6 (the rail, the
+visualizers, `SourceStage`/`ClipSourceView`, the always-present rail wiring he's crossed into
+`screens/` for at his direction). Aaron owns the relays/recorder/backend (§9) + the real
+data wiring in `screens/`/`hooks/`/`api/` (the live-location relay, the now-edge live taps on
+the clips page, screen capture). Integration via `design` → `main` merges.
+
+### Done-bar
+Open any source on any frame and it shows that source live in the moment the way the camera
+does; arm any source and a viewer can consume it, it writes to the server, and it saves into a
+clip; riding the now edge on the clips page shows the live source feed. Where a path genuinely
+can't be live (e.g. audio in preview, temp), it reads as an honest idle, never faked.
+
+---
+
 ## Reporting & moderation initiative — app-side status (2026-06-13)
 
 > **The canonical status + resume checklist lives in `wrld-backend/CLAUDE.md`
