@@ -40,7 +40,7 @@ export function useLocalTelemetry(kind: string | null, enabled: boolean): Stream
   const wantAccel = kind === 'accel' || kind === 'motion'
   const wantCompass = kind === 'compass'
   const wantSpeed = kind === 'speed'
-  const wantLocation = kind === 'location'
+  const wantLocation = kind === 'location' || kind === 'loc' // accept the FeedKind ('loc') the rails pass
 
   // DeviceMotion → gyro attitude + accel vector (one listener feeds both).
   useEffect(() => {

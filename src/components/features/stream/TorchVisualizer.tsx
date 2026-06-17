@@ -7,6 +7,7 @@
 
 import { useEffect, useRef } from 'react'
 import { Animated, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
+import { Pressable } from '@/components/primitives/Pressable'
 import { Icon } from '@/components/primitives/Icon'
 import { Text } from '@/components/primitives/Text'
 import { VisualizerFrame, VIZ_MUTED } from '@/components/features/stream/VisualizerFrame'
@@ -18,10 +19,13 @@ type Props = {
   level?: number
   active?: boolean
   label?: string
+  /** When set, the lamp becomes a tappable on/off control (the broadcaster's torch toggle —
+   *  a signaled on/off channel, not the device LED). Omitted → a read-only lamp (viewers). */
+  onToggle?: () => void
   style?: StyleProp<ViewStyle>
 }
 
-export function TorchVisualizer({ on, level = 1, active = true, label = 'TORCH', style }: Props) {
+export function TorchVisualizer({ on, level = 1, active = true, label = 'TORCH', onToggle, style }: Props) {
   const glow = useRef(new Animated.Value(0)).current
   useEffect(() => {
     Animated.timing(glow, {
@@ -35,21 +39,31 @@ export function TorchVisualizer({ on, level = 1, active = true, label = 'TORCH',
   const haloScale = glow.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1.8] })
   const lit = active && on
 
+  const lamp = (
+    <View style={styles.body}>
+      <View style={styles.lampWrap}>
+        <Animated.View
+          style={[styles.halo, { opacity: haloOpacity, transform: [{ scale: haloScale }] }]}
+        />
+        <View style={[styles.lamp, { backgroundColor: lit ? theme.colors.accent.default : 'transparent', borderColor: lit ? theme.colors.accent.default : VIZ_MUTED }]}>
+          <Icon name="zap" size="lg" color={lit ? theme.colors.text.inverse : VIZ_MUTED} />
+        </View>
+      </View>
+      <Text variant="heading" color={lit ? theme.colors.text.inverse : VIZ_MUTED}>
+        {lit ? 'ON' : 'OFF'}
+      </Text>
+    </View>
+  )
+
   return (
     <VisualizerFrame icon="zap" label={label} dim={!active} style={style}>
-      <View style={styles.body}>
-        <View style={styles.lampWrap}>
-          <Animated.View
-            style={[styles.halo, { opacity: haloOpacity, transform: [{ scale: haloScale }] }]}
-          />
-          <View style={[styles.lamp, { backgroundColor: lit ? theme.colors.accent.default : 'transparent', borderColor: lit ? theme.colors.accent.default : VIZ_MUTED }]}>
-            <Icon name="zap" size="lg" color={lit ? theme.colors.text.inverse : VIZ_MUTED} />
-          </View>
-        </View>
-        <Text variant="heading" color={lit ? theme.colors.text.inverse : VIZ_MUTED}>
-          {lit ? 'ON' : 'OFF'}
-        </Text>
-      </View>
+      {onToggle ? (
+        <Pressable variant="subtle" onPress={onToggle} accessibilityRole="switch" accessibilityState={{ checked: on }} accessibilityLabel="Toggle torch">
+          {lamp}
+        </Pressable>
+      ) : (
+        lamp
+      )}
     </VisualizerFrame>
   )
 }

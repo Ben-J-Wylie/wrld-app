@@ -67,6 +67,7 @@ import { SourceStage, type SourceRender } from '@/components/sections/SourceStag
 import { useBroadcasterClock } from '@/hooks/useBroadcasterClock'
 import { useStreamTelemetry } from '@/hooks/useStreamTelemetry'
 import { useLocalTelemetry } from '@/hooks/useLocalTelemetry'
+import { useLocationTrail } from '@/hooks/useLocationTrail'
 import { useTelemetryCapture } from '@/hooks/useTelemetryCapture'
 import type { FeedKind } from '@/components/features/broadcast/FeedThumb'
 import { Avatar } from '@/components/primitives/Avatar'
@@ -447,6 +448,22 @@ export function StreamScreen() {
   const localTel = useLocalTelemetry(isNew ? selectedKind : null, isNew && (showCameraPreview || (status === 'in-room' && !streamEnded)))
   // The readings the media surface renders: the broadcaster's own (local) vs the viewer's (fan-out).
   const monitorTel = isNew ? localTel : tel
+  // SP5 — accumulate live location samples into a [lng,lat] trail for the location source view
+  // (broadcaster's own via localTel, viewer's via the fan-out tel.location). Resets off-surface.
+  const locTrail = useLocationTrail(monitorTel.location, showCameraPreview || (isNew && status === 'in-room' && !streamEnded) || isViewerInRoom)
+  // SP6a — torch is a CONTROL, not a phone sensor (RN-WebRTC has no torch API; this is a signaled
+  // on/off channel — the lamp UI, not the device LED). The broadcaster holds the on/off state and
+  // emits it; mediasoup fans it to viewers + records it when torch is armed (Aaron's data path).
+  const [torchOn, setTorchOn] = useState(false)
+  const toggleTorch = useCallback(() => {
+    setTorchOn((on) => {
+      const next = !on
+      try {
+        sendTelemetry({ kind: 'torch', ts: Date.now(), on: next })
+      } catch {}
+      return next
+    })
+  }, [sendTelemetry])
   // Build the SourceStage render for the selected source. cam/screen get the
   // injected RTCView slot; everything else renders from `monitorTel` / `audioLevel`.
   const buildSource = useCallback(
@@ -468,11 +485,15 @@ export function StreamScreen() {
         case 'speed':
           return { kind: 'speed', mps: monitorTel.speed?.mps ?? -1 }
         case 'torch':
-          return { kind: 'torch', on: monitorTel.torch?.on ?? false, level: monitorTel.torch?.level }
+          // Broadcaster: own on/off state + the tappable toggle; viewer: read-only from the fan-out.
+          return isNew
+            ? { kind: 'torch', on: torchOn, onToggle: toggleTorch }
+            : { kind: 'torch', on: monitorTel.torch?.on ?? false, level: monitorTel.torch?.level }
         case 'temp':
           return { kind: 'temp', celsius: NaN } // no phone sensor → idle
         case 'loc':
-          return { kind: 'loc', path: [] } // live trail needs the SP5 relay → idle placeholder until then
+          // SP5 — live trail: broadcaster's own (localTel) / viewer's (fan-out), accumulated above.
+          return { kind: 'loc', path: locTrail, position: locTrail[locTrail.length - 1] }
         case 'chat':
           return { kind: 'chat', messages: chatMessages.map((m) => ({ handle: m.from, text: m.text })) }
         case 'profile':
@@ -487,7 +508,7 @@ export function StreamScreen() {
           return { kind: 'audio', level: audioLevel, variant: 'waveform' }
       }
     },
-    [monitorTel, audioLevel, chatMessages, broadcaster],
+    [monitorTel, audioLevel, chatMessages, broadcaster, locTrail, torchOn, toggleTorch, isNew],
   )
   // Has the selected source produced data yet? (idle/dim styling until then — honest, never faked).
   // audio has a real meter ONLY once live (producer getStats) or as a viewer (consumer getStats);
@@ -505,7 +526,9 @@ export function StreamScreen() {
     (selectedKind === 'motion' && monitorTel.motionIntensity !== null) ||
     (selectedKind === 'accel' && !!monitorTel.accel) ||
     (selectedKind === 'speed' && !!monitorTel.speed) ||
-    (selectedKind === 'torch' && !!monitorTel.torch)
+    (selectedKind === 'loc' && !!monitorTel.location) ||
+    // torch: the broadcaster's control is always active; a viewer's lamp once a sample arrives.
+    (selectedKind === 'torch' && (isNew || !!monitorTel.torch))
   // The viewer always gets the dark media surface + translucent control overlay
   // (so a visualizer reads like the video it replaces).
   const showOverlay = showCameraPreview || isViewerInRoom

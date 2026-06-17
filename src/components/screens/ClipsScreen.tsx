@@ -35,6 +35,7 @@ import { ClipSourceView, type ClipSourceRender } from '@/components/sections/Cli
 import { SourceStage, type SourceRender } from '@/components/sections/SourceStage'
 import { SOURCE_META, SOURCE_RAIL_ORDER } from '@/components/features/stream/sourceMeta'
 import { useLocalTelemetry } from '@/hooks/useLocalTelemetry'
+import { useLocationTrail } from '@/hooks/useLocationTrail'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
 import type { FeedKind } from '@/components/features/broadcast/FeedThumb'
 import { BufferTransport } from '@/components/features/clip/BufferTransport'
@@ -744,8 +745,12 @@ export const ClipsScreen = () => {
   // live tap here yet (loc → SP5; chat live not plumbed to Clips) → they fall back to the recording.
   const atLiveEdge = followLive && isLive && !scrubbing
   const liveSensorKind =
-    atLiveEdge && (view === 'compass' || view === 'gyro' || view === 'accel' || view === 'motion' || view === 'speed') ? view : null
+    atLiveEdge && (view === 'compass' || view === 'gyro' || view === 'accel' || view === 'motion' || view === 'speed' || view === 'loc')
+      ? view
+      : null
   const liveTel = useLocalTelemetry(liveSensorKind, isLive)
+  // SP5 — live location trail at the now edge (broadcaster's own device); accumulate liveTel.location.
+  const liveLocTrail = useLocationTrail(liveTel.location, atLiveEdge && view === 'loc')
   const liveSourceRender = useMemo<SourceRender | null>(() => {
     if (!atLiveEdge || isCameraView) return null
     switch (view) {
@@ -761,10 +766,12 @@ export const ClipsScreen = () => {
         return { kind: 'accel', x: liveTel.accel?.x ?? 0, y: liveTel.accel?.y ?? 0, z: liveTel.accel?.z ?? 0 }
       case 'speed':
         return { kind: 'speed', mps: liveTel.speed?.mps ?? -1 }
+      case 'loc':
+        return { kind: 'loc', path: liveLocTrail, position: liveLocTrail[liveLocTrail.length - 1] }
       default:
-        return null // loc / chat / profile / temp / torch → no live tap here yet → recorded or idle
+        return null // chat / profile / temp / torch → no live tap here yet → recorded or idle
     }
-  }, [atLiveEdge, isCameraView, view, liveAudioLevel, liveTel])
+  }, [atLiveEdge, isCameraView, view, liveAudioLevel, liveTel, liveLocTrail])
 
   // The PLAYER (a follower) loads the clip at the PLAYHEAD — so as the clock advances the playhead
   // across clips/snips, the loaded VOD tracks it. In a gap clipAtPlayhead is null; we KEEP the last

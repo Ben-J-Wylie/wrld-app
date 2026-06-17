@@ -1648,6 +1648,9 @@ none touch WebRTC. Plain `Animated`, native driver, transform/opacity only
   the component renders whatever it's given; sourcing it is the open problem (see handoff).
 - **`TorchVisualizer`** — `on` (+ optional `level`). Lamp with accent core + glow
   halo when lit, ON/OFF label. Suits the on/off "torch channel" (incl. morse).
+  Optional **`onToggle`** makes the lamp a tappable on/off control (the broadcaster's
+  torch toggle — a *signaled* on/off channel, not the device LED; SP6a); omitted →
+  a read-only lamp (viewers).
 
 **Data seam (Aaron — mediasoup + backend + `hooks/` + `screens/`):** unlike audio
 (whose track + `getStats` already flow), these need a **telemetry data path** that

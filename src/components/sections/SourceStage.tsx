@@ -46,7 +46,7 @@ export type SourceRender =
   | { kind: 'accel'; x: number; y: number; z: number }
   | { kind: 'speed'; mps: number; unit?: 'kmh' | 'mph' }
   | { kind: 'temp'; celsius: number; unit?: 'c' | 'f' }
-  | { kind: 'torch'; on: boolean; level?: number }
+  | { kind: 'torch'; on: boolean; level?: number; onToggle?: () => void }
   | { kind: 'loc'; path: LngLat[]; position?: LngLat }
   | { kind: 'profile'; displayName: string; handle: string; avatarUrl?: string | null; attributed?: boolean; meta?: { label: string; value: string }[] }
   | { kind: 'chat'; messages: ChatLogMessage[] }
@@ -100,7 +100,7 @@ function renderSource(s: SourceRender, active: boolean) {
     case 'temp':
       return <TemperatureVisualizer celsius={s.celsius} unit={s.unit} active={active} style={styles.fill} />
     case 'torch':
-      return <TorchVisualizer on={s.on} level={s.level} active={active} style={styles.fill} />
+      return <TorchVisualizer on={s.on} level={s.level} onToggle={s.onToggle} active={active} style={styles.fill} />
     case 'loc':
       return <SourceLocationTrail path={s.path} position={s.position} style={styles.fill} />
     case 'profile':
