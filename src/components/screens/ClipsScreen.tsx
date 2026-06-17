@@ -33,7 +33,7 @@ import { ClipViewer } from '@/components/features/clip/ClipViewer'
 import { SourceRail } from '@/components/features/clip/SourceRail'
 import { ClipSourceView } from '@/components/sections/ClipSourceView'
 import { SourceStage, type SourceRender } from '@/components/sections/SourceStage'
-import { SOURCE_META, SOURCE_RAIL_ORDER } from '@/components/features/stream/sourceMeta'
+import { SOURCE_META, SOURCE_RAIL_ORDER, KIND_TO_FEEDKIND } from '@/components/features/stream/sourceMeta'
 import { useLocalTelemetry } from '@/hooks/useLocalTelemetry'
 import { useLocationTrail } from '@/hooks/useLocationTrail'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
@@ -569,7 +569,21 @@ export const ClipsScreen = () => {
   // via each sample's wall-clock `ts`), so the past replays exactly as it was captured.
   const { data: currentUser } = useCurrentUser()
   const [view, setView] = useState<FeedKind>('cam')
-  const availableViews = SOURCE_RAIL_ORDER
+  // The rail shows ONLY what THIS clip CAPTURED (Ben 2026-06-17) — so it varies per clip. Identity is
+  // always present; camera when there's playable video; the rest from the session's recorded kinds.
+  const availableViews = useMemo<FeedKind[]>(() => {
+    const set = new Set<FeedKind>(['profile']) // identity always
+    if (manifestUrl || playerSession?.kinds.includes('camera')) set.add('cam')
+    for (const k of playerSession?.kinds ?? []) {
+      const fk = KIND_TO_FEEDKIND[k]
+      if (fk) set.add(fk)
+    }
+    return SOURCE_RAIL_ORDER.filter((k) => set.has(k))
+  }, [playerSession, manifestUrl])
+  // Fall back to camera (or the first available) when the held view isn't in this clip's set.
+  useEffect(() => {
+    if (!availableViews.includes(view)) setView(availableViews.includes('cam') ? 'cam' : (availableViews[0] ?? 'cam'))
+  }, [availableViews, view])
   const isCameraView = view === 'cam'
   // The buffer track kind backing the viewed source (null = no recorded track for this kind).
   const bufferKindForView = FEEDKIND_TO_BUFFER[view]

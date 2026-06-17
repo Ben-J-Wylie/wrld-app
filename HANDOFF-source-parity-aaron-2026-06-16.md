@@ -9,6 +9,17 @@ shows the live source). The staged rollout is **`wrld-app/CLAUDE.md` → "Source
 (SP0–SP6)"**. This doc is the *index of the parts that are yours* — exactly what we need from you,
 in priority order. It does not restate Ben's design/app work.
 
+## ⚠️ Update 2026-06-17 (c) — data-only / single-source streams must record a clip
+The rails are now **armed-only** and identity + location are always armed, so a broadcaster can go
+live with **no camera/audio** — e.g. **location-only** (or any single source). The app already
+allows it (`anyAirArmed` gates go-live, not camera/audio) and sends the full armed set to
+`createRoom({ sources })` (incl. `location`/sensors/`chat`, no AV). **Your side:** confirm a
+**data-only room (zero AV producers) is accepted as live AND creates a buffer session that records
+the armed data tracks**, so a clip can be saved from a camera-less broadcast. (CLAUDE.md already
+lists "data-only room support" + "non-AV layer producers" as assumed follow-ups — this is the
+concrete need: location-only must produce a saveable clip.) If a data-only stream currently creates
+no buffer session / no recording, that's the gap.
+
 ## ⚠️ Update 2026-06-17 (b) — NEW ask: a recorded AUDIO AMPLITUDE track (for clip replay)
 Clip playback now replays every source through the live visualizers, sampled at the playhead (compass
 circle, gyro horizon, accel xyz traces that scroll + rewind, torch, location trail, chat). **Audio is

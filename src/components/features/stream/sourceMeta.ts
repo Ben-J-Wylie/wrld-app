@@ -37,3 +37,20 @@ export const SOURCE_META: Record<FeedKind, { icon: IconName; label: string }> = 
 export const SOURCE_RAIL_ORDER: FeedKind[] = [
   'profile', 'loc', 'chat', 'cam', 'audio', 'compass', 'gyro', 'accel', 'speed', 'torch',
 ]
+
+// Backend / buffer track-kind name → FeedKind. The rail shows ARMED (live) / CAPTURED (clip)
+// sources only; both arrive as these backend names (Stream.sources / BufferSession.kinds), so the
+// screens map them to FeedKind to filter SOURCE_RAIL_ORDER. (profile/motion/temp aren't backend
+// tracks — profile is the always-present identity flag; motion is a viewer-derived view of accel.)
+export const KIND_TO_FEEDKIND: Record<string, FeedKind | undefined> = {
+  camera: 'cam',
+  audio: 'audio',
+  screen: 'screen',
+  location: 'loc',
+  compass: 'compass',
+  gyro: 'gyro',
+  accel: 'accel',
+  speed: 'speed',
+  torch: 'torch',
+  chat: 'chat',
+}

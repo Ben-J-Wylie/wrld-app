@@ -62,7 +62,7 @@ import { Icon } from '@/components/primitives/Icon'
 import { IconButton } from '@/components/primitives/IconButton'
 import { LivePill } from '@/components/features/stream/LivePill'
 import { SourceRail } from '@/components/features/clip/SourceRail'
-import { SOURCE_META, SOURCE_RAIL_ORDER } from '@/components/features/stream/sourceMeta'
+import { SOURCE_META, SOURCE_RAIL_ORDER, KIND_TO_FEEDKIND } from '@/components/features/stream/sourceMeta'
 import { SourceStage, type SourceRender } from '@/components/sections/SourceStage'
 import { useBroadcasterClock } from '@/hooks/useBroadcasterClock'
 import { useStreamTelemetry } from '@/hooks/useStreamTelemetry'
@@ -152,11 +152,6 @@ const AIR_KEY_TO_KIND: Record<string, string> = {
   torch: 'torch',
 }
 
-// The full source rail is the SHARED canonical suite (`SOURCE_RAIL_ORDER`) — identical to the clips
-// page, dashboard-ordered. Every source is present; clicking one switches the media surface to its
-// live readout, and a source with no live data shows an honest idle visualizer (`loc` until the SP5
-// relay; audio in preview; temp — no phone sensor).
-const FULL_SOURCE_RAIL: FeedKind[] = SOURCE_RAIL_ORDER
 
 function recordedSourcesFromConfig(cfg: CaptureConfig | null): string[] {
   if (!cfg) return []
@@ -428,13 +423,32 @@ export function StreamScreen() {
   // (camera video OR a source visualizer) renders for the whole time this is
   // true; the SourceRail switches which source is shown.
   const isViewerInRoom = !isNew && status === 'in-room' && !streamEnded && !!remoteStream
-  // The FULL source rail, always present on the stream view (broadcasting or not). Ben's call
-  // (2026-06-16): the rail shows every renderable source at all times — clicking one switches the
-  // media surface to that source's live readout. A source with no live data shows its honest idle
-  // visualizer. `loc` is omitted until the live-location relay lands (SP5).
-  const availableKinds = FULL_SOURCE_RAIL
-  // Which source is currently being shown (defaults to camera).
-  const selectedKind: FeedKind = activeSource ?? 'cam'
+  // The source rail shows ONLY the ARMED sources (Ben 2026-06-17) — not the full suite. Identity is
+  // always present (a flag). Broadcaster: the armed set from captureConfig (air keys are FeedKinds,
+  // + chat). Viewer: the stream's armed sources (Stream.sources, backend names → FeedKind). Ordered
+  // by SOURCE_RAIL_ORDER. (An un-armed source isn't shown — and a data-only/location-only stream is
+  // valid: it still has identity + location.)
+  const availableKinds = useMemo<FeedKind[]>(() => {
+    const set = new Set<FeedKind>(['profile']) // identity always
+    if (isNew) {
+      for (const [k, on] of Object.entries(cfg?.air ?? {})) if (on) set.add(k as FeedKind)
+      if (cfg?.chat === 'on') set.add('chat')
+    } else {
+      for (const s of broadcastSources) {
+        const fk = KIND_TO_FEEDKIND[s as string]
+        if (fk) set.add(fk)
+      }
+    }
+    return SOURCE_RAIL_ORDER.filter((k) => set.has(k))
+  }, [isNew, cfg, broadcastSources])
+  // Which source is shown — the held selection if it's still armed; else camera if armed (the natural
+  // default, even though identity leads the rail order); else the first armed source.
+  const selectedKind: FeedKind =
+    activeSource && availableKinds.includes(activeSource)
+      ? activeSource
+      : availableKinds.includes('cam')
+        ? 'cam'
+        : (availableKinds[0] ?? 'cam')
   const selectSource = (k: FeedKind) => setActiveSource(k)
 
   // Viewer-side live decode of the broadcaster's sensor telemetry (latest per kind), from the

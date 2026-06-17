@@ -3653,7 +3653,7 @@ Demoed together in the gallery's **"SourceRail + source views"** section.
 - **Location:** `src/components/features/clip/SourceRail.tsx` *(built 2026-06-10)*
 - **Variants:** `default` · **Sizes:** 36px icon buttons in a translucent-ink rounded column
 - **States:** per-item active (accent fill, inverse icon) / inactive (light icon) / **disabled** (dimmed icon, non-selectable — a source this buffer didn't capture)
-- **Props:** `sources` (`SourceRailItem[]` = `{ key, iconName, label, disabled? }`), `value`, `onChange`, `orientation?` (`'vertical'` default — the clip-editor field column; `'horizontal'` — the stream-view + clips-page bottom bands, **shared `SOURCE_RAIL_ORDER`** so both rails are identical, dashboard-ordered; the horizontal row is **horizontally scrollable**, centred when the full 12-source suite fits, pannable when it overflows), `style?`
+- **Props:** `sources` (`SourceRailItem[]` = `{ key, iconName, label, disabled? }`), `value`, `onChange`, `orientation?` (`'vertical'` default — the clip-editor field column; `'horizontal'` — the stream-view + clips-page bottom bands, **dashboard-ordered** via `SOURCE_RAIL_ORDER`; horizontally **scrollable**, centred when it fits, pannable when it overflows), `style?`. The screens pass only the **armed (live) / captured (clip)** sources (identity always; 2026-06-17) — so the rail varies by stream and per clip, not the full suite.
 
 **Code does:** A self-contained `rgba(20,16,12,0.55)` column (reads over dark video, a
 light map, or a paper identity card). The rail shows the **full** source set; items with
