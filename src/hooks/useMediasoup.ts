@@ -72,43 +72,69 @@ export function useMediasoup() {
   // broadcaster's own mic) + its getStats poll; torn down in cleanup().
   const audioStatsRef = useRef<{ getStats(): Promise<unknown> } | null>(null)
   const audioLevelTimer = useRef<ReturnType<typeof setInterval> | null>(null)
-  // PREVIEW audio meter: a throwaway local RTCPeerConnection that holds the mic track so
-  // getStats() yields `media-source.audioLevel` BEFORE going live (there's no producer/sender
-  // to meter in preview otherwise). Torn down on go-live (the real producer poll takes over),
+  // PREVIEW audio meter: a local LOOPBACK (sender PC ↔ receiver PC, both on-device) carrying the
+  // mic track, so the audio pipeline actually RUNS and `media-source.audioLevel` reports BEFORE
+  // going live (a one-sided PC doesn't process audio → no level). The receiver is muted so the
+  // broadcaster doesn't hear themselves. Torn down on go-live (the real producer poll takes over),
   // on a source change, and in cleanup().
-  const meterPcRef = useRef<RTCPeerConnection | null>(null)
+  const meterPcsRef = useRef<RTCPeerConnection[]>([])
 
-  // Tear down whatever is currently driving audioLevel (preview meter PC and/or the poll).
+  // Tear down whatever is currently driving audioLevel (preview loopback PCs and/or the poll).
   const stopAudioMeter = useCallback(() => {
     if (audioLevelTimer.current) {
       clearInterval(audioLevelTimer.current)
       audioLevelTimer.current = null
     }
     audioStatsRef.current = null
-    if (meterPcRef.current) {
+    for (const pc of meterPcsRef.current) {
       try {
-        meterPcRef.current.close() // closes the PC's sender; the track lives on in localStream
+        pc.close() // closes the PC; the mic track lives on in localStream (reused on go-live)
       } catch {}
-      meterPcRef.current = null
     }
+    meterPcsRef.current = []
     setAudioLevel(0)
   }, [])
 
-  // Start a preview meter for the mic in `stream`. A local offer (no remote, no server) is enough
-  // to activate the sender so its source-side `audioLevel` reports — so the audio visualizer moves
-  // in preview, always, not just when live. Best-effort: on any failure the visualizer stays idle.
+  // Start a preview meter for the mic in `stream`. A one-sided PC isn't enough on RN-WebRTC (the
+  // audio isn't processed without a peer, so no `audioLevel`), so we wire a real LOCAL LOOPBACK:
+  // pc1 sends the mic to pc2 over host candidates (no STUN/TURN, no server). Once connected the
+  // sender's `media-source.audioLevel` reports — the same stat the live producer uses. pc2's
+  // received audio is muted (volume 0) so there's no echo. Best-effort: failure → idle.
   const startPreviewMeter = useCallback(async (stream: MediaStream) => {
     stopAudioMeter()
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const audioTrack = (stream as any).getAudioTracks?.()[0]
       if (!audioTrack) return
-      const pc = new RTCPeerConnection({})
-      pc.addTrack(audioTrack, stream)
-      const offer = await pc.createOffer({})
-      await pc.setLocalDescription(offer)
-      meterPcRef.current = pc
-      audioStatsRef.current = pc as unknown as { getStats(): Promise<unknown> }
+      const pc1 = new RTCPeerConnection({}) // sender (we poll this one's media-source.audioLevel)
+      const pc2 = new RTCPeerConnection({}) // receiver (muted — only there to complete the pipeline)
+      meterPcsRef.current = [pc1, pc2]
+      // RN-WebRTC's RTCPeerConnection TS type omits addEventListener — cast for the event wiring.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const e1 = pc1 as any
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const e2 = pc2 as any
+      e1.addEventListener('icecandidate', (e: { candidate?: unknown }) => {
+        if (e.candidate) pc2.addIceCandidate(e.candidate as never).catch(() => {})
+      })
+      e2.addEventListener('icecandidate', (e: { candidate?: unknown }) => {
+        if (e.candidate) pc1.addIceCandidate(e.candidate as never).catch(() => {})
+      })
+      // Mute the looped-back audio so the broadcaster doesn't hear their own mic (the level stat is
+      // measured pre-playback, so muting doesn't affect it).
+      e2.addEventListener('track', (e: { track?: { _setVolume?: (v: number) => void } }) => {
+        try {
+          e.track?._setVolume?.(0)
+        } catch {}
+      })
+      pc1.addTrack(audioTrack, stream)
+      const offer = await pc1.createOffer({})
+      await pc1.setLocalDescription(offer)
+      await pc2.setRemoteDescription(offer)
+      const answer = await pc2.createAnswer()
+      await pc2.setLocalDescription(answer)
+      await pc1.setRemoteDescription(answer)
+      audioStatsRef.current = pc1 as unknown as { getStats(): Promise<unknown> }
       audioLevelTimer.current = startAudioLevelPoll(audioStatsRef.current, setAudioLevel)
     } catch {
       stopAudioMeter() // metering unavailable → idle, no worse than before
