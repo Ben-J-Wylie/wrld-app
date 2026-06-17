@@ -3336,12 +3336,13 @@ location relay · SP6 persist/save audit + screen). The SP2/SP3(non-loc)/SP4 sta
 > separate device-specific spike (likely a native module that contends with WebRTC's camera).
 > **SP6b screen: deferred to v0.3** (mark the `screen` rail view honest-idle).
 
-> **Backend items ✅ ALL DONE (Aaron, 2026-06-17)** — data-only recording + wall-clock `durationSec`,
-> `temp`/`motion` dropped from `VALID_SOURCES`, the `audiolevel` companion track. The **audio Ben
-> follow-up is also done** (`AudioVisualizer` history-mode reads the recorded `audiolevel` window).
-> Remaining: an **on-device verify of the data-only path** (location-only go-live → clip persists +
-> saves) and confirming `GET /buffer/me` exposes `audiolevel` in each session's `dataUrls` (the
-> clips timeline reads it there). Detail: `HANDOFF-source-parity-aaron-2026-06-16.md` "OPEN ITEMS".
+> **Backend items ✅ ALL DONE (Aaron, 2026-06-17)** — data-only recording + wall-clock `durationSec`
+> (✅ data-only persistence on-device verified), `temp`/`motion` dropped from `VALID_SOURCES`, the
+> `audiolevel` companion track now exposed in `session.dataUrls.audiolevel` (`wrld-backend` `b3258c5`
+> — was the one missing key). App side done: clip rail derives from `kinds`∪`dataUrls` (chat/audio/
+> location confirmed on-device), and `AudioVisualizer` history-mode reads the `audiolevel` window.
+> **Remaining: deploy `wrld-backend` to the box + on-device verify the audio waveform replays.**
+> Detail: `HANDOFF-source-parity-aaron-2026-06-16.md` "OPEN ITEMS".
 
 ### Seam (unchanged)
 Ben owns `primitives/`/`features/`/`sections/` + DESIGN.md + CONTENT.md §6 (the rail, the

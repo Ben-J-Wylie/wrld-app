@@ -34,13 +34,11 @@ items below are now **all built + deployed** (api rebuilt, mediasoup restarted, 
    same as live). The clips timeline reads it from **`session.dataUrls.audiolevel`** (the buffer
    path the other data tracks use). `audiolevel` is a companion of the audio source (filtered out of
    the rail via `KIND_TO_FEEDKIND`) — rendered inside the audio waveform, not as a standalone rail item.
-   **⚠️ CONFIRMED GAP (2026-06-17, on-device):** for an audio-armed clip, `GET /buffer/me` returns
-   `audiolevel` in the session's **`kinds`** but NOT in its **`dataUrls`** (probed:
-   `kinds=audio|location|chat|audiolevel`, `dataUrls=location|chat`). location/chat/compass replay
-   fine (they're in `dataUrls`); audio stays flat because `dataUrls.audiolevel` is absent. **Please
-   add the `audiolevel` track's tokenized URL to each session's `dataUrls` map** in `GET /buffer/me`
-   — then the clip audio waveform replays (the app wiring is done and waiting on that one key). The
-   rail itself is correct (audio shows, via `kinds`); only the waveform DATA is missing.
+   **✅ GAP CLOSED (Aaron, `wrld-backend` `b3258c5`).** `audiolevel` was in the session's `kinds` but
+   not its `dataUrls` (probed `kinds=audio|location|chat|audiolevel`, `dataUrls=location|chat`). Aaron
+   added `audiolevel` to `DATA_KINDS` (+ `KNOWN_KINDS`), so it now appears in `session.dataUrls.audiolevel`
+   AND the kind-generic serve route whitelists it. Matches the app's read exactly → the clip audio
+   waveform replays end-to-end **once the backend is deployed** (pull + restart on the box).
 
 > **On-device done-bar (item 1 — Aaron/Ben to verify):** arm ONLY location (no camera/audio) → go live
 > → stop → the location-only session appears in the Clips timeline with non-zero width and persists,
