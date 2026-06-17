@@ -76,12 +76,21 @@ camera/audio/sensors/chat/location ✓. **Gaps to close:**
 - Confirm the recorder writes a track for **any** armed kind (not a hardcoded subset) so new sources
   don't silently fail to record.
 
-### 3. SP6b — **Screen source end-to-end** (largest — likely its own slice)
-Screen share has no path at all today: no capture/produce (mediasoup), no record track, no live
-consume. This is the biggest remaining parity gap and probably wants its own mini-rollout. Scope:
-`getDisplayMedia`/screen producer → live consume (viewer + the `screen` rail view already exists as a
-slot) → record track → promote. Flag if screen should stay deferred (v0.3) — if so we mark it
-explicitly so the rail shows `screen` as honest-idle rather than implying parity.
+### 3. SP6b — **v0.3 native-capture slice: screen share + real device torch** (DEFERRED, decided 2026-06-17)
+Build these two together — both need native capture work RN-WebRTC doesn't expose:
+- **Screen share** has no path today: no capture/produce (mediasoup), no record track, no live
+  consume. Scope: `getDisplayMedia`/screen producer → live consume (the `screen` rail view already
+  exists as a slot) → record track → promote.
+- **Real device torch (LED).** The toggle already works as a **signaled on/off channel** (lamp UI +
+  viewer sync + record — done). The remaining piece is lighting the **physical LED**, which
+  RN-WebRTC 124 doesn't expose: it needs a native module that controls the torch on the WebRTC-owned
+  `AVCaptureDevice` (or coexists with it) **without resetting the pinned capture resolution** (that
+  pin is what keeps the buffer codec-uniform — don't break it). iOS Control Center can't toggle it
+  either while the app holds the camera, so the app must own it. The lamp UI + record path are done,
+  so this spike only swaps the physical LED in behind the existing toggle.
+
+Both are **v0.3** + need an **EAS rebuild**. Until then the rail shows `screen` honest-idle and torch
+as the signaled channel.
 
 ---
 
