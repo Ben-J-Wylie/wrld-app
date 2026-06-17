@@ -15,6 +15,10 @@ export type BufferTrackKind =
   | 'speed'
   | 'torch'
   | 'chat'
+  // A companion DATA track of the audio source (not a source kind itself): the broadcaster's
+  // audioLevel (0..1) sampled ~10 Hz, recorded so a clip's audio WAVEFORM can replay/scrub at the
+  // playhead (SP6a item 4, Aaron). Lives on `dataUrls.audiolevel`; the audio source view reads it.
+  | 'audiolevel'
 
 export type BufferSession = {
   id: string

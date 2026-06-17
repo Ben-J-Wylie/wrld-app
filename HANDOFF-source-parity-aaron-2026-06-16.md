@@ -29,10 +29,13 @@ items below are now **all built + deployed** (api rebuilt, mediasoup restarted, 
 4. ✅ **Audio-amplitude track** (`8b347eb` mediasoup + `dbcacc2` app; backend generic, no change):
    when audio is recorded, mediasoup opens an `audiolevel` `.jsonl` companion; the broadcaster emits
    `{kind:'audiolevel',ts,level}` (~10 Hz, `useAudioLevelCapture`) which records generically.
-   **→ Ben follow-up:** feed the recorded `audiolevel` track into `AudioVisualizer`'s playback
-   `history` mode. Its `dataUrl` is on `GET /buffer/me/clips` per-track `tracks[]`. `audiolevel` is a
-   **companion of the audio source** (the rail already filters it out via `KIND_TO_FEEDKIND`) — render
-   it inside the audio waveform, not as a standalone rail item.
+   **→ Ben follow-up ✅ DONE (2026-06-17):** `AudioVisualizer` gained a playback `history` mode and
+   the clip audio view feeds it the recorded `audiolevel` window at the playhead (scroll + rewind,
+   same as live). The clips timeline reads it from **`session.dataUrls.audiolevel`** (the buffer
+   path the other data tracks use) — **please confirm `GET /buffer/me` exposes `audiolevel` in each
+   session's `dataUrls`** (your note referenced the saved-clip `tracks[]` path; the timeline uses
+   the session `dataUrls`). `audiolevel` is a companion of the audio source (filtered out of the rail
+   via `KIND_TO_FEEDKIND`) — rendered inside the audio waveform, not as a standalone rail item.
 
 > **On-device done-bar (item 1 — Aaron/Ben to verify):** arm ONLY location (no camera/audio) → go live
 > → stop → the location-only session appears in the Clips timeline with non-zero width and persists,

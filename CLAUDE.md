@@ -3336,16 +3336,12 @@ location relay · SP6 persist/save audit + screen). The SP2/SP3(non-loc)/SP4 sta
 > separate device-specific spike (likely a native module that contends with WebRTC's camera).
 > **SP6b screen: deferred to v0.3** (mark the `screen` rail view honest-idle).
 
-> **Open BACKEND items for Aaron (2026-06-17), tracked in `HANDOFF-source-parity-aaron-2026-06-16.md`:**
-> (1) **Data-only / single-source streams must record a saveable clip** — a location-only (or any
-> non-AV) go-live must create a buffer **session** + record the armed data tracks + set the session's
-> wall-clock `durationSec`. The app allows the go-live, sends the full armed set to `createRoom`, and
-> renders a media-less session by `durationSec` (so it persists in the Clips timeline — fixed
-> 2026-06-17), **but only if `GET /buffer/me` returns the session**; if a camera-less broadcast makes
-> no session, the clip vanishes on stop. (2) **Drop `temp` from `VALID_SOURCES`** (deprecated — no
-> phone instrument); confirm **`accel`** is the armed/recorded kind (not `motion`). (3) **(lower)** an
-> **audio-amplitude `.jsonl` track** (`{ts,level}` ≈10 Hz on `session.dataUrls.audio`) so clip audio
-> replays its waveform (the app feeds it into `AudioVisualizer`'s playback `history` mode).
+> **Backend items ✅ ALL DONE (Aaron, 2026-06-17)** — data-only recording + wall-clock `durationSec`,
+> `temp`/`motion` dropped from `VALID_SOURCES`, the `audiolevel` companion track. The **audio Ben
+> follow-up is also done** (`AudioVisualizer` history-mode reads the recorded `audiolevel` window).
+> Remaining: an **on-device verify of the data-only path** (location-only go-live → clip persists +
+> saves) and confirming `GET /buffer/me` exposes `audiolevel` in each session's `dataUrls` (the
+> clips timeline reads it there). Detail: `HANDOFF-source-parity-aaron-2026-06-16.md` "OPEN ITEMS".
 
 ### Seam (unchanged)
 Ben owns `primitives/`/`features/`/`sections/` + DESIGN.md + CONTENT.md §6 (the rail, the

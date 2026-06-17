@@ -31,7 +31,6 @@ import { type LaneClip } from '@/components/features/clip/ClipLane'
 import { ClipsTimeline, type ClipsTimelineHandle } from '@/components/features/clip/ClipsTimeline'
 import { ClipViewer } from '@/components/features/clip/ClipViewer'
 import { SourceRail } from '@/components/features/clip/SourceRail'
-import { ClipSourceView } from '@/components/sections/ClipSourceView'
 import { SourceStage, type SourceRender } from '@/components/sections/SourceStage'
 import { SOURCE_META, SOURCE_RAIL_ORDER, KIND_TO_FEEDKIND, pickDefaultView } from '@/components/features/stream/sourceMeta'
 import { useLocalTelemetry } from '@/hooks/useLocalTelemetry'
@@ -70,12 +69,10 @@ const MIN_REMAINDER_MS = 1000 // don't show carved remainders shorter than this
 const OPT_LIVE_SESSION = 'live:optimistic'
 const OPT_LIVE_ID = 'live:optimistic'
 
-// ── source switching (the viewer's source rail) ── the rail is the SHARED canonical suite
-// (`SOURCE_RAIL_ORDER`, FeedKind) — IDENTICAL to the stream view, dashboard-ordered. `cam` is the
-// video frame (ClipViewer's frameSlot); the rest render via ClipSourceView from the session's
-// `.jsonl` data tracks at the playhead. A source the clip didn't capture / can't replay shows an
-// honest idle. This maps each rail FeedKind to its backing buffer track kind (null = no track →
-// idle, e.g. profile/motion/temp/torch/screen).
+// ── source switching (the viewer's source rail) ── `cam` is the video frame (ClipViewer's
+// frameSlot); every other captured source replays via the live SourceStage visualizers, fed the
+// recorded sample at the playhead. This maps each rail FeedKind to its backing buffer track kind
+// (audio's DATA is the `audiolevel` companion, handled specially below; profile has no track).
 const FEEDKIND_TO_BUFFER: Partial<Record<FeedKind, BufferTrackKind>> = {
   cam: 'camera',
   audio: 'audio',
@@ -87,9 +84,6 @@ const FEEDKIND_TO_BUFFER: Partial<Record<FeedKind, BufferTrackKind>> = {
   chat: 'chat',
   screen: 'screen',
 }
-// Audio has no per-sample amplitude `.jsonl` (it's an HLS audio track), so the waveform is a
-// steady placeholder shown while the VOD audio plays — the playhead still lights it left→right.
-const PLACEHOLDER_PEAKS = Array.from({ length: 56 }, (_, i) => 0.3 + 0.55 * Math.abs(Math.sin(i * 0.5)))
 
 const sessionStartMs = (s: BufferSession) => Date.parse(s.startedAt) + (s.mediaStartOffsetMs ?? 0)
 // A session's length: its flushed MEDIA when there is media (camera/audio — the footage length, which
@@ -594,16 +588,16 @@ export const ClipsScreen = () => {
   // The buffer track kind backing the viewed source (null = no recorded track for this kind).
   const bufferKindForView = FEEDKIND_TO_BUFFER[view]
 
-  // Position within the played session, 0..1 — drives the audio placeholder waveform's light-up.
-  const viewProgress = useMemo(() => {
-    if (!playerSession) return 0
-    const st = sessionStartMs(playerSession)
-    const en = sessionEndMs(playerSession)
-    return clamp((playheadMs - st) / Math.max(1, en - st), 0, 1)
-  }, [playerSession, playheadMs])
-
-  // Fetch the viewed data track for the played session ([] while camera / audio / loading / evicted).
-  const currentDataUrl = isCameraView || view === 'audio' || !bufferKindForView ? null : playerSession?.dataUrls?.[bufferKindForView]
+  // Fetch the viewed data track for the played session ([] while camera / loading / evicted). The
+  // AUDIO view reads the `audiolevel` companion track (its `{ts, level}` envelope) — not the `audio`
+  // HLS — so the clip audio WAVEFORM replays (SP6a item 4, Aaron's recorder).
+  const currentDataUrl = isCameraView
+    ? null
+    : view === 'audio'
+      ? playerSession?.dataUrls?.audiolevel
+      : bufferKindForView
+        ? playerSession?.dataUrls?.[bufferKindForView]
+        : null
   const dataSamples = useDataTrack(currentDataUrl)
 
   // The wall-clock instant to sample the recorded track at. When the playhead is WITHIN the played
@@ -618,13 +612,17 @@ export const ClipsScreen = () => {
   }, [playerSession, playheadMs])
 
   // The RECORDED source picture — the live `SourceRender` shape, sampled at `sampledMs`, rendered by
-  // SourceStage (same visualizers as live). audio is excluded (no per-sample loudness track → it keeps
-  // its placeholder waveform below); camera is the frameSlot video.
+  // SourceStage (same visualizers as live). camera is the frameSlot video.
   const recordedSource = useMemo<SourceRender | null>(() => {
-    if (isCameraView || view === 'audio') return null
+    if (isCameraView) return null
     const s = sampleAt(dataSamples, sampledMs)
     const nf = (k: string) => (s && typeof s[k] === 'number' ? (s[k] as number) : 0)
     switch (view) {
+      case 'audio': {
+        // The recorded audiolevel window up to the playhead → the waveform scrolls/rewinds like live.
+        const history = recentUpTo(dataSamples, sampledMs, 48).map((d) => (typeof d.level === 'number' ? d.level : 0))
+        return { kind: 'audio', level: history[history.length - 1] ?? 0, variant: 'waveform', history }
+      }
       case 'compass':
         return { kind: 'compass', heading: nf('heading') }
       case 'gyro':
@@ -1711,18 +1709,16 @@ export const ClipsScreen = () => {
                 }
                 // A non-camera source covers the (still-mounted, still-audible) video with its picture.
                 // At the now edge while live → the LIVE source; otherwise the RECORDED source replayed
-                // at the playhead — both through the same SourceStage visualizers. audio keeps its
-                // placeholder waveform (no per-sample loudness track; the VOD audio still plays).
+                // at the playhead — both through the same SourceStage visualizers (audio included, from
+                // its recorded audiolevel envelope).
                 sourceSlot={
                   isCameraView
                     ? undefined
                     : atLiveEdge && liveSourceRender
                       ? <SourceStage sources={[view]} selected={view} onSelect={() => {}} source={liveSourceRender} style={StyleSheet.absoluteFill} />
-                      : view === 'audio'
-                        ? <ClipSourceView source={{ kind: 'audio', peaks: PLACEHOLDER_PEAKS, progress: viewProgress }} />
-                        : recordedSource
-                          ? <SourceStage sources={[view]} selected={view} onSelect={() => {}} source={recordedSource} active={recordedActive} style={StyleSheet.absoluteFill} />
-                          : undefined
+                      : recordedSource
+                        ? <SourceStage sources={[view]} selected={view} onSelect={() => {}} source={recordedSource} active={recordedActive} style={StyleSheet.absoluteFill} />
+                        : undefined
                 }
               />
               {/* Gap card — over unbroadcasted time (scrub-through or the play rush). absoluteFills

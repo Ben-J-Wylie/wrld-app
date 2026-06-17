@@ -39,7 +39,7 @@ type LngLat = [number, number]
 export type SourceRender =
   | { kind: 'cam'; slot: ReactNode } // injected <RTCView> (screen lane)
   | { kind: 'screen'; slot: ReactNode } // injected <RTCView> (screen lane)
-  | { kind: 'audio'; level: number; variant?: 'waveform' | 'orb' }
+  | { kind: 'audio'; level: number; variant?: 'waveform' | 'orb'; history?: number[] }
   | { kind: 'compass'; heading: number }
   | { kind: 'gyro'; pitch: number; roll: number }
   | { kind: 'motion'; intensity: number }
@@ -86,7 +86,7 @@ function renderSource(s: SourceRender, active: boolean) {
     case 'screen':
       return <View style={styles.fill}>{s.slot}</View>
     case 'audio':
-      return <AudioVisualizer level={s.level} variant={s.variant} active={active} style={styles.fill} />
+      return <AudioVisualizer level={s.level} variant={s.variant} history={s.history} active={active} style={styles.fill} />
     case 'compass':
       return <CompassVisualizer heading={s.heading} active={active} style={styles.fill} />
     case 'gyro':

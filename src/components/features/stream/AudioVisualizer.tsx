@@ -48,6 +48,10 @@ type Props = {
   label?: string
   /** Waveform resolution (bar count). Effectively static — set once. */
   barCount?: number
+  /** PLAYBACK mode (clip replay): the recorded level window (oldest → newest) ending at the
+   *  playhead. When set, the waveform is driven by this directly (scroll + rewind with the
+   *  playhead) instead of the live real-time ticker — so a clip's audio replays as it sounded. */
+  history?: number[]
   style?: StyleProp<ViewStyle>
 }
 
@@ -68,40 +72,54 @@ export function AudioVisualizer({
   active = true,
   label = 'AUDIO',
   barCount = 48,
+  history,
   style,
 }: Props) {
   return (
     <VisualizerFrame icon="mic" label={label} dim={!active} style={style}>
       {variant === 'orb' ? (
-        <Orb level={level} active={active} />
+        <Orb level={history && history.length ? history[history.length - 1]! : level} active={active} />
       ) : (
-        <Waveform level={level} active={active} barCount={barCount} />
+        <Waveform level={level} history={history} active={active} barCount={barCount} />
       )}
     </VisualizerFrame>
   )
 }
 
-function Waveform({ level, active, barCount }: { level: number; active: boolean; barCount: number }) {
+function Waveform({ level, history, active, barCount }: { level: number; history?: number[]; active: boolean; barCount: number }) {
+  const playback = !!history
   // Latest target held in a ref so the steady ticker samples it (decouples scroll
   // cadence from the prop's update rate).
   const target = useRef(0)
   target.current = active ? level : 0
   const smooth = useRef(0)
-  const [bars, setBars] = useState<number[]>(() => new Array(barCount).fill(0))
+  const [tickBars, setTickBars] = useState<number[]>(() => new Array(barCount).fill(0))
 
+  // LIVE: a steady ticker scrolls the latest level in. PLAYBACK: the prop drives it — no ticker.
   useEffect(() => {
+    if (playback) return
     const id = setInterval(() => {
       const t = target.current
       const cur = smooth.current
       smooth.current = cur + (t - cur) * (t > cur ? ATTACK : DECAY)
-      setBars((prev) => {
+      setTickBars((prev) => {
         const next = prev.slice(1)
         next.push(smooth.current)
         return next
       })
     }, SAMPLE_MS)
     return () => clearInterval(id)
-  }, [])
+  }, [playback])
+
+  // PLAYBACK: the recorded level window, left-padded to barCount so it scrolls in from the left as
+  // it fills (newest on the right, like live). LIVE: the ticker history.
+  const bars = playback
+    ? (() => {
+        const w = history!.slice(-barCount)
+        const pad = barCount - w.length
+        return pad > 0 ? [...new Array(pad).fill(0), ...w] : w
+      })()
+    : tickBars
 
   const n = bars.length
   return (
