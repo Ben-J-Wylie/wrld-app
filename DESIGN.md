@@ -3650,7 +3650,7 @@ Demoed together in the gallery's **"SourceRail + source views"** section.
 - **Location:** `src/components/features/clip/SourceRail.tsx` *(built 2026-06-10)*
 - **Variants:** `default` · **Sizes:** 36px icon buttons in a translucent-ink rounded column
 - **States:** per-item active (accent fill, inverse icon) / inactive (light icon) / **disabled** (dimmed icon, non-selectable — a source this buffer didn't capture)
-- **Props:** `sources` (`SourceRailItem[]` = `{ key, iconName, label, disabled? }`), `value`, `onChange`, `style?`
+- **Props:** `sources` (`SourceRailItem[]` = `{ key, iconName, label, disabled? }`), `value`, `onChange`, `orientation?` (`'vertical'` default — the clip-editor field column; `'horizontal'` — the stream-view + clips-page bottom bands, ordered to match the dashboard), `style?`
 
 **Code does:** A self-contained `rgba(20,16,12,0.55)` column (reads over dark video, a
 light map, or a paper identity card). The rail shows the **full** source set; items with

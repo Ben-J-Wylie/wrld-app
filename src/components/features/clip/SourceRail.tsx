@@ -33,13 +33,16 @@ type Props = {
   sources: SourceRailItem[]
   value: string
   onChange: (key: string) => void
+  // Column (default — the clip-editor field rail) or row (the stream view + clips-page rails,
+  // which sit horizontally between the bottom controls). Same pill, same ink track, axis swapped.
+  orientation?: 'vertical' | 'horizontal'
   style?: StyleProp<ViewStyle>
 }
 
-export function SourceRail({ sources, value, onChange, style }: Props) {
+export function SourceRail({ sources, value, onChange, orientation = 'vertical', style }: Props) {
   if (sources.length === 0) return null
   return (
-    <View style={[styles.rail, style]}>
+    <View style={[styles.rail, orientation === 'horizontal' && styles.railHorizontal, style]}>
       {sources.map((s) => {
         const active = !s.disabled && s.key === value
         return (
@@ -76,6 +79,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 3,
     gap: 2,
     alignItems: 'center',
+  },
+  // Horizontal: a row track (swap padding so the pill stays snug on the short axis).
+  railHorizontal: {
+    flexDirection: 'row',
+    paddingVertical: 3,
+    paddingHorizontal: theme.spacing.xs,
+    justifyContent: 'center',
   },
   btn: {
     width: 30,
