@@ -585,12 +585,6 @@ export const ClipsScreen = () => {
     }
     return SOURCE_RAIL_ORDER.filter((k) => set.has(k))
   }, [playerSession, manifestUrl])
-  // DEV probe (2026-06-17): what the played session actually exposes — kinds vs dataUrls keys — so we
-  // can tell whether a missing rail source is a backend listing gap or an app derivation bug.
-  useEffect(() => {
-    if (__DEV__ && playerSession)
-      console.log(`[clip-rail] session=${playerSession.id} kinds=${playerSession.kinds.join('|') || '-'} dataUrls=${Object.keys(playerSession.dataUrls ?? {}).join('|') || '-'} → rail=${availableViews.join('|')}`)
-  }, [playerSession, availableViews])
   // When the held view isn't in this clip's set, fall back to the most important captured source
   // (default-view priority — camera first, … location, identity last).
   useEffect(() => {
