@@ -9,22 +9,35 @@ shows the live source). The staged rollout is **`wrld-app/CLAUDE.md` → "Source
 (SP0–SP6)"**. This doc is the *index of the parts that are yours* — exactly what we need from you,
 in priority order. It does not restate Ben's design/app work.
 
-## ✅ OPEN ITEMS FOR AARON — start here (updated 2026-06-17)
+## ✅ OPEN ITEMS FOR AARON — ALL DONE on `main` (2026-06-17), on-device verify owed
 The app side of source-parity is done + on `main` (armed/captured rails, clip-source replay through
-the live visualizers sampled at the playhead, now-edge default, camera-off preview). What's left is
-backend, in priority order — detail in the dated sections below:
+the live visualizers sampled at the playhead, now-edge default, camera-off preview). The backend
+items below are now **all built + deployed** (api rebuilt, mediasoup restarted, all 3 repos pushed).
+**The data-only path can only be confirmed on-device (CI can't run mediasoup) — see done-bar below.**
 
-1. **Data-only / single-source streams must record a saveable clip** (highest — blocks camera-less
-   capture). A location-only (or any non-AV) go-live must create a buffer **session** + record the
-   armed data tracks + set the session's wall-clock `durationSec`. The app already allows the go-live,
-   sends the full armed set to `createRoom`, and now renders a media-less session by its `durationSec`
-   so it persists in the Clips timeline — **but only if `GET /buffer/me` RETURNS that session.** If a
-   camera-less broadcast creates no session, the clip vanishes when the broadcast stops. → update (c).
-2. **Drop `temp` from `VALID_SOURCES`** — ambient temp deprecated (no phone instrument); don't
-   record/promote a `temp` track. → update (a).
-3. **Confirm `accel` is the armed/recorded kind** (not `motion`); drop `motion` from `VALID_SOURCES`
-   if present (`motion` is a viewer-derived view of `accel`). → update (a).
-4. **(lower)** an **audio-amplitude `.jsonl` track** so clip audio replays its waveform. → update (b).
+1. ✅ **Data-only / single-source streams record a saveable clip.** Two real gaps, both fixed:
+   - **mediasoup** (`8b347eb`): `maybeAutoStartRecording` was only called from `'produce'` (a media
+     event), so a data-only go-live never started recording. `createRoom` now triggers it once the
+     Stream row exists when the armed set has data sources but no media (`isDataOnlySourceSet`).
+   - **backend** (`9693cde`): `GET /buffer/me` returned `durationSec: 0` for a media-less session (the
+     desync fix made it media-only); it now falls back to **wall-clock** `((endedAt ?? now) − startedAt)`
+     so the clip has width and persists. `mediaDurationSec` stays 0.
+2. ✅ **Dropped `temp` from `VALID_SOURCES`** (backend `9693cde`) — and incoming `sources` are now
+   **stripped of unknown values** rather than rejected, so a legacy client still arming `temp`/`motion`
+   keeps going live.
+3. ✅ **`accel` confirmed the armed/recorded kind; `motion` dropped from `VALID_SOURCES`** (same commit).
+4. ✅ **Audio-amplitude track** (`8b347eb` mediasoup + `dbcacc2` app; backend generic, no change):
+   when audio is recorded, mediasoup opens an `audiolevel` `.jsonl` companion; the broadcaster emits
+   `{kind:'audiolevel',ts,level}` (~10 Hz, `useAudioLevelCapture`) which records generically.
+   **→ Ben follow-up:** feed the recorded `audiolevel` track into `AudioVisualizer`'s playback
+   `history` mode. Its `dataUrl` is on `GET /buffer/me/clips` per-track `tracks[]`. `audiolevel` is a
+   **companion of the audio source** (the rail already filters it out via `KIND_TO_FEEDKIND`) — render
+   it inside the audio waveform, not as a standalone rail item.
+
+> **On-device done-bar (item 1 — Aaron/Ben to verify):** arm ONLY location (no camera/audio) → go live
+> → stop → the location-only session appears in the Clips timeline with non-zero width and persists,
+> and saving it produces a clip carrying the `location` `.jsonl` track. (Item 4: confirm an audio
+> go-live's saved clip carries an `audiolevel` track via `GET /buffer/me/clips` `tracks[]`.)
 
 Already done by you: **SP5 live location relay** ✅. **v0.3** (deferred): SP6b — screen share + the
 real device torch LED (native-capture spike).
