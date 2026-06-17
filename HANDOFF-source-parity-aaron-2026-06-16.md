@@ -9,6 +9,21 @@ shows the live source). The staged rollout is **`wrld-app/CLAUDE.md` → "Source
 (SP0–SP6)"**. This doc is the *index of the parts that are yours* — exactly what we need from you,
 in priority order. It does not restate Ben's design/app work.
 
+## ⚠️ Update 2026-06-17 — two model changes on `design` (heads-up + one ask)
+- **Ambient temp is DEPRECATED — please deprecate the data path.** There's no ambient-temperature
+  instrument on real phones (iOS has no API; the Android sensor is absent on ~all devices), so it
+  could never show data. Ben removed `temp` from the **dashboard** and the **source rail** (both
+  surfaces) on `design`. **Your side:** drop `temp` from `VALID_SOURCES` / the recordable kind set
+  and don't record/promote a `temp` track (it would only ever be empty). No migration needed — temp
+  was never armable in practice. The `TemperatureVisualizer` component stays parked (unused) in case
+  a future external/BLE thermometer ever provides a real source.
+- **Accelerometer is ONE source, keyed `accel`** (not `motion`). `accel` (raw 3-axis) and `motion`
+  (its derived magnitude) are the same instrument; the dashboard now arms it once as **`accel`**
+  ("Accelerometer", 3-axis) and the rail shows the xyz readout. The recorded track is already
+  `accel` (a `BufferTrackKind`), so this matches your substrate — just be aware the armed/recorded
+  kind from the app is **`accel`**, and `motion` is a viewer-derived view, never armed/recorded on
+  its own. (If `VALID_SOURCES` had `motion`, it can go; keep `accel`.)
+
 ## What's already shipped (so you don't redo it)
 - **Sensor + chat live relays** (`telemetry`/`telemetryUpdate`, chat) — done (your work, June 2026).
 - **Per-source recording** of the armed set (camera/audio/sensors/chat/location) → buffer `.jsonl`

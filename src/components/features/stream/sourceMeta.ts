@@ -29,12 +29,11 @@ export const SOURCE_META: Record<FeedKind, { icon: IconName; label: string }> = 
 
 // The canonical source-rail order — the SAME ordered suite on every frame (stream view + clips
 // page), so the rails are identical. Matches the DASHBOARD's arming set 1:1 (one button per armable
-// instrument). `motion` is the accelerometer (its dashboard label is "Motion intensity"); there is
-// NO separate `accel` button — accel and motion are the same instrument (the raw 3-axis vector vs.
-// its derived magnitude), and the dashboard arms it once, so the rail shows it once. (The `accel`
-// render path stays for the eventual single readout.) `screen` is excluded until it has a
-// capture/render path (SP6). A source a frame can't render yet shows an honest idle (camera-parity,
-// CONTENT.md §6) — location idle on the live stream until the SP5 relay; etc.
+// instrument). The accelerometer is ONE entry — `accel` (the raw 3-axis readout); `motion` (its
+// derived magnitude) is the same instrument, so it's not a separate button. `temp` is REMOVED —
+// ambient temperature has no instrument on real phones (deprecated 2026-06-17). `screen` is
+// excluded until it has a capture/render path (SP6). A source a frame can't render yet shows an
+// honest idle (camera-parity, CONTENT.md §6) — location idle on the live stream until the SP5 relay.
 export const SOURCE_RAIL_ORDER: FeedKind[] = [
-  'profile', 'loc', 'chat', 'cam', 'audio', 'compass', 'gyro', 'motion', 'speed', 'temp', 'torch',
+  'profile', 'loc', 'chat', 'cam', 'audio', 'compass', 'gyro', 'accel', 'speed', 'torch',
 ]

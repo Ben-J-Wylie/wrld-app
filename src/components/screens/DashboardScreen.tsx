@@ -23,8 +23,9 @@
 // the full model is visible, but only camera/audio Air actually streams
 // today. Location shares live + carries a precision ceiling. The rest
 // arm visually and carry their flags forward; backend capture for
-// screen/gyro/compass and the v0.3+ sources (speed/torch/temp/motion) is
-// a follow-up on `main` (Aaron's lane) — flagged in each row's detail.
+// screen/gyro/compass and the v0.3+ sources (speed/torch) is a follow-up on
+// `main` (Aaron's lane) — flagged in each row's detail. (Ambient temp was
+// removed 2026-06-17 — no instrument on real phones; accel is the 3-axis source.)
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from 'react'
 import { Alert, ScrollView, StyleSheet, View } from 'react-native'
@@ -104,9 +105,8 @@ const SOURCE_GROUPS: SourceDescriptor[][] = [
   [
     { kind: 'compass', label: 'Compass', detail: 'Telemetry · heading · true north · capture pending', availability: 'available' },
     { kind: 'gyro', label: 'Gyro', detail: 'Telemetry · orientation · ~60 Hz · capture pending', availability: 'available' },
-    { kind: 'motion', label: 'Motion intensity', detail: 'Telemetry · derived from accelerometer · v0.3+', availability: 'available' },
+    { kind: 'accel', label: 'Accelerometer', detail: 'Telemetry · 3-axis (x/y/z) · derived motion', availability: 'available' },
     { kind: 'speed', label: 'Speed', detail: 'Telemetry · derived from GPS · v0.3+', availability: 'available' },
-    { kind: 'temp', label: 'Ambient temp', detail: 'Telemetry · ambient temperature · v0.3+', availability: 'available' },
   ],
   [
     { kind: 'torch', label: 'Torch', detail: 'Device state · on / off · v0.3+', availability: 'available' },
