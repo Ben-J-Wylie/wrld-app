@@ -3524,7 +3524,11 @@ on the sublabel and the left ruler.
   currently encodes landscape, so buffer video can play rotated — a capture-side fix, NOT an app
   rotation.)* Props `posterUrl?` · `title?` · `playing?` · **`coverPoster?`** (hold the poster over a
   between-lane VOD reload — the poster is always-mounted + opacity-toggled so raising it can't flash
-  the bg; 2026-06-13) · `frameSlot?` · `style?`.
+  the bg; 2026-06-13) · `frameSlot?` · **`sourceSlot?`** (a non-camera source's picture — a
+  `ClipSourceView` — covering the still-mounted/still-audible video so the player + audio survive a
+  source switch; poster + title chip suppressed under it; 2026-06-16) · **`rail?`** (the source switch
+  — a `SourceRail`, overlaid left-centre, top-most so it's reachable over the video, a visualizer, or a
+  gap; 2026-06-16) · `style?`.
 
   The **Clips page playback chrome**: a `BufferTransport` (to-start · prev clip · frame-back ·
   play/pause · frame-forward · next clip · to-end) sits **directly below the viewer**; the
@@ -3879,10 +3883,10 @@ single home screen — flagged at the end.
 - **Props:** `sources: FeedKind[]` (available → rail), `selected: FeedKind`, `onSelect`,
   `source: SourceRender` (resolved data for the selected kind), `active?`, `style?`
 - **States:** per-source render; rail hidden when ≤1 source; data sources show idle until `active`
-- **Used in:** not yet — the live viewer wiring is the screen/telemetry lane (see handoff)
+- **Used in:** `StreamScreen` (viewer + broadcaster monitor + fullscreen surfaces; wired 2026-06-13)
 - **Tweak impact:** the whole non-camera live viewer surface — one switchboard for every source
 - **Shipped:** 2026-06-12 (source-visualizers initiative)
-- **Last reviewed:** 2026-06-12
+- **Last reviewed:** 2026-06-16
 
 The live **"universal remote"**: renders the selected source full-bleed and overlays a
 `SourceRail` to switch between the stream's available sources. It's a **section** because
@@ -3912,6 +3916,38 @@ and widens the persisted source set beyond `SourceType = camera|audio`. See
 
 **Gap / proposal:** one-source-at-a-time today (rail switches). A future multi-pane / PiP
 layout (several sources at once) would be a new section variant, not a change here.
+
+##### `ClipSourceView`
+
+- **Tier:** section (dispatches across the clip `Source*` playback features)
+- **Location:** `src/components/sections/ClipSourceView.tsx`
+- **Props:** `source: ClipSourceRender` (resolved data for the viewed source), `style?`
+- **States:** per-source render; empty samples → the renderer's own idle/placeholder
+- **Used in:** `ClipsScreen` (the Clips-page viewer's non-camera sources; via `ClipViewer.sourceSlot`)
+- **Tweak impact:** the recorded-clip non-camera viewer surface
+- **Shipped:** 2026-06-16 (source-visualizers initiative — clip-view switching)
+- **Last reviewed:** 2026-06-16
+
+The **recorded-clip analog of `SourceStage`'s dispatch**. Where `SourceStage` renders a
+*live* source from an instantaneous value, this renders a **played-back** track: each member
+of `ClipSourceRender` carries a **`progress`** (0..1) playhead across the recorded samples, so
+the whole track's shape shows with the playhead position lit (`audio` → `SourceWaveform`;
+`compass`/`gyro`/`accel`/`speed` → `SourceTelemetryGraph`; `location` → `SourceLocationTrail`;
+`chat` → `SourceChatLog`).
+
+**Render split:** camera/screen are **NOT** handled here — the clip viewer (`ClipViewer`) owns
+the video frame because the poster, gap card, live feed, and VOD-reload cover are all
+camera-specific. This section is just the picture for the *non-camera* selected source; the
+**`SourceRail`** (the switch) is the clip viewer's overlay (`ClipViewer.rail`).
+
+**Data seam (`screens/` + `hooks/`/`lib/`):** `ClipsScreen` resolves the picture — the available
+sources come from the played clip's source **session's `kinds`**, the samples from
+`useDataTrack(session.dataUrls[kind])` mapped through `lib/dataTrackRender` (`toGraphValues` /
+`toTrail` / `toChatLog` / `readingAt` / `trailPositionAt`), and the progress from the playhead's
+position within the session. A saved clip whose buffer session was evicted exposes no session →
+camera-only (the durable manifest still plays). Audio has no per-sample amplitude `.jsonl` (it's
+an HLS audio track), so its waveform is a steady placeholder lit by the playhead while the VOD
+audio plays. Mirrors `ClipEditScreen`'s field rail (which can adopt this section to dedupe).
 
 ##### `ScreenHeader`
 

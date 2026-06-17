@@ -30,8 +30,12 @@ import { Pressable } from '@/components/primitives/Pressable'
 import { type LaneClip } from '@/components/features/clip/ClipLane'
 import { ClipsTimeline, type ClipsTimelineHandle } from '@/components/features/clip/ClipsTimeline'
 import { ClipViewer } from '@/components/features/clip/ClipViewer'
+import { SourceRail, type SourceRailItem } from '@/components/features/clip/SourceRail'
+import { ClipSourceView, type ClipSourceRender } from '@/components/sections/ClipSourceView'
 import { BufferTransport } from '@/components/features/clip/BufferTransport'
 import { TimeScrubber } from '@/components/features/discovery/TimeScrubber'
+import { useDataTrack } from '@/hooks/useDataTrack'
+import { toGraphValues, readingAt, toTrail, trailPositionAt, toChatLog } from '@/lib/dataTrackRender'
 import { useVideoPlayer, VideoView } from 'expo-video'
 import { RTCView } from 'react-native-webrtc'
 import { useBuffer } from '@/hooks/useBuffer'
@@ -39,7 +43,7 @@ import { useSavedClips } from '@/hooks/useSavedClips'
 import { useDrafts } from '@/hooks/useDrafts'
 import { useBroadcastStore } from '@/stores/broadcastStore'
 import { serverNow, feedServerNow } from '@/lib/serverClock'
-import { bufferApi, type BufferSession } from '@/api/buffer'
+import { bufferApi, type BufferSession, type BufferTrackKind } from '@/api/buffer'
 
 const FRAME_MS = 1000 / 30 // one frame at the 30fps capture (transport frame-step)
 const GAP_RUSH_MS = 3000 // real-time duration to "rush" the clock across an unbroadcasted-time gap
@@ -59,6 +63,26 @@ const MIN_REMAINDER_MS = 1000 // don't show carved remainders shorter than this
 // the timeline extends it to nowUI; it's dropped the moment the real session appears.
 const OPT_LIVE_SESSION = 'live:optimistic'
 const OPT_LIVE_ID = 'live:optimistic'
+
+// ── source switching (the viewer's source rail) ── which captured tracks the clip viewer can
+// replay, in rail order. `camera` is the video frame (ClipViewer's frameSlot); the rest render
+// via ClipSourceView from the session's `.jsonl` data tracks at the playhead. `screen` is excluded
+// (its own video track isn't in the camera manifest); audio shows a placeholder waveform while the
+// VOD audio plays (there's no per-sample amplitude track).
+const SOURCE_VIEW_ORDER: BufferTrackKind[] = ['camera', 'audio', 'location', 'compass', 'gyro', 'accel', 'speed', 'chat']
+const SOURCE_VIEW_META: Record<string, { iconName: SourceRailItem['iconName']; label: string }> = {
+  camera: { iconName: 'video', label: 'Camera' },
+  audio: { iconName: 'mic', label: 'Audio' },
+  location: { iconName: 'map-pin', label: 'Location' },
+  compass: { iconName: 'compass', label: 'Compass' },
+  gyro: { iconName: 'navigation', label: 'Gyro' },
+  accel: { iconName: 'activity', label: 'Accel' },
+  speed: { iconName: 'fast-forward', label: 'Speed' },
+  chat: { iconName: 'message-circle', label: 'Chat' },
+}
+// Audio has no per-sample amplitude `.jsonl` (it's an HLS audio track), so the waveform is a
+// steady placeholder shown while the VOD audio plays — the playhead still lights it left→right.
+const PLACEHOLDER_PEAKS = Array.from({ length: 56 }, (_, i) => 0.3 + 0.55 * Math.abs(Math.sin(i * 0.5)))
 
 const sessionStartMs = (s: BufferSession) => Date.parse(s.startedAt) + (s.mediaStartOffsetMs ?? 0)
 // `?? 0` matters: a brand-new live session can have BOTH duration fields undefined.
@@ -534,6 +558,63 @@ export const ClipsScreen = () => {
   // now/reaper fronts (true wall-clock) overtook it. Every non-tick setter (init/scrub/seek/nav) sets
   // playheadRef explicitly alongside setPlayheadMs, so the idle-only sync below loses nothing.
   if (!playingRef.current) playheadRef.current = playheadMs
+
+  // ── source switching ── the viewer can switch which captured track of the played clip it shows.
+  // `view` defaults to camera; the rail lists the sources the clip's source SESSION actually
+  // captured. Data sources render via ClipSourceView from the session's `.jsonl` tracks at the
+  // playhead; camera is the video frame. A saved clip whose buffer session was evicted exposes no
+  // session here → camera-only (the durable manifest still plays). Mirrors ClipEditScreen's rail.
+  const [view, setView] = useState<BufferTrackKind>('camera')
+  const availableViews = useMemo<BufferTrackKind[]>(() => {
+    const kinds = new Set(playerSession?.kinds ?? [])
+    const out = SOURCE_VIEW_ORDER.filter((k) => k !== 'camera' && kinds.has(k))
+    // Camera leads whenever there's playable video (a manifest), even for an evicted-session saved clip.
+    if (manifestUrl || kinds.has('camera')) out.unshift('camera')
+    return out.length ? out : ['camera']
+  }, [playerSession, manifestUrl])
+  // Fall back to camera when the played clip doesn't have the current source (e.g. after switching clips).
+  useEffect(() => {
+    if (!availableViews.includes(view)) setView('camera')
+  }, [availableViews, view])
+  const isCameraView = view === 'camera'
+
+  // The playhead's position within the played session, 0..1 — the progress the data renderers light.
+  const viewProgress = useMemo(() => {
+    if (!playerSession) return 0
+    const st = sessionStartMs(playerSession)
+    const en = sessionEndMs(playerSession)
+    return clamp((playheadMs - st) / Math.max(1, en - st), 0, 1)
+  }, [playerSession, playheadMs])
+
+  // Fetch the viewed data track for the played session ([] while camera / loading / evicted).
+  const currentDataUrl = isCameraView ? null : playerSession?.dataUrls?.[view]
+  const dataSamples = useDataTrack(currentDataUrl)
+  const dataTrail = useMemo(() => toTrail(dataSamples), [dataSamples])
+
+  // The resolved picture for a non-camera source (camera stays the ClipViewer frameSlot video).
+  const clipSourceRender = useMemo<ClipSourceRender | null>(() => {
+    switch (view) {
+      case 'audio':
+        return { kind: 'audio', peaks: PLACEHOLDER_PEAKS, progress: viewProgress }
+      case 'location':
+        return { kind: 'location', path: dataTrail, position: trailPositionAt(dataTrail, viewProgress) }
+      case 'compass':
+      case 'gyro':
+      case 'accel':
+      case 'speed':
+        return {
+          kind: view,
+          values: dataSamples.length ? toGraphValues(dataSamples, view) : [],
+          progress: viewProgress,
+          reading: dataSamples.length ? readingAt(dataSamples, view, viewProgress) : '—',
+        }
+      case 'chat':
+        return { kind: 'chat', messages: toChatLog(dataSamples), progress: viewProgress }
+      default:
+        return null
+    }
+  }, [view, viewProgress, dataSamples, dataTrail])
+
   // Clock edge state. `followLive` = at the now edge → NOW (ticking). `ridingReaper` = at the reaper
   // edge → THEN, ticking toward eviction. Both are driven by the timeline's pixel-precise `atNow` /
   // `atReaper` flags (via getCenter) — not re-derived from playheadMs in a mismatched clock/rush
@@ -1547,10 +1628,23 @@ export const ClipsScreen = () => {
                     <VideoView player={player} style={StyleSheet.absoluteFill} nativeControls={false} contentFit="contain" />
                   ) : undefined
                 }
+                // A non-camera source covers the (still-mounted, still-audible) video with its picture.
+                sourceSlot={!isCameraView && clipSourceRender ? <ClipSourceView source={clipSourceRender} /> : undefined}
+                // The source switch — only when the played clip captured more than one source.
+                rail={
+                  availableViews.length > 1 ? (
+                    <SourceRail
+                      sources={availableViews.map((k) => ({ key: k, iconName: SOURCE_VIEW_META[k]!.iconName, label: SOURCE_VIEW_META[k]!.label }))}
+                      value={view}
+                      onChange={(k) => setView(k as BufferTrackKind)}
+                    />
+                  ) : undefined
+                }
               />
               {/* Gap card — over unbroadcasted time (scrub-through or the play rush). absoluteFills
-                  the viewer exactly: no thumb/footage, just a title over the background. */}
-              {gapCard ? (
+                  the viewer exactly: no thumb/footage, just a title over the background. Camera view
+                  only — a data source fills the field itself, so no gap card under it. */}
+              {gapCard && isCameraView ? (
                 <View style={styles.gapCard} pointerEvents="none">
                   <Icon
                     name={isReaperCard ? 'clock' : isTrailingCard ? 'radio' : 'moon'}

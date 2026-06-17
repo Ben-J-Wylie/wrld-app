@@ -16,7 +16,9 @@ import { useEffect, useRef, useState } from 'react'
 import { View, StyleSheet } from 'react-native'
 import { ScreenScroll } from '@/components/sections/ScreenScroll'
 import { SourceStage, type SourceRender } from '@/components/sections/SourceStage'
+import { ClipSourceView, type ClipSourceRender } from '@/components/sections/ClipSourceView'
 import type { FeedKind } from '@/components/features/broadcast/FeedThumb'
+import { SourceRail } from '@/components/features/clip/SourceRail'
 import { ScreenHeader } from '@/components/sections/ScreenHeader'
 import { Pill } from '@/components/primitives/Pill'
 import { TrendingRail } from '@/components/sections/TrendingRail'
@@ -61,6 +63,17 @@ export function SectionGallery() {
         </Text>
         <View style={styles.stageFrame}>
           <SourceStageDemo />
+        </View>
+      </Section>
+
+      <Section title="ClipSourceView">
+        <Text variant="caption" color={theme.colors.text.muted}>
+          The recorded-clip analog of SourceStage's dispatch: renders the viewed source's PLAYBACK
+          picture (a `progress` playhead across the recorded track), not a live instantaneous value.
+          The clip viewer owns the camera frame + the rail; this is just the picture. Synthetic data.
+        </Text>
+        <View style={styles.stageFrame}>
+          <ClipSourceViewDemo />
         </View>
       </Section>
 
@@ -266,6 +279,64 @@ function SourceStageDemo() {
   )
 }
 
+// The clip-viewer source switch: a rail (the clip viewer's overlay) + the ClipSourceView picture.
+const CLIP_VIEWS = ['audio', 'location', 'compass', 'gyro', 'speed', 'chat'] as const
+const CLIP_VIEW_META: Record<string, { iconName: 'mic' | 'map-pin' | 'compass' | 'navigation' | 'fast-forward' | 'message-circle'; label: string }> = {
+  audio: { iconName: 'mic', label: 'Audio' },
+  location: { iconName: 'map-pin', label: 'Location' },
+  compass: { iconName: 'compass', label: 'Compass' },
+  gyro: { iconName: 'navigation', label: 'Gyro' },
+  speed: { iconName: 'fast-forward', label: 'Speed' },
+  chat: { iconName: 'message-circle', label: 'Chat' },
+}
+const DEMO_PEAKS = Array.from({ length: 56 }, (_, i) => 0.3 + 0.55 * Math.abs(Math.sin(i * 0.5)))
+const DEMO_VALUES = Array.from({ length: 56 }, (_, i) => 0.5 + 0.4 * Math.sin(i * 0.32))
+const DEMO_TRAIL: [number, number][] = Array.from({ length: 22 }, (_, i) => [-0.1276 + i * 0.0009, 51.5074 + 0.0006 * Math.sin(i * 0.5)])
+
+function ClipSourceViewDemo() {
+  const [view, setView] = useState<(typeof CLIP_VIEWS)[number]>('audio')
+  const [t, setT] = useState(0)
+  useEffect(() => {
+    const id = setInterval(() => setT((x) => (x + 1) % 100), 120)
+    return () => clearInterval(id)
+  }, [])
+  const progress = t / 99
+
+  let source: ClipSourceRender
+  switch (view) {
+    case 'audio':
+      source = { kind: 'audio', peaks: DEMO_PEAKS, progress }
+      break
+    case 'location':
+      source = { kind: 'location', path: DEMO_TRAIL, position: DEMO_TRAIL[Math.round(progress * (DEMO_TRAIL.length - 1))] }
+      break
+    case 'compass':
+      source = { kind: 'compass', values: DEMO_VALUES, progress, reading: `${Math.round(progress * 359)}°` }
+      break
+    case 'gyro':
+      source = { kind: 'gyro', values: DEMO_VALUES, progress, reading: '±1.2 rad/s' }
+      break
+    case 'speed':
+      source = { kind: 'speed', values: DEMO_VALUES, progress, reading: `${Math.round(progress * 30 * 3.6)} km/h` }
+      break
+    default:
+      source = { kind: 'chat', messages: [], progress }
+  }
+
+  return (
+    <>
+      <ClipSourceView source={source} />
+      <View style={styles.clipRail} pointerEvents="box-none">
+        <SourceRail
+          sources={CLIP_VIEWS.map((k) => ({ key: k, iconName: CLIP_VIEW_META[k]!.iconName, label: CLIP_VIEW_META[k]!.label }))}
+          value={view}
+          onChange={(k) => setView(k as (typeof CLIP_VIEWS)[number])}
+        />
+      </View>
+    </>
+  )
+}
+
 function CameraSlotPlaceholder() {
   return (
     <View style={styles.camSlot}>
@@ -415,5 +486,6 @@ const styles = StyleSheet.create({
     gap: theme.spacing.xs,
   },
   stageFrame: { height: 260, borderRadius: theme.radius.md, overflow: 'hidden' },
+  clipRail: { position: 'absolute', left: theme.spacing.sm, top: 0, bottom: 0, justifyContent: 'center' },
   camSlot: { flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center' },
 })

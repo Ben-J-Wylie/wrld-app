@@ -30,14 +30,22 @@ type Props = {
   coverPoster?: boolean
   // The host's `VideoView` (or any frame layer), rendered full-bleed behind the chrome.
   frameSlot?: ReactNode
+  // A non-camera source's picture (a ClipSourceView). When present it covers the video + poster
+  // (a source other than camera is being viewed); the video stays MOUNTED underneath so the player
+  // and its audio survive the switch. The title chip + poster are suppressed under it.
+  sourceSlot?: ReactNode
+  // The source switcher (a SourceRail), overlaid on the left edge. Top-most so it's reachable in
+  // every view (camera, a data source, over a gap). Shown only when there's more than one source.
+  rail?: ReactNode
   style?: StyleProp<ViewStyle>
 }
 
-export function ClipViewer({ posterUrl, title, playing, coverPoster, frameSlot, style }: Props) {
-  const hasClip = !!frameSlot || !!posterUrl
+export function ClipViewer({ posterUrl, title, playing, coverPoster, frameSlot, sourceSlot, rail, style }: Props) {
+  const hasClip = !!frameSlot || !!posterUrl || !!sourceSlot
   // The poster stays MOUNTED whenever there's a posterUrl and only its opacity toggles — so raising
-  // it (paused, or covering a reload) is instant, with no remount fade that would flash the bg.
-  const showPoster = !!posterUrl && (coverPoster || !playing)
+  // it (paused, or covering a reload) is instant, with no remount fade that would flash the bg. A
+  // non-camera source covers everything, so the poster is forced off under it.
+  const showPoster = !!posterUrl && !sourceSlot && (coverPoster || !playing)
 
   return (
     <View style={[styles.frame, style]}>
@@ -52,6 +60,9 @@ export function ClipViewer({ posterUrl, title, playing, coverPoster, frameSlot, 
         />
       ) : null}
 
+      {/* A non-camera source's picture — opaque, over the (still-mounted) video + poster. */}
+      {sourceSlot ? <View style={StyleSheet.absoluteFill}>{sourceSlot}</View> : null}
+
       {!hasClip ? (
         <View style={styles.empty}>
           <Icon name="film" size="lg" color={theme.colors.text.subtle} />
@@ -61,11 +72,18 @@ export function ClipViewer({ posterUrl, title, playing, coverPoster, frameSlot, 
         </View>
       ) : null}
 
-      {hasClip && title ? (
+      {hasClip && title && !sourceSlot ? (
         <View style={styles.titleChip} pointerEvents="none">
           <Text variant="monoCaption" color={theme.colors.text.inverse} numberOfLines={1}>
             {title}
           </Text>
+        </View>
+      ) : null}
+
+      {/* Source switch — top-most so it's tappable over the video, a visualizer, or a gap. */}
+      {rail ? (
+        <View style={styles.railSlot} pointerEvents="box-none">
+          {rail}
         </View>
       ) : null}
     </View>
@@ -95,5 +113,13 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: theme.radius.full,
     backgroundColor: 'rgba(20,16,12,0.55)',
+  },
+  // Left edge, vertically centred — the clip-context source switch (mirrors the editor's field rail).
+  railSlot: {
+    position: 'absolute',
+    left: theme.spacing.sm,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
   },
 })
