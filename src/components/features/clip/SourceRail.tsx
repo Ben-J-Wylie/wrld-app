@@ -13,7 +13,7 @@
 // (dark video, light map, light identity card). Pass only the sources the session
 // actually captured. See DESIGN.md Section 3 (Buffer-trim clip editor).
 
-import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
+import { ScrollView, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
 import { Pressable } from '@/components/primitives/Pressable'
 import { Icon } from '@/components/primitives/Icon'
 import { theme } from '@/tokens/theme'
@@ -41,32 +41,42 @@ type Props = {
 
 export function SourceRail({ sources, value, onChange, orientation = 'vertical', style }: Props) {
   if (sources.length === 0) return null
-  return (
-    <View style={[styles.rail, orientation === 'horizontal' && styles.railHorizontal, style]}>
-      {sources.map((s) => {
-        const active = !s.disabled && s.key === value
-        return (
-          <Pressable
-            key={s.key}
-            variant={s.disabled ? 'none' : 'subtle'}
-            onPress={() => {
-              if (!s.disabled) onChange(s.key)
-            }}
-            accessibilityRole="button"
-            accessibilityLabel={s.label}
-            accessibilityState={{ selected: active, disabled: !!s.disabled }}
-            style={[styles.btn, active && styles.btnActive]}
-          >
-            <Icon
-              name={s.iconName}
-              size="sm"
-              color={s.disabled ? DISABLED_ICON : theme.colors.text.inverse}
-            />
-          </Pressable>
-        )
-      })}
-    </View>
-  )
+
+  const buttons = sources.map((s) => {
+    const active = !s.disabled && s.key === value
+    return (
+      <Pressable
+        key={s.key}
+        variant={s.disabled ? 'none' : 'subtle'}
+        onPress={() => {
+          if (!s.disabled) onChange(s.key)
+        }}
+        accessibilityRole="button"
+        accessibilityLabel={s.label}
+        accessibilityState={{ selected: active, disabled: !!s.disabled }}
+        style={[styles.btn, active && styles.btnActive]}
+      >
+        <Icon name={s.iconName} size="sm" color={s.disabled ? DISABLED_ICON : theme.colors.text.inverse} />
+      </Pressable>
+    )
+  })
+
+  // Horizontal: the full suite (12 sources) is wider than a phone, so the row is HORIZONTALLY
+  // SCROLLABLE — centred when it fits, pannable when it doesn't (the ink pill hugs the buttons).
+  if (orientation === 'horizontal') {
+    return (
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={[styles.hScroll, style]}
+        contentContainerStyle={styles.hScrollContent}
+      >
+        <View style={[styles.rail, styles.railHorizontal]}>{buttons}</View>
+      </ScrollView>
+    )
+  }
+
+  return <View style={[styles.rail, style]}>{buttons}</View>
 }
 
 const styles = StyleSheet.create({
@@ -86,6 +96,16 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     paddingHorizontal: theme.spacing.xs,
     justifyContent: 'center',
+  },
+  // Horizontal scroller — fills the bar width so the row can pan; the content centres the ink
+  // pill when the full suite fits and lets it scroll when it doesn't.
+  hScroll: {
+    alignSelf: 'stretch',
+  },
+  hScrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   btn: {
     width: 30,

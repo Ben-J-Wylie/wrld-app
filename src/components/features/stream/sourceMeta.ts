@@ -26,3 +26,13 @@ export const SOURCE_META: Record<FeedKind, { icon: IconName; label: string }> = 
   accel: { icon: 'move', label: 'ACCEL' },
   chat: { icon: 'message-circle', label: 'CHAT' },
 }
+
+// The canonical source-rail order — the SAME ordered suite on every frame (stream view + clips
+// page), so the rails are identical. Matches the DASHBOARD's arming order (identity · location ·
+// chat · cam · audio · sensors — accel sits under motion). `screen` is excluded until it has any
+// capture/render path (SP6). A source a given frame can't render yet shows an honest idle (the
+// camera-parity principle, CONTENT.md §6) — e.g. location idle on the live stream until the relay
+// lands (SP5); profile/motion/temp/torch idle on a recorded clip.
+export const SOURCE_RAIL_ORDER: FeedKind[] = [
+  'profile', 'loc', 'chat', 'cam', 'audio', 'compass', 'gyro', 'motion', 'accel', 'speed', 'temp', 'torch',
+]
