@@ -15,6 +15,8 @@ import { Text } from '@/components/primitives/Text'
 import { VisualizerFrame, VIZ_MUTED } from '@/components/features/stream/VisualizerFrame'
 import { theme } from '@/tokens/theme'
 
+type Frame = { x: number; y: number; z: number }
+
 type Props = {
   /** Acceleration on each axis in m/s² (raw — typically includes gravity). */
   x: number
@@ -26,6 +28,10 @@ type Props = {
   range?: number
   /** Number of time columns held in the scroll history. */
   samples?: number
+  /** PLAYBACK mode: the recorded window (oldest → newest) ending at the playhead. When set, the
+   *  traces are driven by this directly (and scrub-rewind with the playhead) instead of the live
+   *  real-time ticker — so a clip replays exactly as it scrolled when recorded. */
+  history?: Frame[]
   style?: StyleProp<ViewStyle>
 }
 
@@ -39,7 +45,7 @@ const AXIS = {
 
 const SAMPLE_MS = 60
 
-type Frame = { x: number; y: number; z: number }
+const ZERO: Frame = { x: 0, y: 0, z: 0 }
 
 export function AccelerometerVisualizer({
   x,
@@ -49,24 +55,42 @@ export function AccelerometerVisualizer({
   label = 'ACCEL',
   range = 20,
   samples = 56,
+  history,
   style,
 }: Props) {
-  const latest = useRef<Frame>({ x: 0, y: 0, z: 0 })
-  latest.current = active ? { x, y, z } : { x: 0, y: 0, z: 0 }
-  const [hist, setHist] = useState<Frame[]>(() =>
-    new Array(samples).fill(0).map(() => ({ x: 0, y: 0, z: 0 })),
-  )
+  const playback = !!history
+  const latest = useRef<Frame>(ZERO)
+  latest.current = playback
+    ? history!.length
+      ? history![history!.length - 1]!
+      : ZERO
+    : active
+      ? { x, y, z }
+      : ZERO
+  const [tickHist, setTickHist] = useState<Frame[]>(() => new Array(samples).fill(0).map(() => ({ ...ZERO })))
 
+  // LIVE: a steady ticker scrolls the latest value in. PLAYBACK: the prop drives it — no ticker.
   useEffect(() => {
+    if (playback) return
     const id = setInterval(() => {
-      setHist((prev) => {
+      setTickHist((prev) => {
         const next = prev.slice(1)
         next.push(latest.current)
         return next
       })
     }, SAMPLE_MS)
     return () => clearInterval(id)
-  }, [])
+  }, [playback])
+
+  // PLAYBACK: the recorded window, left-padded to `samples` so it scrolls in from the left as it
+  // fills (newest on the right, like live). LIVE: the ticker history.
+  const hist = playback
+    ? (() => {
+        const w = history!.slice(-samples)
+        const pad = samples - w.length
+        return pad > 0 ? [...new Array(pad).fill(ZERO), ...w] : w
+      })()
+    : tickHist
 
   // value (m/s²) → 0..1 top fraction (0 = top, 0.5 = zero line, 1 = bottom)
   const pos = (v: number) => Math.max(0, Math.min(1, 0.5 - v / (2 * range)))

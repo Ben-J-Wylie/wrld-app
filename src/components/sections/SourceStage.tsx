@@ -43,7 +43,7 @@ export type SourceRender =
   | { kind: 'compass'; heading: number }
   | { kind: 'gyro'; pitch: number; roll: number }
   | { kind: 'motion'; intensity: number }
-  | { kind: 'accel'; x: number; y: number; z: number }
+  | { kind: 'accel'; x: number; y: number; z: number; history?: { x: number; y: number; z: number }[] }
   | { kind: 'speed'; mps: number; unit?: 'kmh' | 'mph' }
   | { kind: 'temp'; celsius: number; unit?: 'c' | 'f' }
   | { kind: 'torch'; on: boolean; level?: number; onToggle?: () => void }
@@ -94,7 +94,7 @@ function renderSource(s: SourceRender, active: boolean) {
     case 'motion':
       return <MotionVisualizer intensity={s.intensity} active={active} style={styles.fill} />
     case 'accel':
-      return <AccelerometerVisualizer x={s.x} y={s.y} z={s.z} active={active} style={styles.fill} />
+      return <AccelerometerVisualizer x={s.x} y={s.y} z={s.z} history={s.history} active={active} style={styles.fill} />
     case 'speed':
       return <SpeedVisualizer mps={s.mps} unit={s.unit} active={active} style={styles.fill} />
     case 'temp':

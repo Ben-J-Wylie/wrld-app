@@ -19,14 +19,16 @@ import { theme } from '@/tokens/theme'
 export type ChatLogMessage = { handle: string; text: string }
 
 type Props = {
-  messages: ChatLogMessage[]
+  // Omit → the gallery mock renders (convenience). Pass an explicit array (incl. []) → it's used
+  // verbatim; an empty array shows the empty state (chat default is EMPTY, never faked — Ben 2026-06-17).
+  messages?: ChatLogMessage[]
   progress?: number // 0..1 playhead position across the messages
   label?: string
   style?: StyleProp<ViewStyle>
 }
 
-// Self-contained mock so the gallery (and the editor before the track lands) renders
-// without external data.
+// Self-contained mock so the gallery renders without external data. Only used when `messages` is
+// OMITTED entirely; an explicit [] is honoured as empty.
 const MOCK_MESSAGES: ChatLogMessage[] = [
   { handle: 'kai.dc', text: 'this view is unreal 🔥' },
   { handle: 'mara', text: 'where is this?' },
@@ -35,8 +37,8 @@ const MOCK_MESSAGES: ChatLogMessage[] = [
   { handle: 'sam', text: 'how long are you live for?' },
 ]
 
-export function SourceChatLog({ messages = MOCK_MESSAGES, progress = 1, label = 'CHAT', style }: Props) {
-  const rows = messages.length ? messages : MOCK_MESSAGES
+export function SourceChatLog({ messages, progress = 1, label = 'CHAT', style }: Props) {
+  const rows = messages ?? MOCK_MESSAGES
   // The "live" row is the one the playhead has reached — everything past it is muted
   // (hasn't been said yet at this point in the buffer).
   const liveIndex = Math.round((rows.length - 1) * progress)
@@ -44,23 +46,29 @@ export function SourceChatLog({ messages = MOCK_MESSAGES, progress = 1, label = 
   return (
     <View style={[styles.wrap, style]}>
       <View style={styles.log}>
-        {rows.map((m, i) => {
-          const future = i > liveIndex
-          return (
-            <View key={i} style={[styles.bubble, future && styles.bubbleFuture]}>
-              <Text variant="monoLabel" color={future ? theme.colors.text.subtle : theme.colors.accent.default}>
-                @{m.handle}
-              </Text>
-              <Text
-                variant="caption"
-                color={future ? theme.colors.text.subtle : theme.colors.text.primary}
-                numberOfLines={2}
-              >
-                {m.text}
-              </Text>
-            </View>
-          )
-        })}
+        {rows.length === 0 ? (
+          <Text variant="caption" color={theme.colors.text.subtle}>
+            No messages yet
+          </Text>
+        ) : (
+          rows.map((m, i) => {
+            const future = i > liveIndex
+            return (
+              <View key={i} style={[styles.bubble, future && styles.bubbleFuture]}>
+                <Text variant="monoLabel" color={future ? theme.colors.text.subtle : theme.colors.accent.default}>
+                  @{m.handle}
+                </Text>
+                <Text
+                  variant="caption"
+                  color={future ? theme.colors.text.subtle : theme.colors.text.primary}
+                  numberOfLines={2}
+                >
+                  {m.text}
+                </Text>
+              </View>
+            )
+          })
+        )}
       </View>
       <View style={styles.tag}>
         <Icon name="message-circle" size="sm" color={theme.colors.text.muted} />

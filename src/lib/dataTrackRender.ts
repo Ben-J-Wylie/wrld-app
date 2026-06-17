@@ -27,6 +27,28 @@ export function sampleAt(samples: DataSample[], atMs: number): DataSample | null
   return samples[lo]!
 }
 
+// The most recent `max` samples at or before `atMs` (the scrolling window for the live-style traces:
+// AccelerometerVisualizer / AudioVisualizer in playback mode). As the playhead advances the window
+// slides (scroll in from the left); scrubbing back moves it earlier (rewind). Oldest → newest.
+export function recentUpTo(samples: DataSample[], atMs: number, max: number): DataSample[] {
+  const upTo = samples.filter((s) => s.ts <= atMs)
+  return upTo.length > max ? upTo.slice(upTo.length - max) : upTo
+}
+
+// Torch state at `atMs`. Torch is an EVENT track (each entry is a toggle), so before the first
+// logged event the state is the one PRIOR to that toggle — the inverse of the first event — NOT the
+// first event's value (unlike position/sensors, which hold their first reading). After the first
+// event, hold the latest state ≤ atMs. (Ben 2026-06-17.)
+export function torchStateAt(samples: DataSample[], atMs: number): boolean {
+  if (!samples.length) return false
+  let state: boolean | null = null
+  for (const s of samples) {
+    if (s.ts <= atMs) state = !!s.on
+    else break // ts-sorted — once past atMs, stop
+  }
+  return state !== null ? state : !samples[0]!.on // before the first toggle → the prior (inverse) state
+}
+
 // The location trail UP TO `atMs` — so the path draws (and the pin moves) as the clip plays.
 // Position is a HELD signal: before the first fix, hold the earliest known point (a single pin), so
 // the map shows at the head of the clip rather than going blank (matches sampleAt's held behaviour).

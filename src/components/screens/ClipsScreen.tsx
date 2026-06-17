@@ -41,7 +41,7 @@ import type { FeedKind } from '@/components/features/broadcast/FeedThumb'
 import { BufferTransport } from '@/components/features/clip/BufferTransport'
 import { TimeScrubber } from '@/components/features/discovery/TimeScrubber'
 import { useDataTrack } from '@/hooks/useDataTrack'
-import { sampleAt, trailUpTo, chatUpTo } from '@/lib/dataTrackRender'
+import { sampleAt, trailUpTo, chatUpTo, recentUpTo, torchStateAt } from '@/lib/dataTrackRender'
 import { useVideoPlayer, VideoView } from 'expo-video'
 import { RTCView } from 'react-native-webrtc'
 import { useBuffer } from '@/hooks/useBuffer'
@@ -614,12 +614,20 @@ export const ClipsScreen = () => {
         return { kind: 'compass', heading: nf('heading') }
       case 'gyro':
         return { kind: 'gyro', pitch: nf('pitch'), roll: nf('roll') }
-      case 'accel':
-        return { kind: 'accel', x: nf('x'), y: nf('y'), z: nf('z') }
+      case 'accel': {
+        // The recorded window up to the playhead → the traces scroll/rewind like the live viewer.
+        const history = recentUpTo(dataSamples, sampledMs, 56).map((d) => ({
+          x: typeof d.x === 'number' ? d.x : 0,
+          y: typeof d.y === 'number' ? d.y : 0,
+          z: typeof d.z === 'number' ? d.z : 0,
+        }))
+        return { kind: 'accel', x: nf('x'), y: nf('y'), z: nf('z'), history }
+      }
       case 'speed':
         return { kind: 'speed', mps: s ? nf('mps') : -1 }
       case 'torch':
-        return { kind: 'torch', on: !!(s && s.on) }
+        // Torch carries the state PRIOR to the first toggle back to the head (not the first value).
+        return { kind: 'torch', on: torchStateAt(dataSamples, sampledMs) }
       case 'loc': {
         const path = trailUpTo(dataSamples, sampledMs) // trail grows as the clip plays; full when paused/outside
         return { kind: 'loc', path, position: path[path.length - 1] }
