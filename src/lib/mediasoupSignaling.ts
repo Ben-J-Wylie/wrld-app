@@ -10,6 +10,12 @@ export type TelemetryPayload =
   | { kind: 'accel'; ts: number; x: number; y: number; z: number }
   | { kind: 'speed'; ts: number; mps: number; accuracy?: number }
   | { kind: 'torch'; ts: number; on: boolean; level?: number }
+  // SP5: location is relayed to viewers via the telemetry decode path, but it is
+  // NOT emitted as a `telemetry` message — the broadcaster's existing
+  // `locationUpdate` is fanned out by mediasoup as `telemetryUpdate{kind:location}`
+  // (avoids double-recording; locationUpdate already records the track). So this
+  // shape appears on telemetryUpdate (viewer) but the app never sends it.
+  | { kind: 'location'; ts: number; lat: number; lng: number; accuracy?: number }
 
 export type ClientMessage =
   | { type: 'identify'; deviceId: string }

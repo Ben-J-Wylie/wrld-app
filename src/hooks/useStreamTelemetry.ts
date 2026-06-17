@@ -14,6 +14,7 @@ export type StreamTelemetry = {
   accel: ByKind<'accel'> | null
   speed: ByKind<'speed'> | null
   torch: ByKind<'torch'> | null
+  location: ByKind<'location'> | null
   motionIntensity: number | null
 }
 
@@ -23,6 +24,7 @@ const EMPTY: StreamTelemetry = {
   accel: null,
   speed: null,
   torch: null,
+  location: null,
   motionIntensity: null,
 }
 
@@ -58,6 +60,8 @@ export function useStreamTelemetry(enabled = true): StreamTelemetry {
             return { ...prev, speed: p }
           case 'torch':
             return { ...prev, torch: p }
+          case 'location':
+            return { ...prev, location: p }
           case 'accel': {
             const mag = Math.sqrt(p.x * p.x + p.y * p.y + p.z * p.z)
             const intensity = Math.max(0, Math.min(1, Math.abs(mag - GRAVITY) / MOTION_SPAN))
