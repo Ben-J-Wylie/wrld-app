@@ -9,6 +9,18 @@ shows the live source). The staged rollout is **`wrld-app/CLAUDE.md` → "Source
 (SP0–SP6)"**. This doc is the *index of the parts that are yours* — exactly what we need from you,
 in priority order. It does not restate Ben's design/app work.
 
+## ⚠️ Update 2026-06-17 (b) — NEW ask: a recorded AUDIO AMPLITUDE track (for clip replay)
+Clip playback now replays every source through the live visualizers, sampled at the playhead (compass
+circle, gyro horizon, accel xyz traces that scroll + rewind, torch, location trail, chat). **Audio is
+the one that can't replay its waveform** — there's no per-sample loudness recorded (audio is the HLS
+track only), so the clip audio falls back to a static placeholder waveform (the VOD audio still plays).
+To make the clip audio waveform **scroll/rewind exactly like the live viewer**, the recorder needs to
+write a small **audio-amplitude `.jsonl` track** — the broadcaster's `audioLevel` (0..1) sampled over
+time (≈10 Hz, same shape as the telemetry tracks: `{ ts, level }`), exposed on `session.dataUrls.audio`
+(or a sibling kind). Once it lands, the app feeds it into `AudioVisualizer`'s new playback `history`
+mode (same pattern just shipped for accel) — small app change. **Until then audio clip-replay is a
+placeholder.** Flagging so it's on your radar; low priority vs SP5/SP6.
+
 ## ⚠️ Update 2026-06-17 — two model changes on `design` (heads-up + one ask)
 - **Ambient temp is DEPRECATED — please deprecate the data path.** There's no ambient-temperature
   instrument on real phones (iOS has no API; the Android sensor is absent on ~all devices), so it
