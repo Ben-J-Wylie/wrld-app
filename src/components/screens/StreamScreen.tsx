@@ -150,10 +150,11 @@ const AIR_KEY_TO_KIND: Record<string, string> = {
 }
 
 // The full source rail shown on the stream view at all times (Ben, 2026-06-16). Every renderable
-// source, in display order — clicking one switches the media surface to its live readout. Sensors
-// with no data show their idle visualizer. (loc / chat / profile need their own data wiring; temp
-// has no phone sensor — both kept visible as idle for now.) Camera leads.
-const FULL_SOURCE_RAIL: FeedKind[] = ['cam', 'audio', 'compass', 'gyro', 'motion', 'accel', 'speed', 'torch', 'temp']
+// source, in display order — clicking one switches the media surface to its live readout. Sources
+// with no live data read as an honest idle visualizer (audio in preview, temp — no phone sensor).
+// `loc` is omitted until the live-location relay lands (SP5, Aaron); chat + profile are wired
+// (SP3). Camera leads.
+const FULL_SOURCE_RAIL: FeedKind[] = ['cam', 'audio', 'compass', 'gyro', 'motion', 'accel', 'speed', 'torch', 'temp', 'chat', 'profile']
 
 function recordedSourcesFromConfig(cfg: CaptureConfig | null): string[] {
   if (!cfg) return []
@@ -427,8 +428,8 @@ export function StreamScreen() {
   const isViewerInRoom = !isNew && status === 'in-room' && !streamEnded && !!remoteStream
   // The FULL source rail, always present on the stream view (broadcasting or not). Ben's call
   // (2026-06-16): the rail shows every renderable source at all times — clicking one switches the
-  // media surface to that source's live readout. A source with no data shows its idle visualizer.
-  // (loc / chat / profile source-views need their own data wiring — separate follow-ups, omitted.)
+  // media surface to that source's live readout. A source with no live data shows its honest idle
+  // visualizer. `loc` is omitted until the live-location relay lands (SP5).
   const availableKinds = FULL_SOURCE_RAIL
   // Which source is currently being shown (defaults to camera).
   const selectedKind: FeedKind = activeSource ?? 'cam'
@@ -468,17 +469,33 @@ export function StreamScreen() {
           return { kind: 'torch', on: monitorTel.torch?.on ?? false, level: monitorTel.torch?.level }
         case 'temp':
           return { kind: 'temp', celsius: NaN } // no phone sensor → idle
+        case 'chat':
+          return { kind: 'chat', messages: chatMessages.map((m) => ({ handle: m.from, text: m.text })) }
+        case 'profile':
+          return {
+            kind: 'profile',
+            displayName: broadcaster?.displayName ?? '—',
+            handle: broadcaster?.handle ?? '',
+            avatarUrl: broadcaster?.avatarUrl ?? null,
+            attributed: true,
+          }
         default:
           return { kind: 'audio', level: audioLevel, variant: 'waveform' }
       }
     },
-    [monitorTel, audioLevel],
+    [monitorTel, audioLevel, chatMessages, broadcaster],
   )
-  // Has the selected source produced data yet? (idle styling until then)
+  // Has the selected source produced data yet? (idle/dim styling until then — honest, never faked).
+  // audio has a real meter ONLY once live (producer getStats) or as a viewer (consumer getStats);
+  // in broadcaster preview there's no sender to meter, so it reads as idle (SP2). temp has no phone
+  // sensor → always idle. chat/profile/cam/screen are always live surfaces. (isLiveBroadcast is
+  // defined below — inline its condition here to avoid the TDZ.)
   const sourceActive =
     selectedKind === 'cam' ||
     selectedKind === 'screen' ||
-    selectedKind === 'audio' ||
+    selectedKind === 'profile' ||
+    selectedKind === 'chat' ||
+    (selectedKind === 'audio' && (isViewerInRoom || (isNew && status === 'in-room' && !streamEnded))) ||
     (selectedKind === 'compass' && !!monitorTel.compass) ||
     (selectedKind === 'gyro' && !!monitorTel.gyro) ||
     (selectedKind === 'motion' && monitorTel.motionIntensity !== null) ||
@@ -512,6 +529,20 @@ export function StreamScreen() {
       } catch {}
     }
   }, [isLiveBroadcast, localStream, isCameraArmed, facingMode])
+
+  // Publish the broadcaster's own live mic level too — the non-camera live tap the Clips page reads
+  // at the now edge (SP4). The producer getStats poll keeps `audioLevel` current while live even when
+  // this (never-unmounted) tab is in the background, so the Clips tab sees it move. 0 when not live.
+  useEffect(() => {
+    try {
+      useBroadcastStore.getState().setLiveAudioLevel(isLiveBroadcast ? audioLevel : 0)
+    } catch {}
+    return () => {
+      try {
+        useBroadcastStore.getState().setLiveAudioLevel(0)
+      } catch {}
+    }
+  }, [isLiveBroadcast, audioLevel])
 
   // Broadcaster sensor capture — while live, read the armed sensor sources and
   // emit `telemetry` (compass/speed via expo-location, gyro/accel via DeviceMotion).

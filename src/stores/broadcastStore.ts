@@ -28,6 +28,10 @@ type BroadcastState = {
   // the tab never unmounts, so the feed stays alive while you're on the Clips tab.)
   liveStreamUrl: string | null
   liveMirror: boolean
+  // The broadcaster's own LIVE mic loudness (0..1), published so the Clips page can show a live
+  // audio readout at the now edge — the non-camera analog of `liveStreamUrl` (SP4 / CONTENT.md §6:
+  // the live edge's media is the live source). 0 while not broadcasting audio.
+  liveAudioLevel: number
   // One-shot command from a remote control surface (e.g. the dashboard);
   // StreamScreen executes it and calls consumeCommand(). The nonce makes
   // repeated identical commands re-fire.
@@ -36,6 +40,7 @@ type BroadcastState = {
   setLive: (sources: SourceType[]) => void
   setRecording: (isRecording: boolean) => void
   setLiveStream: (url: string | null, mirror: boolean) => void
+  setLiveAudioLevel: (level: number) => void
   clear: () => void
   sendCommand: (command: Command) => void
   consumeCommand: () => void
@@ -48,6 +53,7 @@ export const useBroadcastStore = create<BroadcastState>((set) => ({
   sources: [],
   liveStreamUrl: null,
   liveMirror: false,
+  liveAudioLevel: 0,
   command: null,
   commandNonce: 0,
   // Stamp liveSince only on the transition into live (preserve it across source changes). Reads the
@@ -56,7 +62,8 @@ export const useBroadcastStore = create<BroadcastState>((set) => ({
   setLive: (sources) => set((s) => ({ isLive: true, sources, liveSince: s.isLive ? s.liveSince : serverNow() })),
   setRecording: (isRecording) => set({ isRecording }),
   setLiveStream: (liveStreamUrl, liveMirror) => set({ liveStreamUrl, liveMirror }),
-  clear: () => set({ isLive: false, isRecording: false, sources: [], liveSince: null, liveStreamUrl: null, liveMirror: false }),
+  setLiveAudioLevel: (liveAudioLevel) => set({ liveAudioLevel }),
+  clear: () => set({ isLive: false, isRecording: false, sources: [], liveSince: null, liveStreamUrl: null, liveMirror: false, liveAudioLevel: 0 }),
   sendCommand: (command) => set((s) => ({ command, commandNonce: s.commandNonce + 1 })),
   consumeCommand: () => set({ command: null }),
 }))

@@ -32,6 +32,9 @@ import { ClipsTimeline, type ClipsTimelineHandle } from '@/components/features/c
 import { ClipViewer } from '@/components/features/clip/ClipViewer'
 import { SourceRail, type SourceRailItem } from '@/components/features/clip/SourceRail'
 import { ClipSourceView, type ClipSourceRender } from '@/components/sections/ClipSourceView'
+import { SourceStage, type SourceRender } from '@/components/sections/SourceStage'
+import { useLocalTelemetry } from '@/hooks/useLocalTelemetry'
+import type { FeedKind } from '@/components/features/broadcast/FeedThumb'
 import { BufferTransport } from '@/components/features/clip/BufferTransport'
 import { TimeScrubber } from '@/components/features/discovery/TimeScrubber'
 import { useDataTrack } from '@/hooks/useDataTrack'
@@ -233,6 +236,7 @@ export const ClipsScreen = () => {
   // playhead rides the now edge — the buffer VOD's live edge trails real-time by seconds, so at "now"
   // the actual low-latency feed is the right media (same view as the stream page). See §6.
   const liveStreamUrl = useBroadcastStore((s) => s.liveStreamUrl)
+  const liveAudioLevel = useBroadcastStore((s) => s.liveAudioLevel)
   const liveMirror = useBroadcastStore((s) => s.liveMirror)
   const qc = useQueryClient()
   const { data: buffer, refetch: refetchBuffer } = useBuffer(!!isSignedIn, isLive)
@@ -714,6 +718,33 @@ export const ClipsScreen = () => {
   // back into the past, followLive flips off and the viewer returns to the VOD. (CONTENT.md §6:
   // the live edge's media is the live stream; the past's media is the recording.)
   const showLiveFeed = followLive && isLive && !!liveStreamUrl && !scrubbing
+
+  // SP4 — the now edge shows the LIVE source, for EVERY source, not just the camera (CONTENT.md §6:
+  // "the live edge's media is the live source"). At the live edge while broadcasting, the selected
+  // non-camera source renders its LIVE readout instead of the trailing recording: audio from the
+  // broadcaster's own mic level (broadcastStore), sensors read LOCALLY off this device (the relay
+  // never fans back to the sender — same as the stream page's self-monitor). location/chat have no
+  // live tap here yet (loc → SP5; chat live not plumbed to Clips) → they fall back to the recording.
+  const atLiveEdge = followLive && isLive && !scrubbing
+  const liveSensorKind = atLiveEdge && (view === 'compass' || view === 'gyro' || view === 'accel' || view === 'speed') ? view : null
+  const liveTel = useLocalTelemetry(liveSensorKind, isLive)
+  const liveSourceRender = useMemo<SourceRender | null>(() => {
+    if (!atLiveEdge || isCameraView) return null
+    switch (view) {
+      case 'audio':
+        return { kind: 'audio', level: liveAudioLevel, variant: 'waveform' }
+      case 'compass':
+        return { kind: 'compass', heading: liveTel.compass?.heading ?? 0 }
+      case 'gyro':
+        return { kind: 'gyro', pitch: liveTel.gyro?.pitch ?? 0, roll: liveTel.gyro?.roll ?? 0 }
+      case 'accel':
+        return { kind: 'accel', x: liveTel.accel?.x ?? 0, y: liveTel.accel?.y ?? 0, z: liveTel.accel?.z ?? 0 }
+      case 'speed':
+        return { kind: 'speed', mps: liveTel.speed?.mps ?? -1 }
+      default:
+        return null // location / chat → no live tap yet, fall back to the recorded track
+    }
+  }, [atLiveEdge, isCameraView, view, liveAudioLevel, liveTel])
 
   // The PLAYER (a follower) loads the clip at the PLAYHEAD — so as the clock advances the playhead
   // across clips/snips, the loaded VOD tracks it. In a gap clipAtPlayhead is null; we KEEP the last
@@ -1629,7 +1660,17 @@ export const ClipsScreen = () => {
                   ) : undefined
                 }
                 // A non-camera source covers the (still-mounted, still-audible) video with its picture.
-                sourceSlot={!isCameraView && clipSourceRender ? <ClipSourceView source={clipSourceRender} /> : undefined}
+                // At the now edge while live it's the LIVE source (SourceStage); otherwise the recorded
+                // track (ClipSourceView). location/chat have no live tap yet → recorded fallback (SP4).
+                sourceSlot={
+                  !isCameraView
+                    ? liveSourceRender
+                      ? <SourceStage sources={[view as FeedKind]} selected={view as FeedKind} onSelect={() => {}} source={liveSourceRender} style={StyleSheet.absoluteFill} />
+                      : clipSourceRender
+                        ? <ClipSourceView source={clipSourceRender} />
+                        : undefined
+                    : undefined
+                }
                 // The source switch — only when the played clip captured more than one source.
                 rail={
                   availableViews.length > 1 ? (
