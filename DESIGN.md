@@ -3883,7 +3883,7 @@ single home screen — flagged at the end.
 - **Props:** `sources: FeedKind[]` (available → rail), `selected: FeedKind`, `onSelect`,
   `source: SourceRender` (resolved data for the selected kind), `active?`, `style?`
 - **States:** per-source render; rail hidden when ≤1 source; data sources show idle until `active`
-- **Used in:** `StreamScreen` (viewer + broadcaster monitor + fullscreen surfaces; wired 2026-06-13)
+- **Used in:** `StreamScreen` (viewer + broadcaster monitor + fullscreen surfaces; wired 2026-06-13) · `ClipsScreen` (the now-edge live source while broadcasting; SP4, 2026-06-16)
 - **Tweak impact:** the whole non-camera live viewer surface — one switchboard for every source
 - **Shipped:** 2026-06-12 (source-visualizers initiative)
 - **Last reviewed:** 2026-06-16
