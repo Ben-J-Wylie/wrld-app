@@ -569,16 +569,28 @@ export const ClipsScreen = () => {
   const { data: currentUser } = useCurrentUser()
   const [view, setView] = useState<FeedKind>('cam')
   // The rail shows ONLY what THIS clip CAPTURED (Ben 2026-06-17) — so it varies per clip. Identity is
-  // always present; camera when there's playable video; the rest from the session's recorded kinds.
+  // always present. We union the session's `kinds` AND its recorded `dataUrls` keys, because the
+  // backend may list a recorded source in one but not the other (e.g. data tracks under dataUrls).
+  // camera: only if camera was captured (NOT just any manifest — an audio-only clip has an audio
+  // manifest); an evicted saved clip (no session) falls back to the manifest playing video.
   const availableViews = useMemo<FeedKind[]>(() => {
     const set = new Set<FeedKind>(['profile']) // identity always
-    if (manifestUrl || playerSession?.kinds.includes('camera')) set.add('cam')
-    for (const k of playerSession?.kinds ?? []) {
+    const kinds = playerSession?.kinds ?? []
+    const dataKeys = Object.keys(playerSession?.dataUrls ?? {})
+    if (playerSession ? kinds.includes('camera') : !!manifestUrl) set.add('cam')
+    if (kinds.includes('audio') || dataKeys.includes('audiolevel') || dataKeys.includes('audio')) set.add('audio')
+    for (const k of [...kinds, ...dataKeys]) {
       const fk = KIND_TO_FEEDKIND[k]
       if (fk) set.add(fk)
     }
     return SOURCE_RAIL_ORDER.filter((k) => set.has(k))
   }, [playerSession, manifestUrl])
+  // DEV probe (2026-06-17): what the played session actually exposes — kinds vs dataUrls keys — so we
+  // can tell whether a missing rail source is a backend listing gap or an app derivation bug.
+  useEffect(() => {
+    if (__DEV__ && playerSession)
+      console.log(`[clip-rail] session=${playerSession.id} kinds=${playerSession.kinds.join('|') || '-'} dataUrls=${Object.keys(playerSession.dataUrls ?? {}).join('|') || '-'} → rail=${availableViews.join('|')}`)
+  }, [playerSession, availableViews])
   // When the held view isn't in this clip's set, fall back to the most important captured source
   // (default-view priority — camera first, … location, identity last).
   useEffect(() => {
