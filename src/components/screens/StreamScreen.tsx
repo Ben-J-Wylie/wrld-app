@@ -69,6 +69,7 @@ import { useStreamTelemetry } from '@/hooks/useStreamTelemetry'
 import { useLocalTelemetry } from '@/hooks/useLocalTelemetry'
 import { useLocationTrail } from '@/hooks/useLocationTrail'
 import { useTelemetryCapture } from '@/hooks/useTelemetryCapture'
+import { useAudioLevelCapture } from '@/hooks/useAudioLevelCapture'
 import type { FeedKind } from '@/components/features/broadcast/FeedThumb'
 import { Avatar } from '@/components/primitives/Avatar'
 import { GoLiveRecordBar } from '@/components/features/broadcast/GoLiveRecordBar'
@@ -593,6 +594,10 @@ export function StreamScreen() {
   // The armed set comes from captureConfig (mapped to backend kind names).
   const armedKinds = useMemo(() => new Set(recordedSourcesFromConfig(cfg)), [cfg])
   useTelemetryCapture(armedKinds, sendTelemetry, isLiveBroadcast)
+  // SP6a item 4 — emit the live audio loudness as `audiolevel` telemetry while live
+  // with audio armed, so mediasoup records the audio-amplitude track for clip-waveform
+  // replay. Companion to the audio media track (not a phone sensor → its own emitter).
+  useAudioLevelCapture(audioLevel, sendTelemetry, isLiveBroadcast && armedKinds.has('audio'))
 
   // Physical device orientation (sensed via DeviceMotion — the app UI is
   // portrait-locked, so this is the only way to know how the phone is held).

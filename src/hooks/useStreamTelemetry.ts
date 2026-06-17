@@ -62,6 +62,10 @@ export function useStreamTelemetry(enabled = true): StreamTelemetry {
             return { ...prev, torch: p }
           case 'location':
             return { ...prev, location: p }
+          case 'audiolevel':
+            // Recording-only companion (clip waveform replay) — the live viewer
+            // waveform comes from the audio analyser, so ignore the live sample.
+            return prev
           case 'accel': {
             const mag = Math.sqrt(p.x * p.x + p.y * p.y + p.z * p.z)
             const intensity = Math.max(0, Math.min(1, Math.abs(mag - GRAVITY) / MOTION_SPAN))

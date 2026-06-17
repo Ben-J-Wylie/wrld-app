@@ -16,6 +16,11 @@ export type TelemetryPayload =
   // (avoids double-recording; locationUpdate already records the track). So this
   // shape appears on telemetryUpdate (viewer) but the app never sends it.
   | { kind: 'location'; ts: number; lat: number; lng: number; accuracy?: number }
+  // SP6a item 4: the broadcaster's live audio loudness (0..1), emitted ~10 Hz while
+  // live with audio armed. mediasoup records it into the `audiolevel` .jsonl companion
+  // of the audio HLS track so a saved clip's waveform can replay/scrub at the playhead.
+  // Recording-oriented: viewers ignore it live (the live waveform uses the analyser).
+  | { kind: 'audiolevel'; ts: number; level: number }
 
 export type ClientMessage =
   | { type: 'identify'; deviceId: string }
