@@ -3336,6 +3336,17 @@ location relay · SP6 persist/save audit + screen). The SP2/SP3(non-loc)/SP4 sta
 > separate device-specific spike (likely a native module that contends with WebRTC's camera).
 > **SP6b screen: deferred to v0.3** (mark the `screen` rail view honest-idle).
 
+> **Open BACKEND items for Aaron (2026-06-17), tracked in `HANDOFF-source-parity-aaron-2026-06-16.md`:**
+> (1) **Data-only / single-source streams must record a saveable clip** — a location-only (or any
+> non-AV) go-live must create a buffer **session** + record the armed data tracks + set the session's
+> wall-clock `durationSec`. The app allows the go-live, sends the full armed set to `createRoom`, and
+> renders a media-less session by `durationSec` (so it persists in the Clips timeline — fixed
+> 2026-06-17), **but only if `GET /buffer/me` returns the session**; if a camera-less broadcast makes
+> no session, the clip vanishes on stop. (2) **Drop `temp` from `VALID_SOURCES`** (deprecated — no
+> phone instrument); confirm **`accel`** is the armed/recorded kind (not `motion`). (3) **(lower)** an
+> **audio-amplitude `.jsonl` track** (`{ts,level}` ≈10 Hz on `session.dataUrls.audio`) so clip audio
+> replays its waveform (the app feeds it into `AudioVisualizer`'s playback `history` mode).
+
 ### Seam (unchanged)
 Ben owns `primitives/`/`features/`/`sections/` + DESIGN.md + CONTENT.md §6 (the rail, the
 visualizers, `SourceStage`/`ClipSourceView`, the always-present rail wiring he's crossed into
@@ -3348,6 +3359,35 @@ Open any source on any frame and it shows that source live in the moment the way
 does; arm any source and a viewer can consume it, it writes to the server, and it saves into a
 clip; riding the now edge on the clips page shows the live source feed. Where a path genuinely
 can't be live (e.g. audio in preview, temp), it reads as an honest idle, never faked.
+
+---
+
+## Updates — June 2026 (Source-parity app pass: clip replay · armed rails · viewer/preview)
+
+A run of source-parity refinements on `design`, all pure JS (hot-reload, no native module), merged to
+`main` continuously. The cross-repo open items are the backend ones above (data-only recording, temp
+drop, audio amplitude) — everything below is app-side and done.
+
+- **Clip-source replay through the live visualizers.** Recorded clip sources replay via the SAME
+  `SourceStage` visualizers as live (circle compass, gyro horizon, accel xyz traces, speed dial,
+  torch lamp, location trail, chat log), **sampled at the playhead** (time-accurate by each sample's
+  wall-clock `ts` — new `sampleAt`/`trailUpTo`/`chatUpTo`/`recentUpTo`/`torchStateAt` in
+  `dataTrackRender`). Accel + the audio waveform get a **playback `history` mode** (scroll + rewind
+  with the playhead, not an internal ticker). Location **holds the earliest fix** at the head; torch
+  carries the **prior** state (inverse of the first toggle) to the head; chat **unfolds** + defaults
+  empty (mock only when omitted). audio replay still wants the backend amplitude track.
+- **Armed/captured-only rails** (supersedes the brief "full suite + idle"). The rail shows only
+  sources actually there — broadcaster = `captureConfig.air` (+chat), viewer = `Stream.sources`,
+  clip = the played session's `kinds` (varies per clip); identity always. `KIND_TO_FEEDKIND` maps
+  backend names. Rail ICON order = dashboard order; the DEFAULT view is a separate importance order
+  (`pickDefaultView`: camera · audio · sensors · speed · torch · location · identity).
+- **Camera-off preview no longer blanks** — a broadcaster arming/preview state renders the selected
+  source + rail (id/location/sensor) before go-live, with local sensor reads enabled in preview.
+- **Clips page defaults to riding the now edge** on open; **data-only sessions keep their wall-clock
+  length** so a camera-less clip persists in the timeline (given the backend returns the session).
+- **Viewer UX:** retired the tap-up roomInfo overlay; tip · follow (compact) · report · fullscreen ·
+  leave live in the always-visible top cluster; the profile source shows the same identity card as
+  the broadcaster. **Audio preview metering** via a throwaway local loopback PC (device-confirmed).
 
 ---
 

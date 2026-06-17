@@ -12,9 +12,12 @@ This doc is the index + the priority order, not a re-statement.
   on macOS) — **discarded**; CONTENT.md is canonical.
 - **`HANDOFF-source-visualizers-2026-06-12.md`** — the telemetry data path (sensors) + the
   camera/audio wiring already shipped. Has its own START-HERE checklist.
-- **`HANDOFF-source-parity-aaron-2026-06-16.md`** — camera-parity for every source (CONTENT.md §1.7);
-  what's left from you: **SP5 live location relay** (unblocks loc everywhere) + **SP6** persist/save
-  audit (torch) + screen source. The rollout table is in `CLAUDE.md` ("Source-parity rollout").
+- **`HANDOFF-source-parity-aaron-2026-06-16.md`** — camera-parity for every source (CONTENT.md §1.7).
+  SP5 live location relay ✅ (done by you). **Open backend items (see its "OPEN ITEMS FOR AARON"
+  top section):** (1) data-only/single-source streams must create a session + record a saveable clip
+  (camera-less clips vanish otherwise); (2) drop `temp` from `VALID_SOURCES` + confirm `accel` (not
+  `motion`); (3) lower: an audio-amplitude `.jsonl` track. v0.3: screen + real torch LED. Rollout
+  table in `CLAUDE.md` ("Source-parity rollout").
 - **`HANDOFF-c4-clip-editor-2026-06-12.md`** — editable manifest (draft↔saved); the open gap is
   `removedByLane`.
 - **`HANDOFF-clips-saved-persistence-2026-06-11.md`** — R3 promote-on-publish + saved-clip list.

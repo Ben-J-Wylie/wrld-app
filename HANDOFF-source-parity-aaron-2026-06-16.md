@@ -9,6 +9,26 @@ shows the live source). The staged rollout is **`wrld-app/CLAUDE.md` → "Source
 (SP0–SP6)"**. This doc is the *index of the parts that are yours* — exactly what we need from you,
 in priority order. It does not restate Ben's design/app work.
 
+## ✅ OPEN ITEMS FOR AARON — start here (updated 2026-06-17)
+The app side of source-parity is done + on `main` (armed/captured rails, clip-source replay through
+the live visualizers sampled at the playhead, now-edge default, camera-off preview). What's left is
+backend, in priority order — detail in the dated sections below:
+
+1. **Data-only / single-source streams must record a saveable clip** (highest — blocks camera-less
+   capture). A location-only (or any non-AV) go-live must create a buffer **session** + record the
+   armed data tracks + set the session's wall-clock `durationSec`. The app already allows the go-live,
+   sends the full armed set to `createRoom`, and now renders a media-less session by its `durationSec`
+   so it persists in the Clips timeline — **but only if `GET /buffer/me` RETURNS that session.** If a
+   camera-less broadcast creates no session, the clip vanishes when the broadcast stops. → update (c).
+2. **Drop `temp` from `VALID_SOURCES`** — ambient temp deprecated (no phone instrument); don't
+   record/promote a `temp` track. → update (a).
+3. **Confirm `accel` is the armed/recorded kind** (not `motion`); drop `motion` from `VALID_SOURCES`
+   if present (`motion` is a viewer-derived view of `accel`). → update (a).
+4. **(lower)** an **audio-amplitude `.jsonl` track** so clip audio replays its waveform. → update (b).
+
+Already done by you: **SP5 live location relay** ✅. **v0.3** (deferred): SP6b — screen share + the
+real device torch LED (native-capture spike).
+
 ## ⚠️ Update 2026-06-17 (c) — data-only / single-source streams must record a clip
 The rails are now **armed-only** and identity + location are always armed, so a broadcaster can go
 live with **no camera/audio** — e.g. **location-only** (or any single source). The app already
@@ -19,6 +39,13 @@ the armed data tracks**, so a clip can be saved from a camera-less broadcast. (C
 lists "data-only room support" + "non-AV layer producers" as assumed follow-ups — this is the
 concrete need: location-only must produce a saveable clip.) If a data-only stream currently creates
 no buffer session / no recording, that's the gap.
+
+**Timeline persistence (app side done):** the Clips timeline previously dropped a media-less session
+(it sized clips by media duration → zero width → vanished on stop). Fixed 2026-06-17 — `sessionEndMs`
+now uses the session's **wall-clock `durationSec`** when there's no media. So the session must come
+back from `GET /buffer/me` with `durationSec` set (and `mediaDurationSec` 0/absent for data-only);
+then a location-only clip shows + persists. The `.jsonl` data tracks must be on `session.dataUrls`
+(already the shape for camera sessions).
 
 ## ⚠️ Update 2026-06-17 (b) — NEW ask: a recorded AUDIO AMPLITUDE track (for clip replay)
 Clip playback now replays every source through the live visualizers, sampled at the playhead (compass
