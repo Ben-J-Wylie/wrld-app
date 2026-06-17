@@ -37,6 +37,9 @@ function startAudioLevelPoll(
   stats: { getStats(): Promise<unknown> },
   setLevel: (n: number) => void,
 ): ReturnType<typeof setInterval> {
+  // Confirmed on-device (RN-WebRTC 124, 2026-06-16): `audioLevel` IS populated — on the
+  // broadcaster from media-source, on the viewer from inbound-rtp — and tracks the mic in
+  // real time. We scan every stat entry for the first numeric audioLevel so both paths work.
   return setInterval(() => {
     stats
       .getStats()

@@ -66,6 +66,7 @@ import { SOURCE_META } from '@/components/features/stream/sourceMeta'
 import { SourceStage, type SourceRender } from '@/components/sections/SourceStage'
 import { useBroadcasterClock } from '@/hooks/useBroadcasterClock'
 import { useStreamTelemetry } from '@/hooks/useStreamTelemetry'
+import { useLocalTelemetry } from '@/hooks/useLocalTelemetry'
 import { useTelemetryCapture } from '@/hooks/useTelemetryCapture'
 import type { FeedKind } from '@/components/features/broadcast/FeedThumb'
 import { Avatar } from '@/components/primitives/Avatar'
@@ -148,22 +149,12 @@ const AIR_KEY_TO_KIND: Record<string, string> = {
   torch: 'torch',
 }
 
-// Backend source-kind string → the FeedKind the SourceStage rail/renderer uses.
-// AV + the sensor kinds that render from live telemetry. location ('loc'), chat,
-// and profile are intentionally omitted — their source-views need their own data
-// wiring (loc trail / chat log / host identity) and are separate follow-ups.
-const SOURCE_TO_FEEDKIND: Record<string, FeedKind | undefined> = {
-  camera: 'cam',
-  audio: 'audio',
-  screen: 'screen',
-  compass: 'compass',
-  gyro: 'gyro',
-  motion: 'motion',
-  accel: 'accel',
-  speed: 'speed',
-  temp: 'temp',
-  torch: 'torch',
-}
+// The full source rail shown on the stream view at all times (Ben, 2026-06-16). Every renderable
+// source, in display order — clicking one switches the media surface to its live readout. Sensors
+// with no data show their idle visualizer. (loc / chat / profile need their own data wiring; temp
+// has no phone sensor — both kept visible as idle for now.) Camera leads.
+const FULL_SOURCE_RAIL: FeedKind[] = ['cam', 'audio', 'compass', 'gyro', 'motion', 'accel', 'speed', 'torch', 'temp']
+
 function recordedSourcesFromConfig(cfg: CaptureConfig | null): string[] {
   if (!cfg) return []
   const out: string[] = []
@@ -434,26 +425,27 @@ export function StreamScreen() {
   // (camera video OR a source visualizer) renders for the whole time this is
   // true; the SourceRail switches which source is shown.
   const isViewerInRoom = !isNew && status === 'in-room' && !streamEnded && !!remoteStream
-  // The available sources as FeedKind, for the rail. Role-aware: broadcastSources
-  // is the viewer's stream sources (Stream.sources) or the broadcaster's live/armed
-  // set — so the same rail serves both the viewer and the live broadcaster monitor.
-  // AV + the sensor sources the SourceStage can render from live telemetry. (loc /
-  // profile / chat source-views need their own data wiring — separate follow-ups.)
-  const availableKinds = useMemo<FeedKind[]>(
-    () => broadcastSources.map((s) => SOURCE_TO_FEEDKIND[s as string]).filter((k): k is FeedKind => !!k),
-    [broadcastSources],
-  )
-  // Which source is currently being shown (defaults to the first).
-  const selectedKind: FeedKind = activeSource ?? availableKinds[0] ?? 'cam'
+  // The FULL source rail, always present on the stream view (broadcasting or not). Ben's call
+  // (2026-06-16): the rail shows every renderable source at all times — clicking one switches the
+  // media surface to that source's live readout. A source with no data shows its idle visualizer.
+  // (loc / chat / profile source-views need their own data wiring — separate follow-ups, omitted.)
+  const availableKinds = FULL_SOURCE_RAIL
+  // Which source is currently being shown (defaults to camera).
+  const selectedKind: FeedKind = activeSource ?? 'cam'
   const selectSource = (k: FeedKind) => setActiveSource(k)
 
-  // Viewer-side live decode of the broadcaster's sensor telemetry (latest per kind).
-  // Active whenever we're showing a stream surface (viewer in-room or broadcaster
-  // monitoring its own sensors). audioLevel still comes from the getStats seam.
-  // (isLiveBroadcast is defined below; inline its condition to avoid the TDZ.)
-  const tel = useStreamTelemetry(isViewerInRoom || (isNew && status === 'in-room' && !streamEnded))
+  // Viewer-side live decode of the broadcaster's sensor telemetry (latest per kind), from the
+  // `telemetryUpdate` fan-out. Viewer-only — the broadcaster monitors its OWN sensors locally
+  // (the relay never fans back to the sender), so the broadcaster reads `localTel` instead.
+  const tel = useStreamTelemetry(isViewerInRoom)
+  // Broadcaster self-monitor: the relay fans telemetry out to VIEWERS, never back to the sender,
+  // so a broadcaster can't watch its own sensors over the wire. Read the selected sensor locally
+  // (preview AND live) and feed the SAME render path. Only the viewed sensor is subscribed.
+  const localTel = useLocalTelemetry(isNew ? selectedKind : null, isNew && (showCameraPreview || (status === 'in-room' && !streamEnded)))
+  // The readings the media surface renders: the broadcaster's own (local) vs the viewer's (fan-out).
+  const monitorTel = isNew ? localTel : tel
   // Build the SourceStage render for the selected source. cam/screen get the
-  // injected RTCView slot; everything else renders from `tel` / `audioLevel`.
+  // injected RTCView slot; everything else renders from `monitorTel` / `audioLevel`.
   const buildSource = useCallback(
     (kind: FeedKind, camSlot: ReactNode): SourceRender => {
       switch (kind) {
@@ -463,36 +455,36 @@ export function StreamScreen() {
         case 'audio':
           return { kind: 'audio', level: audioLevel, variant: 'waveform' }
         case 'compass':
-          return { kind: 'compass', heading: tel.compass?.heading ?? 0 }
+          return { kind: 'compass', heading: monitorTel.compass?.heading ?? 0 }
         case 'gyro':
-          return { kind: 'gyro', pitch: tel.gyro?.pitch ?? 0, roll: tel.gyro?.roll ?? 0 }
+          return { kind: 'gyro', pitch: monitorTel.gyro?.pitch ?? 0, roll: monitorTel.gyro?.roll ?? 0 }
         case 'motion':
-          return { kind: 'motion', intensity: tel.motionIntensity ?? 0 }
+          return { kind: 'motion', intensity: monitorTel.motionIntensity ?? 0 }
         case 'accel':
-          return { kind: 'accel', x: tel.accel?.x ?? 0, y: tel.accel?.y ?? 0, z: tel.accel?.z ?? 0 }
+          return { kind: 'accel', x: monitorTel.accel?.x ?? 0, y: monitorTel.accel?.y ?? 0, z: monitorTel.accel?.z ?? 0 }
         case 'speed':
-          return { kind: 'speed', mps: tel.speed?.mps ?? -1 }
+          return { kind: 'speed', mps: monitorTel.speed?.mps ?? -1 }
         case 'torch':
-          return { kind: 'torch', on: tel.torch?.on ?? false, level: tel.torch?.level }
+          return { kind: 'torch', on: monitorTel.torch?.on ?? false, level: monitorTel.torch?.level }
         case 'temp':
           return { kind: 'temp', celsius: NaN } // no phone sensor → idle
         default:
           return { kind: 'audio', level: audioLevel, variant: 'waveform' }
       }
     },
-    [tel, audioLevel],
+    [monitorTel, audioLevel],
   )
   // Has the selected source produced data yet? (idle styling until then)
   const sourceActive =
     selectedKind === 'cam' ||
     selectedKind === 'screen' ||
     selectedKind === 'audio' ||
-    (selectedKind === 'compass' && !!tel.compass) ||
-    (selectedKind === 'gyro' && !!tel.gyro) ||
-    (selectedKind === 'motion' && tel.motionIntensity !== null) ||
-    (selectedKind === 'accel' && !!tel.accel) ||
-    (selectedKind === 'speed' && !!tel.speed) ||
-    (selectedKind === 'torch' && !!tel.torch)
+    (selectedKind === 'compass' && !!monitorTel.compass) ||
+    (selectedKind === 'gyro' && !!monitorTel.gyro) ||
+    (selectedKind === 'motion' && monitorTel.motionIntensity !== null) ||
+    (selectedKind === 'accel' && !!monitorTel.accel) ||
+    (selectedKind === 'speed' && !!monitorTel.speed) ||
+    (selectedKind === 'torch' && !!monitorTel.torch)
   // The viewer always gets the dark media surface + translucent control overlay
   // (so a visualizer reads like the video it replaces).
   const showOverlay = showCameraPreview || isViewerInRoom
@@ -1323,10 +1315,11 @@ export function StreamScreen() {
         </View>
       )}
 
-      {/* Broadcaster source monitor — when live and monitoring a non-camera
-          source, its visualizer fills the camera's place (camera keeps streaming
-          either way). Audio uses the broadcaster's own mic level. */}
-      {isLiveBroadcast && selectedKind !== 'cam' && (
+      {/* Broadcaster source monitor — when monitoring a non-camera source (in preview OR
+          live), its visualizer fills the camera's place (the camera keeps streaming either
+          way). Sensors read locally (monitorTel); audio uses the broadcaster's own mic level.
+          The always-present left rail (below) switches the source. */}
+      {isNew && (showCameraPreview || isLiveBroadcast) && selectedKind !== 'cam' && (
         <View style={[styles.cameraBox, { top: camTop, bottom: camBottom }]}>
           <SourceStage
             sources={[selectedKind]}
@@ -1337,17 +1330,6 @@ export function StreamScreen() {
             style={StyleSheet.absoluteFill}
           />
         </View>
-      )}
-
-      {/* Broadcaster source rail — switch which source the broadcaster is
-          monitoring (camera ↔ audio ↔ future sensors), same as a viewer. */}
-      {isLiveBroadcast && availableKinds.length > 1 && (
-        <SourceRail
-          sources={availableKinds.map((k) => ({ key: k, iconName: SOURCE_META[k].icon, label: SOURCE_META[k].label }))}
-          value={selectedKind}
-          onChange={(k) => selectSource(k as FeedKind)}
-          style={styles.broadcasterRail}
-        />
       )}
 
       {/* Viewer media surface — the SELECTED source fills the media box: camera
@@ -1371,6 +1353,19 @@ export function StreamScreen() {
             )}
             active={sourceActive}
             style={StyleSheet.absoluteFill}
+          />
+        </View>
+      )}
+
+      {/* Full source rail — ALWAYS on the left while on a media surface (broadcaster preview,
+          live broadcaster, or viewer). Tapping a source switches the media box above to that
+          source's live readout. (Ben, 2026-06-16.) */}
+      {(showCameraPreview || isLiveBroadcast || isViewerInRoom) && (
+        <View style={[styles.leftRail, { top: camTop, bottom: camBottom }]} pointerEvents="box-none">
+          <SourceRail
+            sources={availableKinds.map((k) => ({ key: k, iconName: SOURCE_META[k].icon, label: SOURCE_META[k].label }))}
+            value={selectedKind}
+            onChange={(k) => selectSource(k as FeedKind)}
           />
         </View>
       )}
@@ -1659,14 +1654,6 @@ export function StreamScreen() {
                     />
                   )}
                 </View>
-              )}
-
-              {availableKinds.length > 1 && (
-                <SourceRail
-                  sources={availableKinds.map((k) => ({ key: k, iconName: SOURCE_META[k].icon, label: SOURCE_META[k].label }))}
-                  value={selectedKind}
-                  onChange={(k) => selectSource(k as FeedKind)}
-                />
               )}
 
               <Button label="Leave" onPress={handleLeave} variant="primary" />
@@ -2231,12 +2218,13 @@ const styles = StyleSheet.create({
     bottom: '38%',
   },
 
-  // Broadcaster source rail — floating right-centre while live, clear of the
-  // top-right flip button and the bottom record/End-Stream footer.
-  broadcasterRail: {
+  // Full source rail — left edge, vertically centred within the camera box (top/bottom set
+  // inline to camTop/camBottom). Always present on a media surface; clear of the bottom chat/
+  // record chrome. `box-none` wrapper so only the rail buttons capture touches.
+  leftRail: {
     position: 'absolute',
-    right: theme.spacing.md,
-    top: '40%',
+    left: theme.spacing.md,
+    justifyContent: 'center',
   },
   // Camera flip — top-right of the camera frame; `top` is set inline to
   // camTop + sm.

@@ -51,9 +51,11 @@ type Props = {
   style?: StyleProp<ViewStyle>
 }
 
-// audioLevel from getStats is RMS-ish and rarely approaches 1, so a perceptual
-// gain lifts normal speech into the visible range before clamping.
-const GAIN = 1.6
+// audioLevel from getStats is RMS-ish and small in practice — normal speech measured
+// ~0.05–0.13 on-device (RN-WebRTC 124), peaking well under 1 — so a strong perceptual
+// gain lifts it into the visible range before clamping. Without this the waveform moves
+// but only to ~10–20% height, reading as near-static.
+const GAIN = 4
 // Steady scroll cadence for the waveform, independent of how often `level` ticks.
 const SAMPLE_MS = 70
 // Asymmetric envelope — snap up to peaks, ease back down (natural VU feel).
