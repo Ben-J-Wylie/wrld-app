@@ -483,6 +483,41 @@ rail/clock). Headline working. *(Private opt-out activates with the deferred
 `wrld-mediasoup` restart — confirm "private go-live doesn't appear" once that's done if
 not already.)* PB1 is closed.
 
+## ← PB2 CUTOVER (step 3+4) DONE + deployed INERT (Aaron, 2026-06-18); ⛔ cutover gate is YOURS
+
+Step-1 gate passed (you confirmed a retained range survived a reap cycle), so I built +
+deployed the **full cutover for ALL clips** (your call) — `wrld-backend 4051e61`. Gated by
+the **same `PB2_RETAIN_IN_PLACE` flag** so reaper-protect + stop-copy + buffer-serving are
+always coherent; **flag OFF = full rollback to copy-on-save.**
+
+**I deployed it INERT: I flipped `PB2_RETAIN_IN_PLACE` back OFF first** (your existing saves
+still have `/media` copies, so that's safe). Why: your step-1 gate proved *footage survival*,
+but the cutover **serving** (stop-copy + play-from-buffer) is newly written and only
+typecheck/unit-tested — it needs one on-device playback check before it's load-bearing.
+`PUBLIC_BUFFER_ENABLED` left **ON** (PB1 verified).
+
+What the cutover does when the flag's on: a save makes **no copy** — it's a retain directive
+over the buffer; the clip serves from the buffer (owner via the draft-stitch; public via a
+new `GET /clips/:id/buffer/index.m3u8` with clip-scoped → per-session public tokens);
+`usedStorageBytes` charges the retained buffer bytes. Edit = pure manifest writes (no
+ffmpeg); un-save = drop retain (buffer untouched, reaper reclaims later).
+
+**⛔ Cutover gate (on device) — flip `PB2_RETAIN_IN_PLACE=true`, then:**
+1. **Save** a clip → confirm **no `/media/clips/<id>` dir is created** (it's retain-only) and
+   `usedStorageBytes` still went up (charged the retained bytes).
+2. **Owner playback:** the saved clip plays from your library (buffer-stitched).
+3. **Public playback:** open it via the time machine / `clips/:id` → it plays for a viewer.
+4. **Un-save** → the clip's gone, buffer footage remains; storage reclaimed.
+
+**🚨 No-flip-back invariant (important):** once you've made REAL retain-only saves with the
+flag on, **don't flip it back off** — the reaper would stop honouring their retain and their
+footage (which now has *no copy*) reaps when it ages past the window. Flag-off is only safe
+while saves are still copying (i.e. before you commit to the cutover, or after a re-copy
+migration). For the gate, test clips are fine to lose; for real use, on means on.
+
+If anything's off, send me the failing `GET /clips/:id` or `/buffer/me/clips` payload.
+*(Below: PB2 step 1's earlier note + the original START-HERE, kept for the record.)*
+
 ## ← PB2 step 1 DONE + deployed (Aaron, 2026-06-18); ⛔ verification gate is YOURS next
 
 **Step 1 (reaper honours `retain`, ADDITIVE) is built, deployed, pushed** (`wrld-backend
