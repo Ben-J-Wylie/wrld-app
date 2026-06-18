@@ -342,3 +342,29 @@ Roll the globe back → a teammate's **un-saved public buffer** shows as a pin a
 instant → Watch → it plays with the source rail + broadcast clock. A `private` go-live
 does **not** appear. A subscriber-only session shows as a **locked pin**. Flipping
 `PUBLIC_BUFFER_ENABLED` off restores today's saved-clips-only past.
+
+### PB1 — app scaffold LANDED (Ben, 2026-06-18), flag-gated, awaiting Aaron's backend
+
+The app side is built to the contract above and **degrades gracefully** until the
+backend ships (discover returns no `bufferPins` → nothing extra; the viewer 404s on a
+buffer id → graceful blocked state). `tsc` clean; pure JS, no rebuild.
+
+- **`src/api/clips.ts`** — `discover` now returns `{ clips, bufferPins }` (additive;
+  `bufferPins` empty unless the backend sends it). New **`BufferPin`** type +
+  **`getBufferSession(id)`** → `GET /buffer/session/:id`, normalised into `ClipDetail`
+  so the viewer is source-agnostic.
+- **`src/hooks/useHistoricalClips.ts`** — returns `{ clips, bufferPins }`.
+- **`src/hooks/usePublicConfig.ts`** — new **`configBool`** helper.
+- **`GlobeScreenMapbox`** — reads **`PUBLIC_BUFFER_ENABLED`** (`configBool`, default
+  false; defensive on top of the backend gate); `bufferPinToStream` adapter; the
+  historical `pins` set = clip pins **+** buffer pins; `watchHistorical(id)` routes the
+  viewer with `source: 'buffer' | 'clip'`; locked tiers render the existing
+  subscriber/PPV locked card.
+- **`ClipViewerScreen`** — reads a `source` param; `source==='buffer'` fetches
+  `getBufferSession` (same rail + clock + transport, different fetch + id space).
+
+**What's needed to light it up (Aaron, PB1 backend, to the contract):** `Stream.visibility`
+(coarse), `bufferPins[]` in `clips/discover`, `GET /buffer/session/:id` with the 4-tier
+gate + session-scoped windowed tokens, and the `PUBLIC_BUFFER_ENABLED` +
+`PUBLIC_BUFFER_TOKEN_TTL_SEC` RemoteConfig keys. Flip the flag on for the team → the
+PB1 done-bar.

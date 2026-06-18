@@ -59,11 +59,15 @@ export function ClipViewerScreen() {
     seekSec?: string
     title?: string
     handle?: string
+    source?: string
   }>()
   const id = typeof params.id === 'string' ? params.id : undefined
   const seekSec = params.seekSec ? Math.max(0, Math.floor(Number(params.seekSec)) || 0) : 0
   const paramTitle = typeof params.title === 'string' ? params.title : undefined
   const paramHandle = typeof params.handle === 'string' ? params.handle : undefined
+  // 'buffer' → a public buffer session (PB1, GET /buffer/session/:id); else a saved
+  // clip (GET /clips/:id). Both normalise to ClipDetail, so the rest is source-agnostic.
+  const source = params.source === 'buffer' ? 'buffer' : 'clip'
 
   const {
     data: clip,
@@ -71,8 +75,8 @@ export function ClipViewerScreen() {
     isError,
     error,
   } = useQuery({
-    queryKey: ['clip', id],
-    queryFn: () => clipsApi.get(id!),
+    queryKey: ['clip', source, id],
+    queryFn: () => (source === 'buffer' ? clipsApi.getBufferSession(id!) : clipsApi.get(id!)),
     enabled: !!id,
     retry: 1,
   })

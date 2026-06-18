@@ -49,9 +49,9 @@ import { useAuthStore } from '@/stores/authStore'
 import { useLocation } from '@/hooks/useLocation'
 import { useViewportDiscovery, type TileCount } from '@/hooks/useViewportDiscovery'
 import { useHistoricalClips } from '@/hooks/useHistoricalClips'
-import type { ClipPin } from '@/api/clips'
+import type { ClipPin, BufferPin } from '@/api/clips'
 import { useStreamsNear } from '@/hooks/useStreamsNear'
-import { usePublicConfig, configNumber } from '@/hooks/usePublicConfig'
+import { usePublicConfig, configNumber, configBool } from '@/hooks/usePublicConfig'
 import { PIN_ZOOM_THRESHOLD, COUNT_MIN_ZOOM } from '@/lib/tiles'
 import { Text } from '@/components/primitives/Text'
 import { Pill } from '@/components/primitives/Pill'
@@ -190,6 +190,33 @@ function clipToStream(c: ClipPin): Stream {
   }
 }
 
+// PB1 — map a public/gated buffer session into the same Stream shape (so buffer pins
+// reuse the pin renderer + card). A subscriber/ppv tier reads as `subscribersOnly` so
+// the card shows the locked treatment; owner-private sessions never reach here.
+function bufferPinToStream(b: BufferPin): Stream {
+  return {
+    id: b.sessionId,
+    hostId: b.host.id,
+    host: {
+      id: b.host.id,
+      handle: b.host.handle,
+      displayName: b.host.displayName,
+      avatarUrl: b.host.avatarUrl,
+      subscriptionPriceUsd: b.subscriptionPriceUsd ?? null,
+    },
+    title: b.title ?? 'Buffer',
+    lat: b.lat,
+    lng: b.lng,
+    startedAt: new Date(b.sessionStartMs).toISOString(),
+    viewerCount: 0,
+    isLive: false,
+    sources: [],
+    mediasoupRoomId: null,
+    subscribersOnly: b.accessTier !== 'public',
+    locationPrecision: b.locationPrecision,
+  }
+}
+
 export function GlobeScreenMapbox() {
   const { coords } = useLocation()
   // ── Map pins: viewport tile-subscription feed (P2) ─────────────────────────
@@ -247,11 +274,19 @@ export function GlobeScreenMapbox() {
     return () => clearInterval(tid)
   }, [historicalMode])
   const playheadMs = historicalMode ? Date.now() - timeOffsetMs : 0
-  const { data: clipPinsData } = useHistoricalClips(playheadMs)
-  const clipPins = clipPinsData ?? []
+  const { data: histData } = useHistoricalClips(playheadMs)
+  const clipPins = histData?.clips ?? []
+  // PB1 — public buffer pins in the past, behind the PUBLIC_BUFFER_ENABLED flag
+  // (defensive: the backend also omits them when off). Empty until the backend ships.
+  const publicBufferEnabled = configBool(config, 'PUBLIC_BUFFER_ENABLED', false)
+  const bufferPins = publicBufferEnabled ? (histData?.bufferPins ?? []) : []
   const clipPinById = useMemo(
     () => new Map(clipPins.map((c) => [c.id, c] as const)),
     [clipPins],
+  )
+  const bufferPinById = useMemo(
+    () => new Map(bufferPins.map((b) => [b.sessionId, b] as const)),
+    [bufferPins],
   )
   // Bumped whenever any overlay UI (not the globe, not the clock) is touched,
   // so the TimeScrubber blurs + collapses. Spinning/zooming the globe doesn't.
@@ -268,8 +303,11 @@ export function GlobeScreenMapbox() {
   // screen, but `pins` only changes when the live feed or the clip set changes),
   // which keeps the card-sync effects from looping.
   const pins: Stream[] = useMemo(
-    () => (historicalMode ? clipPins.map(clipToStream) : streams),
-    [historicalMode, clipPins, streams],
+    () =>
+      historicalMode
+        ? [...clipPins.map(clipToStream), ...bufferPins.map(bufferPinToStream)]
+        : streams,
+    [historicalMode, clipPins, bufferPins, streams],
   )
   // A clip pin is never treated as the viewer's own live stream (no black self-pin,
   // no return-to-broadcast on tap) even when it's their own clip.
@@ -567,16 +605,21 @@ export function GlobeScreenMapbox() {
     })
   }
 
-  // Open a historical clip in the replay viewer, seeking to the playhead instant.
-  function watchClip(clipId: string) {
-    const pin = clipPinById.get(clipId)
+  // Open a historical clip OR public buffer session in the replay viewer, seeking to
+  // the playhead instant. `source` routes the viewer's fetch (clips/:id vs
+  // buffer/session/:id).
+  function watchHistorical(id: string) {
+    const clip = clipPinById.get(id)
+    const buf = bufferPinById.get(id)
+    const pin = clip ?? buf
     if (!pin) return
     setSelectedStream(null)
     setSelectedClusterStreams(null)
     router.push({
       pathname: '/(app)/clip/[id]',
       params: {
-        id: clipId,
+        id,
+        source: buf ? 'buffer' : 'clip',
         seekSec: String(pin.seekOffsetSec),
         title: pin.title ?? '',
         handle: pin.host.handle,
@@ -585,7 +628,7 @@ export function GlobeScreenMapbox() {
   }
 
   function toDiscovery(stream: Stream): DiscoveryStream {
-    const clip = clipPinById.get(stream.id)
+    const clip = clipPinById.get(stream.id) ?? bufferPinById.get(stream.id)
     return {
       id: stream.id,
       title: stream.title,
@@ -596,10 +639,10 @@ export function GlobeScreenMapbox() {
       isLive: stream.isLive,
       subscribersOnly: stream.subscribersOnly,
       subscriptionPriceUsd: stream.host?.subscriptionPriceUsd,
-      // Clip pins (Time Machine) → "Watch" → replay viewer; live streams → "Join".
+      // Clip / buffer pins (Time Machine) → "Watch" → replay viewer; live → "Join".
       kind: clip ? 'clip' : 'stream',
       ctaLabel: clip ? 'Watch' : 'Join',
-      onJoin: clip ? () => watchClip(stream.id) : () => joinStream(stream),
+      onJoin: clip ? () => watchHistorical(stream.id) : () => joinStream(stream),
     }
   }
 

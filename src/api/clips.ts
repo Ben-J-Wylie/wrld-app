@@ -24,6 +24,27 @@ export type ClipPin = {
   host: { id: string; handle: string; displayName: string; avatarUrl: string | null }
 }
 
+// One public/gated buffer session alive at a scrubbed instant — a globe pin in
+// playback mode (PB1). Additive alongside ClipPin; only present when the backend's
+// PUBLIC_BUFFER_ENABLED flag is on. `accessTier` drives the locked-pin treatment;
+// owner-private sessions are never returned. Open via the buffer-session viewer
+// (`/clip/[id]?source=buffer`).
+export type BufferPin = {
+  source: 'buffer'
+  sessionId: string
+  title: string | null
+  lat: number
+  lng: number
+  locationPrecision: 'exact' | 'city' | 'country'
+  sessionStartMs: number
+  sessionEndMs: number
+  seekOffsetSec: number
+  accessTier: 'public' | 'subscriber' | 'ppv'
+  subscriptionPriceUsd?: number | null
+  ppvEventId?: string | null
+  host: { id: string; handle: string; displayName: string; avatarUrl: string | null }
+}
+
 // One captured/included source track on a clip (durable public /media/clips URLs).
 // `manifestUrl` for media kinds (camera/audio/screen); `dataUrl` (NDJSON) for data
 // kinds (location/gyro/compass/accel/speed/torch/chat/audiolevel).
@@ -52,17 +73,53 @@ export type ClipDetail = {
 }
 
 export const clipsApi = {
-  // Surviving public clips alive at the given instant — the Time Machine pin feed.
-  discover: async (atISO: string): Promise<ClipPin[]> => {
-    const res = await apiClient.get<{ clips: ClipPin[] }>('/clips/discover', {
-      params: { at: atISO },
-    })
-    return res.data.clips
+  // Surviving public content alive at the given instant — the Time Machine pin feed.
+  // `clips` = saved public clips (unchanged); `bufferPins` = public/gated rolling-buffer
+  // sessions (PB1, additive — empty unless the backend's PUBLIC_BUFFER_ENABLED flag is on).
+  discover: async (atISO: string): Promise<{ clips: ClipPin[]; bufferPins: BufferPin[] }> => {
+    const res = await apiClient.get<{ clips: ClipPin[]; bufferPins?: BufferPin[] }>(
+      '/clips/discover',
+      { params: { at: atISO } },
+    )
+    return { clips: res.data.clips ?? [], bufferPins: res.data.bufferPins ?? [] }
   },
 
   // One clip for playback. 403s on a subscribers-only clip without a subscription.
   get: async (id: string): Promise<ClipDetail> => {
     const res = await apiClient.get<{ clip: ClipDetail }>(`/clips/${id}`)
     return res.data.clip
+  },
+
+  // PB1 — a public buffer session for playback (GET /buffer/session/:id, the clips/:id
+  // analog). Normalised into ClipDetail so the viewer is source-agnostic. 403 when the
+  // session is subscriber/ppv-gated and the caller lacks access; 404 when owner-private
+  // / flag off / not found.
+  getBufferSession: async (id: string): Promise<ClipDetail> => {
+    const res = await apiClient.get<{
+      session: {
+        id: string
+        title: string | null
+        startAtMs: number
+        endAtMs: number
+        accessTier: 'public' | 'subscriber' | 'ppv'
+        manifestUrl: string | null
+        tracks: ClipTrack[]
+        host: { id: string; handle: string; displayName: string; avatarUrl: string | null }
+      }
+    }>(`/buffer/session/${id}`)
+    const s = res.data.session
+    return {
+      id: s.id,
+      title: s.title,
+      status: 'ready',
+      manifestUrl: s.manifestUrl,
+      thumbnailUrl: null,
+      subscribersOnly: s.accessTier !== 'public',
+      hostId: s.host.id,
+      host: s.host,
+      startAtMs: s.startAtMs,
+      endAtMs: s.endAtMs,
+      tracks: s.tracks,
+    }
   },
 }

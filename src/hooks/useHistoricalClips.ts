@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { clipsApi, type ClipPin } from '@/api/clips'
+import { clipsApi, type ClipPin, type BufferPin } from '@/api/clips'
 
 // Time Machine — the globe's historical pin feed. Given a playhead instant (epoch
 // ms behind now), queries the surviving public clips alive at that moment.
@@ -16,7 +16,7 @@ export function useHistoricalClips(playheadMs: number) {
   const active = playheadMs > 0
   const bucket = active ? Math.floor(playheadMs / BUCKET_MS) : 0
 
-  return useQuery<ClipPin[]>({
+  return useQuery<{ clips: ClipPin[]; bufferPins: BufferPin[] }>({
     queryKey: ['historical-clips', bucket],
     queryFn: () => clipsApi.discover(new Date(bucket * BUCKET_MS).toISOString()),
     enabled: active,

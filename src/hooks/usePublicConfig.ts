@@ -27,3 +27,12 @@ export function configNumber(config: PublicConfig, key: string, fallback: number
   const v = config[key]
   return typeof v === 'number' ? v : fallback
 }
+
+// Helper: read a boolean flag (accepts bool, number 1/0, or "true"/"1") with a fallback.
+export function configBool(config: PublicConfig, key: string, fallback: boolean): boolean {
+  const v = config[key]
+  if (typeof v === 'boolean') return v
+  if (typeof v === 'number') return v !== 0
+  if (typeof v === 'string') return v === 'true' || v === '1'
+  return fallback
+}
