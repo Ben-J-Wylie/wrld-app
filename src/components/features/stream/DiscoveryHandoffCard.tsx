@@ -41,6 +41,10 @@ export type DiscoveryStream = {
   layers?: StreamStripLayer[]
   subscribersOnly?: boolean
   subscriptionPriceUsd?: number | null
+  // 'clip' (Time Machine replay) vs the default live 'stream'. A clip shows the
+  // `ctaLabel` ("Watch") instead of "Join", no LivePill, and a "replay" caption.
+  kind?: 'stream' | 'clip'
+  ctaLabel?: string
   onJoin: () => void
 }
 
@@ -90,7 +94,7 @@ function SingleCard({ stream, onDismiss, style }: SingleProps) {
             {stream.title}
           </Text>
           <Text variant="monoCaption" color={theme.colors.text.muted} numberOfLines={1}>
-            @{stream.handle} · {formatViewers(stream.viewerCount)} watching
+            @{stream.handle} · {stream.kind === 'clip' ? 'replay' : `${formatViewers(stream.viewerCount)} watching`}
           </Text>
           {priceLabel != null && (
             <View style={styles.lockRow}>
@@ -105,7 +109,7 @@ function SingleCard({ stream, onDismiss, style }: SingleProps) {
             </View>
           )}
         </View>
-        {stream.isLive !== false && <LivePill size="sm" />}
+        {stream.kind !== 'clip' && stream.isLive !== false && <LivePill size="sm" />}
         {onDismiss && (
           <Pressable
             variant="default"
@@ -122,7 +126,7 @@ function SingleCard({ stream, onDismiss, style }: SingleProps) {
       {stream.layers && stream.layers.length > 0 && (
         <StreamStrip layers={stream.layers} />
       )}
-      <Button variant="primary" label="Join" onPress={stream.onJoin} />
+      <Button variant="primary" label={stream.ctaLabel ?? 'Join'} onPress={stream.onJoin} />
     </View>
   )
 }

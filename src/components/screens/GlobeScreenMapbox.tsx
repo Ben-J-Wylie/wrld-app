@@ -48,6 +48,8 @@ import { theme } from '@/tokens/theme'
 import { useAuthStore } from '@/stores/authStore'
 import { useLocation } from '@/hooks/useLocation'
 import { useViewportDiscovery, type TileCount } from '@/hooks/useViewportDiscovery'
+import { useHistoricalClips } from '@/hooks/useHistoricalClips'
+import type { ClipPin } from '@/api/clips'
 import { useStreamsNear } from '@/hooks/useStreamsNear'
 import { usePublicConfig, configNumber } from '@/hooks/usePublicConfig'
 import { PIN_ZOOM_THRESHOLD, COUNT_MIN_ZOOM } from '@/lib/tiles'
@@ -160,6 +162,34 @@ type BannerData =
   | { kind: 'cancelled' }
   | { kind: 'resumed'; stream: Stream; broadcasterHandle: string | null }
 
+// Time Machine — map a surviving-clip pin into the Stream shape the globe's pin
+// renderer + card already consume, so historical pins reuse the whole live path.
+// Module-level + pure so the memoised `pins` stays referentially stable. Clips are
+// recorded (isLive false, no room, no viewers); their clip-ness is recovered by
+// `clipPinById.has(id)`, which drives the "Watch" CTA + replay caption.
+function clipToStream(c: ClipPin): Stream {
+  return {
+    id: c.id,
+    hostId: c.host.id,
+    host: {
+      id: c.host.id,
+      handle: c.host.handle,
+      displayName: c.host.displayName,
+      avatarUrl: c.host.avatarUrl,
+    },
+    title: c.title ?? 'Clip',
+    lat: c.lat,
+    lng: c.lng,
+    startedAt: new Date(c.clipStartMs).toISOString(),
+    viewerCount: 0,
+    isLive: false,
+    sources: [],
+    mediasoupRoomId: null,
+    subscribersOnly: c.subscribersOnly,
+    locationPrecision: c.locationPrecision,
+  }
+}
+
 export function GlobeScreenMapbox() {
   const { coords } = useLocation()
   // ── Map pins: viewport tile-subscription feed (P2) ─────────────────────────
@@ -201,6 +231,28 @@ export function GlobeScreenMapbox() {
 
   // 0 = live present; >0 = playback offset behind now (Time Machine).
   const [timeOffsetMs, setTimeOffsetMs] = useState(0)
+  const historicalMode = timeOffsetMs > 0
+
+  // ── TIME MACHINE: surviving-clip pins at the playhead ──────────────────────
+  // Scrubbed into the past → the globe shows the public clips alive at the
+  // playhead instead of the live viewport feed. The playhead = now − offset
+  // ticks forward at 1× (a 1s ticker, only while scrubbed), so the pin set
+  // replays the past as time advances; useHistoricalClips buckets the query to
+  // 5s so it refreshes without thrashing. `playheadMs` uses Date.now() to match
+  // the TimeScrubber's own clock (offset is derived against the device clock).
+  const [, setNowTick] = useState(0)
+  useEffect(() => {
+    if (!historicalMode) return
+    const tid = setInterval(() => setNowTick((n) => n + 1), 1000)
+    return () => clearInterval(tid)
+  }, [historicalMode])
+  const playheadMs = historicalMode ? Date.now() - timeOffsetMs : 0
+  const { data: clipPinsData } = useHistoricalClips(playheadMs)
+  const clipPins = clipPinsData ?? []
+  const clipPinById = useMemo(
+    () => new Map(clipPins.map((c) => [c.id, c] as const)),
+    [clipPins],
+  )
   // Bumped whenever any overlay UI (not the globe, not the clock) is touched,
   // so the TimeScrubber blurs + collapses. Spinning/zooming the globe doesn't.
   const [clockCollapseSignal, setClockCollapseSignal] = useState(0)
@@ -209,6 +261,28 @@ export function GlobeScreenMapbox() {
   const [selectedStream, setSelectedStream] = useState<Stream | null>(null)
   const [selectedClusterStreams, setSelectedClusterStreams] = useState<Stream[] | null>(null)
   const [banner, setBanner] = useState<BannerData | null>(null)
+
+  // The pins the globe renders: live viewport streams, or — when scrubbed into
+  // the past — the surviving clips mapped into the Stream shape. Memoised so the
+  // reference stays stable between renders (the 1s playhead ticker re-renders the
+  // screen, but `pins` only changes when the live feed or the clip set changes),
+  // which keeps the card-sync effects from looping.
+  const pins: Stream[] = useMemo(
+    () => (historicalMode ? clipPins.map(clipToStream) : streams),
+    [historicalMode, clipPins, streams],
+  )
+  // A clip pin is never treated as the viewer's own live stream (no black self-pin,
+  // no return-to-broadcast on tap) even when it's their own clip.
+  const treatAsSelf = useCallback(
+    (s: Stream) => !historicalMode && isSelfStream(s),
+    [historicalMode, isSelfStream],
+  )
+  // Crossing the live↔past boundary clears any open card (the pin may not exist on
+  // the other side). Within the past, the card-sync effects drop a stale selection.
+  useEffect(() => {
+    setSelectedStream(null)
+    setSelectedClusterStreams(null)
+  }, [historicalMode])
   const [query, setQuery] = useState('')
   const [chipId, setChipId] = useState<string | null>(null)
   const [drawerState, setDrawerState] = useState<DrawerState>('closed')
@@ -411,20 +485,20 @@ export function GlobeScreenMapbox() {
   // ── Keep preview cards in sync with streams refresh ────────────────────────
 
   useEffect(() => {
-    if (!selectedStream || !streams) return
-    const updated = streams.find(s => s.id === selectedStream.id)
+    if (!selectedStream || !pins) return
+    const updated = pins.find(s => s.id === selectedStream.id)
     if (!updated) setSelectedStream(null)
     else if (updated !== selectedStream) setSelectedStream(updated)
-  }, [streams])
+  }, [pins])
 
   useEffect(() => {
-    if (!selectedClusterStreams || !streams) return
+    if (!selectedClusterStreams || !pins) return
     const updated = selectedClusterStreams
-      .map(s => streams.find(x => x.id === s.id))
+      .map(s => pins.find(x => x.id === s.id))
       .filter((s): s is Stream => s != null)
     if (updated.length === 0) setSelectedClusterStreams(null)
     else setSelectedClusterStreams(updated)
-  }, [streams])
+  }, [pins])
 
   // ── Filtered streams (query + chip) ────────────────────────────────────────
 
@@ -493,7 +567,25 @@ export function GlobeScreenMapbox() {
     })
   }
 
+  // Open a historical clip in the replay viewer, seeking to the playhead instant.
+  function watchClip(clipId: string) {
+    const pin = clipPinById.get(clipId)
+    if (!pin) return
+    setSelectedStream(null)
+    setSelectedClusterStreams(null)
+    router.push({
+      pathname: '/(app)/clip/[id]',
+      params: {
+        id: clipId,
+        seekSec: String(pin.seekOffsetSec),
+        title: pin.title ?? '',
+        handle: pin.host.handle,
+      },
+    })
+  }
+
   function toDiscovery(stream: Stream): DiscoveryStream {
+    const clip = clipPinById.get(stream.id)
     return {
       id: stream.id,
       title: stream.title,
@@ -504,7 +596,10 @@ export function GlobeScreenMapbox() {
       isLive: stream.isLive,
       subscribersOnly: stream.subscribersOnly,
       subscriptionPriceUsd: stream.host?.subscriptionPriceUsd,
-      onJoin: () => joinStream(stream),
+      // Clip pins (Time Machine) → "Watch" → replay viewer; live streams → "Join".
+      kind: clip ? 'clip' : 'stream',
+      ctaLabel: clip ? 'Watch' : 'Join',
+      onJoin: clip ? () => watchClip(stream.id) : () => joinStream(stream),
     }
   }
 
@@ -512,7 +607,7 @@ export function GlobeScreenMapbox() {
 
   const geoJSON = {
     type: 'FeatureCollection' as const,
-    features: streams
+    features: pins
       .filter(s => s.lat != null && s.lng != null)
       .map(s => ({
         type: 'Feature' as const,
@@ -526,7 +621,7 @@ export function GlobeScreenMapbox() {
           sources:          (s.sources ?? []).join(','),
           precision:        s.locationPrecision ?? 'exact',
           subscribersOnly:  s.subscribersOnly === true,
-          isSelf:           isSelfStream(s),
+          isSelf:           treatAsSelf(s),
         },
       })),
   }
@@ -535,7 +630,9 @@ export function GlobeScreenMapbox() {
   // centroid the server snapped to a real pin. Empty in pins mode.
   const countsGeoJSON = {
     type: 'FeatureCollection' as const,
-    features: counts.map((c: TileCount) => ({
+    // In the past, pins come from the clip feed (no server tile-counts) — render
+    // clip pins directly and suppress the live count bubbles.
+    features: (historicalMode ? [] : counts).map((c: TileCount) => ({
       type: 'Feature' as const,
       geometry: { type: 'Point' as const, coordinates: [c.lng, c.lat] },
       properties: {
@@ -572,21 +669,21 @@ export function GlobeScreenMapbox() {
       try {
         const leaves = await sourceRef.current?.getClusterLeaves(feature, 100, 0) as any
         const clusterStreams = ((leaves?.features ?? []) as any[])
-          .map((f: any) => streams.find(s => s.id === f.properties?.streamId))
+          .map((f: any) => pins.find(s => s.id === f.properties?.streamId))
           .filter((s): s is Stream => s != null)
           // A streamer never sees their own stream in the cluster card either.
-          .filter(s => !isSelfStream(s))
+          .filter(s => !treatAsSelf(s))
         if (clusterStreams.length > 0) {
           setSelectedClusterStreams(clusterStreams)
           setSelectedStream(null)
         }
       } catch {}
     } else {
-      const stream = streams.find(s => s.id === feature.properties?.streamId)
+      const stream = pins.find(s => s.id === feature.properties?.streamId)
       if (stream) {
         // Tapping your own (black) pin returns to your stream view instead of
         // opening a join card — same path as the tab-bar live-return link.
-        if (isSelfStream(stream)) {
+        if (treatAsSelf(stream)) {
           returnToActiveBroadcast()
           return
         }

@@ -184,6 +184,9 @@ export default function AppLayout() {
         <Tabs.Screen name="cashout" options={{ href: null }} />
         <Tabs.Screen name="topup" options={{ href: null }} />
         <Tabs.Screen name="stream/[id]" options={{ href: null }} />
+        {/* Time Machine clip viewer (singular `clip/` to avoid colliding with the
+            `clips` grid tab). Reached from a historical clip pin on the globe. */}
+        <Tabs.Screen name="clip/[id]" options={{ href: null }} />
         <Tabs.Screen name="profile/[handle]" options={{ href: null }} />
         <Tabs.Screen name="settings" options={{ href: null }} />
         <Tabs.Screen name="subscription" options={{ href: null }} />

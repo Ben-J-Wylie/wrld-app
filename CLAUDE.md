@@ -3618,3 +3618,60 @@ the zone — app-side playlist refresh + recorder-side shorter segments / less h
 cure is recorder/backend-side** (CONTENT.md §9 "Minimise the recording lag / dead zone"). **Next step
 with Aaron:** measure the actual dead-zone width + split true recorder lag vs the app's stale snapshot
 (the fixes differ). Captured 2026-06-16; nothing built yet.
+
+---
+
+## Updates — June 2026 (Time Machine — globe replay wired to the clip feed)
+
+The Time Machine app consumer is built on `design`. Scrubbing the globe clock into
+the past now repopulates the globe with **only the surviving public clips alive at
+the playhead** (CONTENT.md time-machine model); tapping a clip pin opens it in a
+replay viewer seeked to that instant. The backend was already ready — Aaron's
+**C4.5** made `GET /clips/discover?at=` a LEFT JOIN so it returns BOTH
+recording-sourced and buffer-promoted clips (honouring the clip's current
+reversible precision + identity), plus `GET /clips/:id` for playback — so this was
+pure app work. Built on the now-solid clip-playback foundation.
+
+### What was built (app, `design`)
+- **`src/api/clips.ts`** (new) — `clipsApi.discover(atISO)` → `GET /clips/discover`
+  (returns `ClipPin[]`: `{id, recordingId, title, lat, lng, locationPrecision,
+  seekOffsetSec, clipStartMs/EndMs, subscribersOnly, host}`); `clipsApi.get(id)` →
+  `GET /clips/:id` (the playable `manifestUrl` + host; 403 on subscribers-only).
+- **`src/hooks/useHistoricalClips.ts`** (new) — TanStack query, disabled at offset 0,
+  query key bucketed to 5s so the pin set refreshes as the playhead advances without
+  thrashing; `placeholderData` keeps prior pins on screen between fetches (no flicker).
+- **`GlobeScreenMapbox` seam** (the documented TIME MACHINE SEAM, now implemented):
+  `historicalMode = timeOffsetMs > 0`; a 1s ticker (only while scrubbed) advances
+  `playheadMs = Date.now() − timeOffsetMs`; a **memoised `pins`** swaps the live
+  viewport `streams` for `clipPins.map(clipToStream)` (clips mapped into the `Stream`
+  shape so the whole pin renderer + clustering + card path is reused — referentially
+  stable so the card-sync effects don't loop). `clipPinById` recovers clip-ness:
+  `toDiscovery` gives clip pins `kind:'clip'` + a **"Watch"** CTA → `watchClip` →
+  the replay viewer; live pins keep "Join". Count bubbles suppressed in the past
+  (no server tile-counts for clips); `treatAsSelf` disables the black self-pin /
+  return-to-broadcast for clip pins; selection clears on the live↔past boundary.
+- **`DiscoveryHandoffCard`** — `DiscoveryStream` gained `kind?: 'stream'|'clip'` +
+  `ctaLabel?`. A clip card shows the `ctaLabel`, no `LivePill`, and a "replay" caption.
+- **Clip viewer** — new route `app/(app)/clip/[id].tsx` (singular `clip/` to avoid
+  colliding with the `clips` grid tab; registered `href:null`) →
+  **`ClipViewerScreen`**. Fetches `clipsApi.get(id)`, plays `manifestUrl` (expo-video,
+  mirrors `ExternalStreamScreen`), seeks once to `seekSec` on first ready (single
+  landing seek — the repeated-precise-seek hang only bites after many). Host identity
+  chrome + back-to-globe; blocked states for subscribers-only (403, App-Store-safe:
+  no in-app buy), no-media, and load error.
+
+### Seam / lane note
+The Time Machine initiative section above split this as Aaron's backend replay + the
+app seam; Ben built the app consumer at his direction (same cross-lane pattern as the
+clips work). Backend (`clips/discover` + `clips/:id`) is Aaron's and already shipped.
+
+### Not yet device-tested / dependencies
+- **Needs the backend deployed** on the Hetzner box (pull `clips/discover` C4.5) for
+  the past to show anything; until then a rolled-back globe is empty (correct — no
+  surviving clips returned).
+- On-device pass owed: scrub-back populating clip pins, the 1s playhead advance
+  replaying pins as time passes, clip pins clustering + the "Watch" card, the replay
+  viewer (manifest load + seek-to-instant + the blocked states), and that returning
+  to live (`THEN`→`NOW` / offset 0) restores the live viewport feed cleanly.
+- `tsc` clean (only the pre-existing `stream/${string}` typed-route template-literal
+  errors remain — unrelated). Pure JS, no native module → no EAS rebuild.
