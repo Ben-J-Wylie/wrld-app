@@ -155,3 +155,53 @@ host's *entire* buffer, not one public session/range). So the PB0 call is how to
   *coarse/Clip-level* `saved` today and generalize to per-range once A/B lands.
 - So: lock **Contract 2 (serve) + the PB1 coarse flag** now → PB1 starts. Lock **A/B**
   in parallel → unblocks PB3. PB2 starts additive against today's `saved`.
+
+### PB0 — open questions audit (2026-06-18)
+
+What's **settled** (don't re-open): the core principle (CONTENT.md §3); per-range
+directives; orthogonal retention × visibility (Reading B); keep-cap model (buffer=time,
+saved=storage quota, saving decrements storage); the PB0–PB4 phasing.
+
+**Still unanswered — grouped by what they block:**
+
+*Blocks PB1 (answer to start):*
+1. **Contract 2 serve mechanism** — Option 2 (token-less per-request check) vs Option 3
+   (session-scoped token + manifest-build gate). [Aaron's lane; Ben leans 3]
+2. **Coarse PB1 visibility flag location** — `Stream.visibility` vs `UserBuffer`/user
+   default vs both. [Aaron]
+3. **subscribersOnly buffer = a third serve tier.** A public buffer that's
+   subscribers-only is neither open nor owner-private — it's auth+sub-gated. Decide:
+   does it appear in the time machine as a **locked pin** (like live subs-only streams
+   on the globe) and gate on *watch*, or is it **excluded** from the past entirely?
+   And the serve path must handle three tiers (public / subs-gated / owner-private),
+   not two. [Ben product + Aaron serve]
+
+*Blocks PB2 (the careful phase):*
+4. **Existing copied saved clips** — grandfather in `/media/clips` (recommend) vs
+   reconcile into retain-in-place. [Aaron; Ben to bless]
+5. **Additive→subtractive cutover** — copy-on-save and retain-in-place run together
+   first (redundant, safe); the flip that *stops copying* needs a **verification gate**
+   (prove a retained range survives a real reap cycle on device before we drop the
+   copy). Not a hard unknown, but an explicit gate to agree. [Aaron + Ben verify]
+6. **Delete vs un-save in one store (NEW question the model creates).** Un-save =
+   remove `retain` → footage falls back to the reaper. But **permanent-delete of a
+   saved clip whose footage is also live public buffer = the same bytes** — so delete
+   removes it *everywhere* (public buffer included). Is "delete = gone everywhere" the
+   intended semantic, or do we need delete-from-saved-only (just un-retain)? [Ben
+   product call]
+
+*Blocks PB3:*
+7. **Contract 1 A vs B** — extend `ClipRange` vs a dedicated `DirectiveRange` table.
+   [Aaron; Ben leans B]
+8. **Per-user visibility default** — is the default itself user-changeable in v0.2, and
+   where stored (`User.bufferVisibilityDefault`)? Or hardcoded public for now? [Ben]
+9. **Mend differ-guard behaviour** — disable mend vs prompt-to-pick when adjacent
+   ranges' directives differ. [Ben, UX — decide at build]
+
+*Confirm-but-low-risk (same pattern as today's clips/discover):*
+10. **Anon identity + precision on the public buffer** — discover honours the stream's
+    `attributed` + go-live precision via the same COALESCE chain as `clips/discover`
+    C4.5; un-directive'd buffer inherits the stream value. Confirm, don't redesign.
+11. **Session = pin/viewer unit** — one `BufferSession` (a go-live span) = one
+    time-machine pin; the viewer seeks to T within it (same seek math as clips).
+    Confirm.
