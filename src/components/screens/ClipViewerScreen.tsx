@@ -2,25 +2,58 @@
 //
 // Time Machine clip viewer. Reached from a historical clip pin on the globe
 // (rolled back into the past) via /(app)/clip/[id]?seekSec=N. Plays the clip's
-// recorded HLS (`manifestUrl`), seeking to the playhead instant the user tapped.
+// recorded HLS, seeking to the playhead instant the user tapped — and offers the
+// SAME switchable source rail as live watching + the clip preview: every source
+// captured at broadcast (camera/audio/sensors/location/chat/identity) replays at
+// the playhead through the live SourceStage visualizers. A passive broadcast clock
+// at the bottom ticks the real wall-clock time the footage was captured.
 //
-// Recorded VOD, not live — no signaling, no WebRTC, no viewer count, no chat.
-// Mirrors ExternalStreamScreen's expo-video setup; one initial seek (the
-// repeated-precise-seek hang only bites after many seeks, so a single landing
-// seek is safe).
+// Recorded VOD, not live — no signaling, no WebRTC, no viewer count. One video
+// player on the primary track stays mounted for audio continuity while a non-camera
+// source is in view; data sources replay from their `.jsonl` tracks sampled at the
+// wall-clock instant (startAtMs + currentTime). Mirrors ClipsScreen's clip replay.
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, StyleSheet, View } from 'react-native'
 import { useLocalSearchParams, router, useFocusEffect } from 'expo-router'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useQuery } from '@tanstack/react-query'
 import { useVideoPlayer, VideoView } from 'expo-video'
 import { Text } from '@/components/primitives/Text'
 import { IconButton } from '@/components/primitives/IconButton'
 import { Avatar } from '@/components/primitives/Avatar'
 import { Button } from '@/components/primitives/Button'
+import { SourceStage, type SourceRender } from '@/components/sections/SourceStage'
+import { SourceRail } from '@/components/features/clip/SourceRail'
+import {
+  SOURCE_META,
+  SOURCE_RAIL_ORDER,
+  KIND_TO_FEEDKIND,
+  pickDefaultView,
+} from '@/components/features/stream/sourceMeta'
+import type { FeedKind } from '@/components/features/broadcast/FeedThumb'
+import { useDataTrack } from '@/hooks/useDataTrack'
+import { sampleAt, recentUpTo, torchStateAt, trailUpTo, chatUpTo } from '@/lib/dataTrackRender'
+import { TimeScrubber } from '@/components/features/discovery/TimeScrubber'
+import { serverNow } from '@/lib/serverClock'
 import { clipsApi } from '@/api/clips'
 import { theme } from '@/tokens/theme'
+
+// FeedKind → the backend data-track kind that feeds its visualizer. cam/screen play
+// the video (no data track); profile is the identity flag; audio reads its
+// `audiolevel` companion (the waveform envelope), not the audio HLS.
+const FEED_TO_DATAKIND: Partial<Record<FeedKind, string>> = {
+  loc: 'location',
+  compass: 'compass',
+  gyro: 'gyro',
+  accel: 'accel',
+  speed: 'speed',
+  torch: 'torch',
+  chat: 'chat',
+}
+
+// The footer (AppTabBar) is shown on this pushed screen, so the clock sits above it.
+const TAB_BAR_CONTENT_H = 52
 
 export function ClipViewerScreen() {
   const params = useLocalSearchParams<{
@@ -31,9 +64,9 @@ export function ClipViewerScreen() {
   }>()
   const id = typeof params.id === 'string' ? params.id : undefined
   const seekSec = params.seekSec ? Math.max(0, Math.floor(Number(params.seekSec)) || 0) : 0
-  // Optimistic chrome from the pin tap, until the real clip row loads.
   const paramTitle = typeof params.title === 'string' ? params.title : undefined
   const paramHandle = typeof params.handle === 'string' ? params.handle : undefined
+  const insets = useSafeAreaInsets()
 
   const {
     data: clip,
@@ -47,7 +80,6 @@ export function ClipViewerScreen() {
     retry: 1,
   })
 
-  // 403 → subscribers-only clip the viewer can't watch (App Store: no in-app buy).
   const isForbidden = (error as any)?.response?.status === 403
 
   const [phase, setPhase] = useState<'loading' | 'playing' | 'error'>('loading')
@@ -56,7 +88,7 @@ export function ClipViewerScreen() {
   })
   const seekedRef = useRef(false)
 
-  // Load the clip's manifest once the row arrives.
+  // Load the clip's primary manifest once the row arrives (camera, else audio).
   useEffect(() => {
     const url = clip?.manifestUrl
     if (!url) return
@@ -82,6 +114,16 @@ export function ClipViewerScreen() {
     return () => sub.remove()
   }, [player, seekSec])
 
+  // Track playback position → the wall-clock playhead (startAtMs + currentTime).
+  const [currentMs, setCurrentMs] = useState(seekSec * 1000)
+  useEffect(() => {
+    const tid = setInterval(() => {
+      const t = player.currentTime
+      if (typeof t === 'number' && isFinite(t)) setCurrentMs(Math.max(0, Math.floor(t * 1000)))
+    }, 250)
+    return () => clearInterval(tid)
+  }, [player])
+
   // Pause when the screen loses focus.
   useFocusEffect(
     useCallback(() => {
@@ -97,10 +139,110 @@ export function ClipViewerScreen() {
   const handle = host?.handle ?? paramHandle ?? 'unknown'
   const title = clip?.title ?? paramTitle ?? 'Clip'
   const hasMedia = !!clip?.manifestUrl
+  const startAtMs = clip?.startAtMs ?? null
+  const playheadMs = startAtMs != null ? startAtMs + currentMs : 0
 
-  // ── Blocked states (no media / forbidden / load error) ──────────────────────
+  // ── Source rail: the clip's captured sources, replaying at the playhead ──────
+  // The rail shows only CAPTURED sources (the clip's enabled tracks), mapped to
+  // FeedKind + ordered like the dashboard; identity is always present.
+  const availableViews = useMemo<FeedKind[]>(() => {
+    const set = new Set<FeedKind>()
+    for (const t of clip?.tracks ?? []) {
+      const fk = KIND_TO_FEEDKIND[t.kind]
+      if (fk) set.add(fk)
+    }
+    // The audiolevel companion track means the audio waveform can replay even on a
+    // clip with no separate 'audio' media kind.
+    if ((clip?.tracks ?? []).some((t) => t.kind === 'audiolevel')) set.add('audio')
+    set.add('profile') // identity always
+    return SOURCE_RAIL_ORDER.filter((k) => set.has(k))
+  }, [clip?.tracks])
+
+  const [view, setView] = useState<FeedKind>('cam')
+  useEffect(() => {
+    if (availableViews.length && !availableViews.includes(view)) {
+      setView(pickDefaultView(availableViews))
+    }
+  }, [availableViews]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const dataUrlByKind = useMemo(() => {
+    const m: Record<string, string> = {}
+    for (const t of clip?.tracks ?? []) if (t.dataUrl) m[t.kind] = t.dataUrl
+    return m
+  }, [clip?.tracks])
+
+  const isVideoView = view === 'cam' || view === 'screen'
+  const currentDataUrl = isVideoView
+    ? null
+    : view === 'audio'
+      ? dataUrlByKind['audiolevel']
+      : FEED_TO_DATAKIND[view]
+        ? dataUrlByKind[FEED_TO_DATAKIND[view]!]
+        : null
+  const dataSamples = useDataTrack(currentDataUrl)
+
+  // The recorded source picture, sampled at the playhead — same SourceRender shape
+  // as live, rendered by the SourceStage visualizers (camera is the video below).
+  const recordedSource = useMemo<SourceRender | null>(() => {
+    if (isVideoView) return null
+    const s = sampleAt(dataSamples, playheadMs)
+    const nf = (k: string) => (s && typeof s[k] === 'number' ? (s[k] as number) : 0)
+    switch (view) {
+      case 'audio': {
+        const history = recentUpTo(dataSamples, playheadMs, 48).map((d) =>
+          typeof d.level === 'number' ? d.level : 0,
+        )
+        return { kind: 'audio', level: history[history.length - 1] ?? 0, variant: 'waveform', history }
+      }
+      case 'compass':
+        return { kind: 'compass', heading: nf('heading') }
+      case 'gyro':
+        return { kind: 'gyro', pitch: nf('pitch'), roll: nf('roll') }
+      case 'accel': {
+        const history = recentUpTo(dataSamples, playheadMs, 56).map((d) => ({
+          x: typeof d.x === 'number' ? d.x : 0,
+          y: typeof d.y === 'number' ? d.y : 0,
+          z: typeof d.z === 'number' ? d.z : 0,
+        }))
+        return { kind: 'accel', x: nf('x'), y: nf('y'), z: nf('z'), history }
+      }
+      case 'speed':
+        return { kind: 'speed', mps: s ? nf('mps') : -1 }
+      case 'torch':
+        return { kind: 'torch', on: torchStateAt(dataSamples, playheadMs) }
+      case 'loc': {
+        const path = trailUpTo(dataSamples, playheadMs)
+        return { kind: 'loc', path, position: path[path.length - 1] }
+      }
+      case 'chat':
+        return { kind: 'chat', messages: chatUpTo(dataSamples, playheadMs) }
+      case 'profile':
+        return {
+          kind: 'profile',
+          displayName: host?.displayName ?? handle,
+          handle,
+          avatarUrl: host?.avatarUrl ?? null,
+          attributed: true,
+        }
+      default:
+        return null
+    }
+  }, [isVideoView, view, dataSamples, playheadMs, host, handle])
+  const recordedActive = view === 'profile' || dataSamples.length > 0
+
+  // Broadcast clock offset: serverNow() − the wall-clock instant under the playhead,
+  // so the passive TimeScrubber reads the real time the footage was captured, ticking
+  // forward as the clip plays.
+  const clockOffset = startAtMs != null ? Math.max(0, serverNow() - playheadMs) : 0
+
+  // A clip is playable when it has video OR any data track to replay.
+  const hasPlayable = hasMedia || Object.keys(dataUrlByKind).length > 0
+
+  // ── Blocked states (forbidden / nothing to play / load error) ───────────────
   const blocked =
-    isForbidden || (!isLoading && !isError && clip && !hasMedia) || (isError && !isForbidden)
+    isForbidden ||
+    (isError && !isForbidden) ||
+    (!isLoading && !isError && clip && !hasPlayable)
 
   if (blocked) {
     return (
@@ -126,6 +268,8 @@ export function ClipViewerScreen() {
 
   return (
     <View style={styles.root}>
+      {/* Primary video — always mounted (audio continuity while a non-camera
+          source is in view). Shows through when the camera source is selected. */}
       {hasMedia ? (
         <VideoView
           player={player}
@@ -135,8 +279,21 @@ export function ClipViewerScreen() {
         />
       ) : null}
 
-      {/* Loading / error over the black field. */}
-      {phase !== 'playing' && (
+      {/* Non-camera source → its visualizer, replaying at the playhead, over the
+          (still-playing) video. SourceStage with a single source renders no rail. */}
+      {!isVideoView && recordedSource && (
+        <SourceStage
+          sources={[view]}
+          selected={view}
+          onSelect={() => {}}
+          source={recordedSource}
+          active={recordedActive}
+          style={StyleSheet.absoluteFill}
+        />
+      )}
+
+      {/* Loading / error over the field. */}
+      {hasMedia && phase !== 'playing' && isVideoView && (
         <View style={styles.center} pointerEvents="none">
           {phase === 'error' ? (
             <Text variant="monoCaption" color={theme.colors.text.inverse}>
@@ -148,7 +305,21 @@ export function ClipViewerScreen() {
         </View>
       )}
 
-      {/* Top chrome — back + host identity + REPLAY tag (recorded, not live). */}
+      {/* Source rail — the captured sources, switchable (same as live + preview). */}
+      {availableViews.length > 1 && (
+        <SourceRail
+          sources={availableViews.map((k) => ({
+            key: k,
+            iconName: SOURCE_META[k].icon,
+            label: SOURCE_META[k].label,
+          }))}
+          value={view}
+          onChange={(k) => setView(k as FeedKind)}
+          style={styles.rail}
+        />
+      )}
+
+      {/* Top chrome — back + host identity + replay tag. */}
       <SafeAreaView style={styles.topBar} edges={['top']} pointerEvents="box-none">
         <IconButton name="arrow-left" onPress={back} accessibilityLabel="Back to globe" variant="surface" />
         <View style={styles.identity}>
@@ -163,6 +334,22 @@ export function ClipViewerScreen() {
           </View>
         </View>
       </SafeAreaView>
+
+      {/* Broadcast clock — passive ticking readout of the captured wall-clock time,
+          pinned above the footer. */}
+      {startAtMs != null && (
+        <View
+          style={[styles.clock, { bottom: insets.bottom + TAB_BAR_CONTENT_H }]}
+          pointerEvents="box-none"
+        >
+          <TimeScrubber
+            offsetMs={clockOffset}
+            onOffsetChange={() => {}}
+            playback={false}
+            interactive={false}
+          />
+        </View>
+      )}
     </View>
   )
 }
@@ -183,6 +370,17 @@ const styles = StyleSheet.create({
   },
   identity: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
   identityCol: { flex: 1 },
+  rail: {
+    position: 'absolute',
+    right: 12,
+    top: '50%',
+    transform: [{ translateY: -120 }],
+  },
+  clock: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+  },
   blockedWrap: {
     flex: 1,
     alignItems: 'center',

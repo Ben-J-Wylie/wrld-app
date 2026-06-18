@@ -24,8 +24,19 @@ export type ClipPin = {
   host: { id: string; handle: string; displayName: string; avatarUrl: string | null }
 }
 
+// One captured/included source track on a clip (durable public /media/clips URLs).
+// `manifestUrl` for media kinds (camera/audio/screen); `dataUrl` (NDJSON) for data
+// kinds (location/gyro/compass/accel/speed/torch/chat/audiolevel).
+export type ClipTrack = {
+  kind: string
+  manifestUrl: string | null
+  dataUrl: string | null
+}
+
 // The full clip row for the viewer (GET /clips/:id). `manifestUrl` is the primary
 // playable HLS track (camera, else audio); null for a clip with no playable media.
+// `startAtMs`/`endAtMs` are the clip's absolute wall-clock window (the broadcast
+// clock + data-track sampling read it); `tracks` drives the switchable source rail.
 export type ClipDetail = {
   id: string
   title: string | null
@@ -35,6 +46,9 @@ export type ClipDetail = {
   subscribersOnly: boolean
   hostId: string
   host: { id: string; handle: string; displayName: string; avatarUrl: string | null }
+  startAtMs: number | null
+  endAtMs: number | null
+  tracks: ClipTrack[]
 }
 
 export const clipsApi = {

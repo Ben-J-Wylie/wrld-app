@@ -3675,3 +3675,23 @@ clips work). Backend (`clips/discover` + `clips/:id`) is Aaron's and already shi
   to live (`THEN`→`NOW` / offset 0) restores the live viewport feed cleanly.
 - `tsc` clean (only the pre-existing `stream/${string}` typed-route template-literal
   errors remain — unrelated). Pure JS, no native module → no EAS rebuild.
+
+### Follow-up (same session) — source rail + broadcast clock on the viewer
+The clip viewer now matches live watching + the clip preview:
+- **Switchable source rail.** `ClipViewerScreen` shows the clip's **captured**
+  sources (camera/audio/sensors/location/chat/identity), switchable, each replaying
+  at the playhead through the live `SourceStage` visualizers (sampled by wall-clock
+  `ts` via `useDataTrack` + `dataTrackRender` — same machinery as `ClipsScreen`). One
+  video player on the primary track stays mounted for audio continuity while a
+  non-camera source is in view; identity always present; rail ordered by
+  `SOURCE_RAIL_ORDER`. Data-only clips (no camera/audio) still render — the default
+  view falls to a data source.
+- **Broadcast clock.** A passive `TimeScrubber` (`interactive={false}`,
+  `playback={false}`) pinned above the footer reads the **real wall-clock time the
+  footage was captured** (`clip.startAtMs + currentTime`), ticking as the clip plays.
+- **Backend (`wrld-backend`, Aaron's lane — needs deploy):** `GET /clips/:id` now
+  `include`s the clip's enabled `tracks` (`kind`/`manifestUrl`/`dataUrl`, durable
+  public `/media/clips` URLs); `startAtMs`/`endAtMs` already came through as Numbers
+  via the `convertBigInts` preSerialization hook. Additive (non-breaking).
+  `clipsApi`/`ClipDetail` gained `startAtMs`/`endAtMs`/`tracks`. Until this deploys,
+  the viewer plays the primary track but the rail is identity-only.
