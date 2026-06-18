@@ -250,3 +250,25 @@ All PB0 blockers resolved. These are now contract, not options:
 PB2 starts additive. `DirectiveRange` (Contract 1) is the PB3 schema. Ben's PB1 app
 side (globe buffer pins + the buffer-session viewer, reusing the Time Machine consumer)
 can scaffold against the agreed discover/serve shape now.
+
+### PB0 — REVISION (2026-06-18): Contract 2 → windowed + a tunable window control
+
+**Supersedes the "truly instant for everyone / per-request check" choice above.** Ben:
+make revocation **windowed** with a **control we can play with**.
+
+- **Serve = session-scoped self-authorizing token + manifest-build visibility gate.**
+  Flipping a range private removes it from the next manifest fetch (new viewers can't
+  find or open it immediately); a viewer **already mid-watch** can still reach those
+  exact segments until the token expires.
+- **The window = the public token TTL, exposed as an admin RemoteConfig knob**
+  (e.g. `PUBLIC_BUFFER_TOKEN_TTL_SEC`), tunable live like the other globe knobs (app
+  reads `usePublicConfig`; backend RemoteConfig ~30s cache). It spans the spectrum:
+  **small TTL ≈ near-instant revoke** (more re-mint/token churn), **larger ≈ efficient
+  serving + slower revoke** — so we dial in the privacy/load balance on device instead
+  of hardcoding it.
+- **Load profile:** the common path is cheap (self-authorizing segment fetches, no
+  per-chunk DB hit); the privacy gate runs at **manifest build** (cheap, per fetch),
+  not per segment.
+- Everything else from PB0 DECIDED stands: `DirectiveRange` table, four access tiers
+  (public/subscriber/PPV/owner-private; gated = locked pins, owner-private excluded),
+  permanent-delete = gone-everywhere, the non-blocking defaults.
