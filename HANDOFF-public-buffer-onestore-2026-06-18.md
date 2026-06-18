@@ -272,3 +272,73 @@ make revocation **windowed** with a **control we can play with**.
 - Everything else from PB0 DECIDED stands: `DirectiveRange` table, four access tiers
   (public/subscriber/PPV/owner-private; gated = locked pins, owner-private excluded),
   permanent-delete = gone-everywhere, the non-blocking defaults.
+
+---
+
+## PB1 — API contract (draft for ratification, 2026-06-18)
+
+Build to this. **Additive + flag-gated** so flag-off is byte-identical to today.
+
+### Safety rails (non-negotiable for PB1)
+- **`PUBLIC_BUFFER_ENABLED` RemoteConfig flag, default OFF.** Off → discover omits
+  buffer pins, the serve/detail route 404s, behaviour == today (saved clips only).
+  Flip on **for the team first**, soak, then widen. One-switch kill.
+- **`PUBLIC_BUFFER_TOKEN_TTL_SEC` RemoteConfig knob** = the revocation window (Contract
+  2 revision). Exposed via `usePublicConfig` so it's tunable live.
+- **Coarse visibility (PB1):** `Stream.visibility` `'public' | 'private'` (default
+  `public`) set at go-live + the hardcoded per-user default. Per-range comes with
+  `DirectiveRange` in PB3; the serve gate reads "current truth" (this flag now).
+
+### Discovery — extend `GET /clips/discover?at=<ISO>` (additive)
+Response gains a **`bufferPins`** array alongside the existing `clips` (unchanged).
+Only present when the flag is on. Each pin = a public/gated buffer session live at T:
+
+```
+bufferPins: Array<{
+  source: 'buffer'
+  sessionId: string
+  host: { id, handle, displayName, avatarUrl } | { handle:'anonymous', ... }  // anon-aware
+  title: string | null
+  lat: number; lng: number                       // display coords (precision-obfuscated)
+  locationPrecision: 'exact' | 'city' | 'country'
+  sessionStartMs: number; sessionEndMs: number   // endedAt ?? now
+  seekOffsetSec: number                          // floor(T_sec - sessionStart_sec)
+  accessTier: 'public' | 'subscriber' | 'ppv'    // owner-private is NEVER returned
+  subscriptionPriceUsd?: number | null           // for the locked-pin card
+  ppvEventId?: string | null
+}>
+```
+Filter: `BufferSession ⋈ Stream`, `startedAt ≤ T ≤ endedAt‖now`, `Stream.visibility !=
+'private'`, precision `!= off`; honour `attributed` (anon) + precision via the same
+COALESCE chain as `clips/discover` C4.5. Gated tiers (subscriber/ppv) ARE returned (as
+locked pins); owner-private excluded.
+
+### Detail / serve — new `GET /buffer/session/:id` (optionalAuth), the `clips/:id` analog
+```
+200 { session: {
+  id, title, host(anon-aware), startAtMs, endAtMs, accessTier,
+  manifestUrl: string | null,                          // windowed-token HLS (primary)
+  tracks: Array<{ kind, manifestUrl, dataUrl }>        // windowed-token; powers the source rail
+}}
+403  // subscriber/ppv tier + caller lacks access → app shows the locked state
+404  // not found / owner-private / flag off
+```
+- **Tier enforcement** here: public → serve; subscriber → require auth + active sub;
+  ppv → require auth + event access; owner-private → never (404).
+- **Tokens** are session-scoped + self-authorizing, TTL = `PUBLIC_BUFFER_TOKEN_TTL_SEC`
+  (no broad user-namespace grant). Manifest lists only public ranges (PB1: whole
+  session; PB3: per-range). Segment fetches need no per-chunk DB hit.
+
+### App side (Ben — drops onto the Time Machine consumer)
+- `clipsApi.discover` reads `bufferPins`; the globe seam maps them like clip pins
+  (a `clipToStream`-style adapter) → a **"Watch"** card; locked tiers render the
+  subscribe/PPV locked card (reuse the live globe treatment).
+- Tapping → a buffer-session viewer = **`ClipViewerScreen` generalized** to fetch
+  `GET /buffer/session/:id` (same rail + broadcast clock + transport; just a different
+  fetch + id space). 403 → locked state; 404 → graceful.
+
+### Done-bar (PB1, flag-on for the team)
+Roll the globe back → a teammate's **un-saved public buffer** shows as a pin at the
+instant → Watch → it plays with the source rail + broadcast clock. A `private` go-live
+does **not** appear. A subscriber-only session shows as a **locked pin**. Flipping
+`PUBLIC_BUFFER_ENABLED` off restores today's saved-clips-only past.
