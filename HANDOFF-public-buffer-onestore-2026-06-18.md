@@ -205,3 +205,48 @@ saved=storage quota, saving decrements storage); the PB0–PB4 phasing.
 11. **Session = pin/viewer unit** — one `BufferSession` (a go-live span) = one
     time-machine pin; the viewer seeks to T within it (same seek math as clips).
     Confirm.
+
+### PB0 — DECIDED (2026-06-18, Ben + Aaron)
+
+All PB0 blockers resolved. These are now contract, not options:
+
+1. **Contract 1 — `DirectiveRange` table (Option B).** A first-class table over the
+   store — `{ userId, bufferSessionId, startAtMs, endAtMs, retain, visibility,
+   precision, attributed, ordinal }` — is the **single truth** the reaper, discovery,
+   and serving read. A saved `Clip` is a named grouping of retain-directives. Buffer
+   default = no row = reapable + public. *(PB1 may read a coarse stream/user-level
+   visibility while the table lands; the per-request serve check (below) reads whatever
+   the current truth is — coarse flag in PB1, `DirectiveRange` from PB3.)*
+2. **Contract 2 — per-request visibility check, instant revocation (Option 2).**
+   Flipping a range private cuts it off for **everyone immediately**, including a viewer
+   mid-watch — privacy-first. The serve route checks access **per chunk request** and
+   serves iff allowed; **mitigate the load with a short-TTL cache** of the per-range
+   access decision (not a per-request DB round-trip every time). No broad
+   user-namespace token handed to viewers.
+3. **Four access tiers** (the serve check + discovery both honour them):
+   **open public · subscriber-gated · PPV-gated · owner-private.** Public + the gated
+   tiers appear in the time machine as **locked pins** (watch requires auth + an active
+   subscription / PPV access, like live today); **owner-private is excluded** from the
+   past entirely. The per-request check resolves the tier (public → serve; subscriber →
+   auth + active sub; PPV → auth + event access; owner-private → owner only).
+4. **Permanent-delete = gone everywhere, now.** It destroys the one copy (segments off
+   disk), so the public-buffer copy vanishes with it. **Un-save** stays the soft act
+   (drop `retain` → footage falls back to the reaper, evicts when past the window).
+
+**Remaining non-blocking defaults (Ben's calls unless overridden):**
+- **Per-user visibility default:** hardcoded **public** for v0.2; a user-facing default
+  setting is a PB4 add. (Override: ship the setting in v0.2 if wanted.)
+- **Mend differ-guard:** **prompt-to-pick** when adjacent ranges differ (vs hard
+  disable); keeping snipped always valid. Decide on device at build.
+- **Existing copied saved clips:** **grandfather** in `/media/clips` (already survive
+  eviction) — no rewrite.
+- **PB2 cutover gate:** ship reaper-honours-`retain` **additively** (copy-on-save still
+  running) → verify a retained range survives a real reap cycle on device → **then**
+  stop copying.
+- **Coarse PB1 flag location:** Aaron's pick (a per-go-live `Stream`-level public/private
+  + the hardcoded user default is enough for PB1).
+
+**Unblocked:** PB1 can start (serve = per-request check; PB1 visibility = coarse flag).
+PB2 starts additive. `DirectiveRange` (Contract 1) is the PB3 schema. Ben's PB1 app
+side (globe buffer pins + the buffer-session viewer, reusing the Time Machine consumer)
+can scaffold against the agreed discover/serve shape now.
