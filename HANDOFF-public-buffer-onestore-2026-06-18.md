@@ -496,10 +496,20 @@ Flag flipped on (`PB2_RETAIN_IN_PLACE=true`) + a real clip saved by **@ben** in 
 - **Un-save** — clip row + ranges + tracks gone, **buffer footage survived on disk**, storage
   reclaimed exactly.
 
-The cutover is proven. **Flag left ON = retain-in-place is live** (new saves stop copying;
-copied pre-cutover clips are grandfathered on `/media`). Remaining: the no-flip-back rule
-holds (don't flip OFF while retain-only saves exist, or they lose footage past the window).
-Below: the pre-gate cutover notes, kept for the record.
+The cutover is proven. **Flag left ON = retain-in-place is live** (new saves stop copying).
+Remaining: the no-flip-back rule holds (don't flip OFF while retain-only saves exist, or
+they lose footage past the window). Below: the pre-gate cutover notes, kept for the record.
+
+### ✅ PB2 CLOSED (2026-06-18) — post-gate cleanup done
+- **Doubled time-machine pin — FIXED** (`d02c025`). Cause: `clips/discover` returned a saved
+  clip in `clips[]` AND its public buffer session in `bufferPins[]` (same footage → 2 pins).
+  Fix: dedup — drop the clip pin when its buffer session is already a public `bufferPin`
+  (clips whose session isn't a public pin — private/reaped/legacy — still show). Verified on
+  device: single pin, saves + reaping behave.
+- **Grandfathered `/media` copies — DELETED.** The 2 legacy copied clips (test data) removed
+  (rows + files + quota reclaimed); `/media/clips` empty. Everything is retain-in-place now.
+- Lightweight `tag:PB2` save/serve logs left in (cheap info tracing).
+- **The whole PB0–PB2 path (public buffer + retain-in-place) is DONE + verified on prod.**
 
 ## ← PB2 CUTOVER (step 3+4) DONE + deployed INERT (Aaron, 2026-06-18); ⛔ cutover gate is YOURS
 
