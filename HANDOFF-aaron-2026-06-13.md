@@ -24,10 +24,11 @@ This doc is the index + the priority order, not a re-statement.
 - **`HANDOFF-public-buffer-onestore-2026-06-18.md`** — **NEW model, decided (CONTENT.md §3).** Public
   buffer by default + one-store/retain-in-place (no copy-on-save) + per-range directives. **PB0
   DECIDED** (DirectiveRange table · windowed token + TTL knob · 4 access tiers · delete=gone-everywhere).
-  **PB1 app scaffold SHIPPED (flag-off).** → **Your part now: the "PB1 — Aaron START-HERE" section**
-  (RemoteConfig flag + TTL knob · `Stream.visibility` · `bufferPins[]` in `clips/discover` ·
-  `GET /buffer/session/:id` 4-tier gate + session-scoped windowed tokens). Then PB2 (reaper honours
-  `retain`, additive) + PB3 (DirectiveRange).
+  **PB1 ✅ DONE + verified on device** (backend deployed by Aaron, app complete incl. the go-live
+  visibility send + dashboard "Public replay" toggle). → **Your part NOW: the "PB2 — Aaron START-HERE"
+  section** — retain-in-place: reaper honours `retain` **(additive, behind a verification gate)** →
+  cutover (stop copy-on-save) → one-store quota → delete=gone-everywhere → grandfather copied clips.
+  **App side for PB2 ≈ none.** Then PB3 (DirectiveRange + per-range UI).
 - **`HANDOFF-c4-clip-editor-2026-06-12.md`** — editable manifest (draft↔saved); the open gap is
   `removedByLane`.
 - **`HANDOFF-clips-saved-persistence-2026-06-11.md`** — R3 promote-on-publish + saved-clip list.

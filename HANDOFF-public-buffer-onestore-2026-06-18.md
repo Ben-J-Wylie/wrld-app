@@ -473,3 +473,50 @@ app's missing half — **sending `visibility` at go-live** (the private opt-out)
 
 Then on device: public go-live → appears in the past with the rail/clock; **private
 go-live → does NOT appear**; subs-only → locked pin; flag off → today's behaviour.
+
+---
+
+## PB1 — ✅ VERIFIED ON DEVICE (Ben, 2026-06-18) → PB2 is next (Aaron)
+
+On-device tests pass: Time Machine + the PB1 public buffer (pin in the past → Watch →
+rail/clock). Headline working. *(Private opt-out activates with the deferred
+`wrld-mediasoup` restart — confirm "private go-live doesn't appear" once that's done if
+not already.)* PB1 is closed.
+
+## PB2 — Aaron START-HERE (retain-in-place; backend + mediasoup)
+
+The simplification: **drop copy-on-save — "saving" becomes a `retain` directive the
+reaper honours in place** (CONTENT.md §3). **This is the careful, high-stakes phase**
+— the reaper must NEVER evict a kept range (the one principle we can't violate:
+"never silently drop content a user chose to keep"). So it ships **additive first,
+behind a verification gate.**
+
+1. **Reaper honours `retain` — ADDITIVE (copy-on-save still running).** In
+   `bufferService.reapBuffers`, before evicting a buffer segment, **skip it if a
+   retained range overlaps it** (or it's in the live window). PB2 can read retain at
+   the **clip level today** (a `saved` Clip's `ranges` = retain for that user) — no
+   `DirectiveRange` needed yet (that's PB3). Copy-on-save stays on; this just proves
+   the reaper can keep footage in place.
+2. **⛔ VERIFICATION GATE (on device, before step 3).** Confirm a retained range
+   **survives a real reap cycle** — footage older than the tier window but covered by a
+   retain stays on disk AND still plays. Do **not** proceed to the cutover until this
+   passes. (Tighten the test buffer window via RemoteConfig to force a reap quickly.)
+3. **Cutover: stop copying.** Once step 2 is proven, `saveClip` / `promoteBufferClip`
+   **stops copying bytes** — saving = set `retain` only; un-save = clear it (footage
+   falls back to the reaper, evicts when past the window).
+4. **Quota accounting over one store.** Retained-bytes quota = **sum of retained
+   ranges** (replaces the copied-pool size); `GET /buffer/me` storage fields
+   (`usedStorageBytes`) reflect it. Saving still decrements available storage.
+5. **Permanent-delete = gone everywhere** (decided): destroy the segments (the one
+   copy) — buffer + saved vanish together. **Un-save** stays the soft release.
+6. **Grandfather** existing copied saved clips in `/media/clips` — leave as-is (they
+   already survive eviction); no rewrite.
+
+**App side for PB2: ~none.** Drag-to-save already calls `saveClip`; un-save/delete
+already exist; the storage meter already reads `/buffer/me`. Behaviour is unchanged to
+the app — the change is server-side (no copy). I'll wire any app touch-ups if the
+contract shifts.
+
+*(Then PB3 — the `DirectiveRange` table → per-range `retain`/`visibility`/precision/
+identity + the per-segment settings UI + the mend differ-guard. That's where the app
+comes back in.)*
