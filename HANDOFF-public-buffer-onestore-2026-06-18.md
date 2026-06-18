@@ -611,3 +611,59 @@ contract shifts.
 *(Then PB3 — the `DirectiveRange` table → per-range `retain`/`visibility`/precision/
 identity + the per-segment settings UI + the mend differ-guard. That's where the app
 comes back in.)*
+
+---
+
+## PB3 — per-range directives (plan + contract for sign-off, 2026-06-18)
+
+PB0–PB2 done. PB3 moves `retain`/`visibility`/`precision`/`identity` from coarse
+(per-stream / per-clip) to **per-range**, with `DirectiveRange` as the single source of
+truth. **This rewrites how the reaper/discovery/serving read retain+visibility → joint
+sign-off before the read-path build.** Flag-gated (`PB3_PER_RANGE`, default OFF) so flag-off
+== PB2-today.
+
+### ✅ Landed (additive, inert) — `a4867e9`
+- **`DirectiveRange`** table (Contract 1 / option B): `{ id, userId, bufferSessionId,
+  startAtMs, endAtMs, retain, visibility, precision?, attributed, ordinal, clipId? }`.
+  `Clip.directiveRanges` relation. A saved Clip = grouping of retain rows (clipId set); an
+  un-saved private buffer slice = a row with clipId null. Buffer default = NO row (reapable
+  + public). Nothing reads/writes it yet.
+
+### Backend read-path migration (mine, flag-gated `PB3_PER_RANGE`)
+1. **Write path** — `saveClip`/draft-edit + the per-segment settings PATCH write
+   `DirectiveRange` rows (retain=true for a save; visibility/precision/attributed per
+   segment). One-time **backfill**: every existing retain-in-place saved clip's `ClipRange`s
+   → `DirectiveRange(retain=true, clipId)` so the reaper keeps honouring them after cutover.
+2. **Reaper** (`bufferService.reapBuffers`) — read retain from `DirectiveRange(retain=true)`
+   instead of (PB2) the saved-clip `ClipRange`s. Same `coveredByRetain` math, new source.
+3. **Discovery** (`clips/discover` bufferPins) — a session pins if it has ANY public range
+   at T; replace the coarse `Stream.visibility` gate with per-range (a session can be
+   part-public/part-private). Precision/anon read per range (COALESCE range → stream → exact).
+4. **Serve** (`/buffer/session/:id`, `/clips/:id/buffer`, the per-session serve) — the
+   built manifest **excludes segments in private ranges** (per-range visibility); precision/
+   identity per range. Contract 2 (revision): session-scoped **windowed token** + the gate
+   at **manifest-build** (flip a range private → it drops from the next manifest fetch).
+5. **Coarse → per-range**: `Stream.visibility` (PB1) stays as the session DEFAULT a
+   broadcaster picks at go-live; `DirectiveRange` overrides per slice. No PB1/PB2 break.
+
+### App (Ben) — the per-range UX
+- **Per-segment settings affordance:** each snipped segment carries its own
+  public/private (+ later precision/identity); writes a `DirectiveRange` via the PATCH.
+- **Mend differ-guard:** when adjacent segments' directives differ, **prompt-to-pick**
+  (decided default) which to keep; keeping them snipped is always valid.
+
+### Resolves
+- The known PB2 limitation (multi-session data tracks on a public clip) — per-range serving
+  builds the manifest from `DirectiveRange` across sessions uniformly.
+
+### Sign-off ask (Ben + Aaron)
+Confirm: (a) `DirectiveRange` shape above; (b) the write path = `saveClip` + a per-segment
+PATCH; (c) reaper/discover/serve read `DirectiveRange` with `Stream.visibility` as the
+session default; (d) flag `PB3_PER_RANGE` (default off) + the `ClipRange→DirectiveRange`
+backfill. On sign-off I build the read-paths flag-gated (additive), gate on device, then flip.
+
+## PB4 — private polish (mostly Ben/app; backend guardrail audit)
+After PB3: per-user visibility default setting (`User.bufferVisibilityDefault`), the
+public/private per-range toggle UI + distinct-segment visual (Ben), and a backend guardrail
+audit (subscribersOnly buffer keeps the paywall on replay; anon/precision reversibility
+honoured on the public buffer). Small backend; mostly app.
