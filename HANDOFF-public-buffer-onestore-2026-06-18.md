@@ -371,7 +371,50 @@ PB1 done-bar.
 
 ---
 
-## PB1 — Aaron START-HERE (backend, to the contract above)
+## ← BACK TO BEN (2026-06-18, Aaron): PB1 backend DONE + deployed (flag OFF) — your flip + on-device
+
+**All five PB1 backend items are built, deployed on `api.wrld.cam`, and pushed**
+(`wrld-backend dc2970d`, `wrld-mediasoup 6c50c9b`). Flag-gated + **OFF by default**, so
+prod behaviour == today until someone flips it. Verified on the box:
+
+- ✅ **RemoteConfig** `PUBLIC_BUFFER_ENABLED` (bool, **false**) + `PUBLIC_BUFFER_TOKEN_TTL_SEC`
+  (number, **3600**) — seeded by migration, **exposed on `GET /config`** (confirmed the app
+  will see them via `usePublicConfig`/`configBool`).
+- ✅ **`Stream.visibility`** `'public'|'private'` (default `'public'`) — migration applied
+  (column live), threaded through `streamStarted` + mediasoup `createRoom→streamStarted`.
+- ✅ **`clips/discover` → `{ clips, bufferPins }`** — flag-off returns `bufferPins: []`
+  (verified). Flag-on, the query returns public `BufferSession ⋈ Stream` live at T,
+  reap-aware (`UserBuffer.earliestAt`), precision-obfuscated, `accessTier`
+  (`public`/`subscriber`/`ppv`), owner-private excluded. **Validated the SQL against prod
+  data** (returns real live public sessions, incl. a PPV one → `accessTier:'ppv'`).
+- ✅ **`GET /buffer/session/:id`** (optionalAuth, the `clips/:id` analog) — flag-off → 404
+  (verified); flag-on → 4-tier gate (public serve / subscriber+sub / ppv+access /
+  owner-private→404), `manifestUrl` + per-source `tracks[]`, **session-scoped windowed
+  tokens** (TTL = `PUBLIC_BUFFER_TOKEN_TTL_SEC`).
+- ✅ **Token scoping** — public tokens carry a session claim and reach ONLY that session's
+  serve routes (can't roam the host namespace); owner tokens unchanged.
+
+**Matches the contract shapes** in the "PB1 — API contract" + "PB1 app scaffold LANDED"
+sections — `bufferPins[]` and `getBufferSession`'s `ClipDetail` normalisation should line up.
+
+**→ Over to Ben/team:**
+1. **Flip `PUBLIC_BUFFER_ENABLED` on for the team** (`/admin/config`), soak, then widen —
+   that's the deliberate rollout call, so I left it OFF.
+2. **On-device done-bar** (below): roll the globe back → a teammate's un-saved public buffer
+   shows as a pin → Watch → plays with rail + clock; a `private` go-live doesn't appear; a
+   subscriber-only session shows as a locked pin; flag off → today's saved-clips-only past.
+3. **One deploy note:** mediasoup is pushed but its **restart is deferred** (the `visibility`
+   passthrough is inert until both the flag is on AND the app sends `visibility` at go-live;
+   I didn't want to interrupt the live streams / Bol Harbour ext-cam). Restart
+   `wrld-mediasoup` at a convenient time to activate the passthrough. Until then a go-live
+   sends no `visibility` → backend defaults `'public'` (the intended PB1 default anyway).
+
+If discover/serve shapes need a tweak to match the app, send me the mismatch.
+PB2 (retain-in-place) + PB3 (`DirectiveRange`) are the next backend slices.
+
+---
+
+## PB1 — Aaron START-HERE (backend, to the contract above) — ✅ COMPLETE (kept for the record)
 
 The app is built + merged (flag-off, degrades gracefully). PB1 ships when these land
 and the flag flips. Build to the **PB1 API contract** + **PB0 DECIDED** sections above.
