@@ -138,8 +138,11 @@ export type Stream = {
   host?: { id: string; handle: string; displayName: string; avatarUrl: string | null; subscriptionPriceUsd?: number | null }
   hostDisplayName?: string
   title: string
-  lat: number
-  lng: number
+  // Null for PRIVATE streams (locationPrecision 'off'): the backend strips the
+  // real coordinate before it ever leaves the server. Such streams are placed
+  // on the Haven island client-side (by stream id), not by these fields.
+  lat: number | null
+  lng: number | null
   // IANA timezone of the broadcaster's location (e.g. "America/New_York"),
   // derived server-side from the real coordinates. Used to show the
   // broadcaster's local time on the stream screens.
@@ -154,7 +157,8 @@ export type Stream = {
   // Present when this live stream is a PPV event broadcast — lets the viewer UI
   // badge it as PPV + show the event title, and detect pause vs end.
   ppvEvent?: { id: string; title: string; status: string } | null
-  locationPrecision?: 'exact' | 'city' | 'country'
+  // 'off' = PRIVATE — discoverable only on the Haven planet, with no real coords.
+  locationPrecision?: 'exact' | 'city' | 'country' | 'off'
   distanceKm?: number
   distanceMeters?: number
   // External cams (ext-<slug>) have no mediasoup room — they're watched as a live

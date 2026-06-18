@@ -1744,6 +1744,68 @@ this feature is the lift target either way.
 
 ---
 
+##### `PlanetSwitcher`
+
+- **Tier:** feature (composes Pressable + Icon + Text + Animated + PanResponder)
+- **Location:** `src/components/features/discovery/PlanetSwitcher.tsx`
+- **States:** active per planet; chevrons dim at the ends; `disabled` (locked while a glide is mid-flight)
+- **Used in:** Globe top stack (under the header) — switches between worlds
+- **Shipped:** 2026-06-18 (planet branch)
+
+The glass pill `‹ glyph + name ›` that moves between planets. Tap a chevron or
+swipe the centre chip; the big move between worlds is the globe's job (it pulls
+the real globe back to space, swaps the planet, and dives in), this is just the
+control that requests it. The centre chip slides in from the direction of travel
+so the change reads directional. Registry-driven + presentational: renders
+whatever `{ id, name, glyph }[]` it's given (so a new planet in `src/lib/planets`
+surfaces here automatically). Clamped, not cyclic. **API:** `planets`, `activeId`,
+`onChange(id)`, `disabled?`.
+
+> **Globe sizing + vertical-rotation floor (in `GlobeScreenMapbox`).** Mapbox clips
+> the globe to the MapView, so too high a zoom shears the planet's sides flat against
+> the screen edges. Sizing is therefore purely the **zoom**: `GLOBE_MIN_ZOOM` floors
+> it low enough that the whole planet fits the screen width (no L/R crop) and vertical
+> rotation still works; each planet's `initialCamera.zoomLevel` is where it sits —
+> raise for a bigger globe until the sides begin to clip. (An earlier transform
+> `fitScale` was removed: it scaled the *already-clipped* result, so it couldn't undo
+> the shear.)
+
+> **Planet swap motion (in `GlobeScreenMapbox`, not a component).** One live Mapbox
+> MapView throughout — no placeholder globe, no cover. Driven by **NATIVE transforms**
+> on an OUTER wrapper (`glideX` translateX + `glideScale`), NOT the Mapbox camera
+> (which stutters when animated under load): the globe **slides off one edge while
+> shrinking**, the `styleURL`/`styleJSON` swaps off-screen (unseen), then the new
+> planet **slides in from the other edge growing back**, centred on the **island**
+> (Haven) or **user's location** (Earth). The camera only repositions instantly while
+> off-screen. Direction = registry order (later planet → exit left / enter right;
+> reversed back). The transition wrapper nests OUTSIDE the non-native
+> `globeTranslateY`/`fitScale` view so the two drivers never mix. A fallback timer
+> guarantees the fly-in if style-load is missed. (Supersedes the placeholder-sphere
+> `PlanetGlideOverlay`, the cover-fade, AND the camera-zoom variants — all removed.)
+> **Knobs:** `TX_EXIT_MS`/`TX_ENTER_MS`/`TX_EXIT_SCALE`, each planet's `initialCamera`.
+
+> **Day/night terminator (any `dayNight` planet — Earth + Haven, same monochrome
+> dusk; Haven's skin is also recoloured to Earth's Mapbox-Light palette).**
+> `src/lib/dayNight.ts` `nightPolygon(date, alt)` is a pure subsolar-point computation
+> → a GeoJSON polygon of "sun below `alt`°". Mapbox fills can't blur, so the globe
+> stacks `NIGHT_BANDS` (10 thin bands across **+5° → −5°**, straddling the line) as
+> low-opacity `FillLayer`s under the pins → a **soft, graded** frontier centred on the
+> terminator. Fed `Date.now() - timeOffsetMs` → tracks the WRLD clock + time-machine
+> scrub; recomputed each minute + on offset change. **Haven (`dayNightLocal`)** uses
+> `nightPolygonLocal(date, anchorLng, alt)` instead: real seasonal tilt but the sun's
+> longitude anchored to the **viewer's local clock**, so the island reads as each
+> viewer's own time of day — differs per timezone, so it leaks nothing about the host.
+
+> **Planet registry** (`src/lib/planets/`): a planet is data — `styleURL`/
+> `styleJSON`, `surfaceColor`, `belongsTo(stream)`, `placePin(stream)→[lng,lat]`,
+> `initialCamera`. Earth = the real world (located streams); Haven = the synthetic
+> island for PRIVATE (`locationPrecision:'off'`) streams, placed at a stable random
+> island spot by stream id (`island.ts`: one GeoJSON polygon + a minimal water+island
+> `styleJSON`). Adding a planet = one object in `PLANETS`; the switcher, glide, and
+> pin layers read from it with no per-planet branching in `GlobeScreenMapbox`.
+
+---
+
 ##### `TimeScrubber`
 
 - **Tier:** feature (composes Pressable + Text + PanResponder + Animated)

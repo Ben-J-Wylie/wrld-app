@@ -34,13 +34,14 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  useWindowDimensions,
   View,
   type LayoutChangeEvent,
 } from 'react-native'
 import { router, useFocusEffect } from 'expo-router'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
-import Mapbox, { Camera, ShapeSource, CircleLayer, SymbolLayer, Atmosphere } from '@rnmapbox/maps'
+import Mapbox, { Camera, ShapeSource, CircleLayer, SymbolLayer, FillLayer, Atmosphere } from '@rnmapbox/maps'
 import { consumeStreamSignal } from '@/lib/streamSignals'
 import { returnToActiveBroadcast } from '@/lib/activeBroadcast'
 import { streamsApi } from '@/api/streams'
@@ -51,6 +52,7 @@ import { useViewportDiscovery, type TileCount } from '@/hooks/useViewportDiscove
 import { useHistoricalClips } from '@/hooks/useHistoricalClips'
 import type { ClipPin, BufferPin } from '@/api/clips'
 import { useStreamsNear } from '@/hooks/useStreamsNear'
+import { useDiscoverySocket } from '@/hooks/useDiscoverySocket'
 import { usePublicConfig, configNumber, configBool } from '@/hooks/usePublicConfig'
 import { PIN_ZOOM_THRESHOLD, COUNT_MIN_ZOOM } from '@/lib/tiles'
 import { Text } from '@/components/primitives/Text'
@@ -69,7 +71,10 @@ import {
 } from '@/components/features/stream/DiscoveryHandoffCard'
 import { SearchBar } from '@/components/features/discovery/SearchBar'
 import { ScaleBar } from '@/components/features/discovery/ScaleBar'
+import { PlanetSwitcher } from '@/components/features/discovery/PlanetSwitcher'
 import { CategoryChipRow, type Category } from '@/components/sections/CategoryChipRow'
+import { PLANETS, planetById, planetIndex, type PlanetId } from '@/lib/planets'
+import { nightPolygon, nightPolygonLocal, NIGHT_BANDS } from '@/lib/dayNight'
 import type { Stream } from '@/types'
 
 Mapbox.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '')
@@ -78,6 +83,37 @@ const PIN_RED    = '#FF3B5C'
 const PIN_PURPLE = '#A855F7'
 const PIN_BLACK  = '#111111' // the viewer's own stream pin (tap → return to it)
 const PIN_BORDER = '#FFFFFF'
+
+// Globe sizing is purely the zoom. The floor is low enough that the WHOLE planet
+// sits inside the screen width on portrait (no left/right clip — Mapbox clips the
+// globe to the viewport, so a too-high zoom shears the sides flat) AND vertical
+// rotation still works. Each planet's `initialCamera.zoomLevel` is where it sits;
+// raise it for a bigger globe until the sides start to crop. Tune both on device.
+const GLOBE_MIN_ZOOM = 0.9
+
+// Night-side terminator fill (planets with `dayNight`). Stacked twilight bands
+// (NIGHT_BANDS) each draw this colour at low opacity → a soft, graded dusk.
+const NIGHT_COLOR = '#0a0f24'
+
+// Pole markers — N/S labels at the geographic poles, for orientation now that
+// vertical rotation is a thing. Static, on every planet.
+const POLE_COLOR = '#1a1612'
+const POLES_GEOJSON = {
+  type: 'FeatureCollection' as const,
+  features: [
+    { type: 'Feature' as const, properties: { label: 'N' }, geometry: { type: 'Point' as const, coordinates: [0, 90] } },
+    { type: 'Feature' as const, properties: { label: 'S' }, geometry: { type: 'Point' as const, coordinates: [0, -90] } },
+  ],
+}
+
+// Planet-swap motion (ms). Driven entirely by NATIVE transforms on the globe
+// layer (translateX slide + scale zoom) — NOT the Mapbox camera, which stutters
+// when animated under load. The globe slides off one side shrinking, the new
+// planet slides in from the other growing back. Direction = registry order.
+const TX_EXIT_MS    = 460
+const TX_ENTER_MS   = 560
+const TX_EXIT_SCALE = 0.45 // how far the globe shrinks as it flies off
+const TX_STYLE_FALLBACK_MS = 1400 // enter even if the style-load event is missed
 
 // Drawer has three states:
 //   closed   — only the grip visible above the tab bar (default at app
@@ -327,6 +363,60 @@ export function GlobeScreenMapbox() {
   const [mapCenterLat, setMapCenterLat] = useState(20)
   const [mapZoom, setMapZoom] = useState(1.5)
 
+  // ── Active planet + swap transition ────────────────────────────────────────
+  const { width: windowW } = useWindowDimensions()
+  const [activePlanetId, setActivePlanetId] = useState<PlanetId>('earth')
+  const planet = planetById(activePlanetId)
+
+  // ── HAVEN DATA SEAM ────────────────────────────────────────────────────────
+  // Earth's pins ride the geographic viewport feed (useViewportDiscovery) + the
+  // nearby-REST drawer. PRIVATE ('off') streams are coordless, so they can't ride
+  // either — Haven reads the discovery socket filtered to 'off' instead, and the
+  // registry's placePin scatters them on the island by stream id. The socket
+  // snapshot/events now carry 'off' streams (backend findAllLiveStreams + the
+  // streamStarted push). Earth ignores this feed entirely.
+  const socketStreams = useDiscoverySocket()
+  const privateStreams = useMemo(
+    () => socketStreams.filter((s) => s.locationPrecision === 'off'),
+    [socketStreams],
+  )
+  // Active-planet pin + drawer sources. Both stable references (one of two
+  // memoised arrays), so the card-sync effects don't loop.
+  const planetPins = planet.id === 'haven' ? privateStreams : pins
+  const drawerSource = planet.id === 'haven' ? privateStreams : nearbyStreams
+  const [transitioning, setTransitioning] = useState(false)
+  const transitioningRef = useRef(false)
+  const pendingToRef = useRef<PlanetId | null>(null)
+  const swapDirRef = useRef(1) // +1 = exit left / enter right; -1 = reverse
+  const styleSwappedRef = useRef(false)
+  const enterStartedRef = useRef(false)
+  const txTimersRef = useRef<ReturnType<typeof setTimeout>[]>([])
+  // Native-driven slide + scale of the globe layer during a planet swap. These
+  // live on the OUTER wrapper (separate from globeTranslateY, which is non-native),
+  // so the swap runs on the UI thread — smooth, and no Mapbox camera animation.
+  const glideX = useRef(new Animated.Value(0)).current
+  const glideScale = useRef(new Animated.Value(1)).current
+
+  // Day/night terminator — soft, stacked twilight bands. Earth uses the real
+  // geographic terminator; Haven (dayNightLocal) anchors it to the VIEWER's local
+  // clock so the island reads as their own time of day (differs per viewer → no
+  // location leak). Recomputed each minute + on time-machine offset change.
+  const [nightTick, setNightTick] = useState(0)
+  useEffect(() => {
+    const t = setInterval(() => setNightTick((n) => n + 1), 60_000)
+    return () => clearInterval(t)
+  }, [])
+  const nightBands = useMemo(() => {
+    const date = new Date(Date.now() - timeOffsetMs)
+    const anchorLng = planet.initialCamera.centerCoordinate[0]
+    return NIGHT_BANDS.map((b) => ({
+      opacity: b.opacity,
+      shape: planet.dayNightLocal
+        ? nightPolygonLocal(date, anchorLng, b.alt)
+        : nightPolygon(date, b.alt),
+    }))
+  }, [timeOffsetMs, nightTick, planet])
+
   const hasActiveSearch =
     query.trim().length > 0 || (chipId !== null && chipId !== 'all')
 
@@ -347,8 +437,12 @@ export function GlobeScreenMapbox() {
   const rotLatRef          = useRef(20)
   const userInteractingRef = useRef(false)
   const gestureActiveRef   = useRef(false)
+  // Auto-rotation only makes sense on Earth — a synthetic planet (Haven) would
+  // spin its single island off-screen, so we keep it framed instead.
+  const rotateEnabledRef   = useRef(true)
 
   useEffect(() => { coordsRef.current = coords }, [coords])
+  useEffect(() => { rotateEnabledRef.current = activePlanetId === 'earth' }, [activePlanetId])
 
   // ── Banner state machine (identical to GlobeScreen) ───────────────────────
 
@@ -467,7 +561,7 @@ export function GlobeScreenMapbox() {
 
   useEffect(() => {
     autoRotateRef.current = setInterval(() => {
-      if (gestureActiveRef.current || userInteractingRef.current) return
+      if (!rotateEnabledRef.current || gestureActiveRef.current || userInteractingRef.current) return
       rotLngRef.current = ((rotLngRef.current + 0.15) + 360) % 360
       const lng = rotLngRef.current > 180 ? rotLngRef.current - 360 : rotLngRef.current
       cameraRef.current?.setCamera({ centerCoordinate: [lng, rotLatRef.current], animationDuration: 0 })
@@ -497,8 +591,8 @@ export function GlobeScreenMapbox() {
       flyToUserLocation(lng, lat)
     } else {
       cameraRef.current?.setCamera({
-        centerCoordinate: [0, 20],
-        zoomLevel: 1.5,
+        centerCoordinate: planetById('earth').initialCamera.centerCoordinate,
+        zoomLevel: planetById('earth').initialCamera.zoomLevel,
         animationMode: 'none',
         animationDuration: 0,
       })
@@ -509,6 +603,9 @@ export function GlobeScreenMapbox() {
 
   useEffect(() => {
     if (!coords || hasAutoOrientedRef.current) return
+    // Only orient the real-world globe to the user; a synthetic planet stays
+    // framed on its own content.
+    if (!rotateEnabledRef.current) return
     hasAutoOrientedRef.current = true
     userInteractingRef.current = true
     rotLngRef.current = ((coords.longitude + 360) % 360)
@@ -520,28 +617,125 @@ export function GlobeScreenMapbox() {
     }
   }, [coords])
 
+  // ── Planet switch (fly out → swap off-screen → fly in) ─────────────────────
+  //
+  // One live MapView throughout — no placeholder globe, no cover. The REAL globe
+  // zooms out + slides off one edge; while it's off-screen the style swaps; then
+  // the new planet slides in from the OTHER edge + zooms in to its default
+  // framing, centred on the island (Haven) or the user's location (Earth).
+  // Direction follows registry order (later planet → exit left / enter right;
+  // reversed coming back). The swap is hidden simply by being off-screen.
+  // A fallback timer guarantees the fly-in even if the style-load event is missed.
+
+  function clearTxTimers() {
+    txTimersRef.current.forEach(clearTimeout)
+    txTimersRef.current = []
+  }
+  function txSchedule(ms: number, fn: () => void) {
+    txTimersRef.current.push(setTimeout(fn, ms))
+  }
+
+  function planetTargetCenter(p: ReturnType<typeof planetById>): [number, number] {
+    // Earth re-centres on the user (if known); a synthetic planet on its own centre.
+    if (p.id === 'earth' && coordsRef.current) {
+      return [coordsRef.current.longitude, coordsRef.current.latitude]
+    }
+    return p.initialCamera.centerCoordinate
+  }
+
+  function flyInNewPlanet() {
+    if (!transitioningRef.current || enterStartedRef.current) return
+    enterStartedRef.current = true
+    clearTxTimers()
+    const dir = swapDirRef.current
+    const p = planetById(pendingToRef.current ?? activePlanetId)
+    const center = planetTargetCenter(p)
+    // Frame the new planet at its initial zoom (INSTANT — the camera never animates
+    // during a swap), parked off the ENTERING edge and shrunk by glideScale.
+    cameraRef.current?.setCamera({
+      centerCoordinate: center,
+      zoomLevel: p.initialCamera.zoomLevel,
+      animationDuration: 0,
+    })
+    glideX.setValue(dir * windowW)
+    glideScale.setValue(TX_EXIT_SCALE)
+    rotLngRef.current = (center[0] + 360) % 360
+    rotLatRef.current = center[1]
+    // …then slide in + grow back, entirely on the UI thread (native driver).
+    Animated.parallel([
+      Animated.timing(glideX, { toValue: 0, duration: TX_ENTER_MS, easing: theme.motion.easing.standard, useNativeDriver: true }),
+      Animated.timing(glideScale, { toValue: 1, duration: TX_ENTER_MS, easing: theme.motion.easing.standard, useNativeDriver: true }),
+    ]).start(() => {
+      transitioningRef.current = false
+      pendingToRef.current = null
+      setTransitioning(false)
+      userInteractingRef.current = false // auto-rotation resumes (Earth only)
+    })
+  }
+
+  function changePlanet(toId: PlanetId) {
+    if (toId === activePlanetId || transitioningRef.current) return
+    const dir = planetIndex(toId) > planetIndex(activePlanetId) ? 1 : -1
+    transitioningRef.current = true
+    pendingToRef.current = toId
+    swapDirRef.current = dir
+    styleSwappedRef.current = false
+    enterStartedRef.current = false
+    userInteractingRef.current = true // pause auto-rotation through the swap
+    setSelectedStream(null)
+    setSelectedClusterStreams(null)
+    setTransitioning(true)
+    clearTxTimers()
+    glideX.setValue(0)
+    glideScale.setValue(1)
+
+    // Exit: slide the CURRENT globe off-screen (dir +1 → left) while shrinking it —
+    // pure native transforms, no Mapbox camera move. Swap the style when it's gone.
+    Animated.parallel([
+      Animated.timing(glideX, { toValue: -dir * windowW, duration: TX_EXIT_MS, easing: theme.motion.easing.standard, useNativeDriver: true }),
+      Animated.timing(glideScale, { toValue: TX_EXIT_SCALE, duration: TX_EXIT_MS, easing: theme.motion.easing.standard, useNativeDriver: true }),
+    ]).start(({ finished }) => {
+      if (!finished || !transitioningRef.current) return
+      styleSwappedRef.current = true
+      setActivePlanetId(toId) // restyle the now-off-screen MapView
+      // Fly in on the new style's load, or this fallback if the event is missed.
+      txSchedule(TX_STYLE_FALLBACK_MS, flyInNewPlanet)
+    })
+  }
+
+  function handleStyleLoad() {
+    if (!transitioningRef.current || !styleSwappedRef.current) return
+    flyInNewPlanet()
+  }
+
+  // Clean up any in-flight transition timers on unmount.
+  useEffect(() => () => clearTxTimers(), [])
+
   // ── Keep preview cards in sync with streams refresh ────────────────────────
 
   useEffect(() => {
-    if (!selectedStream || !pins) return
-    const updated = pins.find(s => s.id === selectedStream.id)
+    if (!selectedStream || !planetPins) return
+    const updated = planetPins.find(s => s.id === selectedStream.id)
     if (!updated) setSelectedStream(null)
     else if (updated !== selectedStream) setSelectedStream(updated)
-  }, [pins])
+  }, [planetPins])
 
   useEffect(() => {
-    if (!selectedClusterStreams || !pins) return
+    if (!selectedClusterStreams || !planetPins) return
     const updated = selectedClusterStreams
-      .map(s => pins.find(x => x.id === s.id))
+      .map(s => planetPins.find(x => x.id === s.id))
       .filter((s): s is Stream => s != null)
     if (updated.length === 0) setSelectedClusterStreams(null)
     else setSelectedClusterStreams(updated)
-  }, [pins])
+  }, [planetPins])
 
   // ── Filtered streams (query + chip) ────────────────────────────────────────
 
   const visibleStreams = useMemo(() => {
-    const all = nearbyStreams
+    // Only the active planet's streams populate its drawer + cards. `drawerSource`
+    // is Earth's nearby-REST feed or Haven's private-stream socket feed (HAVEN
+    // DATA SEAM); the planet filter is then a safety no-op on each.
+    const all = drawerSource.filter(planet.belongsTo)
     // A streamer never sees their own stream in the drawer. All other
     // curation rules below are unchanged.
     let out = all.filter(s => !isSelfStream(s))
@@ -570,7 +764,7 @@ export function GlobeScreenMapbox() {
     // Order by viewer count desc for now (until a real "trending"
     // weighting lands).
     return out.slice().sort((a, b) => b.viewerCount - a.viewerCount)
-  }, [nearbyStreams, chipId, query, isSelfStream])
+  }, [drawerSource, chipId, query, isSelfStream, planet])
 
   // ── Navigation ────────────────────────────────────────────────────────────
 
@@ -648,34 +842,47 @@ export function GlobeScreenMapbox() {
 
   // ── GeoJSON feature collection from streams ───────────────────────────────
 
+  // Pins for the active planet only. Earth uses real coords + location precision
+  // halos; Haven places each private stream at its stable island spot (by id) and
+  // renders sharp dots (precision halos are meaningless on a synthetic planet).
   const geoJSON = {
     type: 'FeatureCollection' as const,
-    features: pins
-      .filter(s => s.lat != null && s.lng != null)
-      .map(s => ({
-        type: 'Feature' as const,
-        geometry: { type: 'Point' as const, coordinates: [s.lng!, s.lat!] },
-        properties: {
-          streamId:         s.id,
-          mediasoupRoomId:  s.mediasoupRoomId ?? '',
-          title:            s.title,
-          viewerCount:      s.viewerCount,
-          handle:           s.host?.handle ?? 'unknown',
-          sources:          (s.sources ?? []).join(','),
-          precision:        s.locationPrecision ?? 'exact',
-          subscribersOnly:  s.subscribersOnly === true,
-          isSelf:           treatAsSelf(s),
-        },
-      })),
+    features: planetPins
+      .filter(planet.belongsTo)
+      .map(s => {
+        // Earth: real coords + precision halos. Haven: stable island spot by id,
+        // sharp dots (halos are meaningless on a synthetic planet).
+        const [lng, lat] = planet.placePin(s)
+        if (lng == null || lat == null || Number.isNaN(lng) || Number.isNaN(lat)) {
+          return null
+        }
+        return {
+          type: 'Feature' as const,
+          geometry: { type: 'Point' as const, coordinates: [lng, lat] },
+          properties: {
+            streamId:         s.id,
+            mediasoupRoomId:  s.mediasoupRoomId ?? '',
+            title:            s.title,
+            viewerCount:      s.viewerCount,
+            handle:           s.host?.handle ?? 'unknown',
+            sources:          (s.sources ?? []).join(','),
+            precision:        planet.id === 'earth' ? (s.locationPrecision ?? 'exact') : 'exact',
+            subscribersOnly:  s.subscribersOnly === true,
+            isSelf:           treatAsSelf(s),
+          },
+        }
+      })
+      .filter((f): f is NonNullable<typeof f> => f != null),
   }
 
   // Count bubbles (low zoom): one per populated tile, drawn at the cluster
   // centroid the server snapped to a real pin. Empty in pins mode.
   const countsGeoJSON = {
     type: 'FeatureCollection' as const,
-    // In the past, pins come from the clip feed (no server tile-counts) — render
-    // clip pins directly and suppress the live count bubbles.
-    features: (historicalMode ? [] : counts).map((c: TileCount) => ({
+    // In the past, pins come from the clip feed (no server tile-counts); on Haven
+    // the tile feed is geographic + irrelevant — suppress the count bubbles in
+    // both cases (only Earth-live has real viewport tile counts).
+    features: (historicalMode || planet.id !== 'earth' ? [] : counts).map((c: TileCount) => ({
       type: 'Feature' as const,
       geometry: { type: 'Point' as const, coordinates: [c.lng, c.lat] },
       properties: {
@@ -712,7 +919,7 @@ export function GlobeScreenMapbox() {
       try {
         const leaves = await sourceRef.current?.getClusterLeaves(feature, 100, 0) as any
         const clusterStreams = ((leaves?.features ?? []) as any[])
-          .map((f: any) => pins.find(s => s.id === f.properties?.streamId))
+          .map((f: any) => planetPins.find(s => s.id === f.properties?.streamId))
           .filter((s): s is Stream => s != null)
           // A streamer never sees their own stream in the cluster card either.
           .filter(s => !treatAsSelf(s))
@@ -722,7 +929,7 @@ export function GlobeScreenMapbox() {
         }
       } catch {}
     } else {
-      const stream = pins.find(s => s.id === feature.properties?.streamId)
+      const stream = planetPins.find(s => s.id === feature.properties?.streamId)
       if (stream) {
         // Tapping your own (black) pin returns to your stream view instead of
         // opening a join card — same path as the tab-bar live-return link.
@@ -736,7 +943,8 @@ export function GlobeScreenMapbox() {
     }
   }
 
-  const liveCount = nearbyStreams.length
+  // LIVE count reflects the active planet (what the user is actually looking at).
+  const liveCount = drawerSource.filter(planet.belongsTo).length
 
   // ── Drawer animation + state coupling ──────────────────────────────────────
 
@@ -897,6 +1105,16 @@ export function GlobeScreenMapbox() {
 
   return (
     <View style={styles.container} onLayout={onContainerLayout}>
+      {/* OUTER: planet-swap slide + scale (NATIVE driver — UI thread). */}
+      <Animated.View
+        style={[
+          StyleSheet.absoluteFill,
+          { transform: [{ translateX: glideX }, { scale: glideScale }] },
+        ]}
+        pointerEvents="box-none"
+      >
+      {/* INNER: drawer/clock vertical coupling (non-native). Separate view from the
+          outer native slide+scale so the two transform drivers never mix. */}
       <Animated.View
         style={[
           StyleSheet.absoluteFill,
@@ -907,15 +1125,23 @@ export function GlobeScreenMapbox() {
       <Mapbox.MapView
         ref={mapViewRef}
         style={StyleSheet.absoluteFill}
-        styleURL={Mapbox.StyleURL.Light}
+        // Exactly one of styleURL / styleJSON is set per planet (Earth = hosted
+        // Mapbox style; Haven = synthetic in-code water+island style).
+        {...(planet.styleJSON
+          ? { styleJSON: planet.styleJSON }
+          : { styleURL: planet.styleURL })}
         projection="globe"
         logoEnabled={false}
         attributionEnabled={false}
         compassEnabled={false}
         scaleBarEnabled={false}
+        // Disable the two-finger bearing twist (z-axis / yaw roll). Pan + pinch-zoom
+        // stay; auto-spin is a pan (center change), so it's unaffected.
+        rotateEnabled={false}
         gestureSettings={{ panDecelerationFactor: Platform.OS === 'ios' ? 0.99 : undefined }}
         onCameraChanged={handleCameraChanged}
         onDidFinishLoadingMap={handleMapLoad}
+        onDidFinishLoadingStyle={handleStyleLoad}
         onPress={() => {
           pauseRotation()
           setSelectedStream(null)
@@ -926,9 +1152,39 @@ export function GlobeScreenMapbox() {
 
         <Camera
           ref={cameraRef}
-          defaultSettings={{ centerCoordinate: [0, 20], zoomLevel: 1.5 }}
+          defaultSettings={{ centerCoordinate: [0, 20], zoomLevel: planetById('earth').initialCamera.zoomLevel }}
+          minZoomLevel={GLOBE_MIN_ZOOM}
           maxZoomLevel={20}
         />
+
+        {/* Day/night terminator — on any `dayNight` planet (Earth + Haven, same
+            monochrome dusk). Tracks the WRLD clock + time machine. Stacked
+            twilight bands → a soft frontier. Drawn before the pins. */}
+        {planet.dayNight && nightBands.map((band, i) => (
+          <ShapeSource key={`night-${i}`} id={`night-${i}`} shape={band.shape}>
+            <FillLayer
+              id={`night-fill-${i}`}
+              style={{ fillColor: NIGHT_COLOR, fillOpacity: band.opacity }}
+            />
+          </ShapeSource>
+        ))}
+
+        {/* Pole markers — N / S labels for orientation. */}
+        <ShapeSource id="poles" shape={POLES_GEOJSON}>
+          <SymbolLayer
+            id="pole-labels"
+            style={{
+              textField: ['get', 'label'] as any,
+              textSize: 13,
+              textColor: POLE_COLOR,
+              textHaloColor: '#FFFFFF',
+              textHaloWidth: 1.5,
+              textOpacity: 0.6,
+              textAllowOverlap: true,
+              textIgnorePlacement: true,
+            }}
+          />
+        </ShapeSource>
 
         <ShapeSource
           id="streams"
@@ -1058,6 +1314,7 @@ export function GlobeScreenMapbox() {
         </ShapeSource>
       </Mapbox.MapView>
       </Animated.View>
+      </Animated.View>
 
       {/* Top scrim — paper100 fade muting the globe behind the top stack */}
       <LinearGradient
@@ -1082,6 +1339,17 @@ export function GlobeScreenMapbox() {
               ) : undefined
             }
           />
+
+          {PLANETS.length > 1 && (
+            <View style={styles.planetRow} pointerEvents="box-none">
+              <PlanetSwitcher
+                planets={PLANETS.map(p => ({ id: p.id, name: p.name, glyph: p.glyph }))}
+                activeId={activePlanetId}
+                onChange={(id) => changePlanet(id as PlanetId)}
+                disabled={transitioning}
+              />
+            </View>
+          )}
 
           <View style={styles.searchRow}>
             <SearchBar
@@ -1278,6 +1546,10 @@ const styles = StyleSheet.create({
   // +sm. Dashboard / stream preview mirror this exactly so the field doesn't
   // jump between tabs.
   headerPad: {
+    paddingTop: theme.spacing.sm,
+  },
+  planetRow: {
+    alignItems: 'center',
     paddingTop: theme.spacing.sm,
   },
   searchRow: {

@@ -3739,3 +3739,89 @@ public/private affordance, time-machine consumer over the public-buffer discover
 Backend/recorder (Aaron): reaper honours per-range `retain` (drop copy-out), public
 buffer discover + serve, per-range manifest fields, retained-bytes quota accounting.
 Full staged plan + split: `HANDOFF-public-buffer-onestore-2026-06-18.md`.
+
+---
+
+## Second-planet initiative — "Haven" for private-location streams (June 2026)
+
+> **Branch: `planet`** (off `main`, both `wrld-app` and `wrld-backend`). Net-new
+> feature, not yet merged. Crosses the Ben/Aaron seam by design (Ben directed it) —
+> the globe screen + backend discovery are touched directly on this branch.
+
+**The need.** A creator who broadcasts with **PRIVATE** location
+(`locationPrecision = 'off'`) was filtered out server-side and **undiscoverable**.
+They now get a home: a **second planet** (99% water, one island) reached via a
+**planet switcher** on the globe that glides between worlds. Built as an
+**extensible planet registry** so more planets drop in as config.
+
+**Planet registry (`src/lib/planets/`).** A planet is *data*, not a code path —
+`{ styleURL | styleJSON, surfaceColor, initialCamera, belongsTo(stream),
+placePin(stream)→[lng,lat] }`. `GlobeScreenMapbox` reads everything from the active
+planet; no per-planet branching. Adding a planet = one object in `PLANETS`.
+- **Earth** — `StyleURL.Light`; located streams (`precision !== 'off'`); pin at real
+  coords; auto-rotates + GPS-orients (unchanged).
+- **Haven** — synthetic in-code `styleJSON` (water `background` + one island
+  `fill`/`line` GeoJSON, `island.ts`), rendered `projection="globe"`; PRIVATE
+  streams only; each placed at a **stable** random island spot seeded by stream id
+  (`randomPointOnIsland`, rejection-sampled, deterministic). Auto-rotation disabled
+  (kept framed on the island).
+
+**App pieces** (Ben's lane — features/lib):
+- `src/lib/planets/{index,island}.ts` — registry + island geometry/style/placement.
+- `features/discovery/PlanetSwitcher.tsx` — glass pill `‹ glyph + name ›`, chevrons +
+  swipe, registry-driven (gallery + DESIGN.md Section 3).
+- `src/lib/dayNight.ts` — `nightPolygon(date, alt)` (subsolar point → "sun below
+  alt°" GeoJSON); the globe stacks `NIGHT_BANDS` (10 thin bands across +5°→−5°
+  straddling the line, as Mapbox fills can't blur) as low-opacity `FillLayer`s on any
+  **`dayNight` planet (Earth + Haven, same monochrome dusk)** → a SOFT graded frontier,
+  fed `Date.now() - timeOffsetMs` (tracks the WRLD clock + time-machine scrub). **Haven
+  (`dayNightLocal`)** uses `nightPolygonLocal(date, anchorLng, alt)` — real tilt but the
+  sun's longitude anchored to the **viewer's local clock**, so the island reads as each
+  viewer's own time of day (per-timezone → no host-location leak). Haven's skin is also
+  recoloured to Earth's Mapbox-Light monochrome (light-grey sea, cream land).
+- `GlobeScreenMapbox.tsx` (screens) — `activePlanetId` + `transitioning` state; style /
+  geoJSON (`placePin`/`belongsTo`) planet-derived. **Swap motion = NATIVE transforms**
+  on an OUTER wrapper (`glideX` slide + `glideScale` shrink), NOT the Mapbox camera
+  (which stuttered): globe slides off one edge shrinking → style swaps off-screen →
+  new planet slides in the other edge growing back, centred on the island (Haven) or
+  user's location (Earth); direction = registry order (reversed back). Nested outside
+  the non-native `globeTranslateY` view so drivers don't mix. **Globe sizing = zoom
+  only:** Mapbox clips the globe to the MapView, so too high a zoom shears the sides
+  flat; `Camera minZoomLevel = GLOBE_MIN_ZOOM` (0.35) floors it low enough that the
+  whole planet fits the screen width (no crop) + vertical rotation works, and each
+  planet's `initialCamera.zoomLevel` (0.5) is where it sits — raise for a bigger globe
+  until the sides clip. (An earlier `fitScale` transform was removed — it scaled the
+  already-clipped result.) `Stream` type: `locationPrecision` gains `'off'`, `lat`/`lng` nullable.
+
+**Backend pieces** (`wrld-backend`, `planet` branch):
+- `findAllLiveStreams` (discovery snapshot) now **includes `off` streams with
+  coordinates stripped to `null`** (privacy: the real coord never leaves the server);
+  `findStreamsNear` (geographic) still excludes `off`.
+- `discoveryService` — `DiscoveryStream` widened (`lat/lng: number|null`, precision
+  `'off'`); rebuildIndex + `publish('stream_started')` keep coordless pins **out of
+  the geo set / tiles** (pin hash + legacy fan-out only → app gets them, viewport
+  clients ignore them). `internal.ts` `streamStarted` pushes `off` streams (null
+  coords) instead of skipping. `stream_ended` already fired for all streams.
+- mediasoup unchanged.
+
+**On-device tuning knobs** (numbers are first guesses): `GLOBE_MIN_ZOOM` /
+`GLOBE_SPACE_ZOOM` / each planet's `initialCamera.zoomLevel` (whole-planet framing +
+the vertical-rotation floor), the `TX_*` swap durations, `NIGHT_OPACITY`.
+**Not yet tested on device** (flagged): the swap motion (pull-back → cover-instant →
+dive-in) reading clean with no style-flash; the night terminator rendering on the
+globe + tracking the time-machine scrub; vertical rotation holding at the min-zoom
+floor; island pin spread; and end-to-end that a PRIVATE stream appears on Haven
+(stable spot) and **never** exposes a real coordinate. Pure JS app-side (no native
+module) — Metro hot-reload, no EAS rebuild. Backend needs deps + `prisma generate`
+current to typecheck (this local checkout is stale).
+
+> **Rebased onto upstream main 2026-06-18 + HAVEN DATA SEAM wired.** Main had moved
+> the globe's pins from the discovery socket to **viewport-tile discovery**
+> (`useViewportDiscovery`) + `useStreamsNear` (drawer) — a geographic model coordless
+> PRIVATE streams can't ride. Resolved in `GlobeScreenMapbox`: **Earth** keeps the
+> viewport/nearby feeds; **Haven** reads `useDiscoverySocket()` filtered to `'off'`
+> (the socket snapshot/events now carry `off` streams via the backend changes), placed
+> on the island by `placePin`. `planetPins` / `drawerSource` switch the pin + drawer +
+> count + tap sources by `planet.id`; count bubbles suppressed off-Earth. **Follow-up
+> (scale only):** the socket is always-on again — at real scale, gate it to Haven or
+> add a dedicated lightweight live-`off` endpoint instead of the full discovery socket.

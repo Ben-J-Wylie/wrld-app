@@ -30,6 +30,7 @@ import { SettingsRow } from '@/components/features/settings/SettingsRow'
 import { ToastBanner } from '@/components/features/feedback/ToastBanner'
 import { SearchBar } from '@/components/features/discovery/SearchBar'
 import { ScaleBar } from '@/components/features/discovery/ScaleBar'
+import { PlanetSwitcher } from '@/components/features/discovery/PlanetSwitcher'
 import { TimeScrubber } from '@/components/features/discovery/TimeScrubber'
 import { LiveClockBar } from '@/components/features/discovery/LiveClockBar'
 import { PlaceResult } from '@/components/features/discovery/PlaceResult'
@@ -618,6 +619,24 @@ export function FeatureGallery() {
         </Row>
         <Row label="imperial unit (NYC, zoom 8)">
           <ScaleBar centerLat={40.71} zoom={8} maxWidthPx={140} unit="imperial" />
+        </Row>
+      </Section>
+
+      <Section title="PlanetSwitcher">
+        <Row label="tap a chevron or swipe the chip to switch planets">
+          <View style={styles.darkStage}>
+            <PlanetSwitcherDemo />
+          </View>
+        </Row>
+        <Row label="disabled (mid-glide)">
+          <View style={styles.darkStage}>
+            <PlanetSwitcher
+              planets={PLANET_DEMO}
+              activeId="earth"
+              onChange={() => {}}
+              disabled
+            />
+          </View>
         </Row>
       </Section>
 
@@ -1770,6 +1789,18 @@ function SearchBarDemo({
       onChangeText={setValue}
       onClear={omitClear ? undefined : () => setValue('')}
     />
+  )
+}
+
+const PLANET_DEMO = [
+  { id: 'earth', name: 'Earth', glyph: 'globe' },
+  { id: 'haven', name: 'Haven', glyph: 'shield' },
+]
+
+function PlanetSwitcherDemo() {
+  const [active, setActive] = useState('earth')
+  return (
+    <PlanetSwitcher planets={PLANET_DEMO} activeId={active} onChange={setActive} />
   )
 }
 
