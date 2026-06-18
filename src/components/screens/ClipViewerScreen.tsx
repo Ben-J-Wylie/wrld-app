@@ -16,7 +16,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, StyleSheet, View } from 'react-native'
 import { useLocalSearchParams, router, useFocusEffect } from 'expo-router'
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { useQuery } from '@tanstack/react-query'
 import { useVideoPlayer, VideoView } from 'expo-video'
 import { Text } from '@/components/primitives/Text'
@@ -53,9 +53,6 @@ const FEED_TO_DATAKIND: Partial<Record<FeedKind, string>> = {
   chat: 'chat',
 }
 
-// The footer (AppTabBar) is shown on this pushed screen, so the clock sits above it.
-const TAB_BAR_CONTENT_H = 52
-
 export function ClipViewerScreen() {
   const params = useLocalSearchParams<{
     id?: string
@@ -67,7 +64,6 @@ export function ClipViewerScreen() {
   const seekSec = params.seekSec ? Math.max(0, Math.floor(Number(params.seekSec)) || 0) : 0
   const paramTitle = typeof params.title === 'string' ? params.title : undefined
   const paramHandle = typeof params.handle === 'string' ? params.handle : undefined
-  const insets = useSafeAreaInsets()
 
   const {
     data: clip,
@@ -186,9 +182,13 @@ export function ClipViewerScreen() {
     // The audiolevel companion track means the audio waveform can replay even on a
     // clip with no separate 'audio' media kind.
     if ((clip?.tracks ?? []).some((t) => t.kind === 'audiolevel')) set.add('audio')
+    // The primary manifest is always a camera (or audio) track, so the camera view
+    // is always switchable — even before the per-source tracks list is available
+    // (the GET /clips/:id tracks include needs deploying for the rest of the rail).
+    if (hasMedia) set.add('cam')
     set.add('profile') // identity always
     return SOURCE_RAIL_ORDER.filter((k) => set.has(k))
-  }, [clip?.tracks])
+  }, [clip?.tracks, hasMedia])
 
   const [view, setView] = useState<FeedKind>('cam')
   useEffect(() => {
@@ -354,11 +354,9 @@ export function ClipViewerScreen() {
       </SafeAreaView>
 
       {/* Bottom chrome, bottom-up above the footer: clock · transport · source rail
-          (the same stack as the Clips preview). */}
-      <View
-        style={[styles.bottomStack, { bottom: insets.bottom + TAB_BAR_CONTENT_H }]}
-        pointerEvents="box-none"
-      >
+          (the same stack as the Clips preview). The Tabs navigator already insets
+          the scene above the footer, so this just sits at the scene bottom. */}
+      <View style={styles.bottomStack} pointerEvents="box-none">
         {/* Source rail — captured sources, switchable (same as live + preview). */}
         {availableViews.length > 1 && (
           <View style={styles.railBar}>
@@ -430,6 +428,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
+    bottom: theme.spacing.sm,
   },
   railBar: {
     alignItems: 'center',
