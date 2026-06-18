@@ -4617,6 +4617,27 @@ above. The seam is not a separate motion category.
 Append-only. Most recent first. Each entry: date, decision, rationale,
 constraint it imposes downstream.
 
+### 2026-06-18 — Public buffer + one-store / retain-in-place (content-model; UI follows)
+
+**Decision:** the rolling buffer is **public by default** (in the time machine), and
+there is **one footage store** — "saving" is a per-range `retain` directive the reaper
+honours **in place** (no copy-on-save). **Retention (reap↔keep)** and **visibility
+(public↔private)** are **orthogonal per-range directives**; live is public by policy.
+Canonical in **CONTENT.md §3** (the content model is CONTENT.md's axis, not DESIGN's) —
+logged here for the **UI work it imposes** (PB3/PB4 in
+`HANDOFF-public-buffer-onestore-2026-06-18.md`):
+
+- A **per-segment settings affordance** — each snip segment carries its own
+  visibility / precision / identity / retention (directives are per-range).
+- A **public/private per-range toggle** + a clear visual of distinct segments.
+- A **mend differ-guard** — when two adjacent segments' directives differ, mend is
+  disabled / prompts-to-pick; keeping them snipped is always valid.
+- The time-machine consumer now surfaces **public buffer pins** (not only saved
+  clips); storage-meter copy reads retained-bytes-over-one-store.
+
+**Constraint:** new clip-editor controls must treat every directive as **per-range**,
+not per-clip; nothing in the editor may assume a single clip-wide privacy value.
+
 ### 2026-06-13 — Clips grid: playhead-driven playback + buffer-window reaper UX
 
 A large pass on the Clips landing grid (`ClipsScreen` + `ClipsTimeline` + `ClipViewer` +

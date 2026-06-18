@@ -5,8 +5,8 @@
 > substrate and the app surfaces. It is the **content-principles** doc, the
 > sibling to [`DESIGN.md`](DESIGN.md): DESIGN.md governs how WRLD *looks and
 > composes* (tokens, tiers, motion); CONTENT.md governs how WRLD *handles
-> content* (the two pools, the clip manifest, capture, representation, privacy,
-> the time machine). Same role, different axis — principles + decided models,
+> content* (the one store + retention/visibility axes, the clip manifest, capture,
+> representation, privacy, the time machine). Same role, different axis — principles + decided models,
 > not an API reference (those live in `wrld-backend/docs/API.md`, the per-repo
 > `CLAUDE.md` files, and the `HANDOFF-*.md` notes). When a content decision is
 > made, the principle lands here; the implementation detail lands in the repo
@@ -33,10 +33,13 @@
    Going live is what fills the buffer; there is no record-without-broadcast and
    no standalone Record verb. The durable user verb is **"Save a clip"**
    (retroactive, over the buffer).
-3. **Editing is non-destructive.** A clip is a *manifest* over footage, never a
-   re-encode. The only destructive act a user can take is **permanent delete**
-   (which reclaims quota). Everything else — trim, reorder, source on/off,
-   visibility — is reversible metadata. Delete is real (off disk) **except**
+3. **Editing is non-destructive — and so is saving.** A clip is a *manifest* over
+   **one footage store**, never a re-encode and never a copy. The only destructive
+   act a user can take is **permanent delete** (which reclaims quota). Everything
+   else — trim, reorder, source on/off, visibility, **and retention itself
+   (reap ↔ keep)** — is reversible per-range metadata. "Saving" is just flipping a
+   `retain` directive the reaper honours in place (§3); it moves bytes between
+   accounting buckets, not between disks. Delete is real (off disk) **except**
    reported content, a copy of which the platform holds in the **Report Centre**
    for moderation beyond the user's reach (§3).
 4. **Privacy is the creator's, and reversible.** Location precision and identity
@@ -49,9 +52,11 @@
    shipped immutable-precision behaviour is the rework.)* The captured **set of
    sources** is a historical fact (you can't capture a source retroactively), but a
    clip may disable any of them (§5).
-5. **Storage is honest and bounded.** Two pools, explicit caps per tier, visible
-   usage. The system never quietly grows without bound, and it never silently
-   drops content a user chose to keep.
+5. **Storage is honest and bounded.** One store, two accounting views — reapable
+   footage bounded by a per-tier **time window**, retained footage bounded by the
+   **saved-storage quota** — with explicit caps and visible usage. The system never
+   quietly grows without bound, and it never silently drops content a user chose to
+   keep.
 6. **The representation never lies about the model.** What the UI shows — lane,
    lifecycle, precision, frame, state — must be true to the underlying content.
    Where it can't show the full truth it degrades visibly (thinner), never
@@ -98,10 +103,12 @@
    recorded **per source**. A clip can keep camera while dropping audio for a
    window, reveal a record-only sensor, or carry a gap on one track and not
    another. Edits are markers over tracks, never re-encodes (the manifest, §5).
-5. **At the behest of the reaper.** Everything captured lives in the rolling
-   buffer under the reaper's eviction contract — **deleted unless saved.**
-   Saving is the single act that promotes content out of the reaper's reach into
-   the durable pool. Ephemeral-by-default is the rule, not a failure mode.
+5. **At the behest of the reaper.** Everything captured lives in the one store
+   under the reaper's eviction contract — **reaped unless a `retain` directive
+   pins it.** Saving is that directive: it exempts a range from the reaper **in
+   place** (no copy, no second pool) and shifts its bytes onto the saved quota.
+   Ephemeral-by-default is the rule, not a failure mode; the reaper is a consumer
+   of the manifest, not a separate lifecycle.
 6. **Total scrub accessibility.** Every source and the whole buffer window are
    reachable by **scrub**. The user can land on any captured instant, on any
    track — the representation gets them there (best-effort where footage is thin).
@@ -136,25 +143,57 @@ saving.**
 
 ---
 
-## 3. The two pools
+## 3. The content store (one store, orthogonal axes)
 
-Content lives in exactly one of two stores, with opposite lifecycles:
+> **Decided 2026-06-18 — supersedes the earlier "two physical pools / copy-on-save"
+> framing.** There is **one append-only footage store**. "Buffered" vs "saved" and
+> "public" vs "private" are not separate stores — they are two **independent
+> per-range directives** in the manifest (§5) over that one store. Nothing is copied
+> to "save"; saving flips a `retain` directive the reaper honours, in place.
 
-| | **Rolling buffer** | **Saved-clip pool** |
-|---|---|---|
-| Purpose | always-on rewind of what you aired | the bits you chose to keep |
-| Lifecycle | self-overwriting ring; the **reaper** evicts by a time-window + byte-backstop contract | **permanent until deleted** |
-| Privacy | private to the owner; never on the globe | public-eligible (visibility per clip) |
-| Time machine | **not** in it | **in** it (surviving clips are what the past is made of) |
-| Cost | a generous per-tier budget (not user-managed) | counts against the user's saved quota |
+**Two orthogonal axes, both expressed as per-range directives:**
 
-**Per-tier caps** (capture is pinned to the tier — "cap produce", no server
-transcode): Free 24h / 720p · Plus 72h / 1080p · Pro 7d / 1440p. Byte backstops
-are sized worst-case-plus-cushion.
+- **Retention — reap ↔ keep** (the two lanes). By default a range is **reapable**:
+  it lives under the rolling-buffer contract (a per-tier **time window** + byte
+  backstop; the reaper evicts oldest-first). A **`retain` directive** exempts a
+  range — the **saved lane**. Saving moves a range from *time-windowed* accounting
+  into the user's **saved-storage quota** — the **same bytes, re-tagged, never moved
+  or copied** — so it still decrements available storage exactly as before.
+  Un-saving releases the range back to the reaper (which may evict it immediately if
+  it's already past the window).
+- **Visibility — public ↔ private** (time-machine discoverability), with a
+  **per-user default of public**. **Public** ranges appear in the time machine
+  (reapable *or* retained). **Private** ranges never appear in the time machine —
+  watchable live in the now, kept if retained, but absent from the past.
+  **Independent of retention: all four cells are valid, including private + saved**
+  (a kept, undiscoverable keepsake).
+
+The reaper is just a **manifest consumer**: a segment survives iff a `retain`
+directive pins it (or it's in the live window); otherwise it's evicted, oldest-first,
+under the byte cap. "Saving" and "publishing" are two distinct flips — neither copies
+bytes.
+
+**Live is public by policy, not by structure.** The model permits a *private live*
+broadcast; the product simply doesn't offer that choice — a one-line product rule,
+not a data-model assumption.
+
+| axis | default | flip | bound by |
+|---|---|---|---|
+| **retention** | reapable (buffer lane) | `retain` → saved lane | saved-storage quota |
+| **visibility** | public | private | discovery filter only |
+
+**Per-tier caps** (capture pinned to tier — "cap produce", no server transcode):
+Free 24h / 720p · Plus 72h / 1080p · Pro 7d / 1440p. The time window bounds the
+reapable footage; the saved quota bounds retained footage — both are accounting
+views over the one store, not separate disks.
+
+**The only genuine copies.** Two acts ever move or duplicate bytes: **permanent
+delete** (drop segments, reclaim) and the **Report Centre** moderation hold — which
+*must* be a separate copy because it has to outlive the user's own deletion.
 
 **A third, platform-side hold — the Report Centre.** When content is
 **reported**, the platform copies it to a **separate moderation hold** (the
-*Report Centre*) — not one of the user's two pools. The decided shape (2026-06-13):
+*Report Centre*) — not part of the user's store. The decided shape (2026-06-13):
 
 - **What can be reported.** A **live stream** or a **public clip** (clips are
   public — they appear in the time machine and on profiles). Both produce a
@@ -221,21 +260,25 @@ decided principle now.)*
 ## 5. The manifest model (recording → clip; draft ↔ saved)
 
 - **A Recording** is the per-source tracks captured for a session.
-- **A Clip is a manifest** over a recording / the buffer: an ordered list of
-  time-**ranges** + per-source **enabled** state + identity / location-precision
-  / visibility / tags. No bytes are re-encoded. The manifest is the single
-  source of truth.
-- **One row, two states** (a `saved` boolean):
-  - **Draft** — a manifest over the buffer. No copy, private, costs no saved
-    quota, editable, **ages out with its footage**. Plays straight from the
-    buffer.
-  - **Saved** — its in-bounds footage **materialised** to durable storage
-    (promote-on-publish), public-eligible, **survives buffer eviction**.
-- **The carve.** The buffer view shows footage **minus** the saved + draft
-  ranges. A saved/trimmed clip carves its range out of its source session; the
-  remainder stays as buffer. So a given range shows in **exactly one lane**, and
-  a carved range can't be re-saved. (App-side display computation today; the
-  durable promote is the backend's job.)
+- **A Clip is a manifest** over the one footage store: an ordered list of
+  time-**ranges** + **per-range directives** — source **enabled** state, identity,
+  location-precision, **visibility**, **retention**, tags. No bytes are re-encoded
+  and none are copied. The manifest is the single source of truth.
+- **Per-range directives, not per-clip.** Every directive lives on the range and
+  travels with it, so a snip (split) gives each segment its own settings and a
+  **mend (merge) needs no reconciliation when the adjacent ranges agree** — and when
+  they differ, the mend is guarded (disabled / prompt-to-pick), with *keeping them
+  snipped* always a valid answer. *(Decided 2026-06-18 — supersedes per-clip
+  identity/precision.)*
+- **Saved = a `retain` directive, in place** (no `saved`-copies-bytes promote):
+  - **Reapable (buffer lane)** — the default; ages out with the window, costs no
+    saved quota.
+  - **Saved (retained)** — a `retain` directive exempts the range from the reaper
+    **where it already lives**; it counts against the saved quota and survives
+    eviction. Same bytes, re-tagged. Un-save removes the directive → reapable again.
+- **The carve still holds.** The buffer view shows footage **minus** the retained
+  ranges, so a given range reads in **exactly one lane**. The carve is now pure
+  metadata (which ranges carry `retain`), not "which pool the bytes were copied to."
 - **Mid-clip delete** = one clip with two ranges and a gap (an HLS
   discontinuity), not an auto-split into two entities.
 
@@ -697,11 +740,21 @@ Then pick **B** (honest placeholder) for whatever lag remains + **C** (shrink it
 - **The consent step is the relaxable half.** Currently parked for friends-and-
   family; the `RecordConsentSheet` and sensitive/benign badges are shipped and
   re-enabled before any wider exposure.
-- **Precision is per-stream and reversible** (exact / city / country / off): set at
-  go-live but **editable in either direction afterward** on the clip; the globe and
-  replay render the clip's **current** choice. Capture keeps the exact coordinate so
+- **Precision is per-range and reversible** (exact / city / country / off): set at
+  go-live but **editable in either direction afterward** per range; the globe and
+  replay render the range's **current** choice. Capture keeps the exact coordinate so
   it can be sharpened later. `off` never reaches a client while it is set to `off`.
-  *(Reversibility decided 2026-06-13 — see §1.4.)*
+  *(Reversibility decided 2026-06-13 — see §1.4; per-range decided 2026-06-18 — §3/§5.)*
+- **Visibility is per-range, public by default** (decided 2026-06-18, §3). The buffer
+  is **public in the time machine by default** — what you aired is replayable in the
+  past. **Private** is the per-range opt-out: still watchable live in the now, kept if
+  retained, but **never in the time machine**. Visibility is **orthogonal to
+  retention** (a range can be public-or-private in either lane). A **per-user default**
+  sets the starting value.
+- **Live is public by policy, not structure.** A private *live* broadcast is
+  structurally valid (visibility is just a directive) but the product does **not**
+  offer it — live is always public. This is a one-line product rule, deliberately not
+  baked into the data model, so it can be revisited.
 - **Anonymous is truly anonymous.** No device IDs, no local UUIDs, no backend
   row for a viewer. Identity actions (go live, chat, react, follow, save) are
   what require an account.
@@ -710,9 +763,13 @@ Then pick **B** (honest placeholder) for whatever lag remains + **C** (shrink it
 
 ## 8. Time, discovery & the globe
 
-- **The past is thinner than live, on purpose.** The time machine replays the
-  globe at a past instant from **surviving clips only** — not everything that
-  aired. A single `offsetMs` behind now drives a real-time playhead (NOW / THEN).
+- **The past is the surviving public footage.** The time machine replays the globe
+  at a past instant from **everything still on disk that is public** — the **public
+  rolling buffer** (default) *plus* retained (saved) public clips — not just
+  deliberately-saved clips *(broadened 2026-06-18, §3)*. It's still thinner than live
+  (private ranges excluded; reapable footage only reaches back the tier window and
+  shrinks as it's reaped; retained clips persist). A single `offsetMs` behind now
+  drives a real-time playhead (NOW / THEN).
 - **Forward-only data.** Audience geo, activity heatmaps, analytics — all accrue
   from new activity; nothing is backfilled. The honest story beats a fabricated
   history.
@@ -748,7 +805,10 @@ regresses, the app's content surfaces degrade or lie.
 - **Wall-clock-chunked telemetry** (`.jsonl`) per data source, aligned to the
   media timeline, so sensor overlays replay in sync.
 - Per-track `recordingReady`; the **reaper** enforces the window + byte-cap
-  contract (the buffer's self-overwriting promise).
+  contract (the buffer's self-overwriting promise) **while honouring per-range
+  `retain` directives** — a retained range is exempt from eviction in place, never
+  copied out (§3). The eviction unit stays the media segment; a segment survives
+  iff a retain range overlaps it or it's in the live window.
 - **Minimise the recording lag / dead zone** (§6 "The recording lag & the dead
   zone" — OPEN). The gap between the live moment and the freshest *recorded*
   frame is manufactured here: segment duration + finalize/flush latency + the
@@ -774,22 +834,29 @@ regresses, the app's content surfaces degrade or lie.
 
 ### Backend — `wrld-backend`
 
-- The **durable saved-clip pool** + the non-destructive clip **manifest** (ranges
-  + per-source enabled + identity / precision / visibility / tags), draft↔saved
-  with **promote-on-publish** (in-bounds bytes copied out of the rolling buffer so
-  a saved clip survives eviction).
-- **Owner-gated, self-authorizing tokenized HLS** — segment URLs carry their own
-  token (no Clerk header on segment fetches), TTL long enough for an editing
-  session and refreshable.
-- `GET /buffer/me`: the buffer descriptor (sessions, playable kinds,
-  manifest/poster URLs, **codec-uniform groups**) + **dual-pool storage**
-  (`usedStorageBytes` saved pool · `bufferSizeBytes` · `bufferEarliestAt`) so the
-  reach hint + storage meters are real.
-- **Clip CRUD:** create draft · patch manifest · save (promote) · list
-  (`lane=saved|draft|all`) · delete.
-- `clips/discover?at=<ISO>` honours `saved` + visibility + the **captured**
-  location precision (never the user's current setting); excludes `off`. Returns
-  the unified `DiscoveryPin` union; computes the **seek offset** server-side.
+- **One store, retain-in-place** (2026-06-18, §3): the non-destructive clip
+  **manifest** (ranges + per-range enabled / identity / precision / **visibility** /
+  **retention** / tags) over a single footage store. Saving sets a **`retain`
+  directive** the reaper honours **in place** — no `promote`-copy, no second pool.
+  Retained bytes shift to the saved-storage quota (still decrements available
+  storage); un-save releases them to the reaper.
+- **Public buffer serving (Path A).** A regular user's buffer is **public by
+  default** and fetchable by any viewer for **public** ranges — a public serve path
+  + token-mint policy beyond today's owner-gated / ext-cam-only routes. Private
+  ranges + the owner's editing views stay owner-gated. (Self-authorizing tokenized
+  HLS — segment URLs carry their own token, refreshable — remains the mechanism;
+  what changes is *who* may mint for a session.)
+- `GET /buffer/me`: the owner's buffer descriptor (sessions, playable kinds,
+  manifest/poster URLs, **codec-uniform groups**) + storage accounting
+  (`usedStorageBytes` retained · `bufferSizeBytes` reapable · `bufferEarliestAt`)
+  so the reach hint + storage meters are real.
+- **Clip CRUD:** create draft · patch manifest (incl. `retain` + `visibility` per
+  range) · list · delete. (No separate "promote/materialise" step — save is a patch.)
+- `clips/discover?at=<ISO>` returns the surviving **public** footage at the instant —
+  the **public rolling buffer** *and* retained public clips (2026-06-18, §8) —
+  honouring each range's **current** visibility + location precision; excludes
+  `private` and `off`. Returns the unified `DiscoveryPin` union; computes the
+  **seek offset** server-side.
 
 ### Shared contracts
 
@@ -823,7 +890,10 @@ DESIGN.md + CONTENT.md §6 (representation). Aaron owns `screens/`, `hooks/`,
 - Backend detail: `wrld-backend/CLAUDE.md` (C-series + R-series) and
   `wrld-backend/docs/`.
 - Recorder detail: `wrld-mediasoup/CLAUDE.md`.
+- **Public buffer + one-store / retain-in-place** (§3, decided 2026-06-18) — the
+  staged build-out (PB0–PB4) + Ben/Aaron split is
+  `HANDOFF-public-buffer-onestore-2026-06-18.md`.
 - Live handoffs: `HANDOFF-aaron-2026-06-13.md` (cross-initiative todo, status-tracked),
   `HANDOFF-ben-frontend-2026-06-13.md` (front-end components still needed),
   `HANDOFF-c4-clip-editor-*.md`, `HANDOFF-clips-saved-persistence-*.md`,
-  `HANDOFF-source-visualizers-*.md`.
+  `HANDOFF-source-visualizers-*.md`, `HANDOFF-time-machine-aaron-2026-06-18.md`.

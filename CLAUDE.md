@@ -3695,3 +3695,47 @@ The clip viewer now matches live watching + the clip preview:
   via the `convertBigInts` preSerialization hook. Additive (non-breaking).
   `clipsApi`/`ClipDetail` gained `startAtMs`/`endAtMs`/`tracks`. Until this deploys,
   the viewer plays the primary track but the rail is identity-only.
+
+---
+
+## Updates — June 2026 (Public buffer + one-store / retain-in-place model — DECIDED, principle only)
+
+Decided with Ben 2026-06-18 (CONTENT.md §3 is canonical; §1.3/§1.5/§2.5/§5/§7/§8/§9
+updated). **Principle settled; no code yet** — the implementation path is
+`HANDOFF-public-buffer-onestore-2026-06-18.md`.
+
+### The model
+- **Path A — the rolling buffer is PUBLIC by default** and available in the time
+  machine (not just deliberately-saved clips). Per-range **private** is the opt-out
+  (watchable live, kept if retained, never in the past). **Live is always public by
+  product policy** (the model permits private-live; we don't expose it).
+- **One footage store; saving is retain-in-place, not a copy.** Supersedes the
+  two-pool / copy-on-save (`promoteBufferClip` copying bytes) model. A clip is a
+  manifest of **per-range directives** over one store; **retention (reap↔keep)** and
+  **visibility (public↔private)** are two **orthogonal** per-range axes (all four
+  cells valid, incl. private+saved). The **reaper is a manifest consumer**: a segment
+  survives iff a `retain` directive pins it (or it's live). Saving shifts bytes from
+  the time-window budget onto the saved-storage quota — re-tagged, never moved.
+- **Per-range directives** (supersedes per-clip identity/precision): every directive
+  travels with the range, so snip/mend needs **no reconciliation** when adjacent
+  ranges agree; when they differ, mend is guarded (disable / prompt), and keeping
+  them snipped is always valid.
+- **Unchanged:** saved = storage-quota'd, buffer = time-windowed; saving decrements
+  available storage; **moderation hold + permanent-delete remain the only genuine
+  copies**; the snip/mend + two-lane UX.
+
+### What this supersedes (blast radius)
+- CONTENT.md §3 "two physical pools" + §5 "promote-on-publish materialises bytes" →
+  one store, retain-in-place.
+- Backend `promoteBufferClip` (copy-out) → a `retain` directive the reaper honours.
+- Per-clip `attributed`/`locDisplayPrecision`/`visibility` → per-range.
+- Time machine = saved clips only → public buffer + retained public clips.
+- The buffer's "never expose a regular user's buffer publicly" wall → a public buffer
+  serve + token-mint policy (private ranges + owner editing stay owner-gated).
+
+### Cross-repo
+App (Ben): per-range directive UI (visibility toggle + the snip/mend differ-guard),
+public/private affordance, time-machine consumer over the public-buffer discover feed.
+Backend/recorder (Aaron): reaper honours per-range `retain` (drop copy-out), public
+buffer discover + serve, per-range manifest fields, retained-bytes quota accounting.
+Full staged plan + split: `HANDOFF-public-buffer-onestore-2026-06-18.md`.

@@ -21,6 +21,11 @@ This doc is the index + the priority order, not a re-statement.
 - **`HANDOFF-time-machine-aaron-2026-06-18.md`** — globe replay (Time Machine). App consumer BUILT
   by Ben (`design`). **Your part: push + deploy `wrld-backend` `81eb83b` (`GET /clips/:id` tracks
   include — local-only on `main`); confirm `clips/discover` C4.5 is deployed; on-device verify.**
+- **`HANDOFF-public-buffer-onestore-2026-06-18.md`** — **NEW model, decided (CONTENT.md §3).** Public
+  buffer by default + one-store/retain-in-place (no copy-on-save) + per-range directives. Staged
+  PB0–PB4 + split. **Your part (PB1/PB2): discover-over-public-buffer + public serve/token policy;
+  reaper honours per-range `retain` (drop `promoteBufferClip` copy-out); per-range manifest +
+  retained-bytes quota.** Principle only — no code yet.
 - **`HANDOFF-c4-clip-editor-2026-06-12.md`** — editable manifest (draft↔saved); the open gap is
   `removedByLane`.
 - **`HANDOFF-clips-saved-persistence-2026-06-11.md`** — R3 promote-on-publish + saved-clip list.
