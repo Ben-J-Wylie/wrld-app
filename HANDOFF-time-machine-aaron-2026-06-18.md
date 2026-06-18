@@ -6,18 +6,38 @@ backend replay query was already yours and is largely done (C4.5).
 
 ---
 
-## ⏱️ START HERE (Aaron)
+## ← BACK TO BEN (2026-06-18, Aaron): backend DONE + live — your final confirmation needed
 
-1. **Push + deploy `wrld-backend` `81eb83b`** — `GET /clips/:id` now `include`s the
-   clip's enabled `tracks` (`kind` / `manifestUrl` / `dataUrl`). **It is committed
-   LOCAL-ONLY on `main` (not pushed).** Push it, then pull on the Hetzner box.
-   *Without it the clip viewer's source rail is camera + identity only* (the app
-   degrades gracefully — see below).
-2. **Confirm `clips/discover` C4.5 is deployed on the box.** It's already on
-   `origin/main` (the LEFT-JOIN version that surfaces buffer-promoted clips +
-   honours the clip's current precision/identity). If the box hasn't pulled it,
-   the rolled-back globe will be empty.
-3. **On-device verify the done-bar** (below).
+**Ben — the backend half is complete and deployed on `api.wrld.cam`. Over to you to push
+`design → main` and run the on-device done-bar for final sign-off.** There is no remaining
+backend work.
+
+**Deployed + verified (running container + through Caddy):**
+- ✅ **`81eb83b` (`GET /clips/:id` tracks-include)** — live (`dist/routes/clips.js` has the
+  per-source `tracks` include). It was already on `origin/main`; the box was behind
+  (`702290a`), so I pulled + rebuilt the api container. `local == origin == 81eb83b`.
+- ✅ **`clips/discover` C4.5 (LEFT-JOIN)** — live; `GET /clips/discover?at=…` → `200 {"clips":[…]}`
+  (empty when no surviving public clip covers that instant — expected).
+- ✅ api `/health` → 200.
+
+**Your turn (final confirmation):**
+1. Push `design → main` (your 4 app commits) per the usual protocol — backend is already
+   live, so the app landing completes the feature.
+2. Run the **on-device done-bar** (the 4 checks below). The viewer rail now populates from
+   `tracks[]` — the camera+identity-only degrade is gone.
+3. **Confirm here** (flip this section to ✅) once it passes on device.
+
+If anything's off, send me the `GET /clips/:id` or `/clips/discover` payload for the clip
+and I'll dig in. (CI can't drive a Mapbox globe, so this last check is necessarily yours.)
+
+## ⏱️ START HERE (Aaron) — ✅ COMPLETE (kept for the record)
+
+1. ✅ **Push + deploy `wrld-backend` `81eb83b`** — done (was already on `origin/main`;
+   box pulled + api rebuilt). `GET /clips/:id` now `include`s the clip's enabled `tracks`
+   (`kind` / `manifestUrl` / `dataUrl`).
+2. ✅ **`clips/discover` C4.5 deployed on the box** — confirmed live (LEFT-JOIN version,
+   returns 200).
+3. ⏳ **On-device verify the done-bar** (below) — Ben/Aaron.
 
 > Ben's app commits are on `design` (ahead 4, unpushed). Ben pushes `design → main`
 > on his sign-off per the usual protocol; coordinate so the deploy + the app land
