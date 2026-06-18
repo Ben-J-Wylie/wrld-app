@@ -6,21 +6,29 @@ backend replay query was already yours and is largely done (C4.5).
 
 ---
 
-## ✅ BACKEND DEPLOYED (2026-06-18, Aaron) — steps 1 + 2 done; only on-device (3) remains
+## ← BACK TO BEN (2026-06-18, Aaron): backend DONE + live — your final confirmation needed
 
-The backend is **fully deployed on `api.wrld.cam`** (Hetzner box pulled `81eb83b`, api
-container rebuilt). Verified in the running container + through Caddy:
-- **`81eb83b` (`GET /clips/:id` tracks-include)** — live (`dist/routes/clips.js` has the
-  per-source `tracks` include). `81eb83b` was already on `origin/main`; the box was behind
-  (`702290a`) so I pulled + rebuilt. `local == origin == 81eb83b`.
-- **`clips/discover` C4.5 (LEFT-JOIN)** — live; `GET /clips/discover?at=…` returns
-  `200 {"clips":[…]}` (empty when no surviving public clip covers that instant — expected).
-- api `/health` → 200.
+**Ben — the backend half is complete and deployed on `api.wrld.cam`. Over to you to push
+`design → main` and run the on-device done-bar for final sign-off.** There is no remaining
+backend work.
 
-**→ Over to Ben/Aaron: only the on-device done-bar (step 3) remains** — I can't drive a
-Mapbox globe from the box. Run the 4 checks under "Done-bar" below. The viewer rail will
-now populate from `tracks[]` (no more camera+identity-only degrade). If anything's off,
-send me the `GET /clips/:id` or `/clips/discover` payload and I'll dig in.
+**Deployed + verified (running container + through Caddy):**
+- ✅ **`81eb83b` (`GET /clips/:id` tracks-include)** — live (`dist/routes/clips.js` has the
+  per-source `tracks` include). It was already on `origin/main`; the box was behind
+  (`702290a`), so I pulled + rebuilt the api container. `local == origin == 81eb83b`.
+- ✅ **`clips/discover` C4.5 (LEFT-JOIN)** — live; `GET /clips/discover?at=…` → `200 {"clips":[…]}`
+  (empty when no surviving public clip covers that instant — expected).
+- ✅ api `/health` → 200.
+
+**Your turn (final confirmation):**
+1. Push `design → main` (your 4 app commits) per the usual protocol — backend is already
+   live, so the app landing completes the feature.
+2. Run the **on-device done-bar** (the 4 checks below). The viewer rail now populates from
+   `tracks[]` — the camera+identity-only degrade is gone.
+3. **Confirm here** (flip this section to ✅) once it passes on device.
+
+If anything's off, send me the `GET /clips/:id` or `/clips/discover` payload for the clip
+and I'll dig in. (CI can't drive a Mapbox globe, so this last check is necessarily yours.)
 
 ## ⏱️ START HERE (Aaron) — ✅ COMPLETE (kept for the record)
 
