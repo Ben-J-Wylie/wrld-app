@@ -483,6 +483,24 @@ rail/clock). Headline working. *(Private opt-out activates with the deferred
 `wrld-mediasoup` restart — confirm "private go-live doesn't appear" once that's done if
 not already.)* PB1 is closed.
 
+## ✅ PB2 CUTOVER GATE PASSED (2026-06-18) — verified end-to-end on prod
+
+Flag flipped on (`PB2_RETAIN_IN_PLACE=true`) + a real clip saved by **@ben** in the app:
+- **Save = retain-only, NO copy** — clip `manifestUrl` null, `storagePath` empty, no
+  `/media/clips/<id>` dir; `usedStorageBytes` charged the retained bytes (964 KB); log
+  `PB2 retain-in-place save — NO copy` fired.
+- **Owner playback** — confirmed playing in Ben's library (in-app).
+- **Public playback** — `GET /clips/:id` → buffer manifest **200** (7 segs + init), `init.mp4`
+  **200**, segment (range) **206**, `location` data track **200** — per-session public tokens
+  authorise the segments.
+- **Un-save** — clip row + ranges + tracks gone, **buffer footage survived on disk**, storage
+  reclaimed exactly.
+
+The cutover is proven. **Flag left ON = retain-in-place is live** (new saves stop copying;
+copied pre-cutover clips are grandfathered on `/media`). Remaining: the no-flip-back rule
+holds (don't flip OFF while retain-only saves exist, or they lose footage past the window).
+Below: the pre-gate cutover notes, kept for the record.
+
 ## ← PB2 CUTOVER (step 3+4) DONE + deployed INERT (Aaron, 2026-06-18); ⛔ cutover gate is YOURS
 
 Step-1 gate passed (you confirmed a retained range survived a reap cycle), so I built +
