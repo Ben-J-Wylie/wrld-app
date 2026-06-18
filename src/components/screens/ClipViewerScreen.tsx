@@ -25,6 +25,7 @@ import { Avatar } from '@/components/primitives/Avatar'
 import { Button } from '@/components/primitives/Button'
 import { SourceStage, type SourceRender } from '@/components/sections/SourceStage'
 import { SourceRail } from '@/components/features/clip/SourceRail'
+import { BufferTransport } from '@/components/features/clip/BufferTransport'
 import {
   SOURCE_META,
   SOURCE_RAIL_ORDER,
@@ -114,15 +115,46 @@ export function ClipViewerScreen() {
     return () => sub.remove()
   }, [player, seekSec])
 
-  // Track playback position → the wall-clock playhead (startAtMs + currentTime).
+  // Track playback position → the wall-clock playhead (startAtMs + currentTime),
+  // plus play/pause + duration for the transport.
   const [currentMs, setCurrentMs] = useState(seekSec * 1000)
+  const [playing, setPlaying] = useState(true)
+  const [durationMs, setDurationMs] = useState(0)
   useEffect(() => {
     const tid = setInterval(() => {
       const t = player.currentTime
       if (typeof t === 'number' && isFinite(t)) setCurrentMs(Math.max(0, Math.floor(t * 1000)))
+      const d = player.duration
+      if (typeof d === 'number' && isFinite(d) && d > 0) setDurationMs(Math.floor(d * 1000))
+      setPlaying(!!player.playing)
     }, 250)
     return () => clearInterval(tid)
   }, [player])
+
+  // Transport. Tolerant keyframe seeks (seekBy) — frame accuracy isn't needed and
+  // the precise-seek hang only bites on a -c:v copy VOD after many seeks.
+  const FRAME_MS = 5000
+  const seekBySec = useCallback(
+    (deltaSec: number) => {
+      try {
+        player.seekBy(deltaSec)
+      } catch {}
+    },
+    [player],
+  )
+  function togglePlay() {
+    if (player.playing) {
+      player.pause()
+      setPlaying(false)
+    } else {
+      player.play()
+      setPlaying(true)
+    }
+  }
+  const toStart = () => seekBySec(-(currentMs / 1000) - 1) // before 0 → clamps to head
+  const toEnd = () => durationMs > 0 && seekBySec((durationMs - currentMs) / 1000)
+  const frameBack = () => seekBySec(-FRAME_MS / 1000)
+  const frameForward = () => seekBySec(FRAME_MS / 1000)
 
   // Pause when the screen loses focus.
   useFocusEffect(
@@ -305,20 +337,6 @@ export function ClipViewerScreen() {
         </View>
       )}
 
-      {/* Source rail — the captured sources, switchable (same as live + preview). */}
-      {availableViews.length > 1 && (
-        <SourceRail
-          sources={availableViews.map((k) => ({
-            key: k,
-            iconName: SOURCE_META[k].icon,
-            label: SOURCE_META[k].label,
-          }))}
-          value={view}
-          onChange={(k) => setView(k as FeedKind)}
-          style={styles.rail}
-        />
-      )}
-
       {/* Top chrome — back + host identity + replay tag. */}
       <SafeAreaView style={styles.topBar} edges={['top']} pointerEvents="box-none">
         <IconButton name="arrow-left" onPress={back} accessibilityLabel="Back to globe" variant="surface" />
@@ -335,21 +353,59 @@ export function ClipViewerScreen() {
         </View>
       </SafeAreaView>
 
-      {/* Broadcast clock — passive ticking readout of the captured wall-clock time,
-          pinned above the footer. */}
-      {startAtMs != null && (
-        <View
-          style={[styles.clock, { bottom: insets.bottom + TAB_BAR_CONTENT_H }]}
-          pointerEvents="box-none"
-        >
+      {/* Bottom chrome, bottom-up above the footer: clock · transport · source rail
+          (the same stack as the Clips preview). */}
+      <View
+        style={[styles.bottomStack, { bottom: insets.bottom + TAB_BAR_CONTENT_H }]}
+        pointerEvents="box-none"
+      >
+        {/* Source rail — captured sources, switchable (same as live + preview). */}
+        {availableViews.length > 1 && (
+          <View style={styles.railBar}>
+            <SourceRail
+              orientation="horizontal"
+              sources={availableViews.map((k) => ({
+                key: k,
+                iconName: SOURCE_META[k].icon,
+                label: SOURCE_META[k].label,
+              }))}
+              value={view}
+              onChange={(k) => setView(k as FeedKind)}
+            />
+          </View>
+        )}
+
+        {/* Transport — drives the video (single clip → no prev/next clip). */}
+        {hasMedia && (
+          <BufferTransport
+            playing={playing}
+            onToStart={toStart}
+            onPrevClip={() => {}}
+            onFrameBack={frameBack}
+            onFrameBackHold={() => {}}
+            onTogglePlay={togglePlay}
+            onFrameForward={frameForward}
+            onFrameForwardHold={() => {}}
+            onNextClip={() => {}}
+            onToEnd={toEnd}
+            canPrev={false}
+            canNext={false}
+            canFrameBack={currentMs > 0}
+            canFrameForward={durationMs > 0 && currentMs < durationMs}
+            style={styles.transport}
+          />
+        )}
+
+        {/* Broadcast clock — passive ticking readout of the captured wall-clock time. */}
+        {startAtMs != null && (
           <TimeScrubber
             offsetMs={clockOffset}
             onOffsetChange={() => {}}
             playback={false}
             interactive={false}
           />
-        </View>
-      )}
+        )}
+      </View>
     </View>
   )
 }
@@ -370,16 +426,18 @@ const styles = StyleSheet.create({
   },
   identity: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
   identityCol: { flex: 1 },
-  rail: {
-    position: 'absolute',
-    right: 12,
-    top: '50%',
-    transform: [{ translateY: -120 }],
-  },
-  clock: {
+  bottomStack: {
     position: 'absolute',
     left: 0,
     right: 0,
+  },
+  railBar: {
+    alignItems: 'center',
+    marginBottom: theme.spacing.sm,
+  },
+  transport: {
+    paddingHorizontal: theme.spacing.lg,
+    marginBottom: theme.spacing.sm,
   },
   blockedWrap: {
     flex: 1,
