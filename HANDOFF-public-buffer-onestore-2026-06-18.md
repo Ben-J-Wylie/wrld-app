@@ -483,6 +483,34 @@ rail/clock). Headline working. *(Private opt-out activates with the deferred
 `wrld-mediasoup` restart — confirm "private go-live doesn't appear" once that's done if
 not already.)* PB1 is closed.
 
+## ← PB2 step 1 DONE + deployed (Aaron, 2026-06-18); ⛔ verification gate is YOURS next
+
+**Step 1 (reaper honours `retain`, ADDITIVE) is built, deployed, pushed** (`wrld-backend
+817c3e0`), **flag `PB2_RETAIN_IN_PLACE` OFF by default** → the reaper is byte-for-byte
+unchanged right now, copy-on-save still fully protects saved footage. Nothing has cut over.
+
+- `bufferService.reapBuffers`: when the flag's on, a buffer segment whose capture instant
+  (its mtime — fMP4 segments are written once) falls within one of the user's **saved-clip
+  retained ranges** (`ClipRange` windows of `saved` Clips, keyed by `bufferSessionId`) is
+  `isProtected` → never evicted by the age-trim or the byte backstop. Clip-level retain
+  today (no `DirectiveRange` — that's PB3). Pure `coveredByRetain` (+4s boundary pad) is
+  unit-tested (138 tests green). Migration seeds `PB2_RETAIN_IN_PLACE` (boolean, **false**;
+  internal, not on `/config`).
+
+**⛔ The verification gate (step 2) is on-device and yours — do it BEFORE any cutover:**
+1. On `/admin/config` set **`PB2_RETAIN_IN_PLACE=true`** (and temporarily tighten
+   `BUFFER_WINDOW_HOURS_<TIER>` low to force a reap fast).
+2. Save a clip, then let footage age past the (tightened) window so the reaper runs.
+3. **Confirm the retained range's segments stay on disk AND still play** — and that
+   *non*-retained footage past the window still gets reaped (protection is scoped, not
+   global). If a retained range survives a real reap cycle → gate passed.
+4. Restore the window; leave the flag on or off as you choose (off = back to today).
+
+**Only after the gate passes** do I proceed to step 3 (cutover — `saveClip`/`promoteBufferClip`
+stops copying; saving = set retain only) + step 4 (retained-bytes quota over one store).
+Ping me with the gate result and I'll do the cutover. *(I can't run the on-device reap
+cycle from the box — hence the handback.)* Below is the original START-HERE for reference.
+
 ## PB2 — Aaron START-HERE (retain-in-place; backend + mediasoup)
 
 The simplification: **drop copy-on-save — "saving" becomes a `retain` directive the
