@@ -69,3 +69,89 @@ segment **private** (per range) and it drops out of the past while staying live-
 viewable + kept. Saving a segment **keeps it from the reaper with no copy** and
 decrements storage. Snip a clip, give each segment different settings, and mend
 behaves (free when they agree, guarded when they differ). Live is always public.
+
+---
+
+## PB0 — the two contracts to decide (Ben + Aaron), kicked off 2026-06-18
+
+Before PB1/PB2 code. Both are **Aaron's lane to ratify** (schema + serve); Ben's lean is
+noted. Neither blocks *starting* PB1 (see "minimum to start" at the end).
+
+### Contract 1 — where per-range directives live
+
+The directives: **`retain`** (reap/keep), **`visibility`** (public/private),
+**`locDisplayPrecision`**, **`attributed`** (identity) — today all **per-`Clip`**
+(`attributed` / `locDisplayPrecision` / `visibility` columns + the `saved` bool). The
+new requirement: directives must also describe **un-saved public buffer ranges** (the
+buffer is public by default and a user can mark *a slice* of it private), so they can't
+live only on saved `Clip` rows.
+
+- **Option A — extend `ClipRange`.** Add `retain`/`visibility`/`precision`/`attributed`
+  to `ClipRange`; the buffer's default (reapable + public) is the *absence* of an
+  overriding range; marking a buffer slice private = creating a draft `Clip` + a
+  `ClipRange` just to carve the override. *Pro:* reuses the existing manifest. *Con:*
+  every "make this bit private / public" spawns a `Clip` row; overlapping ranges over
+  the same buffer time get fiddly; `Clip`/`ClipRange` end up doing double duty (naming
+  *and* store-truth).
+- **Option B — a dedicated `DirectiveRange` table (Ben's lean).** First-class rows over
+  the store: `{ userId, bufferSessionId, startAtMs, endAtMs, retain, visibility,
+  precision, attributed, ordinal }` — the **single source of truth** the reaper,
+  discovery, and serving all read. A **saved `Clip` becomes a named grouping** of
+  retain-directives (presentation layer); the buffer default = no row = reapable +
+  public(per-user default); a private buffer slice = one `DirectiveRange`, no `Clip`
+  needed. *Pro:* clean split — directives describe *footage*, Clips *name* it; one thing
+  to read everywhere. *Con:* new table + Clip↔DirectiveRange relation + migrating the
+  existing per-clip columns into rows.
+
+**This decision blocks PB3, not PB1.** PB1 ships **coarse** visibility (a per-stream
+flag + a per-user default) — `Stream.visibility` (or a buffer-level flag) is all PB1
+needs. The A/B call is the *target* shape for per-range (PB3); locking the direction now
+just lets PB2/PB3 build toward it. **Ben's lean: B**, because un-saved public buffer
+genuinely needs directives and forcing a `Clip` per "make-this-private" is awkward.
+
+> Decide: **A or B** for the per-range target; and the **coarse PB1 flag** location
+> (`Stream.visibility` vs `UserBuffer`/user default vs both).
+
+### Contract 2 — the public serve / token policy
+
+Today (`buffer.ts`): `mkToken(userId)` → HMAC `{u, e}` (1h TTL); `verifyToken` → userId;
+serve routes return `buffers/<userId>/…`. Tokens are minted **owner-gated** (`/buffer/me`)
+or for **ext-cams** (`/streams/:id/live.m3u8`, which mints `mkToken(hostId)` but is locked
+to `ext-*` + live, with the comment *"never expose a regular user's buffer."*).
+
+**The core problem:** the current token is **user-namespace-scoped** — a token grants all
+of `buffers/<userId>/…`. That's too broad to hand a public viewer (it would authorize the
+host's *entire* buffer, not one public session/range). So the PB0 call is how to narrow it.
+
+- **Option 1 — public mint of the host token.** Reuse `mkToken(hostId)` for any public
+  session. *Rejected:* over-grants the whole host namespace; no range scoping.
+- **Option 2 — token-less public route, per-request visibility check.** A public serve
+  route looks up session (and PB3: range) visibility per request, serves iff public, no
+  token. *Pro:* instant revocation (flip private → next fetch 404s); no over-grant.
+  *Con:* a DB/visibility lookup per **segment** request (HLS is chatty) — perf/caching
+  cost; diverges from the token mechanism.
+- **Option 3 — session-scoped public tokens + visibility enforced at manifest build
+  (Ben's lean).** Token payload gains a **session (+ public) scope**: `{ session, scope:
+  'public', e }`; the serve route resolves session→host internally and checks the
+  requested segment belongs to that session — so a public token **can't roam the host's
+  namespace**. The **public/private gate lives at manifest-build time**: the discover /
+  detail / manifest only lists segments of **public** ranges, so flipping a range private
+  drops it from the next manifest fetch (near-immediate effect); subscribersOnly is
+  checked there before minting. *Pro:* keeps the efficient self-authorizing token, narrows
+  the grant to one session, cheap privacy gate at the manifest layer. *Con:* a segment URL
+  already minted is hittable until TTL (~1h) even after going private — but without the
+  manifest a viewer won't request it; **strict per-segment revocation** is a later
+  hardening (or shorten the public TTL).
+
+> Decide: **serve mechanism** (Option 2 token-less vs Option 3 session-scoped token);
+> the **public token TTL** (shorter = tighter revocation); and that **subscribersOnly +
+> anon/precision are enforced at the manifest/detail layer** (read the range's *current*
+> value), not baked into the token.
+
+### Minimum to START (so PB0 ratification and PB1 can overlap)
+- **PB1 needs only:** the **coarse visibility flag** (Contract 1's PB1 piece) + the
+  **serve mechanism** (Contract 2). It does **not** need the A/B per-range table.
+- **PB2 needs:** the reaper to read a `retain` signal — which can begin against the
+  *coarse/Clip-level* `saved` today and generalize to per-range once A/B lands.
+- So: lock **Contract 2 (serve) + the PB1 coarse flag** now → PB1 starts. Lock **A/B**
+  in parallel → unblocks PB3. PB2 starts additive against today's `saved`.
