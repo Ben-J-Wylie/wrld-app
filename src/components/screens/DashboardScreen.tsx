@@ -61,8 +61,10 @@ import {
   type LocationPrecision,
   type IdentityFlag,
   type ChatMode,
+  type Visibility,
 } from '@/lib/captureConfig'
 import { ppvApi } from '@/api/ppvEvents'
+import { usePublicConfig, configBool } from '@/hooks/usePublicConfig'
 import type { SourceType, PpvEvent } from '@/types'
 
 // The enforcement window is 30 minutes before scheduledAt through the end of the event.
@@ -233,6 +235,10 @@ export function DashboardScreen() {
   const [identity, setIdentity] = useState<IdentityFlag>(DEFAULT_CAPTURE_CONFIG.identity)
   const [chat, setChat] = useState<ChatMode>(DEFAULT_CAPTURE_CONFIG.chat)
   const [subscribersOnly, setSubscribersOnly] = useState(DEFAULT_CAPTURE_CONFIG.subscribersOnly)
+  const [visibility, setVisibility] = useState<Visibility>(DEFAULT_CAPTURE_CONFIG.visibility)
+  // The "Public replay" control only shows once the public-buffer feature is on.
+  const { config: publicConfig } = usePublicConfig()
+  const publicBufferEnabled = configBool(publicConfig, 'PUBLIC_BUFFER_ENABLED', false)
 
   // Hydrate from AsyncStorage on focus (not just mount) so the dashboard
   // reflects title/arming edits made on the stream-view preview — captureConfig
@@ -250,6 +256,7 @@ export function DashboardScreen() {
         setIdentity(cfg.identity)
         setChat(cfg.chat)
         setSubscribersOnly(cfg.subscribersOnly)
+        setVisibility(cfg.visibility)
         hydratedRef.current = true
       })
       return () => {
@@ -261,8 +268,8 @@ export function DashboardScreen() {
   // Auto-save on any capture-config change (no save button) — title included.
   useEffect(() => {
     if (!hydratedRef.current) return
-    saveCaptureConfig({ title, air, precision, identity, chat, subscribersOnly })
-  }, [title, air, precision, identity, chat, subscribersOnly])
+    saveCaptureConfig({ title, air, precision, identity, chat, subscribersOnly, visibility })
+  }, [title, air, precision, identity, chat, subscribersOnly, visibility])
 
   function setAirFor(kind: FeedKind, v: boolean) {
     setAir((prev) => ({ ...prev, [kind]: v }))
@@ -302,7 +309,7 @@ export function DashboardScreen() {
       Alert.alert('Title not allowed', 'Your stream title contains prohibited content. Please choose a different title.')
       return
     }
-    await saveCaptureConfig({ title: title.trim(), air, precision, identity, chat, subscribersOnly })
+    await saveCaptureConfig({ title: title.trim(), air, precision, identity, chat, subscribersOnly, visibility })
     activeBroadcast.set({ ppvEventId: ppvEventId ?? undefined })
     router.push({
       pathname: '/(app)/stream/[id]',
@@ -458,6 +465,21 @@ export function DashboardScreen() {
             </Fragment>
           ))}
         </View>
+
+        {publicBufferEnabled && (
+          <View style={styles.subscribersOnlyRow}>
+            <View style={styles.subscribersOnlyText}>
+              <Text variant="body">Public replay</Text>
+              <Text variant="caption" color={theme.colors.text.muted}>
+                On = your buffer is replayable in the time machine. Off keeps it out of the past (still live now).
+              </Text>
+            </View>
+            <Toggle
+              value={visibility === 'public'}
+              onValueChange={(v) => setVisibility(v ? 'public' : 'private')}
+            />
+          </View>
+        )}
 
         {currentUser?.subscriptionEnabled && (
           <View style={styles.subscribersOnlyRow}>

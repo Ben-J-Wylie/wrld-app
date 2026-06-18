@@ -20,6 +20,11 @@ const KEY = '@wrld_capture_config'
 
 export type LocationPrecision = 'exact' | 'city' | 'country' | 'private'
 export type IdentityFlag = 'public' | 'anon'
+// Time-machine visibility of this go-live's footage (PB1, public-buffer initiative).
+// 'public' (default) → the rolling buffer is replayable in the time machine;
+// 'private' → live-viewable in the now, but never in the past (owner-private tier).
+// Coarse per-go-live for PB1; per-range comes with DirectiveRange (PB3).
+export type Visibility = 'public' | 'private'
 // Whether the live chat stream is included on the broadcast. A flag (like
 // identity), not a media track — its multistate is CHAT / NO CHAT.
 export type ChatMode = 'on' | 'off'
@@ -33,6 +38,7 @@ export type CaptureConfig = {
   identity: IdentityFlag
   chat: ChatMode
   subscribersOnly: boolean
+  visibility: Visibility
 }
 
 // Fresh-install defaults: empty title; camera + audio + location all aired;
@@ -45,6 +51,7 @@ export const DEFAULT_CAPTURE_CONFIG: CaptureConfig = {
   identity: 'public',
   chat: 'on',
   subscribersOnly: false,
+  visibility: 'public',
 }
 
 export async function loadCaptureConfig(): Promise<CaptureConfig> {

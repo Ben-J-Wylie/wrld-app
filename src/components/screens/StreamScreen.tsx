@@ -1173,6 +1173,7 @@ export function StreamScreen() {
         subscribersOnly: c.subscribersOnly,
         locationPrecision,
         ppvEventId: activeBroadcast.get()?.ppvEventId,
+        visibility: c.visibility,
       })
       await startBroadcasting(av)
     } catch (err) {

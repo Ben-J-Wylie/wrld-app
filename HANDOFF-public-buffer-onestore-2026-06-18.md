@@ -450,3 +450,26 @@ source rail + broadcast clock. A `private` go-live does **not** appear. A subscr
 session shows as a **locked pin**. Flag off → today's saved-clips-only past.
 
 *(Then PB2 — reaper honours `retain`, additive — and PB3 — the `DirectiveRange` table.)*
+
+### PB1 — app COMPLETE incl. the private opt-out (Ben, 2026-06-18)
+
+Verified Aaron's backend against prod (`/config` exposes both keys; `clips/discover` →
+`{clips:[],bufferPins:[]}`; `/buffer/session/:id` → 404 flag-off). Then finished the
+app's missing half — **sending `visibility` at go-live** (the private opt-out):
+
+- **`captureConfig.visibility`** `'public' | 'private'` (default `public`), persisted.
+- **`createRoom` chain** carries `visibility?` (`mediasoupSignaling` + `useSignaling` +
+  `StreamScreen` go-live passes `c.visibility`).
+- **Dashboard "Public replay" toggle** — on = public (in the time machine), off =
+  private (live-only). **Gated on `PUBLIC_BUFFER_ENABLED`** so it only appears once the
+  feature is flipped on. Coarse per-go-live (per-range is PB3).
+
+**To light up the full PB1 done-bar, two ops actions remain (not code):**
+1. **Flip `PUBLIC_BUFFER_ENABLED` on** for the team (`/admin/config`).
+2. **Restart `wrld-mediasoup`** — Aaron deferred it, so until then `createRoom`'s
+   `visibility` is dropped at the relay and the backend defaults `'public'` (the
+   public-buffer headline still works; the **private opt-out won't take effect until the
+   restart**).
+
+Then on device: public go-live → appears in the past with the rail/clock; **private
+go-live → does NOT appear**; subs-only → locked pin; flag off → today's behaviour.
