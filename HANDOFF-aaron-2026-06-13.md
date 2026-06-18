@@ -18,6 +18,9 @@ This doc is the index + the priority order, not a re-statement.
   (camera-less clips vanish otherwise); (2) drop `temp` from `VALID_SOURCES` + confirm `accel` (not
   `motion`); (3) lower: an audio-amplitude `.jsonl` track. v0.3: screen + real torch LED. Rollout
   table in `CLAUDE.md` ("Source-parity rollout").
+- **`HANDOFF-time-machine-aaron-2026-06-18.md`** — globe replay (Time Machine). App consumer BUILT
+  by Ben (`design`). **Your part: push + deploy `wrld-backend` `81eb83b` (`GET /clips/:id` tracks
+  include — local-only on `main`); confirm `clips/discover` C4.5 is deployed; on-device verify.**
 - **`HANDOFF-c4-clip-editor-2026-06-12.md`** — editable manifest (draft↔saved); the open gap is
   `removedByLane`.
 - **`HANDOFF-clips-saved-persistence-2026-06-11.md`** — R3 promote-on-publish + saved-clip list.
