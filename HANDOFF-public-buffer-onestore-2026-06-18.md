@@ -368,3 +368,42 @@ buffer id → graceful blocked state). `tsc` clean; pure JS, no rebuild.
 gate + session-scoped windowed tokens, and the `PUBLIC_BUFFER_ENABLED` +
 `PUBLIC_BUFFER_TOKEN_TTL_SEC` RemoteConfig keys. Flip the flag on for the team → the
 PB1 done-bar.
+
+---
+
+## PB1 — Aaron START-HERE (backend, to the contract above)
+
+The app is built + merged (flag-off, degrades gracefully). PB1 ships when these land
+and the flag flips. Build to the **PB1 API contract** + **PB0 DECIDED** sections above.
+All additive + flag-gated → flag-off == today.
+
+1. **RemoteConfig keys** (allowlist + the public `/config` output so the app sees them):
+   - `PUBLIC_BUFFER_ENABLED` — bool, **default false** (the kill switch; flip on for the
+     team first).
+   - `PUBLIC_BUFFER_TOKEN_TTL_SEC` — number (the revocation window; start generous, tune
+     live).
+2. **`Stream.visibility`** column — `'public' | 'private'`, **default `'public'`**, set at
+   go-live (carry it on the `createRoom` / `streamStarted` payload like the other fields).
+   Coarse PB1 visibility; per-range `DirectiveRange` is PB3.
+3. **`clips/discover?at=` → add `bufferPins[]`** (only when the flag's on; `clips`
+   unchanged): `BufferSession ⋈ Stream` where `startedAt ≤ T ≤ endedAt‖now`,
+   `Stream.visibility != 'private'`, precision `!= off`; honour `attributed` (anon) +
+   precision via the **same COALESCE chain as C4.5**; compute `seekOffsetSec`; set
+   `accessTier` (`public` / `subscriber` = subscribersOnly / `ppv` = has ppvEventId);
+   **owner-private excluded**. Exact shape in the PB1 contract.
+4. **`GET /buffer/session/:id`** (optionalAuth) — the `clips/:id` analog: returns
+   `{ session: { id, title, host(anon-aware), startAtMs, endAtMs, accessTier,
+   manifestUrl, tracks[] } }` with **session-scoped windowed tokens** (TTL =
+   `PUBLIC_BUFFER_TOKEN_TTL_SEC`). **4-tier gate:** public → serve; subscriber → auth +
+   active sub (else 403); ppv → auth + event access (else 403); owner-private → 404.
+   Flag-off → 404.
+5. **Narrow the public token to a session** (add a session claim) so a handed-out token
+   can't roam the host's whole `buffers/<userId>/` namespace; the existing
+   `/buffer/stream/:sessionId/...` serve routes accept it for **that session only**.
+
+**Done-bar (flip the flag on for the team):** roll the globe back → a teammate's
+**un-saved public buffer** shows as a pin at the instant → **Watch** → plays with the
+source rail + broadcast clock. A `private` go-live does **not** appear. A subscriber-only
+session shows as a **locked pin**. Flag off → today's saved-clips-only past.
+
+*(Then PB2 — reaper honours `retain`, additive — and PB3 — the `DirectiveRange` table.)*

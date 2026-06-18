@@ -22,10 +22,12 @@ This doc is the index + the priority order, not a re-statement.
   by Ben (`design`). **Your part: push + deploy `wrld-backend` `81eb83b` (`GET /clips/:id` tracks
   include — local-only on `main`); confirm `clips/discover` C4.5 is deployed; on-device verify.**
 - **`HANDOFF-public-buffer-onestore-2026-06-18.md`** — **NEW model, decided (CONTENT.md §3).** Public
-  buffer by default + one-store/retain-in-place (no copy-on-save) + per-range directives. Staged
-  PB0–PB4 + split. **Your part (PB1/PB2): discover-over-public-buffer + public serve/token policy;
-  reaper honours per-range `retain` (drop `promoteBufferClip` copy-out); per-range manifest +
-  retained-bytes quota.** Principle only — no code yet.
+  buffer by default + one-store/retain-in-place (no copy-on-save) + per-range directives. **PB0
+  DECIDED** (DirectiveRange table · windowed token + TTL knob · 4 access tiers · delete=gone-everywhere).
+  **PB1 app scaffold SHIPPED (flag-off).** → **Your part now: the "PB1 — Aaron START-HERE" section**
+  (RemoteConfig flag + TTL knob · `Stream.visibility` · `bufferPins[]` in `clips/discover` ·
+  `GET /buffer/session/:id` 4-tier gate + session-scoped windowed tokens). Then PB2 (reaper honours
+  `retain`, additive) + PB3 (DirectiveRange).
 - **`HANDOFF-c4-clip-editor-2026-06-12.md`** — editable manifest (draft↔saved); the open gap is
   `removedByLane`.
 - **`HANDOFF-clips-saved-persistence-2026-06-11.md`** — R3 promote-on-publish + saved-clip list.
