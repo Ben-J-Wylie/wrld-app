@@ -1,8 +1,51 @@
 # Path — Public buffer + one-store / retain-in-place (PB0–PB4)
 
 **Decided with Ben 2026-06-18.** Principle is canonical in **CONTENT.md §3** (with
-§1.3/§1.5/§2.5/§5/§7/§8/§9 updated) + the dated CLAUDE.md update. This doc is the
-**implementation path** — no code written yet.
+§1.3/§1.5/§2.5/§5/§7/§8/§9 updated) + the dated CLAUDE.md update.
+
+---
+
+## → BEN — ACTION ITEMS (updated 2026-06-19): PB1+PB2 shipped, PB3 backend done, your turn
+
+**State:** PB1 (public buffer in the time machine) ✅ live + verified. PB2 (retain-in-place:
+saves stop copying, reaper keeps them) ✅ live + verified. **PB3 backend ✅ complete +
+deployed, all behind `PB3_PER_RANGE` (OFF).** The only thing standing between us and
+per-segment public/private going live is **your app UI + a coordinated flag flip.** Full
+contracts are in the PB3 sections below; this is your ordered checklist.
+
+### 1. Per-segment settings UI (PB3) — the headline
+Each snipped segment (your `splitPoints`) gets its own **public/private** toggle.
+- **On change, call** `PATCH /buffer/me/sessions/:id/directives` with the **authoritative
+  full list** for that session:
+  ```
+  { directives: [ { startAtMs, endAtMs, visibility: 'public'|'private',
+                    precision?: 'exact'|'city'|'country'|'off'|null, attributed?: boolean } ] }
+  ```
+  Omit a segment → it reverts to default (public / inherit / attributed). Owner-gated.
+- **⚠️ Gate the toggle on the flag:** only render it when `configBool('PB3_PER_RANGE')` is
+  true. The endpoint 409s when off, and a "private" mark isn't enforced until the flag's on —
+  showing it while off would give a false sense of privacy.
+- **Mend differ-guard:** when adjacent segments' directives differ, **prompt-to-pick** which
+  to keep (decided default); keeping them snipped is always valid.
+
+### 2. Ping Aaron for the team flip (when #1 is built)
+I'll then (a) add `PB3_PER_RANGE` to the public `/config` allowlist so `configBool` sees it,
+and (b) flip it on for the team. **On-device gate:** mark a segment private → its pin vanishes
+from the time machine + it won't serve publicly, while you (the owner) still see it.
+
+### 3. PB4 app items (after PB3 is validated) — lower priority
+- **Per-user visibility default** setting (a "new go-lives are public/private by default"
+  toggle). Backend adds `User.bufferVisibilityDefault` when we get here (Aaron).
+- **Polish:** distinct-segment visual in the grid; storage-meter copy for retain-in-place.
+
+### Not blocking you (Aaron, in parallel)
+PB4 **backend guardrail audit** — verify subscribers-only/PPV buffer stays paywalled on
+time-machine replay + anon/precision reversibility on the public buffer. Independent of your
+UI; I'll do it so the public buffer is safe to widen past the team.
+
+---
+
+> Below is the full implementation record (PB0 contracts → PB3 build), kept for reference.
 
 ## The model in one paragraph
 One append-only footage store. A clip is a manifest of **per-range directives** over
