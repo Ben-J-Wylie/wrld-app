@@ -9,6 +9,7 @@
 // No big "Cash out" title here — the tab label / screen header already says it.
 
 import { useState } from 'react'
+import { router } from 'expo-router'
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, View } from 'react-native'
 import { theme } from '@/tokens/theme'
 import { useWallet, useInvalidateWallet } from '@/hooks/useWallet'
@@ -62,11 +63,22 @@ export function CashOutPanel({ onDone }: { onDone: () => void }) {
       await Promise.all([invalidateWallet(), invalidateCurrentUser()])
       setSubmitted(true)
     } catch (err: unknown) {
-      const msg =
+      const data =
         err && typeof err === 'object' && 'response' in err
-          ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
+          ? (err as { response?: { data?: { error?: string; message?: string } } }).response?.data
           : null
-      Alert.alert('Could not submit', msg ?? 'Something went wrong — try again.')
+      if (data?.error === 'payouts_not_set_up') {
+        Alert.alert(
+          'Set up payouts first',
+          'Cash-outs are sent to your bank through Stripe. Connect your account to start receiving payouts.',
+          [
+            { text: 'Not now', style: 'cancel' },
+            { text: 'Set up payouts', onPress: () => router.push('/(app)/monetize') },
+          ],
+        )
+      } else {
+        Alert.alert('Could not submit', data?.message ?? 'Something went wrong — try again.')
+      }
     } finally {
       setSubmitting(false)
     }
