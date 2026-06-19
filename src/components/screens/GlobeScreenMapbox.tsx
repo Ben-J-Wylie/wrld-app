@@ -1189,14 +1189,16 @@ export function GlobeScreenMapbox() {
           </ShapeSource>
         ))}
 
-        {/* Graticule — equator, tropics, and the N–S axis (prime-meridian ring). */}
+        {/* Graticule — equator, tropics, polar circles, and the N–S axis. The polar
+            circles foreshorten near the poles so they read faint at a flat opacity;
+            boost them and ease the rest so all the lines land at a consistent weight. */}
         <ShapeSource id="graticule" shape={GRATICULE_GEOJSON}>
           <LineLayer
             id="graticule-lines"
             style={{
               lineColor: GRATICULE_COLOR,
               lineWidth: 0.6,
-              lineOpacity: 0.22,
+              lineOpacity: ['match', ['get', 'kind'], 'polar', 0.3, 0.17] as any,
             }}
           />
         </ShapeSource>
