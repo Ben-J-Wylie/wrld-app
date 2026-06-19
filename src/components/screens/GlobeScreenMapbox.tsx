@@ -84,12 +84,11 @@ const PIN_PURPLE = '#A855F7'
 const PIN_BLACK  = '#111111' // the viewer's own stream pin (tap → return to it)
 const PIN_BORDER = '#FFFFFF'
 
-// Globe sizing is purely the zoom. The floor is low enough that the WHOLE planet
-// sits inside the screen width on portrait (no left/right clip — Mapbox clips the
-// globe to the viewport, so a too-high zoom shears the sides flat) AND vertical
-// rotation still works. Each planet's `initialCamera.zoomLevel` is where it sits;
-// raise it for a bigger globe until the sides start to crop. Tune both on device.
-const GLOBE_MIN_ZOOM = 0.9
+// TEMP (2026-06-19): reset to Mapbox defaults to isolate the terminator anomaly.
+// Prior tuned values to RESTORE if reverting: GLOBE_MIN_ZOOM = 0.9 (the
+// vertical-collapse-safe floor) and each planet's initialCamera.zoomLevel = 0.9.
+// Original default = no floor (min 0) + initial zoom 1.5.
+const GLOBE_MIN_ZOOM = 0
 
 // Night-side terminator fill (planets with `dayNight`). Stacked twilight bands
 // (NIGHT_BANDS) each draw this colour at low opacity → a soft, graded dusk.
