@@ -95,12 +95,13 @@ const GLOBE_MIN_ZOOM = 0.9
 // (NIGHT_BANDS) each draw this colour at low opacity → a soft, graded dusk.
 const NIGHT_COLOR = '#0a0f24'
 
-// Graticule — thin reference lines on the globe: the equator, the two tropics, and
-// a vertical N–S axis (the prime-meridian great circle through both poles). Static,
-// on every planet, drawn under the pins. Densely sampled so the rings stay smooth
-// on the globe projection.
+// Graticule — thin reference lines on the globe: the equator, the two tropics, the
+// Arctic / Antarctic circles, and a vertical N–S axis (the prime-meridian great
+// circle through both poles). Static, on every planet, drawn under the pins. Densely
+// sampled so the rings stay smooth on the globe projection.
 const GRATICULE_COLOR = '#1a1612'
 const TROPIC_LAT = 23.4366 // obliquity of the ecliptic — Tropics of Cancer / Capricorn
+const POLAR_LAT = 90 - TROPIC_LAT // 66.5634° — Arctic / Antarctic circles
 
 const latRing = (lat: number): [number, number][] => {
   const pts: [number, number][] = []
@@ -119,6 +120,8 @@ const GRATICULE_GEOJSON = {
     { type: 'Feature' as const, properties: { kind: 'equator' }, geometry: { type: 'LineString' as const, coordinates: latRing(0) } },
     { type: 'Feature' as const, properties: { kind: 'tropic' }, geometry: { type: 'LineString' as const, coordinates: latRing(TROPIC_LAT) } },
     { type: 'Feature' as const, properties: { kind: 'tropic' }, geometry: { type: 'LineString' as const, coordinates: latRing(-TROPIC_LAT) } },
+    { type: 'Feature' as const, properties: { kind: 'polar' }, geometry: { type: 'LineString' as const, coordinates: latRing(POLAR_LAT) } },
+    { type: 'Feature' as const, properties: { kind: 'polar' }, geometry: { type: 'LineString' as const, coordinates: latRing(-POLAR_LAT) } },
     { type: 'Feature' as const, properties: { kind: 'axis' }, geometry: { type: 'LineString' as const, coordinates: meridianRing() } },
   ],
 }
