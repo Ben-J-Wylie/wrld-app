@@ -288,10 +288,14 @@ export function PpvEventDetailScreen() {
       {eventOver ? (
         <View style={styles.accessGranted}>
           <Text variant="bodyEmphasized">
-            {eventOver === 'cancelled' ? 'This event was cancelled' : 'This event has ended'}
+            {eventOver === 'cancelled' ? 'Cancelled by the creator' : 'This event has ended'}
           </Text>
           {eventOver === 'cancelled' && hasAccess && !isFreeAccess && (
-            <Text variant="caption" color={theme.colors.text.muted}>Your ticket has been refunded.</Text>
+            <Text variant="caption" color={theme.colors.text.muted}>
+              {escrowEnabled
+                ? `You've been credited ${event.priceSb.toLocaleString()} 🚀 back to your balance.`
+                : 'Your ticket has been refunded.'}
+            </Text>
           )}
           {eventOver === 'ended' && hasAccess && !isFreeAccess && (
             reportDone ? (
