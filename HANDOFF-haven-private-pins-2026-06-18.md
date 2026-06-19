@@ -1,5 +1,22 @@
 # HANDOFF — Haven private-stream pins (Aaron) — 2026-06-18
 
+## ✅ BACKEND DEPLOYED + VERIFIED (Aaron, 2026-06-19)
+
+`65c2f2a` pulled onto the Hetzner box + api rebuilt. Verified in the running container:
+- `findAllLiveStreams` no longer excludes `off` — it surfaces private streams with
+  **`lat: null, lng: null, locationPrecision: 'off'`**; `findStreamsNear` still excludes
+  `off` (no geographic position). `streamStarted` pushes `off` streams with **null coords**.
+- **Privacy sanity-check PASSED:** real coordinates for `off` streams are stripped to null
+  at both server boundaries; nothing else emits them.
+- **Redis-safe:** `DISCOVERY_REDIS` is on; coordless pins are kept OUT of the geo set /
+  tiles (`if (s.lat == null) continue`) → pin-hash + legacy fan-out only (the app's Haven
+  socket), viewport/Earth clients ignore them, no null-coord crash. API log clean.
+
+Remaining = the **on-device test checklist below** (go live PRIVATE → absent on Earth →
+pin on Haven island at a stable spot → tap → Join → count/end clear it). That's yours —
+I can't drive the globe from the box.
+
+
 **Goal:** get PRIVATE-location streams rendering as pins on the **Haven** island,
 end-to-end. The **app side is done** (Ben, `planet` branch). What's left is the
 **backend deploy + verify** — that's this handoff.
