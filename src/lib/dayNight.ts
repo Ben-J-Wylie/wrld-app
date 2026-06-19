@@ -75,11 +75,14 @@ function nightPolygonFrom(sun: { lat: number; lng: number }, altitudeDeg: number
     const h = (lng - sun.lng) * RAD
     ring.push([lng, boundaryLat(h, decRad, altRad)])
   }
-  // Sun in the north → the south pole is dark, and vice versa. Close the ring
-  // around the dark pole so the fill covers the night cap.
-  const nightPole = dec >= 0 ? -90 : 90
-  ring.push([180, nightPole])
-  ring.push([-180, nightPole])
+  // Sun in the north → the south pole is dark, and vice versa. Close the cap by
+  // walking a DENSE ring just inside the dark pole (NOT pinched to the singular
+  // pole vertex), so the polygon's interior unambiguously contains the dark pole.
+  // A near-hemisphere cap pinched to one pole point triangulates with stray
+  // antipodal triangles (a phantom shaded patch at the OTHER pole) — this avoids it.
+  const poleSign = dec >= 0 ? -1 : 1 // sign of the dark pole's hemisphere
+  const capLat = poleSign * 89.5
+  for (let lng = 180; lng >= -180; lng -= 5) ring.push([lng, capLat])
   const start = ring[0]
   if (start) ring.push(start)
 
