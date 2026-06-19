@@ -8,6 +8,7 @@ export type CreatePpvEventData = {
   timezone: string
   durationMinutes?: number
   priceUsd: number         // cents
+  priceSb?: number         // Space Bucks price (escrow rail; 1 SB = 1 cent)
   subscribersFreeAccess?: boolean
   maxCapacity?: number
   replayAccess?: boolean

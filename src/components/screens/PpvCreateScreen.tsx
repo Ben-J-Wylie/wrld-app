@@ -12,6 +12,7 @@ import { Toggle } from '@/components/primitives/Toggle'
 import { HelpText } from '@/components/primitives/HelpText'
 import { ppvApi } from '@/api/ppvEvents'
 import type { UpdatePpvEventData, EventOverlapError } from '@/api/ppvEvents'
+import { usePublicConfig, configBool, configNumber } from '@/hooks/usePublicConfig'
 
 const pad = (n: number) => String(n).padStart(2, '0')
 
@@ -99,6 +100,12 @@ export function PpvCreateScreen() {
   const [replayAccess, setReplayAccess] = useState(existing?.replayAccess ?? true)
   const [saving, setSaving] = useState(false)
 
+  // Escrow on → price in Space Bucks (1 🚀 = 1¢); off → legacy USD.
+  const { config } = usePublicConfig()
+  const escrowEnabled = configBool(config, 'PPV_ESCROW_ENABLED', false)
+  const minSb = configNumber(config, 'PPV_MINIMUM_PRICE_SB', 100)
+  const maxSb = configNumber(config, 'PPV_MAX_PRICE_SB', 2000)
+
   // Sync form when editing an existing event loads
   useEffect(() => {
     if (!existing) return
@@ -106,14 +113,14 @@ export function PpvCreateScreen() {
     setDescription(existing.description ?? '')
     setDuration(existing.durationMinutes ? String(existing.durationMinutes) : '')
     setCapacity(existing.maxCapacity ? String(existing.maxCapacity) : '')
-    setPriceDollars(String((existing.priceUsd / 100).toFixed(2)))
+    setPriceDollars(escrowEnabled ? String(existing.priceSb) : (existing.priceUsd / 100).toFixed(2))
     setSubscribersFree(existing.subscribersFreeAccess)
     setReplayAccess(existing.replayAccess)
     const { dateStr: ds, timeStr: ts, isPM: pm } = dateToInputs(new Date(existing.scheduledAt))
     setDateStr(ds)
     setTimeStr(ts)
     setIsPM(pm)
-  }, [existing?.id])
+  }, [existing?.id, escrowEnabled])
 
   function applyPreset(hours: number) {
     const d = new Date()
@@ -134,8 +141,10 @@ export function PpvCreateScreen() {
   const parsedDate = parseDateInputs(dateStr, timeStr, isPM)
   const dateValid = parsedDate !== null && parsedDate > new Date()
 
-  const priceCents = priceDollars ? Math.round(parseFloat(priceDollars) * 100) : 0
-  const priceValid = priceCents >= 100
+  // Escrow mode: a whole Space-Bucks amount (1 🚀 = 1¢, so SB == cents). Legacy: dollars.
+  const priceSbValue = escrowEnabled && priceDollars ? Math.round(parseFloat(priceDollars)) : 0
+  const priceCents = escrowEnabled ? priceSbValue : (priceDollars ? Math.round(parseFloat(priceDollars) * 100) : 0)
+  const priceValid = escrowEnabled ? priceSbValue >= minSb && priceSbValue <= maxSb : priceCents >= 100
   const titleValid = title.trim().length > 0
   const canSave = titleValid && priceValid && dateValid && !isEdit
   const canUpdate = isEdit && titleValid && !saving
@@ -164,6 +173,7 @@ export function PpvCreateScreen() {
         timezone: tz,
         durationMinutes: duration ? parseInt(duration) : undefined,
         priceUsd: priceCents,
+        ...(escrowEnabled ? { priceSb: priceSbValue } : {}),
         subscribersFreeAccess: subscribersFree,
         maxCapacity: capacity ? parseInt(capacity) : undefined,
         replayAccess,
@@ -384,19 +394,26 @@ export function PpvCreateScreen() {
       </View>
 
       <View style={styles.field}>
-        <Text variant="monoLabel">Price (USD)</Text>
+        <Text variant="monoLabel">{escrowEnabled ? 'Price (Space Bucks)' : 'Price (USD)'}</Text>
         <Input
           value={priceDollars}
           onChangeText={setPriceDollars}
-          placeholder="e.g. 4.99"
-          keyboardType="decimal-pad"
+          placeholder={escrowEnabled ? 'e.g. 500' : 'e.g. 4.99'}
+          keyboardType={escrowEnabled ? 'number-pad' : 'decimal-pad'}
           editable={!isEdit}
         />
         {isEdit && (
           <HelpText>Price cannot be changed after event creation</HelpText>
         )}
         {priceDollars.length > 0 && !priceValid && (
-          <HelpText>Minimum price is $1.00</HelpText>
+          <HelpText>
+            {escrowEnabled
+              ? `Price must be between ${minSb.toLocaleString()} and ${maxSb.toLocaleString()} 🚀`
+              : 'Minimum price is $1.00'}
+          </HelpText>
+        )}
+        {escrowEnabled && !isEdit && priceDollars.length === 0 && (
+          <HelpText>{minSb.toLocaleString()}–{maxSb.toLocaleString()} 🚀 · 1 🚀 = $0.01</HelpText>
         )}
       </View>
 
