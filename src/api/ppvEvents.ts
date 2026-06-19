@@ -91,6 +91,20 @@ export const ppvApi = {
     return res.data
   },
 
+  // Viewer: buy a ticket with Space Bucks (escrow rail). Throws on 402 (insufficient
+  // balance) — the caller inspects e.response.status and routes to top-up.
+  purchaseWithSpaceBucks: async (eventId: string): Promise<{ purchased: boolean; free: boolean; newBalance: number }> => {
+    const res = await apiClient.post<{ purchased: boolean; free: boolean; newBalance: number }>(
+      `/ppv-events/${eventId}/purchase`,
+    )
+    return res.data
+  },
+
+  // Viewer: report a delivery problem with an event (ticket-holders only).
+  reportProblem: async (eventId: string, reason: string): Promise<void> => {
+    await apiClient.post(`/ppv-events/${eventId}/report-problem`, { reason })
+  },
+
   // Viewer: cancel own ticket + refund (only while the event is still scheduled)
   cancelPurchase: async (eventId: string): Promise<{ ok: boolean; refunded: boolean }> => {
     const res = await apiClient.post<{ ok: boolean; refunded: boolean }>(

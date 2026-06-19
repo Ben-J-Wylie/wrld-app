@@ -12,6 +12,15 @@ import { Text } from '@/components/primitives/Text'
 import { HelpText } from '@/components/primitives/HelpText'
 import { Icon } from '@/components/primitives/Icon'
 import { ppvApi } from '@/api/ppvEvents'
+import { CURRENT_USER_KEY } from '@/hooks/useCurrentUser'
+import { usePublicConfig, configBool } from '@/hooks/usePublicConfig'
+
+const PPV_REPORT_REASONS = [
+  { value: 'never_started', label: 'It never started' },
+  { value: 'ended_early', label: 'It ended early' },
+  { value: 'technical', label: 'Technical / quality problem' },
+  { value: 'not_as_described', label: 'Not as described' },
+]
 
 function formatCountdown(targetIso: string): string {
   const diff = new Date(targetIso).getTime() - Date.now()
@@ -38,6 +47,9 @@ export function PpvEventDetailScreen() {
   const { id, handle } = useLocalSearchParams<{ id: string; handle?: string }>()
   const { isSignedIn } = useAuth()
   const qc = useQueryClient()
+  const { config } = usePublicConfig()
+  const escrowEnabled = configBool(config, 'PPV_ESCROW_ENABLED', false)
+  const [reportDone, setReportDone] = useState(false)
   const [countdown, setCountdown] = useState('')
   const [purchasing, setPurchasing] = useState(false)
   const [accessStatus, setAccessStatus] = useState<{ hasAccess: boolean; free: boolean } | null>(null)
@@ -141,6 +153,24 @@ export function PpvEventDetailScreen() {
     }
     setPurchasing(true)
     try {
+      if (escrowEnabled) {
+        try {
+          const res = await ppvApi.purchaseWithSpaceBucks(id)
+          setAccessStatus({ hasAccess: true, free: res.free })
+          qc.invalidateQueries({ queryKey: CURRENT_USER_KEY })
+        } catch (e: unknown) {
+          const status = (e as { response?: { status?: number } })?.response?.status
+          if (status === 402) {
+            Alert.alert('Not enough Space Bucks', 'Top up your balance to buy this ticket.', [
+              { text: 'Not now', style: 'cancel' },
+              { text: 'Top up', onPress: () => router.push('/(app)/wallet') },
+            ])
+            return
+          }
+          throw e
+        }
+        return
+      }
       const { free, url } = await ppvApi.createAccessSession(id)
       if (free) {
         setAccessStatus({ hasAccess: true, free: true })
@@ -239,7 +269,9 @@ export function PpvEventDetailScreen() {
         ) : null}
         <View style={styles.row}>
           <Icon name="tag" size="sm" color={theme.colors.text.muted} />
-          <Text variant="body">${(event.priceUsd / 100).toFixed(2)}</Text>
+          <Text variant="body">
+            {escrowEnabled ? `${event.priceSb.toLocaleString()} 🚀` : `$${(event.priceUsd / 100).toFixed(2)}`}
+          </Text>
           {event.subscribersFreeAccess && (
             <Text variant="caption" color={theme.colors.accent.default}> · free for subscribers</Text>
           )}
@@ -260,6 +292,26 @@ export function PpvEventDetailScreen() {
           </Text>
           {eventOver === 'cancelled' && hasAccess && !isFreeAccess && (
             <Text variant="caption" color={theme.colors.text.muted}>Your ticket has been refunded.</Text>
+          )}
+          {eventOver === 'ended' && hasAccess && !isFreeAccess && (
+            reportDone ? (
+              <Text variant="caption" color={theme.colors.text.muted}>Thanks — your report was submitted.</Text>
+            ) : (
+              <View style={{ gap: theme.spacing.sm, alignSelf: 'stretch' }}>
+                <Text variant="caption" color={theme.colors.text.muted}>Was there a problem with this event?</Text>
+                {PPV_REPORT_REASONS.map(r => (
+                  <Button
+                    key={r.value}
+                    label={r.label}
+                    variant="secondary"
+                    onPress={async () => {
+                      try { await ppvApi.reportProblem(id, r.value); setReportDone(true) }
+                      catch { Alert.alert('Error', 'Could not submit report.') }
+                    }}
+                  />
+                ))}
+              </View>
+            )
           )}
           <Button label="Back to events" variant="secondary" onPress={() => router.back()} />
         </View>
@@ -304,7 +356,13 @@ export function PpvEventDetailScreen() {
       ) : (
         <View style={styles.purchaseArea}>
           <Button
-            label={purchasing ? 'Opening checkout…' : `Buy ticket · $${(event.priceUsd / 100).toFixed(2)}`}
+            label={
+              purchasing
+                ? escrowEnabled ? 'Purchasing…' : 'Opening checkout…'
+                : escrowEnabled
+                  ? `Buy ticket · ${event.priceSb.toLocaleString()} 🚀`
+                  : `Buy ticket · $${(event.priceUsd / 100).toFixed(2)}`
+            }
             onPress={handlePurchase}
             disabled={purchasing}
           />

@@ -120,6 +120,7 @@ export type PpvEvent = {
   timezone: string         // creator's IANA timezone
   durationMinutes: number | null
   priceUsd: number         // cents
+  priceSb: number          // Space Bucks price (escrow rail); defaults to priceUsd
   subscribersFreeAccess: boolean
   maxCapacity: number | null
   replayAccess: boolean
