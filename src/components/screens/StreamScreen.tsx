@@ -783,6 +783,19 @@ export function StreamScreen() {
     router.navigate('/(app)/globe')
   }
 
+  // Like exitToGlobe('ended'), but for a PPV stream that has truly ended — sends the
+  // ticket-holder to the post-event problem-report (RateEventPage's app twin) instead
+  // of the globe. Cancellations (creator/admin) still go to the globe with a refund
+  // notice, not here.
+  function exitToRate(ppvId: string) {
+    if (navigatingRef.current) return
+    navigatingRef.current = true
+    cleanup()
+    disconnect()
+    signalStreamEnded()
+    router.navigate({ pathname: '/(app)/ppv/[id]/rate', params: { id: ppvId } })
+  }
+
   useEffect(() => {
     if (!adminEnded || !isNew) return
     stopActiveRecording()
@@ -806,9 +819,9 @@ export function StreamScreen() {
       ppvApi.getCreatorEvents(hostHandle)
         .then((events) => {
           if (events.some((e) => e.id === ppvId)) { pausedRef.current = true; setPaused(true) }
-          else exitToGlobe('ended')
+          else exitToRate(ppvId)
         })
-        .catch(() => exitToGlobe('ended'))
+        .catch(() => exitToRate(ppvId))
     } else {
       exitToGlobe('ended')
     }
@@ -829,7 +842,8 @@ export function StreamScreen() {
           router.replace({ pathname: '/(app)/stream/[id]', params: { id: e.mediasoupRoomId, sources: '' } })
         }
       } else if (e.type === 'ppv_event_ended') {
-        exitToGlobe(e.reason === 'cancelled' ? 'cancelled' : 'ended')
+        if (e.reason === 'cancelled' || e.reason === 'admin_cancelled') exitToGlobe('cancelled')
+        else exitToRate(ppvId)
       }
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
