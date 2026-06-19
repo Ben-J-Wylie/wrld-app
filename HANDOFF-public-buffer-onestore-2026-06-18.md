@@ -667,3 +667,49 @@ After PB3: per-user visibility default setting (`User.bufferVisibilityDefault`),
 public/private per-range toggle UI + distinct-segment visual (Ben), and a backend guardrail
 audit (subscribersOnly buffer keeps the paywall on replay; anon/precision reversibility
 honoured on the public buffer). Small backend; mostly app.
+
+---
+
+## → BEN: PB3 per-segment settings UI (2026-06-19) — backend write endpoint is LIVE
+
+PB3 steps 1–2 done (DirectiveRange written on save + read by the reaper, flag-gated).
+**Step 3a is deployed:** the per-segment **write** endpoint your settings UI calls. The
+**enforcement** (discover hides private at T; serve excludes private segments) is step 3b
+(Aaron, next). All gated by `PB3_PER_RANGE` (default OFF).
+
+### The endpoint (owner-gated, flag-gated)
+`PATCH /buffer/me/sessions/:id/directives`
+```
+{ directives: [
+    { startAtMs, endAtMs,                 // a [start,end) slice of THIS buffer session
+      visibility: 'public' | 'private',   // default 'public'
+      precision?: 'exact'|'city'|'country'|'off' | null,  // null = inherit (optional, later)
+      attributed?: boolean }              // default true (optional, later)
+] }
+→ 200 { ok: true, count }
+→ 409 if PB3_PER_RANGE is off   ← see "gate the UI" below
+```
+- **Authoritative full list per session** (same shape as `/splits`): send every
+  non-default segment; **omit a range → it reverts to default** (public / inherit /
+  attributed). Replaces the session's standalone directives; saved-clip retain rows
+  are untouched.
+- Headline use: mark a segment **private** → (once 3b lands) it drops out of the time
+  machine + stops serving, while staying live-viewable and (if saved) kept.
+
+### Your UI (per the signed-off plan)
+- **Per-segment settings affordance:** each snip segment (your `splitPoints`) carries
+  its own public/private toggle → on change, PATCH the full `directives` list for the
+  session. (Precision/identity per segment can come later; visibility is the headline.)
+- **Mend differ-guard:** when adjacent segments' directives differ, **prompt-to-pick**
+  which to keep (decided default); keeping them snipped is always valid.
+- **⚠️ Gate the toggle on the flag:** only show the per-segment private toggle when
+  `configBool('PB3_PER_RANGE')` is true. The endpoint 409s when off, and — more
+  importantly — a "private" mark isn't enforced until 3b + the flag are live, so showing
+  it while off would give a false sense of privacy. (Same `usePublicConfig` path as the
+  other globe flags — I'll add `PB3_PER_RANGE` to the public `/config` allowlist when we
+  flip it on for the team; ping me and I'll expose it.)
+
+### Status / next
+3a write endpoint **live** (flag-gated). Aaron does **3b enforcement** next (discover +
+serve read per-range visibility). Then we flip `PB3_PER_RANGE` on for the team and gate
+on device (mark a segment private → confirm it vanishes from the past + won't serve).
