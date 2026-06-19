@@ -24,6 +24,7 @@ import { Text } from '@/components/primitives/Text'
 import { Icon } from '@/components/primitives/Icon'
 import { useAuthStore } from '@/stores/authStore'
 import { useBroadcastStore } from '@/stores/broadcastStore'
+import { useFullscreenStore } from '@/stores/fullscreenStore'
 import { returnToActiveBroadcast } from '@/lib/activeBroadcast'
 
 // Inline warn-tint values reused from ToastBanner's warn variant —
@@ -131,8 +132,14 @@ function AppTabBar() {
   const pathname = usePathname()
   const isLive = useBroadcastStore((s) => s.isLive)
   const creatorReady = useAuthStore((s) => s.wrldUser?.creatorReady ?? false)
+  const isFullscreen = useFullscreenStore((s) => s.isFullscreen)
   const insets = useSafeAreaInsets()
   const streamActive = pathname.startsWith('/stream')
+
+  // Hide the footer entirely while a video is fullscreen so the frame goes
+  // edge-to-edge (the fullscreen overlay renders inside the tab scene, above
+  // this bar). Returning null collapses the bar's height → the scene fills.
+  if (isFullscreen) return null
 
   // The center Stream tab opens the broadcaster preview / live view. Going live
   // requires creator onboarding, so a non-creator is sent to finish setup

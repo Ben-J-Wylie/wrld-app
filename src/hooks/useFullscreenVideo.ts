@@ -18,6 +18,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { StatusBar } from 'react-native'
 import * as ScreenOrientation from 'expo-screen-orientation'
+import { useFullscreenStore } from '@/stores/fullscreenStore'
 
 export function useFullscreenVideo() {
   const [isFullscreen, setIsFullscreen] = useState(false)
@@ -27,6 +28,7 @@ export function useFullscreenVideo() {
   const enter = useCallback(async (landscape: boolean) => {
     activeRef.current = true
     setIsFullscreen(true)
+    useFullscreenStore.getState().setFullscreen(true) // hides the bottom tab bar
     StatusBar.setHidden(true, 'fade')
     try {
       await ScreenOrientation.lockAsync(
@@ -41,6 +43,7 @@ export function useFullscreenVideo() {
     if (!activeRef.current) return
     activeRef.current = false
     setIsFullscreen(false)
+    useFullscreenStore.getState().setFullscreen(false) // restores the bottom tab bar
     StatusBar.setHidden(false, 'fade')
     try {
       await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP)
@@ -52,6 +55,7 @@ export function useFullscreenVideo() {
   useEffect(() => {
     return () => {
       if (activeRef.current) {
+        useFullscreenStore.getState().setFullscreen(false) // restore tab bar on teardown
         StatusBar.setHidden(false)
         ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {})
       }
