@@ -710,6 +710,13 @@ PB3 steps 1–2 done (DirectiveRange written on save + read by the reaper, flag-
   flip it on for the team; ping me and I'll expose it.)
 
 ### Status / next
-3a write endpoint **live** (flag-gated). Aaron does **3b enforcement** next (discover +
-serve read per-range visibility). Then we flip `PB3_PER_RANGE` on for the team and gate
-on device (mark a segment private → confirm it vanishes from the past + won't serve).
+**Backend PB3 is COMPLETE** (2026-06-19): 3a write endpoint + 3b enforcement both LIVE
+(flag-gated `PB3_PER_RANGE`, off). Enforcement: discover hides a session pin when the
+instant is inside a private range; the public serve (clip + session) excludes private
+windows from the built manifest; the OWNER still sees everything (session-scoped token =
+public viewer, owner token = full). So the moment your per-segment UI writes a private
+directive (+ the flag's on), it vanishes from the past + won't serve publicly.
+**Over to you:** build the per-segment toggle (the PATCH contract above) + the mend
+differ-guard. When ready, ping me to (a) add `PB3_PER_RANGE` to the public `/config`
+allowlist so the app can `configBool` it, and (b) flip it on for the team for the
+on-device gate (mark a segment private → pin vanishes + won't serve; owner still sees it).
