@@ -153,6 +153,28 @@ export const bufferApi = {
     const res = await apiClient.post<{ clip: { id: string } }>(`/buffer/me/clips/${id}/save`)
     return { clipId: res.data.clip.id }
   },
+
+  // PB3 — per-segment directives over a BUFFER session (public-buffer initiative).
+  // AUTHORITATIVE full list: send every non-default segment for the session; an omitted
+  // range reverts to default (public / inherit precision / attributed). Today we only
+  // send `visibility:'private'` ranges (the headline); the shape carries `precision` +
+  // `attributed` so the full per-segment suite slots in later with no API change.
+  // Owner-gated; 409 when the PB3_PER_RANGE flag is off (so a "private" mark never gives
+  // a false sense of privacy before enforcement is live).
+  patchDirectives: async (sessionId: string, directives: SegmentDirective[]): Promise<void> => {
+    await apiClient.patch(`/buffer/me/sessions/${sessionId}/directives`, { directives })
+  },
+}
+
+// One per-segment directive over a buffer session (PB3). `visibility` is the headline;
+// `precision`/`attributed` are accepted now (full-suite-ready) though the UI sets only
+// visibility today.
+export type SegmentDirective = {
+  startAtMs: number
+  endAtMs: number
+  visibility: 'public' | 'private'
+  precision?: 'exact' | 'city' | 'country' | 'off' | null
+  attributed?: boolean
 }
 
 // One contiguous in-window slice of a buffer session — the manifest body (C4).

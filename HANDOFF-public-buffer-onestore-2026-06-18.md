@@ -763,3 +763,30 @@ directive (+ the flag's on), it vanishes from the past + won't serve publicly.
 differ-guard. When ready, ping me to (a) add `PB3_PER_RANGE` to the public `/config`
 allowlist so the app can `configBool` it, and (b) flip it on for the team for the
 on-device gate (mark a segment private → pin vanishes + won't serve; owner still sees it).
+
+### PB3 — app per-segment public/private SCABBED IN (Ben, 2026-06-19) → Aaron, flip when ready
+
+Built Option A (public/private per segment), wired full-suite-ready. Lives in the clip
+grid (`ClipsScreen`) by the scissor — **needs a redesign, scabbed in for now** per Ben.
+
+- **`bufferApi.patchDirectives(sessionId, directives)`** → `PATCH /buffer/me/sessions/:id/directives`
+  with the authoritative full list. `SegmentDirective` carries `visibility` (set today) +
+  `precision?`/`attributed?` (accepted now, UI later — no API change to add them).
+- **Grid control:** select a BUFFER segment → an **eye/lock toggle** appears above the
+  scissor → marks that segment public/private → PATCHes the session's private ranges
+  (public omitted = default). **Gated on `configBool('PB3_PER_RANGE')`** — dormant until
+  you allowlist + flip it.
+- **Mend differ-guard:** un-snipping two segments whose privacy differs → Alert
+  prompt-to-pick (Public / Private / Cancel); same/none → merge silently.
+- **Scab-in caveats (for the redesign):** (1) no `GET` directives yet, so marks don't
+  survive a reload — the **enforcement** (discover/serve) is real, only the local UI
+  reflection is ephemeral; a read endpoint would let the grid rehydrate. (2) range-keyed
+  matching (±1s) is provisional. (3) the control placement is a stopgap by the scissor.
+
+**→ Aaron:** (a) add `PB3_PER_RANGE` to the public `/config` allowlist so `configBool`
+sees it, (b) flip it on for the team. Then on-device: mark a segment private → its pin
+vanishes from the time machine + won't serve publicly, while you (owner) still see it.
+A `GET /buffer/me/sessions/:id/directives` (or fold directives into `GET /buffer/me`)
+would make the marks survive reload — nice-to-have for the redesign.
+
+tsc clean; pure JS, no rebuild.

@@ -48,6 +48,7 @@ import { useSavedClips } from '@/hooks/useSavedClips'
 import { useDrafts } from '@/hooks/useDrafts'
 import { useBroadcastStore } from '@/stores/broadcastStore'
 import { serverNow, feedServerNow } from '@/lib/serverClock'
+import { usePublicConfig, configBool } from '@/hooks/usePublicConfig'
 import { bufferApi, type BufferSession, type BufferTrackKind } from '@/api/buffer'
 
 const FRAME_MS = 1000 / 30 // one frame at the 30fps capture (transport frame-step)
@@ -490,6 +491,60 @@ export const ClipsScreen = () => {
   const [centerClipId, setCenterClipId] = useState<string | null>(null)
   const selectedClip = useMemo(() => allClips.find((c) => c.id === selectedId) ?? null, [allClips, selectedId])
   const viewerClip = useMemo(() => selectedClip ?? allClips.find((c) => c.id === centerClipId) ?? null, [selectedClip, allClips, centerClipId])
+
+  // ── PB3: per-segment public/private (public-buffer initiative) — SCABBED IN ─────
+  // Gated on PB3_PER_RANGE (not in the public /config allowlist until Aaron's team flip,
+  // so this is dormant until then). A selected BUFFER segment gets a public/private
+  // toggle by the scissor; marking private writes a wall-clock directive range. We track
+  // only PRIVATE ranges (public = default/omitted) and PATCH the session's full private
+  // list. NOTE (scab-in): no GET-directives yet, so marks don't survive a reload — the
+  // ENFORCEMENT (discover/serve) is real; only the local UI reflection is ephemeral. The
+  // shape is full-suite-ready (precision/identity slot into the same PATCH later).
+  const { config: publicConfig } = usePublicConfig()
+  const pb3Enabled = configBool(publicConfig, 'PB3_PER_RANGE', false)
+  const SEG_TOL = 1000 // ms tolerance matching a stored range to a (re-derived) segment
+  const [privateSegs, setPrivateSegs] = useState<{ sessionId: string; startMs: number; endMs: number }[]>([])
+  const segIsPrivate = useCallback(
+    (c: LaneClip) => {
+      const sid = c.sourceSessionId
+      return (
+        !!sid &&
+        privateSegs.some(
+          (p) => p.sessionId === sid && Math.abs(p.startMs - c.startMs) < SEG_TOL && Math.abs(p.endMs - c.endMs) < SEG_TOL,
+        )
+      )
+    },
+    [privateSegs],
+  )
+  // PATCH the authoritative private-range list for one session (public ranges omitted).
+  const patchSessionDirectives = useCallback(
+    (sessionId: string, segs: { sessionId: string; startMs: number; endMs: number }[]) => {
+      const directives = segs
+        .filter((s) => s.sessionId === sessionId)
+        .map((s) => ({ startAtMs: Math.round(s.startMs), endAtMs: Math.round(s.endMs), visibility: 'private' as const }))
+      bufferApi.patchDirectives(sessionId, directives).catch(() => {})
+    },
+    [],
+  )
+  const toggleSegPrivacy = useCallback(
+    (c: LaneClip) => {
+      const sid = c.sourceSessionId
+      if (!sid) return
+      setPrivateSegs((prev) => {
+        const match = (p: { sessionId: string; startMs: number; endMs: number }) =>
+          p.sessionId === sid && Math.abs(p.startMs - c.startMs) < SEG_TOL && Math.abs(p.endMs - c.endMs) < SEG_TOL
+        const next = prev.some(match)
+          ? prev.filter((p) => !match(p))
+          : [...prev, { sessionId: sid, startMs: c.startMs, endMs: c.endMs }]
+        patchSessionDirectives(sid, next)
+        return next
+      })
+    },
+    [patchSessionDirectives],
+  )
+  // The per-segment toggle shows only for a selected BUFFER segment, when the flag's on.
+  const selectedIsBufferSeg = !!selectedClip && bufferedLane.some((c) => c.id === selectedClip.id)
+  const selectedPrivate = !!selectedClip && segIsPrivate(selectedClip)
   // No auto-selection on open — the page defaults to RIDING THE NOW EDGE (below), so the viewer
   // follows the live/now edge rather than highlighting a past clip. (Tapping a clip still selects it.)
 
@@ -1576,7 +1631,45 @@ export const ClipsScreen = () => {
   // Otherwise → cut the clip under the static playhead in two (a local split point).
   const handleScissor = useCallback(() => {
     if (unsnip) {
-      setSplitPoints((prev) => prev.filter((s) => !(s.sessionId === unsnip.sessionId && s.atMs === unsnip.atMs)))
+      const sid = unsnip.sessionId
+      const removeSnip = () =>
+        setSplitPoints((prev) => prev.filter((s) => !(s.sessionId === sid && s.atMs === unsnip.atMs)))
+      // PB3 mend differ-guard: un-snipping merges the two pieces at the snip. If their
+      // privacy DIFFERS, prompt-to-pick which the merged range keeps (keeping it snipped
+      // is always an option — just cancel). Same/none → merge silently.
+      const left = bufferedLane.find((c) => c.sourceSessionId === sid && Math.abs(c.endMs - unsnip.atMs) < SEG_TOL)
+      const right = bufferedLane.find((c) => c.sourceSessionId === sid && Math.abs(c.startMs - unsnip.atMs) < SEG_TOL)
+      const lPriv = !!left && segIsPrivate(left)
+      const rPriv = !!right && segIsPrivate(right)
+      const mergeWith = (priv: boolean) => {
+        if (left && right) {
+          setPrivateSegs((prev) => {
+            // drop the two piece entries, add the merged range iff private
+            const cleared = prev.filter(
+              (p) =>
+                !(
+                  p.sessionId === sid &&
+                  ((Math.abs(p.startMs - left.startMs) < SEG_TOL && Math.abs(p.endMs - left.endMs) < SEG_TOL) ||
+                    (Math.abs(p.startMs - right.startMs) < SEG_TOL && Math.abs(p.endMs - right.endMs) < SEG_TOL))
+                ),
+            )
+            const next = priv ? [...cleared, { sessionId: sid, startMs: left.startMs, endMs: right.endMs }] : cleared
+            patchSessionDirectives(sid, next)
+            return next
+          })
+        }
+        removeSnip()
+        setUnsnip(null)
+      }
+      if (left && right && lPriv !== rPriv) {
+        Alert.alert('Segments differ', 'These two segments have different privacy. Keep the merged clip:', [
+          { text: 'Public', onPress: () => mergeWith(false) },
+          { text: 'Private', onPress: () => mergeWith(true) },
+          { text: 'Cancel', style: 'cancel' },
+        ])
+        return
+      }
+      removeSnip()
       setUnsnip(null)
       return
     }
@@ -1587,7 +1680,7 @@ export const ClipsScreen = () => {
     if (!clip || !sessionId) return
     if (c.timeMs <= clip.startMs + MIN_REMAINDER_MS || c.timeMs >= clip.endMs - MIN_REMAINDER_MS) return // not strictly inside
     setSplitPoints((prev) => (prev.some((s) => s.sessionId === sessionId && Math.abs(s.atMs - c.timeMs) < 1) ? prev : [...prev, { sessionId, atMs: c.timeMs }]))
-  }, [unsnip, allClips])
+  }, [unsnip, allClips, bufferedLane, segIsPrivate, patchSessionDirectives])
 
   // ── transport navigation: smooth-scroll the timeline so a boundary lands on the playhead ──
   // Boundaries = every clip head + tail; plus the reaper (oldest) and now (live) edges.
@@ -1862,8 +1955,19 @@ export const ClipsScreen = () => {
             onSave={saveClip}
             onUnsave={unsaveClip}
           />
-          {/* Scissor / bandaid — cuts the clip at the playhead, or un-snips when over a snip mark. */}
+          {/* Scissor / bandaid — cuts the clip at the playhead, or un-snips when over a snip mark.
+              PB3 (scab-in): a selected buffer segment gets a public/private toggle above it. */}
           <View style={styles.scissorRow} pointerEvents="box-none">
+            {pb3Enabled && selectedIsBufferSeg && (
+              <Pressable
+                variant="none"
+                accessibilityLabel={selectedPrivate ? 'Make this segment public' : 'Make this segment private'}
+                onPress={() => selectedClip && toggleSegPrivacy(selectedClip)}
+                style={[styles.scissorBtn, selectedPrivate && styles.bandaidBtn]}
+              >
+                <Icon name={selectedPrivate ? 'lock' : 'eye'} size="md" color={theme.colors.text.inverse} />
+              </Pressable>
+            )}
             <Pressable
               variant="none"
               accessibilityLabel={unsnip ? 'Remove the snip at the playhead' : 'Cut clip at the playhead'}
@@ -1973,6 +2077,7 @@ const styles = StyleSheet.create({
     bottom: theme.spacing.sm,
     right: theme.spacing.sm,
     alignItems: 'flex-end',
+    gap: theme.spacing.xs,
   },
   scissorBtn: {
     width: 36,
