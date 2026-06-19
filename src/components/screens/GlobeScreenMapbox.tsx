@@ -41,7 +41,7 @@ import {
 import { router, useFocusEffect } from 'expo-router'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
-import Mapbox, { Camera, ShapeSource, CircleLayer, SymbolLayer, FillLayer, Atmosphere } from '@rnmapbox/maps'
+import Mapbox, { Camera, ShapeSource, CircleLayer, SymbolLayer, FillLayer, LineLayer, Atmosphere } from '@rnmapbox/maps'
 import { consumeStreamSignal } from '@/lib/streamSignals'
 import { returnToActiveBroadcast } from '@/lib/activeBroadcast'
 import { streamsApi } from '@/api/streams'
@@ -95,14 +95,31 @@ const GLOBE_MIN_ZOOM = 0.9
 // (NIGHT_BANDS) each draw this colour at low opacity → a soft, graded dusk.
 const NIGHT_COLOR = '#0a0f24'
 
-// Pole markers — N/S labels at the geographic poles, for orientation now that
-// vertical rotation is a thing. Static, on every planet.
-const POLE_COLOR = '#1a1612'
-const POLES_GEOJSON = {
+// Graticule — thin reference lines on the globe: the equator, the two tropics, and
+// a vertical N–S axis (the prime-meridian great circle through both poles). Static,
+// on every planet, drawn under the pins. Densely sampled so the rings stay smooth
+// on the globe projection.
+const GRATICULE_COLOR = '#1a1612'
+const TROPIC_LAT = 23.4366 // obliquity of the ecliptic — Tropics of Cancer / Capricorn
+
+const latRing = (lat: number): [number, number][] => {
+  const pts: [number, number][] = []
+  for (let lng = -180; lng <= 180; lng += 4) pts.push([lng, lat])
+  return pts
+}
+const meridianRing = (): [number, number][] => {
+  const pts: [number, number][] = []
+  for (let lat = -90; lat <= 90; lat += 4) pts.push([0, lat])
+  for (let lat = 90; lat >= -90; lat -= 4) pts.push([180, lat])
+  return pts
+}
+const GRATICULE_GEOJSON = {
   type: 'FeatureCollection' as const,
   features: [
-    { type: 'Feature' as const, properties: { label: 'N' }, geometry: { type: 'Point' as const, coordinates: [0, 90] } },
-    { type: 'Feature' as const, properties: { label: 'S' }, geometry: { type: 'Point' as const, coordinates: [0, -90] } },
+    { type: 'Feature' as const, properties: { kind: 'equator' }, geometry: { type: 'LineString' as const, coordinates: latRing(0) } },
+    { type: 'Feature' as const, properties: { kind: 'tropic' }, geometry: { type: 'LineString' as const, coordinates: latRing(TROPIC_LAT) } },
+    { type: 'Feature' as const, properties: { kind: 'tropic' }, geometry: { type: 'LineString' as const, coordinates: latRing(-TROPIC_LAT) } },
+    { type: 'Feature' as const, properties: { kind: 'axis' }, geometry: { type: 'LineString' as const, coordinates: meridianRing() } },
   ],
 }
 
@@ -1169,19 +1186,14 @@ export function GlobeScreenMapbox() {
           </ShapeSource>
         ))}
 
-        {/* Pole markers — N / S labels for orientation. */}
-        <ShapeSource id="poles" shape={POLES_GEOJSON}>
-          <SymbolLayer
-            id="pole-labels"
+        {/* Graticule — equator, tropics, and the N–S axis (prime-meridian ring). */}
+        <ShapeSource id="graticule" shape={GRATICULE_GEOJSON}>
+          <LineLayer
+            id="graticule-lines"
             style={{
-              textField: ['get', 'label'] as any,
-              textSize: 13,
-              textColor: POLE_COLOR,
-              textHaloColor: '#FFFFFF',
-              textHaloWidth: 1.5,
-              textOpacity: 0.6,
-              textAllowOverlap: true,
-              textIgnorePlacement: true,
+              lineColor: GRATICULE_COLOR,
+              lineWidth: 0.6,
+              lineOpacity: 0.22,
             }}
           />
         </ShapeSource>
