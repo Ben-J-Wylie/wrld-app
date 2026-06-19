@@ -55,7 +55,7 @@ export function PpvEventDetailScreen() {
   const [accessStatus, setAccessStatus] = useState<{ hasAccess: boolean; free: boolean } | null>(null)
   // Live event status for the waiting room — refreshed by polling
   const [liveStatus, setLiveStatus] = useState<{ status: string; roomId: string | null } | null>(null)
-  const [eventOver, setEventOver] = useState<'ended' | 'cancelled' | null>(null)
+  const [eventOver, setEventOver] = useState<'ended' | 'cancelled' | 'admin_cancelled' | null>(null)
   const [cancelling, setCancelling] = useState(false)
 
   // Try cache first (seeded by ProfileScreen), then fetch if needed
@@ -113,7 +113,7 @@ export function PpvEventDetailScreen() {
     if (e.type === 'ppv_event_live') {
       setLiveStatus({ status: 'live', roomId: e.mediasoupRoomId ?? null })
     } else if (e.type === 'ppv_event_ended') {
-      setEventOver(e.reason === 'cancelled' ? 'cancelled' : 'ended')
+      setEventOver(e.reason === 'cancelled' ? 'cancelled' : e.reason === 'admin_cancelled' ? 'admin_cancelled' : 'ended')
     }
   }), [id])
 
@@ -288,9 +288,11 @@ export function PpvEventDetailScreen() {
       {eventOver ? (
         <View style={styles.accessGranted}>
           <Text variant="bodyEmphasized">
-            {eventOver === 'cancelled' ? 'Cancelled by the creator' : 'This event has ended'}
+            {eventOver === 'admin_cancelled' ? 'Ended by an administrator'
+              : eventOver === 'cancelled' ? 'Cancelled by the creator'
+              : 'This event has ended'}
           </Text>
-          {eventOver === 'cancelled' && hasAccess && !isFreeAccess && (
+          {(eventOver === 'cancelled' || eventOver === 'admin_cancelled') && hasAccess && !isFreeAccess && (
             <Text variant="caption" color={theme.colors.text.muted}>
               {escrowEnabled
                 ? `You've been credited ${event.priceSb.toLocaleString()} 🚀 back to your balance.`

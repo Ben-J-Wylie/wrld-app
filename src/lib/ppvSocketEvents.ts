@@ -4,7 +4,7 @@
 
 export type PpvSocketEvent =
   | { type: 'ppv_event_live'; eventId: string; streamId: string; mediasoupRoomId: string }
-  | { type: 'ppv_event_ended'; eventId: string; reason?: 'ended' | 'cancelled' }
+  | { type: 'ppv_event_ended'; eventId: string; reason?: 'ended' | 'cancelled' | 'admin_cancelled' }
 
 type Listener = (e: PpvSocketEvent) => void
 
