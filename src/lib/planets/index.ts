@@ -59,7 +59,7 @@ const earth: Planet = {
   styleURL: Mapbox.StyleURL.Light,
   surfaceColor: '#e7e4dc',
   // Sits at the zoom floor (whole planet in frame, no L/R crop, vertical rotation OK).
-  initialCamera: { centerCoordinate: [0, 20], zoomLevel: 0.9 },
+  initialCamera: { centerCoordinate: [0, 20], zoomLevel: 1.0 },
   belongsTo: (s) => !isPrivate(s),
   placePin: (s) => [s.lng as number, s.lat as number],
 }
@@ -71,7 +71,7 @@ const haven: Planet = {
   styleJSON: ISLAND_STYLE_JSON,
   surfaceColor: ISLAND_SURFACE_COLOR,
   // Same whole-planet framing as Earth.
-  initialCamera: { centerCoordinate: ISLAND_CENTER, zoomLevel: 0.9 },
+  initialCamera: { centerCoordinate: ISLAND_CENTER, zoomLevel: 1.0 },
   belongsTo: isPrivate,
   placePin: (s) => randomPointOnIsland(s.id),
 }

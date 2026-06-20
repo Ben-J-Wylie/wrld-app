@@ -86,8 +86,8 @@ const PIN_BORDER = '#FFFFFF'
 // Globe zoom floor — low enough that the whole planet frames without an L/R crop,
 // high enough that vertical rotation still works (the floor IS the resting zoom; you
 // can't pinch out past it into the collapse zone). Pairs with each planet's
-// initialCamera.zoomLevel (0.9).
-const GLOBE_MIN_ZOOM = 0.9
+// initialCamera.zoomLevel (keep them equal). Lower toward 0.9 if the sides crop.
+const GLOBE_MIN_ZOOM = 1.0
 
 // Graticule — thin reference lines on the globe: the equator, the two tropics, the
 // Arctic / Antarctic circles, and a vertical N–S axis (the prime-meridian great
