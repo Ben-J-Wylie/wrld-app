@@ -1311,6 +1311,19 @@ export function GlobeScreenMapbox() {
               textIgnorePlacement: true,
             }}
           />
+          {/* White star on unclustered subscriber-only pins (clustering stays the
+              same purple logic; the star marks the paywall on a single pin). */}
+          <SymbolLayer
+            id="single-sub-star"
+            filter={['all', ['!', ['has', 'point_count']], ['==', ['get', 'subscribersOnly'], true]] as any}
+            style={{
+              textField: '★',
+              textSize: 13,
+              textColor: PIN_BORDER,
+              textAllowOverlap: true,
+              textIgnorePlacement: true,
+            }}
+          />
         </ShapeSource>
 
         {/* Count bubbles — server-side per-tile aggregates at low zoom. Populated
