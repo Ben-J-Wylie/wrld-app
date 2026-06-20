@@ -89,6 +89,14 @@ const PIN_BORDER = '#FFFFFF'
 // initialCamera.zoomLevel (keep them equal). Lower toward 0.9 if the sides crop.
 const GLOBE_MIN_ZOOM = 1.0
 
+// Globe fit-scale — a visual shrink of the rendered globe, independent of the zoom,
+// so the planet can sit smaller / more framed than the zoom floor alone allows. Full
+// shrink (GLOBE_FIT_SCALE) at the floor, relaxing to 1.0 by GLOBE_FIT_FULL_ZOOM so
+// pinched-in (street) detail still fills the screen. 1.0 = no shrink. (Scales the
+// native MapView — verify on Android.)
+const GLOBE_FIT_SCALE = 0.85
+const GLOBE_FIT_FULL_ZOOM = 3.0
+
 // Graticule — thin reference lines on the globe: the equator, the two tropics, the
 // Arctic / Antarctic circles, and a vertical N–S axis (the prime-meridian great
 // circle through both poles). Static, on every planet, drawn under the pins. Densely
@@ -410,6 +418,12 @@ export function GlobeScreenMapbox() {
   // so the swap runs on the UI thread — smooth, and no Mapbox camera animation.
   const glideX = useRef(new Animated.Value(0)).current
   const glideScale = useRef(new Animated.Value(1)).current
+  // Fit-scale: shrink the globe at the floor (GLOBE_FIT_SCALE), relaxing to 1.0 as
+  // you pinch in past the floor (so street detail still fills the screen).
+  const fitScale = useMemo(() => {
+    const t = (mapZoom - GLOBE_MIN_ZOOM) / (GLOBE_FIT_FULL_ZOOM - GLOBE_MIN_ZOOM)
+    return GLOBE_FIT_SCALE + Math.max(0, Math.min(1, t)) * (1 - GLOBE_FIT_SCALE)
+  }, [mapZoom])
 
   const hasActiveSearch =
     query.trim().length > 0 || (chipId !== null && chipId !== 'all')
@@ -1107,12 +1121,13 @@ export function GlobeScreenMapbox() {
         ]}
         pointerEvents="box-none"
       >
-      {/* INNER: drawer/clock vertical coupling (non-native). Separate view from the
-          outer native slide+scale so the two transform drivers never mix. */}
+      {/* INNER: drawer/clock vertical coupling (non-native) + the fit-scale shrink.
+          Separate view from the outer native slide+scale so the two transform
+          drivers never mix. */}
       <Animated.View
         style={[
           StyleSheet.absoluteFill,
-          { transform: [{ translateY: globeTranslateY }] },
+          { transform: [{ translateY: globeTranslateY }, { scale: fitScale }] },
         ]}
         pointerEvents="box-none"
       >
