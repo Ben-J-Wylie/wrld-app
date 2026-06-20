@@ -1109,6 +1109,15 @@ export function GlobeScreenMapbox() {
     setDrawerState((s) => (s === 'expanded' ? 'peek' : 'expanded'))
   }
 
+  // The MapView is a big square — LARGER than the globe at the floor zoom — so
+  // Mapbox never clips the globe at its edges (Mapbox zoom is resolution-based:
+  // the globe is a fixed pixel size, a bigger viewport just shows more space
+  // around it). fit-scale then cleanly sets the on-screen globe size with no crop.
+  // Using the screen height keeps the map full-screen when you pinch in (no
+  // letterbox); the windowW*1.6 floor covers the first frame before containerH
+  // measures. Centred so the globe sits at screen centre, then nudged by translateY.
+  const globeBox = Math.max(containerH, windowW * 1.6)
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
@@ -1121,20 +1130,18 @@ export function GlobeScreenMapbox() {
         ]}
         pointerEvents="box-none"
       >
-      {/* INNER: a width-SQUARE MapView, vertically centred. In a square viewport
-          Mapbox sizes the globe to the screen WIDTH (fits round, no L/R crop) on
-          any portrait aspect — so fit-scale is free framing, not a crop crutch.
-          globeTranslateY shifts it for the drawer/clock; fitScale shrinks it.
-          Trade-off (square): zoomed-in/street view is letterboxed to this square.
-          Separate view from the outer native slide+scale so drivers never mix. */}
+      {/* INNER: the big (globeBox) MapView, centred. Bigger than the globe → no
+          edge clip; globeTranslateY shifts it for the drawer/clock; fitScale is the
+          clean on-screen globe-size dial. Separate view from the outer native
+          slide+scale so the two transform drivers never mix. */}
       <Animated.View
         style={[
           {
             position: 'absolute',
-            left: 0,
-            top: (containerH - windowW) / 2,
-            width: windowW,
-            height: windowW,
+            left: (windowW - globeBox) / 2,
+            top: (containerH - globeBox) / 2,
+            width: globeBox,
+            height: globeBox,
           },
           { transform: [{ translateY: globeTranslateY }, { scale: fitScale }] },
         ]}
