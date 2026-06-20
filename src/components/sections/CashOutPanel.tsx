@@ -94,7 +94,7 @@ export function CashOutPanel({ onDone }: { onDone: () => void }) {
           Request submitted
         </Text>
         <Text variant="body" color={theme.colors.text.muted} style={styles.center}>
-          We'll send {fmtUsd(net)} to the bank account you set up with Stripe — your{' '}
+          We'll send {fmtUsd(net)} to your connected Stripe payout account — your{' '}
           {amount.toLocaleString()} Stardust minus the {CASHOUT_FEE_PCT}% cashout fee.
           Payouts typically arrive within 5–7 business days.
         </Text>
