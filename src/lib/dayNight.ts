@@ -50,14 +50,28 @@ function subsolarPoint(date: Date): { lat: number; lng: number } {
 }
 
 // Latitude (deg) where the sun's altitude equals `alt`, at hour angle `hRad`
-// (Δlng from the subsolar meridian). Solves
-//   sin(alt) = sinφ·sinδ + cosφ·cosδ·cos(h)   for φ.
+// (Δlng from the subsolar meridian). Solves  sin(alt) = sinφ·sinδ + cosφ·cosδ·cos(h)
+// for φ. There are two solutions; we must return the one that's a VALID latitude
+// (|φ| ≤ 90°). The naïve `asin − atan2` branch goes out of range once the
+// declination turns negative (autumn/winter), which malformed the polygon and
+// flipped the shaded side 180° at the equinox — so pick the in-range branch.
 function boundaryLat(hRad: number, decRad: number, altRad: number): number {
   const A = Math.sin(decRad)
   const B = Math.cos(decRad) * Math.cos(hRad)
   const R = Math.hypot(A, B)
-  const s = Math.max(-1, Math.min(1, Math.sin(altRad) / R))
-  return (Math.asin(s) - Math.atan2(B, A)) / RAD
+  if (R < 1e-9) return 0
+  const a = Math.asin(Math.max(-1, Math.min(1, Math.sin(altRad) / R)))
+  const psi = Math.atan2(B, A)
+  const HALF_PI = Math.PI / 2
+  const norm = (x: number) => {
+    let y = x
+    while (y > Math.PI) y -= 2 * Math.PI
+    while (y < -Math.PI) y += 2 * Math.PI
+    return y
+  }
+  const phi1 = norm(a - psi)
+  const phi = Math.abs(phi1) <= HALF_PI ? phi1 : norm(Math.PI - a - psi)
+  return Math.max(-90, Math.min(90, phi / RAD))
 }
 
 // Polygon of the region where the sun is below `altitudeDeg`: the terminator sampled
