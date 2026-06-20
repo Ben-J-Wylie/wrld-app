@@ -17,14 +17,15 @@ const RAD = Math.PI / 180
 type LngLat = [number, number]
 
 // Mapbox fill layers can't blur or gradient, so a SOFT terminator is approximated
-// by many thin bands: each is "sun below `alt`°" drawn at a low opacity. The bands
-// span a window straddling the terminator (+TOP° into the day → BOTTOM° into the
-// night); stacked, the alpha accumulates toward the dark side and feathers the day
-// edge, so the soft transition is centred on the day/night line. More bands →
-// smoother gradient (at a little more render cost). Tune range/count/opacity.
+// by many thin bands: each is "sun below `alt`°" drawn at a low opacity, stacked so
+// the alpha accumulates toward the dark core and feathers at the terminator. The
+// altitudes are kept just on the NIGHT side (all < 0) on purpose: each band is then
+// a sub-hemisphere cap around the anti-solar point, which renders cleanly. A
+// lit-side band (alt > 0) would be a >hemisphere cap whose triangulation produces
+// stray wedges on the globe. Tune range/count/opacity.
 const NIGHT_BAND_COUNT = 10
-const NIGHT_TOP_ALT = 2 // degrees into the day side
-const NIGHT_BOTTOM_ALT = -2 // degrees into the night side
+const NIGHT_TOP_ALT = -0.4 // just inside the terminator (night side)
+const NIGHT_BOTTOM_ALT = -4.4 // deepest band of the soft edge
 export const NIGHT_BANDS: { alt: number; opacity: number }[] = Array.from(
   { length: NIGHT_BAND_COUNT },
   (_, i) => ({
@@ -48,44 +49,46 @@ function subsolarPoint(date: Date): { lat: number; lng: number } {
   return { lat: declination, lng }
 }
 
-// Boundary latitude (deg) where the sun's altitude equals `altDeg`, at a given
-// hour angle (Δlng from the subsolar meridian). Solves
-//   sin(alt) = sinφ·sinδ + cosφ·cosδ·cos(H)   for φ.
-function boundaryLat(hRad: number, decRad: number, altRad: number): number {
-  const A = Math.sin(decRad)
-  const B = Math.cos(decRad) * Math.cos(hRad)
-  const R = Math.hypot(A, B)
-  const s = Math.max(-1, Math.min(1, Math.sin(altRad) / R))
-  const phi0 = Math.atan2(B, A)
-  return (Math.asin(s) - phi0) / RAD
+// A small-circle ring of angular radius `radiusDeg` around a centre point, sampled
+// by azimuth. Longitudes are kept continuous (no ±180 jump) so the polygon never
+// has an antimeridian seam. Used as a clean spherical-cap boundary.
+function capRing(centerLat: number, centerLng: number, radiusDeg: number): LngLat[] {
+  const latC = centerLat * RAD
+  const R = radiusDeg * RAD
+  const sinLatC = Math.sin(latC)
+  const cosLatC = Math.cos(latC)
+  const sinR = Math.sin(R)
+  const cosR = Math.cos(R)
+  const ring: LngLat[] = []
+  let prevLng: number | null = null
+  for (let az = 0; az <= 360; az += 3) {
+    const th = az * RAD
+    const lat2 = Math.asin(sinLatC * cosR + cosLatC * sinR * Math.cos(th))
+    let lng =
+      centerLng +
+      Math.atan2(Math.sin(th) * sinR * cosLatC, cosR - sinLatC * Math.sin(lat2)) / RAD
+    if (prevLng != null) {
+      while (lng - prevLng > 180) lng -= 360
+      while (lng - prevLng < -180) lng += 360
+    }
+    prevLng = lng
+    ring.push([lng, lat2 / RAD])
+  }
+  return ring
 }
 
-// Polygon of the region where the sun is below `altitudeDeg`, given a subsolar
-// point. The band's boundary great circle, sampled per-longitude, closed around
-// whichever pole is currently dark.
+// Polygon of the region where the sun is below `altitudeDeg`. The night region is a
+// spherical cap centred on the ANTI-SOLAR point with angular radius (90 + alt)°. We
+// keep alt < 0 (caller's bands are night-side), so the radius is < 90° → a clean
+// sub-hemisphere cap with an unambiguous fill, no pole pinch and no antimeridian
+// seam (the failure modes of the old per-longitude great-circle polygon).
 function nightPolygonFrom(sun: { lat: number; lng: number }, altitudeDeg: number) {
-  // Near an equinox sin(declination) → 0; clamp so the boundary stays finite.
   let dec = sun.lat
   if (Math.abs(dec) < 0.5) dec = dec >= 0 ? 0.5 : -0.5
-  const decRad = dec * RAD
-  const altRad = altitudeDeg * RAD
-
-  const ring: LngLat[] = []
-  for (let lng = -180; lng <= 180; lng += 2) {
-    const h = (lng - sun.lng) * RAD
-    ring.push([lng, boundaryLat(h, decRad, altRad)])
-  }
-  // Sun in the north → the south pole is dark, and vice versa. Close the cap by
-  // walking a DENSE ring just inside the dark pole (NOT pinched to the singular
-  // pole vertex), so the polygon's interior unambiguously contains the dark pole.
-  // A near-hemisphere cap pinched to one pole point triangulates with stray
-  // antipodal triangles (a phantom shaded patch at the OTHER pole) — this avoids it.
-  const poleSign = dec >= 0 ? -1 : 1 // sign of the dark pole's hemisphere
-  const capLat = poleSign * 89.5
-  for (let lng = 180; lng >= -180; lng -= 5) ring.push([lng, capLat])
-  const start = ring[0]
-  if (start) ring.push(start)
-
+  const antiLat = -dec // anti-solar point — centre of the night hemisphere
+  const antiLng = ((sun.lng + 180 + 540) % 360) - 180
+  const radius = Math.min(89.6, 90 + altitudeDeg) // clamp sub-hemisphere for safety
+  const ring = capRing(antiLat, antiLng, radius)
   return {
     type: 'FeatureCollection' as const,
     features: [

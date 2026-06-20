@@ -1180,7 +1180,7 @@ export function GlobeScreenMapbox() {
             monochrome dusk). Tracks the WRLD clock + time machine. Stacked
             twilight bands → a soft frontier. Drawn before the pins. */}
         {planet.dayNight && nightBands.map((band, i) => (
-          <ShapeSource key={`night-${i}`} id={`night-${i}`} shape={band.shape}>
+          <ShapeSource key={`night-${i}`} id={`night-${i}`} shape={band.shape} tolerance={0}>
             <FillLayer
               id={`night-fill-${i}`}
               style={{ fillColor: NIGHT_COLOR, fillOpacity: band.opacity }}
