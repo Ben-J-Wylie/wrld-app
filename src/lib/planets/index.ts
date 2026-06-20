@@ -44,11 +44,6 @@ export type Planet = {
   surfaceColor: string
   /** Camera framing when this planet becomes active. */
   initialCamera: { centerCoordinate: [number, number]; zoomLevel: number }
-  /** Render the day/night terminator on this planet (monochrome dusk overlay). */
-  dayNight?: boolean
-  /** Terminator follows the VIEWER's local clock (synthetic planets) rather than
-   *  real geography — so the island reads as each viewer's local time of day. */
-  dayNightLocal?: boolean
   /** Which discovery streams render on this planet. */
   belongsTo: (s: Stream) => boolean
   /** Where a stream's pin sits on this planet, as [lng, lat]. */
@@ -63,9 +58,8 @@ const earth: Planet = {
   glyph: 'globe',
   styleURL: Mapbox.StyleURL.Light,
   surfaceColor: '#e7e4dc',
-  // TEMP (2026-06-19): original Mapbox default. RESTORE to 0.9 to go back.
-  initialCamera: { centerCoordinate: [0, 20], zoomLevel: 1.5 },
-  dayNight: true,
+  // Sits at the zoom floor (whole planet in frame, no L/R crop, vertical rotation OK).
+  initialCamera: { centerCoordinate: [0, 20], zoomLevel: 0.9 },
   belongsTo: (s) => !isPrivate(s),
   placePin: (s) => [s.lng as number, s.lat as number],
 }
@@ -76,10 +70,8 @@ const haven: Planet = {
   glyph: 'shield', // privacy / refuge
   styleJSON: ISLAND_STYLE_JSON,
   surfaceColor: ISLAND_SURFACE_COLOR,
-  // TEMP (2026-06-19): original Mapbox default. RESTORE to 0.9 to go back.
-  initialCamera: { centerCoordinate: ISLAND_CENTER, zoomLevel: 1.5 },
-  dayNight: true, // same monochrome dusk treatment as Earth
-  dayNightLocal: true, // island shows each viewer's own local time of day
+  // Same whole-planet framing as Earth.
+  initialCamera: { centerCoordinate: ISLAND_CENTER, zoomLevel: 0.9 },
   belongsTo: isPrivate,
   placePin: (s) => randomPointOnIsland(s.id),
 }

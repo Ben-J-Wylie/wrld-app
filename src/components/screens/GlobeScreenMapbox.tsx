@@ -41,7 +41,7 @@ import {
 import { router, useFocusEffect } from 'expo-router'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
-import Mapbox, { Camera, ShapeSource, CircleLayer, SymbolLayer, FillLayer, LineLayer, Atmosphere } from '@rnmapbox/maps'
+import Mapbox, { Camera, ShapeSource, CircleLayer, SymbolLayer, LineLayer, Atmosphere } from '@rnmapbox/maps'
 import { consumeStreamSignal } from '@/lib/streamSignals'
 import { returnToActiveBroadcast } from '@/lib/activeBroadcast'
 import { streamsApi } from '@/api/streams'
@@ -74,7 +74,6 @@ import { ScaleBar } from '@/components/features/discovery/ScaleBar'
 import { PlanetSwitcher } from '@/components/features/discovery/PlanetSwitcher'
 import { CategoryChipRow, type Category } from '@/components/sections/CategoryChipRow'
 import { PLANETS, planetById, planetIndex, type PlanetId } from '@/lib/planets'
-import { nightPolygon, nightPolygonLocal, NIGHT_BANDS } from '@/lib/dayNight'
 import type { Stream } from '@/types'
 
 Mapbox.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '')
@@ -84,15 +83,11 @@ const PIN_PURPLE = '#A855F7'
 const PIN_BLACK  = '#111111' // the viewer's own stream pin (tap → return to it)
 const PIN_BORDER = '#FFFFFF'
 
-// TEMP (2026-06-19): reset to Mapbox defaults to isolate the terminator anomaly.
-// Prior tuned values to RESTORE if reverting: GLOBE_MIN_ZOOM = 0.9 (the
-// vertical-collapse-safe floor) and each planet's initialCamera.zoomLevel = 0.9.
-// Original default = no floor (min 0) + initial zoom 1.5.
-const GLOBE_MIN_ZOOM = 0
-
-// Night-side terminator fill (planets with `dayNight`). Stacked twilight bands
-// (NIGHT_BANDS) each draw this colour at low opacity → a soft, graded dusk.
-const NIGHT_COLOR = '#0a0f24'
+// Globe zoom floor — low enough that the whole planet frames without an L/R crop,
+// high enough that vertical rotation still works (the floor IS the resting zoom; you
+// can't pinch out past it into the collapse zone). Pairs with each planet's
+// initialCamera.zoomLevel (0.9).
+const GLOBE_MIN_ZOOM = 0.9
 
 // Graticule — thin reference lines on the globe: the equator, the two tropics, the
 // Arctic / Antarctic circles, and a vertical N–S axis (the prime-meridian great
@@ -415,26 +410,6 @@ export function GlobeScreenMapbox() {
   // so the swap runs on the UI thread — smooth, and no Mapbox camera animation.
   const glideX = useRef(new Animated.Value(0)).current
   const glideScale = useRef(new Animated.Value(1)).current
-
-  // Day/night terminator — soft, stacked twilight bands. Earth uses the real
-  // geographic terminator; Haven (dayNightLocal) anchors it to the VIEWER's local
-  // clock so the island reads as their own time of day (differs per viewer → no
-  // location leak). Recomputed each minute + on time-machine offset change.
-  const [nightTick, setNightTick] = useState(0)
-  useEffect(() => {
-    const t = setInterval(() => setNightTick((n) => n + 1), 60_000)
-    return () => clearInterval(t)
-  }, [])
-  const nightBands = useMemo(() => {
-    const date = new Date(Date.now() - timeOffsetMs)
-    const anchorLng = planet.initialCamera.centerCoordinate[0]
-    return NIGHT_BANDS.map((b) => ({
-      opacity: b.opacity,
-      shape: planet.dayNightLocal
-        ? nightPolygonLocal(date, anchorLng, b.alt)
-        : nightPolygon(date, b.alt),
-    }))
-  }, [timeOffsetMs, nightTick, planet])
 
   const hasActiveSearch =
     query.trim().length > 0 || (chipId !== null && chipId !== 'all')
@@ -1175,18 +1150,6 @@ export function GlobeScreenMapbox() {
           minZoomLevel={GLOBE_MIN_ZOOM}
           maxZoomLevel={20}
         />
-
-        {/* Day/night terminator — on any `dayNight` planet (Earth + Haven, same
-            monochrome dusk). Tracks the WRLD clock + time machine. Stacked
-            twilight bands → a soft frontier. Drawn before the pins. */}
-        {planet.dayNight && nightBands.map((band, i) => (
-          <ShapeSource key={`night-${i}`} id={`night-${i}`} shape={band.shape} tolerance={0}>
-            <FillLayer
-              id={`night-fill-${i}`}
-              style={{ fillColor: NIGHT_COLOR, fillOpacity: band.opacity }}
-            />
-          </ShapeSource>
-        ))}
 
         {/* Graticule — equator, tropics, polar circles, and the N–S axis. The polar
             circles foreshorten near the poles so they read faint at a flat opacity;
