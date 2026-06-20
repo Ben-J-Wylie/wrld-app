@@ -94,7 +94,7 @@ const GLOBE_MIN_ZOOM = 1.0
 // shrink (GLOBE_FIT_SCALE) at the floor, relaxing to 1.0 by GLOBE_FIT_FULL_ZOOM so
 // pinched-in (street) detail still fills the screen. 1.0 = no shrink. (Scales the
 // native MapView — verify on Android.)
-const GLOBE_FIT_SCALE = 0.85
+const GLOBE_FIT_SCALE = 0.9
 const GLOBE_FIT_FULL_ZOOM = 3.0
 
 // Graticule — thin reference lines on the globe: the equator, the two tropics, the
@@ -1121,12 +1121,21 @@ export function GlobeScreenMapbox() {
         ]}
         pointerEvents="box-none"
       >
-      {/* INNER: drawer/clock vertical coupling (non-native) + the fit-scale shrink.
-          Separate view from the outer native slide+scale so the two transform
-          drivers never mix. */}
+      {/* INNER: a width-SQUARE MapView, vertically centred. In a square viewport
+          Mapbox sizes the globe to the screen WIDTH (fits round, no L/R crop) on
+          any portrait aspect — so fit-scale is free framing, not a crop crutch.
+          globeTranslateY shifts it for the drawer/clock; fitScale shrinks it.
+          Trade-off (square): zoomed-in/street view is letterboxed to this square.
+          Separate view from the outer native slide+scale so drivers never mix. */}
       <Animated.View
         style={[
-          StyleSheet.absoluteFill,
+          {
+            position: 'absolute',
+            left: 0,
+            top: (containerH - windowW) / 2,
+            width: windowW,
+            height: windowW,
+          },
           { transform: [{ translateY: globeTranslateY }, { scale: fitScale }] },
         ]}
         pointerEvents="box-none"
