@@ -841,6 +841,7 @@ export function GlobeScreenMapbox() {
       isLive: stream.isLive,
       subscribersOnly: stream.subscribersOnly,
       subscriptionPriceUsd: stream.host?.subscriptionPriceUsd,
+      ppvEvent: stream.ppvEvent,
       // Clip / buffer pins (Time Machine) → "Watch" → replay viewer; live → "Join".
       kind: clip ? 'clip' : 'stream',
       ctaLabel: clip ? 'Watch' : 'Join',
@@ -876,6 +877,7 @@ export function GlobeScreenMapbox() {
             sources:          (s.sources ?? []).join(','),
             precision:        planet.id === 'earth' ? (s.locationPrecision ?? 'exact') : 'exact',
             subscribersOnly:  s.subscribersOnly === true,
+            ppv:              s.ppvEvent != null,
             isSelf:           treatAsSelf(s),
           },
         }
@@ -1295,6 +1297,18 @@ export function GlobeScreenMapbox() {
               circleOpacity: 0.25,
               circleBlur: 1,
               circleStrokeWidth: 0,
+            }}
+          />
+          {/* "PPV" label on unclustered pay-per-view pins. */}
+          <SymbolLayer
+            id="single-ppv-label"
+            filter={['all', ['!', ['has', 'point_count']], ['==', ['get', 'ppv'], true]] as any}
+            style={{
+              textField: 'PPV',
+              textSize: 9,
+              textColor: PIN_BORDER,
+              textAllowOverlap: true,
+              textIgnorePlacement: true,
             }}
           />
         </ShapeSource>

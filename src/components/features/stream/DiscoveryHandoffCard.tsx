@@ -41,6 +41,8 @@ export type DiscoveryStream = {
   layers?: StreamStripLayer[]
   subscribersOnly?: boolean
   subscriptionPriceUsd?: number | null
+  // Present when this live stream is a pay-per-view event broadcast.
+  ppvEvent?: { id: string; title: string; status: string } | null
   // 'clip' (Time Machine replay) vs the default live 'stream'. A clip shows the
   // `ctaLabel` ("Watch") instead of "Join", no LivePill, and a "replay" caption.
   kind?: 'stream' | 'clip'
@@ -108,6 +110,13 @@ function SingleCard({ stream, onDismiss, style }: SingleProps) {
               </Text>
             </View>
           )}
+          {stream.ppvEvent && (
+            <View style={styles.lockRow}>
+              <Text variant="monoCaption" color={theme.colors.accent.default}>
+                🎟 PPV event
+              </Text>
+            </View>
+          )}
         </View>
         {stream.kind !== 'clip' && stream.isLive !== false && <LivePill size="sm" />}
         {onDismiss && (
@@ -170,6 +179,7 @@ function ClusterCard({ streams, locationLabel, onDismiss, style }: ClusterProps)
                 @{s.handle} · {formatViewers(s.viewerCount)}
                 {s.distance ? ` · ${s.distance}` : ''}
                 {s.subscribersOnly ? ' · 🔒' : s.subscriptionPriceUsd ? ' · ⭐' : ''}
+                {s.ppvEvent ? ' · 🎟' : ''}
               </Text>
             </View>
             <Pressable

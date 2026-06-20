@@ -1846,6 +1846,15 @@ export function StreamScreen() {
               <Text variant="caption" color={theme.colors.text.muted} style={styles.center}>
                 Purchase access at wrld.cam to watch
               </Text>
+              {streamByRoom?.ppvEvent?.id && (
+                <Button
+                  label="View event"
+                  onPress={() => router.navigate({
+                    pathname: '/(app)/ppv/[id]',
+                    params: { id: streamByRoom?.ppvEvent?.id ?? '', handle: broadcaster?.handle ?? '' },
+                  })}
+                />
+              )}
               <Button
                 label="Back"
                 onPress={() => router.navigate('/(app)/globe')}
