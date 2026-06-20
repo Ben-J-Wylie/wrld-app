@@ -99,6 +99,9 @@ export function PpvCreateScreen() {
   const [subscribersFree, setSubscribersFree] = useState(existing?.subscribersFreeAccess ?? false)
   const [replayAccess, setReplayAccess] = useState(existing?.replayAccess ?? true)
   const [saving, setSaving] = useState(false)
+  // Flipped true on the first submit attempt so required-but-empty fields also
+  // surface their error (a touched field already shows its error live).
+  const [submitted, setSubmitted] = useState(false)
 
   // Escrow on → price in Space Bucks (1 🚀 = 1¢); off → legacy USD.
   const { config } = usePublicConfig()
@@ -146,10 +149,40 @@ export function PpvCreateScreen() {
   const priceCents = escrowEnabled ? priceSbValue : (priceDollars ? Math.round(parseFloat(priceDollars) * 100) : 0)
   const priceValid = escrowEnabled ? priceSbValue >= minSb && priceSbValue <= maxSb : priceCents >= 100
   const titleValid = title.trim().length > 0
-  const canSave = titleValid && priceValid && dateValid && !isEdit
-  const canUpdate = isEdit && titleValid && !saving
+  // Numeric optionals: blank is fine; otherwise must be a positive whole number,
+  // so "asdf" in duration/capacity is a called-out error rather than a silent NaN.
+  const durationValid = duration.trim() === '' || /^\d+$/.test(duration.trim())
+  const capacityValid = capacity.trim() === '' || /^\d+$/.test(capacity.trim())
+  const canSave = titleValid && priceValid && dateValid && durationValid && capacityValid && !isEdit
+  // True when the user has moved the scheduled time (>60s from the saved value);
+  // that's the only case the edit sends scheduledAt, so only then must it be future.
+  const dateChanged = !!parsedDate && (
+    existing?.scheduledAt
+      ? Math.abs(parsedDate.getTime() - new Date(existing.scheduledAt).getTime()) > 60_000
+      : true
+  )
+  const canUpdate = isEdit && titleValid && durationValid && capacityValid && !saving && (!dateChanged || dateValid)
 
   const hasPurchases = (existing?.purchaseCount ?? 0) > 0
+
+  // Per-field error text (null = valid). Rendered under each field so the form
+  // says exactly what needs fixing.
+  const fieldErrors = {
+    title: !titleValid ? 'Add a title for your event.' : null,
+    date: (isEdit ? dateChanged && !dateValid : !dateValid)
+      ? (parsedDate === null
+          ? 'Enter the date as MM/DD/YYYY and the time as H:MM.'
+          : 'Pick a date and time in the future.')
+      : null,
+    price: !isEdit && !priceValid
+      ? (escrowEnabled
+          ? `Price must be between ${minSb.toLocaleString()} and ${maxSb.toLocaleString()} 🚀.`
+          : 'Minimum price is $1.00.')
+      : null,
+    duration: !durationValid ? 'Duration must be a whole number of minutes.' : null,
+    capacity: !capacityValid ? 'Capacity must be a whole number of tickets.' : null,
+  }
+  const hasFieldError = Object.values(fieldErrors).some(Boolean)
 
   const datePreview = parsedDate
     ? parsedDate.toLocaleString('en-US', {
@@ -202,14 +235,16 @@ export function PpvCreateScreen() {
   }
 
   async function handleSave() {
-    if (!parsedDate) return
-    // Client-side soft pre-check — warn if parsedDate is very close to another
-    // known scheduled event (both without duration). Server is the authority.
+    setSubmitted(true)
+    // Invalid → the field-level callouts + summary are now visible; don't submit.
+    if (!canSave || !parsedDate) return
     doSave()
   }
 
   async function handleUpdate() {
     if (!eventId) return
+    setSubmitted(true)
+    if (!canUpdate) return
     setSaving(true)
     try {
       const updates: UpdatePpvEventData = {}
@@ -283,6 +318,7 @@ export function PpvCreateScreen() {
           placeholder="What's the stream about?"
           maxLength={200}
         />
+        {submitted && fieldErrors.title && <HelpText tone="err">{fieldErrors.title}</HelpText>}
       </View>
 
       <View style={styles.field}>
@@ -357,8 +393,8 @@ export function PpvCreateScreen() {
 
         {dateValid && datePreview ? (
           <Text variant="caption" color={theme.colors.text.muted}>{datePreview}</Text>
-        ) : (!dateValid && (dateStr.length > 3 || timeStr.length > 1)) ? (
-          <HelpText>Enter a valid future date and time</HelpText>
+        ) : (fieldErrors.date && (submitted || dateStr.trim().length > 3 || timeStr.trim().length > 1)) ? (
+          <HelpText tone="err">{fieldErrors.date}</HelpText>
         ) : null}
 
         {hasPurchases && (
@@ -374,6 +410,9 @@ export function PpvCreateScreen() {
           placeholder="Minutes, e.g. 90"
           keyboardType="number-pad"
         />
+        {(submitted || duration.length > 0) && fieldErrors.duration && (
+          <HelpText tone="err">{fieldErrors.duration}</HelpText>
+        )}
       </View>
 
       <View style={styles.field}>
@@ -384,7 +423,9 @@ export function PpvCreateScreen() {
           placeholder="Leave empty for unlimited"
           keyboardType="number-pad"
         />
-        {hasPurchases && capacity && parseInt(capacity) < (existing?.purchaseCount ?? 0) ? (
+        {(submitted || capacity.length > 0) && fieldErrors.capacity ? (
+          <HelpText tone="err">{fieldErrors.capacity}</HelpText>
+        ) : hasPurchases && capacity && parseInt(capacity) < (existing?.purchaseCount ?? 0) ? (
           <HelpText>Cannot be less than {existing?.purchaseCount} (current purchasers)</HelpText>
         ) : hasPurchases ? (
           <HelpText>Currently {existing?.purchaseCount} ticket{existing?.purchaseCount === 1 ? '' : 's'} sold</HelpText>
@@ -405,12 +446,8 @@ export function PpvCreateScreen() {
         {isEdit && (
           <HelpText>Price cannot be changed after event creation</HelpText>
         )}
-        {priceDollars.length > 0 && !priceValid && (
-          <HelpText>
-            {escrowEnabled
-              ? `Price must be between ${minSb.toLocaleString()} and ${maxSb.toLocaleString()} 🚀`
-              : 'Minimum price is $1.00'}
-          </HelpText>
+        {(submitted || priceDollars.length > 0) && fieldErrors.price && (
+          <HelpText tone="err">{fieldErrors.price}</HelpText>
         )}
         {escrowEnabled && !isEdit && priceDollars.length === 0 && (
           <HelpText>{minSb.toLocaleString()}–{maxSb.toLocaleString()} 🚀 · 1 🚀 = $0.01</HelpText>
@@ -437,10 +474,14 @@ export function PpvCreateScreen() {
         <Toggle value={replayAccess} onValueChange={setReplayAccess} />
       </View>
 
+      {submitted && hasFieldError && (
+        <HelpText tone="err">Please fix the highlighted fields above before continuing.</HelpText>
+      )}
+
       <Button
         label={saving ? 'Saving…' : isEdit ? 'Save changes' : 'Create event'}
         onPress={isEdit ? handleUpdate : handleSave}
-        disabled={isEdit ? !canUpdate : !canSave}
+        disabled={saving}
       />
 
       {isEdit && (
