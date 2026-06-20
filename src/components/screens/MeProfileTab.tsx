@@ -12,13 +12,16 @@
 
 import { ActivityIndicator, StyleSheet, View } from 'react-native'
 import { router } from 'expo-router'
+import { useQuery } from '@tanstack/react-query'
 import { theme } from '@/tokens/theme'
 import { Avatar } from '@/components/primitives/Avatar'
 import { Text } from '@/components/primitives/Text'
 import { Pill } from '@/components/primitives/Pill'
+import { Pressable } from '@/components/primitives/Pressable'
 import { Divider } from '@/components/primitives/Divider'
 import { AccountIDPill } from '@/components/features/user/AccountIDPill'
 import { SavedClipRow } from '@/components/features/clip/SavedClipRow'
+import { usersApi } from '@/api/users'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
 import { useUserProfile } from '@/hooks/useUserProfile'
 import { useSavedClips } from '@/hooks/useSavedClips'
@@ -90,6 +93,13 @@ export function MeProfileTab() {
   // /auth/me — fetch our own profile to surface them.
   const { data: profile } = useUserProfile(user?.handle ?? null)
   const { data: savedClips, isLoading: clipsLoading } = useSavedClips(!!user)
+  // Who's subscribed to me — creators only (non-creators always get []).
+  const { data: subscribers = [] } = useQuery({
+    queryKey: ['my-subscribers'],
+    queryFn: usersApi.getSubscribers,
+    enabled: !!user && user.subscriptionEnabled === true,
+    staleTime: 60_000,
+  })
 
   if (!user) return null
 
@@ -168,6 +178,36 @@ export function MeProfileTab() {
         )}
       </View>
 
+      {/* SUBSCRIBERS (creators only) */}
+      {user.subscriptionEnabled && (
+        <View style={styles.section}>
+          <Text variant="monoLabel" color={theme.colors.text.subtle}>
+            SUBSCRIBERS · {formatCount(subscribers.length)}
+          </Text>
+          {subscribers.length === 0 ? (
+            <Text variant="body" color={theme.colors.text.muted} style={styles.center}>
+              No subscribers yet
+            </Text>
+          ) : (
+            <View style={styles.subsRow}>
+              {subscribers.map((s) => (
+                <Pressable
+                  key={s.id}
+                  variant="subtle"
+                  onPress={() => router.navigate({ pathname: '/(app)/profile/[handle]', params: { handle: s.handle } })}
+                  style={styles.subCell}
+                >
+                  <Avatar avatarUrl={s.avatarUrl} displayName={s.displayName} size="md" />
+                  <Text variant="monoCaption" color={theme.colors.text.muted} numberOfLines={1} style={styles.subHandle}>
+                    @{s.handle}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
+        </View>
+      )}
+
       {/* FEED */}
       <View style={styles.feed}>
         <Text variant="monoLabel" color={theme.colors.text.subtle}>
@@ -244,6 +284,23 @@ const styles = StyleSheet.create({
   giftCell: {
     alignItems: 'center',
     gap: 2,
+  },
+  section: {
+    gap: theme.spacing.sm,
+  },
+  subsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.md,
+  },
+  subCell: {
+    width: 56,
+    alignItems: 'center',
+    gap: 4,
+  },
+  subHandle: {
+    maxWidth: 56,
+    textAlign: 'center',
   },
   feed: {
     gap: theme.spacing.sm,

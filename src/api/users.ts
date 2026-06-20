@@ -50,6 +50,12 @@ export const usersApi = {
     await apiClient.delete(`/users/${handle}/follow`)
   },
 
+  // The users currently subscribed to me (active/past_due), most-recent first.
+  getSubscribers: async (): Promise<Array<{ id: string; handle: string; displayName: string; avatarUrl: string | null }>> => {
+    const res = await apiClient.get<{ subscribers: Array<{ id: string; handle: string; displayName: string; avatarUrl: string | null }> }>('/users/me/subscribers')
+    return res.data.subscribers
+  },
+
   // Tip a creator from their profile (or a clip). Creator-only + self-tip are
   // enforced server-side. Returns the tipper's new Space Bucks balance.
   tip: async (
