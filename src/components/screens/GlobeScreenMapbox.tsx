@@ -1208,8 +1208,9 @@ export function GlobeScreenMapbox() {
           clusterRadius={50}
           clusterMaxZoomLevel={14}
           clusterProperties={{
-            // sum of 1s for each subscribersOnly stream in the cluster
-            subscriberCount: ['+', ['case', ['get', 'subscribersOnly'], 1, 0]],
+            // sum of 1s for each subscription (NOT PPV) stream in the cluster —
+            // PPV streams are red, so they don't pull a cluster purple.
+            subscriberCount: ['+', ['case', ['all', ['get', 'subscribersOnly'], ['!', ['get', 'ppv']]], 1, 0]],
             // sum of 1s for the viewer's own stream(s) — subtracted from the
             // displayed count so a streamer is never counted in their cluster.
             selfCount: ['+', ['case', ['get', 'isSelf'], 1, 0]],
@@ -1254,6 +1255,7 @@ export function GlobeScreenMapbox() {
             style={{
               circleColor: ['case',
                 ['get', 'isSelf'], PIN_BLACK,
+                ['get', 'ppv'], PIN_RED,
                 ['get', 'subscribersOnly'], PIN_PURPLE,
                 PIN_RED,
               ] as any,
@@ -1269,6 +1271,7 @@ export function GlobeScreenMapbox() {
             style={{
               circleColor: ['case',
                 ['get', 'isSelf'], PIN_BLACK,
+                ['get', 'ppv'], PIN_RED,
                 ['get', 'subscribersOnly'], PIN_PURPLE,
                 PIN_RED,
               ] as any,
@@ -1278,6 +1281,7 @@ export function GlobeScreenMapbox() {
               circleStrokeWidth: 1,
               circleStrokeColor: ['case',
                 ['get', 'isSelf'], PIN_BLACK,
+                ['get', 'ppv'], PIN_RED,
                 ['get', 'subscribersOnly'], PIN_PURPLE,
                 PIN_RED,
               ] as any,
@@ -1290,6 +1294,7 @@ export function GlobeScreenMapbox() {
             style={{
               circleColor: ['case',
                 ['get', 'isSelf'], PIN_BLACK,
+                ['get', 'ppv'], PIN_RED,
                 ['get', 'subscribersOnly'], PIN_PURPLE,
                 PIN_RED,
               ] as any,
@@ -1311,11 +1316,11 @@ export function GlobeScreenMapbox() {
               textIgnorePlacement: true,
             }}
           />
-          {/* White star on unclustered subscriber-only pins (clustering stays the
-              same purple logic; the star marks the paywall on a single pin). */}
+          {/* White star on unclustered subscription-paywall pins that are NOT PPV
+              (a PPV stream shows "PPV" instead, even if it's also subscriber-only). */}
           <SymbolLayer
             id="single-sub-star"
-            filter={['all', ['!', ['has', 'point_count']], ['==', ['get', 'subscribersOnly'], true]] as any}
+            filter={['all', ['!', ['has', 'point_count']], ['==', ['get', 'subscribersOnly'], true], ['!=', ['get', 'ppv'], true]] as any}
             style={{
               textField: '★',
               textSize: 13,
