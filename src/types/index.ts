@@ -68,6 +68,7 @@ export type WalletTransaction = {
   amount: number
   counterpartHandle?: string
   streamTitle?: string
+  message?: string | null  // optional tipper note (tips only)
   status?: 'pending' | 'paid' | 'rejected'
   priceCents?: number
   createdAt: string

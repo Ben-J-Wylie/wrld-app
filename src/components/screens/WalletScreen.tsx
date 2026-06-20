@@ -70,6 +70,7 @@ function mapWalletTx(
   kind: TransactionKind
   title: string
   sub?: string
+  message?: string | null
   amount: number
   currency: 'sb' | 'sd'
   pending?: boolean
@@ -102,6 +103,7 @@ function mapWalletTx(
       kind: 'tip-sent',
       title: `Tip to @${item.counterpartHandle ?? 'unknown'}`,
       sub: [item.streamTitle, date].filter(Boolean).join(' · '),
+      message: item.message,
       amount: item.amount,
       currency: 'sb',
     }
@@ -110,6 +112,7 @@ function mapWalletTx(
     kind: 'tip-received',
     title: `Tip from @${item.counterpartHandle ?? 'unknown'}`,
     sub: [item.streamTitle, date].filter(Boolean).join(' · '),
+    message: item.message,
     amount: item.amount,
     currency: 'sd',
   }

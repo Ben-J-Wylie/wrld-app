@@ -37,6 +37,7 @@ export type TransactionRow = {
   kind: TransactionKind
   title: string
   sub?: string
+  message?: string | null
   amount: number
   currency: Currency
   pending?: boolean
@@ -77,6 +78,7 @@ export function TransactionRow({
   kind,
   title,
   sub,
+  message,
   amount,
   currency,
   pending,
@@ -102,6 +104,11 @@ export function TransactionRow({
             {sub}
           </Text>
         )}
+        {message ? (
+          <Text variant="caption" color={theme.colors.text.muted} numberOfLines={3} style={styles.message}>
+            “{message}”
+          </Text>
+        ) : null}
       </View>
       <View style={styles.amountCol}>
         <Text variant="monoValue" color={theme.colors.text.primary}>
@@ -156,6 +163,10 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 2,
     minWidth: 0,
+  },
+  message: {
+    fontStyle: 'italic',
+    marginTop: 2,
   },
   amountCol: {
     alignItems: 'flex-end',
