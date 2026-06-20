@@ -467,7 +467,7 @@ export function PpvCreateScreen() {
         </View>
         <Toggle
           value={subscribersFree}
-          onValueChange={hasPurchases ? () => {} : setSubscribersFree}
+          onValueChange={hasPurchases ? () => {} : (v) => { setSubscribersFree(v); if (v) setSubscribersOnly(false) }}
           disabled={hasPurchases}
         />
       </View>
@@ -479,7 +479,7 @@ export function PpvCreateScreen() {
         </View>
         <Toggle
           value={subscribersOnly}
-          onValueChange={hasPurchases ? () => {} : setSubscribersOnly}
+          onValueChange={hasPurchases ? () => {} : (v) => { setSubscribersOnly(v); if (v) setSubscribersFree(false) }}
           disabled={hasPurchases}
         />
       </View>
