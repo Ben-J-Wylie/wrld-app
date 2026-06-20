@@ -25,7 +25,7 @@ import { PresetGrid } from '@/components/sections/PresetGrid'
 
 const SPACE_BUCKS_PER_DOLLAR = 100
 const CASHOUT_MINIMUM = 1000
-const CASHOUT_FEE_PCT = 5
+const CASHOUT_FEE_PCT = 0 // no cashout fee — platform cut is taken once at monetization (60/40)
 
 const PRESETS = [1000, 5000, 10000] as const
 
@@ -94,9 +94,7 @@ export function CashOutPanel({ onDone }: { onDone: () => void }) {
           Request submitted
         </Text>
         <Text variant="body" color={theme.colors.text.muted} style={styles.center}>
-          We'll send {fmtUsd(net)} to your connected Stripe payout account — your{' '}
-          {amount.toLocaleString()} Stardust minus the {CASHOUT_FEE_PCT}% cashout fee.
-          Payouts typically arrive within 5–7 business days.
+          {`We'll send ${fmtUsd(net)} to your connected Stripe payout account — your ${amount.toLocaleString()} Stardust${CASHOUT_FEE_PCT > 0 ? ` minus the ${CASHOUT_FEE_PCT}% cashout fee` : ''}. Payouts typically arrive within 5–7 business days.`}
         </Text>
         <Button label="Done" onPress={onDone} />
       </ScrollView>
@@ -139,7 +137,7 @@ export function CashOutPanel({ onDone }: { onDone: () => void }) {
           min={CASHOUT_MINIMUM}
           max={Math.max(CASHOUT_MINIMUM, readyStardust)}
           step={100}
-          platformFeePct={CASHOUT_FEE_PCT}
+          platformFeePct={CASHOUT_FEE_PCT > 0 ? CASHOUT_FEE_PCT : undefined}
           invalidReason={invalidReason}
         />
 
