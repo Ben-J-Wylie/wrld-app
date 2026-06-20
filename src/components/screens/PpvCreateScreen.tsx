@@ -97,6 +97,7 @@ export function PpvCreateScreen() {
     existing?.maxCapacity ? String(existing.maxCapacity) : '',
   )
   const [subscribersFree, setSubscribersFree] = useState(existing?.subscribersFreeAccess ?? false)
+  const [subscribersOnly, setSubscribersOnly] = useState(existing?.subscribersOnly ?? false)
   const [replayAccess, setReplayAccess] = useState(existing?.replayAccess ?? true)
   const [saving, setSaving] = useState(false)
   // Flipped true on the first submit attempt so required-but-empty fields also
@@ -118,6 +119,7 @@ export function PpvCreateScreen() {
     setCapacity(existing.maxCapacity ? String(existing.maxCapacity) : '')
     setPriceDollars(escrowEnabled ? String(existing.priceSb) : (existing.priceUsd / 100).toFixed(2))
     setSubscribersFree(existing.subscribersFreeAccess)
+    setSubscribersOnly(existing.subscribersOnly ?? false)
     setReplayAccess(existing.replayAccess)
     const { dateStr: ds, timeStr: ts, isPM: pm } = dateToInputs(new Date(existing.scheduledAt))
     setDateStr(ds)
@@ -208,6 +210,7 @@ export function PpvCreateScreen() {
         priceUsd: priceCents,
         ...(escrowEnabled ? { priceSb: priceSbValue } : {}),
         subscribersFreeAccess: subscribersFree,
+        subscribersOnly,
         maxCapacity: capacity ? parseInt(capacity) : undefined,
         replayAccess,
       })
@@ -271,6 +274,9 @@ export function PpvCreateScreen() {
         }
         if (subscribersFree !== existing?.subscribersFreeAccess) {
           updates.subscribersFreeAccess = subscribersFree
+        }
+        if (subscribersOnly !== (existing?.subscribersOnly ?? false)) {
+          updates.subscribersOnly = subscribersOnly
         }
       }
 
@@ -462,6 +468,18 @@ export function PpvCreateScreen() {
         <Toggle
           value={subscribersFree}
           onValueChange={hasPurchases ? () => {} : setSubscribersFree}
+          disabled={hasPurchases}
+        />
+      </View>
+
+      <View style={styles.row}>
+        <View style={styles.rowText}>
+          <Text variant="monoLabel">Subscribers also required</Text>
+          <HelpText>Viewers must be subscribed AND hold a ticket. Buyers are warned before purchase.</HelpText>
+        </View>
+        <Toggle
+          value={subscribersOnly}
+          onValueChange={hasPurchases ? () => {} : setSubscribersOnly}
           disabled={hasPurchases}
         />
       </View>

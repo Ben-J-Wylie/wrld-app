@@ -10,6 +10,7 @@ export type CreatePpvEventData = {
   priceUsd: number         // cents
   priceSb?: number         // Space Bucks price (escrow rail; 1 SB = 1 cent)
   subscribersFreeAccess?: boolean
+  subscribersOnly?: boolean
   maxCapacity?: number
   replayAccess?: boolean
 }
@@ -21,6 +22,7 @@ export type UpdatePpvEventData = {
   replayAccess?: boolean
   scheduledAt?: string
   subscribersFreeAccess?: boolean
+  subscribersOnly?: boolean
   maxCapacity?: number | null
 }
 

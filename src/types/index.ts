@@ -125,6 +125,7 @@ export type PpvEvent = {
   priceUsd: number         // cents
   priceSb: number          // Space Bucks price (escrow rail); defaults to priceUsd
   subscribersFreeAccess: boolean
+  subscribersOnly?: boolean        // creator declared: stream is also subscriber-only
   maxCapacity: number | null
   replayAccess: boolean
   status: 'scheduled' | 'live' | 'ended' | 'cancelled'
