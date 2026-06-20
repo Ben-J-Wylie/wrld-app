@@ -13,6 +13,7 @@
 //     profile flex move; MetaStrip would flatten it
 //   • FollowButton (for other profiles) / Button (for own profile)
 
+import { useState } from 'react'
 import { ActivityIndicator, Alert, Linking, Pressable, StyleSheet, View } from 'react-native'
 import { useLocalSearchParams, router } from 'expo-router'
 import { useAuth } from '@clerk/clerk-expo'
@@ -23,6 +24,7 @@ import { ScreenHeader } from '@/components/sections/ScreenHeader'
 import { Avatar } from '@/components/primitives/Avatar'
 import { Text } from '@/components/primitives/Text'
 import { FollowButton } from '@/components/features/user/FollowButton'
+import { ProfileTipSheet } from '@/components/features/user/ProfileTipSheet'
 import { MetaStrip } from '@/components/features/user/MetaStrip'
 import { useUserProfile } from '@/hooks/useUserProfile'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
@@ -74,6 +76,7 @@ export function ProfileScreen() {
   const { data: me } = useCurrentUser()
 
   const isOwnProfile = !!me && me.handle === handle
+  const [tipVisible, setTipVisible] = useState(false)
 
   const { data: subStatus, refetch: refetchSubStatus } = useQuery({
     queryKey: ['subscription-status', handle],
@@ -152,6 +155,14 @@ export function ProfileScreen() {
 
       {isSignedIn && !isOwnProfile && (
         <FollowButton handle={profile.handle} />
+      )}
+
+      {isSignedIn && !isOwnProfile && profile.tippable && (
+        <Button
+          label="💸 Tip"
+          variant="secondary"
+          onPress={() => setTipVisible(true)}
+        />
       )}
 
       {!isOwnProfile && profile.subscriptionEnabled && profile.subscriptionPriceUsd && (
@@ -311,6 +322,13 @@ export function ProfileScreen() {
           })}
         </View>
       )}
+
+      <ProfileTipSheet
+        visible={tipVisible}
+        handle={profile.handle}
+        displayName={profile.displayName}
+        onClose={() => setTipVisible(false)}
+      />
     </ScreenScroll>
   )
 }

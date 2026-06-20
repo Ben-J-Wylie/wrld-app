@@ -38,6 +38,7 @@ export type PublicUser = {
   followerCount: number
   followingCount: number
   isFollowing: boolean
+  tippable: boolean // creator-only: can receive tips (Stardust). Gates the tip button.
   subscriptionEnabled: boolean
   subscriptionPriceUsd: number | null  // monthly price in cents
   giftsReceived?: GiftCollectionItem[]

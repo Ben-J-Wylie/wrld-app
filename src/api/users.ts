@@ -50,6 +50,19 @@ export const usersApi = {
     await apiClient.delete(`/users/${handle}/follow`)
   },
 
+  // Tip a creator from their profile (or a clip). Creator-only + self-tip are
+  // enforced server-side. Returns the tipper's new Space Bucks balance.
+  tip: async (
+    handle: string,
+    body: { amount: number; message?: string; clipId?: string },
+  ): Promise<{ newBalance: number; spaceBucksPerDollar: number }> => {
+    const res = await apiClient.post<{ newBalance: number; spaceBucksPerDollar: number }>(
+      `/users/${handle}/tip`,
+      body,
+    )
+    return res.data
+  },
+
   registerPushToken: async (data: {
     token: string
     platform: 'ios' | 'android'
