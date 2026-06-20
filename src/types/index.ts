@@ -116,6 +116,7 @@ export type PpvEvent = {
   host?: { id: string; handle: string; displayName: string; avatarUrl: string | null }
   streamId: string | null
   streamRoomId?: string | null   // live mediasoup room — what /stream/[id] joins
+  streamSubscribersOnly?: boolean // live stream is ALSO subscriber-only → ticket alone won't grant entry
   title: string
   description: string | null
   scheduledAt: string      // ISO UTC

@@ -146,11 +146,28 @@ export function PpvEventDetailScreen() {
     )
   }
 
-  async function handlePurchase() {
+  function handlePurchase() {
     if (!isSignedIn) {
       router.push('/(auth)/login')
       return
     }
+    // This stream is ALSO subscriber-only — a ticket alone won't grant entry.
+    // Warn before charging so nobody buys a ticket they can't use.
+    if (event?.streamSubscribersOnly) {
+      Alert.alert(
+        'Subscription also required',
+        `Heads up — this stream is subscriber-only. A ticket alone won't get you in; you also need an active subscription to @${event.host?.handle ?? 'this creator'}. Make sure you're subscribed before you buy.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Buy ticket anyway', onPress: () => { void doPurchase() } },
+        ],
+      )
+      return
+    }
+    void doPurchase()
+  }
+
+  async function doPurchase() {
     setPurchasing(true)
     try {
       if (escrowEnabled) {
