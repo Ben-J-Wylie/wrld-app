@@ -1109,14 +1109,16 @@ export function GlobeScreenMapbox() {
     setDrawerState((s) => (s === 'expanded' ? 'peek' : 'expanded'))
   }
 
-  // The MapView is a big square — LARGER than the globe at the floor zoom — so
-  // Mapbox never clips the globe at its edges (Mapbox zoom is resolution-based:
-  // the globe is a fixed pixel size, a bigger viewport just shows more space
-  // around it). fit-scale then cleanly sets the on-screen globe size with no crop.
-  // Using the screen height keeps the map full-screen when you pinch in (no
-  // letterbox); the windowW*1.6 floor covers the first frame before containerH
-  // measures. Centred so the globe sits at screen centre, then nudged by translateY.
-  const globeBox = Math.max(containerH, windowW * 1.6)
+  // NO-CLIP VIEWPORT (set-and-forget; auto-sized, NOT a tuning knob).
+  // The MapView is this square. Mapbox zoom is resolution-based — the globe is a
+  // FIXED pixel size, so a bigger viewport just shows more space around it (it does
+  // NOT grow the globe). We make the square comfortably LARGER than the globe so it
+  // never touches an edge → no crop, on any phone, portrait OR landscape. Derived
+  // live from the screen, so it re-figures itself on rotation / different devices.
+  // 1.4 × the larger screen dimension covers the globe + the drawer shift + headroom
+  // for fit-scale down to ~0.7. (Before containerH measures it's windowW×1.4 — still
+  // bigger than the globe.) Centred → globe at screen centre, then nudged by translateY.
+  const globeBox = Math.max(windowW, containerH) * 1.4
 
   // ── Render ────────────────────────────────────────────────────────────────
 
