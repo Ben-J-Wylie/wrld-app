@@ -60,8 +60,20 @@ function formatDate(iso: string): string {
 
 const STATUS_LABEL: Record<string, string> = {
   pending: 'Pending',
+  paying: 'Processing',
   paid: 'Paid',
   rejected: 'Rejected',
+  failed: 'Failed',
+}
+// Pill tone per status: 'wait' (amber, in progress), 'bad' (accent, refunded), or
+// none for the completed 'paid'. Unknown statuses fall back to 'wait' so a future
+// backend status never renders blank/"undefined".
+const STATUS_TONE: Record<string, 'wait' | 'bad' | undefined> = {
+  pending: 'wait',
+  paying: 'wait',
+  paid: undefined,
+  rejected: 'bad',
+  failed: 'bad',
 }
 
 function mapWalletTx(
@@ -74,6 +86,8 @@ function mapWalletTx(
   amount: number
   currency: 'sb' | 'sd'
   pending?: boolean
+  statusLabel?: string
+  statusTone?: 'wait' | 'bad'
 } {
   const date = formatDate(item.createdAt)
   if (item.type === 'topup') {
@@ -88,14 +102,17 @@ function mapWalletTx(
     }
   }
   if (item.type === 'cashout') {
-    const status = STATUS_LABEL[item.status ?? 'pending']
+    const s = item.status ?? 'pending'
+    const label = STATUS_LABEL[s] ?? 'Pending'
+    const tone = s in STATUS_TONE ? STATUS_TONE[s] : 'wait'
     return {
       kind: 'cashout',
       title: 'Payout',
-      sub: `${status} · ${date}`,
+      sub: `${label} · ${date}`,
       amount: item.amount,
       currency: 'sd',
-      pending: item.status === 'pending',
+      statusLabel: tone ? label : undefined,
+      statusTone: tone,
     }
   }
   if (item.type === 'spaceBucksSpent') {

@@ -65,7 +65,12 @@ export function AmountInput({
       <View style={styles.row}>
         <Text variant="display">{GLYPH[variant]}</Text>
         <TextInput
-          value={String(value)}
+          // Show empty (not a stuck "0") when the amount is 0 so the field can be
+          // cleared and retyped instead of fighting a leading zero. number-pad has
+          // no decimal key, so digit-only parsing is correct for these integer amounts.
+          value={value === 0 ? '' : String(value)}
+          placeholder="0"
+          placeholderTextColor={theme.colors.text.subtle}
           onChangeText={(t) => {
             const n = Number.parseInt(t.replace(/[^0-9]/g, ''), 10)
             onValueChange(Number.isFinite(n) ? n : 0)

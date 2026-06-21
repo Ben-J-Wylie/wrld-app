@@ -62,6 +62,10 @@ export type GiftCollectionItem = {
   totalValue: number  // summed Space Bucks value received for this type (display only)
 }
 
+// Cashout status lifecycle (backend cashoutService): pending → paying (claimed,
+// transfer in flight) → paid; or rejected / failed (both refund the Stardust).
+export type CashoutStatus = 'pending' | 'paying' | 'paid' | 'rejected' | 'failed'
+
 export type WalletTransaction = {
   id: string
   type: 'spaceBucksSpent' | 'stardustEarned' | 'cashout' | 'topup'
@@ -69,7 +73,7 @@ export type WalletTransaction = {
   counterpartHandle?: string
   streamTitle?: string
   message?: string | null  // optional tipper note (tips only)
-  status?: 'pending' | 'paid' | 'rejected'
+  status?: CashoutStatus
   priceCents?: number
   createdAt: string
 }
@@ -79,6 +83,10 @@ export type WalletData = {
   stardust: number
   lockedStardust: number
   readyStardust: number
+  // Cashout policy (from the authenticated wallet endpoint, not public /config).
+  cashoutFeeRate: number      // fraction, e.g. 0 or 0.05
+  cashoutMinimum: number      // minimum Stardust per cashout
+  stardustLockDays: number    // how long earned Stardust stays locked
   transactions: WalletTransaction[]
 }
 
@@ -86,7 +94,7 @@ export type CashoutRequest = {
   id: string
   amount: number
   dollarValue: number
-  status: 'pending' | 'paid' | 'rejected'
+  status: CashoutStatus
   createdAt: string
   processedAt: string | null
 }

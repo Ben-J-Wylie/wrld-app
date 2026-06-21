@@ -11,6 +11,7 @@
 import { useState } from 'react'
 import { router } from 'expo-router'
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, View } from 'react-native'
+import { useQuery } from '@tanstack/react-query'
 import { theme } from '@/tokens/theme'
 import { useWallet, useInvalidateWallet } from '@/hooks/useWallet'
 import { useInvalidateCurrentUser } from '@/hooks/useCurrentUser'
@@ -24,8 +25,11 @@ import { AmountInput } from '@/components/features/wallet/AmountInput'
 import { PresetGrid } from '@/components/sections/PresetGrid'
 
 const SPACE_BUCKS_PER_DOLLAR = 100
-const CASHOUT_MINIMUM = 1000
-const CASHOUT_FEE_PCT = 0 // no cashout fee — platform cut is taken once at monetization (60/40)
+// Fallbacks only — the live minimum / fee / lock window come from the wallet
+// payload (data.cashoutMinimum / cashoutFeeRate / stardustLockDays), so an admin
+// /admin/config change is reflected instead of a frozen client constant.
+const CASHOUT_MINIMUM_FALLBACK = 1000
+const CASHOUT_LOCK_DAYS_FALLBACK = 7
 
 const PRESETS = [1000, 5000, 10000] as const
 
@@ -37,9 +41,18 @@ export function CashOutPanel({ onDone }: { onDone: () => void }) {
   const { data, isLoading } = useWallet()
   const invalidateWallet = useInvalidateWallet()
   const invalidateCurrentUser = useInvalidateCurrentUser()
-  const [amount, setAmount] = useState(CASHOUT_MINIMUM)
+  const [amount, setAmount] = useState(CASHOUT_MINIMUM_FALLBACK)
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
+
+  // Payout-account status — gate the form up front instead of failing after submit.
+  // Only block on a definitive "not onboarded"; a failed/loading fetch falls through
+  // to the form (the server's payouts_not_set_up is the backstop).
+  const { data: payoutSettings } = useQuery({
+    queryKey: ['subscription-settings'],
+    queryFn: () => usersApi.getSubscriptionSettings(),
+    staleTime: 60_000,
+  })
 
   if (isLoading || !data) {
     return (
@@ -50,10 +63,21 @@ export function CashOutPanel({ onDone }: { onDone: () => void }) {
   }
 
   const { stardust, lockedStardust, readyStardust } = data
+  const cashoutMin = data.cashoutMinimum || CASHOUT_MINIMUM_FALLBACK
+  const feeRate = data.cashoutFeeRate || 0
+  const feePct = Math.round(feeRate * 100)
+  const lockDays = data.stardustLockDays || CASHOUT_LOCK_DAYS_FALLBACK
 
-  const net = amount - Math.floor((amount * CASHOUT_FEE_PCT) / 100)
-  const canSubmit =
-    amount >= CASHOUT_MINIMUM && amount <= readyStardust && !submitting
+  const knownNotOnboarded = payoutSettings !== undefined && !payoutSettings.onboardingComplete
+
+  // Cap the amount at the ready balance so it can never silently exceed what's
+  // available (a dead Cash-out button with no reason was the old failure mode).
+  const clampAmount = (v: number) => Math.max(0, Math.min(Math.floor(v || 0), readyStardust))
+
+  const net = amount - Math.floor(amount * feeRate)
+  const insufficient = readyStardust < cashoutMin
+  const belowMin = !insufficient && amount > 0 && amount < cashoutMin
+  const canSubmit = amount >= cashoutMin && amount <= readyStardust && !submitting
 
   async function handleSubmit() {
     if (!canSubmit) return
@@ -70,7 +94,7 @@ export function CashOutPanel({ onDone }: { onDone: () => void }) {
       if (data?.error === 'payouts_not_set_up') {
         Alert.alert(
           'Set up payouts first',
-          'Cash-outs are sent to your bank through Stripe. Connect your account to start receiving payouts.',
+          'Cash-outs are sent to your bank through Stripe. Connect your payout account to start cashing out.',
           [
             { text: 'Not now', style: 'cancel' },
             { text: 'Set up payouts', onPress: () => router.push('/(app)/monetize') },
@@ -91,20 +115,46 @@ export function CashOutPanel({ onDone }: { onDone: () => void }) {
           <Icon name="check" size="lg" color={theme.colors.accent.default} />
         </View>
         <Text variant="display" style={styles.center}>
-          Request submitted
+          Payout requested
         </Text>
         <Text variant="body" color={theme.colors.text.muted} style={styles.center}>
-          {`We'll send ${fmtUsd(net)} to your connected Stripe payout account — your ${amount.toLocaleString()} Stardust${CASHOUT_FEE_PCT > 0 ? ` minus the ${CASHOUT_FEE_PCT}% cashout fee` : ''}. Payouts typically arrive within 5–7 business days.`}
+          {`We've queued your payout of ${net.toLocaleString()} ✨ (${fmtUsd(net)})${feePct > 0 ? ` — your ${amount.toLocaleString()} Stardust minus the ${feePct}% cashout fee` : ''}. It's reviewed and sent to your connected Stripe payout account, usually within a few business days. Track it in your transaction history.`}
         </Text>
         <Button label="Done" onPress={onDone} />
       </ScrollView>
     )
   }
 
-  const invalidReason =
-    amount > 0 && amount < CASHOUT_MINIMUM
-      ? `MINIMUM ${CASHOUT_MINIMUM.toLocaleString()} ✨ (${fmtUsd(CASHOUT_MINIMUM)})`
-      : undefined
+  // No payout account yet — block before the form instead of after submit.
+  if (knownNotOnboarded) {
+    return (
+      <ScrollView contentContainerStyle={styles.successScroll}>
+        <View style={styles.successIconFrame}>
+          <Icon name="arrow-down-circle" size="lg" color={theme.colors.accent.default} />
+        </View>
+        <Text variant="display" style={styles.center}>
+          Set up payouts first
+        </Text>
+        <Text variant="body" color={theme.colors.text.muted} style={styles.center}>
+          Cash-outs are sent to your bank through Stripe. Connect your payout account to start cashing out your Stardust.
+        </Text>
+        <Button label="Set up payouts" onPress={() => router.push('/(app)/monetize')} />
+      </ScrollView>
+    )
+  }
+
+  const invalidReason = belowMin
+    ? `MINIMUM ${cashoutMin.toLocaleString()} ✨ (${fmtUsd(cashoutMin)})`
+    : undefined
+
+  // Explain a disabled button so the primary action is never silently dead.
+  const disabledHint = insufficient
+    ? `Need ${cashoutMin.toLocaleString()} ✨ ready to cash out`
+    : belowMin
+      ? `Minimum is ${cashoutMin.toLocaleString()} ✨`
+      : amount > readyStardust
+        ? `Only ${readyStardust.toLocaleString()} ✨ ready`
+        : undefined
 
   return (
     <View style={styles.panel}>
@@ -113,7 +163,7 @@ export function CashOutPanel({ onDone }: { onDone: () => void }) {
           <StatusCard
             label="LOCKED"
             value={`${lockedStardust.toLocaleString()} ✨`}
-            sub="releases in up to 7 days"
+            sub={`releases in up to ${lockDays} days`}
           />
           <StatusCard
             label="READY"
@@ -126,18 +176,18 @@ export function CashOutPanel({ onDone }: { onDone: () => void }) {
         <View style={styles.amountHeader}>
           <HelpText>AMOUNT</HelpText>
           <HelpText>
-            MIN {CASHOUT_MINIMUM.toLocaleString()} ✨ · {fmtUsd(CASHOUT_MINIMUM)}
+            MIN {cashoutMin.toLocaleString()} ✨ · {fmtUsd(cashoutMin)}
           </HelpText>
         </View>
 
         <AmountInput
           variant="cashout"
           value={amount}
-          onValueChange={setAmount}
-          min={CASHOUT_MINIMUM}
-          max={Math.max(CASHOUT_MINIMUM, readyStardust)}
+          onValueChange={(v) => setAmount(clampAmount(v))}
+          min={cashoutMin}
+          max={Math.max(cashoutMin, readyStardust)}
           step={100}
-          platformFeePct={CASHOUT_FEE_PCT > 0 ? CASHOUT_FEE_PCT : undefined}
+          platformFeePct={feePct > 0 ? feePct : undefined}
           invalidReason={invalidReason}
         />
 
@@ -153,15 +203,17 @@ export function CashOutPanel({ onDone }: { onDone: () => void }) {
         <View style={styles.allRow}>
           <Chip
             label="ALL"
-            selected={amount === readyStardust && readyStardust > 0}
-            disabled={readyStardust === 0}
+            selected={amount === readyStardust && readyStardust >= cashoutMin}
+            disabled={readyStardust < cashoutMin}
             onPress={() => setAmount(readyStardust)}
           />
         </View>
 
-        {readyStardust === 0 && stardust > 0 && (
+        {insufficient && stardust > 0 && (
           <HelpText style={styles.center}>
-            YOUR {stardust.toLocaleString()} ✨ IS LOCKED FOR UP TO 7 DAYS AFTER BEING EARNED
+            {readyStardust > 0
+              ? `YOU HAVE ${readyStardust.toLocaleString()} ✨ READY — YOU NEED AT LEAST ${cashoutMin.toLocaleString()} ✨ TO CASH OUT`
+              : `YOUR ${stardust.toLocaleString()} ✨ IS LOCKED FOR UP TO ${lockDays} DAYS AFTER BEING EARNED`}
           </HelpText>
         )}
 
@@ -183,9 +235,13 @@ export function CashOutPanel({ onDone }: { onDone: () => void }) {
           disabled={!canSubmit}
           loading={submitting}
         />
-        <HelpText style={styles.center}>
-          PROCESSED MANUALLY · PAYMENT SENT TO YOUR ACCOUNT EMAIL
-        </HelpText>
+        {!canSubmit && !submitting && disabledHint ? (
+          <HelpText style={[styles.center, { color: theme.colors.warn }]}>{disabledHint}</HelpText>
+        ) : (
+          <HelpText style={styles.center}>
+            REVIEWED &amp; SENT TO YOUR CONNECTED STRIPE PAYOUT ACCOUNT
+          </HelpText>
+        )}
       </View>
     </View>
   )

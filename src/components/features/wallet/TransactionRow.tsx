@@ -41,6 +41,11 @@ export type TransactionRow = {
   amount: number
   currency: Currency
   pending?: boolean
+  // A status pill below the amount (e.g. cashout PENDING / PROCESSING / FAILED).
+  // 'wait' renders amber, 'bad' renders accent (refunded/failed). Takes precedence
+  // over `pending` so a status is never rendered as a blank/"undefined" row.
+  statusLabel?: string
+  statusTone?: 'wait' | 'bad'
   onPress?: () => void
 }
 
@@ -82,6 +87,8 @@ export function TransactionRow({
   amount,
   currency,
   pending,
+  statusLabel,
+  statusTone,
   onPress,
   style,
 }: Props) {
@@ -117,11 +124,18 @@ export function TransactionRow({
         <Text variant="monoCaption" color={theme.colors.text.muted}>
           {signedUsd}
         </Text>
-        {pending && (
+        {statusLabel ? (
+          <Text
+            variant="monoLabel"
+            color={statusTone === 'bad' ? theme.colors.accent.default : theme.colors.warn}
+          >
+            {statusLabel.toUpperCase()}
+          </Text>
+        ) : pending ? (
           <Text variant="monoLabel" color={theme.colors.warn}>
             PENDING
           </Text>
-        )}
+        ) : null}
       </View>
     </>
   )
