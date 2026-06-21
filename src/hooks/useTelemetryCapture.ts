@@ -8,9 +8,7 @@ import type { TelemetryPayload } from '@/lib/mediasoupSignaling'
 // (the broadcaster monitors its own sensors locally, so the relay only fans out to
 // viewers). Sources:
 //   • compass — expo-location watchHeadingAsync (already a dep, no extra sensor)
-//   • speed   — NOT here. Speed rides StreamScreen's single broadcaster GPS watcher
-//     (the same one that updates the stream pin) so we never run a 2nd concurrent
-//     watchPositionAsync. See StreamScreen's "Single broadcaster GPS watcher".
+//   • speed   — expo-location watchPositionAsync coords.speed (already a dep)
 //   • gyro / accel — expo-sensors DeviceMotion (ONE sensor → both; motion is
 //     derived viewer-side from accel, so we don't run a second sensor or send it)
 //   • torch — a control, not a sensor; emitted wherever the torch toggles (not here)
@@ -37,6 +35,7 @@ export function useTelemetryCapture(
   // motion is derived viewer-side from accel, so arming either runs the accelerometer.
   const wantAccel = airedKinds.has('accel') || airedKinds.has('motion')
   const wantCompass = airedKinds.has('compass')
+  const wantSpeed = airedKinds.has('speed')
 
   // DeviceMotion → gyro attitude + accel vector (one listener feeds both).
   useEffect(() => {
@@ -100,4 +99,27 @@ export function useTelemetryCapture(
       sub?.remove()
     }
   }, [enabled, wantCompass])
+
+  // Speed via GPS (coords.speed is m/s; -1 / null ⇒ unknown).
+  useEffect(() => {
+    if (!enabled || !wantSpeed) return
+    let sub: Location.LocationSubscription | null = null
+    let cancelled = false
+    ;(async () => {
+      try {
+        const s = await Location.watchPositionAsync(
+          { accuracy: Location.Accuracy.Balanced, timeInterval: 1000, distanceInterval: 0 },
+          (pos) => sendRef.current({ kind: 'speed', ts: Date.now(), mps: pos.coords.speed ?? -1 }),
+        )
+        if (cancelled) s.remove()
+        else sub = s
+      } catch {
+        /* position unavailable */
+      }
+    })()
+    return () => {
+      cancelled = true
+      sub?.remove()
+    }
+  }, [enabled, wantSpeed])
 }
