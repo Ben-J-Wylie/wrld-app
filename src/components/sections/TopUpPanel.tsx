@@ -26,6 +26,7 @@ import { env } from '@/lib/env'
 import { useWallet, useInvalidateWallet } from '@/hooks/useWallet'
 import { useInvalidateCurrentUser } from '@/hooks/useCurrentUser'
 import { useRevenueCat } from '@/hooks/useRevenueCat'
+import { usePublicConfig, configBundles, type TopUpBundleConfig } from '@/hooks/usePublicConfig'
 import { getSpaceBucksPackages, purchase } from '@/lib/purchases'
 import { usersApi } from '@/api/users'
 import { Text } from '@/components/primitives/Text'
@@ -35,29 +36,28 @@ import { Icon } from '@/components/primitives/Icon'
 import { PursesCard } from '@/components/features/wallet/PursesCard'
 import { BundleCard, type BundleBadge } from '@/components/features/wallet/BundleCard'
 
-type Bundle = {
-  amount: number
-  priceCents: number
-  badge: BundleBadge | null
-  // Store consumable product id — must match the App Store / Play product id AND
-  // the backend TOPUP_BUNDLES catalog's iosProductId/androidProductId. Keep the
-  // id string identical across both stores so one value matches either platform.
-  storeProductId: string
-}
-
-const BUNDLES: Bundle[] = [
-  { amount: 500, priceCents: 499, badge: null, storeProductId: 'wrld.spacebucks.500' },
-  { amount: 1200, priceCents: 999, badge: 'most-popular', storeProductId: 'wrld.spacebucks.1200' },
-  { amount: 2500, priceCents: 1999, badge: 'best-value', storeProductId: 'wrld.spacebucks.2500' },
-  { amount: 6000, priceCents: 3999, badge: 'vip', storeProductId: 'wrld.spacebucks.6000' },
+// Local fallback for the top-up catalog — used only until GET /config delivers
+// the authoritative TOPUP_BUNDLES (which the backend validates + credits
+// against). Store product ids must match the App Store / Play product ids; keep
+// the id string identical across both stores so one value matches either
+// platform. Badges are presentation, assigned by position below.
+const BUNDLES_FALLBACK: TopUpBundleConfig[] = [
+  { amount: 500, priceCents: 499, iosProductId: 'wrld.spacebucks.500', androidProductId: 'wrld.spacebucks.500' },
+  { amount: 1200, priceCents: 999, iosProductId: 'wrld.spacebucks.1200', androidProductId: 'wrld.spacebucks.1200' },
+  { amount: 2500, priceCents: 1999, iosProductId: 'wrld.spacebucks.2500', androidProductId: 'wrld.spacebucks.2500' },
+  { amount: 6000, priceCents: 3999, iosProductId: 'wrld.spacebucks.6000', androidProductId: 'wrld.spacebucks.6000' },
 ]
+
+// Badge by catalog position (presentation only — the backend catalog carries no
+// badge). Bundles beyond the fourth get none.
+const BUNDLE_BADGES: (BundleBadge | null)[] = [null, 'most-popular', 'best-value', 'vip']
 
 // Web top-up (the second rail). The wrld.cam wallet hosts the Stripe top-up.
 const WEB_TOPUP_URL = 'https://wrld.cam/wallet'
 
 const BASE_RATE = 0.01 // $0.01 per Space Buck
 
-function savingsPct(b: Bundle): number {
+function savingsPct(b: { amount: number; priceCents: number }): number {
   const rate = b.priceCents / 100 / b.amount
   const pct = Math.round((1 - rate / BASE_RATE) * 100)
   return Math.max(0, pct)
@@ -76,8 +76,10 @@ export function TopUpPanel({ onDone }: { onDone: () => void }) {
   const [buying, setBuying] = useState(false)
   const [done, setDone] = useState(false)
   const [packages, setPackages] = useState<PurchasesPackage[]>([])
+  const { config } = usePublicConfig()
 
-  const selected = BUNDLES[selectedIndex]!
+  const bundles = configBundles(config, BUNDLES_FALLBACK)
+  const selected = bundles[selectedIndex] ?? bundles[0]!
 
   // Load the Space Bucks consumable packages once the SDK is configured. Empty
   // until the store/RevenueCat products exist — then the IAP CTA lights up.
@@ -92,7 +94,10 @@ export function TopUpPanel({ onDone }: { onDone: () => void }) {
     }
   }, [rc.available])
 
-  const selectedPkg = packages.find((p) => p.product.identifier === selected.storeProductId)
+  const selectedProductId = Platform.OS === 'ios' ? selected.iosProductId : selected.androidProductId
+  const selectedPkg = selectedProductId
+    ? packages.find((p) => p.product.identifier === selectedProductId)
+    : undefined
   const iapReady = rc.available && !!selectedPkg
 
   // The credit lands via the RevenueCat webhook (async), so poll the wallet for
@@ -182,13 +187,13 @@ export function TopUpPanel({ onDone }: { onDone: () => void }) {
         <HelpText>CHOOSE BUNDLE</HelpText>
 
         <View style={styles.bundles}>
-          {BUNDLES.map((bundle, i) => (
+          {bundles.map((bundle, i) => (
             <BundleCard
               key={bundle.amount}
               qty={bundle.amount}
               priceUsd={bundle.priceCents / 100}
               perUnitSavingsPct={savingsPct(bundle)}
-              badge={bundle.badge ?? undefined}
+              badge={BUNDLE_BADGES[i] ?? undefined}
               selected={i === selectedIndex}
               onPress={() => setSelectedIndex(i)}
             />

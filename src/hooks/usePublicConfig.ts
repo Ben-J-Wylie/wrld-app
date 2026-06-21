@@ -36,3 +36,27 @@ export function configBool(config: PublicConfig, key: string, fallback: boolean)
   if (typeof v === 'string') return v === 'true' || v === '1'
   return fallback
 }
+
+// The Space Bucks top-up catalog, mirrored from the backend TOPUP_BUNDLES config
+// (the single source of truth the backend validates + credits against). The IAP
+// rail matches a store package by iosProductId/androidProductId.
+export type TopUpBundleConfig = {
+  amount: number
+  priceCents: number
+  iosProductId?: string | null
+  androidProductId?: string | null
+}
+
+// Helper: read the TOPUP_BUNDLES catalog, falling back to a local default if the
+// key is absent or malformed (so the picker always renders something sane).
+export function configBundles(config: PublicConfig, fallback: TopUpBundleConfig[]): TopUpBundleConfig[] {
+  const v = config['TOPUP_BUNDLES']
+  if (
+    Array.isArray(v) &&
+    v.length > 0 &&
+    v.every((b) => b && typeof b.amount === 'number' && typeof b.priceCents === 'number')
+  ) {
+    return v as TopUpBundleConfig[]
+  }
+  return fallback
+}
