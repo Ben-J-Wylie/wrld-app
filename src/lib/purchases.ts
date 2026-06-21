@@ -98,6 +98,28 @@ export async function getCurrentOffering(): Promise<PurchasesOffering | null> {
   return offerings.current ?? null
 }
 
+// Offering identifier for the Space Bucks consumable catalog, EXACTLY as named
+// in the RevenueCat dashboard (Offerings tab). Distinct from the `current`
+// offering, which holds the WRLD Plus subscription packages.
+export const SPACE_BUCKS_OFFERING = 'spacebucks'
+
+/**
+ * The Space Bucks consumable packages (one per top-up bundle), or [] if the SDK
+ * isn't configured or the offering doesn't exist yet. Each package's
+ * `product.identifier` is the store product id the backend TOPUP_BUNDLES catalog
+ * maps to a bucks amount; `product.priceString` is the localized store price.
+ */
+export async function getSpaceBucksPackages(): Promise<PurchasesPackage[]> {
+  if (!configured) return []
+  try {
+    const offerings = await Purchases.getOfferings()
+    return offerings.all[SPACE_BUCKS_OFFERING]?.availablePackages ?? []
+  } catch (e) {
+    console.warn('[purchases] getSpaceBucksPackages failed', e)
+    return []
+  }
+}
+
 /** True if the customer currently holds the WRLD Plus entitlement. */
 export function hasPlus(info: CustomerInfo | null | undefined): boolean {
   return !!info?.entitlements.active[PLUS_ENTITLEMENT]
