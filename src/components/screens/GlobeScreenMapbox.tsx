@@ -29,6 +29,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Animated,
+  AppState,
   PanResponder,
   Platform,
   Pressable,
@@ -87,6 +88,13 @@ const PIN_BORDER = '#FFFFFF'
 // high enough that vertical rotation still works (the floor IS the resting zoom; you
 // can't pinch out past it into the collapse zone). Pairs with each planet's
 // initialCamera.zoomLevel (keep them equal). Lower toward 0.9 if the sides crop.
+// Idle globe auto-rotation: spin as a signature intro, then ease to a stop so
+// Mapbox stops re-rendering (continuous setCamera at 12.5fps was the dominant
+// battery cost when browsing). Re-armed on interaction / focus / foreground.
+const SPIN_WINDOW_MS = 12_000 // how long each spin window lasts before resting
+const SPIN_EASE_MS   = 2_500  // taper the angular speed to zero over the tail
+const SPIN_STEP_DEG  = 0.15   // per-tick longitude advance at full speed
+
 const GLOBE_MIN_ZOOM = 1.0
 
 // Globe fit-scale — a visual shrink of the rendered globe, independent of the zoom,
@@ -448,9 +456,41 @@ export function GlobeScreenMapbox() {
   // Auto-rotation only makes sense on Earth — a synthetic planet (Haven) would
   // spin its single island off-screen, so we keep it framed instead.
   const rotateEnabledRef   = useRef(true)
+  // Only drive the map (setCamera) while the globe is actually on screen. The
+  // stream tab never unmounts, so without these guards the 80ms rotate tick
+  // keeps re-rendering the GPU map when the app is backgrounded or the user is
+  // on another tab — a continuous, invisible battery drain. Refs (not state) so
+  // the long-lived interval closure reads the current value without resubscribing.
+  const appActiveRef       = useRef(true)
+  const screenFocusedRef   = useRef(true)
+  // The globe spins as a signature intro, then comes to rest so Mapbox stops
+  // re-rendering (a resting map draws ~no GPU). `spinUntilRef` holds the instant
+  // the current spin window ends; null = at rest. Each interaction / focus /
+  // foregrounding re-arms a fresh window. `armSpin()` (re)starts one.
+  const spinUntilRef       = useRef(0)
+  const armSpin = useCallback(() => { spinUntilRef.current = Date.now() + SPIN_WINDOW_MS }, [])
 
   useEffect(() => { coordsRef.current = coords }, [coords])
   useEffect(() => { rotateEnabledRef.current = activePlanetId === 'earth' }, [activePlanetId])
+
+  // Pause the globe when the app leaves the foreground; re-arm a spin on return.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next) => {
+      appActiveRef.current = next === 'active'
+      if (next === 'active') armSpin()
+    })
+    return () => sub.remove()
+  }, [armSpin])
+
+  // Pause the globe when the user switches to another tab (the screen blurs);
+  // re-arm a spin window each time the globe regains focus.
+  useFocusEffect(
+    useCallback(() => {
+      screenFocusedRef.current = true
+      armSpin()
+      return () => { screenFocusedRef.current = false }
+    }, [armSpin]),
+  )
 
   // ── Banner state machine (identical to GlobeScreen) ───────────────────────
 
@@ -518,6 +558,7 @@ export function GlobeScreenMapbox() {
     if (interactTimerRef.current) clearTimeout(interactTimerRef.current)
     interactTimerRef.current = setTimeout(() => {
       userInteractingRef.current = false
+      armSpin() // resume a fresh spin window once the interaction settles
     }, 4000)
   }
 
@@ -568,9 +609,17 @@ export function GlobeScreenMapbox() {
   }
 
   useEffect(() => {
+    armSpin() // spin on first open
     autoRotateRef.current = setInterval(() => {
       if (!rotateEnabledRef.current || gestureActiveRef.current || userInteractingRef.current) return
-      rotLngRef.current = ((rotLngRef.current + 0.15) + 360) % 360
+      // Don't render the map when the globe isn't on screen — let the GPU idle.
+      if (!appActiveRef.current || !screenFocusedRef.current) return
+      // The spin window is over — globe at rest, no setCamera, Mapbox idles.
+      const remaining = spinUntilRef.current - Date.now()
+      if (remaining <= 0) return
+      // Ease the angular speed to zero over the tail so it glides to a stop.
+      const step = remaining < SPIN_EASE_MS ? SPIN_STEP_DEG * (remaining / SPIN_EASE_MS) : SPIN_STEP_DEG
+      rotLngRef.current = ((rotLngRef.current + step) + 360) % 360
       const lng = rotLngRef.current > 180 ? rotLngRef.current - 360 : rotLngRef.current
       cameraRef.current?.setCamera({ centerCoordinate: [lng, rotLatRef.current], animationDuration: 0 })
     }, 80)
@@ -578,7 +627,7 @@ export function GlobeScreenMapbox() {
       if (autoRotateRef.current) clearInterval(autoRotateRef.current)
       if (interactTimerRef.current) clearTimeout(interactTimerRef.current)
     }
-  }, [])
+  }, [armSpin])
 
   // ── GPS auto-orient on first fix ──────────────────────────────────────────
 
