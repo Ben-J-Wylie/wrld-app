@@ -468,7 +468,17 @@ export function GlobeScreenMapbox() {
   // the current spin window ends; null = at rest. Each interaction / focus /
   // foregrounding re-arms a fresh window. `armSpin()` (re)starts one.
   const spinUntilRef       = useRef(0)
-  const armSpin = useCallback(() => { spinUntilRef.current = Date.now() + SPIN_WINDOW_MS }, [])
+  // Spin timing is admin-tunable (RemoteConfig "Globe rotation" group); the module
+  // consts above are the offline/pre-fetch fallbacks. Held in a ref so the
+  // long-lived rotate interval + armSpin read current values without resubscribing.
+  const spinCfgRef = useRef({ windowMs: SPIN_WINDOW_MS, easeMs: SPIN_EASE_MS, stepDeg: SPIN_STEP_DEG })
+  const spinWindowMs = configNumber(config, 'SPIN_WINDOW_MS', SPIN_WINDOW_MS)
+  const spinEaseMs   = configNumber(config, 'SPIN_EASE_MS', SPIN_EASE_MS)
+  const spinStepDeg  = configNumber(config, 'SPIN_STEP_DEG', SPIN_STEP_DEG)
+  useEffect(() => {
+    spinCfgRef.current = { windowMs: spinWindowMs, easeMs: spinEaseMs, stepDeg: spinStepDeg }
+  }, [spinWindowMs, spinEaseMs, spinStepDeg])
+  const armSpin = useCallback(() => { spinUntilRef.current = Date.now() + spinCfgRef.current.windowMs }, [])
 
   useEffect(() => { coordsRef.current = coords }, [coords])
   useEffect(() => { rotateEnabledRef.current = activePlanetId === 'earth' }, [activePlanetId])
@@ -618,7 +628,8 @@ export function GlobeScreenMapbox() {
       const remaining = spinUntilRef.current - Date.now()
       if (remaining <= 0) return
       // Ease the angular speed to zero over the tail so it glides to a stop.
-      const step = remaining < SPIN_EASE_MS ? SPIN_STEP_DEG * (remaining / SPIN_EASE_MS) : SPIN_STEP_DEG
+      const { easeMs, stepDeg } = spinCfgRef.current
+      const step = remaining < easeMs ? stepDeg * (remaining / easeMs) : stepDeg
       rotLngRef.current = ((rotLngRef.current + step) + 360) % 360
       const lng = rotLngRef.current > 180 ? rotLngRef.current - 360 : rotLngRef.current
       cameraRef.current?.setCamera({ centerCoordinate: [lng, rotLatRef.current], animationDuration: 0 })
