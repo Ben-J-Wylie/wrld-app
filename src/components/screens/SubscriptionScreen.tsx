@@ -33,6 +33,8 @@ import { ScreenHeader } from '@/components/sections/ScreenHeader'
 import { SegmentedToggle } from '@/components/primitives/SegmentedToggle'
 import { useAuthStore } from '@/stores/authStore'
 import { usePublicConfig, configNumber } from '@/hooks/usePublicConfig'
+import { useRevenueCat } from '@/hooks/useRevenueCat'
+import { presentPlusPaywall, presentCustomerCenter } from '@/lib/paywall'
 
 type BillingCycle = 'monthly' | 'annual'
 type Tier = 'free' | 'plus' | 'pro'
@@ -141,13 +143,42 @@ export function SubscriptionScreen() {
     return { amt: fmtCents(p.mo), per: '/month', eq: '' }
   }
 
-  function handlePaidTierPress(tier: 'plus' | 'pro') {
+  const { available: billingAvailable, isPlus, refresh } = useRevenueCat()
+
+  async function handlePaidTierPress(tier: 'plus' | 'pro') {
     if (currentTier === tier) return
-    Alert.alert(
-      `${TIER_LABEL[tier]} coming soon`,
-      'Paid plans will be available shortly. Your account will be upgraded automatically when billing launches.',
-      [{ text: 'Got it' }],
-    )
+
+    // Pro is a separate offering/entitlement — not wired yet. Keep the
+    // placeholder until its paywall + entitlement exist in RevenueCat.
+    if (tier === 'pro' || !billingAvailable) {
+      Alert.alert(
+        `${TIER_LABEL[tier]} coming soon`,
+        'Paid plans will be available shortly. Your account will be upgraded automatically when billing launches.',
+        [{ text: 'Got it' }],
+      )
+      return
+    }
+
+    // Plus → present the native RevenueCat paywall (Monthly / Yearly packages).
+    const outcome = await presentPlusPaywall()
+    if (outcome === 'purchased' || outcome === 'restored') {
+      // The webhook flips wrldUser.tier → 'plus' on the backend; pull it
+      // through now so the UI reflects the upgrade without waiting for a poll.
+      await refresh()
+      Alert.alert('Welcome to WRLD Plus', 'Your upgrade is active. Enjoy the extras!', [
+        { text: 'Nice' },
+      ])
+    } else if (outcome === 'error') {
+      Alert.alert('Purchase unavailable', 'Something went wrong reaching the store. Please try again.', [
+        { text: 'OK' },
+      ])
+    }
+    // 'cancelled' / 'not_presented' → no-op, user dismissed or already entitled.
+  }
+
+  async function handleManageSubscription() {
+    await presentCustomerCenter()
+    await refresh()
   }
 
   const plus = price('plus')
@@ -224,6 +255,15 @@ export function SubscriptionScreen() {
       />
 
       {compareOpen && <ComparisonMatrix plusPrice={plus.amt} proPrice={pro.amt} />}
+
+      {(isPlus || currentTier !== 'free') && (
+        <Button
+          variant="secondary"
+          label="Manage subscription"
+          icon="settings"
+          onPress={handleManageSubscription}
+        />
+      )}
 
       <HelpText style={styles.legal}>
         PLANS RENEW AUTOMATICALLY UNTIL CANCELLED · CANCEL ANYTIME IN YOUR STORE ACCOUNT

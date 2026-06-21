@@ -14,6 +14,7 @@ import { env } from '@/lib/env'
 import { setClerkTokenGetter } from '@/lib/clerkToken'
 import { useAuthStore } from '@/stores/authStore'
 import { useRegisterPushToken } from '@/hooks/useRegisterPushToken'
+import { RevenueCatProvider } from '@/hooks/useRevenueCat'
 import { useUserSocket } from '@/hooks/useUserSocket'
 import { usersApi } from '@/api/users'
 import { hydrateCaptureLadder } from '@/lib/tierCaps'
@@ -186,7 +187,9 @@ export default function RootLayout() {
           <SafeAreaProvider>
             <KeyboardProvider>
               <StatusBar style="light" />
-              <RootNavigator />
+              <RevenueCatProvider>
+                <RootNavigator />
+              </RevenueCatProvider>
             </KeyboardProvider>
           </SafeAreaProvider>
         </QueryClientProvider>
