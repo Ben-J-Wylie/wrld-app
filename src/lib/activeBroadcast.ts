@@ -8,6 +8,9 @@ import { router } from 'expo-router'
 // from scheduled events, not a persisted setting).
 type BroadcastParams = {
   ppvEventId?: string
+  // The linked PPV event's title, carried so the broadcaster live surface can
+  // show the PPV badge + event title (mirrors the viewer's stream.ppvEvent.title).
+  ppvTitle?: string
 }
 
 let _active: BroadcastParams | null = null

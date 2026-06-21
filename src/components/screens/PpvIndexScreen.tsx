@@ -1,4 +1,4 @@
-import { ActivityIndicator, Pressable, RefreshControl, StyleSheet, View } from 'react-native'
+import { ActivityIndicator, Image, Pressable, RefreshControl, StyleSheet, View } from 'react-native'
 import { useCallback, useState } from 'react'
 import { router, useFocusEffect } from 'expo-router'
 import { useQuery } from '@tanstack/react-query'
@@ -72,6 +72,9 @@ function EventCard({ event, isSignedIn, currentUserId }: { event: PpvEvent; isSi
 
   return (
     <Pressable style={styles.card} onPress={handlePress}>
+      {event.thumbnailUrl ? (
+        <Image source={{ uri: event.thumbnailUrl }} style={styles.cardCover} resizeMode="cover" />
+      ) : null}
       <View style={styles.cardTop}>
         <Text variant="bodyEmphasized" style={styles.cardTitle}>{event.title}</Text>
         <View style={styles.badgeRow}>
@@ -109,7 +112,7 @@ function EventCard({ event, isSignedIn, currentUserId }: { event: PpvEvent; isSi
 
       <View style={styles.priceRow}>
         <Text variant="caption" color={theme.colors.text.muted}>
-          ${(event.priceUsd / 100).toFixed(2)} per ticket
+          {(event.priceSb ?? event.priceUsd ?? 0).toLocaleString()} 🚀 per ticket
         </Text>
         {event.subscribersFreeAccess && (
           <Text variant="caption" color={theme.colors.accent.default}>· free for subscribers</Text>
@@ -237,6 +240,12 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border.subtle,
     padding: theme.spacing.md,
     gap: theme.spacing.sm,
+  },
+  cardCover: {
+    width: '100%',
+    aspectRatio: 16 / 9,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.colors.bg.panel,
   },
   cardTop: {
     flexDirection: 'row',

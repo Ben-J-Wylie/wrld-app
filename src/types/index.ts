@@ -122,8 +122,8 @@ export type PpvEvent = {
   scheduledAt: string      // ISO UTC
   timezone: string         // creator's IANA timezone
   durationMinutes: number | null
-  priceUsd: number         // cents
-  priceSb: number          // Space Bucks price (escrow rail); defaults to priceUsd
+  priceUsd: number         // cents — numerically equals priceSb (1🚀=1¢); NOT displayed for PPV
+  priceSb: number          // Space Bucks price — the displayed PPV price (older events may be null)
   subscribersFreeAccess: boolean
   subscribersOnly?: boolean        // creator declared: stream is also subscriber-only
   maxCapacity: number | null
@@ -133,7 +133,11 @@ export type PpvEvent = {
   thumbnailUrl: string | null
   hasAccess?: boolean      // viewer-facing: true if viewer has purchased or has subscriber free access
   grossRevenueCents?: number
-  netRevenueCents?: number
+  netRevenueCents?: number       // creator's NET take, already net of fee. 1🚀=1¢ → this IS net Space Bucks (no /100)
+  // Escrow payout lifecycle (creator-facing) — held until the event succeeds.
+  payoutStatus?: 'held' | 'scheduled_release' | 'review' | 'released' | 'refunded'
+  payoutOutcome?: 'success' | 'failed' | null
+  releaseAt?: string | null
   createdAt?: string
 }
 

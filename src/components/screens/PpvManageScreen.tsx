@@ -1,4 +1,4 @@
-import { Alert, StyleSheet, View } from 'react-native'
+import { Alert, Image, Pressable, StyleSheet, View } from 'react-native'
 import { useEffect, useState, useCallback } from 'react'
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -10,6 +10,7 @@ import { Text } from '@/components/primitives/Text'
 import { HelpText } from '@/components/primitives/HelpText'
 import { Icon } from '@/components/primitives/Icon'
 import { ppvApi } from '@/api/ppvEvents'
+import type { PpvEvent } from '@/types'
 
 function formatCountdown(targetIso: string): string {
   const diff = new Date(targetIso).getTime() - Date.now()
@@ -32,6 +33,58 @@ function formatLocalTime(isoUtc: string, tz: string): string {
     minute: '2-digit',
     timeZoneName: 'short',
   })
+}
+
+function formatReleaseDate(iso: string): string {
+  return new Date(iso).toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
+// Escrow payout-state note for the creator. Ticket revenue is held until the
+// event succeeds; this surfaces where in the lifecycle the money sits.
+function PayoutNote({
+  payoutStatus,
+  payoutOutcome,
+  releaseAt,
+  hasRevenue,
+}: {
+  payoutStatus?: PpvEvent['payoutStatus']
+  payoutOutcome?: PpvEvent['payoutOutcome']
+  releaseAt?: string | null
+  hasRevenue: boolean
+}) {
+  // Nothing held yet (no sales / no status) → no note.
+  if (!payoutStatus || !hasRevenue) return null
+
+  let label: string
+  switch (payoutStatus) {
+    case 'held':
+      label = 'Pending — releases after the event'
+      break
+    case 'scheduled_release':
+      label = releaseAt ? `Releasing on ${formatReleaseDate(releaseAt)}` : 'Releasing soon'
+      break
+    case 'review':
+      label = 'In review'
+      break
+    case 'released':
+      label = 'Added to your Stardust'
+      break
+    case 'refunded':
+      label = 'Refunded'
+      break
+    default:
+      return null
+  }
+
+  const released = payoutStatus === 'released' && payoutOutcome !== 'failed'
+  return (
+    <HelpText tone={released ? 'ok' : 'dim'}>{label}</HelpText>
+  )
 }
 
 export function PpvManageScreen() {
@@ -138,14 +191,30 @@ export function PpvManageScreen() {
   // live. Ending a not-yet-aired event with ticket holders strands them with no
   // refund (and the server rejects it), so pre-show with buyers, force Cancel.
   const canEnd = isLive || (isScheduled && event.purchaseCount === 0)
-  const netRevenue = event.netRevenueCents ?? 0
-  const grossRevenue = event.grossRevenueCents ?? 0
+  // 1🚀 = 1¢, so netRevenueCents (already net of fee) IS the creator's net Space
+  // Bucks — render as 🚀 with NO /100. priceSb is the ticket price (older events
+  // may be null → fall back to priceUsd, numerically equal).
+  const netRevenueSb = event.netRevenueCents ?? 0
+  const priceSb = event.priceSb ?? event.priceUsd ?? 0
 
   return (
     <ScreenScroll
       header={<ScreenHeader title="Manage" onBack={() => router.back()} />}
       contentContainerStyle={styles.content}
     >
+      {/* ── Cover art ──────────────────────────────────────── */}
+      {event.thumbnailUrl ? (
+        <Image source={{ uri: event.thumbnailUrl }} style={styles.cover} resizeMode="cover" />
+      ) : isScheduled ? (
+        <Pressable
+          style={[styles.cover, styles.coverEmpty]}
+          onPress={() => router.push({ pathname: '/(app)/ppv/create', params: { eventId: event.id } })}
+        >
+          <Icon name="image" size="lg" color={theme.colors.text.muted} />
+          <Text variant="caption" color={theme.colors.text.muted}>Add cover art</Text>
+        </Pressable>
+      ) : null}
+
       {/* ── Header ─────────────────────────────────────────── */}
       <View style={styles.header}>
         <Text variant="heading">{event.title}</Text>
@@ -195,14 +264,22 @@ export function PpvManageScreen() {
           </Text>
         </View>
         <View style={styles.statCard}>
-          <Text variant="heading">${(event.priceUsd / 100).toFixed(2)}</Text>
+          <Text variant="heading">{priceSb.toLocaleString()} 🚀</Text>
           <Text variant="caption" color={theme.colors.text.muted}>Per ticket</Text>
         </View>
         <View style={styles.statCard}>
-          <Text variant="heading">${(netRevenue / 100).toFixed(2)}</Text>
-          <Text variant="caption" color={theme.colors.text.muted}>Your earnings (70%)</Text>
+          <Text variant="heading">{netRevenueSb.toLocaleString()} 🚀</Text>
+          <Text variant="caption" color={theme.colors.text.muted}>Your earnings</Text>
         </View>
       </View>
+
+      {/* Escrow payout state — ticket revenue is held until the event succeeds. */}
+      <PayoutNote
+        payoutStatus={event.payoutStatus}
+        payoutOutcome={event.payoutOutcome}
+        releaseAt={event.releaseAt}
+        hasRevenue={netRevenueSb > 0}
+      />
 
       {event.subscribersFreeAccess && (
         <HelpText>Monthly subscribers get free access</HelpText>
@@ -216,8 +293,8 @@ export function PpvManageScreen() {
         <View style={styles.section}>
           <Text variant="monoLabel">Ready to broadcast?</Text>
           <HelpText>
-            Head to the dashboard and go live. Set your event's ID ({event.id.slice(0, 8)}…) in
-            the PPV field when prompted to link this event to your stream.
+            When you go live within your event's start window, the dashboard automatically
+            airs it as this PPV event — no setup needed.
           </HelpText>
           <Button
             label="Go to Dashboard"
@@ -264,6 +341,19 @@ const styles = StyleSheet.create({
     padding: theme.spacing.lg,
     gap: theme.spacing.lg,
     paddingBottom: theme.spacing.xxxl,
+  },
+  cover: {
+    width: '100%',
+    aspectRatio: 16 / 9,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.colors.bg.elevated,
+  },
+  coverEmpty: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: theme.spacing.xs,
+    borderWidth: 1,
+    borderColor: theme.colors.border.subtle,
   },
   header: {
     flexDirection: 'row',

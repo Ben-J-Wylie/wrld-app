@@ -1,7 +1,8 @@
-import { Alert, Pressable, StyleSheet, View } from 'react-native'
-import { useEffect, useMemo, useState } from 'react'
+import { Alert, Image, Pressable, StyleSheet, View } from 'react-native'
+import { useEffect, useRef, useState } from 'react'
 import { router, useLocalSearchParams } from 'expo-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import * as ImagePicker from 'expo-image-picker'
 import { theme } from '@/tokens/theme'
 import { ScreenScroll } from '@/components/sections/ScreenScroll'
 import { ScreenHeader } from '@/components/sections/ScreenHeader'
@@ -10,9 +11,10 @@ import { Text } from '@/components/primitives/Text'
 import { Input } from '@/components/primitives/Input'
 import { Toggle } from '@/components/primitives/Toggle'
 import { HelpText } from '@/components/primitives/HelpText'
+import { Icon } from '@/components/primitives/Icon'
 import { ppvApi } from '@/api/ppvEvents'
 import type { UpdatePpvEventData, EventOverlapError } from '@/api/ppvEvents'
-import { usePublicConfig, configBool, configNumber } from '@/hooks/usePublicConfig'
+import { usePublicConfig, configNumber } from '@/hooks/usePublicConfig'
 
 const pad = (n: number) => String(n).padStart(2, '0')
 
@@ -90,8 +92,10 @@ export function PpvCreateScreen() {
   const [duration, setDuration] = useState(
     existing?.durationMinutes ? String(existing.durationMinutes) : '',
   )
-  const [priceDollars, setPriceDollars] = useState(
-    existing?.priceUsd ? String((existing.priceUsd / 100).toFixed(2)) : '',
+  // PPV price is a whole number of Space Bucks (1 🚀 = 1¢). Older events may have a
+  // null priceSb → fall back to priceUsd (numerically equal).
+  const [priceSbStr, setPriceSbStr] = useState(
+    existing ? String(existing.priceSb ?? existing.priceUsd ?? '') : '',
   )
   const [capacity, setCapacity] = useState(
     existing?.maxCapacity ? String(existing.maxCapacity) : '',
@@ -99,14 +103,16 @@ export function PpvCreateScreen() {
   const [subscribersFree, setSubscribersFree] = useState(existing?.subscribersFreeAccess ?? false)
   const [subscribersOnly, setSubscribersOnly] = useState(existing?.subscribersOnly ?? false)
   const [replayAccess, setReplayAccess] = useState(existing?.replayAccess ?? true)
+  const [coverUrl, setCoverUrl] = useState<string | null>(existing?.thumbnailUrl ?? null)
+  const [coverUploading, setCoverUploading] = useState(false)
+  const coverMimeRef = useRef<string | null>(null)
   const [saving, setSaving] = useState(false)
   // Flipped true on the first submit attempt so required-but-empty fields also
   // surface their error (a touched field already shows its error live).
   const [submitted, setSubmitted] = useState(false)
 
-  // Escrow on → price in Space Bucks (1 🚀 = 1¢); off → legacy USD.
+  // PPV price bounds (whole Space Bucks) from public config.
   const { config } = usePublicConfig()
-  const escrowEnabled = configBool(config, 'PPV_ESCROW_ENABLED', false)
   const minSb = configNumber(config, 'PPV_MINIMUM_PRICE_SB', 100)
   const maxSb = configNumber(config, 'PPV_MAX_PRICE_SB', 2000)
 
@@ -117,15 +123,16 @@ export function PpvCreateScreen() {
     setDescription(existing.description ?? '')
     setDuration(existing.durationMinutes ? String(existing.durationMinutes) : '')
     setCapacity(existing.maxCapacity ? String(existing.maxCapacity) : '')
-    setPriceDollars(escrowEnabled ? String(existing.priceSb) : (existing.priceUsd / 100).toFixed(2))
+    setPriceSbStr(String(existing.priceSb ?? existing.priceUsd ?? ''))
     setSubscribersFree(existing.subscribersFreeAccess)
     setSubscribersOnly(existing.subscribersOnly ?? false)
     setReplayAccess(existing.replayAccess)
+    setCoverUrl(existing.thumbnailUrl ?? null)
     const { dateStr: ds, timeStr: ts, isPM: pm } = dateToInputs(new Date(existing.scheduledAt))
     setDateStr(ds)
     setTimeStr(ts)
     setIsPM(pm)
-  }, [existing?.id, escrowEnabled])
+  }, [existing?.id])
 
   function applyPreset(hours: number) {
     const d = new Date()
@@ -143,13 +150,47 @@ export function PpvCreateScreen() {
     setIsPM(pm)
   }
 
+  async function pickCover() {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
+    if (!perm.granted) {
+      Alert.alert('Photo library access required', 'Enable in Settings to add cover art.')
+      return
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [16, 9],
+      quality: 0.8,
+    })
+    if (result.canceled || !result.assets[0]) return
+    const asset = result.assets[0]
+    const mime = asset.mimeType ?? 'image/jpeg'
+    coverMimeRef.current = mime
+    // Editing an existing event → upload immediately (the event already exists).
+    // Creating → stash the local uri; it uploads after the event is created.
+    if (isEdit && eventId) {
+      setCoverUploading(true)
+      try {
+        const { thumbnailUrl } = await ppvApi.uploadThumbnail(eventId, asset.uri, mime)
+        setCoverUrl(thumbnailUrl)
+        qc.invalidateQueries({ queryKey: ['ppv-event-manage', eventId] })
+        qc.invalidateQueries({ queryKey: ['my-ppv-events'] })
+      } catch {
+        Alert.alert('Error', 'Could not upload cover art.')
+      } finally {
+        setCoverUploading(false)
+      }
+    } else {
+      setCoverUrl(asset.uri)
+    }
+  }
+
   const parsedDate = parseDateInputs(dateStr, timeStr, isPM)
   const dateValid = parsedDate !== null && parsedDate > new Date()
 
-  // Escrow mode: a whole Space-Bucks amount (1 🚀 = 1¢, so SB == cents). Legacy: dollars.
-  const priceSbValue = escrowEnabled && priceDollars ? Math.round(parseFloat(priceDollars)) : 0
-  const priceCents = escrowEnabled ? priceSbValue : (priceDollars ? Math.round(parseFloat(priceDollars) * 100) : 0)
-  const priceValid = escrowEnabled ? priceSbValue >= minSb && priceSbValue <= maxSb : priceCents >= 100
+  // PPV price is a whole number of Space Bucks (1 🚀 = 1¢).
+  const priceSbValue = priceSbStr ? Math.round(parseFloat(priceSbStr)) : 0
+  const priceValid = priceSbValue >= minSb && priceSbValue <= maxSb
   const titleValid = title.trim().length > 0
   // Numeric optionals: blank is fine; otherwise must be a positive whole number,
   // so "asdf" in duration/capacity is a called-out error rather than a silent NaN.
@@ -177,9 +218,7 @@ export function PpvCreateScreen() {
           : 'Pick a date and time in the future.')
       : null,
     price: !isEdit && !priceValid
-      ? (escrowEnabled
-          ? `Price must be between ${minSb.toLocaleString()} and ${maxSb.toLocaleString()} 🚀.`
-          : 'Minimum price is $1.00.')
+      ? `Price must be between ${minSb.toLocaleString()} and ${maxSb.toLocaleString()} 🚀.`
       : null,
     duration: !durationValid ? 'Duration must be a whole number of minutes.' : null,
     capacity: !capacityValid ? 'Capacity must be a whole number of tickets.' : null,
@@ -207,13 +246,20 @@ export function PpvCreateScreen() {
         scheduledAt: parsedDate.toISOString(),
         timezone: tz,
         durationMinutes: duration ? parseInt(duration) : undefined,
-        priceUsd: priceCents,
-        ...(escrowEnabled ? { priceSb: priceSbValue } : {}),
+        priceSb: priceSbValue,
         subscribersFreeAccess: subscribersFree,
         subscribersOnly,
         maxCapacity: capacity ? parseInt(capacity) : undefined,
         replayAccess,
       })
+      // Upload the chosen cover (if any) now the event exists. Non-fatal.
+      if (coverUrl && coverUrl.startsWith('file:')) {
+        try {
+          await ppvApi.uploadThumbnail(result.event.id, coverUrl, coverMimeRef.current ?? 'image/jpeg')
+        } catch {
+          // cover upload is best-effort — the event is already created
+        }
+      }
       qc.invalidateQueries({ queryKey: ['my-ppv-events'] })
       if (result.warning === 'duration_unknown_overlap') {
         Alert.alert(
@@ -339,6 +385,30 @@ export function PpvCreateScreen() {
         />
       </View>
 
+      {/* ── Cover art ──────────────────────────────────── */}
+      <View style={styles.field}>
+        <Text variant="monoLabel">Cover art (optional)</Text>
+        <Pressable onPress={pickCover} disabled={coverUploading}>
+          {coverUrl ? (
+            <Image source={{ uri: coverUrl }} style={styles.cover} resizeMode="cover" />
+          ) : (
+            <View style={[styles.cover, styles.coverEmpty]}>
+              <Icon name="image" size="lg" color={theme.colors.text.muted} />
+              <Text variant="caption" color={theme.colors.text.muted}>
+                {coverUploading ? 'Uploading…' : 'Add a cover image'}
+              </Text>
+            </View>
+          )}
+        </Pressable>
+        {coverUrl && (
+          <Pressable onPress={pickCover} disabled={coverUploading}>
+            <Text variant="caption" color={theme.colors.accent.default}>
+              {coverUploading ? 'Uploading…' : 'Change cover'}
+            </Text>
+          </Pressable>
+        )}
+      </View>
+
       {/* ── Date & time ─────────────────────────────────── */}
       <View style={styles.field}>
         <Text variant="monoLabel">Date & time ({tz})</Text>
@@ -441,21 +511,21 @@ export function PpvCreateScreen() {
       </View>
 
       <View style={styles.field}>
-        <Text variant="monoLabel">{escrowEnabled ? 'Price (Space Bucks)' : 'Price (USD)'}</Text>
+        <Text variant="monoLabel">Price (Space Bucks)</Text>
         <Input
-          value={priceDollars}
-          onChangeText={setPriceDollars}
-          placeholder={escrowEnabled ? 'e.g. 500' : 'e.g. 4.99'}
-          keyboardType={escrowEnabled ? 'number-pad' : 'decimal-pad'}
+          value={priceSbStr}
+          onChangeText={setPriceSbStr}
+          placeholder="e.g. 500"
+          keyboardType="number-pad"
           editable={!isEdit}
         />
         {isEdit && (
           <HelpText>Price cannot be changed after event creation</HelpText>
         )}
-        {(submitted || priceDollars.length > 0) && fieldErrors.price && (
+        {(submitted || priceSbStr.length > 0) && fieldErrors.price && (
           <HelpText tone="err">{fieldErrors.price}</HelpText>
         )}
-        {escrowEnabled && !isEdit && priceDollars.length === 0 && (
+        {!isEdit && priceSbStr.length === 0 && (
           <HelpText>{minSb.toLocaleString()}–{maxSb.toLocaleString()} 🚀 · 1 🚀 = $0.01</HelpText>
         )}
       </View>
@@ -517,6 +587,19 @@ const styles = StyleSheet.create({
   },
   field: {
     gap: theme.spacing.sm,
+  },
+  cover: {
+    width: '100%',
+    aspectRatio: 16 / 9,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.colors.bg.elevated,
+  },
+  coverEmpty: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: theme.spacing.xs,
+    borderWidth: 1,
+    borderColor: theme.colors.border.subtle,
   },
   presetRow: {
     flexDirection: 'row',

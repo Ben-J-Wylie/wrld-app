@@ -14,7 +14,7 @@
 //   • FollowButton (for other profiles) / Button (for own profile)
 
 import { useState } from 'react'
-import { ActivityIndicator, Alert, Linking, Pressable, StyleSheet, View } from 'react-native'
+import { ActivityIndicator, Alert, Image, Linking, Pressable, StyleSheet, View } from 'react-native'
 import { useLocalSearchParams, router } from 'expo-router'
 import { useAuth } from '@clerk/clerk-expo'
 import { theme } from '@/tokens/theme'
@@ -253,6 +253,9 @@ export function ProfileScreen() {
                   params: { id: event.id, handle: handle ?? '' },
                 })}
               >
+                {event.thumbnailUrl ? (
+                  <Image source={{ uri: event.thumbnailUrl }} style={styles.ppvCover} resizeMode="cover" />
+                ) : null}
                 {/* Title row with status badge */}
                 <View style={styles.ppvTitleRow}>
                   <Text variant="bodyEmphasized" style={styles.ppvTitle}>{event.title}</Text>
@@ -301,7 +304,7 @@ export function ProfileScreen() {
                 {/* Price + access CTA */}
                 <View style={styles.ppvFooter}>
                   <Text variant="bodyEmphasized" color={theme.colors.accent.default}>
-                    ${(event.priceUsd / 100).toFixed(2)}
+                    {(event.priceSb ?? event.priceUsd ?? 0).toLocaleString()} 🚀
                   </Text>
                   {event.hasAccess ? (
                     <View style={styles.accessBadge}>
@@ -411,6 +414,12 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border.subtle,
     padding: theme.spacing.md,
     gap: theme.spacing.sm,
+  },
+  ppvCover: {
+    width: '100%',
+    aspectRatio: 16 / 9,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.colors.bg.panel,
   },
   ppvTitleRow: {
     flexDirection: 'row',

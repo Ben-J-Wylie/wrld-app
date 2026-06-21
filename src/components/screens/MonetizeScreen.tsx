@@ -230,7 +230,7 @@ export function MonetizeScreen() {
                     {event.status.toUpperCase()}
                   </Text>
                   <Text variant="bodyEmphasized" color={theme.colors.accent.default}>
-                    ${(event.priceUsd / 100).toFixed(2)}
+                    {(event.priceSb ?? event.priceUsd ?? 0).toLocaleString()} 🚀
                   </Text>
                 </View>
               </View>

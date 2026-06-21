@@ -1,4 +1,4 @@
-import { ActivityIndicator, Alert, Linking, StyleSheet, View } from 'react-native'
+import { ActivityIndicator, Alert, Image, StyleSheet, View } from 'react-native'
 import { useCallback, useEffect, useState } from 'react'
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router'
 import { onPpvSocketEvent } from '@/lib/ppvSocketEvents'
@@ -13,7 +13,12 @@ import { HelpText } from '@/components/primitives/HelpText'
 import { Icon } from '@/components/primitives/Icon'
 import { ppvApi } from '@/api/ppvEvents'
 import { CURRENT_USER_KEY } from '@/hooks/useCurrentUser'
-import { usePublicConfig, configBool } from '@/hooks/usePublicConfig'
+
+// PPV is purchased with Space Bucks (1 🚀 = 1¢). Older events may carry a null
+// priceSb, so fall back to priceUsd (numerically equal) then 0.
+function ppvPriceSb(event: { priceSb?: number | null; priceUsd?: number | null }): number {
+  return event.priceSb ?? event.priceUsd ?? 0
+}
 
 const PPV_REPORT_REASONS = [
   { value: 'never_started', label: 'It never started' },
@@ -47,8 +52,6 @@ export function PpvEventDetailScreen() {
   const { id, handle } = useLocalSearchParams<{ id: string; handle?: string }>()
   const { isSignedIn } = useAuth()
   const qc = useQueryClient()
-  const { config } = usePublicConfig()
-  const escrowEnabled = configBool(config, 'PPV_ESCROW_ENABLED', false)
   const [reportDone, setReportDone] = useState(false)
   const [countdown, setCountdown] = useState('')
   const [purchasing, setPurchasing] = useState(false)
@@ -121,7 +124,7 @@ export function PpvEventDetailScreen() {
     if (!event) return
     Alert.alert(
       'Cancel your ticket?',
-      `You'll be refunded $${(event.priceUsd / 100).toFixed(2)}. You can buy again any time before the event starts.`,
+      `You'll be refunded ${ppvPriceSb(event).toLocaleString()} 🚀. You can buy again any time before the event starts.`,
       [
         { text: 'Keep ticket', style: 'cancel' },
         {
@@ -170,36 +173,26 @@ export function PpvEventDetailScreen() {
   async function doPurchase() {
     setPurchasing(true)
     try {
-      if (escrowEnabled) {
-        try {
-          const res = await ppvApi.purchaseWithSpaceBucks(id)
-          setAccessStatus({ hasAccess: true, free: res.free })
-          qc.invalidateQueries({ queryKey: CURRENT_USER_KEY })
-        } catch (e: unknown) {
-          const status = (e as { response?: { status?: number } })?.response?.status
-          if (status === 402) {
-            Alert.alert('Not enough Space Bucks', 'Top up your balance to buy this ticket.', [
-              { text: 'Not now', style: 'cancel' },
-              { text: 'Top up', onPress: () => router.push('/(app)/wallet') },
-            ])
-            return
-          }
-          throw e
-        }
-        return
-      }
-      const { free, url } = await ppvApi.createAccessSession(id)
-      if (free) {
-        setAccessStatus({ hasAccess: true, free: true })
-        Alert.alert('Access granted', 'You have free access as a subscriber.')
-        return
-      }
-      if (url) {
-        await Linking.openURL(url)
-        const status = await ppvApi.getAccessStatus(id)
-        setAccessStatus(status)
-      }
+      // The only PPV purchase path: instant in-app Space Bucks. The response
+      // drives access state directly — no browser round-trip, no re-poll.
+      const res = await ppvApi.purchaseWithSpaceBucks(id)
+      setAccessStatus({ hasAccess: res.purchased, free: res.free })
+      qc.invalidateQueries({ queryKey: CURRENT_USER_KEY })
+      qc.invalidateQueries({ queryKey: ['ppv-events-profile', handle] })
     } catch (e: unknown) {
+      const status = (e as { response?: { status?: number } })?.response?.status
+      if (status === 402) {
+        Alert.alert('Not enough Space Bucks', 'Top up your balance to buy this ticket.', [
+          { text: 'Not now', style: 'cancel' },
+          { text: 'Top up', onPress: () => router.push('/(app)/wallet') },
+        ])
+        return
+      }
+      if (status === 409) {
+        // Already has access — reflect it rather than erroring.
+        setAccessStatus({ hasAccess: true, free: false })
+        return
+      }
       const msg = e instanceof Error ? e.message : 'Could not complete purchase'
       Alert.alert('Error', msg)
     } finally {
@@ -246,6 +239,15 @@ export function PpvEventDetailScreen() {
       header={<ScreenHeader title="Event" onBack={() => router.back()} />}
       contentContainerStyle={styles.content}
     >
+      {/* ── Cover art ───────────────────────────────────────── */}
+      {event.thumbnailUrl ? (
+        <Image source={{ uri: event.thumbnailUrl }} style={styles.cover} resizeMode="cover" />
+      ) : (
+        <View style={[styles.cover, styles.coverFallback]}>
+          <Icon name="calendar" size="lg" color={theme.colors.text.muted} />
+        </View>
+      )}
+
       {/* ── Header ──────────────────────────────────────────── */}
       <View style={styles.titleRow}>
         <Text variant="heading" style={styles.flex}>{event.title}</Text>
@@ -287,7 +289,7 @@ export function PpvEventDetailScreen() {
         <View style={styles.row}>
           <Icon name="tag" size="sm" color={theme.colors.text.muted} />
           <Text variant="body">
-            {escrowEnabled ? `${event.priceSb.toLocaleString()} 🚀` : `$${(event.priceUsd / 100).toFixed(2)}`}
+            {ppvPriceSb(event).toLocaleString()} 🚀
           </Text>
           {event.subscribersFreeAccess && (
             <Text variant="caption" color={theme.colors.accent.default}> · free for subscribers</Text>
@@ -311,9 +313,7 @@ export function PpvEventDetailScreen() {
           </Text>
           {(eventOver === 'cancelled' || eventOver === 'admin_cancelled') && hasAccess && !isFreeAccess && (
             <Text variant="caption" color={theme.colors.text.muted}>
-              {escrowEnabled
-                ? `You've been credited ${event.priceSb.toLocaleString()} 🚀 back to your balance.`
-                : 'Your ticket has been refunded.'}
+              You&apos;ve been credited {ppvPriceSb(event).toLocaleString()} 🚀 back to your balance.
             </Text>
           )}
           {eventOver === 'ended' && hasAccess && !isFreeAccess && (
@@ -379,13 +379,7 @@ export function PpvEventDetailScreen() {
       ) : (
         <View style={styles.purchaseArea}>
           <Button
-            label={
-              purchasing
-                ? escrowEnabled ? 'Purchasing…' : 'Opening checkout…'
-                : escrowEnabled
-                  ? `Buy ticket · ${event.priceSb.toLocaleString()} 🚀`
-                  : `Buy ticket · $${(event.priceUsd / 100).toFixed(2)}`
-            }
+            label={purchasing ? 'Purchasing…' : `Buy ticket · ${ppvPriceSb(event).toLocaleString()} 🚀`}
             onPress={handlePurchase}
             disabled={purchasing}
           />
@@ -419,6 +413,18 @@ const styles = StyleSheet.create({
   },
   flex: {
     flex: 1,
+  },
+  cover: {
+    width: '100%',
+    aspectRatio: 16 / 9,
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.colors.bg.elevated,
+  },
+  coverFallback: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: theme.colors.border.subtle,
   },
   titleRow: {
     flexDirection: 'row',

@@ -225,6 +225,9 @@ export function DashboardScreen() {
   const [manualPpvEventId, setManualPpvEventId] = useState<string | null>(null)
   const ppvEventId: string | null = enforcedEvent ? enforcedEvent.id : manualPpvEventId
   const ppvEventLocked = !!enforcedEvent
+  // The selected/enforced event's title — carried to the live surface for the PPV badge.
+  const ppvTitle: string | undefined =
+    enforcedEvent?.title ?? (scheduledEvents ?? []).find(e => e.id === manualPpvEventId)?.title
 
   // Title ("what's happening") is persisted/shared via captureConfig now,
   // so the stream-view preview can go live with the same title. It hydrates
@@ -310,7 +313,7 @@ export function DashboardScreen() {
       return
     }
     await saveCaptureConfig({ title: title.trim(), air, precision, identity, chat, subscribersOnly, visibility })
-    activeBroadcast.set({ ppvEventId: ppvEventId ?? undefined })
+    activeBroadcast.set({ ppvEventId: ppvEventId ?? undefined, ppvTitle })
     router.push({
       pathname: '/(app)/stream/[id]',
       params: {

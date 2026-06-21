@@ -1,4 +1,6 @@
 import { apiClient } from './client'
+import { getClerkToken } from '@/lib/clerkToken'
+import { env } from '@/lib/env'
 import type { PpvEvent } from '@/types'
 
 export type CreatePpvEventData = {
@@ -7,8 +9,7 @@ export type CreatePpvEventData = {
   scheduledAt: string      // ISO UTC
   timezone: string
   durationMinutes?: number
-  priceUsd: number         // cents
-  priceSb?: number         // Space Bucks price (escrow rail; 1 SB = 1 cent)
+  priceSb: number          // Space Bucks price (1 🚀 = 1¢); the only PPV rail
   subscribersFreeAccess?: boolean
   subscribersOnly?: boolean
   maxCapacity?: number
@@ -86,21 +87,30 @@ export const ppvApi = {
     return res.data.events
   },
 
-  // Viewer: create checkout session (returns { free, url })
-  createAccessSession: async (eventId: string): Promise<{ free: boolean; url: string | null }> => {
-    const res = await apiClient.post<{ free: boolean; url: string | null }>(
-      `/ppv-events/${eventId}/access-session`,
+  // Viewer: buy a ticket with Space Bucks — the ONLY PPV purchase path. Throws on
+  // 402 (insufficient balance, body `{ error, priceSb, balance }`) — the caller
+  // inspects e.response.status and routes to the in-app top-up. 409 = already has
+  // access, 400 = at_capacity / not_purchasable.
+  purchaseWithSpaceBucks: async (eventId: string): Promise<{ purchased: boolean; free: boolean; newBalance: number; priceSb: number }> => {
+    const res = await apiClient.post<{ purchased: boolean; free: boolean; newBalance: number; priceSb: number }>(
+      `/ppv-events/${eventId}/purchase`,
     )
     return res.data
   },
 
-  // Viewer: buy a ticket with Space Bucks (escrow rail). Throws on 402 (insufficient
-  // balance) — the caller inspects e.response.status and routes to top-up.
-  purchaseWithSpaceBucks: async (eventId: string): Promise<{ purchased: boolean; free: boolean; newBalance: number }> => {
-    const res = await apiClient.post<{ purchased: boolean; free: boolean; newBalance: number }>(
-      `/ppv-events/${eventId}/purchase`,
-    )
-    return res.data
+  // Creator: upload event cover art (multipart single file, ≤5MB, jpg/png/webp).
+  uploadThumbnail: async (eventId: string, uri: string, mimeType: string): Promise<{ thumbnailUrl: string }> => {
+    const ext = mimeType.split('/')[1] ?? 'jpg'
+    const formData = new FormData()
+    formData.append('file', { uri, type: mimeType, name: `cover.${ext}` } as unknown as Blob)
+    const token = await getClerkToken()
+    const res = await fetch(`${env.apiBaseUrl}/ppv-events/${eventId}/thumbnail`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    })
+    if (!res.ok) throw new Error(`Upload failed: ${res.status}`)
+    return (await res.json()) as { thumbnailUrl: string }
   },
 
   // Viewer: report a delivery problem with an event (ticket-holders only).

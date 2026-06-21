@@ -254,6 +254,41 @@ const giftStyles = StyleSheet.create({
   emoji: { fontSize: 18 },
 })
 
+// Amber PPV pill + event title for a live pay-per-view broadcast surface
+// (viewer + broadcaster). Mirrors the web stream view; sits beside the LIVE pill.
+function PpvBadge({ title }: { title?: string }) {
+  return (
+    <View style={ppvBadgeStyles.row}>
+      <View style={ppvBadgeStyles.pill}>
+        <Text variant="monoCaption" color={theme.colors.text.inverse}>PPV</Text>
+      </View>
+      {title ? (
+        <Text variant="monoCaption" color={theme.colors.text.muted} numberOfLines={1} style={ppvBadgeStyles.title}>
+          {title}
+        </Text>
+      ) : null}
+    </View>
+  )
+}
+
+const ppvBadgeStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    flexShrink: 1,
+  },
+  pill: {
+    backgroundColor: theme.colors.warn,
+    borderRadius: theme.radius.full,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 3,
+  },
+  title: {
+    flexShrink: 1,
+  },
+})
+
 export function StreamScreen() {
   const { id, streamId: paramStreamId, sources: paramSources, lat: paramLat, lng: paramLng, go: paramGo, rec: paramRec } = useLocalSearchParams<{
     id: string
@@ -559,6 +594,12 @@ export function StreamScreen() {
   // and the live info row (LivePill + avatar + viewer count) that takes the
   // title input's place.
   const isLiveBroadcast = isNew && status === 'in-room' && !streamEnded
+  // PPV badge/title — broadcaster reads the linked event title from activeBroadcast
+  // (set at Go Live); viewer reads it from the stream's linked ppvEvent. A PPV live
+  // surface shows an amber PPV pill + the event title (mirrors web).
+  const ppvTitle: string | undefined = isNew
+    ? activeBroadcast.get()?.ppvTitle
+    : (streamByRoom?.ppvEvent?.title ?? undefined)
   // Broadcaster ARMING/preview state on the stream page (pre-live, signed in) — REGARDLESS of camera.
   // The source view + rail must render here too: with camera off, the selected source (id / location /
   // sensor) fills the surface so the page isn't blank until go-live (Ben 2026-06-17).
@@ -1672,6 +1713,7 @@ export function StreamScreen() {
               {isLiveBroadcast ? (
                 <View style={styles.liveInfoRow}>
                   <LivePill />
+                  {ppvTitle !== undefined && <PpvBadge title={ppvTitle} />}
                   {broadcaster && (
                     <Avatar
                       size="sm"
@@ -1712,12 +1754,13 @@ export function StreamScreen() {
               broadcaster ? (
                 <View style={styles.viewerTitle}>
                   <Text variant="heading" numberOfLines={1}>
-                    {broadcaster.displayName}
+                    {ppvTitle ?? broadcaster.displayName}
                   </Text>
                   <Text variant="monoCaption" color={theme.colors.text.muted}>
                     @{broadcaster.handle}
                     {broadcasterLocalTime ? ` · ${broadcasterLocalTime}` : ''}
                   </Text>
+                  {ppvTitle !== undefined && <PpvBadge />}
                 </View>
               ) : undefined
             }

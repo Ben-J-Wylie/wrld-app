@@ -112,8 +112,9 @@ function SingleCard({ stream, onDismiss, style }: SingleProps) {
           )}
           {stream.ppvEvent && (
             <View style={styles.lockRow}>
-              <Text variant="monoCaption" color={theme.colors.accent.default}>
-                🎟 PPV event
+              <Icon name="lock" size="sm" color={theme.colors.warn} />
+              <Text variant="monoCaption" color={theme.colors.warn} numberOfLines={1}>
+                🎟 PPV · {stream.ppvEvent.title}
               </Text>
             </View>
           )}
@@ -135,7 +136,11 @@ function SingleCard({ stream, onDismiss, style }: SingleProps) {
       {stream.layers && stream.layers.length > 0 && (
         <StreamStrip layers={stream.layers} />
       )}
-      <Button variant="primary" label={stream.ctaLabel ?? 'Join'} onPress={stream.onJoin} />
+      <Button
+        variant="primary"
+        label={stream.ctaLabel ?? (stream.ppvEvent ? 'Get ticket 🎟' : 'Join')}
+        onPress={stream.onJoin}
+      />
     </View>
   )
 }
