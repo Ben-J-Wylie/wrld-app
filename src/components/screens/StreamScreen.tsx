@@ -1134,22 +1134,30 @@ export function StreamScreen() {
     return () => { deactivateKeepAwake('wrld-broadcast').catch(() => {}) }
   }, [isNew, status])
 
-  // Live location tracking for broadcasters — updates the stream pin as they move
+  // Single broadcaster GPS watcher: feeds the stream-pin location AND, when the
+  // speed source is armed, the speed telemetry — so we never run a second
+  // concurrent watchPositionAsync (battery). useTelemetryCapture no longer opens
+  // its own speed watcher. When speed is armed we need 1 Hz time-based fixes (so
+  // speed reports 0 while stationary); otherwise the pin only needs the cheaper
+  // movement-driven cadence.
+  const wantSpeedTelemetry = armedKinds.has('speed')
   useEffect(() => {
     if (!isNew || status !== 'in-room') return
     let sub: { remove(): void } | null = null
     Location.watchPositionAsync(
-      {
-        accuracy: Location.Accuracy.Balanced,
-        distanceInterval: 10,
-      },
+      wantSpeedTelemetry
+        ? { accuracy: Location.Accuracy.Balanced, timeInterval: 1000, distanceInterval: 0 }
+        : { accuracy: Location.Accuracy.Balanced, distanceInterval: 10 },
       (loc) => {
         sendLocationUpdate(loc.coords.latitude, loc.coords.longitude)
+        if (wantSpeedTelemetry) {
+          sendTelemetry({ kind: 'speed', ts: Date.now(), mps: loc.coords.speed ?? -1 })
+        }
       },
     ).then((s) => { sub = s }).catch(() => {})
     return () => { sub?.remove() }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isNew, status])
+  }, [isNew, status, wantSpeedTelemetry])
 
   // Watch the recordings query cache for server-side status changes on the
   // active recording. The recording_updated WS push keeps this cache current

@@ -16,7 +16,7 @@ import type { StreamTelemetry } from '@/hooks/useStreamTelemetry'
 // reads the ARMED sensors to SEND to viewers while live; this is read-only, for the monitor.
 
 const RAD2DEG = 180 / Math.PI
-const MOTION_HZ_MS = 66 // ~15 Hz for gyro / accel
+const MOTION_HZ_MS = 100 // ~10 Hz for gyro / accel (matches useTelemetryCapture)
 const GRAVITY = 9.81 // baseline removed from the accel magnitude (matches useStreamTelemetry)
 const MOTION_SPAN = 12
 
