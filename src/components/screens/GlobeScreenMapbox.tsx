@@ -1363,6 +1363,12 @@ export function GlobeScreenMapbox() {
             // Disable the two-finger bearing twist (z-axis / yaw roll). Pan + pinch-zoom
             // stay; auto-spin is a pan (center change), so it's unaffected.
             rotateEnabled={false}
+            // Disable pitch/tilt. On Android a fast swipe on the globe is sporadically
+            // misclassified as a tilt gesture (mapbox-maps-android #2217), which then
+            // snaps the camera back to its un-tilted state — the intermittent "bounce
+            // back to where it started" seen only on Android, only on the globe (zoomed
+            // out), only on a fast swipe. A spin globe never wants tilt, so turn it off.
+            pitchEnabled={false}
             // Pan inertia (fling-to-spin). iOS keeps near-full momentum at 0.99;
             // Android was left `undefined`, which the native gestures manager treats
             // as 0 — a released spin stopped dead with no inertia. Give both
