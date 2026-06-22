@@ -31,7 +31,6 @@ import {
   Animated,
   AppState,
   PanResponder,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -637,9 +636,16 @@ export function GlobeScreenMapbox() {
     setMapZoom(state.properties.zoom)
     mapZoomRef.current = state.properties.zoom
     throttledPushViewport()
+    // Always resume rotation from wherever the map actually is — not only when
+    // Mapbox flags the change as a gesture. On Android `isGestureActive` is
+    // unreliable, and guarding the sync behind it left `rotLngRef` stale at the
+    // pre-drag longitude: the 80ms auto-rotate tick then slammed the camera back
+    // there every frame ("hits a wall and bounces back to where it started").
+    // Syncing unconditionally is idempotent for our own rotate writes (same value)
+    // and keeps a user drag from snapping back even if the gesture flag misses.
+    rotLngRef.current = (lng + 360) % 360
+    rotLatRef.current = lat
     if (state.gestures.isGestureActive) {
-      rotLngRef.current = (lng + 360) % 360
-      rotLatRef.current = lat
       gestureActiveRef.current = true
       pauseRotation()
     } else {
@@ -1265,6 +1271,15 @@ export function GlobeScreenMapbox() {
             { transform: [{ translateY: globeTranslateY }, { scale: fitScale }] },
           ]}
           pointerEvents="box-none"
+          // Belt-and-suspenders gate for the auto-rotate loop. Mapbox's
+          // `isGestureActive` (read in handleCameraChanged) is unreliable on
+          // Android, so pausing only off that flag can leave the 80ms rotate tick
+          // fighting a user drag. This raw touch handler fires the instant a finger
+          // lands on the globe — independent of the gesture flag — and pauses
+          // rotation immediately. Raw onTouchStart bubbles through a box-none
+          // wrapper (same pattern the clock collapse signal uses), so it works even
+          // though the native MapView consumes the gesture itself.
+          onTouchStart={() => pauseRotation()}
         >
           <Mapbox.MapView
             ref={mapViewRef}
@@ -1282,7 +1297,11 @@ export function GlobeScreenMapbox() {
             // Disable the two-finger bearing twist (z-axis / yaw roll). Pan + pinch-zoom
             // stay; auto-spin is a pan (center change), so it's unaffected.
             rotateEnabled={false}
-            gestureSettings={{ panDecelerationFactor: Platform.OS === 'ios' ? 0.99 : undefined }}
+            // Pan inertia (fling-to-spin). iOS keeps near-full momentum at 0.99;
+            // Android was left `undefined`, which the native gestures manager treats
+            // as 0 — a released spin stopped dead with no inertia. Give both
+            // platforms a real deceleration factor so a flung globe keeps spinning.
+            gestureSettings={{ panDecelerationFactor: 0.99 }}
             onCameraChanged={handleCameraChanged}
             onDidFinishLoadingMap={handleMapLoad}
             onDidFinishLoadingStyle={handleStyleLoad}
