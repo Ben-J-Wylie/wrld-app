@@ -7,7 +7,7 @@
 
 import { useRef, useState } from 'react'
 import { KeyboardAvoidingView, Modal, Platform, Pressable as RNPressable, StyleSheet, View } from 'react-native'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { theme } from '@/tokens/theme'
 import { Text } from '@/components/primitives/Text'
 import { HelpText } from '@/components/primitives/HelpText'
@@ -29,6 +29,7 @@ type Props = {
 export function ProfileGiftSheet({ visible, handle, displayName, onClose }: Props) {
   const { data: me } = useCurrentUser()
   const setCurrentUser = useSetCurrentUser()
+  const qc = useQueryClient()
   const { data: gifts } = useGiftCatalog()
   const balance = me?.spaceBucks ?? 0
 
@@ -43,6 +44,9 @@ export function ProfileGiftSheet({ visible, handle, displayName, onClose }: Prop
     },
     onSuccess: (res) => {
       if (me) setCurrentUser({ ...me, spaceBucks: res.newBalance })
+      // Refresh the recipient's profile so "gifts received" updates immediately
+      // (the refetch lands while the "Sent" screen shows).
+      qc.invalidateQueries({ queryKey: ['user', handle] })
       keyRef.current = null
       setSentGift({ emoji: res.emoji, amount: res.amount })
     },
