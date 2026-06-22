@@ -112,10 +112,9 @@ const SPIN_STEP_DEG = 0.15 // per-tick longitude advance at full speed
 const GLOBE_FIT_SCALE = 0.65
 const GLOBE_FIT_FULL_ZOOM = 3.0
 
-// Graticule — thin reference lines on the globe: the equator, the two tropics, the
-// Arctic / Antarctic circles, and a vertical N–S axis (the prime-meridian great
-// circle through both poles). Static, on every planet, drawn under the pins. Densely
-// sampled so the rings stay smooth on the globe projection.
+// Graticule — thin reference lines on the globe: the equator, the two tropics, and
+// the Arctic / Antarctic circles. Static, on every planet, drawn under the pins.
+// Densely sampled so the rings stay smooth on the globe projection.
 const GRATICULE_COLOR = '#1a1612'
 const TROPIC_LAT = 23.4366 // obliquity of the ecliptic — Tropics of Cancer / Capricorn
 const POLAR_LAT = 90 - TROPIC_LAT // 66.5634° — Arctic / Antarctic circles
@@ -123,12 +122,6 @@ const POLAR_LAT = 90 - TROPIC_LAT // 66.5634° — Arctic / Antarctic circles
 const latRing = (lat: number): [number, number][] => {
   const pts: [number, number][] = []
   for (let lng = -180; lng <= 180; lng += 4) pts.push([lng, lat])
-  return pts
-}
-const meridianRing = (): [number, number][] => {
-  const pts: [number, number][] = []
-  for (let lat = -90; lat <= 90; lat += 4) pts.push([0, lat])
-  for (let lat = 90; lat >= -90; lat -= 4) pts.push([180, lat])
   return pts
 }
 const GRATICULE_GEOJSON = {
@@ -158,11 +151,6 @@ const GRATICULE_GEOJSON = {
       type: 'Feature' as const,
       properties: { kind: 'polar' },
       geometry: { type: 'LineString' as const, coordinates: latRing(-POLAR_LAT) },
-    },
-    {
-      type: 'Feature' as const,
-      properties: { kind: 'axis' },
-      geometry: { type: 'LineString' as const, coordinates: meridianRing() },
     },
   ],
 }
@@ -1323,9 +1311,9 @@ export function GlobeScreenMapbox() {
               maxZoomLevel={20}
             />
 
-            {/* Graticule — equator, tropics, polar circles, and the N–S axis. The polar
-            circles foreshorten near the poles so they read faint at a flat opacity;
-            boost them and ease the rest so all the lines land at a consistent weight. */}
+            {/* Graticule — equator, tropics, and polar circles. The polar circles
+            foreshorten near the poles so they read faint at a flat opacity; boost
+            them and ease the rest so all the lines land at a consistent weight. */}
             <ShapeSource id="graticule" shape={GRATICULE_GEOJSON}>
               <LineLayer
                 id="graticule-lines"
