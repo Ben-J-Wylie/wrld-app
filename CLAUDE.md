@@ -3890,3 +3890,25 @@ all tiers, no new navigation. It reads `profile?.broadcastSeconds` (the passport
 already fetches `useUserProfile(user.handle)`); local `formatLiveTime` floors to the
 minute ("0m" when none). `statsRow` is `space-between` with no fixed widths so the
 4th item distributes — check narrow-screen spacing on the next build.
+
+---
+
+## Updates — June 2026 (Day/night terminator on the globe — IN PROGRESS, KAN-52)
+
+A day/night terminator + shaded night side on the discovery globe
+(`GlobeScreenMapbox.tsx`). **The work is UNCOMMITTED** in the working tree on branch
+`planet` (terminator `LineLayer` + night `FillLayer`, both driven by
+`Date.now() - timeOffsetMs` so they track the live WRLD clock + the time-machine scrub,
+on both Earth + Haven). It works on-device but has a residual pole artifact that is
+**structural to Mapbox's globe** (Web Mercator can't represent latitudes past ±85.05°, so
+Mapbox draws a degenerate pole-cap fan; a fill hides it, a line inherits it) — not fixable
+within `@rnmapbox/maps`.
+
+This forces an **architecture decision** (recorded, not yet made): (a) ship the Mapbox-fill
+version and accept the minor near-equinox pole compromise; (b) prototype/migrate to a pure
+three.js globe where a sun-oriented hemisphere shell is geometrically trivial — but that
+unwinds Haven, viewport-tile discovery (P4), street-zoom, native clustering, and the
+deliberate Mapbox decision. **Filed as Jira [KAN-52](https://aaronwyliework.atlassian.net/browse/KAN-52)**
+(project KAN, Type Task, assigned Ben) — full technical context + the fork + tunable dials
+live in **`HANDOFF-day-night-terminator-2026-06-22.md`**. Pure JS, no EAS rebuild. Nothing
+ships until the decision is made.
