@@ -329,6 +329,13 @@ export function GlobeScreenMapbox() {
   const { config } = usePublicConfig()
   const pinZoomThreshold = configNumber(config, 'PIN_ZOOM_THRESHOLD', PIN_ZOOM_THRESHOLD)
   const countMinZoom = configNumber(config, 'COUNT_MIN_ZOOM', COUNT_MIN_ZOOM)
+  // Globe sizing knobs (admin-tunable, "Globe rotation" group). globeMinZoom is the
+  // resting/floor zoom — keep it at the "globe fills the viewport" value or Mapbox
+  // rubber-bands the spin when zoomed out. globeFitScale is the on-screen size dial
+  // (RN shrink of the already-full MapView; safe to lower with no bounce). Applied on
+  // app relaunch (config is cached ~30s server-side + locally).
+  const globeMinZoom = configNumber(config, 'GLOBE_MIN_ZOOM', GLOBE_MIN_ZOOM)
+  const globeFitScale = configNumber(config, 'GLOBE_FIT_SCALE', GLOBE_FIT_SCALE)
   const {
     pins: streams,
     counts,
@@ -457,9 +464,9 @@ export function GlobeScreenMapbox() {
   // Fit-scale: shrink the globe at the floor (GLOBE_FIT_SCALE), relaxing to 1.0 as
   // you pinch in past the floor (so street detail still fills the screen).
   const fitScale = useMemo(() => {
-    const t = (mapZoom - GLOBE_MIN_ZOOM) / (GLOBE_FIT_FULL_ZOOM - GLOBE_MIN_ZOOM)
-    return GLOBE_FIT_SCALE + Math.max(0, Math.min(1, t)) * (1 - GLOBE_FIT_SCALE)
-  }, [mapZoom])
+    const t = (mapZoom - globeMinZoom) / (GLOBE_FIT_FULL_ZOOM - globeMinZoom)
+    return globeFitScale + Math.max(0, Math.min(1, t)) * (1 - globeFitScale)
+  }, [mapZoom, globeMinZoom, globeFitScale])
 
   const hasActiveSearch = query.trim().length > 0 || (chipId !== null && chipId !== 'all')
 
@@ -736,7 +743,7 @@ export function GlobeScreenMapbox() {
     } else {
       cameraRef.current?.setCamera({
         centerCoordinate: planetById('earth').initialCamera.centerCoordinate,
-        zoomLevel: planetById('earth').initialCamera.zoomLevel,
+        zoomLevel: globeMinZoom,
         animationMode: 'none',
         animationDuration: 0,
       })
@@ -798,7 +805,7 @@ export function GlobeScreenMapbox() {
     // during a swap), parked off the ENTERING edge and shrunk by glideScale.
     cameraRef.current?.setCamera({
       centerCoordinate: center,
-      zoomLevel: p.initialCamera.zoomLevel,
+      zoomLevel: globeMinZoom,
       animationDuration: 0,
     })
     glideX.setValue(dir * windowW)
@@ -1359,9 +1366,9 @@ export function GlobeScreenMapbox() {
               ref={cameraRef}
               defaultSettings={{
                 centerCoordinate: [0, 20],
-                zoomLevel: planetById('earth').initialCamera.zoomLevel,
+                zoomLevel: globeMinZoom,
               }}
-              minZoomLevel={GLOBE_MIN_ZOOM}
+              minZoomLevel={globeMinZoom}
               maxZoomLevel={20}
             />
 
