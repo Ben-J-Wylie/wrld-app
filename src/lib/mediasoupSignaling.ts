@@ -40,7 +40,7 @@ export type ClientMessage =
   | { type: 'cameraFacing'; facing: 'user' | 'environment' }
   | { type: 'locationUpdate'; lat: number; lng: number }
   | { type: 'telemetry'; payload: TelemetryPayload }
-  | { type: 'tip'; amount: number }
+  | { type: 'tip'; amount: number; message?: string; idempotencyKey?: string }
   | { type: 'gift'; giftType: string }
 
 export type ServerMessage =
@@ -69,8 +69,10 @@ export type ServerMessage =
   | { type: 'reaction'; from: string; kind: string; ts: number }
   | { type: 'tipReceived'; handle: string; amount: number }
   | { type: 'tipConfirmed'; newBalance: number }
+  | { type: 'tipFailed'; message: string }
   | { type: 'giftReceived'; handle: string; giftType: string; emoji: string; amount: number }
   | { type: 'giftConfirmed'; newBalance: number }
+  | { type: 'giftFailed'; message: string }
   | { type: 'adminEnded' }
   | { type: 'adminWarning'; message: string }
   | { type: 'error'; message: string }
@@ -284,8 +286,8 @@ class MediasoupSignalingClient {
     this.trySend({ type: 'telemetry', payload })
   }
 
-  sendTip(amount: number): void {
-    this.send({ type: 'tip', amount })
+  sendTip(amount: number, opts?: { message?: string; idempotencyKey?: string }): void {
+    this.send({ type: 'tip', amount, message: opts?.message, idempotencyKey: opts?.idempotencyKey })
   }
 
   sendGift(giftType: string): void {

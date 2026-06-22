@@ -37,6 +37,12 @@ export function useSignaling() {
   const [giftEvents, setGiftEvents] = useState<GiftEvent[]>([])
   const [confirmedBalance, setConfirmedBalance] = useState<number | null>(null)
   const [suspensionError, setSuspensionError] = useState<string | null>(null)
+  // Set when the server rejects a live tip (insufficient balance, below the
+  // minimum, …). The tip sheet has already closed on send, so StreamScreen
+  // surfaces this so the failure isn't silent.
+  const [tipError, setTipError] = useState<string | null>(null)
+  // Same, for a rejected gift (the gift rail fires-and-forgets).
+  const [giftError, setGiftError] = useState<string | null>(null)
   // Server-sent error during go-live (e.g. backend rejected streamStarted: PPV
   // event in progress, banned title). Arrives as a {type:'error'} message just
   // before the 4001 close; StreamScreen surfaces it so the broadcaster sees the
@@ -70,12 +76,18 @@ export function useSignaling() {
       if (msg.type === 'tipConfirmed') {
         setConfirmedBalance(msg.newBalance)
       }
+      if (msg.type === 'tipFailed') {
+        setTipError(msg.message)
+      }
       if (msg.type === 'giftReceived') {
         const id = ++giftCounterRef.current
         setGiftEvents((prev) => [...prev, { handle: msg.handle, giftType: msg.giftType, emoji: msg.emoji, amount: msg.amount, id }])
       }
       if (msg.type === 'giftConfirmed') {
         setConfirmedBalance(msg.newBalance)
+      }
+      if (msg.type === 'giftFailed') {
+        setGiftError(msg.message)
       }
       if (msg.type === 'error' && msg.message) {
         if (msg.message.toLowerCase().includes('suspended')) setSuspensionError(msg.message)
@@ -112,6 +124,8 @@ export function useSignaling() {
     setKicked(false)
     setAdminEnded(false)
     setGoLiveError(null)
+    setTipError(null)
+    setGiftError(null)
     try {
       await signalingClient.connect(env.mediasoupWssUrl)
       setStatus('connected')
@@ -188,7 +202,10 @@ export function useSignaling() {
   const sendCameraFacing = useCallback((facing: 'user' | 'environment') => signalingClient.sendCameraFacing(facing), [])
   const sendLocationUpdate = useCallback((lat: number, lng: number) => signalingClient.sendLocationUpdate(lat, lng), [])
   const sendTelemetry = useCallback((payload: TelemetryPayload) => signalingClient.sendTelemetry(payload), [])
-  const sendTip = useCallback((amount: number) => signalingClient.sendTip(amount), [])
+  const sendTip = useCallback(
+    (amount: number, opts?: { message?: string; idempotencyKey?: string }) => signalingClient.sendTip(amount, opts),
+    [],
+  )
   const sendGift = useCallback((giftType: string) => signalingClient.sendGift(giftType), [])
 
   const dismissReaction = useCallback((id: number) => {
@@ -240,5 +257,9 @@ export function useSignaling() {
     clearSuspensionError: () => setSuspensionError(null),
     goLiveError,
     clearGoLiveError: () => setGoLiveError(null),
+    tipError,
+    clearTipError: () => setTipError(null),
+    giftError,
+    clearGiftError: () => setGiftError(null),
   }
 }

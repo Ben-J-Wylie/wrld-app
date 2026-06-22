@@ -60,7 +60,7 @@ export const usersApi = {
   // enforced server-side. Returns the tipper's new Space Bucks balance.
   tip: async (
     handle: string,
-    body: { amount: number; message?: string; clipId?: string },
+    body: { amount: number; message?: string; clipId?: string; idempotencyKey?: string },
   ): Promise<{ newBalance: number; spaceBucksPerDollar: number }> => {
     const res = await apiClient.post<{ newBalance: number; spaceBucksPerDollar: number }>(
       `/users/${handle}/tip`,

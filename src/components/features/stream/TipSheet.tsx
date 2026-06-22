@@ -20,6 +20,7 @@ import {
   TextInput,
   View,
 } from 'react-native'
+import { Filter as ProfanityFilter } from 'bad-words'
 import { theme } from '@/tokens/theme'
 import { Text } from '@/components/primitives/Text'
 import { HelpText } from '@/components/primitives/HelpText'
@@ -27,6 +28,8 @@ import { Button } from '@/components/primitives/Button'
 import { Pressable } from '@/components/primitives/Pressable'
 
 const SPACE_BUCKS_PER_DOLLAR = 100
+const MAX_MESSAGE = 140
+const profanityFilter = new ProfanityFilter()
 
 const PRESETS = [
   { amount: 50, label: '50 🚀', sub: '$0.50' },
@@ -38,32 +41,40 @@ type Props = {
   visible: boolean
   balance: number
   onClose: () => void
-  onTip: (amount: number) => void
+  onTip: (amount: number, message?: string) => void
+  // The minimum tip in Space Bucks, from backend config (TIP_MINIMUM). Defaults
+  // to 10 so the sheet still works if config hasn't loaded.
+  minTip?: number
 }
 
-export function TipSheet({ visible, balance, onClose, onTip }: Props) {
+export function TipSheet({ visible, balance, onClose, onTip, minTip = 10 }: Props) {
   const [selected, setSelected] = useState<number | null>(null)
   const [custom, setCustom] = useState('')
+  const [message, setMessage] = useState('')
 
   const customAmount = parseInt(custom, 10)
   const amount =
     selected ??
     (custom ? (Number.isFinite(customAmount) && customAmount > 0 ? customAmount : 0) : 0)
   const insufficient = amount > 0 && amount > balance
-  const canTip = amount >= 10 && !insufficient
+  const belowMin = amount > 0 && amount < minTip
+  const messageProfane = message.trim().length > 0 && profanityFilter.isProfane(message)
+  const canTip = amount >= minTip && !insufficient && !messageProfane
 
   function handleTip() {
     if (!canTip) return
-    onTip(amount)
+    onTip(amount, message.trim() || undefined)
     onClose()
     setSelected(null)
     setCustom('')
+    setMessage('')
   }
 
   function handleClose() {
     onClose()
     setSelected(null)
     setCustom('')
+    setMessage('')
   }
 
   const dollarEquiv =
@@ -138,7 +149,19 @@ export function TipSheet({ visible, balance, onClose, onTip }: Props) {
             }}
           />
 
+          <TextInput
+            style={[styles.customInput, styles.messageInput]}
+            placeholder="Add a message (optional)"
+            placeholderTextColor={theme.colors.text.muted}
+            value={message}
+            onChangeText={setMessage}
+            maxLength={MAX_MESSAGE}
+            multiline
+          />
+
           {insufficient && <HelpText tone="err">Insufficient balance</HelpText>}
+          {!insufficient && belowMin && <HelpText tone="err">Minimum tip is {minTip} 🚀</HelpText>}
+          {messageProfane && <HelpText tone="err">Please remove inappropriate language from your message.</HelpText>}
 
           <Button
             label={canTip && dollarEquiv ? `Send ${amount} 🚀 · ${dollarEquiv}` : 'Send tip'}
@@ -204,5 +227,9 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.sm,
     fontFamily: theme.typography.body.fontFamily,
     fontSize: theme.typography.body.fontSize,
+  },
+  messageInput: {
+    minHeight: 56,
+    textAlignVertical: 'top',
   },
 })

@@ -90,6 +90,8 @@ import { AuthModal } from '@/components/features/stream/AuthModal'
 import { TipSheet } from '@/components/features/stream/TipSheet'
 import { GiftRail } from '@/components/features/stream/GiftRail'
 import { useGiftCatalog } from '@/hooks/useGiftCatalog'
+import { usePublicConfig, configNumber } from '@/hooks/usePublicConfig'
+import { newIdempotencyKey } from '@/lib/idempotency'
 import { FollowButton } from '@/components/features/user/FollowButton'
 import { useInvalidateCurrentUser } from '@/hooks/useCurrentUser'
 import { useInvalidateWallet } from '@/hooks/useWallet'
@@ -331,6 +333,8 @@ export function StreamScreen() {
     error: signalingError, setError,
     suspensionError, clearSuspensionError,
     goLiveError, clearGoLiveError,
+    tipError, clearTipError,
+    giftError, clearGiftError,
     chatMessages, reactions, broadcasterPaused,
     tipEvents, giftEvents, confirmedBalance,
     connect, createRoom, joinRoom, disconnect,
@@ -1022,6 +1026,20 @@ export function StreamScreen() {
     Alert.alert('Account suspended', suspensionError, [{ text: 'OK', onPress: clearSuspensionError }])
   }, [suspensionError])
 
+  // Viewer: a live tip was rejected server-side (insufficient balance, a race,
+  // below the minimum). The tip sheet closed on send, so without this the
+  // failure would be silent (the money never moved). Surface the reason.
+  useEffect(() => {
+    if (!tipError) return
+    Alert.alert('Tip not sent', tipError, [{ text: 'OK', onPress: clearTipError }])
+  }, [tipError])
+
+  // Same for a rejected gift (the gift rail fires-and-forgets too).
+  useEffect(() => {
+    if (!giftError) return
+    Alert.alert('Gift not sent', giftError, [{ text: 'OK', onPress: clearGiftError }])
+  }, [giftError])
+
   // Broadcaster: the backend rejected the go-live (e.g. a PPV event in progress,
   // a banned title) — mediasoup sends the reason as an error then closes 4001.
   // Without this the broadcaster just sees a blank "Going live…" screen. Surface
@@ -1363,8 +1381,9 @@ export function StreamScreen() {
 
   const tipBalance = confirmedBalance ?? (wrldUser?.spaceBucks ?? 0)
 
-  function handleTip(amount: number) {
-    sendTip(amount)
+  function handleTip(amount: number, message?: string) {
+    // Fresh dedup key per send so a duplicate WS delivery can't double-charge.
+    sendTip(amount, { message, idempotencyKey: newIdempotencyKey() })
   }
 
   function handleTipPress() {
@@ -1373,6 +1392,8 @@ export function StreamScreen() {
   }
 
   const { data: giftCatalog } = useGiftCatalog()
+  const { config: publicConfig } = usePublicConfig()
+  const minTip = configNumber(publicConfig, 'TIP_MINIMUM', 10)
 
   function handleSendGift(giftId: string) {
     sendGift(giftId)
@@ -2124,6 +2145,7 @@ export function StreamScreen() {
       <TipSheet
         visible={tipSheetVisible}
         balance={tipBalance}
+        minTip={minTip}
         onClose={() => setTipSheetVisible(false)}
         onTip={handleTip}
       />

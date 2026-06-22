@@ -6,7 +6,7 @@
 // checked client-side; the server is the authority) and owns the API mutation
 // + success state. Space Bucks → the creator's Stardust.
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import {
   KeyboardAvoidingView,
   Modal,
@@ -16,6 +16,7 @@ import {
   View,
 } from 'react-native'
 import { useMutation } from '@tanstack/react-query'
+import { newIdempotencyKey } from '@/lib/idempotency'
 import { Filter as ProfanityFilter } from 'bad-words'
 import { theme } from '@/tokens/theme'
 import { Text } from '@/components/primitives/Text'
@@ -24,6 +25,7 @@ import { Button } from '@/components/primitives/Button'
 import { Pressable } from '@/components/primitives/Pressable'
 import { usersApi } from '@/api/users'
 import { useCurrentUser, useSetCurrentUser } from '@/hooks/useCurrentUser'
+import { usePublicConfig, configNumber } from '@/hooks/usePublicConfig'
 
 const SPACE_BUCKS_PER_DOLLAR = 100
 const MAX_MESSAGE = 140
@@ -45,6 +47,8 @@ type Props = {
 export function ProfileTipSheet({ visible, handle, displayName, onClose }: Props) {
   const { data: me } = useCurrentUser()
   const setCurrentUser = useSetCurrentUser()
+  const { config } = usePublicConfig()
+  const minTip = configNumber(config, 'TIP_MINIMUM', 10)
   const balance = me?.spaceBucks ?? 0
 
   const [selected, setSelected] = useState<number | null>(100)
@@ -57,14 +61,25 @@ export function ProfileTipSheet({ visible, handle, displayName, onClose }: Props
   const amount =
     custom ? (Number.isFinite(customAmount) && customAmount > 0 ? customAmount : 0) : (selected ?? 0)
   const insufficient = amount > 0 && amount > balance
+  const belowMin = amount > 0 && amount < minTip
   const messageProfane = message.trim().length > 0 && profanityFilter.isProfane(message)
-  const canTip = amount >= 10 && !insufficient && !messageProfane
+  const canTip = amount >= minTip && !insufficient && !messageProfane
+
+  // Stable dedup key for THIS logical tip. Set lazily on send and kept across a
+  // retry (e.g. the user taps send again after a lost-response timeout) so the
+  // server collapses the duplicate to the original charge. Cleared on success
+  // and whenever the amount/message changes (a different tip → a new key).
+  const keyRef = useRef<string | null>(null)
 
   const tipMutation = useMutation({
-    mutationFn: () => usersApi.tip(handle, { amount, message: message.trim() || undefined }),
+    mutationFn: () => {
+      const idempotencyKey = (keyRef.current ??= newIdempotencyKey())
+      return usersApi.tip(handle, { amount, message: message.trim() || undefined, idempotencyKey })
+    },
     onSuccess: (res) => {
       // Patch the balance immediately; the user_updated WS push will also land.
       if (me) setCurrentUser({ ...me, spaceBucks: res.newBalance })
+      keyRef.current = null
       setSent(true)
     },
     onError: (err: unknown) => {
@@ -79,6 +94,7 @@ export function ProfileTipSheet({ visible, handle, displayName, onClose }: Props
     setMessage('')
     setError(null)
     setSent(false)
+    keyRef.current = null
   }
 
   function handleClose() {
@@ -126,6 +142,7 @@ export function ProfileTipSheet({ visible, handle, displayName, onClose }: Props
                         setSelected(p.amount)
                         setCustom('')
                         setError(null)
+                        keyRef.current = null
                       }}
                       style={[styles.preset, isSelected && styles.presetActive]}
                     >
@@ -156,6 +173,7 @@ export function ProfileTipSheet({ visible, handle, displayName, onClose }: Props
                   setCustom(t)
                   setSelected(null)
                   setError(null)
+                  keyRef.current = null
                 }}
               />
 
@@ -164,12 +182,13 @@ export function ProfileTipSheet({ visible, handle, displayName, onClose }: Props
                 placeholder="Add a message (optional)"
                 placeholderTextColor={theme.colors.text.muted}
                 value={message}
-                onChangeText={setMessage}
+                onChangeText={(t) => { setMessage(t); keyRef.current = null }}
                 maxLength={MAX_MESSAGE}
                 multiline
               />
 
               {insufficient && <HelpText tone="err">Insufficient balance</HelpText>}
+              {!insufficient && belowMin && <HelpText tone="err">Minimum tip is {minTip} 🚀</HelpText>}
               {messageProfane && <HelpText tone="err">Please remove inappropriate language from your message.</HelpText>}
               {error && <HelpText tone="err">{error}</HelpText>}
 
