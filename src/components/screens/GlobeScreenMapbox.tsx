@@ -42,7 +42,14 @@ import {
 import { router, useFocusEffect } from 'expo-router'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
-import Mapbox, { Camera, ShapeSource, CircleLayer, SymbolLayer, LineLayer, Atmosphere } from '@rnmapbox/maps'
+import Mapbox, {
+  Camera,
+  ShapeSource,
+  CircleLayer,
+  SymbolLayer,
+  LineLayer,
+  Atmosphere,
+} from '@rnmapbox/maps'
 import { consumeStreamSignal } from '@/lib/streamSignals'
 import { returnToActiveBroadcast } from '@/lib/activeBroadcast'
 import { streamsApi } from '@/api/streams'
@@ -79,30 +86,30 @@ import type { Stream } from '@/types'
 
 Mapbox.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '')
 
-const PIN_RED    = '#FF3B5C'
+const PIN_RED = '#FF3B5C'
 const PIN_PURPLE = '#A855F7'
-const PIN_BLACK  = '#111111' // the viewer's own stream pin (tap → return to it)
+const PIN_BLACK = '#111111' // the viewer's own stream pin (tap → return to it)
 const PIN_BORDER = '#FFFFFF'
 
 // Globe zoom FLOOR — the furthest you can pinch out. Below the resting zoom
 // (each planet's initialCamera.zoomLevel = 1.0), so there's pinch-out room; the low
 // end may re-introduce the vertical-rotation collapse — raise toward the resting
 // zoom if that bites.
-const GLOBE_MIN_ZOOM = 0.5
+const GLOBE_MIN_ZOOM = 1.5
 
 // Idle globe auto-rotation: spin as a signature intro, then ease to a stop so
 // Mapbox stops re-rendering (continuous setCamera at 12.5fps was the dominant
 // battery cost when browsing). Re-armed on interaction / focus / foreground.
 const SPIN_WINDOW_MS = 12_000 // how long each spin window lasts before resting
-const SPIN_EASE_MS   = 2_500  // taper the angular speed to zero over the tail
-const SPIN_STEP_DEG  = 0.15   // per-tick longitude advance at full speed
+const SPIN_EASE_MS = 2_500 // taper the angular speed to zero over the tail
+const SPIN_STEP_DEG = 0.15 // per-tick longitude advance at full speed
 
 // Globe fit-scale — a visual shrink of the rendered globe, independent of the zoom,
 // so the planet can sit smaller / more framed than the zoom floor alone allows. Full
 // shrink (GLOBE_FIT_SCALE) at the floor, relaxing to 1.0 by GLOBE_FIT_FULL_ZOOM so
 // pinched-in (street) detail still fills the screen. 1.0 = no shrink. (Scales the
 // native MapView — verify on Android.)
-const GLOBE_FIT_SCALE = 0.9
+const GLOBE_FIT_SCALE = 0.65
 const GLOBE_FIT_FULL_ZOOM = 3.0
 
 // Graticule — thin reference lines on the globe: the equator, the two tropics, the
@@ -127,12 +134,36 @@ const meridianRing = (): [number, number][] => {
 const GRATICULE_GEOJSON = {
   type: 'FeatureCollection' as const,
   features: [
-    { type: 'Feature' as const, properties: { kind: 'equator' }, geometry: { type: 'LineString' as const, coordinates: latRing(0) } },
-    { type: 'Feature' as const, properties: { kind: 'tropic' }, geometry: { type: 'LineString' as const, coordinates: latRing(TROPIC_LAT) } },
-    { type: 'Feature' as const, properties: { kind: 'tropic' }, geometry: { type: 'LineString' as const, coordinates: latRing(-TROPIC_LAT) } },
-    { type: 'Feature' as const, properties: { kind: 'polar' }, geometry: { type: 'LineString' as const, coordinates: latRing(POLAR_LAT) } },
-    { type: 'Feature' as const, properties: { kind: 'polar' }, geometry: { type: 'LineString' as const, coordinates: latRing(-POLAR_LAT) } },
-    { type: 'Feature' as const, properties: { kind: 'axis' }, geometry: { type: 'LineString' as const, coordinates: meridianRing() } },
+    {
+      type: 'Feature' as const,
+      properties: { kind: 'equator' },
+      geometry: { type: 'LineString' as const, coordinates: latRing(0) },
+    },
+    {
+      type: 'Feature' as const,
+      properties: { kind: 'tropic' },
+      geometry: { type: 'LineString' as const, coordinates: latRing(TROPIC_LAT) },
+    },
+    {
+      type: 'Feature' as const,
+      properties: { kind: 'tropic' },
+      geometry: { type: 'LineString' as const, coordinates: latRing(-TROPIC_LAT) },
+    },
+    {
+      type: 'Feature' as const,
+      properties: { kind: 'polar' },
+      geometry: { type: 'LineString' as const, coordinates: latRing(POLAR_LAT) },
+    },
+    {
+      type: 'Feature' as const,
+      properties: { kind: 'polar' },
+      geometry: { type: 'LineString' as const, coordinates: latRing(-POLAR_LAT) },
+    },
+    {
+      type: 'Feature' as const,
+      properties: { kind: 'axis' },
+      geometry: { type: 'LineString' as const, coordinates: meridianRing() },
+    },
   ],
 }
 
@@ -140,8 +171,8 @@ const GRATICULE_GEOJSON = {
 // layer (translateX slide + scale zoom) — NOT the Mapbox camera, which stutters
 // when animated under load. The globe slides off one side shrinking, the new
 // planet slides in from the other growing back. Direction = registry order.
-const TX_EXIT_MS    = 460
-const TX_ENTER_MS   = 560
+const TX_EXIT_MS = 460
+const TX_ENTER_MS = 560
 const TX_EXIT_SCALE = 0.45 // how far the globe shrinks as it flies off
 const TX_STYLE_FALLBACK_MS = 1400 // enter even if the style-load event is missed
 
@@ -161,11 +192,11 @@ const TX_STYLE_FALLBACK_MS = 1400 // enter even if the style-load event is misse
 // includes the tab bar and gives wrong numbers for `bottom: 0`-anchored
 // math. The drawer is positioned `bottom: 0` (i.e. just above the tab
 // bar) and we animate its height.
-const DRAWER_CLOSED_H            = 44   // grip + breathing room above the tab bar
-const DRAWER_PEEK_H              = 220  // header + StreamCard.trending (144) + rail padding
-const DRAWER_EXPANDED_TOP_OFFSET = 190  // top stack + chrome reserved above the expanded sheet
-const TAP_DRAG_TOLERANCE         = 10   // |dy| under this is a tap, not a drag
-const COMMIT_DRAG_DISTANCE       = 60   // px past TAP_DRAG_TOLERANCE before a drag commits
+const DRAWER_CLOSED_H = 44 // grip + breathing room above the tab bar
+const DRAWER_PEEK_H = 220 // header + StreamCard.trending (144) + rail padding
+const DRAWER_EXPANDED_TOP_OFFSET = 190 // top stack + chrome reserved above the expanded sheet
+const TAP_DRAG_TOLERANCE = 10 // |dy| under this is a tap, not a drag
+const COMMIT_DRAG_DISTANCE = 60 // px past TAP_DRAG_TOLERANCE before a drag commits
 
 // Vertical placement of the rendered globe sphere on screen.
 //
@@ -183,7 +214,7 @@ const COMMIT_DRAG_DISTANCE       = 60   // px past TAP_DRAG_TOLERANCE before a d
 // drawer doesn't crowd it. peek and expanded share the same fraction
 // — the globe stays put while the drawer slides between them.
 const GLOBE_FRAC_CLOSED = 0.59
-const GLOBE_FRAC_OPEN   = 0.48
+const GLOBE_FRAC_OPEN = 0.48
 // The clock also pushes the planet up when it expands (it grows from the bottom
 // like the drawer). Its frac shift is proportional to its growth vs the
 // drawer's — the same shift-per-pixel of bottom-UI growth — so the four
@@ -209,8 +240,8 @@ function nextStateDown(s: DrawerState): DrawerState {
 // expressed inline as rgba because LinearGradient needs colour strings
 // with explicit alpha stops — same precedent as `bg.glass`.
 const TOP_SCRIM_HEIGHT = 220
-const TOP_SCRIM_TOP    = 'rgba(236,230,214,1)'
-const TOP_SCRIM_MID    = 'rgba(236,230,214,0.85)'
+const TOP_SCRIM_TOP = 'rgba(236,230,214,1)'
+const TOP_SCRIM_MID = 'rgba(236,230,214,0.85)'
 const TOP_SCRIM_BOTTOM = 'rgba(236,230,214,0)'
 
 const CATEGORIES: Category[] = [
@@ -299,7 +330,11 @@ export function GlobeScreenMapbox() {
   const { config } = usePublicConfig()
   const pinZoomThreshold = configNumber(config, 'PIN_ZOOM_THRESHOLD', PIN_ZOOM_THRESHOLD)
   const countMinZoom = configNumber(config, 'COUNT_MIN_ZOOM', COUNT_MIN_ZOOM)
-  const { pins: streams, counts, setView } = useViewportDiscovery({ pinZoomThreshold, countMinZoom })
+  const {
+    pins: streams,
+    counts,
+    setView,
+  } = useViewportDiscovery({ pinZoomThreshold, countMinZoom })
   const setViewRef = useRef(setView)
   setViewRef.current = setView
 
@@ -317,10 +352,7 @@ export function GlobeScreenMapbox() {
   // globe: it's excluded from the drawer + cards, its pin renders black, and
   // tapping it returns to their stream view instead of opening a join card.
   const myUserId = useAuthStore((s) => s.wrldUser?.id) ?? null
-  const isSelfStream = useCallback(
-    (s: Stream) => !!myUserId && s.hostId === myUserId,
-    [myUserId],
-  )
+  const isSelfStream = useCallback((s: Stream) => !!myUserId && s.hostId === myUserId, [myUserId])
 
   // 0 = live present; >0 = playback offset behind now (Time Machine).
   const [timeOffsetMs, setTimeOffsetMs] = useState(0)
@@ -346,10 +378,7 @@ export function GlobeScreenMapbox() {
   // (defensive: the backend also omits them when off). Empty until the backend ships.
   const publicBufferEnabled = configBool(config, 'PUBLIC_BUFFER_ENABLED', false)
   const bufferPins = publicBufferEnabled ? (histData?.bufferPins ?? []) : []
-  const clipPinById = useMemo(
-    () => new Map(clipPins.map((c) => [c.id, c] as const)),
-    [clipPins],
-  )
+  const clipPinById = useMemo(() => new Map(clipPins.map((c) => [c.id, c] as const)), [clipPins])
   const bufferPinById = useMemo(
     () => new Map(bufferPins.map((b) => [b.sessionId, b] as const)),
     [bufferPins],
@@ -433,8 +462,7 @@ export function GlobeScreenMapbox() {
     return GLOBE_FIT_SCALE + Math.max(0, Math.min(1, t)) * (1 - GLOBE_FIT_SCALE)
   }, [mapZoom])
 
-  const hasActiveSearch =
-    query.trim().length > 0 || (chipId !== null && chipId !== 'all')
+  const hasActiveSearch = query.trim().length > 0 || (chipId !== null && chipId !== 'all')
 
   const bannerPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const coordsRef = useRef(coords)
@@ -444,44 +472,54 @@ export function GlobeScreenMapbox() {
   const mapViewRef = useRef<React.ElementRef<typeof Mapbox.MapView>>(null)
   const mapZoomRef = useRef(1.5)
   const lastViewPushRef = useRef(0)
-  const hasAutoOrientedRef  = useRef(false)
-  const mapReadyRef         = useRef(false)
-  const pendingOrientRef    = useRef<[number, number] | null>(null)
-  const autoRotateRef      = useRef<ReturnType<typeof setInterval> | null>(null)
-  const interactTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const rotLngRef          = useRef(0)
-  const rotLatRef          = useRef(20)
+  const hasAutoOrientedRef = useRef(false)
+  const mapReadyRef = useRef(false)
+  const pendingOrientRef = useRef<[number, number] | null>(null)
+  const autoRotateRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const interactTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const rotLngRef = useRef(0)
+  const rotLatRef = useRef(20)
   const userInteractingRef = useRef(false)
-  const gestureActiveRef   = useRef(false)
+  const gestureActiveRef = useRef(false)
   // Auto-rotation only makes sense on Earth — a synthetic planet (Haven) would
   // spin its single island off-screen, so we keep it framed instead.
-  const rotateEnabledRef   = useRef(true)
+  const rotateEnabledRef = useRef(true)
   // Only drive the map (setCamera) while the globe is actually on screen. The
   // stream tab never unmounts, so without these guards the 80ms rotate tick
   // keeps re-rendering the GPU map when the app is backgrounded or the user is
   // on another tab — a continuous, invisible battery drain. Refs (not state) so
   // the long-lived interval closure reads the current value without resubscribing.
-  const appActiveRef       = useRef(true)
-  const screenFocusedRef   = useRef(true)
+  const appActiveRef = useRef(true)
+  const screenFocusedRef = useRef(true)
   // The globe spins as a signature intro, then comes to rest so Mapbox stops
   // re-rendering (a resting map draws ~no GPU). `spinUntilRef` holds the instant
   // the current spin window ends; null = at rest. Each interaction / focus /
   // foregrounding re-arms a fresh window. `armSpin()` (re)starts one.
-  const spinUntilRef       = useRef(0)
+  const spinUntilRef = useRef(0)
   // Spin timing is admin-tunable (RemoteConfig "Globe rotation" group); the module
   // consts above are the offline/pre-fetch fallbacks. Held in a ref so the
   // long-lived rotate interval + armSpin read current values without resubscribing.
-  const spinCfgRef = useRef({ windowMs: SPIN_WINDOW_MS, easeMs: SPIN_EASE_MS, stepDeg: SPIN_STEP_DEG })
+  const spinCfgRef = useRef({
+    windowMs: SPIN_WINDOW_MS,
+    easeMs: SPIN_EASE_MS,
+    stepDeg: SPIN_STEP_DEG,
+  })
   const spinWindowMs = configNumber(config, 'SPIN_WINDOW_MS', SPIN_WINDOW_MS)
-  const spinEaseMs   = configNumber(config, 'SPIN_EASE_MS', SPIN_EASE_MS)
-  const spinStepDeg  = configNumber(config, 'SPIN_STEP_DEG', SPIN_STEP_DEG)
+  const spinEaseMs = configNumber(config, 'SPIN_EASE_MS', SPIN_EASE_MS)
+  const spinStepDeg = configNumber(config, 'SPIN_STEP_DEG', SPIN_STEP_DEG)
   useEffect(() => {
     spinCfgRef.current = { windowMs: spinWindowMs, easeMs: spinEaseMs, stepDeg: spinStepDeg }
   }, [spinWindowMs, spinEaseMs, spinStepDeg])
-  const armSpin = useCallback(() => { spinUntilRef.current = Date.now() + spinCfgRef.current.windowMs }, [])
+  const armSpin = useCallback(() => {
+    spinUntilRef.current = Date.now() + spinCfgRef.current.windowMs
+  }, [])
 
-  useEffect(() => { coordsRef.current = coords }, [coords])
-  useEffect(() => { rotateEnabledRef.current = activePlanetId === 'earth' }, [activePlanetId])
+  useEffect(() => {
+    coordsRef.current = coords
+  }, [coords])
+  useEffect(() => {
+    rotateEnabledRef.current = activePlanetId === 'earth'
+  }, [activePlanetId])
 
   // Pause the globe when the app leaves the foreground; re-arm a spin on return.
   useEffect(() => {
@@ -498,7 +536,9 @@ export function GlobeScreenMapbox() {
     useCallback(() => {
       screenFocusedRef.current = true
       armSpin()
-      return () => { screenFocusedRef.current = false }
+      return () => {
+        screenFocusedRef.current = false
+      }
     }, [armSpin]),
   )
 
@@ -539,7 +579,7 @@ export function GlobeScreenMapbox() {
       try {
         const nearby = await streamsApi.near(c.latitude, c.longitude)
         const resumed = nearby.find(
-          s => s.host?.handle === broadcasterHandle && s.isLive && s.mediasoupRoomId,
+          (s) => s.host?.handle === broadcasterHandle && s.isLive && s.mediasoupRoomId,
         )
         if (resumed?.mediasoupRoomId) {
           clearInterval(bannerPollRef.current!)
@@ -578,7 +618,8 @@ export function GlobeScreenMapbox() {
   const pushViewport = useCallback(() => {
     const map = mapViewRef.current
     if (!map) return
-    map.getVisibleBounds()
+    map
+      .getVisibleBounds()
       .then((b) => {
         if (!b) return
         const [[east, north], [west, south]] = b as [[number, number], [number, number]]
@@ -609,7 +650,7 @@ export function GlobeScreenMapbox() {
     mapZoomRef.current = state.properties.zoom
     throttledPushViewport()
     if (state.gestures.isGestureActive) {
-      rotLngRef.current = ((lng + 360) % 360)
+      rotLngRef.current = (lng + 360) % 360
       rotLatRef.current = lat
       gestureActiveRef.current = true
       pauseRotation()
@@ -621,7 +662,8 @@ export function GlobeScreenMapbox() {
   useEffect(() => {
     armSpin() // spin on first open
     autoRotateRef.current = setInterval(() => {
-      if (!rotateEnabledRef.current || gestureActiveRef.current || userInteractingRef.current) return
+      if (!rotateEnabledRef.current || gestureActiveRef.current || userInteractingRef.current)
+        return
       // Don't render the map when the globe isn't on screen — let the GPU idle.
       if (!appActiveRef.current || !screenFocusedRef.current) return
       // The spin window is over — globe at rest, no setCamera, Mapbox idles.
@@ -630,9 +672,12 @@ export function GlobeScreenMapbox() {
       // Ease the angular speed to zero over the tail so it glides to a stop.
       const { easeMs, stepDeg } = spinCfgRef.current
       const step = remaining < easeMs ? stepDeg * (remaining / easeMs) : stepDeg
-      rotLngRef.current = ((rotLngRef.current + step) + 360) % 360
+      rotLngRef.current = (rotLngRef.current + step + 360) % 360
       const lng = rotLngRef.current > 180 ? rotLngRef.current - 360 : rotLngRef.current
-      cameraRef.current?.setCamera({ centerCoordinate: [lng, rotLatRef.current], animationDuration: 0 })
+      cameraRef.current?.setCamera({
+        centerCoordinate: [lng, rotLatRef.current],
+        animationDuration: 0,
+      })
     }, 80)
     return () => {
       if (autoRotateRef.current) clearInterval(autoRotateRef.current)
@@ -648,7 +693,9 @@ export function GlobeScreenMapbox() {
       animationDuration: 1500,
       animationMode: 'easeTo',
     })
-    setTimeout(() => { userInteractingRef.current = false }, 2500)
+    setTimeout(() => {
+      userInteractingRef.current = false
+    }, 2500)
   }
 
   function handleMapLoad() {
@@ -676,7 +723,7 @@ export function GlobeScreenMapbox() {
     if (!rotateEnabledRef.current) return
     hasAutoOrientedRef.current = true
     userInteractingRef.current = true
-    rotLngRef.current = ((coords.longitude + 360) % 360)
+    rotLngRef.current = (coords.longitude + 360) % 360
     rotLatRef.current = coords.latitude
     if (mapReadyRef.current) {
       flyToUserLocation(coords.longitude, coords.latitude)
@@ -731,8 +778,18 @@ export function GlobeScreenMapbox() {
     rotLatRef.current = center[1]
     // …then slide in + grow back, entirely on the UI thread (native driver).
     Animated.parallel([
-      Animated.timing(glideX, { toValue: 0, duration: TX_ENTER_MS, easing: theme.motion.easing.standard, useNativeDriver: true }),
-      Animated.timing(glideScale, { toValue: 1, duration: TX_ENTER_MS, easing: theme.motion.easing.standard, useNativeDriver: true }),
+      Animated.timing(glideX, {
+        toValue: 0,
+        duration: TX_ENTER_MS,
+        easing: theme.motion.easing.standard,
+        useNativeDriver: true,
+      }),
+      Animated.timing(glideScale, {
+        toValue: 1,
+        duration: TX_ENTER_MS,
+        easing: theme.motion.easing.standard,
+        useNativeDriver: true,
+      }),
     ]).start(() => {
       transitioningRef.current = false
       pendingToRef.current = null
@@ -760,8 +817,18 @@ export function GlobeScreenMapbox() {
     // Exit: slide the CURRENT globe off-screen (dir +1 → left) while shrinking it —
     // pure native transforms, no Mapbox camera move. Swap the style when it's gone.
     Animated.parallel([
-      Animated.timing(glideX, { toValue: -dir * windowW, duration: TX_EXIT_MS, easing: theme.motion.easing.standard, useNativeDriver: true }),
-      Animated.timing(glideScale, { toValue: TX_EXIT_SCALE, duration: TX_EXIT_MS, easing: theme.motion.easing.standard, useNativeDriver: true }),
+      Animated.timing(glideX, {
+        toValue: -dir * windowW,
+        duration: TX_EXIT_MS,
+        easing: theme.motion.easing.standard,
+        useNativeDriver: true,
+      }),
+      Animated.timing(glideScale, {
+        toValue: TX_EXIT_SCALE,
+        duration: TX_EXIT_MS,
+        easing: theme.motion.easing.standard,
+        useNativeDriver: true,
+      }),
     ]).start(({ finished }) => {
       if (!finished || !transitioningRef.current) return
       styleSwappedRef.current = true
@@ -783,7 +850,7 @@ export function GlobeScreenMapbox() {
 
   useEffect(() => {
     if (!selectedStream || !planetPins) return
-    const updated = planetPins.find(s => s.id === selectedStream.id)
+    const updated = planetPins.find((s) => s.id === selectedStream.id)
     if (!updated) setSelectedStream(null)
     else if (updated !== selectedStream) setSelectedStream(updated)
   }, [planetPins])
@@ -791,7 +858,7 @@ export function GlobeScreenMapbox() {
   useEffect(() => {
     if (!selectedClusterStreams || !planetPins) return
     const updated = selectedClusterStreams
-      .map(s => planetPins.find(x => x.id === s.id))
+      .map((s) => planetPins.find((x) => x.id === s.id))
       .filter((s): s is Stream => s != null)
     if (updated.length === 0) setSelectedClusterStreams(null)
     else setSelectedClusterStreams(updated)
@@ -806,11 +873,11 @@ export function GlobeScreenMapbox() {
     const all = drawerSource.filter(planet.belongsTo)
     // A streamer never sees their own stream in the drawer. All other
     // curation rules below are unchanged.
-    let out = all.filter(s => !isSelfStream(s))
+    let out = all.filter((s) => !isSelfStream(s))
     if (chipId === 'camera') {
-      out = out.filter(s => (s.sources ?? []).includes('camera'))
+      out = out.filter((s) => (s.sources ?? []).includes('camera'))
     } else if (chipId === 'audio') {
-      out = out.filter(s => (s.sources ?? []).includes('audio'))
+      out = out.filter((s) => (s.sources ?? []).includes('audio'))
     } else if (chipId === 'city' || chipId === 'country') {
       // TODO Phase 14a follow-up: wire reverse-geocode lookup for the
       // user's city + country so these chips can filter against the
@@ -820,10 +887,11 @@ export function GlobeScreenMapbox() {
     }
     const q = query.trim().toLowerCase()
     if (q.length > 0) {
-      out = out.filter(s =>
-        s.title.toLowerCase().includes(q) ||
-        (s.host?.handle ?? '').toLowerCase().includes(q) ||
-        (s.host?.displayName ?? '').toLowerCase().includes(q),
+      out = out.filter(
+        (s) =>
+          s.title.toLowerCase().includes(q) ||
+          (s.host?.handle ?? '').toLowerCase().includes(q) ||
+          (s.host?.displayName ?? '').toLowerCase().includes(q),
       )
       // TODO Phase 14a follow-up: also match Mapbox geocoding place
       // results and people search. Today the search filters streams
@@ -918,7 +986,7 @@ export function GlobeScreenMapbox() {
     type: 'FeatureCollection' as const,
     features: planetPins
       .filter(planet.belongsTo)
-      .map(s => {
+      .map((s) => {
         // Earth: real coords + precision halos. Haven: stable island spot by id,
         // sharp dots (halos are meaningless on a synthetic planet).
         const [lng, lat] = planet.placePin(s)
@@ -929,16 +997,16 @@ export function GlobeScreenMapbox() {
           type: 'Feature' as const,
           geometry: { type: 'Point' as const, coordinates: [lng, lat] },
           properties: {
-            streamId:         s.id,
-            mediasoupRoomId:  s.mediasoupRoomId ?? '',
-            title:            s.title,
-            viewerCount:      s.viewerCount,
-            handle:           s.host?.handle ?? 'unknown',
-            sources:          (s.sources ?? []).join(','),
-            precision:        planet.id === 'earth' ? (s.locationPrecision ?? 'exact') : 'exact',
-            subscribersOnly:  s.subscribersOnly === true,
-            ppv:              s.ppvEvent != null,
-            isSelf:           treatAsSelf(s),
+            streamId: s.id,
+            mediasoupRoomId: s.mediasoupRoomId ?? '',
+            title: s.title,
+            viewerCount: s.viewerCount,
+            handle: s.host?.handle ?? 'unknown',
+            sources: (s.sources ?? []).join(','),
+            precision: planet.id === 'earth' ? (s.locationPrecision ?? 'exact') : 'exact',
+            subscribersOnly: s.subscribersOnly === true,
+            ppv: s.ppvEvent != null,
+            isSelf: treatAsSelf(s),
           },
         }
       })
@@ -958,7 +1026,8 @@ export function GlobeScreenMapbox() {
       properties: {
         tile: c.tile,
         count: c.count,
-        label: c.count >= 1000 ? `${(c.count / 1000).toFixed(c.count >= 10000 ? 0 : 1)}k` : `${c.count}`,
+        label:
+          c.count >= 1000 ? `${(c.count / 1000).toFixed(c.count >= 10000 ? 0 : 1)}k` : `${c.count}`,
       },
     })),
   }
@@ -987,19 +1056,19 @@ export function GlobeScreenMapbox() {
 
     if (feature.properties?.cluster) {
       try {
-        const leaves = await sourceRef.current?.getClusterLeaves(feature, 100, 0) as any
+        const leaves = (await sourceRef.current?.getClusterLeaves(feature, 100, 0)) as any
         const clusterStreams = ((leaves?.features ?? []) as any[])
-          .map((f: any) => planetPins.find(s => s.id === f.properties?.streamId))
+          .map((f: any) => planetPins.find((s) => s.id === f.properties?.streamId))
           .filter((s): s is Stream => s != null)
           // A streamer never sees their own stream in the cluster card either.
-          .filter(s => !treatAsSelf(s))
+          .filter((s) => !treatAsSelf(s))
         if (clusterStreams.length > 0) {
           setSelectedClusterStreams(clusterStreams)
           setSelectedStream(null)
         }
       } catch {}
     } else {
-      const stream = planetPins.find(s => s.id === feature.properties?.streamId)
+      const stream = planetPins.find((s) => s.id === feature.properties?.streamId)
       if (stream) {
         // Tapping your own (black) pin returns to your stream view instead of
         // opening a join card — same path as the tab-bar live-return link.
@@ -1028,10 +1097,7 @@ export function GlobeScreenMapbox() {
     if (h && h !== containerH) setContainerH(h)
   }
 
-  const expandedH = Math.max(
-    DRAWER_PEEK_H,
-    containerH - (insets.top + DRAWER_EXPANDED_TOP_OFFSET),
-  )
+  const expandedH = Math.max(DRAWER_PEEK_H, containerH - (insets.top + DRAWER_EXPANDED_TOP_OFFSET))
 
   const drawerHeight = useRef(new Animated.Value(DRAWER_CLOSED_H)).current
 
@@ -1062,10 +1128,7 @@ export function GlobeScreenMapbox() {
     // Drawer contribution: GLOBE_FRAC_CLOSED → GLOBE_FRAC_OPEN as it opens.
     const drawerT = drawerHeight.interpolate({
       inputRange: [DRAWER_CLOSED_H, DRAWER_PEEK_H],
-      outputRange: [
-        containerH * (GLOBE_FRAC_CLOSED - 0.5),
-        containerH * (GLOBE_FRAC_OPEN - 0.5),
-      ],
+      outputRange: [containerH * (GLOBE_FRAC_CLOSED - 0.5), containerH * (GLOBE_FRAC_OPEN - 0.5)],
       extrapolate: 'clamp',
     })
     // Clock contribution: 0 collapsed → a further proportional up-shift expanded.
@@ -1084,8 +1147,12 @@ export function GlobeScreenMapbox() {
   const expandedHRef = useRef(expandedH)
   const dragStartHeightRef = useRef(DRAWER_CLOSED_H)
 
-  useEffect(() => { drawerStateRef.current = drawerState }, [drawerState])
-  useEffect(() => { expandedHRef.current = expandedH }, [expandedH])
+  useEffect(() => {
+    drawerStateRef.current = drawerState
+  }, [drawerState])
+  useEffect(() => {
+    expandedHRef.current = expandedH
+  }, [expandedH])
 
   function heightForState(s: DrawerState): number {
     return s === 'closed'
@@ -1194,230 +1261,286 @@ export function GlobeScreenMapbox() {
         ]}
         pointerEvents="box-none"
       >
-      {/* INNER: the big (globeBox) MapView, centred. Bigger than the globe → no
+        {/* INNER: the big (globeBox) MapView, centred. Bigger than the globe → no
           edge clip; globeTranslateY shifts it for the drawer/clock; fitScale is the
           clean on-screen globe-size dial. Separate view from the outer native
           slide+scale so the two transform drivers never mix. */}
-      <Animated.View
-        style={[
-          {
-            position: 'absolute',
-            left: (windowW - globeBox) / 2,
-            top: (containerH - globeBox) / 2,
-            width: globeBox,
-            height: globeBox,
-          },
-          { transform: [{ translateY: globeTranslateY }, { scale: fitScale }] },
-        ]}
-        pointerEvents="box-none"
-      >
-      <Mapbox.MapView
-        ref={mapViewRef}
-        style={StyleSheet.absoluteFill}
-        // Exactly one of styleURL / styleJSON is set per planet (Earth = hosted
-        // Mapbox style; Haven = synthetic in-code water+island style).
-        {...(planet.styleJSON
-          ? { styleJSON: planet.styleJSON }
-          : { styleURL: planet.styleURL })}
-        projection="globe"
-        logoEnabled={false}
-        attributionEnabled={false}
-        compassEnabled={false}
-        scaleBarEnabled={false}
-        // Disable the two-finger bearing twist (z-axis / yaw roll). Pan + pinch-zoom
-        // stay; auto-spin is a pan (center change), so it's unaffected.
-        rotateEnabled={false}
-        gestureSettings={{ panDecelerationFactor: Platform.OS === 'ios' ? 0.99 : undefined }}
-        onCameraChanged={handleCameraChanged}
-        onDidFinishLoadingMap={handleMapLoad}
-        onDidFinishLoadingStyle={handleStyleLoad}
-        onPress={() => {
-          pauseRotation()
-          setSelectedStream(null)
-          setSelectedClusterStreams(null)
-        }}
-      >
-        <Atmosphere style={{ spaceColor: theme.colors.bg.primary, color: 'transparent', highColor: 'transparent', starIntensity: 0 }} />
+        <Animated.View
+          style={[
+            {
+              position: 'absolute',
+              left: (windowW - globeBox) / 2,
+              top: (containerH - globeBox) / 2,
+              width: globeBox,
+              height: globeBox,
+            },
+            { transform: [{ translateY: globeTranslateY }, { scale: fitScale }] },
+          ]}
+          pointerEvents="box-none"
+        >
+          <Mapbox.MapView
+            ref={mapViewRef}
+            style={StyleSheet.absoluteFill}
+            // Exactly one of styleURL / styleJSON is set per planet (Earth = hosted
+            // Mapbox style; Haven = synthetic in-code water+island style).
+            {...(planet.styleJSON
+              ? { styleJSON: planet.styleJSON }
+              : { styleURL: planet.styleURL })}
+            projection="globe"
+            logoEnabled={false}
+            attributionEnabled={false}
+            compassEnabled={false}
+            scaleBarEnabled={false}
+            // Disable the two-finger bearing twist (z-axis / yaw roll). Pan + pinch-zoom
+            // stay; auto-spin is a pan (center change), so it's unaffected.
+            rotateEnabled={false}
+            gestureSettings={{ panDecelerationFactor: Platform.OS === 'ios' ? 0.99 : undefined }}
+            onCameraChanged={handleCameraChanged}
+            onDidFinishLoadingMap={handleMapLoad}
+            onDidFinishLoadingStyle={handleStyleLoad}
+            onPress={() => {
+              pauseRotation()
+              setSelectedStream(null)
+              setSelectedClusterStreams(null)
+            }}
+          >
+            <Atmosphere
+              style={{
+                spaceColor: theme.colors.bg.primary,
+                color: 'transparent',
+                highColor: 'transparent',
+                starIntensity: 0,
+              }}
+            />
 
-        <Camera
-          ref={cameraRef}
-          defaultSettings={{ centerCoordinate: [0, 20], zoomLevel: planetById('earth').initialCamera.zoomLevel }}
-          minZoomLevel={GLOBE_MIN_ZOOM}
-          maxZoomLevel={20}
-        />
+            <Camera
+              ref={cameraRef}
+              defaultSettings={{
+                centerCoordinate: [0, 20],
+                zoomLevel: planetById('earth').initialCamera.zoomLevel,
+              }}
+              minZoomLevel={GLOBE_MIN_ZOOM}
+              maxZoomLevel={20}
+            />
 
-        {/* Graticule — equator, tropics, polar circles, and the N–S axis. The polar
+            {/* Graticule — equator, tropics, polar circles, and the N–S axis. The polar
             circles foreshorten near the poles so they read faint at a flat opacity;
             boost them and ease the rest so all the lines land at a consistent weight. */}
-        <ShapeSource id="graticule" shape={GRATICULE_GEOJSON}>
-          <LineLayer
-            id="graticule-lines"
-            style={{
-              lineColor: GRATICULE_COLOR,
-              lineWidth: 0.6,
-              lineOpacity: ['match', ['get', 'kind'], 'polar', 0.3, 0.17] as any,
-            }}
-          />
-        </ShapeSource>
+            <ShapeSource id="graticule" shape={GRATICULE_GEOJSON}>
+              <LineLayer
+                id="graticule-lines"
+                style={{
+                  lineColor: GRATICULE_COLOR,
+                  lineWidth: 0.6,
+                  lineOpacity: ['match', ['get', 'kind'], 'polar', 0.3, 0.17] as any,
+                }}
+              />
+            </ShapeSource>
 
-        <ShapeSource
-          id="streams"
-          ref={sourceRef}
-          shape={geoJSON}
-          cluster
-          clusterRadius={50}
-          clusterMaxZoomLevel={14}
-          clusterProperties={{
-            // sum of 1s for each subscription (NOT PPV) stream in the cluster —
-            // PPV streams are red, so they don't pull a cluster purple.
-            subscriberCount: ['+', ['case', ['all', ['get', 'subscribersOnly'], ['!', ['get', 'ppv']]], 1, 0]],
-            // sum of 1s for the viewer's own stream(s) — subtracted from the
-            // displayed count so a streamer is never counted in their cluster.
-            selfCount: ['+', ['case', ['get', 'isSelf'], 1, 0]],
-          }}
-          onPress={handleSourcePress}
-        >
-          <CircleLayer
-            id="cluster-circles"
-            filter={['has', 'point_count']}
-            style={{
-              // purple if every stream in cluster is subscriber-only, red otherwise
-              circleColor: ['case',
-                ['==', ['get', 'subscriberCount'], ['get', 'point_count']],
-                PIN_PURPLE,
-                PIN_RED,
-              ] as any,
-              circleRadius: ['step', ['get', 'point_count'], 18, 5, 22, 15, 26] as any,
-              circleStrokeWidth: 2,
-              circleStrokeColor: PIN_BORDER,
-              circleOpacity: 0.95,
-            }}
-          />
-          <SymbolLayer
-            id="cluster-count"
-            filter={['has', 'point_count']}
-            style={{
-              // Count excludes the viewer's own stream(s) in the cluster.
-              textField: ['case',
-                ['>', ['-', ['get', 'point_count'], ['get', 'selfCount']], 1],
-                ['to-string', ['-', ['get', 'point_count'], ['get', 'selfCount']]],
-                '',
-              ] as any,
-              textSize: 13,
-              textColor: PIN_BORDER,
-              textAllowOverlap: true,
-              textIgnorePlacement: true,
-            }}
-          />
-          <CircleLayer
-            id="single-circles"
-            filter={['all', ['!', ['has', 'point_count']], ['==', ['get', 'precision'], 'exact']] as any}
-            style={{
-              circleColor: ['case',
-                ['get', 'isSelf'], PIN_BLACK,
-                ['get', 'ppv'], PIN_RED,
-                ['get', 'subscribersOnly'], PIN_PURPLE,
-                PIN_RED,
-              ] as any,
-              circleRadius: 14,
-              circleStrokeWidth: 2,
-              circleStrokeColor: PIN_BORDER,
-              circleOpacity: 0.95,
-            }}
-          />
-          <CircleLayer
-            id="single-city"
-            filter={['all', ['!', ['has', 'point_count']], ['==', ['get', 'precision'], 'city']] as any}
-            style={{
-              circleColor: ['case',
-                ['get', 'isSelf'], PIN_BLACK,
-                ['get', 'ppv'], PIN_RED,
-                ['get', 'subscribersOnly'], PIN_PURPLE,
-                PIN_RED,
-              ] as any,
-              circleRadius: 44,
-              circleOpacity: 0.35,
-              circleBlur: 0.85,
-              circleStrokeWidth: 1,
-              circleStrokeColor: ['case',
-                ['get', 'isSelf'], PIN_BLACK,
-                ['get', 'ppv'], PIN_RED,
-                ['get', 'subscribersOnly'], PIN_PURPLE,
-                PIN_RED,
-              ] as any,
-              circleStrokeOpacity: 0.6,
-            }}
-          />
-          <CircleLayer
-            id="single-country"
-            filter={['all', ['!', ['has', 'point_count']], ['==', ['get', 'precision'], 'country']] as any}
-            style={{
-              circleColor: ['case',
-                ['get', 'isSelf'], PIN_BLACK,
-                ['get', 'ppv'], PIN_RED,
-                ['get', 'subscribersOnly'], PIN_PURPLE,
-                PIN_RED,
-              ] as any,
-              circleRadius: 72,
-              circleOpacity: 0.25,
-              circleBlur: 1,
-              circleStrokeWidth: 0,
-            }}
-          />
-          {/* "PPV" label on unclustered pay-per-view pins. */}
-          <SymbolLayer
-            id="single-ppv-label"
-            filter={['all', ['!', ['has', 'point_count']], ['==', ['get', 'ppv'], true]] as any}
-            style={{
-              textField: 'PPV',
-              textSize: 9,
-              textColor: PIN_BORDER,
-              textAllowOverlap: true,
-              textIgnorePlacement: true,
-            }}
-          />
-          {/* White star on unclustered subscription-paywall pins that are NOT PPV
+            <ShapeSource
+              id="streams"
+              ref={sourceRef}
+              shape={geoJSON}
+              cluster
+              clusterRadius={50}
+              clusterMaxZoomLevel={14}
+              clusterProperties={{
+                // sum of 1s for each subscription (NOT PPV) stream in the cluster —
+                // PPV streams are red, so they don't pull a cluster purple.
+                subscriberCount: [
+                  '+',
+                  ['case', ['all', ['get', 'subscribersOnly'], ['!', ['get', 'ppv']]], 1, 0],
+                ],
+                // sum of 1s for the viewer's own stream(s) — subtracted from the
+                // displayed count so a streamer is never counted in their cluster.
+                selfCount: ['+', ['case', ['get', 'isSelf'], 1, 0]],
+              }}
+              onPress={handleSourcePress}
+            >
+              <CircleLayer
+                id="cluster-circles"
+                filter={['has', 'point_count']}
+                style={{
+                  // purple if every stream in cluster is subscriber-only, red otherwise
+                  circleColor: [
+                    'case',
+                    ['==', ['get', 'subscriberCount'], ['get', 'point_count']],
+                    PIN_PURPLE,
+                    PIN_RED,
+                  ] as any,
+                  circleRadius: ['step', ['get', 'point_count'], 18, 5, 22, 15, 26] as any,
+                  circleStrokeWidth: 2,
+                  circleStrokeColor: PIN_BORDER,
+                  circleOpacity: 0.95,
+                }}
+              />
+              <SymbolLayer
+                id="cluster-count"
+                filter={['has', 'point_count']}
+                style={{
+                  // Count excludes the viewer's own stream(s) in the cluster.
+                  textField: [
+                    'case',
+                    ['>', ['-', ['get', 'point_count'], ['get', 'selfCount']], 1],
+                    ['to-string', ['-', ['get', 'point_count'], ['get', 'selfCount']]],
+                    '',
+                  ] as any,
+                  textSize: 13,
+                  textColor: PIN_BORDER,
+                  textAllowOverlap: true,
+                  textIgnorePlacement: true,
+                }}
+              />
+              <CircleLayer
+                id="single-circles"
+                filter={
+                  [
+                    'all',
+                    ['!', ['has', 'point_count']],
+                    ['==', ['get', 'precision'], 'exact'],
+                  ] as any
+                }
+                style={{
+                  circleColor: [
+                    'case',
+                    ['get', 'isSelf'],
+                    PIN_BLACK,
+                    ['get', 'ppv'],
+                    PIN_RED,
+                    ['get', 'subscribersOnly'],
+                    PIN_PURPLE,
+                    PIN_RED,
+                  ] as any,
+                  circleRadius: 14,
+                  circleStrokeWidth: 2,
+                  circleStrokeColor: PIN_BORDER,
+                  circleOpacity: 0.95,
+                }}
+              />
+              <CircleLayer
+                id="single-city"
+                filter={
+                  [
+                    'all',
+                    ['!', ['has', 'point_count']],
+                    ['==', ['get', 'precision'], 'city'],
+                  ] as any
+                }
+                style={{
+                  circleColor: [
+                    'case',
+                    ['get', 'isSelf'],
+                    PIN_BLACK,
+                    ['get', 'ppv'],
+                    PIN_RED,
+                    ['get', 'subscribersOnly'],
+                    PIN_PURPLE,
+                    PIN_RED,
+                  ] as any,
+                  circleRadius: 44,
+                  circleOpacity: 0.35,
+                  circleBlur: 0.85,
+                  circleStrokeWidth: 1,
+                  circleStrokeColor: [
+                    'case',
+                    ['get', 'isSelf'],
+                    PIN_BLACK,
+                    ['get', 'ppv'],
+                    PIN_RED,
+                    ['get', 'subscribersOnly'],
+                    PIN_PURPLE,
+                    PIN_RED,
+                  ] as any,
+                  circleStrokeOpacity: 0.6,
+                }}
+              />
+              <CircleLayer
+                id="single-country"
+                filter={
+                  [
+                    'all',
+                    ['!', ['has', 'point_count']],
+                    ['==', ['get', 'precision'], 'country'],
+                  ] as any
+                }
+                style={{
+                  circleColor: [
+                    'case',
+                    ['get', 'isSelf'],
+                    PIN_BLACK,
+                    ['get', 'ppv'],
+                    PIN_RED,
+                    ['get', 'subscribersOnly'],
+                    PIN_PURPLE,
+                    PIN_RED,
+                  ] as any,
+                  circleRadius: 72,
+                  circleOpacity: 0.25,
+                  circleBlur: 1,
+                  circleStrokeWidth: 0,
+                }}
+              />
+              {/* "PPV" label on unclustered pay-per-view pins. */}
+              <SymbolLayer
+                id="single-ppv-label"
+                filter={['all', ['!', ['has', 'point_count']], ['==', ['get', 'ppv'], true]] as any}
+                style={{
+                  textField: 'PPV',
+                  textSize: 9,
+                  textColor: PIN_BORDER,
+                  textAllowOverlap: true,
+                  textIgnorePlacement: true,
+                }}
+              />
+              {/* White star on unclustered subscription-paywall pins that are NOT PPV
               (a PPV stream shows "PPV" instead, even if it's also subscriber-only). */}
-          <SymbolLayer
-            id="single-sub-star"
-            filter={['all', ['!', ['has', 'point_count']], ['==', ['get', 'subscribersOnly'], true], ['!=', ['get', 'ppv'], true]] as any}
-            style={{
-              textField: '★',
-              textSize: 13,
-              textColor: PIN_BORDER,
-              textAllowOverlap: true,
-              textIgnorePlacement: true,
-            }}
-          />
-        </ShapeSource>
+              <SymbolLayer
+                id="single-sub-star"
+                filter={
+                  [
+                    'all',
+                    ['!', ['has', 'point_count']],
+                    ['==', ['get', 'subscribersOnly'], true],
+                    ['!=', ['get', 'ppv'], true],
+                  ] as any
+                }
+                style={{
+                  textField: '★',
+                  textSize: 13,
+                  textColor: PIN_BORDER,
+                  textAllowOverlap: true,
+                  textIgnorePlacement: true,
+                }}
+              />
+            </ShapeSource>
 
-        {/* Count bubbles — server-side per-tile aggregates at low zoom. Populated
+            {/* Count bubbles — server-side per-tile aggregates at low zoom. Populated
             only in count mode (empty in pins mode), so they never overlap the
             individual pins above. Tap drills in. */}
-        <ShapeSource id="tile-counts" shape={countsGeoJSON} onPress={handleCountPress}>
-          <CircleLayer
-            id="count-circles"
-            style={{
-              circleColor: PIN_RED,
-              circleRadius: ['step', ['get', 'count'], 18, 10, 22, 100, 26, 1000, 30] as any,
-              circleStrokeWidth: 2,
-              circleStrokeColor: PIN_BORDER,
-              circleOpacity: 0.95,
-            }}
-          />
-          <SymbolLayer
-            id="count-labels"
-            style={{
-              textField: ['get', 'label'] as any,
-              textSize: 13,
-              textColor: PIN_BORDER,
-              textAllowOverlap: true,
-              textIgnorePlacement: true,
-            }}
-          />
-        </ShapeSource>
-      </Mapbox.MapView>
-      </Animated.View>
+            <ShapeSource id="tile-counts" shape={countsGeoJSON} onPress={handleCountPress}>
+              <CircleLayer
+                id="count-circles"
+                style={{
+                  circleColor: PIN_RED,
+                  circleRadius: ['step', ['get', 'count'], 18, 10, 22, 100, 26, 1000, 30] as any,
+                  circleStrokeWidth: 2,
+                  circleStrokeColor: PIN_BORDER,
+                  circleOpacity: 0.95,
+                }}
+              />
+              <SymbolLayer
+                id="count-labels"
+                style={{
+                  textField: ['get', 'label'] as any,
+                  textSize: 13,
+                  textColor: PIN_BORDER,
+                  textAllowOverlap: true,
+                  textIgnorePlacement: true,
+                }}
+              />
+            </ShapeSource>
+          </Mapbox.MapView>
+        </Animated.View>
       </Animated.View>
 
       {/* Top scrim — paper100 fade muting the globe behind the top stack */}
@@ -1425,10 +1548,7 @@ export function GlobeScreenMapbox() {
         pointerEvents="none"
         colors={[TOP_SCRIM_TOP, TOP_SCRIM_MID, TOP_SCRIM_BOTTOM]}
         locations={[0, 0.6, 1]}
-        style={[
-          styles.topScrim,
-          { height: insets.top + TOP_SCRIM_HEIGHT },
-        ]}
+        style={[styles.topScrim, { height: insets.top + TOP_SCRIM_HEIGHT }]}
       />
 
       {/* Top stack — header, search, chips, scale */}
@@ -1447,7 +1567,7 @@ export function GlobeScreenMapbox() {
           {PLANETS.length > 1 && (
             <View style={styles.planetRow} pointerEvents="box-none">
               <PlanetSwitcher
-                planets={PLANETS.map(p => ({ id: p.id, name: p.name, glyph: p.glyph }))}
+                planets={PLANETS.map((p) => ({ id: p.id, name: p.name, glyph: p.glyph }))}
                 activeId={activePlanetId}
                 onChange={(id) => changePlanet(id as PlanetId)}
                 disabled={transitioning}
@@ -1488,7 +1608,9 @@ export function GlobeScreenMapbox() {
             variant={banner.kind}
             onDismiss={dismissBanner}
             onTap={banner.kind === 'resumed' ? handleBannerTap : undefined}
-            autoDismissMs={banner.kind === 'disconnected' && banner.broadcasterHandle ? 0 : undefined}
+            autoDismissMs={
+              banner.kind === 'disconnected' && banner.broadcasterHandle ? 0 : undefined
+            }
           />
         </View>
       )}
@@ -1505,7 +1627,10 @@ export function GlobeScreenMapbox() {
       )}
       {selectedClusterStreams && (
         <View style={styles.cardWrapper} pointerEvents="box-none" onTouchStart={collapseClock}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => setSelectedClusterStreams(null)} />
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setSelectedClusterStreams(null)}
+          />
           <DiscoveryHandoffCard
             streams={selectedClusterStreams.map(toDiscovery)}
             onDismiss={() => setSelectedClusterStreams(null)}
@@ -1528,12 +1653,7 @@ export function GlobeScreenMapbox() {
           to peek when the user searches or filters, expands on "See all".
           Interacting with the drawer does NOT collapse the clock (like the
           globe) — the two operate independently; only other UI collapses it. */}
-      <Animated.View
-        style={[
-          styles.drawer,
-          { height: drawerHeight, bottom: clockHeight },
-        ]}
-      >
+      <Animated.View style={[styles.drawer, { height: drawerHeight, bottom: clockHeight }]}>
         <View
           {...gripPanResponder.panHandlers}
           style={styles.gripHitArea}
@@ -1563,7 +1683,7 @@ export function GlobeScreenMapbox() {
                 contentContainerStyle={styles.drawerVerticalList}
                 showsVerticalScrollIndicator={false}
               >
-                {visibleStreams.map(s => (
+                {visibleStreams.map((s) => (
                   <StreamCard
                     key={s.id}
                     variant="compact"
@@ -1582,7 +1702,7 @@ export function GlobeScreenMapbox() {
                 contentContainerStyle={styles.drawerRail}
                 showsHorizontalScrollIndicator={false}
               >
-                {visibleStreams.map(s => (
+                {visibleStreams.map((s) => (
                   <StreamCard
                     key={s.id}
                     variant="trending"
@@ -1608,19 +1728,13 @@ function drawerHeaderLabel(query: string, chipId: string | null, count: number):
     return count === 0 ? 'No matches' : `${count} match${count === 1 ? '' : 'es'}`
   }
   if (chipId === 'camera') return 'Camera streams'
-  if (chipId === 'audio')  return 'Audio streams'
-  if (chipId === 'city')   return 'In your city'
+  if (chipId === 'audio') return 'Audio streams'
+  if (chipId === 'city') return 'In your city'
   if (chipId === 'country') return 'In your country'
   return 'Nearby now'
 }
 
-function DrawerEmptyState({
-  chipId,
-  query,
-}: {
-  chipId: string | null
-  query: string
-}) {
+function DrawerEmptyState({ chipId, query }: { chipId: string | null; query: string }) {
   const isFilterStub = chipId === 'city' || chipId === 'country'
   const body =
     query.trim().length > 0
@@ -1668,11 +1782,16 @@ const styles = StyleSheet.create({
     paddingTop: theme.spacing.sm,
   },
   bannerWrapper: {
-    position: 'absolute', left: 0, right: 0,
+    position: 'absolute',
+    left: 0,
+    right: 0,
     paddingHorizontal: theme.spacing.md,
   },
   cardWrapper: {
-    position: 'absolute', bottom: DRAWER_PEEK_H, left: 0, right: 0,
+    position: 'absolute',
+    bottom: DRAWER_PEEK_H,
+    left: 0,
+    right: 0,
     padding: theme.spacing.lg,
     paddingBottom: theme.spacing.md,
   },
