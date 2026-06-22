@@ -41,7 +41,7 @@ export type ClientMessage =
   | { type: 'locationUpdate'; lat: number; lng: number }
   | { type: 'telemetry'; payload: TelemetryPayload }
   | { type: 'tip'; amount: number; message?: string; idempotencyKey?: string }
-  | { type: 'gift'; giftType: string }
+  | { type: 'gift'; giftType: string; idempotencyKey?: string }
 
 export type ServerMessage =
   | { type: 'authenticated'; clerkUserId: string }
@@ -290,8 +290,8 @@ class MediasoupSignalingClient {
     this.send({ type: 'tip', amount, message: opts?.message, idempotencyKey: opts?.idempotencyKey })
   }
 
-  sendGift(giftType: string): void {
-    this.send({ type: 'gift', giftType })
+  sendGift(giftType: string, opts?: { idempotencyKey?: string }): void {
+    this.send({ type: 'gift', giftType, idempotencyKey: opts?.idempotencyKey })
   }
 
 }

@@ -206,7 +206,10 @@ export function useSignaling() {
     (amount: number, opts?: { message?: string; idempotencyKey?: string }) => signalingClient.sendTip(amount, opts),
     [],
   )
-  const sendGift = useCallback((giftType: string) => signalingClient.sendGift(giftType), [])
+  const sendGift = useCallback(
+    (giftType: string, opts?: { idempotencyKey?: string }) => signalingClient.sendGift(giftType, opts),
+    [],
+  )
 
   const dismissReaction = useCallback((id: number) => {
     setReactions((prev) => prev.filter((r) => r.id !== id))

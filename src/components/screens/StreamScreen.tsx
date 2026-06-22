@@ -1396,7 +1396,8 @@ export function StreamScreen() {
   const minTip = configNumber(publicConfig, 'TIP_MINIMUM', 10)
 
   function handleSendGift(giftId: string) {
-    sendGift(giftId)
+    // Fresh dedup key per send so a duplicate WS delivery can't double-charge.
+    sendGift(giftId, { idempotencyKey: newIdempotencyKey() })
   }
 
   function handleGiftInsufficient(gift: GiftCatalogItem) {

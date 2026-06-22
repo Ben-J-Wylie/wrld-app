@@ -25,6 +25,7 @@ import { Avatar } from '@/components/primitives/Avatar'
 import { Text } from '@/components/primitives/Text'
 import { FollowButton } from '@/components/features/user/FollowButton'
 import { ProfileTipSheet } from '@/components/features/user/ProfileTipSheet'
+import { ProfileGiftSheet } from '@/components/features/user/ProfileGiftSheet'
 import { MetaStrip } from '@/components/features/user/MetaStrip'
 import { useUserProfile } from '@/hooks/useUserProfile'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
@@ -77,6 +78,7 @@ export function ProfileScreen() {
 
   const isOwnProfile = !!me && me.handle === handle
   const [tipVisible, setTipVisible] = useState(false)
+  const [giftVisible, setGiftVisible] = useState(false)
 
   const { data: subStatus, refetch: refetchSubStatus } = useQuery({
     queryKey: ['subscription-status', handle],
@@ -162,6 +164,14 @@ export function ProfileScreen() {
           label="💸 Tip"
           variant="secondary"
           onPress={() => setTipVisible(true)}
+        />
+      )}
+
+      {isSignedIn && !isOwnProfile && profile.tippable && (
+        <Button
+          label="🎁 Send a gift"
+          variant="secondary"
+          onPress={() => setGiftVisible(true)}
         />
       )}
 
@@ -331,6 +341,13 @@ export function ProfileScreen() {
         handle={profile.handle}
         displayName={profile.displayName}
         onClose={() => setTipVisible(false)}
+      />
+
+      <ProfileGiftSheet
+        visible={giftVisible}
+        handle={profile.handle}
+        displayName={profile.displayName}
+        onClose={() => setGiftVisible(false)}
       />
     </ScreenScroll>
   )
