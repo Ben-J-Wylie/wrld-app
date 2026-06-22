@@ -103,6 +103,13 @@ const SPIN_WINDOW_MS = 12_000 // how long each spin window lasts before resting
 const SPIN_EASE_MS = 2_500 // taper the angular speed to zero over the tail
 const SPIN_STEP_DEG = 0.15 // per-tick longitude advance at full speed
 
+// Shortest angular distance between two longitudes (degrees, 0..180), wrapping the
+// ±180 seam. Used to tell the auto-rotate tick's own camera writes from user moves.
+function angularDistDeg(a: number, b: number) {
+  const d = Math.abs(((a - b + 540) % 360) - 180)
+  return d
+}
+
 // Globe fit-scale — a visual shrink of the rendered globe, independent of the zoom,
 // so the planet can sit smaller / more framed than the zoom floor alone allows. Full
 // shrink (GLOBE_FIT_SCALE) at the floor, relaxing to 1.0 by GLOBE_FIT_FULL_ZOOM so
@@ -468,6 +475,13 @@ export function GlobeScreenMapbox() {
   const rotLatRef = useRef(20)
   const userInteractingRef = useRef(false)
   const gestureActiveRef = useRef(false)
+  // Longitudes the auto-rotate tick has written but not yet seen echoed back by
+  // onCameraChanged. Lets handleCameraChanged tell OUR camera writes apart from
+  // user-driven ones (a drag, or the native fling momentum after the finger lifts)
+  // without trusting Mapbox's flaky-on-Android `isGestureActive` flag: any change
+  // that isn't one of our pending self-writes is a user move and must pause the
+  // spin. This is what stops a fast fling from being clawed back by the rotate tick.
+  const selfWriteLngsRef = useRef<number[]>([])
   // Auto-rotation only makes sense on Earth — a synthetic planet (Haven) would
   // spin its single island off-screen, so we keep it framed instead.
   const rotateEnabledRef = useRef(true)
@@ -645,12 +659,22 @@ export function GlobeScreenMapbox() {
     // and keeps a user drag from snapping back even if the gesture flag misses.
     rotLngRef.current = (lng + 360) % 360
     rotLatRef.current = lat
-    if (state.gestures.isGestureActive) {
-      gestureActiveRef.current = true
-      pauseRotation()
-    } else {
-      gestureActiveRef.current = false
+    // Was this change our own rotate tick echoing back, or a user move? Consume a
+    // matching pending self-write if present; anything else (drag or post-lift
+    // fling momentum) is user-driven and must keep the spin paused. A small angular
+    // epsilon (< the per-tick step) absorbs float/echo jitter and callback reorder.
+    const pending = selfWriteLngsRef.current
+    let isSelf = false
+    for (let i = 0; i < pending.length; i++) {
+      const w = pending[i]
+      if (w !== undefined && angularDistDeg(w, lng) < 0.08) {
+        pending.splice(i, 1)
+        isSelf = true
+        break
+      }
     }
+    gestureActiveRef.current = state.gestures.isGestureActive
+    if (state.gestures.isGestureActive || !isSelf) pauseRotation()
   }
 
   useEffect(() => {
@@ -668,6 +692,12 @@ export function GlobeScreenMapbox() {
       const step = remaining < easeMs ? stepDeg * (remaining / easeMs) : stepDeg
       rotLngRef.current = (rotLngRef.current + step + 360) % 360
       const lng = rotLngRef.current > 180 ? rotLngRef.current - 360 : rotLngRef.current
+      // Record this write so the onCameraChanged it triggers is recognised as ours
+      // and doesn't pause the spin. Keep only the last few (the echo arrives within
+      // a tick or two); a longer tail would let a stale value mask a real user move.
+      const pending = selfWriteLngsRef.current
+      pending.push(lng)
+      if (pending.length > 4) pending.shift()
       cameraRef.current?.setCamera({
         centerCoordinate: [lng, rotLatRef.current],
         animationDuration: 0,
