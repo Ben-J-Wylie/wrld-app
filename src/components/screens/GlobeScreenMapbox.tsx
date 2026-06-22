@@ -84,18 +84,18 @@ const PIN_PURPLE = '#A855F7'
 const PIN_BLACK  = '#111111' // the viewer's own stream pin (tap → return to it)
 const PIN_BORDER = '#FFFFFF'
 
-// Globe zoom floor — low enough that the whole planet frames without an L/R crop,
-// high enough that vertical rotation still works (the floor IS the resting zoom; you
-// can't pinch out past it into the collapse zone). Pairs with each planet's
-// initialCamera.zoomLevel (keep them equal). Lower toward 0.9 if the sides crop.
+// Globe zoom FLOOR — the furthest you can pinch out. Below the resting zoom
+// (each planet's initialCamera.zoomLevel = 1.0), so there's pinch-out room; the low
+// end may re-introduce the vertical-rotation collapse — raise toward the resting
+// zoom if that bites.
+const GLOBE_MIN_ZOOM = 0.5
+
 // Idle globe auto-rotation: spin as a signature intro, then ease to a stop so
 // Mapbox stops re-rendering (continuous setCamera at 12.5fps was the dominant
 // battery cost when browsing). Re-armed on interaction / focus / foreground.
 const SPIN_WINDOW_MS = 12_000 // how long each spin window lasts before resting
 const SPIN_EASE_MS   = 2_500  // taper the angular speed to zero over the tail
 const SPIN_STEP_DEG  = 0.15   // per-tick longitude advance at full speed
-
-const GLOBE_MIN_ZOOM = 1.0
 
 // Globe fit-scale — a visual shrink of the rendered globe, independent of the zoom,
 // so the planet can sit smaller / more framed than the zoom floor alone allows. Full
