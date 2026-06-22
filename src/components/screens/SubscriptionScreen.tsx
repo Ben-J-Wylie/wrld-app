@@ -18,7 +18,7 @@
 // All colors flow through the warm crimson accent + cream palette
 // tokens; no hex literals.
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Alert, StyleSheet, View } from 'react-native'
 import { router } from 'expo-router'
 import { theme } from '@/tokens/theme'
@@ -35,6 +35,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { usePublicConfig, configNumber } from '@/hooks/usePublicConfig'
 import { useRevenueCat } from '@/hooks/useRevenueCat'
 import { presentPlusPaywall, presentCustomerCenter } from '@/lib/paywall'
+import { getCurrentOffering, restore } from '@/lib/purchases'
 
 type BillingCycle = 'monthly' | 'annual'
 type Tier = 'free' | 'plus' | 'pro'
@@ -132,25 +133,53 @@ export function SubscriptionScreen() {
       ? Math.round(((PRICING.plus.mo * 12 - PRICING.plus.yr) / (PRICING.plus.mo * 12)) * 100)
       : 0
 
+  const { available: billingAvailable, isPlus, refresh, refreshUntilUpgraded } = useRevenueCat()
+
+  // The displayed Plus price should match what the store actually charges, not
+  // just RemoteConfig (the two can diverge — misleading + a review risk). Pull
+  // the localized price string off the current RevenueCat offering's monthly /
+  // annual packages and prefer it when present; fall back to RemoteConfig.
+  // Pro has no offering yet, so it always uses RemoteConfig.
+  const [plusStorePrice, setPlusStorePrice] = useState<{ mo?: string; yr?: string }>({})
+  useEffect(() => {
+    if (!billingAvailable) return
+    let cancelled = false
+    getCurrentOffering()
+      .then((offering) => {
+        if (cancelled || !offering) return
+        setPlusStorePrice({
+          mo: offering.monthly?.product.priceString,
+          yr: offering.annual?.product.priceString,
+        })
+      })
+      .catch((e) => console.warn('[subscription] getCurrentOffering failed', e))
+    return () => {
+      cancelled = true
+    }
+  }, [billingAvailable])
+
   function price(tier: 'plus' | 'pro') {
     const p = PRICING[tier]
-    if (annual)
+    if (annual) {
+      const storeYr = tier === 'plus' ? plusStorePrice.yr : undefined
       return {
-        amt: fmtCents(p.yr),
+        amt: storeYr ?? fmtCents(p.yr),
         per: '/year',
         eq: `${fmtCents(Math.round(p.yr / 12))}/mo billed yearly`,
       }
-    return { amt: fmtCents(p.mo), per: '/month', eq: '' }
+    }
+    const storeMo = tier === 'plus' ? plusStorePrice.mo : undefined
+    return { amt: storeMo ?? fmtCents(p.mo), per: '/month', eq: '' }
   }
 
-  const { available: billingAvailable, isPlus, refresh } = useRevenueCat()
-
-  async function handlePaidTierPress(tier: 'plus' | 'pro') {
+  // Only Plus is purchasable today. Pro renders a non-actionable "Coming soon"
+  // card (no offering/entitlement yet), so it never reaches this handler.
+  async function handlePaidTierPress(tier: 'plus') {
     if (currentTier === tier) return
 
-    // Pro is a separate offering/entitlement — not wired yet. Keep the
-    // placeholder until its paywall + entitlement exist in RevenueCat.
-    if (tier === 'pro' || !billingAvailable) {
+    // Billing not wired for this platform (no RC key) — be honest rather than
+    // opening a paywall that can't transact.
+    if (!billingAvailable) {
       Alert.alert(
         `${TIER_LABEL[tier]} coming soon`,
         'Paid plans will be available shortly. Your account will be upgraded automatically when billing launches.',
@@ -162,12 +191,22 @@ export function SubscriptionScreen() {
     // Plus → present the native RevenueCat paywall (Monthly / Yearly packages).
     const outcome = await presentPlusPaywall()
     if (outcome === 'purchased' || outcome === 'restored') {
-      // The webhook flips wrldUser.tier → 'plus' on the backend; pull it
-      // through now so the UI reflects the upgrade without waiting for a poll.
-      await refresh()
-      Alert.alert('Welcome to WRLD Plus', 'Your upgrade is active. Enjoy the extras!', [
-        { text: 'Nice' },
-      ])
+      // The webhook flips wrldUser.tier → 'plus' on the backend, but it's async
+      // — a single refresh often reads 'free' still. Poll until the backend
+      // reflects the purchase (or the entitlement confirms) before claiming the
+      // upgrade is active; otherwise show a softer "activating shortly" message.
+      const upgraded = await refreshUntilUpgraded()
+      if (upgraded) {
+        Alert.alert('Welcome to WRLD Plus', 'Your upgrade is active. Enjoy the extras!', [
+          { text: 'Nice' },
+        ])
+      } else {
+        Alert.alert(
+          'Purchase complete',
+          'Thanks! Your upgrade will activate shortly — it can take a moment to sync.',
+          [{ text: 'OK' }],
+        )
+      }
     } else if (outcome === 'error') {
       Alert.alert('Purchase unavailable', 'Something went wrong reaching the store. Please try again.', [
         { text: 'OK' },
@@ -179,6 +218,37 @@ export function SubscriptionScreen() {
   async function handleManageSubscription() {
     await presentCustomerCenter()
     await refresh()
+  }
+
+  const [restoring, setRestoring] = useState(false)
+
+  // App Store / Play require a restore entry point that's ALWAYS reachable —
+  // a user who bought on another device (and whose backend tier hasn't synced)
+  // must be able to recover their entitlement, even while still showing 'free'.
+  async function handleRestore() {
+    if (restoring) return
+    setRestoring(true)
+    try {
+      const outcome = await restore()
+      if (outcome.status === 'error') {
+        Alert.alert('Restore failed', outcome.message, [{ text: 'OK' }])
+        return
+      }
+      // Re-sync the authoritative backend tier (restore may have re-activated an
+      // entitlement the webhook now needs to reflect).
+      const upgraded = await refreshUntilUpgraded()
+      if (upgraded) {
+        Alert.alert('Purchases restored', 'Your subscription is active again.', [{ text: 'Nice' }])
+      } else {
+        Alert.alert(
+          'Nothing to restore',
+          "We didn't find an active purchase for this account. If you subscribed on another device, make sure you're signed in to the same store account.",
+          [{ text: 'OK' }],
+        )
+      }
+    } finally {
+      setRestoring(false)
+    }
   }
 
   const plus = price('plus')
@@ -244,7 +314,8 @@ export function SubscriptionScreen() {
         per={pro.per}
         equivalence={pro.eq || null}
         currentTier={currentTier}
-        onPress={() => handlePaidTierPress('pro')}
+        onPress={undefined}
+        comingSoon
       />
 
       <Button
@@ -265,6 +336,16 @@ export function SubscriptionScreen() {
         />
       )}
 
+      {billingAvailable && (
+        <Button
+          variant="secondary"
+          label={restoring ? 'Restoring…' : 'Restore purchases'}
+          icon="refresh-cw"
+          onPress={handleRestore}
+          disabled={restoring}
+        />
+      )}
+
       <HelpText style={styles.legal}>
         PLANS RENEW AUTOMATICALLY UNTIL CANCELLED · CANCEL ANYTIME IN YOUR STORE ACCOUNT
       </HelpText>
@@ -282,6 +363,7 @@ function TierCard({
   currentTier,
   onPress,
   accent,
+  comingSoon,
 }: {
   tier: Tier
   amount: string
@@ -290,6 +372,7 @@ function TierCard({
   currentTier: Tier
   onPress: (() => void) | undefined
   accent?: boolean
+  comingSoon?: boolean
 }) {
   const isCurrent = currentTier === tier
   const isFree = tier === 'free'
@@ -303,7 +386,10 @@ function TierCard({
     <Card variant={accent || isCurrent ? 'accent' : 'panel'} style={cardStyles.card}>
       <View style={cardStyles.top}>
         <View style={cardStyles.col}>
-          <Text variant="heading">{TIER_LABEL[tier]}</Text>
+          <View style={cardStyles.titleRow}>
+            <Text variant="heading">{TIER_LABEL[tier]}</Text>
+            {comingSoon && <Pill size="sm" variant="default" label="COMING SOON" />}
+          </View>
           <HelpText>{TAGLINE[tier]}</HelpText>
         </View>
         <View style={cardStyles.priceBlock}>
@@ -326,7 +412,11 @@ function TierCard({
           </View>
         ))}
       </View>
-      {onPress ? (
+      {comingSoon ? (
+        // Pro has no offering/entitlement yet — render an honest non-actionable
+        // "Coming soon" CTA instead of a priced "Choose Pro" that dead-ends.
+        <Button variant="secondary" label="Coming soon" onPress={() => {}} disabled />
+      ) : onPress ? (
         <Button
           variant={isCurrent ? 'secondary' : 'primary'}
           label={ctaLabel}
@@ -334,12 +424,7 @@ function TierCard({
           disabled={isCurrent}
         />
       ) : (
-        <Button
-          variant="secondary"
-          label={ctaLabel}
-          onPress={() => {}}
-          disabled
-        />
+        <Button variant="secondary" label={ctaLabel} onPress={() => {}} disabled />
       )}
     </Card>
   )
@@ -459,6 +544,11 @@ const cardStyles = StyleSheet.create({
   col: {
     flex: 1,
     gap: 2,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
   },
   priceBlock: {
     alignItems: 'flex-end',

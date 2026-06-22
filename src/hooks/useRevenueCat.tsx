@@ -34,6 +34,13 @@ type RevenueCatValue = {
   available: boolean
   /** Force-refresh CustomerInfo from the store + pull the backend tier through. */
   refresh: () => Promise<void>
+  /**
+   * After a purchase, poll refresh a few times with short backoff until the
+   * backend `tier` leaves 'free' (the RC→backend webhook is async, so a single
+   * refresh often races ahead of it). Resolves `true` if the tier reflected the
+   * purchase in time, `false` if it didn't (caller then shows a softer message).
+   */
+  refreshUntilUpgraded: () => Promise<boolean>
 }
 
 const Ctx = createContext<RevenueCatValue>({
@@ -41,7 +48,10 @@ const Ctx = createContext<RevenueCatValue>({
   isPlus: false,
   available: false,
   refresh: async () => undefined,
+  refreshUntilUpgraded: async () => false,
 })
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 
 export function RevenueCatProvider({ children }: { children: ReactNode }) {
   const { isLoaded, isSignedIn, userId } = useAuth()
@@ -52,12 +62,15 @@ export function RevenueCatProvider({ children }: { children: ReactNode }) {
 
   // Pull the authoritative WRLD user (with the webhook-updated tier) through.
   // Best-effort: a transient failure just means we keep the cached tier.
+  // Returns the fetched user (or null on failure) so callers can inspect tier.
   async function syncBackendTier() {
     try {
       const me = await usersApi.getMe()
       setWrldUser(me)
+      return me
     } catch (e) {
       console.warn('[revenuecat] /auth/me refresh failed', e)
+      return null
     }
   }
 
@@ -65,6 +78,23 @@ export function RevenueCatProvider({ children }: { children: ReactNode }) {
     const info = await getCustomerInfo()
     if (info) setCustomerInfo(info)
     await syncBackendTier()
+  }
+
+  // Poll refresh after a purchase until the backend tier reflects it. The
+  // webhook that flips tier='plus' is async, so the first refresh frequently
+  // still reads 'free'. Up to 5 attempts over ~6s with linear backoff; bails
+  // early the moment the tier is no longer 'free' OR the client entitlement is
+  // confirmed (a strong hint the webhook is imminent).
+  async function refreshUntilUpgraded(): Promise<boolean> {
+    const delays = [600, 1000, 1400, 1800, 2200]
+    for (const delay of delays) {
+      const info = await getCustomerInfo()
+      if (info) setCustomerInfo(info)
+      const me = await syncBackendTier()
+      if ((me && me.tier !== 'free') || hasPlus(info)) return true
+      await sleep(delay)
+    }
+    return false
   }
 
   // 1) Configure once, as early as possible (anonymous — identity comes next).
@@ -117,6 +147,7 @@ export function RevenueCatProvider({ children }: { children: ReactNode }) {
     isPlus: hasPlus(customerInfo),
     available: isPurchasesConfigured(),
     refresh,
+    refreshUntilUpgraded,
   }
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>

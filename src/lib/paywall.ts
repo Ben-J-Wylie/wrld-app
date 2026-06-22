@@ -29,6 +29,11 @@ function mapResult(result: PAYWALL_RESULT): PaywallOutcome {
  * Present the WRLD Plus paywall ONLY if the user doesn't already hold the
  * entitlement. Returns the outcome so the caller can refetch /auth/me on a
  * 'purchased' | 'restored' (so the authoritative `tier` updates).
+ *
+ * NOTE: not currently called — the Subscription screen uses `presentPlusPaywall`
+ * (always-present, gated on tier by the screen itself). Retained as a public
+ * paywall entry point for "soft gate" call sites (e.g. tapping a Plus-only
+ * feature) that should no-op when the user is already entitled.
  */
 export async function presentPlusPaywallIfNeeded(): Promise<PaywallOutcome> {
   try {

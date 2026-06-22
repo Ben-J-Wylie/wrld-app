@@ -122,7 +122,27 @@ export async function getSpaceBucksPackages(): Promise<PurchasesPackage[]> {
 
 /** True if the customer currently holds the WRLD Plus entitlement. */
 export function hasPlus(info: CustomerInfo | null | undefined): boolean {
+  warnOnEntitlementMismatch(info)
   return !!info?.entitlements.active[PLUS_ENTITLEMENT]
+}
+
+// Dev-only guard against the single most silent failure mode here: if the
+// RevenueCat dashboard entitlement id doesn't EXACTLY match PLUS_ENTITLEMENT
+// (e.g. a stray space or casing diff), a successful purchase grants an active
+// entitlement that `hasPlus` never sees — Plus stays off forever with no error.
+// Surface it loudly in dev so it's a one-line fix, not a multi-hour mystery.
+let warnedMismatch = false
+function warnOnEntitlementMismatch(info: CustomerInfo | null | undefined): void {
+  if (!__DEV__ || warnedMismatch || !info) return
+  const activeIds = Object.keys(info.entitlements.active)
+  if (activeIds.length > 0 && !activeIds.includes(PLUS_ENTITLEMENT)) {
+    warnedMismatch = true
+    console.warn(
+      `[purchases] Active entitlement(s) [${activeIds.join(', ')}] but none match ` +
+        `PLUS_ENTITLEMENT='${PLUS_ENTITLEMENT}'. hasPlus() will stay false. ` +
+        'Fix PLUS_ENTITLEMENT to match the RevenueCat dashboard entitlement id exactly.',
+    )
+  }
 }
 
 export type PurchaseOutcome =
@@ -133,6 +153,11 @@ export type PurchaseOutcome =
 /**
  * Purchase a package. User-cancellation is a normal flow, not an error — it
  * returns `{ status: 'cancelled' }` so callers don't show a scary alert.
+ *
+ * NOTE: not currently called — the native RevenueCat paywall (`paywall.ts`)
+ * owns the WRLD Plus purchase flow end-to-end. Retained as part of this
+ * module's purchase/restore API surface for a future custom (non-native-UI)
+ * purchase path (e.g. an in-screen package picker); remove if that never lands.
  */
 export async function purchase(pkg: PurchasesPackage): Promise<PurchaseOutcome> {
   if (!configured) return { status: 'error', message: 'Billing is not available right now.' }
