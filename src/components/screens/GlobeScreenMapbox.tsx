@@ -97,9 +97,12 @@ const PIN_BORDER = '#FFFFFF'
 // "spin hits a wall and bounces back" you only see when there's space between the
 // globe edge and the screen edge (i.e. zoomed out; it's gone once zoomed in). So
 // the floor is the fill-zoom, NOT a low framing zoom — framing is GLOBE_FIT_SCALE's
-// job (an RN shrink that never reintroduces the bounce). TUNE ON DEVICE: raise if
-// any space/bounce remains at rest; lower only until the space (and bounce) appears.
-const GLOBE_MIN_ZOOM = 2.0
+// job (an RN shrink that never reintroduces the bounce). Both are admin-tunable
+// (RemoteConfig); these consts are the offline fallbacks. NOTE: at this 1.5 floor the
+// globe doesn't fully fill its viewport on Android, so a fast swipe can still hit the
+// Mapbox rubber-band — raise GLOBE_MIN_ZOOM (here or live in /admin/config) until the
+// space/bounce is gone, then use GLOBE_FIT_SCALE for on-screen size.
+const GLOBE_MIN_ZOOM = 1.5
 
 // Idle globe auto-rotation: spin as a signature intro, then ease to a stop so
 // Mapbox stops re-rendering (continuous setCamera at 12.5fps was the dominant
