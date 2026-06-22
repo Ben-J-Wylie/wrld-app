@@ -121,10 +121,21 @@ export const usersApi = {
     return res.data.preferences
   },
 
-  getSubscriptionStatus: async (handle: string): Promise<{ subscribed: boolean; currentPeriodEnd: string | null }> => {
-    const res = await apiClient.get<{ subscribed: boolean; currentPeriodEnd: string | null }>(
+  getSubscriptionStatus: async (
+    handle: string,
+  ): Promise<{ subscribed: boolean; currentPeriodEnd: string | null; pastDue?: boolean }> => {
+    const res = await apiClient.get<{ subscribed: boolean; currentPeriodEnd: string | null; pastDue?: boolean }>(
       `/users/${handle}/subscription-status`,
     )
+    return res.data
+  },
+
+  // Mint a short-lived billing handoff token + the branded /billing URL. The app
+  // opens webUrl in the browser so a past-due subscriber can update their card with
+  // no web login (same rail as createSubscribeSession). Stripe rails only — IAP
+  // past-due is fixed in the App Store / Play, not here.
+  createBillingSession: async (): Promise<{ token: string; webUrl: string }> => {
+    const res = await apiClient.post<{ token: string; webUrl: string }>('/users/me/billing/session')
     return res.data
   },
 

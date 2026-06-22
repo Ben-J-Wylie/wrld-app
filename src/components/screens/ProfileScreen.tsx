@@ -178,8 +178,28 @@ export function ProfileScreen() {
       {!isOwnProfile && profile.subscriptionEnabled && profile.subscriptionPriceUsd && (
         subStatus?.subscribed ? (
           <View style={{ gap: theme.spacing.sm }}>
+            {subStatus.pastDue && (
+              <Button
+                label="Payment failed · Update card"
+                onPress={async () => {
+                  try {
+                    // Branded /billing page via the handoff token — update the card +
+                    // retry the failed renewal with no web login.
+                    const { webUrl } = await usersApi.createBillingSession()
+                    await Linking.openURL(webUrl)
+                    refetchSubStatus()
+                  } catch {
+                    Alert.alert('Error', 'Could not open billing')
+                  }
+                }}
+              />
+            )}
             <Button
-              label={`Subscribed · $${(profile.subscriptionPriceUsd / 100).toFixed(2)}/mo`}
+              label={
+                subStatus.pastDue
+                  ? 'Manage subscription'
+                  : `Subscribed · $${(profile.subscriptionPriceUsd / 100).toFixed(2)}/mo`
+              }
               variant="secondary"
               onPress={() => {
                 Alert.alert(
