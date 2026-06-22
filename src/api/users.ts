@@ -139,6 +139,7 @@ export const usersApi = {
 
   getSubscriptionSettings: async (): Promise<{
     subscriptionEnabled: boolean
+    subscriptionTier: number | null
     subscriptionPriceUsd: number | null
     onboardingComplete: boolean
     stripeConnectId: string | null
@@ -147,6 +148,7 @@ export const usersApi = {
   }> => {
     const res = await apiClient.get<{
       subscriptionEnabled: boolean
+      subscriptionTier: number | null
       subscriptionPriceUsd: number | null
       onboardingComplete: boolean
       stripeConnectId: string | null
@@ -161,8 +163,12 @@ export const usersApi = {
     return res.data
   },
 
+  // Fixed-tier model: the creator picks a tier (1..N from the shared ladder), not an
+  // arbitrary price. The backend derives the price from the tier and only accepts
+  // subscriptionTier / subscriptionEnabled (an arbitrary subscriptionPriceUsd is
+  // ignored). Keep this in lockstep with the backend PATCH schema.
   updateSubscriptionSettings: async (settings: {
-    subscriptionPriceUsd?: number
+    subscriptionTier?: number
     subscriptionEnabled?: boolean
   }): Promise<void> => {
     await apiClient.patch('/users/me/subscription/settings', settings)

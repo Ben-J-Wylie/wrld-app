@@ -18,9 +18,9 @@ import { HelpText } from '@/components/primitives/HelpText'
 import { Toggle } from '@/components/primitives/Toggle'
 import { ScreenHeader } from '@/components/sections/ScreenHeader'
 import { PageTabs } from '@/components/features/navigation/PageTabs'
-import { Input } from '@/components/primitives/Input'
 import { usersApi } from '@/api/users'
 import { ppvApi } from '@/api/ppvEvents'
+import { CREATOR_SUB_TIERS, formatUsd } from '@/lib/subscriptionTiers'
 
 export function MonetizeScreen() {
   const qc = useQueryClient()
@@ -35,14 +35,9 @@ export function MonetizeScreen() {
     queryFn: () => ppvApi.listMyEvents(),
   })
 
-  const [priceInput, setPriceInput] = useState('')
   const [saving, setSaving] = useState(false)
   // Hybrid-nav: Subscriptions / Events as in-place page-tabs.
   const [tab, setTab] = useState<'subs' | 'events'>('subs')
-
-  const priceDollars = priceInput ? parseFloat(priceInput) : null
-  const priceCents = priceDollars ? Math.round(priceDollars * 100) : null
-  const priceValid = priceCents !== null && priceCents >= 100 && priceCents <= 100_000
 
   async function handleConnectStripe() {
     try {
@@ -53,17 +48,15 @@ export function MonetizeScreen() {
     }
   }
 
-  async function handleSavePrice() {
-    if (!priceValid || !priceCents) return
+  async function handleSelectTier(tier: number, priceUsd: number) {
     setSaving(true)
     try {
-      await usersApi.updateSubscriptionSettings({ subscriptionPriceUsd: priceCents })
+      await usersApi.updateSubscriptionSettings({ subscriptionTier: tier })
       qc.invalidateQueries({ queryKey: ['subscription-settings'] })
       qc.invalidateQueries({ queryKey: ['currentUser'] })
-      setPriceInput('')
-      Alert.alert('Price updated', `New subscribers will pay $${(priceCents / 100).toFixed(2)}/mo`)
+      Alert.alert('Tier updated', `New subscribers will pay ${formatUsd(priceUsd)}/mo`)
     } catch {
-      Alert.alert('Error', 'Could not update price')
+      Alert.alert('Error', 'Could not update subscription tier')
     } finally {
       setSaving(false)
     }
@@ -113,7 +106,7 @@ export function MonetizeScreen() {
             Connect a Stripe account to receive subscription payments. Stripe handles billing,
             payouts, and tax compliance.
           </Text>
-          <HelpText>PLATFORM TAKES 30% · YOU KEEP 70%</HelpText>
+          <HelpText>PLATFORM TAKES 40% · YOU KEEP 60%</HelpText>
           <Button label="Connect Stripe" onPress={handleConnectStripe} />
         </>
       ) : (
@@ -154,34 +147,37 @@ export function MonetizeScreen() {
             <Toggle
               value={settings.subscriptionEnabled}
               onValueChange={handleToggleEnabled}
-              disabled={!settings.subscriptionPriceUsd}
+              disabled={!settings.subscriptionTier}
             />
           </View>
 
-          {/* Current price */}
+          {/* Tier picker (fixed ladder — no arbitrary pricing) */}
           <View style={styles.section}>
-            <HelpText>MONTHLY PRICE</HelpText>
-            {settings.subscriptionPriceUsd ? (
-              <Text variant="body">
-                Current: ${(settings.subscriptionPriceUsd / 100).toFixed(2)}/mo
-              </Text>
-            ) : (
+            <HelpText>MONTHLY TIER</HelpText>
+            {!settings.subscriptionTier && (
               <Text variant="body" color={theme.colors.text.muted}>
-                No price set — set one to enable subscriptions
+                Pick a tier to enable subscriptions
               </Text>
             )}
-            <Input
-              value={priceInput}
-              onChangeText={setPriceInput}
-              placeholder="New price in USD (e.g. 5.00)"
-              keyboardType="decimal-pad"
-            />
-            <Button
-              label={saving ? 'Saving…' : 'Save price'}
-              onPress={handleSavePrice}
-              disabled={!priceValid || saving}
-            />
-            <HelpText>MINIMUM $1.00 · MAXIMUM $1,000.00</HelpText>
+            <View style={styles.tierGrid}>
+              {CREATOR_SUB_TIERS.map(t => {
+                const selected = settings.subscriptionTier === t.tier
+                return (
+                  <Pressable
+                    key={t.tier}
+                    onPress={() => handleSelectTier(t.tier, t.priceUsd)}
+                    disabled={saving}
+                    style={[styles.tierCard, selected && styles.tierCardSelected, saving && styles.tierCardDisabled]}
+                  >
+                    <Text variant="bodyEmphasized">{formatUsd(t.priceUsd)}</Text>
+                    <Text variant="monoCaption" color={theme.colors.text.muted}>
+                      TIER {t.tier} · / MO
+                    </Text>
+                  </Pressable>
+                )
+              })}
+            </View>
+            <HelpText>FIXED TIERS · SAME ON WEB &amp; APP</HelpText>
           </View>
 
           {/* Stripe dashboard */}
@@ -284,6 +280,29 @@ const styles = StyleSheet.create({
     padding: theme.spacing.lg,
     alignItems: 'center',
     gap: theme.spacing.xs,
+  },
+  tierGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+  },
+  tierCard: {
+    flexBasis: '47%',
+    flexGrow: 1,
+    backgroundColor: theme.colors.bg.elevated,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border.subtle,
+    paddingVertical: theme.spacing.md,
+    paddingHorizontal: theme.spacing.lg,
+    gap: 2,
+  },
+  tierCardSelected: {
+    borderColor: theme.colors.accent.default,
+    backgroundColor: theme.colors.accent.surface,
+  },
+  tierCardDisabled: {
+    opacity: 0.5,
   },
   ppvHeader: {
     flexDirection: 'row',
