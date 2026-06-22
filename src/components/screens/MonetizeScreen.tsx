@@ -123,7 +123,7 @@ export function MonetizeScreen() {
               {settings.subscriptionPriceUsd != null && (
                 <View style={styles.statBox}>
                   <Text variant="display">
-                    ${(settings.estimatedMrrUsd / 100).toFixed(0)}
+                    ${(settings.estimatedMrrCents / 100).toFixed(0)}
                   </Text>
                   <Text variant="monoCaption" color={theme.colors.text.muted}>
                     EST. MONTHLY

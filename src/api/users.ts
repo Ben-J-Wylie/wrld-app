@@ -144,7 +144,7 @@ export const usersApi = {
     onboardingComplete: boolean
     stripeConnectId: string | null
     subscriberCount: number
-    estimatedMrrUsd: number
+    estimatedMrrCents: number
   }> => {
     const res = await apiClient.get<{
       subscriptionEnabled: boolean
@@ -153,7 +153,7 @@ export const usersApi = {
       onboardingComplete: boolean
       stripeConnectId: string | null
       subscriberCount: number
-      estimatedMrrUsd: number
+      estimatedMrrCents: number
     }>('/users/me/subscription/settings')
     return res.data
   },
