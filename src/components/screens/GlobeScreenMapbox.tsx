@@ -622,10 +622,31 @@ export function GlobeScreenMapbox() {
   function pauseRotation() {
     userInteractingRef.current = true
     if (interactTimerRef.current) clearTimeout(interactTimerRef.current)
+    // SAFETY FALLBACK ONLY — the primary resume is handleMapIdle (onMapIdle). This
+    // timer must OUTLAST the longest possible fling: panDecelerationFactor 0.99
+    // makes a hard swipe coast ~7s. On iOS onCameraChanged fires throughout the
+    // fling and re-arms this each frame, so a short timer was fine. On Android those
+    // events don't fire during the momentum glide, so a 4s timer expired MID-FLING
+    // and the rotate tick's setCamera fought the still-gliding fling → the sporadic
+    // snap-back. 12s comfortably outlasts any fling; onMapIdle resumes sooner.
     interactTimerRef.current = setTimeout(() => {
       userInteractingRef.current = false
-      armSpin() // resume a fresh spin window once the interaction settles
-    }, 4000)
+      armSpin()
+    }, 12_000)
+  }
+
+  // The map has fully come to rest — including at the END of a fling's momentum,
+  // which is the signal a blind timer can't get right on Android. Only resume when
+  // we're actually paused for a user interaction; if the map went idle because the
+  // spin window ended naturally (userInteractingRef false), stay at rest so the GPU
+  // idles (the battery optimisation). Never resume mid-gesture.
+  function handleMapIdle() {
+    if (!userInteractingRef.current || gestureActiveRef.current) return
+    if (interactTimerRef.current) clearTimeout(interactTimerRef.current)
+    interactTimerRef.current = setTimeout(() => {
+      userInteractingRef.current = false
+      armSpin() // resume a fresh spin window once the map (and any fling) settles
+    }, 1_200)
   }
 
   // Push the current viewport (the tiles the map shows) to the discovery
@@ -1348,6 +1369,7 @@ export function GlobeScreenMapbox() {
             // platforms a real deceleration factor so a flung globe keeps spinning.
             gestureSettings={{ panDecelerationFactor: 0.99 }}
             onCameraChanged={handleCameraChanged}
+            onMapIdle={handleMapIdle}
             onDidFinishLoadingMap={handleMapLoad}
             onDidFinishLoadingStyle={handleStyleLoad}
             onPress={() => {
