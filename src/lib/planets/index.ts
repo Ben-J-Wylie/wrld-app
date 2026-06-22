@@ -58,8 +58,10 @@ const earth: Planet = {
   glyph: 'globe',
   styleURL: Mapbox.StyleURL.Light,
   surfaceColor: '#e7e4dc',
-  // Sits at the zoom floor (whole planet in frame, no L/R crop, vertical rotation OK).
-  initialCamera: { centerCoordinate: [0, 20], zoomLevel: 1.0 },
+  // Rests at the zoom floor, which must be the "globe fills the MapView viewport"
+  // zoom — below it Mapbox rubber-bands the spin (see GLOBE_MIN_ZOOM). Keep in sync
+  // with GLOBE_MIN_ZOOM; framing/size is GLOBE_FIT_SCALE's job, not this zoom.
+  initialCamera: { centerCoordinate: [0, 20], zoomLevel: 2.0 },
   belongsTo: (s) => !isPrivate(s),
   placePin: (s) => [s.lng as number, s.lat as number],
 }
@@ -70,8 +72,8 @@ const haven: Planet = {
   glyph: 'shield', // privacy / refuge
   styleJSON: ISLAND_STYLE_JSON,
   surfaceColor: ISLAND_SURFACE_COLOR,
-  // Same whole-planet framing as Earth.
-  initialCamera: { centerCoordinate: ISLAND_CENTER, zoomLevel: 1.0 },
+  // Same fill-the-viewport resting zoom as Earth (keep in sync with GLOBE_MIN_ZOOM).
+  initialCamera: { centerCoordinate: ISLAND_CENTER, zoomLevel: 2.0 },
   belongsTo: isPrivate,
   placePin: (s) => randomPointOnIsland(s.id),
 }

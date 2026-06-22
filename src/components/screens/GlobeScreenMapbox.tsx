@@ -90,11 +90,16 @@ const PIN_PURPLE = '#A855F7'
 const PIN_BLACK = '#111111' // the viewer's own stream pin (tap → return to it)
 const PIN_BORDER = '#FFFFFF'
 
-// Globe zoom FLOOR — the furthest you can pinch out. Below the resting zoom
-// (each planet's initialCamera.zoomLevel = 1.0), so there's pinch-out room; the low
-// end may re-introduce the vertical-rotation collapse — raise toward the resting
-// zoom if that bites.
-const GLOBE_MIN_ZOOM = 1.5
+// Globe zoom FLOOR — the furthest you can pinch out. CRITICAL: this must keep the
+// globe at least filling its MapView viewport (globeBox = 1.4× screen). Below the
+// "globe fills the viewport" zoom, Mapbox's globe projection treats a drag as
+// panning past the world bounds and elastically SNAPS IT BACK — that's the
+// "spin hits a wall and bounces back" you only see when there's space between the
+// globe edge and the screen edge (i.e. zoomed out; it's gone once zoomed in). So
+// the floor is the fill-zoom, NOT a low framing zoom — framing is GLOBE_FIT_SCALE's
+// job (an RN shrink that never reintroduces the bounce). TUNE ON DEVICE: raise if
+// any space/bounce remains at rest; lower only until the space (and bounce) appears.
+const GLOBE_MIN_ZOOM = 2.0
 
 // Idle globe auto-rotation: spin as a signature intro, then ease to a stop so
 // Mapbox stops re-rendering (continuous setCamera at 12.5fps was the dominant
