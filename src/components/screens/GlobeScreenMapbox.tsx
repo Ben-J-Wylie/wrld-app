@@ -1334,7 +1334,14 @@ export function GlobeScreenMapbox() {
               width: globeBox,
               height: globeBox,
             },
-            { transform: [{ translateY: globeTranslateY }, { scale: fitScale }] },
+            // DIAGNOSTIC: scale forced to 1 (was `fitScale`). Isolates whether the
+            // RN scale transform on this native MapView wrapper is what corrupts
+            // Android fling gestures (the sporadic globe bounce). The globe will
+            // render large/cropped while this is 1 — that's expected for the test.
+            // If the bounce disappears on Android, the scale transform is the cause
+            // and we reframe via layout/zoom instead of a transform. Restore to
+            // `scale: fitScale` after testing.
+            { transform: [{ translateY: globeTranslateY }, { scale: 1 }] },
           ]}
           pointerEvents="box-none"
           // Belt-and-suspenders gate for the auto-rotate loop. Mapbox's
