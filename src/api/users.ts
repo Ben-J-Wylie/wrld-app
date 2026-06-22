@@ -128,8 +128,15 @@ export const usersApi = {
     return res.data
   },
 
-  createSubscribeSession: async (handle: string): Promise<{ url: string }> => {
-    const res = await apiClient.post<{ url: string }>(`/users/${handle}/subscribe-session`)
+  // `webUrl` is the branded wrld.cam/subscribe page (carries the session token so the
+  // subscriber pays there with no web login); `url` is the legacy Stripe-hosted-checkout
+  // redirect, kept as a fallback for older backends that don't return webUrl yet.
+  createSubscribeSession: async (
+    handle: string,
+  ): Promise<{ url: string; webUrl?: string; sessionId?: string }> => {
+    const res = await apiClient.post<{ url: string; webUrl?: string; sessionId?: string }>(
+      `/users/${handle}/subscribe-session`,
+    )
     return res.data
   },
 

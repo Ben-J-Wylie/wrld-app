@@ -205,8 +205,12 @@ export function ProfileScreen() {
             label={`Subscribe · $${(profile.subscriptionPriceUsd / 100).toFixed(2)}/mo`}
             onPress={async () => {
               try {
-                const { url } = await usersApi.createSubscribeSession(profile.handle)
-                await Linking.openURL(url)
+                // Open the branded wrld.cam/subscribe page (system browser). It pays via
+                // the embedded Payment Element using the session token — no web login.
+                // Fall back to the legacy Stripe-hosted-checkout redirect if an older
+                // backend doesn't return webUrl yet.
+                const { url, webUrl } = await usersApi.createSubscribeSession(profile.handle)
+                await Linking.openURL(webUrl ?? url)
                 // Refetch status when app regains focus after browser payment
                 refetchSubStatus()
               } catch {
