@@ -54,29 +54,47 @@ kinds set — it can honour per-segment.)
 
 ---
 
-## LANE B — Scalable availability (time-tiles + push) — temporal twin of the live P2 viewport protocol
+## LANE B — Scalable availability: **zoom-adaptive SPACE-TIME tiles + push** (the live P2 viewport protocol, plus a time coordinate)
 
-**Model:** fixed, cacheable time-tiles + push-on-edit. A tile's availability is identical for
-every viewer → edge-cacheable (O(unique tiles)); edits are rare → push is O(edits).
+**Model (amended 2026-06-23 — was time-only; now 2D zoom-adaptive).** The time machine becomes
+the **live globe protocol with a time coordinate.** A tile is a **space-time cell `(t, z, x, y)`**:
+`t = floor(T_ms / TILE_MS)` (time), `z/x/y` = the slippy geo-tile from the **existing
+`tiles.ts`**. Same **zoom-adaptive count/pin regime** as live:
+- **High zoom** (`z ≥ PIN_ZOOM_THRESHOLD`): individual **pins + their public `intervals`**,
+  bounded to the geo-tile *and* the time-tile.
+- **Low zoom** (the live `counts` regime): a compact **count-over-time aggregate** per cell — so
+  a planet-zoom viewer fetches a handful of coarse count tiles, not the world.
 
-**B1 — Tiled, cacheable discover.** *[do first — app can drop the poll immediately]*
-- `GET /clips/discover?tile=<n>` where `n = floor(T_ms / TILE_MS)` → that tile's pins + their
-  public `intervals` within `[n*TILE_MS, (n+1)*TILE_MS]` (same pin shape as the windowed feed).
-- **Cacheable:** `Cache-Control: public, max-age=<short>` + `ETag` (a tile is identical per
-  viewer). `TILE_MS` = RemoteConfig, default **3_600_000 (1h)**, aligned to wall-clock floor.
+Why this is the 500k-correct shape: read load = **O(on-screen tiles)**, independent of viewer
+count *and* total content; and **planet-zoom-spin is the cheapest, most-cache-shared state**
+(every zoomed-out viewer hits the *same* coarse global tiles). Edits stay **O(edits)**.
+
+**B1 — Zoom-adaptive space-time tiled discover (cacheable).** *[do first — app drops the poll]*
+- `GET /clips/discover?t=<t>&z=<z>&x=<x>&y=<y>` → that space-time cell:
+  - **high z →** the pins (geo+time bounded) + their public `intervals`.
+  - **low z →** a **count-over-time** series per cell — e.g. a per-minute "alive-count" across the
+    tile's hour (≈60 ints) — so the client reads the count **at the exact playhead locally** and
+    the response stays **instant-independent + cacheable**. (A single per-tile count over-counts
+    badly — 1000 one-minute clips in an hour ≠ ~17 alive at an instant — so carry the series, not
+    a scalar.)
+- **Cacheable:** `Cache-Control: public, max-age=<short>` + `ETag` (a cell is identical for every
+  viewer). `TILE_MS` = RemoteConfig, default **3_600_000 (1h)**, floor-aligned; `z/x/y` +
+  thresholds reuse `tiles.ts` (same as live).
 - Keep `?from&to` + `?at=` alive during the transition (retired later, edge #3).
-- *App contract:* Ben fetches the tiles covering the scrub range (cacheable GETs), holds/evicts
-  them, resolves pin visibility locally.
+- *App contract:* Ben fetches the cells covering **viewport × scrub-time**, holds/evicts them,
+  and resolves **pins (high z) / the count at the playhead (low z) locally** — reusing the live
+  globe's count/pin rendering.
 
-**B2 — Push channel.** A WebSocket where a viewer **subscribes to the tiles it holds**; on any
-edit, the server emits **"tile `<n>` changed"** to its subscribers → they refetch that tile.
-Reuse the live discovery socket if it's clean to extend; else a sibling channel. O(edits), not
-O(viewers×polls).
+**B2 — Push channel.** A WebSocket where a viewer **subscribes to the cells it holds**; on any
+edit, the server emits **"cell `(t,z,x,y)` changed"** to its subscribers → they refetch that
+cell. Reuse the live discovery socket if clean (it already speaks viewport tiles) — this is the
+same channel with a `t`. O(edits), not O(viewers×polls).
 
 **B3 — Invalidate-on-edit.** The directives/snips PATCH (A1/A2) must **bust the affected
-tile(s)' cache + emit the B2 push** for the tiles the edited range touches.
-- *App contract:* Ben subscribes to held tiles; on "tile changed" → refetch that tile (drops
-  the 60s poll; keep a long poll only as a socket-down backstop).
+cell(s)' cache + emit the B2 push** for every `(t,z,x,y)` the edited range touches (across the
+zoom pyramid for that lat/lng + the time-tiles the range spans).
+- *App contract:* Ben subscribes to held cells; on "cell changed" → refetch it (drops the 60s
+  poll; keep a long poll only as a socket-down backstop).
 
 ---
 
@@ -91,13 +109,16 @@ tile(s)' cache + emit the B2 push** for the tiles the edited range touches.
 - **A1:** snip a clip, reload → snip persists (no straddle); second device → same segmentation.
 - **A2:** set precision / identity / a source-toggle per segment → persists + round-trips.
 - **A4:** a source toggled off over a range → not served/played there.
-- **B1:** time machine fetches per-tile; responses cache (verify `Cache-Control`/`ETag` hits);
-  app poll removable.
-- **B2/B3:** another viewer's edit → "tile changed" → holders update with no poll wait.
+- **B1:** time machine fetches per **space-time cell**; **planet-zoom shows count bubbles**
+  (few coarse tiles), **zoom-in shows pins**; responses cache (verify `Cache-Control`/`ETag`
+  hits); app poll removable.
+- **B2/B3:** another viewer's edit → "cell changed" → holders update with no poll wait.
 
 ## App side (Ben, in parallel)
 - A: generalize the interval lib → piecewise settings; per-segment settings panel; derived
   segmentation from `session.snips` ∪ directive boundaries; multi-axis mend; persist via the
   snips + directives PATCHes.
-- B: tile-manager (fetch/hold/evict cacheable tiles) + push subscription; replace the
-  window+poll in `useHistoricalAvailability`.
+- B: a **space-time cell manager** (fetch/hold/evict cacheable `(t,z,x,y)` cells over
+  viewport × scrub-time) reusing `tiles.ts` + the live count/pin rendering; resolve pins (high z)
+  / playhead-count (low z) locally; push subscription per held cell; replace the window+poll in
+  `useHistoricalAvailability`.
