@@ -1173,3 +1173,39 @@ accumulated overlapping ranges.
   segment's state at a glance) + control placement (A inline-on-segment vs B selected-segment
   panel; Ben leaning B) + the full suite (precision + identity, same `patchDirectives`).
 - **PB4(b):** per-user visibility default (`User.bufferVisibilityDefault`) — independent.
+
+### PB4 — known edges + the robust/scalable trajectory (Ben + audit, 2026-06-23)
+
+The per-segment correctness is solid (interval arithmetic + footage-window). These are the
+honest edges, each with its principled resolution:
+
+1. **Segment straddling a privacy boundary.** Can't happen in the happy path (snip from a
+   uniform segment → mark → mend-with-reconciliation keeps segments uniform). It occurs when
+   the DISPLAY segmentation diverges from the private-range boundaries — chiefly on **reload**
+   (private ranges are server-persisted; `splitPoints` are local + reset, so a marked clip
+   re-shows un-snipped and its binary toggle reads the half-private whole as "public"), and on
+   an **un-guarded mend** (the differ-guard only checks the buffer lane). **Principled fix:
+   derive the display segmentation FROM the privacy boundaries** — auto-split at every private
+   edge on load so a segment is always exactly one private or one public span (uniform by
+   construction). Core of the PB4-UI redesign.
+2. **The 1s `isCovered` tolerance.** Not a separate fix — **#1's derived segmentation makes
+   coverage exact** (a segment IS a span), removing the tolerance. Safe pragmatic margin until
+   then.
+3. **Retire the legacy `?at=` path + `AVAILABILITY_FEED` flag.** Not today — **soak the
+   windowed feed a few days**, then remove the app branch + backend handler in one pass.
+4. **Seed-once rehydration misses a new mid-view session.** Harmless — a new session has no
+   marks to seed; own marks are local; only same-user-two-devices misses (rare, self-heals on
+   reopen). Leave as-is.
+5. **Edit-propagation is poll-based (refetch-on-settle + 60s).** Fine at f&f (one `discover`
+   per active time-machine viewer / 60s). **Scalable answer = PUSH** (server emits
+   "availability changed at T"; viewers subscribed by time-window re-resolve → O(edits), not
+   O(viewers)) **+ cache the windowed `discover` per window**. Defer to v0.3/scale; the model
+   supports bolting it on (the socket idea).
+6. **Window constants (±12h / 1h).** Arbitrary. **Scalable answer = TIME-TILING** — the
+   temporal mirror of the live geographic viewport-tile protocol: fixed time-tiles, **cached
+   per tile** (identical for every viewer → edge-cacheable → big load win), client holds the
+   tiles covering its scrub range. The "window" becomes a principled tile size.
+
+**#5 + #6 converge:** *time-tiled, cacheable availability + push-on-edit* is the one robust
+scalable architecture (the temporal twin of live geographic tiling) — the north star; the
+current poll+window is the f&f stand-in.
