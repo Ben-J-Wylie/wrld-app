@@ -5,34 +5,37 @@
 
 ---
 
-## → AARON — THE ONLY THING LEFT TO LIGHT UP PB3 (2026-06-23)
+## → BEN — PB3 IS READY, TAKE IT FROM HERE (2026-06-23, Aaron)
 
-**State:** PB1 (public buffer) ✅ live · PB2 (retain-in-place) ✅ live · **PB3 backend
-✅ + app ✅, both merged to `main` — but dormant.** The per-segment public/private
-toggle (clip grid, by the scissor) is built + flag-gated and Ben can't see it yet, by
-design. Confirmed on the live API 2026-06-23: **`PB3_PER_RANGE` is not on `/config`**
-(`PUBLIC_BUFFER_ENABLED` is `true`). Two backend steps (your lane) flip PB3 on:
+**State:** PB1 ✅ live · PB2 ✅ live · **PB3 backend ✅ DONE + deployed · app toggle ✅
+scabbed in.** Both Aaron backend steps from the old version of this section are now
+shipped, so there's **no remaining backend code** — only the flag flip + your app polish:
 
-1. **Allowlist `PB3_PER_RANGE` on the public `/config`** (the `wrld-backend` config route
-   that exposes keys to the app) + deploy — so the app's `configBool('PB3_PER_RANGE')`
-   can read it. *(The RemoteConfig key already exists from your PB3 migration; it's just
-   not in the app-facing subset.)*
-2. **Set `PB3_PER_RANGE = true`** via `/admin/config` (same as the `PUBLIC_BUFFER_ENABLED`
-   flip).
+- ✅ **`PB3_PER_RANGE` allowlisted on `/config`** (`wrld-backend 790e775`) — verified live:
+  `/config` now returns `PB3_PER_RANGE` (currently `false`), so `configBool('PB3_PER_RANGE')`
+  reads it; the toggle stays dormant until the flip.
+- ✅ **Directives fold into `GET /buffer/me`** (`wrld-backend 4be347c`) — each session now
+  carries `directives: [{ startAtMs, endAtMs, visibility, precision, attributed }]` (`[]` =
+  all default). **Closes the scab-in reload caveat** — the grid can now rehydrate per-segment
+  public/private marks on load, no separate GET needed.
+- The full enforcement (write PATCH · reaper retain union · discover-hide · public-serve
+  exclude) is deployed + data-gated behind the flag.
 
-**Then Ben verifies on device:** relaunch the app (10-min `/config` cache) → tap a
-buffer-lane segment → an eye/lock toggle appears above the scissor → mark it private →
-its pin vanishes from the time machine + it won't serve publicly, while the owner still
-sees it. (App contract: `PATCH /buffer/me/sessions/:id/directives`, authoritative
-private-range list — already wired.)
+### Your steps (Ben)
+1. **Flip it on:** set `PB3_PER_RANGE = true` in `/admin/config` (just a config toggle now —
+   no code/deploy; the key's already on `/config` + in RemoteConfig). *(Or ping Aaron to flip
+   it via the DB.)*
+2. **Verify on device:** relaunch (≈10-min `/config` cache) → tap a buffer-lane segment →
+   eye/lock toggle by the scissor → mark private → its pin vanishes from the time machine +
+   it won't serve publicly, while you (owner) still see it.
+3. **Rehydrate marks:** wire the grid to seed per-segment public/private from each
+   `/buffer/me` session's new `directives[]` (so marks survive reload — the caveat is now
+   backend-supported).
+4. **Redesign the scab-in:** your own note — the by-the-scissor placement + ±1s range-keyed
+   matching are stopgaps; redesign when ready.
 
-**Nice-to-have for the PB3 redesign (not blocking the flip):** a
-**`GET /buffer/me/sessions/:id/directives`** (or fold the standalone directives into
-`GET /buffer/me`) so the grid can **rehydrate the private marks on reload** — today the
-enforcement is real but the local UI reflection is ephemeral (scab-in note).
-
-After that verifies, the initiative's last slice is **PB4** (per-user visibility default +
-the grid redesign/polish; your `User.bufferVisibilityDefault` when we get there).
+After that, the initiative's last slice is **PB4** (per-user visibility default + grid
+polish; Aaron adds `User.bufferVisibilityDefault` when we get there).
 
 ---
 
