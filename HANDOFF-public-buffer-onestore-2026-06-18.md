@@ -5,6 +5,37 @@
 
 ---
 
+## → AARON — THE ONLY THING LEFT TO LIGHT UP PB3 (2026-06-23)
+
+**State:** PB1 (public buffer) ✅ live · PB2 (retain-in-place) ✅ live · **PB3 backend
+✅ + app ✅, both merged to `main` — but dormant.** The per-segment public/private
+toggle (clip grid, by the scissor) is built + flag-gated and Ben can't see it yet, by
+design. Confirmed on the live API 2026-06-23: **`PB3_PER_RANGE` is not on `/config`**
+(`PUBLIC_BUFFER_ENABLED` is `true`). Two backend steps (your lane) flip PB3 on:
+
+1. **Allowlist `PB3_PER_RANGE` on the public `/config`** (the `wrld-backend` config route
+   that exposes keys to the app) + deploy — so the app's `configBool('PB3_PER_RANGE')`
+   can read it. *(The RemoteConfig key already exists from your PB3 migration; it's just
+   not in the app-facing subset.)*
+2. **Set `PB3_PER_RANGE = true`** via `/admin/config` (same as the `PUBLIC_BUFFER_ENABLED`
+   flip).
+
+**Then Ben verifies on device:** relaunch the app (10-min `/config` cache) → tap a
+buffer-lane segment → an eye/lock toggle appears above the scissor → mark it private →
+its pin vanishes from the time machine + it won't serve publicly, while the owner still
+sees it. (App contract: `PATCH /buffer/me/sessions/:id/directives`, authoritative
+private-range list — already wired.)
+
+**Nice-to-have for the PB3 redesign (not blocking the flip):** a
+**`GET /buffer/me/sessions/:id/directives`** (or fold the standalone directives into
+`GET /buffer/me`) so the grid can **rehydrate the private marks on reload** — today the
+enforcement is real but the local UI reflection is ephemeral (scab-in note).
+
+After that verifies, the initiative's last slice is **PB4** (per-user visibility default +
+the grid redesign/polish; your `User.bufferVisibilityDefault` when we get there).
+
+---
+
 ## → BEN — ACTION ITEMS (updated 2026-06-19): PB1+PB2 shipped, PB3 backend done, your turn
 
 **State:** PB1 (public buffer in the time machine) ✅ live + verified. PB2 (retain-in-place:
