@@ -47,6 +47,7 @@ import Mapbox, {
   CircleLayer,
   SymbolLayer,
   LineLayer,
+  FillLayer,
   Atmosphere,
 } from '@rnmapbox/maps'
 import { consumeStreamSignal } from '@/lib/streamSignals'
@@ -167,6 +168,153 @@ const GRATICULE_GEOJSON = {
       geometry: { type: 'LineString' as const, coordinates: latRing(-POLAR_LAT) },
     },
   ],
+}
+
+// Day/night terminator (Option A) — a SOFT dusk LINE on the great circle 90° from the
+// subsolar point. Built as a parametric ring around the circle's pole (the subsolar
+// point), NOT latitude-as-a-function-of-longitude, so it's well-defined for every sun
+// position — no equinox degeneracy, no pole bald-spot, no wrong-hemisphere fill. Split
+// at the antimeridian so no seam line spans the globe. Driven by the WRLD clock.
+const TERMINATOR_COLOR = '#3a3a5c'
+
+const subsolarPoint = (date: Date): { lat: number; lng: number } => {
+  // Day of year (UTC)
+  const yearStart = Date.UTC(date.getUTCFullYear(), 0, 0)
+  const dayOfYear =
+    (Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()) - yearStart) / 86400000
+  // Solar declination (deg) — obliquity approximation, good enough for a visual line.
+  const decl = -23.44 * Math.cos(((2 * Math.PI) / 365) * (dayOfYear + 10))
+  // Subsolar longitude from UTC time (equation-of-time ignored, <4° error): the sun is
+  // over lng 0 at UTC noon and sweeps −15°/hour.
+  const utcHours = date.getUTCHours() + date.getUTCMinutes() / 60 + date.getUTCSeconds() / 3600
+  const lng = -15 * (utcHours - 12)
+  return { lat: decl, lng: ((lng + 540) % 360) - 180 }
+}
+
+const terminatorGeoJSON = (date: Date) => {
+  const { lat, lng } = subsolarPoint(date)
+  const phi = (lat * Math.PI) / 180
+  const lam = (lng * Math.PI) / 180
+  // Subsolar unit vector (nx,ny,nz) = the terminator great-circle's pole.
+  const nx = Math.cos(phi) * Math.cos(lam)
+  const ny = Math.cos(phi) * Math.sin(lam)
+  const nz = Math.sin(phi)
+  // Orthonormal basis perpendicular to n. Reference = north pole (0,0,1); the subsolar
+  // point stays within the tropics so it's never near a pole — always safe.
+  const dn = nz // ref·n with ref = (0,0,1)
+  let ex = -dn * nx
+  let ey = -dn * ny
+  let ez = 1 - dn * nz
+  const eLen = Math.hypot(ex, ey, ez)
+  ex /= eLen
+  ey /= eLen
+  ez /= eLen
+  // f = n × e (completes the right-handed basis on the great circle's plane)
+  const fx = ny * ez - nz * ey
+  const fy = nz * ex - nx * ez
+  const fz = nx * ey - ny * ex
+  // Sweep the ring 90° from the sun. FINE step (0.5°) so chords stay short — a coarse
+  // step lets the near-cusp chords span a wide longitude and bulge over the pole cap
+  // (the semicircle artifact). 720 points, recomputed only on the 30s tick — cheap.
+  const pts: [number, number][] = []
+  for (let deg = 0; deg <= 360; deg += 0.5) {
+    const t = (deg * Math.PI) / 180
+    const c = Math.cos(t)
+    const s = Math.sin(t)
+    const x = c * ex + s * fx
+    const y = c * ey + s * fy
+    const z = c * ez + s * fz
+    pts.push([(Math.atan2(y, x) * 180) / Math.PI, (Math.asin(z) * 180) / Math.PI])
+  }
+  // Build arcs. DROP everything within POLE_CLIP of the pole. The bad zone is STRUCTURAL
+  // to Mapbox's globe: Web Mercator tiles stop at ±85.0511° (the projection diverges at
+  // the poles), and above that Mapbox fills a degenerate "pole cap" fan that mangles any
+  // geometry drawn in it. So we clip just inside the tile-backed zone — 85° is the
+  // smallest CLEAN cap possible (can't go tighter without entering the degenerate cap).
+  // It only bites near equinox anyway (terminator max lat = 90 − |declination|). At the
+  // antimeridian, stitch both arcs to exactly ±180 at the crossing latitude (no seam).
+  const POLE_CLIP = 85
+  const segments: [number, number][][] = []
+  let seg: [number, number][] = []
+  let prev: [number, number] | null = null
+  const flush = () => {
+    if (seg.length > 1) segments.push(seg)
+    seg = []
+  }
+  for (const p of pts) {
+    if (Math.abs(p[1]) >= POLE_CLIP) {
+      flush()
+      prev = null
+      continue
+    }
+    if (prev) {
+      const dl = p[0] - prev[0]
+      if (Math.abs(dl) > 180) {
+        const curUnwrapped = p[0] + (dl > 0 ? -360 : 360)
+        const edge = prev[0] < 0 ? -180 : 180
+        const frac = (edge - prev[0]) / (curUnwrapped - prev[0])
+        const latEdge = prev[1] + frac * (p[1] - prev[1])
+        seg.push([edge, latEdge])
+        flush()
+        seg.push([-edge, latEdge])
+      }
+    }
+    seg.push(p)
+    prev = p
+  }
+  flush()
+  return {
+    type: 'FeatureCollection' as const,
+    features: segments
+      .filter((coords) => coords.length > 1)
+      .map((coords) => ({
+        type: 'Feature' as const,
+        properties: {},
+        geometry: { type: 'LineString' as const, coordinates: coords },
+      })),
+  }
+}
+
+// Night-side shading — the hemisphere facing away from the sun, as a translucent fill.
+// The terminator is single-valued in longitude (termLat = atan(−cos Δlng / tan δ)), so
+// the night region is a simple longitude sweep closed to the WINTER pole (the pole the
+// night cap always contains). The fill covers that pole's degenerate >85° cap, but as a
+// UNIFORM wash it HIDES the geometry the line couldn't cross. The terminator edge is
+// clamped to ±85 so the visible day/night boundary stays in the clean tile-backed zone;
+// the pole closure runs to ±90 so the winter cap fills dark.
+const NIGHT_COLOR = '#10162e'
+const NIGHT_CLAMP = 85
+
+const nightGeoJSON = (date: Date) => {
+  const { lat: decl, lng: lngSun } = subsolarPoint(date)
+  let tanDecl = Math.tan((decl * Math.PI) / 180)
+  if (Math.abs(tanDecl) < 1e-6) tanDecl = tanDecl < 0 ? -1e-6 : 1e-6
+  // Winter pole = opposite the sun's hemisphere; always inside the night cap.
+  const winterPole = decl >= 0 ? -90 : 90
+  const ring: [number, number][] = []
+  let firstLat = 0
+  for (let lng = -180; lng <= 180; lng += 1) {
+    const dl = ((lng - lngSun) * Math.PI) / 180
+    let termLat = (Math.atan(-Math.cos(dl) / tanDecl) * 180) / Math.PI
+    if (termLat > NIGHT_CLAMP) termLat = NIGHT_CLAMP
+    else if (termLat < -NIGHT_CLAMP) termLat = -NIGHT_CLAMP
+    if (lng === -180) firstLat = termLat
+    ring.push([lng, termLat])
+  }
+  // Close around the winter pole (fills its cap — hidden under the uniform wash).
+  ring.push([180, winterPole])
+  ring.push([-180, winterPole])
+  ring.push([-180, firstLat])
+  return {
+    type: 'FeatureCollection' as const,
+    features: [
+      {
+        type: 'Feature' as const,
+        properties: {},
+        geometry: { type: 'Polygon' as const, coordinates: [ring] },
+      },
+    ],
+  }
 }
 
 // Planet-swap motion (ms). Driven entirely by NATIVE transforms on the globe
@@ -376,11 +524,28 @@ export function GlobeScreenMapbox() {
   // the TimeScrubber's own clock (offset is derived against the device clock).
   const [, setNowTick] = useState(0)
   useEffect(() => {
-    if (!historicalMode) return
-    const tid = setInterval(() => setNowTick((n) => n + 1), 1000)
+    // Historical: tick 1s so the pin set replays the past. Live: tick 30s — enough to
+    // creep the day/night terminator (it moves ~0.25°/min) without re-uploading the
+    // source every second.
+    const tid = setInterval(() => setNowTick((n) => n + 1), historicalMode ? 1000 : 30000)
     return () => clearInterval(tid)
   }, [historicalMode])
   const playheadMs = historicalMode ? Date.now() - timeOffsetMs : 0
+
+  // Day/night terminator (Option A): the dusk frontier line, tracking the WRLD clock +
+  // time-machine scrub. Recomputed on the ~30s tick (or immediately on scrub — the
+  // bucket dep jumps when timeOffsetMs changes).
+  const sunInstantMs = Date.now() - timeOffsetMs
+  const terminatorShape = useMemo(
+    () => terminatorGeoJSON(new Date(sunInstantMs)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [Math.round(sunInstantMs / 30000)],
+  )
+  const nightShape = useMemo(
+    () => nightGeoJSON(new Date(sunInstantMs)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [Math.round(sunInstantMs / 30000)],
+  )
   const { data: histData } = useHistoricalClips(playheadMs)
   const clipPins = histData?.clips ?? []
   // PB1 — public buffer pins in the past, behind the PUBLIC_BUFFER_ENABLED flag
@@ -1403,6 +1568,15 @@ export function GlobeScreenMapbox() {
               maxZoomLevel={20}
             />
 
+            {/* Night-side shading — translucent veil over the hemisphere facing away
+            from the sun. Drawn UNDER the graticule + terminator line + pins so the line
+            reads as its crisp edge. Robust at the poles: the winter pole fills dark
+            (hiding the degenerate cap), and the visible edge is clamped to the clean
+            tile-backed zone. */}
+            <ShapeSource id="night" shape={nightShape}>
+              <FillLayer id="night-fill" style={{ fillColor: NIGHT_COLOR, fillOpacity: 0.15 }} />
+            </ShapeSource>
+
             {/* Graticule — equator, tropics, and polar circles. The polar circles
             foreshorten near the poles so they read faint at a flat opacity; boost
             them and ease the rest so all the lines land at a consistent weight. */}
@@ -1413,6 +1587,23 @@ export function GlobeScreenMapbox() {
                   lineColor: GRATICULE_COLOR,
                   lineWidth: 0.6,
                   lineOpacity: ['match', ['get', 'kind'], 'polar', 0.3, 0.17] as any,
+                }}
+              />
+            </ShapeSource>
+
+            {/* Day/night terminator (Option A) — soft dusk frontier line on the great
+            circle 90° from the sun. A LINE (not a fill), so it's artifact-free across
+            solstice↔equinox and both poles. Tracks the WRLD clock + time-machine. */}
+            <ShapeSource id="terminator" shape={terminatorShape}>
+              <LineLayer
+                id="terminator-line"
+                style={{
+                  lineColor: TERMINATOR_COLOR,
+                  lineWidth: 1.4,
+                  lineBlur: 2,
+                  lineOpacity: 0.5,
+                  lineCap: 'round',
+                  lineJoin: 'round',
                 }}
               />
             </ShapeSource>
