@@ -10,6 +10,10 @@ export type User = {
   createdAt: string
   notifyOnFollowedLive: boolean
   notifyOnNearbyLive: boolean
+  notifyOnTip: boolean
+  notifyOnSubscribedLive: boolean
+  notifyOnPpvReminder: boolean
+  notifyOnGift: boolean
   spaceBucks: number
   stardust: number
   tier: 'free' | 'plus' | 'pro'

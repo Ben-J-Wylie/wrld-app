@@ -34,6 +34,10 @@ export function SettingsScreen({ embedded = false }: { embedded?: boolean } = {}
 
   const [followedLive, setFollowedLive] = useState(wrldUser?.notifyOnFollowedLive ?? true)
   const [nearbyLive, setNearbyLive] = useState(wrldUser?.notifyOnNearbyLive ?? false)
+  const [subscribedLive, setSubscribedLive] = useState(wrldUser?.notifyOnSubscribedLive ?? true)
+  const [tip, setTip] = useState(wrldUser?.notifyOnTip ?? true)
+  const [gift, setGift] = useState(wrldUser?.notifyOnGift ?? true)
+  const [ppvReminder, setPpvReminder] = useState(wrldUser?.notifyOnPpvReminder ?? true)
 
   async function handleSignOut() {
     // Unregister push token before clearing session so the device stops
@@ -80,6 +84,46 @@ export function SettingsScreen({ embedded = false }: { embedded?: boolean } = {}
       if (wrldUser) setWrldUser({ ...wrldUser, ...prefs })
     } catch {
       setNearbyLive(!value)
+    }
+  }
+
+  async function toggleSubscribedLive(value: boolean) {
+    setSubscribedLive(value)
+    try {
+      const prefs = await usersApi.updateNotificationPreferences({ notifyOnSubscribedLive: value })
+      if (wrldUser) setWrldUser({ ...wrldUser, ...prefs })
+    } catch {
+      setSubscribedLive(!value)
+    }
+  }
+
+  async function toggleTip(value: boolean) {
+    setTip(value)
+    try {
+      const prefs = await usersApi.updateNotificationPreferences({ notifyOnTip: value })
+      if (wrldUser) setWrldUser({ ...wrldUser, ...prefs })
+    } catch {
+      setTip(!value)
+    }
+  }
+
+  async function toggleGift(value: boolean) {
+    setGift(value)
+    try {
+      const prefs = await usersApi.updateNotificationPreferences({ notifyOnGift: value })
+      if (wrldUser) setWrldUser({ ...wrldUser, ...prefs })
+    } catch {
+      setGift(!value)
+    }
+  }
+
+  async function togglePpvReminder(value: boolean) {
+    setPpvReminder(value)
+    try {
+      const prefs = await usersApi.updateNotificationPreferences({ notifyOnPpvReminder: value })
+      if (wrldUser) setWrldUser({ ...wrldUser, ...prefs })
+    } catch {
+      setPpvReminder(!value)
     }
   }
 
@@ -152,6 +196,54 @@ export function SettingsScreen({ embedded = false }: { embedded?: boolean } = {}
               value={nearbyLive}
               onValueChange={toggleNearbyLive}
               accessibilityLabel="Notify when a live stream is nearby"
+            />
+          }
+        />
+        <SettingsRow
+          iconName="heart"
+          title="A creator I subscribe to goes live"
+          value="Get notified when a creator you subscribe to starts streaming"
+          right={
+            <Toggle
+              value={subscribedLive}
+              onValueChange={toggleSubscribedLive}
+              accessibilityLabel="Notify when a creator I subscribe to goes live"
+            />
+          }
+        />
+        <SettingsRow
+          iconName="dollar-sign"
+          title="Tips received"
+          value="Get notified when another viewer tips you"
+          right={
+            <Toggle
+              value={tip}
+              onValueChange={toggleTip}
+              accessibilityLabel="Notify when I receive a tip"
+            />
+          }
+        />
+        <SettingsRow
+          iconName="gift"
+          title="Gifts received"
+          value="Get notified when someone sends you a gift from your profile or a clip"
+          right={
+            <Toggle
+              value={gift}
+              onValueChange={toggleGift}
+              accessibilityLabel="Notify when I receive a gift"
+            />
+          }
+        />
+        <SettingsRow
+          iconName="calendar"
+          title="PPV event reminders"
+          value="Get notified when an event you bought a ticket to is about to start"
+          right={
+            <Toggle
+              value={ppvReminder}
+              onValueChange={togglePpvReminder}
+              accessibilityLabel="Notify about PPV event reminders"
             />
           }
         />

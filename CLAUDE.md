@@ -3825,3 +3825,18 @@ current to typecheck (this local checkout is stale).
 > count + tap sources by `planet.id`; count bubbles suppressed off-Earth. **Follow-up
 > (scale only):** the socket is always-on again — at real scale, gate it to Haven or
 > add a dedicated lightweight live-`off` endpoint instead of the full discovery socket.
+
+---
+
+## Updates — June 2026 (Settings notifications — parity with web, 6 prefs)
+
+`SettingsScreen` NOTIFICATIONS expanded from 2 toggles to **6**, matching the web
+`/settings` page: followed-live, **a creator I subscribe to goes live**, nearby,
+**tips received**, **gifts received** (off-stream only — "from your profile or a
+clip"), **PPV event reminders**. Same optimistic-with-revert pattern as the
+existing two. `usersApi.updateNotificationPreferences` widened to the shared
+`NotificationPreferences` type (was 2 fields); `User` gained `notifyOnTip`/
+`notifyOnSubscribedLive`/`notifyOnPpvReminder`/`notifyOnGift` (all returned by
+`/auth/me`). Backed by the backend `notifyOnGift` + the off-stream gift push (see
+`wrld-backend/CLAUDE.md` "Off-stream gift notifications"). Pure JS — no native
+module, no EAS rebuild.

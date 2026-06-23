@@ -4,6 +4,17 @@ import { env } from '@/lib/env'
 import { applyRemoteCaptureLadder, type CaptureLadder } from '@/lib/tierCaps'
 import type { User, PublicUser, WalletData, CashoutRequest } from '@/types'
 
+// The five notification preference flags (mirrors the backend
+// PATCH /users/me/notification-preferences body + response).
+export type NotificationPreferences = {
+  notifyOnFollowedLive: boolean
+  notifyOnNearbyLive: boolean
+  notifyOnTip: boolean
+  notifyOnSubscribedLive: boolean
+  notifyOnPpvReminder: boolean
+  notifyOnGift: boolean
+}
+
 export const usersApi = {
   getMe: async (): Promise<User> => {
     const res = await apiClient.get<{ user: User; captureLadder?: Partial<CaptureLadder> }>('/auth/me')
@@ -111,12 +122,11 @@ export const usersApi = {
     return res.data.user
   },
 
-  updateNotificationPreferences: async (prefs: {
-    notifyOnFollowedLive?: boolean
-    notifyOnNearbyLive?: boolean
-  }): Promise<{ notifyOnFollowedLive: boolean; notifyOnNearbyLive: boolean }> => {
+  updateNotificationPreferences: async (
+    prefs: Partial<NotificationPreferences>,
+  ): Promise<NotificationPreferences> => {
     const res = await apiClient.patch<{
-      preferences: { notifyOnFollowedLive: boolean; notifyOnNearbyLive: boolean }
+      preferences: NotificationPreferences
     }>('/users/me/notification-preferences', prefs)
     return res.data.preferences
   },
