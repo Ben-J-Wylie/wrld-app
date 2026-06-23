@@ -542,8 +542,12 @@ export const ClipsScreen = () => {
     },
     [patchSessionDirectives],
   )
-  // The per-segment toggle shows only for a selected BUFFER segment, when the flag's on.
-  const selectedIsBufferSeg = !!selectedClip && bufferedLane.some((c) => c.id === selectedClip.id)
+  // The per-segment toggle shows for any selected timeline segment with a source
+  // session — BUFFER or SAVED. Post-PB2 (retain-in-place) a saved clip's footage stays
+  // in its buffer session, so the SAME directive range (over sourceSessionId) governs
+  // its time-machine pin — public/private is symmetric across the lanes (the only lane
+  // difference is reaper survival, per Ben). Gated on the flag.
+  const selectedSegHasSession = !!selectedClip?.sourceSessionId
   const selectedPrivate = !!selectedClip && segIsPrivate(selectedClip)
   // No auto-selection on open — the page defaults to RIDING THE NOW EDGE (below), so the viewer
   // follows the live/now edge rather than highlighting a past clip. (Tapping a clip still selects it.)
@@ -1956,9 +1960,9 @@ export const ClipsScreen = () => {
             onUnsave={unsaveClip}
           />
           {/* Scissor / bandaid — cuts the clip at the playhead, or un-snips when over a snip mark.
-              PB3 (scab-in): a selected buffer segment gets a public/private toggle above it. */}
+              PB3 (scab-in): a selected segment (buffer OR saved) gets a public/private toggle. */}
           <View style={styles.scissorRow} pointerEvents="box-none">
-            {pb3Enabled && selectedIsBufferSeg && (
+            {pb3Enabled && selectedSegHasSession && (
               <Pressable
                 variant="none"
                 accessibilityLabel={selectedPrivate ? 'Make this segment public' : 'Make this segment private'}

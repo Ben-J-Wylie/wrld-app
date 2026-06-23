@@ -836,3 +836,48 @@ tsc clean; pure JS, no rebuild.
   + the on-device gate — mark a segment private → pin vanishes + won't serve publicly; owner
   still sees it). Left for you (deliberate rollout, same as PB2/PB3 gates); ping me to flip it
   via DB instead. Backend is fully ready (write + reaper + discover/serve enforcement + rehydration).
+
+---
+
+## PB3 — on-device test findings (Ben, 2026-06-23)
+
+PB3 flag live + tested on device. Results:
+
+- ✅ **Public buffer clip → pin shows in the time machine.**
+- ✅ **Mend reconciliation prompt** looks good.
+- ✅ **#3 saved-lane symmetry — FIXED (app, Ben).** The per-segment public/private toggle
+  now shows for a selected **saved** clip too, not just buffer (gate changed from
+  buffer-lane-only to "any selected segment with a `sourceSessionId`"). Post-PB2
+  (retain-in-place) a saved clip's footage stays in its buffer session, so the SAME
+  `patchDirectives` range (over `sourceSessionId`) governs its pin — symmetric, the only
+  lane difference is reaper survival (per Ben).
+  > **→ Aaron, confirm one edge:** a saved clip is hidden via a DirectiveRange only if it's
+  > **deduped to a `bufferPin`** (its session is a live/retained public bufferPin). For a
+  > saved clip that surfaces via the `clips` array instead (session fully gone, or a legacy
+  > clip), the directive won't hide it — that path filters on `Clip.visibility`. Confirm
+  > retain-in-place keeps saved clips on the bufferPin path (expected), else discover's
+  > `clips` filter must also honour directives (or marking a saved clip private must also
+  > set `Clip.visibility`).
+
+- 🐛 **#2 private pin flickers on scroll + reappears after the clip's end — NEEDS AARON
+  (discover semantics).** Diagnosis from the deployed query: a **bufferPin is per-SESSION**,
+  spanning `[startedAt, endedAt ?? NOW]`, and is hidden **only at instants `T` inside a
+  private DirectiveRange**. So:
+  - **"Shows after the clip end":** the private directive covers the marked segment's range,
+    but the session pin spans the whole session (incl. any public footage after the segment,
+    and up to **NOW** if the session is still live). At `T` past the private range the pin
+    correctly-but-confusingly reappears for that **public** footage. → Decide the intended
+    semantic: should marking a clip private hide the session pin across the clip's footage
+    only (current), or should a fully-private-clip session not reappear? **Measure first:**
+    for a STOPPED session marked **entirely** private, does the pin still show after its end?
+    If yes → a range/end mismatch bug; if only when there's real public tail → working as
+    designed but needs a product call.
+  - **"Reveals momentarily as I scroll":** the globe queries the past in **5 s buckets**
+    (`useHistoricalClips`) + keeps prior pins via `placeholderData` during the fetch, so near
+    a private-range edge the queried instant lags the visual playhead and the pin flashes.
+    App-side cadence — can tighten (smaller bucket / query-at-exact-playhead) but it trades
+    more fetches; holding until the per-session-vs-per-segment semantic above is settled.
+
+- ☐ **Rehydration still pending (app, Ben):** wire the grid to seed marks from each
+  `/buffer/me` session's `directives[]` (Aaron shipped the field) so private marks survive a
+  reload. Separate small task.
