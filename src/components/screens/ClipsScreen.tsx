@@ -504,6 +504,22 @@ export const ClipsScreen = () => {
   const pb3Enabled = configBool(publicConfig, 'PB3_PER_RANGE', false)
   const SEG_TOL = 1000 // ms tolerance matching a stored range to a (re-derived) segment
   const [privateSegs, setPrivateSegs] = useState<{ sessionId: string; startMs: number; endMs: number }[]>([])
+  // Rehydrate the private marks from the server on first load (Aaron folded `directives[]`
+  // into GET /buffer/me): seed once when sessions first arrive so the lock marks survive a
+  // reload. Local state owns afterward (a toggle PATCHes + updates optimistically); seeding
+  // once avoids fighting an in-flight optimistic toggle on a later buffer refetch.
+  const seededPrivateRef = useRef(false)
+  useEffect(() => {
+    if (seededPrivateRef.current || sessions.length === 0) return
+    const seeded: { sessionId: string; startMs: number; endMs: number }[] = []
+    for (const s of sessions) {
+      for (const d of s.directives ?? []) {
+        if (d.visibility === 'private') seeded.push({ sessionId: s.id, startMs: d.startAtMs, endMs: d.endAtMs })
+      }
+    }
+    seededPrivateRef.current = true
+    if (seeded.length) setPrivateSegs(seeded)
+  }, [sessions])
   const segIsPrivate = useCallback(
     (c: LaneClip) => {
       const sid = c.sourceSessionId

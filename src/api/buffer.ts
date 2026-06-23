@@ -55,6 +55,16 @@ export type BufferSession = {
   // torch/chat. The editor fetches the viewed data track for the session under the
   // playhead and replays it through the design renderers. Absent for media-only sessions.
   dataUrls?: Partial<Record<BufferTrackKind, string>>
+  // PB3 — the session's per-segment directives (the standalone, non-retain ones the
+  // per-segment toggle writes via `patchDirectives`). `[]` = all default (public). The
+  // Clips grid seeds its private marks from these on load so they survive a reload.
+  directives?: {
+    startAtMs: number
+    endAtMs: number
+    visibility: 'public' | 'private'
+    precision?: 'exact' | 'city' | 'country' | 'off' | null
+    attributed?: boolean
+  }[]
 }
 
 // One codec-uniform run of the camera buffer: a contiguous group of sessions

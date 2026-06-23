@@ -8,8 +8,7 @@
 ## → AARON — OPEN BACKEND ITEMS FROM PB3 DEVICE TESTING (2026-06-23)
 
 PB3 is flipped on + tested on device. App-side fixes shipped (saved-lane toggle symmetry;
-1s discover bucket so per-segment privacy resolves; mend prompt). **Rehydration is Ben's
-remaining app task** (seed grid marks from `/buffer/me` `directives[]`). The following are
+1s discover bucket so per-segment privacy resolves; mend prompt). **Rehydration is DONE** (grid seeds marks from `/buffer/me` `directives[]` on load). The following are
 **backend (yours)** — surfaced by testing the private/public segment behaviour:
 
 1. **Serve-precision = the real content guarantee (most important).** The discovery PIN can
@@ -915,9 +914,10 @@ PB3 flag live + tested on device. Results:
     App-side cadence — can tighten (smaller bucket / query-at-exact-playhead) but it trades
     more fetches; holding until the per-session-vs-per-segment semantic above is settled.
 
-- ☐ **Rehydration still pending (app, Ben):** wire the grid to seed marks from each
-  `/buffer/me` session's `directives[]` (Aaron shipped the field) so private marks survive a
-  reload. Separate small task.
+- ✅ **Rehydration DONE (app, Ben, 2026-06-23):** the grid seeds `privateSegs` from each
+  `/buffer/me` session's `directives[]` on first load (`BufferSession.directives` typed;
+  seed-once via a ref so a later refetch doesn't fight an in-flight optimistic toggle), so
+  private marks survive a reload.
 
 ### PB3 finding — snipped public+private segments read as one permission (Ben, 2026-06-23)
 
