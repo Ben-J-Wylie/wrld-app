@@ -1209,3 +1209,77 @@ honest edges, each with its principled resolution:
 **#5 + #6 converge:** *time-tiled, cacheable availability + push-on-edit* is the one robust
 scalable architecture (the temporal twin of live geographic tiling) — the north star; the
 current poll+window is the f&f stand-in.
+
+---
+
+## ━━━ CONTRACT A — PB4: per-segment manifest (persist + multi-axis + derived segmentation) ━━━
+*(for Ben + Aaron sign-off, 2026-06-23)*
+
+**Model.** A session/clip's manifest is a **piecewise-constant function over the wall clock**.
+Two persisted boundary sources, unioned:
+- **Snips** — explicit user boundaries `{ sessionId, atMs }`, **persisted even when no-op** (a snip
+  is a boundary in its own right). Mend = *delete* a snip. Current-state, **not an edit log**.
+- **Directive ranges** — each carries a FULL settings object, all axes **first-class + equal**:
+  `{ visibility: 'public'|'private', locPrecision: 'exact'|'city'|'country'|'off',
+     identity: 'attributed'|'anon', sources: { <kind>: boolean } }` (per-source on/off = which
+  sources a time-machine viewer can see). Absent field = inherit the go-live/capture value.
+
+**Segmentation (display) = the wall clock split at the UNION of:** snips ∪ directive boundaries ∪
+capture-config changes ∪ lane (saved/buffer) boundaries. Each segment is therefore **uniform by
+construction** → no straddle, no coverage tolerance (resolves edges #1 + #2). Editing a setting over
+a segment splits/merges directive ranges; **coalesce adjacent ranges with equal settings EXCEPT
+across an explicit snip** (a snip holds the boundary even when settings match). **Mend reconciles
+EVERY differing axis** (multi-field differ-guard; keeping snipped is always valid).
+
+**Persistence = the full durable manifest per profile** (CONTENT.md non-destructive manifest):
+footage + all snips (incl. no-op) + all per-segment settings, for everything **not yet evicted**.
+Evicted footage → its snips + directives are cleaned up with it. Saved (retained) content + its
+manifest persist until the user deletes it.
+
+### Split
+- **Aaron (backend):** make **snips server-authoritative** (persist the `splitPoints` slot per
+  session/clip; surface in `GET /buffer/me` + saved-clip responses alongside `directives[]`).
+  Extend `DirectiveRange` to the **multi-axis** settings (visibility/precision/identity already
+  exist; **add per-source on/off**). Current-state semantics (mend = delete a snip). **Cascade-clean**
+  snips + directives when footage is evicted. The clip viewer's **serve** must honour per-segment
+  per-source enable (which sources play over a given segment).
+- **Ben (app):** generalize `privacyRanges.ts` (boolean) → a **piecewise settings model** (ranges
+  carrying a settings record; set-field-over-range with split/merge; coalesce-equal-but-respect-
+  snips). The **clip-editor per-segment settings panel** — all axes equal (visibility · precision ·
+  identity · per-source toggles). **Derived segmentation** (union of boundaries) + the
+  **distinct-segment visual**. Multi-axis **mend reconciliation**. Persist snips (PATCH) so
+  reload/cross-device reconstruct. The clip **viewer** honours per-segment per-source enable.
+
+### Staging (ship in slices; contract is the whole)
+1. Persist snips server-authoritative + derived segmentation (kills #1 straddle + #2 tolerance).
+2. The per-segment settings panel for the existing axes (visibility/precision/identity).
+3. Per-source on/off per segment (editor + manifest + viewer).
+
+---
+
+## ━━━ CONTRACT B — Scalable availability: time-tiles + push (edges #5 + #6) ━━━
+*(for Ben + Aaron sign-off, 2026-06-23) — the temporal twin of the live geographic viewport-tile protocol (P2)*
+
+**Model.** Replace the ±12h window + 60s poll with **fixed, cacheable time-tiles + push-on-edit**.
+A tile's availability is identical for every viewer → **edge/CDN-cacheable** (O(unique tiles), not
+O(viewers)); edits are rare → a **push** updates holders with O(edits) load.
+
+### Backend (Aaron)
+- **Tiled availability:** `GET /clips/discover?tile=<floor(T / TILE_MS)>` (or `?from&to` snapped to
+  tile boundaries) → the pins + their public `intervals` **within that one tile**. **Cacheable**
+  (`Cache-Control`/`ETag`); `TILE_MS` a RemoteConfig (start **1h**). Tiles aligned to wall-clock floor.
+- **Push channel:** a WebSocket (reuse the live discovery socket if clean) — a viewer **subscribes to
+  the tiles it holds**; on any directive edit, the server **invalidates the affected tile's cache +
+  emits "tile changed"** to subscribers → they re-fetch that tile. O(edits), not O(viewers×polls).
+
+### App (Ben)
+- **Tile manager:** hold the tiles covering the scrub range (+ margin); fetch missing tiles on demand
+  (cacheable GETs); evict far tiles. Resolve pin visibility **locally** from held tiles' intervals
+  (as today). The arbitrary window constant becomes the principled **tile size**.
+- **Push subscription:** subscribe to held tiles; on "tile changed" → refetch that tile. **Replaces**
+  the 60s poll + refetch-on-settle (keep a long poll only as a socket-down backstop).
+
+### Independence
+B reads only **visibility** from directives (globe pins), so Contract A's multi-axis extension doesn't
+change it — **the two lanes build in parallel.** B supersedes `useHistoricalAvailability`'s window +
+poll; the legacy `?at=` path is retired separately (edge #3, after a soak).
