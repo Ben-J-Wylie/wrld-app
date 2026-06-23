@@ -1054,15 +1054,22 @@ clean, pure JS.
   `['historical-availability']` so a tag edit refreshes the globe (the "tagging edits the
   map" step).
 
-**→ Aaron START-HERE (backend, to the PB3.5 contract above):**
-1. **`GET /clips/discover` accepts `?from=<ISO>&to=<ISO>`** and returns `{ clips, bufferPins }`
-   where each pin carries **`intervals: [{startMs,endMs}]`** = its content span within the
-   window MINUS private DirectiveRanges MINUS `off`, at **exact ms**. Fully-private/`off` →
-   omit the pin; gated tiers → include + `accessTier` (locked pin); owner-private → exclude;
-   live session (`endedAt null`) → open interval ends at `to`. Keep `?at=` working (the app
-   falls back to it while the flag's off).
-2. **Add `AVAILABILITY_FEED`** to the public `/config` allowlist + RemoteConfig (default
-   **false**) — gates the app's windowed path.
-3. **Deploy → flip `AVAILABILITY_FEED = true`** for the team. Then Ben verifies on device
-   (private no longer blinks; half-private resolves per-segment) and we retire the legacy
-   `?at=` path after a soak.
+**✅ BACKEND DONE + DEPLOYED (Aaron, 2026-06-23, `wrld-backend` `5ce071e`).** The windowed
+branch is live on prod and matches the contract exactly:
+1. ✅ **`GET /clips/discover?from=<ISO>&to=<ISO>`** → `{ clips, bufferPins }`, each pin
+   carrying **`intervals: [{startMs,endMs}]`** = content span ∩ window − private
+   DirectiveRanges − `off`, **exact ms**. Fully-private/`off` pins omitted; gated buffer pins
+   include `accessTier`; owner-private excluded. One refinement vs the contract: a **live**
+   session's open interval ends at **`min(to, now)`** (real footage exists up to now; the app
+   extends to the live edge locally) rather than always `to`. `?at=` is unchanged (your
+   fallback while the flag's off). Clip↔bufferPin dedup runs in both modes. Invalid window
+   (`to ≤ from`, unparseable) → 400. Pure helper `publicIntervals` unit-tested (7 cases).
+   *Verified live:* over a 4-day window prod returned 27 buffer pins with exact-ms intervals
+   vs 5 at the instant; legacy `?at=` still `{clips, bufferPins}`.
+2. ✅ **`AVAILABILITY_FEED`** added to the public `/config` allowlist + seeded in RemoteConfig
+   (default **false**, migration `20260623040000`). Confirmed exposed on `/config` reading
+   `false`.
+3. ⏳ **Remaining = the team flip (your /admin/config action) + Ben's on-device verify.** Flip
+   `AVAILABILITY_FEED = true` on /admin/config → the app switches to the windowed path → Ben
+   confirms private no longer blinks + half-private resolves per-segment. After a soak we
+   retire the legacy `?at=` path.
