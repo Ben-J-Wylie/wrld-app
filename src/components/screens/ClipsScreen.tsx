@@ -49,6 +49,7 @@ import { useDrafts } from '@/hooks/useDrafts'
 import { useBroadcastStore } from '@/stores/broadcastStore'
 import { serverNow, feedServerNow } from '@/lib/serverClock'
 import { usePublicConfig, configBool } from '@/hooks/usePublicConfig'
+import { coalesce, addRange, subtractRange as subtractPriv, isCovered, type PrivRange } from '@/lib/privacyRanges'
 import { bufferApi, type BufferSession, type BufferTrackKind } from '@/api/buffer'
 
 const FRAME_MS = 1000 / 30 // one frame at the 30fps capture (transport frame-step)
@@ -502,42 +503,42 @@ export const ClipsScreen = () => {
   // shape is full-suite-ready (precision/identity slot into the same PATCH later).
   const { config: publicConfig } = usePublicConfig()
   const pb3Enabled = configBool(publicConfig, 'PB3_PER_RANGE', false)
-  const SEG_TOL = 1000 // ms tolerance matching a stored range to a (re-derived) segment
-  const [privateSegs, setPrivateSegs] = useState<{ sessionId: string; startMs: number; endMs: number }[]>([])
-  // Rehydrate the private marks from the server on first load (Aaron folded `directives[]`
-  // into GET /buffer/me): seed once when sessions first arrive so the lock marks survive a
-  // reload. Local state owns afterward (a toggle PATCHes + updates optimistically); seeding
-  // once avoids fighting an in-flight optimistic toggle on a later buffer refetch.
+  const SEG_TOL = 1000 // ms tolerance locating the segments either side of a snip (mend)
+  // PB4(a) — the session's PRIVATE ranges as a coalesced authoritative set (public = the
+  // omitted complement). Interval arithmetic (privacyRanges.ts) — not the old free-form
+  // exact-match list — so "mark one half of an already-private clip public" SUBTRACTS
+  // correctly and snip/mend never accumulate overlapping ranges.
+  const [privRanges, setPrivRanges] = useState<PrivRange[]>([])
+  // Rehydrate from the server on first load (Aaron folded `directives[]` into GET /buffer/me):
+  // seed + coalesce once when sessions first arrive so marks survive a reload. Local state
+  // owns afterward (a toggle PATCHes the recomputed set); seed-once avoids fighting an
+  // in-flight optimistic edit on a later buffer refetch.
   const seededPrivateRef = useRef(false)
   useEffect(() => {
     if (seededPrivateRef.current || sessions.length === 0) return
-    const seeded: { sessionId: string; startMs: number; endMs: number }[] = []
+    const seeded: PrivRange[] = []
     for (const s of sessions) {
       for (const d of s.directives ?? []) {
         if (d.visibility === 'private') seeded.push({ sessionId: s.id, startMs: d.startAtMs, endMs: d.endAtMs })
       }
     }
     seededPrivateRef.current = true
-    if (seeded.length) setPrivateSegs(seeded)
+    if (seeded.length) setPrivRanges(coalesce(seeded))
   }, [sessions])
   const segIsPrivate = useCallback(
     (c: LaneClip) => {
       const sid = c.sourceSessionId
-      return (
-        !!sid &&
-        privateSegs.some(
-          (p) => p.sessionId === sid && Math.abs(p.startMs - c.startMs) < SEG_TOL && Math.abs(p.endMs - c.endMs) < SEG_TOL,
-        )
-      )
+      return !!sid && isCovered(privRanges, { sessionId: sid, startMs: c.startMs, endMs: c.endMs })
     },
-    [privateSegs],
+    [privRanges],
   )
-  // PATCH the authoritative private-range list for one session (public ranges omitted).
+  // PATCH the authoritative (coalesced) private-range list for one session — the public
+  // spans are the omitted complement.
   const patchSessionDirectives = useCallback(
-    (sessionId: string, segs: { sessionId: string; startMs: number; endMs: number }[]) => {
-      const directives = segs
-        .filter((s) => s.sessionId === sessionId)
-        .map((s) => ({ startAtMs: Math.round(s.startMs), endAtMs: Math.round(s.endMs), visibility: 'private' as const }))
+    (sessionId: string, ranges: PrivRange[]) => {
+      const directives = ranges
+        .filter((r) => r.sessionId === sessionId)
+        .map((r) => ({ startAtMs: Math.round(r.startMs), endAtMs: Math.round(r.endMs), visibility: 'private' as const }))
       bufferApi
         .patchDirectives(sessionId, directives)
         // PB3.5 — tagging edits the time-machine availability map: refresh the globe's
@@ -548,16 +549,16 @@ export const ClipsScreen = () => {
     },
     [qc],
   )
+  // Toggle a segment public↔private by INTERVAL ARITHMETIC: private → subtract its range
+  // (any rest of a covering range stays private); public → add + coalesce. So marking one
+  // half of an already-private clip public leaves the other half private.
   const toggleSegPrivacy = useCallback(
     (c: LaneClip) => {
       const sid = c.sourceSessionId
       if (!sid) return
-      setPrivateSegs((prev) => {
-        const match = (p: { sessionId: string; startMs: number; endMs: number }) =>
-          p.sessionId === sid && Math.abs(p.startMs - c.startMs) < SEG_TOL && Math.abs(p.endMs - c.endMs) < SEG_TOL
-        const next = prev.some(match)
-          ? prev.filter((p) => !match(p))
-          : [...prev, { sessionId: sid, startMs: c.startMs, endMs: c.endMs }]
+      const r: PrivRange = { sessionId: sid, startMs: c.startMs, endMs: c.endMs }
+      setPrivRanges((prev) => {
+        const next = isCovered(prev, r) ? subtractPriv(prev, r) : addRange(prev, r)
         patchSessionDirectives(sid, next)
         return next
       })
@@ -1667,19 +1668,13 @@ export const ClipsScreen = () => {
       const right = bufferedLane.find((c) => c.sourceSessionId === sid && Math.abs(c.startMs - unsnip.atMs) < SEG_TOL)
       const lPriv = !!left && segIsPrivate(left)
       const rPriv = !!right && segIsPrivate(right)
+      // Merge the whole [left.start, right.end] range to the chosen state via interval
+      // arithmetic (add → private, subtract → public). The snip itself is display-only.
       const mergeWith = (priv: boolean) => {
         if (left && right) {
-          setPrivateSegs((prev) => {
-            // drop the two piece entries, add the merged range iff private
-            const cleared = prev.filter(
-              (p) =>
-                !(
-                  p.sessionId === sid &&
-                  ((Math.abs(p.startMs - left.startMs) < SEG_TOL && Math.abs(p.endMs - left.endMs) < SEG_TOL) ||
-                    (Math.abs(p.startMs - right.startMs) < SEG_TOL && Math.abs(p.endMs - right.endMs) < SEG_TOL))
-                ),
-            )
-            const next = priv ? [...cleared, { sessionId: sid, startMs: left.startMs, endMs: right.endMs }] : cleared
+          const merged: PrivRange = { sessionId: sid, startMs: left.startMs, endMs: right.endMs }
+          setPrivRanges((prev) => {
+            const next = priv ? addRange(prev, merged) : subtractPriv(prev, merged)
             patchSessionDirectives(sid, next)
             return next
           })

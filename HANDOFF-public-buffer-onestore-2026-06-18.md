@@ -1121,3 +1121,29 @@ toggle matches `privateSegs` by exact ±1s range — so a half-segment doesn't m
 whole-clip range and toggling *adds* rather than clears → overlapping private ranges. The
 **PB4 per-segment redesign** (explicit per-segment state, not blind range-keyed toggling)
 fixes this; the head/tail leak fix above is the clean, separate backend bug.
+
+### PB4(a) — per-segment privacy data model = interval arithmetic (Ben, 2026-06-23)
+
+Started PB4. The **data-model core is done** — and it fixes the snip case at the *logic*
+level (independent of the UI shape). Root cause of the snip bug was the scab-in storing
+free-form, exact-range-matched private ranges with a blind toggle — it had no way to
+*subtract*, so "mark one half of an already-private clip public" couldn't work, and snips
+accumulated overlapping ranges.
+
+- **New `src/lib/privacyRanges.ts`** — pure interval arithmetic over a session's PRIVATE
+  ranges (public = the omitted complement): `coalesce` · `addRange` · `subtractRange` ·
+  `isCovered`. Dependency-free → unit-testable when H3 lands.
+- **`ClipsScreen`** rewired: `privRanges` (coalesced authoritative set) replaces `privateSegs`;
+  `toggleSegPrivacy` = **subtract if covered, else add+coalesce**; `segIsPrivate` = `isCovered`;
+  rehydrate coalesces the seed; the mend differ-guard merges via add/subtract. Snip/mend are
+  display-only — they never touch the ranges, so all the snip cases fall out of set arithmetic.
+- **Effect:** marking the second half public when the whole clip is private now correctly
+  leaves the first half private (subtract). With **Aaron's head/tail footage-window fix**, the
+  per-segment behaviour is correct **with the current scab-in UI** — no redesign needed for
+  *correctness*.
+
+**Remaining for PB4 (now polish, not correctness):**
+- **PB4(a)-UI:** the per-segment control redesign — distinct-segment visual (see each
+  segment's state at a glance) + control placement (A inline-on-segment vs B selected-segment
+  panel; Ben leaning B) + the full suite (precision + identity, same `patchDirectives`).
+- **PB4(b):** per-user visibility default (`User.bufferVisibilityDefault`) — independent.
