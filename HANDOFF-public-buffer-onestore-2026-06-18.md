@@ -1082,3 +1082,42 @@ windowed feed (all app-side, no backend change):
 - **60s poll** (`refetchInterval`) — a parked/playing viewer picks up others' edits within ~60s.
 Still ~60× quieter than the old per-second sample. The instant **push** (piggyback the live
 discovery socket) remains the future upgrade if we want zero-lag propagation.
+
+### PB3.5 — on-device bug: pin leaks at head + tail of a private clip (Ben tested 2026-06-23)
+
+Symptom: a private 1-min clip's pin is gone EXCEPT **a few seconds at the head and a few at
+the tail**; a snipped clip shows the pin only at the head/tail of the original span.
+
+**Root cause — BACKEND interval math (Aaron). The buffer-pin content span uses the RAW
+SESSION `[startedAt, endedAt]`, but the footage is the narrower MEDIA window
+`[startedAt + mediaStartOffsetMs, + mediaDurationSec]`.** `clips.ts` (windowed bufferPins,
+~L301-306):
+```
+const sessionStartMs = row.startEpoch * 1000                       // = startedAt  ← too early
+const sessionEndMs   = endEpoch ?? min(to, now)                    // = endedAt    ← too late
+const intervals = publicIntervals(sessionStartMs, sessionEndMs, ..., priv)
+```
+The encoder **warm-up** (head) + **hold-back** (tail) — a few seconds each, non-footage — sit
+*outside* the media window, so a private DirectiveRange over the footage leaves them public →
+the pin shows there. A fully-private clip should yield **empty** intervals.
+
+**Fix:** bound the content span to the **footage / media window** (select
+`mediaStartOffsetMs` + `mediaDurationSec` in the bufRows query):
+```
+const footStartMs = round(startEpoch*1000) + (mediaStartOffsetMs ?? 0)
+const footEndMs   = endEpoch != null
+    ? footStartMs + (mediaDurationSec ?? (endEpoch - startEpoch)) * 1000   // exclude tail hold-back
+    : Math.min(toMs, nowMs)                                                // live edge
+const intervals = publicIntervals(footStartMs, footEndMs, fromMs, toMs, priv)
+```
+This removes the head warm-up sliver + bounds the tail to real footage → a fully-private clip
+→ no intervals → no pin. (Same latent issue exists in the `?at=` point feed; the windowed
+feed is what's active.) The app marks the MEDIA window (the grid uses
+`startedAt+mediaStartOffsetMs … +mediaDurationSec`), so post-fix the ranges line up.
+
+**The snip case is ALSO the scab-in data model (Ben, PB4).** Marking the clip private earlier
+leaves a whole-clip DirectiveRange; snipping is display-only (doesn't split it), and the
+toggle matches `privateSegs` by exact ±1s range — so a half-segment doesn't match the
+whole-clip range and toggling *adds* rather than clears → overlapping private ranges. The
+**PB4 per-segment redesign** (explicit per-segment state, not blind range-keyed toggling)
+fixes this; the head/tail leak fix above is the clean, separate backend bug.
