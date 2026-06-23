@@ -1262,7 +1262,7 @@ manifest persist until the user deletes it.
 
 > **⚠️ AMENDED 2026-06-23 — 1D time-tiles → 2D ZOOM-ADAPTIVE SPACE-TIME tiles.** A time-only
 > tile is GLOBAL → unbounded payload at planet-zoom (the common "whole planet + spin" behaviour).
-> The fix: tile on `(t, z, x, y)` — time-tile × the existing slippy geo-tile (`tiles.ts`) — with
+> The fix: tile on `(planet, t, z, x, y)` — a top-level **planet** partition (Earth/Venus/Haven/…, viewer on one at a time) × time-tile × the existing slippy geo-tile (`tiles.ts`) — with
 > the live globe's **zoom-adaptive count/pin regime** (low zoom → compact count-over-time
 > aggregate per cell so a planet-zoom viewer fetches a handful of coarse count tiles; high zoom →
 > pins+intervals). The time machine becomes **the live globe protocol with a `t` coordinate**;
