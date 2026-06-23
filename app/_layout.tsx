@@ -117,8 +117,11 @@ function RootNavigator() {
         url?: string
       }
 
-      // Tip/gift notifications deep-link to the sender's profile.
-      if ((data.type === 'tip' || data.type === 'gift') && data.senderHandle) {
+      // Tip/gift/follow/subscribe notifications deep-link to the sender's profile.
+      if (
+        (data.type === 'tip' || data.type === 'gift' || data.type === 'follow' || data.type === 'subscribe') &&
+        data.senderHandle
+      ) {
         if (everLoaded.current) {
           router.push(`/(app)/profile/${data.senderHandle}`)
         } else {

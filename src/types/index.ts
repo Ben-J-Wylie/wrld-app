@@ -14,6 +14,8 @@ export type User = {
   notifyOnSubscribedLive: boolean
   notifyOnPpvReminder: boolean
   notifyOnGift: boolean
+  notifyOnFollower: boolean
+  notifyOnSubscriber: boolean
   spaceBucks: number
   stardust: number
   tier: 'free' | 'plus' | 'pro'

@@ -38,6 +38,8 @@ export function SettingsScreen({ embedded = false }: { embedded?: boolean } = {}
   const [tip, setTip] = useState(wrldUser?.notifyOnTip ?? true)
   const [gift, setGift] = useState(wrldUser?.notifyOnGift ?? true)
   const [ppvReminder, setPpvReminder] = useState(wrldUser?.notifyOnPpvReminder ?? true)
+  const [follower, setFollower] = useState(wrldUser?.notifyOnFollower ?? true)
+  const [subscriber, setSubscriber] = useState(wrldUser?.notifyOnSubscriber ?? true)
 
   const { data: blocks = [], refetch: refetchBlocks } = useQuery({
     queryKey: ['blocks'],
@@ -139,6 +141,26 @@ export function SettingsScreen({ embedded = false }: { embedded?: boolean } = {}
       if (wrldUser) setWrldUser({ ...wrldUser, ...prefs })
     } catch {
       setPpvReminder(!value)
+    }
+  }
+
+  async function toggleFollower(value: boolean) {
+    setFollower(value)
+    try {
+      const prefs = await usersApi.updateNotificationPreferences({ notifyOnFollower: value })
+      if (wrldUser) setWrldUser({ ...wrldUser, ...prefs })
+    } catch {
+      setFollower(!value)
+    }
+  }
+
+  async function toggleSubscriber(value: boolean) {
+    setSubscriber(value)
+    try {
+      const prefs = await usersApi.updateNotificationPreferences({ notifyOnSubscriber: value })
+      if (wrldUser) setWrldUser({ ...wrldUser, ...prefs })
+    } catch {
+      setSubscriber(!value)
     }
   }
 
@@ -247,6 +269,30 @@ export function SettingsScreen({ embedded = false }: { embedded?: boolean } = {}
               value={gift}
               onValueChange={toggleGift}
               accessibilityLabel="Notify when I receive a gift"
+            />
+          }
+        />
+        <SettingsRow
+          iconName="user-plus"
+          title="New followers"
+          value="Get notified when someone follows you"
+          right={
+            <Toggle
+              value={follower}
+              onValueChange={toggleFollower}
+              accessibilityLabel="Notify when someone follows me"
+            />
+          }
+        />
+        <SettingsRow
+          iconName="star"
+          title="New subscribers"
+          value="Get notified when someone subscribes to your channel"
+          right={
+            <Toggle
+              value={subscriber}
+              onValueChange={toggleSubscriber}
+              accessibilityLabel="Notify when someone subscribes to my channel"
             />
           }
         />

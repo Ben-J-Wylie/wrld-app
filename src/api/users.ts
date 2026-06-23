@@ -12,7 +12,7 @@ export type BlockedUser = {
   blockedAt: string
 }
 
-// The five notification preference flags (mirrors the backend
+// The notification preference flags (mirrors the backend
 // PATCH /users/me/notification-preferences body + response).
 export type NotificationPreferences = {
   notifyOnFollowedLive: boolean
@@ -21,6 +21,8 @@ export type NotificationPreferences = {
   notifyOnSubscribedLive: boolean
   notifyOnPpvReminder: boolean
   notifyOnGift: boolean
+  notifyOnFollower: boolean
+  notifyOnSubscriber: boolean
 }
 
 export const usersApi = {
