@@ -70,6 +70,16 @@ function formatCount(n: number): string {
   return String(n)
 }
 
+// Active broadcast time as "Xh Ym" (or "Ym" / "Ns" under an hour). Only shown
+// for creators who've actually broadcast (gated on broadcastSeconds > 0).
+function liveTimeLabel(sec: number): string {
+  const h = Math.floor(sec / 3600)
+  const m = Math.floor((sec % 3600) / 60)
+  if (h > 0) return `${h}h ${m}m`
+  if (m > 0) return `${m}m`
+  return `${sec}s`
+}
+
 export function ProfileScreen() {
   const { handle } = useLocalSearchParams<{ handle: string }>()
   const { isSignedIn } = useAuth()
@@ -180,6 +190,17 @@ export function ProfileScreen() {
             FOLLOWING
           </Text>
         </View>
+        {profile.broadcastSeconds > 0 && (
+          <>
+            <View style={styles.statDivider} />
+            <View style={styles.stat}>
+              <Text variant="display">{liveTimeLabel(profile.broadcastSeconds)}</Text>
+              <Text variant="monoLabel" color={theme.colors.text.subtle}>
+                LIVE TIME
+              </Text>
+            </View>
+          </>
+        )}
       </View>
 
       {isSignedIn && !isOwnProfile && (

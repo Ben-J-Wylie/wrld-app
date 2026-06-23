@@ -3858,3 +3858,25 @@ the mediasoup joinRoom gate.
   the effect. Mirrors the web `/settings` Privacy section.
 
 Pure JS — no native module, no EAS rebuild.
+
+---
+
+## Updates — June 2026 ("Live time" — h:m analytics + new profile stat tile)
+
+Surfaces the backend's new **active-broadcast** metric (media actually produced, not
+connection-open time — see `wrld-backend/CLAUDE.md` "hours live → active broadcast
+time") as "Xh Ym" by the minute. Two app surfaces; pure JS, **ships next EAS build**
+(no native module, no deploy from the box).
+
+- **`AnalyticsScreen`** — the Streams KPI sub-label uses the screen's existing local
+  `watchLabel(broadcastSeconds)` (`Xh Ym`) instead of `${hoursStreamed}h`.
+- **`ProfileScreen` (NEW tile)** — the public profile stat row gains a third tile
+  `FOLLOWERS | FOLLOWING | LIVE TIME`, rendering `broadcastSeconds` via a local
+  `liveTimeLabel` (`Xh Ym`). **Gated on `broadcastSeconds > 0`** so non-broadcaster /
+  viewer profiles stay the clean two-tile row (no "0m" clutter); creators who've
+  streamed get the tile. (The profile screen previously rendered no hours stat at all.)
+- **Types** — `broadcastSeconds: number` added to `PublicUser` + `AnalyticsSummary`.
+  The backend already returns it on `GET /users/:handle` + `/users/me/analytics`
+  (deployed 2026-06-23); `hoursStreamed` kept there for back-compat.
+- On-device note: the profile row now centres three tiles where it centred two —
+  glance at narrow-screen spacing with a wide value ("1h 26m") on the next build.

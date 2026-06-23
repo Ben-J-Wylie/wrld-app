@@ -193,7 +193,7 @@ function Dashboard({
         <Kpi icon="globe" label="Audience reach" value={compact(s.totalReach)} sub="all viewers (anon + signed-in)" />
         <Kpi icon="users" label="Unique viewers" value={compact(s.uniqueSignedInViewers)} sub={`${compact(s.repeatViewers)} returning`} />
         <Kpi icon="clock" label="Watch time" value={`${compact(s.totalWatchHours)}h`} sub={`${s.avgWatchMinutes}m avg / session`} />
-        <Kpi icon="radio" label="Streams" value={compact(s.streamCount)} sub={`${s.hoursStreamed}h live · peak ${compact(s.peakConcurrentViewers)}`} />
+        <Kpi icon="radio" label="Streams" value={compact(s.streamCount)} sub={`${watchLabel(s.broadcastSeconds)} live · peak ${compact(s.peakConcurrentViewers)}`} />
         <Kpi icon="heart" label="Followers" value={compact(s.followers)} sub={`+${compact(s.followersGained)} this period`} />
         <Kpi icon="award" label="Subscribers" value={compact(s.activeSubscribers)} sub={`+${compact(s.newSubscribers)} new · ${usd(s.mrrUsd)}/mo`} />
         <Kpi icon="dollar-sign" label="Revenue" value={usd(s.totalRevenueUsd)} sub={`${usd(s.tipsUsd)} tips · ${usd(s.ppvUsd)} PPV`} />

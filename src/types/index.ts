@@ -42,6 +42,7 @@ export type PublicUser = {
   followerCount: number
   followingCount: number
   isFollowing: boolean
+  broadcastSeconds: number // active broadcast time (media produced), in seconds
   tippable: boolean // creator-only: can receive tips (Stardust). Gates the tip button.
   subscriptionEnabled: boolean
   subscriptionPriceUsd: number | null  // monthly price in cents

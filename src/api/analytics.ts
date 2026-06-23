@@ -19,6 +19,7 @@ export type AnalyticsRange = '7d' | '30d' | '90d' | 'all'
 
 export type AnalyticsSummary = {
   streamCount: number
+  broadcastSeconds: number
   hoursStreamed: number
   peakConcurrentViewers: number
   totalReach: number              // every viewer (anon + auth) via geo pings
