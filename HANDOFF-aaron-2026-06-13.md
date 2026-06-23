@@ -21,6 +21,11 @@ This doc is the index + the priority order, not a re-statement.
 - **`HANDOFF-time-machine-aaron-2026-06-18.md`** — globe replay (Time Machine). App consumer BUILT
   by Ben (`design`). **Your part: push + deploy `wrld-backend` `81eb83b` (`GET /clips/:id` tracks
   include — local-only on `main`); confirm `clips/discover` C4.5 is deployed; on-device verify.**
+- **`HANDOFF-pb4-availability-aaron-2026-06-23.md`** — **YOUR FULL BUILD (signed off).** Two
+  independent backend lanes: **A** PB4 manifest (persist snips server-authoritative · multi-axis
+  DirectiveRanges `+sources` · cascade-clean on eviction · per-segment serve) and **B** scalable
+  availability (tiled+cacheable `discover?tile=` · push-on-edit · invalidate-on-edit). Ordered
+  checklist + the exact API shapes the app builds to + done-bars. Model detail = Contracts A/B below.
 - **`HANDOFF-public-buffer-onestore-2026-06-18.md`** — **NEW model, decided (CONTENT.md §3).** Public
   buffer by default + one-store/retain-in-place (no copy-on-save) + per-range directives. **PB0
   DECIDED** (DirectiveRange table · windowed token + TTL knob · 4 access tiers · delete=gone-everywhere).
