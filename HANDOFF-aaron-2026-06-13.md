@@ -24,11 +24,11 @@ This doc is the index + the priority order, not a re-statement.
 - **`HANDOFF-public-buffer-onestore-2026-06-18.md`** — **NEW model, decided (CONTENT.md §3).** Public
   buffer by default + one-store/retain-in-place (no copy-on-save) + per-range directives. **PB0
   DECIDED** (DirectiveRange table · windowed token + TTL knob · 4 access tiers · delete=gone-everywhere).
-  **PB1 + PB2 ✅ live. PB3 backend ✅ + app ✅ merged, DORMANT.** → **Your part NOW (2 steps, see the
-  top "→ AARON" section): (1) allowlist `PB3_PER_RANGE` on the public `/config` + deploy, (2) set
-  `PB3_PER_RANGE = true` via `/admin/config`.** That lights up the per-segment public/private toggle
-  Ben built in the clip grid. Optional: a `GET …/sessions/:id/directives` so marks survive reload.
-  Then PB4 (per-user default + grid redesign).
+  **PB1 + PB2 + PB3 ✅ live + tested on device.** → **Your part NOW: the top "→ AARON — OPEN BACKEND
+  ITEMS FROM PB3 DEVICE TESTING" section** — (1) serve-precision (exact-ms exclusion of private spans
+  — the real content guarantee), (2) per-range write/read verify, (3) measure the "pin reappears after
+  clip end", (4) saved-clip dedup edge, (5) future coverage-intervals ideal. **App side: #3 + #5
+  fixed; rehydration is Ben's pending app task.** Then PB4 (per-user default + grid redesign).
 - **`HANDOFF-c4-clip-editor-2026-06-12.md`** — editable manifest (draft↔saved); the open gap is
   `removedByLane`.
 - **`HANDOFF-clips-saved-persistence-2026-06-11.md`** — R3 promote-on-publish + saved-clip list.

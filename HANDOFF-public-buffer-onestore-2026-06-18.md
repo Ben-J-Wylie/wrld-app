@@ -5,6 +5,43 @@
 
 ---
 
+## → AARON — OPEN BACKEND ITEMS FROM PB3 DEVICE TESTING (2026-06-23)
+
+PB3 is flipped on + tested on device. App-side fixes shipped (saved-lane toggle symmetry;
+1s discover bucket so per-segment privacy resolves; mend prompt). **Rehydration is Ben's
+remaining app task** (seed grid marks from `/buffer/me` `directives[]`). The following are
+**backend (yours)** — surfaced by testing the private/public segment behaviour:
+
+1. **Serve-precision = the real content guarantee (most important).** The discovery PIN can
+   be coarse (1s bucket is fine — a pin blinking sub-second is imperceptible), but the
+   **serve / playback path must exclude a private span at its EXACT ms boundary** (a snip at
+   frame 15 = `…:03.500`), independent of any discovery bucket. Confirm the served footage /
+   manifest drops the private range to the frame, not rounded. *This is what actually
+   protects private content.*
+2. **Per-range write/read verify (rules out a backend cause of the "both segments same"
+   bug).** For a session with A=[t0,ts] private + B=[ts,t1] public, confirm `clips/discover`
+   hides the pin at `T∈A` and shows it at `T∈B` (the deployed `NOT EXISTS … dr.startAtMs <= T
+   < dr.endAtMs` check looks right; confirm the rows are written distinctly + no dedup
+   collapse). Ben's 1s bucket fixed the app side; this confirms the backend half.
+3. **"#2 pin reappears after the clip's end" — measure.** The bufferPin is per-session,
+   spanning `[start, endedAt ?? NOW]`, hidden only at instants inside a private range. For a
+   **STOPPED** session marked **entirely** private: does the pin still show after its end? →
+   **yes** = a range/end mismatch bug; **only when there's real public tail / still-live** =
+   working as designed (the single-pin model) and a product call, not a bug.
+4. **Saved-clip dedup edge.** A saved clip is hidden by a `DirectiveRange` only if it's
+   **deduped to a `bufferPin`** (session live/retained). Confirm retain-in-place keeps saved
+   clips on the bufferPin path (expected) — else the `clips`-array discover path (filters on
+   `Clip.visibility`) must also honour directives, or marking a saved clip private must also
+   set `Clip.visibility`.
+5. **(Future, not now) coverage-intervals model — the "ideal" that kills the bucket.**
+   Instead of the client re-querying a bucketed instant, have `discover` return **per-pin
+   public coverage intervals**; the client fetches a coarse window and resolves pin
+   visibility at the **exact** playhead locally (frame-precise, no per-second refetch,
+   sub-second-range-safe). A refinement for when we want frame-crisp pins; flagged so it's
+   tracked, not built.
+
+---
+
 ## → BEN — PB3 IS READY, TAKE IT FROM HERE (2026-06-23, Aaron)
 
 **State:** PB1 ✅ live · PB2 ✅ live · **PB3 backend ✅ DONE + deployed · app toggle ✅
