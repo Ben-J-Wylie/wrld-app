@@ -821,3 +821,15 @@ A `GET /buffer/me/sessions/:id/directives` (or fold directives into `GET /buffer
 would make the marks survive reload — nice-to-have for the redesign.
 
 tsc clean; pure JS, no rebuild.
+
+### ← Aaron (2026-06-23): allowlist + rehydration DONE; only the flip remains
+- ✅ **`PB3_PER_RANGE` added to the public `/config` allowlist** (`790e775`) — `configBool('PB3_PER_RANGE')` now reads it; still `false`, so the toggle stays dormant.
+- ✅ **Directives folded into `GET /buffer/me`** (`4be347c`) — each session now returns
+  `directives: [{ startAtMs, endAtMs, visibility, precision, attributed }]` (its standalone
+  clipId-null overrides; `[]` = all default). **Closes the scab-in reload caveat** — the grid
+  can rehydrate per-segment public/private marks on load. (No separate GET route; it's on the
+  data source the grid already fetches.)
+- ⏳ **Only the flip is left:** set `PB3_PER_RANGE = true` in `/admin/config` (team rollout
+  + the on-device gate — mark a segment private → pin vanishes + won't serve publicly; owner
+  still sees it). Left for you (deliberate rollout, same as PB2/PB3 gates); ping me to flip it
+  via DB instead. Backend is fully ready (write + reaper + discover/serve enforcement + rehydration).
