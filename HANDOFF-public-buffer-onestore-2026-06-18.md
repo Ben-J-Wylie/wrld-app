@@ -5,6 +5,75 @@
 
 ---
 
+## → AARON + BEN — PB3.5: WINDOWED AVAILABILITY FEED (contract for sign-off, 2026-06-23)
+
+**Why:** the per-instant bucketed `discover?at=T` query (re-fetched every tick, floored to a
+bucket, stale pins via `placeholderData`) is the wrong primitive — it SAMPLES a continuous
+truth, so private pins blink on, snipped public/private halves resolve wrong, etc. Replace it
+with an **availability map**, mirroring how LIVE discovery holds "what's available now":
+build the **past's "what's available" map** (which tagging edits), and **scrub a local cursor
+over it.**
+
+**Principle:** a pin is visible ⟺ the playhead ∈ one of that content's **public time-
+intervals**. Interval membership, resolved **continuously on the client** — never a server
+point-sample re-fetched per tick.
+
+### Backend (Aaron) — `GET /clips/discover` goes windowed
+- **Params:** `?from=<ISO>&to=<ISO>` (a window). Keep `?at=` working for any other caller or
+  deprecate — your call; the app moves to `from`/`to`.
+- **Response:** `{ clips: [...], bufferPins: [...] }` — same identity/render fields as today,
+  **plus `intervals`** on each pin:
+  ```
+  intervals: Array<{ startMs: number; endMs: number }>   // PUBLIC spans within [from,to], wall-clock ms
+  ```
+- **`intervals` = the pin's content span within the window, MINUS private DirectiveRanges,
+  MINUS `off`**, computed at **exact ms** (no server bucketing):
+  - saved clip, untagged → `[[clipStart, clipEnd]]`
+  - buffer session, half-private → the public half only
+  - **fully private / off → omit the pin entirely** (no intervals = not in the map)
+- **Gated tiers still appear as locked pins:** a subscriber/PPV session gets its `intervals`
+  + `accessTier` (client shows a locked pin; watchability gated separately). **owner-private
+  → excluded** (no intervals).
+- **Live session** (`endedAt = null`): its open interval ends at `to` (or `NOW`); the client
+  extends it to the live edge locally.
+- Carry each pin's **content start** (for the seek-offset math) — `clipStartMs` / session
+  `startedAt` as today.
+
+### App (Ben) — hold the window, scrub locally
+- **`useHistoricalAvailability(fromMs, toMs)`** (replaces the per-instant bucket in
+  `useHistoricalClips`): fetch `discover?from&to`, hold `{clips, bufferPins}` with intervals.
+  Generous `staleTime`; **invalidate when the user tags a segment** (the grid's
+  `patchDirectives` → `queryClient.invalidateQueries(['historical-availability'])`) so an
+  edit reflects on the globe — this is the "tagging edits the availability map" step.
+- **Window:** fetch `[playhead − W, playhead + W]` (W tunable; start ~1h or the buffer
+  window). Re-fetch a recentered window when the playhead nears an edge.
+- **Render (local, instant, frame-precise):** `visible = pin.intervals.some(iv => playhead >=
+  iv.startMs && playhead < iv.endMs)`. **Remove** the 1s bucket, `placeholderData`, and the
+  per-tick discover query.
+- **Seek/watch:** `seekOffsetSec = (playhead − the containing interval's content start)`.
+- **Live session:** extend its open interval to `serverNow()` locally (like the clips-grid
+  live build).
+
+### What this makes structurally impossible
+- No per-tick query / bucket / stale-pin → the **blink** (anomaly #2) is gone.
+- **Fully private = no intervals = never shown**; **half-private = pin shows exactly in the
+  public half** (anomaly #3 *display*), frame-precise + sub-second-safe; public = shown (#1).
+- Also the path to **frame-exact serve** later (same interval data).
+
+### Still separate — the per-segment UI (PB4)
+The "set public actually set private" confusion is the scab-in *toggle* (tap a public segment
+→ flips private). The PB4 redesign (explicit per-segment state + distinct-segment visual)
+makes the **data** match intent; this feed makes the **display** truthful. Two different fixes.
+
+### Split
+- **Aaron:** windowed `discover` + interval computation (span − private − `off`; gated tiers
+  flagged; owner-private excluded; exact ms; live open-ended).
+- **Ben:** `useHistoricalAvailability` + globe local interval-resolution + remove the bucket +
+  invalidate-on-tag + seek math. (I'll keep the current `?at=` path live until your windowed
+  feed lands, then flip — so the time machine never goes dark mid-build.)
+
+---
+
 ## → AARON — OPEN BACKEND ITEMS FROM PB3 DEVICE TESTING (2026-06-23)
 
 ### ← Aaron RESOLVED (2026-06-23): items 1, 2, 4 fixed/verified; 3 by-design; 5 future
