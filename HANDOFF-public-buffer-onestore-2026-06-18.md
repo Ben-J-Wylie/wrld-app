@@ -7,6 +7,36 @@
 
 ## → AARON — OPEN BACKEND ITEMS FROM PB3 DEVICE TESTING (2026-06-23)
 
+### ← Aaron RESOLVED (2026-06-23): items 1, 2, 4 fixed/verified; 3 by-design; 5 future
+- **1 — serve-precision ✅ FIXED + deployed (`38dc93d`).** The serve subtracted private
+  windows then RE-INCLUDED any segment overlapping the public sub-range → a ~2s segment
+  straddling a mid-segment snip leaked its private frames. `buildDraftPlaylist` now takes
+  `excludeWindows`: a segment touching ANY private window is DROPPED (both public paths).
+  HLS segments are atomic so a frame-exact trim needs re-encode (which no-copy retain-in-
+  place avoids) → privacy-safe choice: never serve a private FRAME, at the cost of ≤1
+  boundary segment of public per edge. (Frame-exact serve = a future re-encode/coverage
+  option, ties to #5.)
+- **2 — per-range write/read ✅ VERIFIED.** Prod has 3 distinct private standalone rows
+  (`retain=false, clipId=null`, incl. overlapping ones) — written distinctly, no dedup
+  collapse. The deployed `NOT EXISTS (startAtMs ≤ T·1000 < endAtMs)` hides at `T∈A`, shows
+  at `T∈B`. Backend half confirmed.
+- **3 — post-end pin: BY DESIGN (no bug found).** The bufferPin query is window-bounded
+  (`startedAt ≤ T ≤ endedAt‖now`), so a STOPPED session CANNOT pin past its `endedAt`. A
+  pin "after the clip's end" therefore means the session was still **LIVE** with public
+  footage past the last private mark (the single-pin-per-session model — the live edge
+  isn't private). On-device discriminator: if a pin shows for a **stopped** session past
+  its end → that'd be a bug (the query says it can't); if only while live / with a public
+  tail → working as designed.
+- **4 — saved-clip dedup leak ✅ FIXED + deployed (`e1e1a9c`).** At a private instant the
+  bufferPin is hidden, so the clip↔bufferPin dedup didn't fire and the clip pin re-surfaced
+  (leak). `clips/discover` now also excludes a clip at any `T` inside a private
+  DirectiveRange for its source session. Latent today (no saved clip on a private session
+  yet); closed defensively.
+- **5 — coverage-intervals: tracked, NOT built.** Frame-crisp pins (discover returns
+  per-pin public coverage intervals; client resolves at the exact playhead) — a refinement
+  for later; also the path to frame-exact *serve*.
+
+
 PB3 is flipped on + tested on device. App-side fixes shipped (saved-lane toggle symmetry;
 1s discover bucket so per-segment privacy resolves; mend prompt). **Rehydration is DONE** (grid seeds marks from `/buffer/me` `directives[]` on load). The following are
 **backend (yours)** — surfaced by testing the private/public segment behaviour:
