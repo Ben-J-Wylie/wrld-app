@@ -1963,6 +1963,12 @@ export function GlobeScreenMapbox() {
           onOffsetChange={setTimeOffsetMs}
           collapseSignal={clockCollapseSignal}
           onExpandedChange={handleClockExpandedChange}
+          // Refetch-on-settle: when the clock lands on a moment, pull the latest
+          // availability for it (windowed feed only) — so another viewer's edit to that
+          // moment is reflected the instant you scrub to it, not just on the 60s poll.
+          onScrubEnd={() => {
+            if (availabilityEnabled) windowedHist.refetch()
+          }}
         />
       </Animated.View>
 

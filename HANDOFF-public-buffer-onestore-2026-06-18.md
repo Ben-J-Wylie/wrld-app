@@ -1066,3 +1066,14 @@ clean, pure JS.
 3. **Deploy → flip `AVAILABILITY_FEED = true`** for the team. Then Ben verifies on device
    (private no longer blinks; half-private resolves per-segment) and we retire the legacy
    `?at=` path after a soak.
+
+### PB3.5 — freshness triggers added (Ben, 2026-06-23)
+
+So another viewer sees an edit to the past, not just the editor. Three triggers on the
+windowed feed (all app-side, no backend change):
+- **invalidate-on-own-edit** (instant) — the editor's tag invalidates `['historical-availability']`.
+- **refetch-on-settle** — the globe's `TimeScrubber.onScrubEnd` calls `windowedHist.refetch()`
+  (windowed feed only): scrub lands on a moment → pull the latest availability for it.
+- **60s poll** (`refetchInterval`) — a parked/playing viewer picks up others' edits within ~60s.
+Still ~60× quieter than the old per-second sample. The instant **push** (piggyback the live
+discovery socket) remains the future upgrade if we want zero-lag propagation.

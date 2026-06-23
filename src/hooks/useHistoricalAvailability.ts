@@ -29,6 +29,10 @@ export function useHistoricalAvailability(playheadMs: number, active: boolean) {
       clipsApi.discoverWindow(new Date(from).toISOString(), new Date(to).toISOString()),
     enabled: active,
     staleTime: 60_000,
+    // Backstop poll: a parked/playing viewer picks up OTHERS' edits to the past within
+    // ~60s (your own edits are instant via invalidate-on-tag; a scrub picks up the latest
+    // on settle — the globe calls refetch() on scrub-end). Only runs while enabled.
+    refetchInterval: 60_000,
     placeholderData: (prev) => prev,
   })
 }
