@@ -881,3 +881,21 @@ PB3 flag live + tested on device. Results:
 - ☐ **Rehydration still pending (app, Ben):** wire the grid to seed marks from each
   `/buffer/me` session's `directives[]` (Aaron shipped the field) so private marks survive a
   reload. Separate small task.
+
+### PB3 finding — snipped public+private segments read as one permission (Ben, 2026-06-23)
+
+Snip a clip → mark one segment private, the other public → time machine treats BOTH the
+same. **Same root as #2.** Cause (app): the globe queried the past in **5 s buckets**, so
+for a short clip snipped into ~5-10 s segments the queried instant `T` couldn't resolve
+which segment the playhead was in → the single per-session pin read one permission for
+both. **Fix (Ben):** `useHistoricalClips` bucket **5 s → 1 s** (matches the globe's 1 s
+playhead ticker), so per-segment privacy now resolves as the playhead crosses the snip.
+
+**→ Aaron, please also verify backend-side** (so we know the bucket was the whole cause):
+that the per-segment **DirectiveRange** rows are written + read **per-range** — i.e. for a
+session with A=[t0,ts] private and B=[ts,t1] public, `clips/discover` hides the pin at
+`T∈A` and shows it at `T∈B`. (The deployed `NOT EXISTS … dr.startAtMs<=T<dr.endAtMs`
+check looks per-range; confirming rules out a write/dedup issue.) Note the **single pin
+per session** model: scrubbing across the snip toggles that one pin — there isn't a
+separate pin per segment. If the product wants distinct simultaneous representation,
+that's a bigger discover/representation change.

@@ -7,10 +7,15 @@ import { clipsApi, type ClipPin, type BufferPin } from '@/api/clips'
 // `playheadMs <= 0` → live present: the query is disabled and returns no clips (the
 // globe uses its live viewport feed instead). When scrubbed into the past the
 // playhead ticks forward at 1× (the globe recomputes it each second); the query key
-// is bucketed to 5s so the pin set refreshes as the playhead advances without
-// refetching on every tick. `placeholderData` keeps the prior pins on screen while
-// the next bucket loads, so the globe doesn't flicker empty between fetches.
-const BUCKET_MS = 5000
+// is bucketed so the pin set refreshes as the playhead advances without refetching on
+// every sub-second change. `placeholderData` keeps the prior pins on screen while the
+// next bucket loads, so the globe doesn't flicker empty between fetches.
+//
+// 1s bucket (was 5s): PB3 per-segment privacy is evaluated at the queried instant T, so
+// a coarse bucket can't resolve which short segment the playhead is in — a clip snipped
+// into ~5-10s public/private segments read as one permission. 1s matches the globe's 1s
+// playhead ticker and resolves per-segment. (Discover is a small query; 1/s is fine.)
+const BUCKET_MS = 1000
 
 export function useHistoricalClips(playheadMs: number) {
   const active = playheadMs > 0
