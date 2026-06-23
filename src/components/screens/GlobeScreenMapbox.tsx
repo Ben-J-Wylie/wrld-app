@@ -58,6 +58,8 @@ import { useAuthStore } from '@/stores/authStore'
 import { useLocation } from '@/hooks/useLocation'
 import { useViewportDiscovery, type TileCount } from '@/hooks/useViewportDiscovery'
 import { useHistoricalClips } from '@/hooks/useHistoricalClips'
+import { useHistoricalAvailability } from '@/hooks/useHistoricalAvailability'
+import type { Interval } from '@/api/clips'
 import type { ClipPin, BufferPin } from '@/api/clips'
 import { useStreamsNear } from '@/hooks/useStreamsNear'
 import { useDiscoverySocket } from '@/hooks/useDiscoverySocket'
@@ -409,6 +411,12 @@ type BannerData =
   | { kind: 'cancelled' }
   | { kind: 'resumed'; stream: Stream; broadcasterHandle: string | null }
 
+// Stable empty pin arrays — so an absent historical feed doesn't hand a fresh `[]`
+// each render into the memo chain (which would defeat the referential-stability the
+// card-sync effects rely on).
+const EMPTY_CLIPS: ClipPin[] = []
+const EMPTY_BUFFER: BufferPin[] = []
+
 // Time Machine — map a surviving-clip pin into the Stream shape the globe's pin
 // renderer + card already consume, so historical pins reuse the whole live path.
 // Module-level + pure so the memoised `pins` stays referentially stable. Clips are
@@ -546,12 +554,45 @@ export function GlobeScreenMapbox() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [Math.round(sunInstantMs / 30000)],
   )
-  const { data: histData } = useHistoricalClips(playheadMs)
-  const clipPins = histData?.clips ?? []
-  // PB1 — public buffer pins in the past, behind the PUBLIC_BUFFER_ENABLED flag
-  // (defensive: the backend also omits them when off). Empty until the backend ships.
+  // PB3.5 — the time-machine pin feed. Two paths, chosen by the AVAILABILITY_FEED flag:
+  //  • OFF (legacy): per-instant `discover?at=T` (re-queried each tick) — returns only the
+  //    pins alive at T (server-sampled). Kept live until the windowed feed deploys.
+  //  • ON (windowed): `discover?from&to` returns every pin in the window + its public
+  //    `intervals`; we resolve visibility LOCALLY here (`playhead ∈ interval`) — no
+  //    per-tick query, no bucket, no stale-pin (kills the blink / half-missing anomalies).
+  // Both hooks are called every render (hooks rules); only the active one is enabled.
+  const availabilityEnabled = configBool(config, 'AVAILABILITY_FEED', false)
+  const legacyHist = useHistoricalClips(historicalMode && !availabilityEnabled ? playheadMs : 0)
+  const windowedHist = useHistoricalAvailability(playheadMs, historicalMode && availabilityEnabled)
   const publicBufferEnabled = configBool(config, 'PUBLIC_BUFFER_ENABLED', false)
-  const bufferPins = publicBufferEnabled ? (histData?.bufferPins ?? []) : []
+
+  // Source pin sets (stable query refs). Windowed feed carries `intervals`; legacy is
+  // already alive-at-T.
+  const srcClips = (availabilityEnabled ? windowedHist.data?.clips : legacyHist.data?.clips) ?? EMPTY_CLIPS
+  const srcBuffer = !publicBufferEnabled
+    ? EMPTY_BUFFER
+    : (availabilityEnabled ? windowedHist.data?.bufferPins : legacyHist.data?.bufferPins) ?? EMPTY_BUFFER
+  const inInterval = (intervals?: Interval[]) =>
+    !!intervals && intervals.some((iv) => playheadMs >= iv.startMs && playheadMs < iv.endMs)
+  // Windowed: resolve the visible set LOCALLY (playhead ∈ interval). The set genuinely
+  // changes as the playhead crosses an interval edge, but we keep `clipPins`/`bufferPins`
+  // REFERENTIALLY STABLE between renders unless the visible id-set actually changes (memo
+  // keyed on a signature, not on playheadMs) — so the card-sync effects don't loop on the
+  // 1s ticker. Legacy: the server already returned only alive-at-T pins (stable query ref).
+  const clipSig = availabilityEnabled
+    ? srcClips.filter((c) => inInterval(c.intervals)).map((c) => c.id).join(',')
+    : `legacy:${srcClips.length}`
+  const bufferSig = availabilityEnabled
+    ? srcBuffer.filter((b) => inInterval(b.intervals)).map((b) => b.sessionId).join(',')
+    : `legacy:${srcBuffer.length}`
+  const clipPins = useMemo(
+    () => (availabilityEnabled ? srcClips.filter((c) => inInterval(c.intervals)) : srcClips),
+    [availabilityEnabled, srcClips, clipSig], // eslint-disable-line react-hooks/exhaustive-deps
+  )
+  const bufferPins = useMemo(
+    () => (availabilityEnabled ? srcBuffer.filter((b) => inInterval(b.intervals)) : srcBuffer),
+    [availabilityEnabled, srcBuffer, bufferSig], // eslint-disable-line react-hooks/exhaustive-deps
+  )
   const clipPinById = useMemo(() => new Map(clipPins.map((c) => [c.id, c] as const)), [clipPins])
   const bufferPinById = useMemo(
     () => new Map(bufferPins.map((b) => [b.sessionId, b] as const)),
@@ -1168,6 +1209,11 @@ export function GlobeScreenMapbox() {
     const buf = bufferPinById.get(id)
     const pin = clip ?? buf
     if (!pin) return
+    // Seek to the exact playhead within the content: playhead − the pin's content start.
+    // Computed client-side (works for both feeds; the windowed feed carries no per-instant
+    // `seekOffsetSec`). Clamped ≥ 0.
+    const contentStartMs = clip ? clip.clipStartMs : buf!.sessionStartMs
+    const seekSec = Math.max(0, Math.floor((playheadMs - contentStartMs) / 1000))
     setSelectedStream(null)
     setSelectedClusterStreams(null)
     router.push({
@@ -1175,7 +1221,7 @@ export function GlobeScreenMapbox() {
       params: {
         id,
         source: buf ? 'buffer' : 'clip',
-        seekSec: String(pin.seekOffsetSec),
+        seekSec: String(seekSec),
         title: pin.title ?? '',
         handle: pin.host.handle,
       },

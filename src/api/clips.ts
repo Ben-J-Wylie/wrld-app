@@ -4,6 +4,12 @@ import { apiClient } from './client'
 // `bufferApi` (the owner-gated rolling buffer + saved-clip management): these
 // endpoints serve PUBLIC clips by id, to anyone.
 
+// PB3.5 — a public time-interval (wall-clock ms) within a discover WINDOW. A pin's
+// `intervals` are the spans where it's publicly discoverable (content span minus
+// private DirectiveRanges minus `off`). The client shows the pin iff the playhead is
+// inside one — interval membership resolved locally, no per-instant server sample.
+export type Interval = { startMs: number; endMs: number }
+
 // One surviving clip alive at a scrubbed instant — a globe pin in playback mode.
 // Returned by GET /clips/discover?at=<ISO>. The backend honours the clip's CURRENT
 // precision + identity (reversible — decision A): an anon clip reports host
@@ -22,6 +28,9 @@ export type ClipPin = {
   clipEndMs: number
   subscribersOnly: boolean
   host: { id: string; handle: string; displayName: string; avatarUrl: string | null }
+  // PB3.5 (windowed feed only): public spans within the window. When present the client
+  // resolves visibility locally (playhead ∈ interval); absent on the legacy `?at=` feed.
+  intervals?: Interval[]
 }
 
 // One public/gated buffer session alive at a scrubbed instant — a globe pin in
@@ -43,6 +52,9 @@ export type BufferPin = {
   subscriptionPriceUsd?: number | null
   ppvEventId?: string | null
   host: { id: string; handle: string; displayName: string; avatarUrl: string | null }
+  // PB3.5 (windowed feed only): public spans within the window. A live session's open
+  // interval ends at the window `to`; the client extends it to the live edge.
+  intervals?: Interval[]
 }
 
 // One captured/included source track on a clip (durable public /media/clips URLs).
@@ -80,6 +92,21 @@ export const clipsApi = {
     const res = await apiClient.get<{ clips: ClipPin[]; bufferPins?: BufferPin[] }>(
       '/clips/discover',
       { params: { at: atISO } },
+    )
+    return { clips: res.data.clips ?? [], bufferPins: res.data.bufferPins ?? [] }
+  },
+
+  // PB3.5 — the WINDOWED availability feed. Returns every public/gated pin with content in
+  // [fromISO, toISO], each carrying its public `intervals` within the window. The client
+  // holds this and resolves pin visibility locally as the playhead scrubs (no per-tick
+  // query). Behind the AVAILABILITY_FEED flag until the backend ships it.
+  discoverWindow: async (
+    fromISO: string,
+    toISO: string,
+  ): Promise<{ clips: ClipPin[]; bufferPins: BufferPin[] }> => {
+    const res = await apiClient.get<{ clips: ClipPin[]; bufferPins?: BufferPin[] }>(
+      '/clips/discover',
+      { params: { from: fromISO, to: toISO } },
     )
     return { clips: res.data.clips ?? [], bufferPins: res.data.bufferPins ?? [] }
   },

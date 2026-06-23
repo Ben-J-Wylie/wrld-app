@@ -1035,3 +1035,34 @@ check looks per-range; confirming rules out a write/dedup issue.) Note the **sin
 per session** model: scrubbing across the snip toggles that one pin — there isn't a
 separate pin per segment. If the product wants distinct simultaneous representation,
 that's a bigger discover/representation change.
+
+### PB3.5 — app half BUILT (Ben, 2026-06-23), flag-gated · Aaron START-HERE (backend)
+
+App side is built to the contract above, **behind `AVAILABILITY_FEED` (default off)** so the
+legacy `?at=` time machine stays live until the windowed feed deploys, then flips. `tsc`
+clean, pure JS.
+
+- **`clipsApi.discoverWindow(fromISO, toISO)`** → `GET /clips/discover?from&to`; `ClipPin` /
+  `BufferPin` gained `intervals?: {startMs,endMs}[]` + an exported `Interval` type.
+- **`useHistoricalAvailability(playheadMs, active)`** — fetches a ±12h window (re-fetch on a
+  1h playhead bucket), holds it; `staleTime 60s`.
+- **`GlobeScreenMapbox`** — when `AVAILABILITY_FEED` is on, resolves the visible set
+  **locally** (`playhead ∈ pin.intervals`), referentially-stable (memo keyed on the visible
+  id-signature, not playheadMs, so the 1s ticker doesn't loop the card-sync). Legacy path
+  unchanged when off. Seek is now computed client-side (`playhead − contentStart`).
+- **Invalidate-on-tag:** `ClipsScreen.patchSessionDirectives` invalidates
+  `['historical-availability']` so a tag edit refreshes the globe (the "tagging edits the
+  map" step).
+
+**→ Aaron START-HERE (backend, to the PB3.5 contract above):**
+1. **`GET /clips/discover` accepts `?from=<ISO>&to=<ISO>`** and returns `{ clips, bufferPins }`
+   where each pin carries **`intervals: [{startMs,endMs}]`** = its content span within the
+   window MINUS private DirectiveRanges MINUS `off`, at **exact ms**. Fully-private/`off` →
+   omit the pin; gated tiers → include + `accessTier` (locked pin); owner-private → exclude;
+   live session (`endedAt null`) → open interval ends at `to`. Keep `?at=` working (the app
+   falls back to it while the flag's off).
+2. **Add `AVAILABILITY_FEED`** to the public `/config` allowlist + RemoteConfig (default
+   **false**) — gates the app's windowed path.
+3. **Deploy → flip `AVAILABILITY_FEED = true`** for the team. Then Ben verifies on device
+   (private no longer blinks; half-private resolves per-segment) and we retire the legacy
+   `?at=` path after a soak.

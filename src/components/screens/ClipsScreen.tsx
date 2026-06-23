@@ -538,9 +538,15 @@ export const ClipsScreen = () => {
       const directives = segs
         .filter((s) => s.sessionId === sessionId)
         .map((s) => ({ startAtMs: Math.round(s.startMs), endAtMs: Math.round(s.endMs), visibility: 'private' as const }))
-      bufferApi.patchDirectives(sessionId, directives).catch(() => {})
+      bufferApi
+        .patchDirectives(sessionId, directives)
+        // PB3.5 — tagging edits the time-machine availability map: refresh the globe's
+        // windowed feed so the edit reflects there (the "tagging updates what's available"
+        // step). Harmless when the availability feed is off (no such query cached).
+        .then(() => qc.invalidateQueries({ queryKey: ['historical-availability'] }))
+        .catch(() => {})
     },
-    [],
+    [qc],
   )
   const toggleSegPrivacy = useCallback(
     (c: LaneClip) => {
