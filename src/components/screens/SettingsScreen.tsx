@@ -7,10 +7,10 @@
 // an AccountIDPill in its `right` slot so the user's permanent ID
 // surfaces alongside the changeable handle.
 
-import { Alert, ScrollView, StyleSheet, View } from 'react-native'
+import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import { router } from 'expo-router'
 import { useClerk } from '@clerk/clerk-expo'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { ScreenScroll } from '@/components/sections/ScreenScroll'
 import { SettingsGroup } from '@/components/sections/SettingsGroup'
@@ -38,6 +38,21 @@ export function SettingsScreen({ embedded = false }: { embedded?: boolean } = {}
   const [tip, setTip] = useState(wrldUser?.notifyOnTip ?? true)
   const [gift, setGift] = useState(wrldUser?.notifyOnGift ?? true)
   const [ppvReminder, setPpvReminder] = useState(wrldUser?.notifyOnPpvReminder ?? true)
+
+  const { data: blocks = [], refetch: refetchBlocks } = useQuery({
+    queryKey: ['blocks'],
+    queryFn: usersApi.getBlocks,
+    staleTime: 30_000,
+  })
+
+  async function handleUnblock(handle: string) {
+    try {
+      await usersApi.unblock(handle)
+      refetchBlocks()
+    } catch {
+      Alert.alert('Error', 'Could not unblock — try again.')
+    }
+  }
 
   async function handleSignOut() {
     // Unregister push token before clearing session so the device stops
@@ -247,6 +262,34 @@ export function SettingsScreen({ embedded = false }: { embedded?: boolean } = {}
             />
           }
         />
+      </SettingsGroup>
+
+      <SettingsGroup title="PRIVACY · BLOCKED ACCOUNTS">
+        {blocks.length === 0 ? (
+          <SettingsRow
+            iconName="slash"
+            title="No blocked accounts"
+            value="Block someone from their profile. Blocked accounts can't view you, find you in search, follow, tip/gift, or join your streams."
+            showBorderTop={false}
+          />
+        ) : (
+          blocks.map((u, i) => (
+            <SettingsRow
+              key={u.id}
+              iconName="slash"
+              title={u.displayName}
+              value={`@${u.handle}`}
+              showBorderTop={i !== 0}
+              right={
+                <Pressable onPress={() => handleUnblock(u.handle)} hitSlop={8}>
+                  <Text variant="bodyEmphasized" color={theme.colors.accent.default}>
+                    Unblock
+                  </Text>
+                </Pressable>
+              }
+            />
+          ))
+        )}
       </SettingsGroup>
 
       <SettingsGroup title="CONTENT">

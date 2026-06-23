@@ -4,6 +4,14 @@ import { env } from '@/lib/env'
 import { applyRemoteCaptureLadder, type CaptureLadder } from '@/lib/tierCaps'
 import type { User, PublicUser, WalletData, CashoutRequest } from '@/types'
 
+export type BlockedUser = {
+  id: string
+  handle: string
+  displayName: string
+  avatarUrl: string | null
+  blockedAt: string
+}
+
 // The five notification preference flags (mirrors the backend
 // PATCH /users/me/notification-preferences body + response).
 export type NotificationPreferences = {
@@ -59,6 +67,21 @@ export const usersApi = {
 
   unfollow: async (handle: string): Promise<void> => {
     await apiClient.delete(`/users/${handle}/follow`)
+  },
+
+  // Block / unblock (bidirectional hiding; block also drops mutual follows).
+  block: async (handle: string): Promise<void> => {
+    await apiClient.post(`/users/${handle}/block`)
+  },
+
+  unblock: async (handle: string): Promise<void> => {
+    await apiClient.delete(`/users/${handle}/block`)
+  },
+
+  // The users the current user has blocked (Settings management list).
+  getBlocks: async (): Promise<BlockedUser[]> => {
+    const res = await apiClient.get<{ blocks: BlockedUser[] }>('/users/me/blocks')
+    return res.data.blocks
   },
 
   // The users currently subscribed to me (active/past_due), most-recent first.

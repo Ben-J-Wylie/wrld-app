@@ -79,6 +79,33 @@ export function ProfileScreen() {
   const isOwnProfile = !!me && me.handle === handle
   const [tipVisible, setTipVisible] = useState(false)
   const [giftVisible, setGiftVisible] = useState(false)
+  const [blocking, setBlocking] = useState(false)
+
+  // Block: once blocked, the pair is hidden (the profile 404s), so leave to the
+  // globe on success. Unblock lives in Settings → Privacy.
+  function handleBlock() {
+    Alert.alert(
+      `Block @${handle}?`,
+      'They won’t be able to view your profile, find you in search, follow you, tip or gift you, or join your live streams. You can unblock from Settings.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Block',
+          style: 'destructive',
+          onPress: async () => {
+            setBlocking(true)
+            try {
+              await usersApi.block(handle)
+              router.navigate('/(app)/globe')
+            } catch {
+              Alert.alert('Error', 'Could not block this user — try again.')
+              setBlocking(false)
+            }
+          },
+        },
+      ],
+    )
+  }
 
   const { data: subStatus, refetch: refetchSubStatus } = useQuery({
     queryKey: ['subscription-status', handle],
@@ -173,6 +200,14 @@ export function ProfileScreen() {
           variant="secondary"
           onPress={() => setGiftVisible(true)}
         />
+      )}
+
+      {isSignedIn && !isOwnProfile && (
+        <Pressable onPress={handleBlock} disabled={blocking} style={styles.blockRow}>
+          <Text variant="caption" color={theme.colors.text.muted}>
+            {blocking ? 'Blocking…' : `Block @${handle}`}
+          </Text>
+        </Pressable>
       )}
 
       {!isOwnProfile && profile.subscriptionEnabled && profile.subscriptionPriceUsd && (
@@ -505,5 +540,9 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.full,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: 5,
+  },
+  blockRow: {
+    alignItems: 'center',
+    paddingVertical: theme.spacing.sm,
   },
 })

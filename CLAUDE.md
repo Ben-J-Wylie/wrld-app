@@ -3840,3 +3840,21 @@ existing two. `usersApi.updateNotificationPreferences` widened to the shared
 `/auth/me`). Backed by the backend `notifyOnGift` + the off-stream gift push (see
 `wrld-backend/CLAUDE.md` "Off-stream gift notifications"). Pure JS — no native
 module, no EAS rebuild.
+
+---
+
+## Updates — June 2026 (Blocked users — app parity)
+
+App side of blocked users (backend + mediasoup foundation in their CLAUDE.md
+"Blocked users"). Block is bidirectional hiding; the live-room/chat boundary is
+the mediasoup joinRoom gate.
+
+- **`usersApi`** — `block(handle)` / `unblock(handle)` / `getBlocks()` + `BlockedUser`.
+- **`ProfileScreen`** — a subtle "Block @handle" action (signed-in, non-own). Alert
+  confirm → on success `router.navigate('/(app)/globe')` (the pair is then hidden,
+  so the profile 404s). Unblock is not offered here — it lives in Settings.
+- **`SettingsScreen`** — a "PRIVACY · BLOCKED ACCOUNTS" group listing who you've
+  blocked (`['blocks']` query) with an inline Unblock action; empty-state explains
+  the effect. Mirrors the web `/settings` Privacy section.
+
+Pure JS — no native module, no EAS rebuild.
