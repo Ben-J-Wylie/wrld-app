@@ -3880,3 +3880,13 @@ time") as "Xh Ym" by the minute. Two app surfaces; pure JS, **ships next EAS bui
   (deployed 2026-06-23); `hoursStreamed` kept there for back-compat.
 - On-device note: the profile row now centres three tiles where it centred two —
   glance at narrow-screen spacing with a wide value ("1h 26m") on the next build.
+
+**Me-tab passport tile (follow-up, same day).** The public-profile tile is
+practically unreachable for yourself (nothing links to your own `ProfileScreen`),
+and the Me tab is Pro-gated only via Analytics — so own "Live time" was effectively
+invisible to non-Pro users. Added **LIVE TIME as a 4th passport stat** in
+`MeProfileTab` (`MEMBER SINCE · FOLLOWERS · FOLLOWING · LIVE TIME`) — always shown,
+all tiers, no new navigation. It reads `profile?.broadcastSeconds` (the passport
+already fetches `useUserProfile(user.handle)`); local `formatLiveTime` floors to the
+minute ("0m" when none). `statsRow` is `space-between` with no fixed widths so the
+4th item distributes — check narrow-screen spacing on the next build.

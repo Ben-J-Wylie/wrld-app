@@ -61,6 +61,13 @@ function formatDuration(sec: number | null): string {
   return m > 0 ? `${m}m ${s}s` : `${s}s`
 }
 
+// Active broadcast time as "Xh Ym" (floored to the minute; "0m" when none yet).
+function formatLiveTime(sec: number): string {
+  const h = Math.floor(sec / 3600)
+  const m = Math.floor((sec % 3600) / 60)
+  return h > 0 ? `${h}h ${m}m` : `${m}m`
+}
+
 const TIER_LABEL: Record<User['tier'], string> = {
   free: 'FREE',
   plus: 'PLUS',
@@ -152,6 +159,12 @@ export function MeProfileTab() {
               FOLLOWING
             </Text>
             <Text variant="bodyEmphasized">{formatCount(profile?.followingCount ?? 0)}</Text>
+          </View>
+          <View style={styles.stat}>
+            <Text variant="monoLabel" color={theme.colors.text.subtle}>
+              LIVE TIME
+            </Text>
+            <Text variant="bodyEmphasized">{formatLiveTime(profile?.broadcastSeconds ?? 0)}</Text>
           </View>
         </View>
 
