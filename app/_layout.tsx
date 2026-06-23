@@ -85,26 +85,46 @@ function RootNavigator() {
 
   // Notification deep-link: queue until Clerk is loaded and Stack is rendered
   const pendingStreamRef = useRef<{ roomId: string; streamId: string; sources: string } | null>(null)
+  // Tip/gift notifications deep-link to the sender's profile.
+  const pendingProfileRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (!isLoaded) return
     const p = pendingStreamRef.current
-    if (!p) return
-    pendingStreamRef.current = null
-    router.push({
-      pathname: `/(app)/stream/${p.roomId}`,
-      params: { streamId: p.streamId, sources: p.sources },
-    })
+    if (p) {
+      pendingStreamRef.current = null
+      router.push({
+        pathname: `/(app)/stream/${p.roomId}`,
+        params: { streamId: p.streamId, sources: p.sources },
+      })
+    }
+    const handle = pendingProfileRef.current
+    if (handle) {
+      pendingProfileRef.current = null
+      router.push(`/(app)/profile/${handle}`)
+    }
   }, [isLoaded])
 
   useEffect(() => {
     function handleResponse(response: Notifications.NotificationResponse | null) {
       if (!response) return
       const data = response.notification.request.content.data as {
+        type?: string
+        senderHandle?: string
         streamId?: string
         mediasoupRoomId?: string
         sources?: string
         url?: string
+      }
+
+      // Tip/gift notifications deep-link to the sender's profile.
+      if ((data.type === 'tip' || data.type === 'gift') && data.senderHandle) {
+        if (everLoaded.current) {
+          router.push(`/(app)/profile/${data.senderHandle}`)
+        } else {
+          pendingProfileRef.current = data.senderHandle
+        }
+        return
       }
 
       let roomId: string | undefined
