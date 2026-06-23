@@ -1122,6 +1122,32 @@ whole-clip range and toggling *adds* rather than clears → overlapping private 
 **PB4 per-segment redesign** (explicit per-segment state, not blind range-keyed toggling)
 fixes this; the head/tail leak fix above is the clean, separate backend bug.
 
+---
+
+**✅ HEAD/TAIL LEAK FIXED + DEPLOYED (Aaron, 2026-06-23, `wrld-backend` `03ea566`).** The
+windowed `bufferPins` span is now bounded to the footage window for any session carrying a
+private directive, so the warm-up/hold-back slivers no longer leak — a fully-private clip
+yields empty intervals → no pin.
+
+Implementation note vs the sketch above: `mediaStartOffsetMs`/`mediaDurationSec` are **not
+columns** — they're read live from the on-disk HLS (PDT anchor + surviving-segment EXTINF
+sum), and they MUST be, because the reaper trims the head/tail of even ended sessions, so a
+persisted value would go stale. New exported helper `sessionFootageWindow(userId, sessionId,
+startedAtMs)` in `buffer.ts` returns `{ footStartMs, footEndMs }` from disk. `clips/discover`
+calls it **only for the (few) sessions that have a private DirectiveRange** — for a fully-public
+pin the disk read isn't worth it and the head/tail over-inclusion is harmless (no private range
+to leak past). Live sessions keep the live-edge end (`min(to, now)`); only the head tightens.
+Data-only sessions (no media → helper returns null) keep raw session bounds, which already
+match the wall-clock window the app marks. This is the exact media window the app marks, so the
+ranges line up. The `?at=` point feed has the same latent sliver but is the retiring fallback —
+left as-is.
+
+**→ on-device verify (Ben):** with `PB3_PER_RANGE` + `AVAILABILITY_FEED` on, mark a 1-min clip
+fully private → its pin should be **gone** (no head/tail seconds); a half-private clip shows the
+pin only over the public portion. (Couldn't repro from the box — needs a real private mark; the
+27 public prod pins are unaffected, raw-bounds path unchanged.) The snip/overlapping-range case
+is the PB4 per-segment work below (Ben's lane).
+
 ### PB4(a) — per-segment privacy data model = interval arithmetic (Ben, 2026-06-23)
 
 Started PB4. The **data-model core is done** — and it fixes the snip case at the *logic*
@@ -1138,9 +1164,9 @@ accumulated overlapping ranges.
   rehydrate coalesces the seed; the mend differ-guard merges via add/subtract. Snip/mend are
   display-only — they never touch the ranges, so all the snip cases fall out of set arithmetic.
 - **Effect:** marking the second half public when the whole clip is private now correctly
-  leaves the first half private (subtract). With **Aaron's head/tail footage-window fix**, the
-  per-segment behaviour is correct **with the current scab-in UI** — no redesign needed for
-  *correctness*.
+  leaves the first half private (subtract). Combined with **Aaron's head/tail footage-window
+  fix above**, per-segment behaviour is correct **with the current scab-in UI** — no redesign
+  needed for *correctness*.
 
 **Remaining for PB4 (now polish, not correctness):**
 - **PB4(a)-UI:** the per-segment control redesign — distinct-segment visual (see each
