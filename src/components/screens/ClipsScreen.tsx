@@ -308,6 +308,26 @@ export const ClipsScreen = () => {
   const [splitPoints, setSplitPoints] = useState<SplitPoint[]>([])
   // When the playhead is over a (same-lane-healable) snip, the scissor becomes a bandaid → un-snip.
   const [unsnip, setUnsnip] = useState<SplitPoint | null>(null)
+  // PB4(a) — the session's coalesced PRIVATE ranges (multi-axis settings land with Aaron's
+  // backend; today this is the visibility axis). Declared up here so the DISPLAY segmentation can
+  // derive blocks from privacy boundaries. Seeded from the server + edited below.
+  const [privRanges, setPrivRanges] = useState<PrivRange[]>([])
+  // Display segmentation = the user's snips UNION every privacy boundary, so a segment is always
+  // uniformly public OR private (the "auto-split blocks" UX — a private sub-range becomes its own
+  // block, which structurally kills the straddle + makes the toggle exact). Privacy boundaries are
+  // display-only: they're NOT added to `splitPoints` (the user's explicit, un-snippable set).
+  const privacyBoundaries = useMemo<SplitPoint[]>(
+    () =>
+      privRanges.flatMap((r) => [
+        { sessionId: r.sessionId, atMs: r.startMs },
+        { sessionId: r.sessionId, atMs: r.endMs },
+      ]),
+    [privRanges],
+  )
+  const effectiveSplits = useMemo(
+    () => [...splitPoints, ...privacyBoundaries],
+    [splitPoints, privacyBoundaries],
+  )
   // In-flight un-save of a saved PIECE: the piece's range is optimistically punched out of its
   // parent's claim (→ returns to buffer) while the parent is trimmed on the backend.
   const [pendingUnsave, setPendingUnsave] = useState<{ id: string; parentId: string; startMs: number; endMs: number }[]>([])
@@ -350,7 +370,7 @@ export const ClipsScreen = () => {
   const savedLaneAll = useMemo<LaneClip[]>(() => {
     const unsavedIds = new Set(pendingUnsave.map((h) => h.id))
     return [
-      ...applySplits(savedLaneReal, splitPoints, true).filter((p) => !unsavedIds.has(p.id)),
+      ...applySplits(savedLaneReal, effectiveSplits, true).filter((p) => !unsavedIds.has(p.id)),
       ...pendingNotReal.map((ps) => ({
         id: ps.tempId,
         startMs: ps.startMs,
@@ -362,7 +382,7 @@ export const ClipsScreen = () => {
         sourceSessionId: ps.sessionId,
       })),
     ]
-  }, [savedLaneReal, pendingNotReal, splitPoints, pendingUnsave])
+  }, [savedLaneReal, pendingNotReal, effectiveSplits, pendingUnsave])
 
   // Drafts (edited-but-unsaved manifests) — shown in the buffer lane as draft blocks; they
   // carve their range out of the raw session too (so a draft + its remainder tile the session).
@@ -440,7 +460,7 @@ export const ClipsScreen = () => {
     // While live, the real open session IS the single persistent liveClip — exclude it from the normal
     // carve so it isn't drawn twice (a zero-width-then-growing duplicate beside the live block).
     const carveSessions = realLiveSessionId ? sessions.filter((s) => s.id !== realLiveSessionId) : sessions
-    const base = [...applySplits(carveBuffer(carveSessions, claims), splitPoints), ...drafts]
+    const base = [...applySplits(carveBuffer(carveSessions, claims), effectiveSplits), ...drafts]
     // The live block is ONE [liveSince → now] piece, but a snip on it divides it like any other clip:
     // applySplits cuts at the live session's split points so the EARLIER (bounded) pieces become normal
     // draggable/saveable clips, while only the LAST piece reaches `now` (the still-growing frontier,
@@ -449,9 +469,9 @@ export const ClipsScreen = () => {
     // carveLiveBlock first removes any saved/pending ranges (so saving a live piece doesn't leave a
     // duplicate buffered copy beside the new saved block), then applySplits divides the remainder at
     // the snip points.
-    if (liveClip) base.push(...applySplits(carveLiveBlock(liveClip, claims), splitPoints))
+    if (liveClip) base.push(...applySplits(carveLiveBlock(liveClip, claims), effectiveSplits))
     return base
-  }, [sessions, claims, drafts, splitPoints, liveClip, realLiveSessionId])
+  }, [sessions, claims, drafts, effectiveSplits, liveClip, realLiveSessionId])
   // Window the timeline to the buffer window: drop anything fully older than the reaper boundary
   // (removes SAVED clips older than the window). Clips straddling the boundary stay full-extent —
   // the timeline draws an advancing reaper MASK over their reaped part (smooth, on the UI thread),
@@ -508,7 +528,7 @@ export const ClipsScreen = () => {
   // omitted complement). Interval arithmetic (privacyRanges.ts) — not the old free-form
   // exact-match list — so "mark one half of an already-private clip public" SUBTRACTS
   // correctly and snip/mend never accumulate overlapping ranges.
-  const [privRanges, setPrivRanges] = useState<PrivRange[]>([])
+  // (privRanges declared above, near splitPoints, so the display segmentation can use it.)
   // Rehydrate from the server on first load (Aaron folded `directives[]` into GET /buffer/me):
   // seed + coalesce once when sessions first arrive so marks survive a reload. Local state
   // owns afterward (a toggle PATCHes the recomputed set); seed-once avoids fighting an
