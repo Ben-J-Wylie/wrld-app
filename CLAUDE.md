@@ -4026,3 +4026,55 @@ armed-empty data tracks") + per-segment title/tags carried through promote. Comb
 go-live baseline emits (sensors + torch), **every armed source now records a first state**, so the
 clip editor's captured-only shelf shows all armed sources (incl. chat, location) without disabled
 placeholders.
+
+---
+
+## Updates — June 2026 (Segment settings shelf + universal timeline foundation)
+
+Per-segment manifest editing UX + the first real step toward one timeline implementation. All on
+`design` → `main`, pure JS (reanimated/RNGH/expo-video/expo-image already in the dev client) — **no
+EAS rebuild**. Needs an on-device pass (the shelf interactions + the reanimated scrub feel).
+
+### Segment settings shelf — `SegmentSettingsSheet`
+**Double-tap a clip block** on the Clips grid → the per-segment shelf (supersedes the scab-in
+eye/lock toggle AND the bracket-trim grid editor — its double-tap entry retires). Every control is a
+**multistate toggle**, fixed order top→bottom: **viewer/timeline/transport** (`SegmentPreview`) ·
+**Lane** (BUFFERED|SAVED — saves/un-saves; hidden once the reaper reaches the segment) · Visibility
+(PRIVATE|PUBLIC) · Identity (ANON|SHOWN) · Location (OFF|COUNTRY|CITY|EXACT) · captured sources
+(camera·audio·chat·compass·gyro·accel·speed·torch, OFF|ON) · **Tags**. Off/least reads left.
+Per-segment **title** (editable) + **tags** are first-class axes now (persist via the directives
+PATCH + carry through promote — Aaron). `loc` dropped from the per-source rows (the Location
+precision axis covers off). Scrollable (grows with content, capped 85% screen); dismiss via
+tap-outside · X · drag-down, animated.
+
+### `SegmentPreview` — the shelf's viewer + mini timeline + transport
+Square clip viewer (`expo-video`, `contentFit:contain` → letterbox/pillarbox) + title/date/time,
+then a thin clip timeline (clip skates under a static centre playhead, half-field head/tail) + a
+transport (`BufferTransport` with `showBufferEdges={false}` → snaps to the clip's own head/tail).
+Starts paused. Player teardown guarded (`aliveRef`/`safe()` — closing the sheet released the player
+→ FunctionCallException, fixed).
+
+### Universal timeline foundation (DESIGN.md decision log 2026-06-24)
+Locked the **core timeline principles** (static centre playhead · half-field head/tail · the
+film-cell white/outlined block · drag-scrub with release inertia · pinch-zoom) — universal; lane
+count / gaps / height / reaper edges vary on top. Two shared layers extracted so timelines can't
+drift:
+- **`FilmStrip`** (`features/clip/FilmStrip.tsx`) — the block visual (sprocket bands +
+  constant-size square poster cells), extracted from ClipBlock's internal FilmRow; **ClipBlock +
+  SegmentPreview both render it**. Fixes the shelf's "darker paper" drift (its film container was
+  `panelHi`; the page's is the lighter `bg.primary` — matched).
+- **`useTimelineScroll`** (`features/clip/useTimelineScroll.ts`, **scope A**) — the reanimated
+  scroll engine (progress+zoom, pan→scrub + clamped `withDecay` inertia, pinch pinned to centre,
+  throttled seek gated to scrubbing). SegmentPreview uses it (dropped its `Animated.decay` copy) →
+  the feel is the engine, not an approximation. The standard for new single-span timelines.
+- **Scope B (scoped, NOT done):** migrating `ClipsTimeline` onto the hook — its engine is fused
+  with the collapsed-gap axis / reaper gap-rush / live build / server clock; would need a mapping
+  param + frontier plugin and must not regress the `clips-timeline-clock-v1` milestone. High risk /
+  dedup-only reward → do on real drift or a third gap/reaper timeline (rule-of-three). Insight in
+  DESIGN.md §6.
+
+### Backend follow-up (Aaron, flagged in HANDOFF-pb4)
+Edited per-segment **title** must proliferate to the time-machine **pin card** — `GET
+/clips/discover` selects `Clip.title`/`Stream.title`, not the covering directive's title; it should
+`COALESCE` the directive title (same pattern as reversible location precision). The app already
+renders `pin.title`, so it's backend-only.

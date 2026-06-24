@@ -3869,6 +3869,64 @@ the handoff):
 
 ---
 
+#### Segment settings shelf (PB4 · per-range manifest editing)
+
+The per-segment editor that opens on **double-tap a clip block** (Clips grid). Supersedes the
+scab-in eye/lock toggle + the bracket-trim grid editor. Built 2026-06-24.
+
+##### `SegmentSettingsSheet`
+
+- **Tier:** feature (composes `SegmentPreview` + `SegmentedToggle` + `Input` + `Chip` + `BottomSheet`)
+- **Location:** `src/components/features/clip/SegmentSettingsSheet.tsx`
+- **What:** a scrollable `BottomSheet` of the segment's manifest as **all multistate toggles**, in a
+  fixed order: **`SegmentPreview` (viewer + timeline + transport)** · Lane (BUFFERED|SAVED, hidden
+  once reaping) · Visibility (PRIVATE|PUBLIC) · Identity (ANON|SHOWN) · Location
+  (OFF|COUNTRY|CITY|EXACT) · the captured sources (camera·audio·chat·compass·gyro·accel·speed·torch,
+  each OFF|ON) · Tags. Off/least → on/most reads left→right.
+- **Props:** `visible` · `onClose` · `rangeLabel`/`dateLabel` · `lane`/`onLaneChange`/`showLane`
+  (save↔un-save) · clip media (`manifestUrl`/`posterUrl`/`startMs`/`endMs`) · resolved `settings`
+  (visibility/precision/identity/sources/title/tags) · `availableSources` · `onChange` (partial patch)
+- **Dismiss:** tap-outside · X · drag-down (the BottomSheet `dragToDismiss`); animated close.
+  Memoised + keyed by segment id (high-churn parent).
+
+##### `SegmentPreview`
+
+- **Tier:** feature (composes `FilmStrip` + `BufferTransport` + `useTimelineScroll` + `expo-video`)
+- **Location:** `src/components/features/clip/SegmentPreview.tsx`
+- **What:** the shelf's top section — a **square clip viewer** (left, `expo-video`, `contentFit:
+  contain` → letterbox/pillarbox; poster/placeholder fallback) + the editable **title · date ·
+  time** (right), then a **thin clip timeline** (the clip skates under a static centre red playhead,
+  half-field head/tail pad — the universal timeline foundation), then a **transport**
+  (`BufferTransport` with `showBufferEdges={false}` → snaps to the clip's own head/tail, not the
+  buffer). Starts paused. Owns one player; scrub/inertia/pinch via `useTimelineScroll`.
+
+##### `FilmStrip`
+
+- **Tier:** feature (presentational; reanimated + `expo-image`)
+- **Location:** `src/components/features/clip/FilmStrip.tsx` *(extracted 2026-06-24 from ClipBlock)*
+- **What:** the canonical clip-block fill — sprocket bands + **constant-size square poster cells**
+  (a wider clip → more cells, never stretched). Absolute-fills its bounding container. `cellLeftSv`
+  (optional) phase-anchors to the global grid so cells skate (ClipsTimeline); omitted → static (the
+  shelf). **One renderer for every timeline** — `ClipBlock` + `SegmentPreview` both use it (can't
+  drift). Container (light `bg.primary` band + outline) is the caller's (`topSpan` / `clipBlock`).
+- **Props:** `widthPx?` · `posterUrl?` · `cellLeftSv?`
+
+##### `useTimelineScroll` (hook)
+
+- **Tier:** feature hook (reanimated + RNGH)
+- **Location:** `src/components/features/clip/useTimelineScroll.ts` *(scope A, 2026-06-24)*
+- **What:** the shared timeline **scroll engine** (linear single-span axis): `progress`(centre
+  time)+`zoom` shared values · pan→scrub with clamped `withDecay` release inertia · pinch→zoom
+  pinned to centre · half-field head/tail · UI-thread translate + throttled JS seek (gated to
+  scrubbing so playback never seeks itself). Returns `gesture` · `stripStyle`/`blockStyle` (animated)
+  · `zoomState`/`blockW` (JS, for cell width) · `setProgress` (playback/transport). The standard for
+  any new single-span timeline; ClipsTimeline keeps its bespoke gap/reaper engine (decision log §6
+  "Timeline core principles", scope B).
+- **Also:** `BufferTransport` gained `showBufferEdges?` (default true) — hides the 1st/7th
+  (head/tail-of-buffer) buttons for a single-clip preview.
+
+---
+
 #### Trust / Safety
 
 ##### `ContextStrip`
