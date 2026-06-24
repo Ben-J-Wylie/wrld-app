@@ -83,6 +83,8 @@ export function SegmentPreview({
   // The expo-video player is released when this unmounts (the sheet closes); any player call after
   // that throws FunctionCallException. Guard every access with this + try/catch.
   const aliveRef = useRef(true)
+  const decayListener = useRef<string | null>(null)
+  const seekThrottle = useRef(0)
   const safe = (fn: () => void) => {
     if (!aliveRef.current) return
     try {
@@ -94,6 +96,8 @@ export function SegmentPreview({
   useEffect(
     () => () => {
       aliveRef.current = false
+      tx.stopAnimation()
+      if (decayListener.current) tx.removeListener(decayListener.current)
     },
     [],
   )
@@ -161,12 +165,50 @@ export function SegmentPreview({
   const scrubStart = useRef(0)
   const wasPlaying = useRef(false)
   const zoomStart = useRef(1)
+  // Release inertia (matches the Clips page): decay tx after a flick, clamped to the head/tail, with
+  // throttled seeks as it glides; resume play (if it was) once it settles.
+  const stopDecay = () => {
+    tx.stopAnimation()
+    if (decayListener.current) {
+      tx.removeListener(decayListener.current)
+      decayListener.current = null
+    }
+  }
+  const startDecay = (velocityPxPerSec: number) => {
+    const w = clipW()
+    if (w <= 0) return
+    stopDecay()
+    decayListener.current = tx.addListener(({ value }) => {
+      let v = value
+      if (v > 0) {
+        v = 0
+        stopDecay()
+        tx.setValue(0)
+      } else if (v < -w) {
+        v = -w
+        stopDecay()
+        tx.setValue(-w)
+      }
+      progressRef.current = clamp01(-v / w)
+      const now = Date.now()
+      if (hasMedia && now - seekThrottle.current > 80) {
+        seekThrottle.current = now
+        safe(() => (player.currentTime = progressRef.current * durationSec))
+      }
+    })
+    Animated.decay(tx, { velocity: velocityPxPerSec / 1000, deceleration: 0.997, useNativeDriver: false }).start(() => {
+      stopDecay()
+      if (hasMedia) safe(() => (player.currentTime = progressRef.current * durationSec)) // settle on an exact frame
+      if (wasPlaying.current) togglePlay()
+    })
+  }
   const gesture = useMemo(() => {
     const pan = Gesture.Pan()
       .runOnJS(true)
       .activeOffsetX([-10, 10])
       .failOffsetY([-12, 12])
       .onBegin(() => {
+        stopDecay() // a new grab cancels any gliding inertia
         scrubStart.current = progressRef.current
         wasPlaying.current = playing
         if (playing) {
@@ -180,8 +222,8 @@ export function SegmentPreview({
         setProgress(scrubStart.current - e.translationX / w) // drag right → earlier
         if (hasMedia) safe(() => (player.currentTime = progressRef.current * durationSec))
       })
-      .onEnd(() => {
-        if (wasPlaying.current) togglePlay()
+      .onEnd((e) => {
+        startDecay(e.velocityX) // glide with inertia, then resume play on settle
       })
     const pinch = Gesture.Pinch()
       .runOnJS(true)
@@ -316,13 +358,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   strip: { position: 'absolute', top: 0, bottom: 0 },
+  // Matches the Clips-page ClipBlock container: white panel, hairline outline, rounded — the film
+  // cells sit on it (the gaps show this bg, so it must be panel, not accent).
   clipBlock: {
     position: 'absolute',
     top: 4,
     bottom: 4,
     borderRadius: theme.radius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border.strong,
     overflow: 'hidden',
-    backgroundColor: theme.colors.accent.surface,
+    backgroundColor: theme.colors.bg.panelHi,
   },
   playhead: {
     position: 'absolute',

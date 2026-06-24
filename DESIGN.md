@@ -4679,6 +4679,41 @@ above. The seam is not a separate motion category.
 Append-only. Most recent first. Each entry: date, decision, rationale,
 constraint it imposes downstream.
 
+### 2026-06-24 — Timeline core principles (universal look + feel)
+
+**Decision (locked, Ben).** Every timeline in the app — the Clips page, the segment-settings
+shelf's mini timeline, and any future one — shares ONE foundation. These are non-negotiable; a
+new timeline that diverges from them is a bug, not a variant:
+
+1. **Static centre playhead.** A single red playhead fixed at the horizontal centre; the content
+   skates *under* it. The playhead never moves; the timeline scrolls.
+2. **Half-field head/tail padding.** Empty space of half the field width on each end, so the
+   playhead can reach the very first and very last frame of the content.
+3. **The film-cell clip block.** A clip renders as a **white panel block, hairline-outlined,
+   rounded corners** (`bg.panelHi` + `border.strong` + `radius.md`), filled with the film strip:
+   sprocket bands top + bottom + a row of **constant-size square poster cells** (`FILM_CELL`
+   constant across zoom — a wider clip gets MORE cells, never stretched ones).
+4. **Drag-to-scrub with release inertia.** Horizontal drag scrubs; on release the content **glides
+   with decay**, clamped to the head/tail. Vertical drags pass through to any parent scroll.
+5. **Pinch-to-zoom.** Two-finger pinch scales the time axis (more cells, finer scrub); the playhead
+   stays pinned to centre through the zoom.
+
+**Allowed variations** (layer on top; never alter the five above): lane count (1 vs 2), time gaps
+(collapsed vs none), height (thin vs tall), reaper/now edges, labels on/off, save/un-save drags.
+
+**Enforcement / constraint downstream.** The **clip-block visual is one shared thing** — today
+`ClipBlock` (Clips page) and `SegmentPreview`'s strip render the *same* film cells + container
+style; they MUST stay matched. The honest next step (rule-of-three: a third timeline, or the next
+churn here) is to **extract a shared `FilmStrip` presentational primitive + a `useTimelineScroll`
+hook** (the reanimated scroll + `withDecay` + pinch + centre-playhead mapping that ClipsTimeline
+already implements) so the foundation is *literally one implementation*, not matched copies. Until
+then, any change to one timeline's foundation must be mirrored to the others in the same PR.
+
+**What this fixed (2026-06-24).** The segment shelf's mini timeline had drifted (red block bg, no
+outline, no release inertia) because it was hand-rolled. Brought to parity: matched the ClipBlock
+container (white + outline + rounded), reused the exact film-cell band, and added clamped release
+decay. Pinch was already present.
+
 ### 2026-06-23 — Unified settings shelf (one element for dashboard · stream · clip-editor)
 
 **Direction (not built yet; recorded for the post-PB4 pass).** Dashboard, stream, and the
