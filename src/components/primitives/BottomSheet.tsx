@@ -31,7 +31,6 @@ import {
 } from 'react-native'
 import type { ReactNode } from 'react'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Pressable } from './Pressable'
 import { theme } from '@/tokens/theme'
 
 type Variant = 'peek' | 'expanded' | 'full'
@@ -104,6 +103,13 @@ export function BottomSheet({
 
   const panResponder = useRef(
     PanResponder.create({
+      // Capture-phase: claim a downward drag even when a child (toggle/row) wants the touch.
+      // (>10px so a tap on a control isn't swallowed.) onMove alone wasn't firing on device.
+      onMoveShouldSetPanResponderCapture: (_, g) => {
+        const want = g.dy > 10 && g.dy > Math.abs(g.dx)
+        if (__DEV__ && want) console.log('[sheet] pan capture (dy=', Math.round(g.dy), ')')
+        return want
+      },
       onMoveShouldSetPanResponder: (_, g) => g.dy > 4,
       onPanResponderMove: (_, g) => {
         if (g.dy > 0) dragY.setValue(g.dy)
@@ -134,16 +140,14 @@ export function BottomSheet({
           <Animated.View
             style={[styles.scrim, { opacity: scrimOpacity }]}
             pointerEvents={visible ? 'auto' : 'none'}
-          >
-            <Pressable
-              variant="none"
-              style={StyleSheet.absoluteFill}
-              onPress={() => {
-                if (__DEV__) console.log('[sheet] scrim tapped → onClose()')
-                onClose()
-              }}
-            />
-          </Animated.View>
+            // Raw responder on the scrim itself — most fundamental touch path (a child Pressable
+            // wasn't receiving the tap in a high-churn screen). Tap-anywhere-outside → dismiss.
+            onStartShouldSetResponder={() => true}
+            onResponderRelease={() => {
+              if (__DEV__) console.log('[sheet] scrim responder release → onClose()')
+              onClose()
+            }}
+          />
         )}
         <Animated.View
           style={[
