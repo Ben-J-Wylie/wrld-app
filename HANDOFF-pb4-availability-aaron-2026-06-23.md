@@ -213,3 +213,30 @@ Until then they round-trip in-session only (lost on reload). Also worth carrying
 > onto the saved `Clip`/promoted manifest yet** — a saved clip doesn't keep per-segment
 > titles/tags through promote; flag it if that's needed (it's a `Clip`/`ClipRange`-side
 > change, separate from the buffer-session round-trip).
+
+---
+
+## Follow-up (Ben, 2026-06-24) — every armed source records a FIRST STATE at go-live
+
+**Decision (Ben):** an armed source must never read as "armed-but-empty / disabled" in the clip
+editor. Instead it should **capture at least an initial state at the start of the broadcast**, so
+it always has a real track and shows normally — empty chat thread, initial location pin, initial
+compass bearing, initial torch state, etc.
+
+**App side — DONE (Ben):** on go-live, the broadcaster now emits one baseline sample per armed
+**client-sourced** kind so a track always exists even with no movement/signal/interaction:
+- `useTelemetryCapture` — gyro/accel `0`, speed `unknown`, compass via `getHeadingAsync` (0
+  fallback so the compass track exists even indoors);
+- `StreamScreen` — torch's initial state (it's a control, not a continuous sensor).
+
+**Backend TODO (Aaron) — the SERVER-sourced kinds the app can't emit cleanly:**
+- **chat** — chat is recorded server-side (the mediasoup chat sink → `chat/<session>.jsonl`), so
+  the app can't seed it without sending a *visible phantom message*. When chat is armed, the
+  recorder should write an **initial empty-chat state** at session start so the chat track exists
+  (and the chat source shows) even with zero messages.
+- **location** — confirm the broadcaster's first `locationUpdate` at go-live is recorded as the
+  initial pin (so the location track always exists from the start).
+- Make sure `GET /buffer/me` lists a track for any armed kind that has only the baseline sample
+  (so the editor's captured-only shelf shows every armed source). This — plus the app baselines —
+  is how we deliver "show all armed sources" without a separate `armedSources` field or disabled
+  placeholders.
