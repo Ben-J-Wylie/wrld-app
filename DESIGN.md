@@ -4701,18 +4701,22 @@ new timeline that diverges from them is a bug, not a variant:
 **Allowed variations** (layer on top; never alter the five above): lane count (1 vs 2), time gaps
 (collapsed vs none), height (thin vs tall), reaper/now edges, labels on/off, save/un-save drags.
 
-**Enforcement / constraint downstream.** The **clip-block visual is one shared thing** — today
-`ClipBlock` (Clips page) and `SegmentPreview`'s strip render the *same* film cells + container
-style; they MUST stay matched. The honest next step (rule-of-three: a third timeline, or the next
-churn here) is to **extract a shared `FilmStrip` presentational primitive + a `useTimelineScroll`
-hook** (the reanimated scroll + `withDecay` + pinch + centre-playhead mapping that ClipsTimeline
-already implements) so the foundation is *literally one implementation*, not matched copies. Until
-then, any change to one timeline's foundation must be mirrored to the others in the same PR.
+**Enforcement / constraint downstream.** The **clip-block visual is now ONE implementation** —
+`features/clip/FilmStrip.tsx` (the sprocket bands + constant-size square poster cells), used by
+BOTH `ClipBlock` (Clips page, with the `cellLeftSv` grid-skate) and `SegmentPreview` (the shelf,
+static). They can no longer drift. The container around it (light-paper `bg.primary` band + hairline
+outline) is matched by hand in both (ClipBlock's `topSpan` / SegmentPreview's `clipBlock`) — keep
+them matched. The remaining shared-ness to extract on the **rule-of-three** is the **scroll
+engine** — a `useTimelineScroll` hook wrapping the reanimated scroll + `withDecay` + pinch +
+centre-playhead mapping ClipsTimeline already implements (SegmentPreview currently re-implements a
+lighter version with `Animated.decay`). Until then, any change to a timeline's foundation must be
+mirrored across timelines in the same PR.
 
 **What this fixed (2026-06-24).** The segment shelf's mini timeline had drifted (red block bg, no
-outline, no release inertia) because it was hand-rolled. Brought to parity: matched the ClipBlock
-container (white + outline + rounded), reused the exact film-cell band, and added clamped release
-decay. Pinch was already present.
+outline, panelHi cells reading darker than the page's `bg.primary` band, no release inertia)
+because it was hand-rolled. Brought to parity: **extracted `FilmStrip`** (now shared with the page
+— fixes the cell/colour drift by construction), matched the container to ClipBlock's `topSpan`
+(light `bg.primary` + outline + rounded), and added clamped release decay. Pinch was already present.
 
 ### 2026-06-23 — Unified settings shelf (one element for dashboard · stream · clip-editor)
 

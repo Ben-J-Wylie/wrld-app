@@ -21,20 +21,13 @@ import { Pressable } from '@/components/primitives/Pressable'
 import { Text } from '@/components/primitives/Text'
 import { Icon } from '@/components/primitives/Icon'
 import { BufferTransport } from './BufferTransport'
+import { FilmStrip } from './FilmStrip'
 import { theme } from '@/tokens/theme'
 
 const TIMELINE_H = 50
 const FRAME_SEC = 0.3 // frame-step size for the transport chevrons
 const MIN_ZOOM = 0.5 // clip spans half the field (whole clip visible)
 const MAX_ZOOM = 8 // clip spans 8× the field (fine scrub)
-// Film strip (matches ClipBlock): constant-size square frame cells + sprocket bands.
-const FILM_SPROCKET_H = 6
-const FILM_GAP = 4
-const FILM_CELL = 22
-const FILM_PITCH = FILM_CELL + FILM_GAP
-const FILM_SPK_W = 4
-const FILM_SPK_PITCH = FILM_PITCH / 2
-const MAX_CELLS = 120
 const clamp01 = (n: number) => (n < 0 ? 0 : n > 1 ? 1 : n)
 const clampZoom = (n: number) => (n < MIN_ZOOM ? MIN_ZOOM : n > MAX_ZOOM ? MAX_ZOOM : n)
 
@@ -283,7 +276,7 @@ export function SegmentPreview({
           {fieldW > 0 && (
             <Animated.View style={[styles.strip, { width: fieldW + blockW, transform: [{ translateX: tx }] }]}>
               <View style={[styles.clipBlock, { left: fieldW / 2, width: blockW }]}>
-                <FilmCells width={blockW} posterUrl={posterUrl} />
+                <FilmStrip widthPx={blockW} posterUrl={posterUrl} />
               </View>
             </Animated.View>
           )}
@@ -304,35 +297,6 @@ export function SegmentPreview({
         onNextClip={toTail}
         onToEnd={toTail}
       />
-    </View>
-  )
-}
-
-// The Clips-page film strip, static (the whole clip block translates as one unit): sprocket bands
-// top + bottom, a row of constant-size square frame cells. Cell count scales with the block width
-// (zoom), capped so a deep zoom can't render unbounded cells.
-function FilmCells({ width, posterUrl }: { width: number; posterUrl: string | null }) {
-  const cells = Math.min(Math.max(1, Math.ceil(width / FILM_PITCH)), MAX_CELLS)
-  const sprockets = cells * 2
-  return (
-    <View style={styles.filmRow} pointerEvents="none">
-      <View style={styles.sprocketBand}>
-        {Array.from({ length: sprockets }).map((_, i) => (
-          <View key={i} style={styles.sprocket} />
-        ))}
-      </View>
-      <View style={styles.cellBand}>
-        {Array.from({ length: cells }).map((_, i) => (
-          <View key={i} style={styles.filmCell}>
-            {posterUrl ? <Image source={{ uri: posterUrl }} style={styles.filmImg} contentFit="cover" transition={120} /> : null}
-          </View>
-        ))}
-      </View>
-      <View style={styles.sprocketBand}>
-        {Array.from({ length: sprockets }).map((_, i) => (
-          <View key={i} style={styles.sprocket} />
-        ))}
-      </View>
     </View>
   )
 }
@@ -358,8 +322,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   strip: { position: 'absolute', top: 0, bottom: 0 },
-  // Matches the Clips-page ClipBlock container: white panel, hairline outline, rounded — the film
-  // cells sit on it (the gaps show this bg, so it must be panel, not accent).
+  // Matches the Clips-page ClipBlock film container (`topSpan`): light paper, hairline outline,
+  // rounded — the film cells (panelHi) sit on it, the gaps show this bg (must be bg.primary, the
+  // lighter paper, NOT panelHi — that was the "darker" drift).
   clipBlock: {
     position: 'absolute',
     top: 4,
@@ -368,7 +333,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.border.strong,
     overflow: 'hidden',
-    backgroundColor: theme.colors.bg.panelHi,
+    backgroundColor: theme.colors.bg.primary,
   },
   playhead: {
     position: 'absolute',
@@ -379,33 +344,4 @@ const styles = StyleSheet.create({
     bottom: 0,
     backgroundColor: theme.colors.accent.default,
   },
-  filmRow: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    left: 0,
-    flexDirection: 'column',
-    justifyContent: 'space-between',
-    paddingVertical: 1,
-  },
-  sprocketBand: { height: FILM_SPROCKET_H, flexDirection: 'row', alignItems: 'center' },
-  sprocket: {
-    width: FILM_SPK_W,
-    height: 3,
-    borderRadius: 1.5,
-    marginRight: FILM_SPK_PITCH - FILM_SPK_W,
-    backgroundColor: theme.colors.border.strong,
-  },
-  cellBand: { flexDirection: 'row', alignItems: 'center' },
-  filmCell: {
-    width: FILM_CELL,
-    height: FILM_CELL,
-    marginRight: FILM_GAP,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: theme.colors.border.strong,
-    backgroundColor: theme.colors.bg.panelHi,
-    overflow: 'hidden',
-  },
-  filmImg: { width: '100%', height: '100%' },
 })
