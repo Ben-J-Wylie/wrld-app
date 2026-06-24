@@ -80,6 +80,23 @@ export function SegmentPreview({
   zoomRef.current = zoom
   const tx = useRef(new Animated.Value(0)).current // strip translateX = -progress * clipW
   const progressRef = useRef(0) // 0..1 over the clip
+  // The expo-video player is released when this unmounts (the sheet closes); any player call after
+  // that throws FunctionCallException. Guard every access with this + try/catch.
+  const aliveRef = useRef(true)
+  const safe = (fn: () => void) => {
+    if (!aliveRef.current) return
+    try {
+      fn()
+    } catch {
+      /* player released mid-teardown */
+    }
+  }
+  useEffect(
+    () => () => {
+      aliveRef.current = false
+    },
+    [],
+  )
 
   const clipW = () => fieldWRef.current * zoomRef.current
   const setProgress = (p: number) => {
@@ -90,7 +107,7 @@ export function SegmentPreview({
   const seekToProgress = (p: number) => {
     const c = clamp01(p)
     setProgress(c)
-    if (hasMedia) player.currentTime = c * durationSec
+    if (hasMedia) safe(() => (player.currentTime = c * durationSec))
   }
 
   // Advance the playhead from the video while playing (RAF; no per-frame React render). Pause at end.
@@ -98,13 +115,18 @@ export function SegmentPreview({
     if (!playing || !hasMedia) return
     let raf = 0
     const tick = () => {
-      const d = player.duration || durationSec
-      const p = clamp01(player.currentTime / d)
-      setProgress(p)
-      if (p >= 0.999) {
-        player.pause()
-        setPlaying(false)
-        return
+      if (!aliveRef.current) return
+      try {
+        const d = player.duration || durationSec
+        const p = clamp01(player.currentTime / d)
+        setProgress(p)
+        if (p >= 0.999) {
+          player.pause()
+          setPlaying(false)
+          return
+        }
+      } catch {
+        return // player released mid-frame
       }
       raf = requestAnimationFrame(tick)
     }
@@ -119,16 +141,14 @@ export function SegmentPreview({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fieldW, zoom])
 
-  useEffect(() => () => player.pause(), [player])
-
   const togglePlay = () => {
     if (!hasMedia) return
     if (playing) {
-      player.pause()
+      safe(() => player.pause())
       setPlaying(false)
     } else {
       if (progressRef.current >= 0.999) seekToProgress(0) // replay from head if parked at the tail
-      player.play()
+      safe(() => player.play())
       setPlaying(true)
     }
   }
@@ -150,7 +170,7 @@ export function SegmentPreview({
         scrubStart.current = progressRef.current
         wasPlaying.current = playing
         if (playing) {
-          player.pause()
+          safe(() => player.pause())
           setPlaying(false)
         }
       })
@@ -158,7 +178,7 @@ export function SegmentPreview({
         const w = clipW()
         if (w <= 0) return
         setProgress(scrubStart.current - e.translationX / w) // drag right → earlier
-        if (hasMedia) player.currentTime = progressRef.current * durationSec
+        if (hasMedia) safe(() => (player.currentTime = progressRef.current * durationSec))
       })
       .onEnd(() => {
         if (wasPlaying.current) togglePlay()
