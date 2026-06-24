@@ -18,7 +18,7 @@
 // Existing one-offs (AuthModal, TipSheet, NearbyStreamsDrawer) refactor
 // to content-only callers in 12.6.
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Animated,
   Dimensions,
@@ -72,27 +72,38 @@ export function BottomSheet({
   // Mounted is decoupled from `visible` so the EXIT animation plays BEFORE the Modal hides — a
   // Modal with visible=false vanishes instantly, so the internal animation would never show.
   const [mounted, setMounted] = useState(visible)
+  // Set when a drag-release starts the exit animation itself, so the visible→false effect doesn't
+  // RE-fire it (the re-fire after the React round-trip is the "brief pause" mid-fling).
+  const closingFromDrag = useRef(false)
 
   const sheetHeight = resolveHeight(variant, peekHeight, insets.top)
 
+  // Run the exit animation (from the current position) then unmount the Modal. Idempotent enough:
+  // the gesture starts it immediately on release; the effect skips it when the gesture already did.
+  const animateOut = useCallback(() => {
+    Animated.parallel([
+      Animated.timing(translateY, { toValue: SCREEN_H, ...theme.motion.patterns.overlay, useNativeDriver: true }),
+      Animated.timing(scrimOpacity, { toValue: 0, ...theme.motion.patterns.overlay, useNativeDriver: true }),
+    ]).start(({ finished }) => {
+      if (finished) setMounted(false)
+    })
+  }, [translateY, scrimOpacity])
+
   useEffect(() => {
     if (visible) {
+      closingFromDrag.current = false
       setMounted(true)
       translateY.setValue(SCREEN_H) // start offscreen → spring up
       Animated.parallel([
         Animated.spring(translateY, { toValue: 0, useNativeDriver: true, stiffness: 220, damping: 24 }),
         Animated.timing(scrimOpacity, { toValue: 1, ...theme.motion.patterns.overlay, useNativeDriver: true }),
       ]).start()
+    } else if (closingFromDrag.current) {
+      closingFromDrag.current = false // the drag already started the exit — don't restart (no pause)
     } else {
-      // Animate out FROM the current position (a drag continues smoothly), then unmount the Modal.
-      Animated.parallel([
-        Animated.timing(translateY, { toValue: SCREEN_H, ...theme.motion.patterns.overlay, useNativeDriver: true }),
-        Animated.timing(scrimOpacity, { toValue: 0, ...theme.motion.patterns.overlay, useNativeDriver: true }),
-      ]).start(({ finished }) => {
-        if (finished) setMounted(false)
-      })
+      animateOut()
     }
-  }, [visible, translateY, scrimOpacity])
+  }, [visible, translateY, scrimOpacity, animateOut])
 
   // Grabber drag (non-dragToDismiss sheets) — drives the same translateY.
   const panResponder = useRef(
@@ -102,8 +113,11 @@ export function BottomSheet({
         if (g.dy > 0) translateY.setValue(g.dy)
       },
       onPanResponderRelease: (_, g) => {
-        if (g.dy > 80 || g.vy > 0.5) onClose()
-        else Animated.spring(translateY, { toValue: 0, useNativeDriver: true }).start()
+        if (g.dy > 80 || g.vy > 0.5) {
+          closingFromDrag.current = true
+          animateOut() // start immediately (continue the motion) — no React round-trip pause
+          onClose()
+        } else Animated.spring(translateY, { toValue: 0, useNativeDriver: true }).start()
       },
     }),
   ).current
@@ -123,10 +137,13 @@ export function BottomSheet({
           if (e.translationY > 0) translateY.setValue(e.translationY)
         })
         .onEnd((e) => {
-          if (e.translationY > 80 || e.velocityY > 600) onClose()
-          else Animated.spring(translateY, { toValue: 0, useNativeDriver: true }).start()
+          if (e.translationY > 80 || e.velocityY > 600) {
+            closingFromDrag.current = true
+            animateOut() // start immediately (continue the fling) — no React round-trip pause
+            onClose()
+          } else Animated.spring(translateY, { toValue: 0, useNativeDriver: true }).start()
         }),
-    [onClose, translateY],
+    [onClose, translateY, animateOut],
   )
 
   const sheet = (
