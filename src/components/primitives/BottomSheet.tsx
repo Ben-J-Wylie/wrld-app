@@ -24,6 +24,7 @@ import {
   Dimensions,
   Modal,
   PanResponder,
+  ScrollView,
   StyleSheet,
   View,
   type StyleProp,
@@ -47,8 +48,12 @@ type Props = {
   showGrabber?: boolean
   showScrim?: boolean
   // When set, a downward drag ANYWHERE on the sheet dismisses (not just the grabber). Use for
-  // sheets with no internal vertical scroll (e.g. a settings shelf), so the body is draggable too.
+  // SHORT sheets with no internal vertical scroll, so the body is draggable too. With `scrollable`
+  // the drag is restricted to the grabber handle (so the body can scroll).
   dragToDismiss?: boolean
+  // When set, the body scrolls (for content taller than the sheet). The drag-to-dismiss handle is
+  // then the grabber only (whole-sheet drag would fight the scroll).
+  scrollable?: boolean
   children: ReactNode
   contentStyle?: StyleProp<ViewStyle>
 }
@@ -61,6 +66,7 @@ export function BottomSheet({
   showGrabber = true,
   showScrim = true,
   dragToDismiss = false,
+  scrollable = false,
   children,
   contentStyle,
 }: Props) {
@@ -146,16 +152,34 @@ export function BottomSheet({
     [onClose, translateY, animateOut],
   )
 
+  // The grabber handle. On a scrollable + dragToDismiss sheet IT is the drag target (a whole-sheet
+  // drag would fight the body scroll); on a short dragToDismiss sheet the whole sheet drags.
+  const grabber = showGrabber ? (
+    <View
+      {...(!dragToDismiss && !scrollable ? panResponder.panHandlers : {})}
+      style={styles.grabberHit}
+    >
+      <View style={styles.grabber} />
+    </View>
+  ) : null
+  const handle = dragToDismiss && scrollable && grabber ? <GestureDetector gesture={dragGesture}>{grabber}</GestureDetector> : grabber
+
   const sheet = (
     <Animated.View
       style={[styles.sheet, { height: sheetHeight, transform: [{ translateY }] }, contentStyle]}
     >
-      {showGrabber && (
-        <View {...(dragToDismiss ? {} : panResponder.panHandlers)} style={styles.grabberHit}>
-          <View style={styles.grabber} />
-        </View>
+      {handle}
+      {scrollable ? (
+        <ScrollView
+          style={styles.body}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + theme.spacing.md }]}
+          showsVerticalScrollIndicator
+        >
+          {children}
+        </ScrollView>
+      ) : (
+        <View style={styles.body}>{children}</View>
       )}
-      <View style={styles.body}>{children}</View>
     </Animated.View>
   )
 
@@ -172,7 +196,8 @@ export function BottomSheet({
             onResponderRelease={onClose}
           />
         )}
-        {dragToDismiss ? <GestureDetector gesture={dragGesture}>{sheet}</GestureDetector> : sheet}
+        {/* Whole-sheet drag only for short (non-scrollable) sheets — else the grabber handles it. */}
+        {dragToDismiss && !scrollable ? <GestureDetector gesture={dragGesture}>{sheet}</GestureDetector> : sheet}
       </GestureHandlerRootView>
     </Modal>
   )
@@ -219,4 +244,5 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.border.strong,
   },
   body: { flex: 1 },
+  scrollContent: { flexGrow: 1 },
 })

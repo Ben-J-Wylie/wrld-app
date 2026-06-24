@@ -9,7 +9,7 @@
 // PATCH, and which sources the segment captured. `availableSources` = the segment's captured kinds.
 
 import { memo } from 'react'
-import { StyleSheet, View } from 'react-native'
+import { Dimensions, StyleSheet, View } from 'react-native'
 import { BottomSheet } from '@/components/primitives/BottomSheet'
 import { Pressable } from '@/components/primitives/Pressable'
 import { SegmentedToggle } from '@/components/primitives/SegmentedToggle'
@@ -64,8 +64,12 @@ export const SegmentSettingsSheet = memo(function SegmentSettingsSheet({
   availableSources,
   onChange,
 }: Props) {
+  // Grow with content (title + 3 axis rows + a sources header + one row per source), capped at
+  // ~85% of the screen — the BottomSheet scrolls past the cap (e.g. all sources armed).
+  const rowCount = 3 + (availableSources.length ? 1 + availableSources.length : 0)
+  const height = Math.min(160 + rowCount * 58, Math.round(Dimensions.get('window').height * 0.85))
   return (
-    <BottomSheet visible={visible} onClose={onClose} variant="peek" peekHeight={460} dragToDismiss>
+    <BottomSheet visible={visible} onClose={onClose} variant="peek" peekHeight={height} dragToDismiss scrollable>
       <View style={styles.body}>
         <View style={styles.header}>
           <Text variant="bodyEmphasized" style={styles.title}>
