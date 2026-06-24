@@ -11,6 +11,31 @@ visibility/precision/attributed; `directives[]` already fold into `GET /buffer/m
 
 ---
 
+> **✅ LANE A BACKEND DONE + DEPLOYED (Aaron, 2026-06-24, `wrld-backend` `a1c48bc` + `5423527`).**
+> A1–A4 are live on prod. Exact shapes Ben builds against:
+> - **A1 snips:** `PATCH /buffer/me/sessions/:id/snips { snips: [{ atMs }] }` (authoritative
+>   replace; mend = send the reduced list / `[]`). `snips: [{ atMs }]` is returned on every
+>   `GET /buffer/me` session **and** each `GET /buffer/me/clips` saved clip; saved-lane snips
+>   also persist via `PATCH /buffer/me/clips/:id { snips }`. Storage is the existing
+>   `splitPoints` slot — `splitPoints` + `/splits` stay as **back-compat aliases**; switch the
+>   app to `snips`/`/snips` and we retire the aliases after your build ships.
+> - **A2 multi-axis:** `PATCH /buffer/me/sessions/:id/directives` (still PB3_PER_RANGE-gated,
+>   authoritative replace) now accepts a per-range **`sources?: { [kind]: boolean } | null`**
+>   alongside `visibility`/`precision`/`attributed` (null/absent = inherit/enabled). `GET
+>   /buffer/me` `directives[]` now carries `sources`. (Saved clips keep using per-track
+>   `enabled` + `removedRanges` — already built — so A2's new axis is the BUFFER-session twin.)
+> - **A3:** the reaper deletes a session's standalone directives + snips when its footage
+>   evicts — no orphaned manifest metadata. Saved (retained) content keeps its manifest.
+> - **A4 (first cut):** `GET /buffer/session/:id` returns **`sourceWindows: [{ startAtMs,
+>   endAtMs, sources }]`** (only ranges with a `sources` map) so the time-machine viewer
+>   filters its rail per segment. Private windows are already excluded from the served HLS;
+>   **full server-side manifest exclusion of source-off windows is the deferred fuller A4 cut**
+>   — flag it if app-side rail filtering isn't enough.
+>
+> Remaining for Lane A is the **app side** (Ben): derived segmentation from `session.snips` ∪
+> directive boundaries, the multi-axis per-segment settings panel + mend, and honouring
+> `sourceWindows` in the viewer rail.
+
 ## LANE A — PB4 manifest (persist snips + multi-axis directives)
 
 **Model:** the manifest is a piecewise-constant function over the wall clock. **Snips** =
