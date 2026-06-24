@@ -209,10 +209,21 @@ Until then they round-trip in-session only (lost on reload). Also worth carrying
 > `title String?` + `tags String[] @default([])` (migration `20260624010000`, additive). The
 > directives PATCH body accepts `title?`/`tags?` and persists them; `GET /buffer/me`
 > `directives[]` now echoes `title` + `tags`, so they survive reload (no longer in-session
-> only). Display metadata — no reaper/serve/availability impact (no B3 push). **NOT carried
-> onto the saved `Clip`/promoted manifest yet** — a saved clip doesn't keep per-segment
-> titles/tags through promote; flag it if that's needed (it's a `Clip`/`ClipRange`-side
-> change, separate from the buffer-session round-trip).
+> only). Display metadata — no reaper/serve/availability impact (no B3 push).
+>
+> **✅ CARRY-THROUGH-PROMOTE DONE + DEPLOYED (Aaron, 2026-06-24, `wrld-backend` `51e52c9`).**
+> Per-segment settings are now first-class through save, like the other axes. Promote builds
+> the saved clip's OWN per-segment directives FROM the buffer's clipId=null directives
+> (`splitRangeByDirectives` splits each retain range at the segment boundaries, carrying
+> visibility/precision/identity **+ title/tags** per segment; gaps → clip defaults; full
+> retention coverage preserved). Both promote paths (window-save + draft→save) + the
+> re-materialise (edit-saved-clip) path (preserves from the clip's own rows across the
+> footage edit). They live on the clip's `clipId`-set rows so they **survive the A3
+> cascade-clean** of the buffer's clipId=null directives. **`GET /buffer/me/clips` now
+> returns each saved clip's per-segment `directives[]`** (`{startAtMs,endAtMs,visibility,
+> precision,attributed,title,tags}`) so the editor reloads them on a saved clip. Gated on
+> `PB3_PER_RANGE` (as the rest of the directive write-path). On-device verify owed: save a
+> clip with per-segment titles/tags → reload → they persist on the saved clip.
 
 ---
 
@@ -240,3 +251,20 @@ compass bearing, initial torch state, etc.
   (so the editor's captured-only shelf shows every armed source). This — plus the app baselines —
   is how we deliver "show all armed sources" without a separate `armedSources` field or disabled
   placeholders.
+
+> **✅ DONE + DEPLOYED (Aaron, 2026-06-24, `wrld-mediasoup` `49b432a`).** Mediasoup-only — no
+> backend change needed.
+> - **chat** — `startRecording` writes an initial `{ts, init:true}` marker to the chat track at
+>   session start, so it exists + renders an empty thread even with zero messages (the marker has
+>   no handle/text → the chat-log renderer skips it). Make sure the app's chat parser treats an
+>   `init:true` line as "no message" (it already skips lines without handle/text).
+> - **location** — confirmed: the track DIR is created at `startRecording`, the broadcaster's
+>   `locationUpdate`s append from go-live, and a data-only go-live now starts recording on
+>   `createRoom` (SP6a) so an early fix isn't dropped.
+> - **`GET /buffer/me` lists armed-but-quiet tracks** — `finalizeRecording` now reports every
+>   armed data track on a buffer session even when 0 bytes (legacy recordings still drop empties),
+>   so ended sessions list them; active sessions already list them (track dir created at start).
+>   So a kind with only a baseline (or none) still shows as a captured source.
+>
+> **On-device verify owed:** arm chat with zero messages + a sensor that doesn't move → both show
+> as captured sources in the editor (chat = empty thread), live and after reload.
