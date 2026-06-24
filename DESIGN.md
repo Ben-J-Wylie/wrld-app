@@ -3915,11 +3915,16 @@ scab-in eye/lock toggle + the bracket-trim grid editor. Built 2026-06-24.
 
 - **Tier:** feature hook (reanimated + RNGH)
 - **Location:** `src/components/features/clip/useTimelineScroll.ts` *(scope A, 2026-06-24)*
-- **What:** the shared timeline **scroll engine** (linear single-span axis): `progress`(centre
-  time)+`zoom` shared values · pan→scrub with clamped `withDecay` release inertia · pinch→zoom
-  pinned to centre · half-field head/tail · UI-thread translate + throttled JS seek (gated to
-  scrubbing so playback never seeks itself). Returns `gesture` · `stripStyle`/`blockStyle` (animated)
-  · `zoomState`/`blockW` (JS, for cell width) · `setProgress` (playback/transport). The standard for
+- **What:** the shared timeline **scroll engine** (linear single-span axis). Animates the PIXEL
+  translate `tx` (in [-contentW, 0]) — NOT a normalised 0..1 — so `withDecay`'s deceleration physics
+  match the Clips page (decaying a 0..1 value covers a tiny range → abrupt stop; pixels glide).
+  `zoom` scales contentW. Pan→scrub with clamped `withDecay` inertia · pinch→zoom pinned to centre ·
+  half-field head/tail · UI-thread translate + throttled JS seek (gated to scrubbing so playback
+  never seeks itself). **Playback is playhead-driven:** `startPlayback()` glides `tx` to the tail
+  over the remaining real time (`withTiming` linear, UI thread) — the video follows; no per-frame
+  `video.currentTime` polling (that polling was the continue-playing jitter). Returns `gesture` ·
+  `stripStyle`/`blockStyle` (animated) · `zoomState`/`blockW` (JS, cell width) · `setProgress` /
+  `getProgress` · `startPlayback`/`stopPlayback` · scrub/settle/play-end callbacks. The standard for
   any new single-span timeline; ClipsTimeline keeps its bespoke gap/reaper engine (decision log §6
   "Timeline core principles", scope B).
 - **Also:** `BufferTransport` gained `showBufferEdges?` (default true) — hides the 1st/7th

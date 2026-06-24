@@ -1,19 +1,20 @@
 // src/components/features/clip/useTimelineScroll.ts
 //
-// The universal timeline SCROLL ENGINE (DESIGN.md "Timeline core principles"). Reanimated, UI-thread:
-// a `progress` (0..1 = centre TIME over the content) + `zoom` (multiplier; 1 = content spans the
-// field). Pan scrubs → progress, with clamped `withDecay` release inertia; pinch → zoom, pinned to
-// the centre; vertical passes through to a parent scroll. Half-field head/tail padding so the centre
-// playhead reaches the very first/last frame.
+// The universal timeline SCROLL ENGINE (DESIGN.md "Timeline core principles"). Reanimated, UI-thread.
 //
-// LINEAR axis (a single content span). The Clips-page ClipsTimeline keeps its own bespoke engine
-// for the collapsed-gap / reaper / live-build axis — see DESIGN.md decision log (Timeline core
-// principles → scope B). This hook is the shared engine for the simple case (the segment shelf +
-// any future single-span timeline) and is modelled on ClipsTimeline's mechanics so the FEEL matches.
+// Animates the PIXEL translate `tx` (in [-contentW, 0]; 0 = head, -contentW = tail) — NOT a
+// normalised 0..1 — so `withDecay`'s deceleration physics match the Clips page exactly (decaying a
+// 0..1 value covers a tiny range → abrupt stop; pixels glide). `zoom` scales the content width.
 //
-// Seek is decoupled: the translate animates on the UI thread; the video seek is a THROTTLED JS
-// callback (`onScrub`) fired only while scrubbing/decaying (never during programmatic playback via
-// `setProgress`), so playback doesn't seek itself.
+// Pan → scrub with clamped `withDecay` release inertia; pinch → zoom pinned to centre; vertical
+// passes through to a parent scroll. Half-field head/tail padding so the centre playhead reaches the
+// first/last frame. PLAYBACK is playhead-driven: `startPlayback()` glides `tx` to the tail over the
+// remaining real time on the UI thread (`withTiming` linear) — the video follows; no per-frame JS
+// polling of `video.currentTime` (that was the jitter). Seek is a THROTTLED JS callback fired only
+// while scrubbing/decaying (never during playback, so playback doesn't seek itself).
+//
+// LINEAR axis (single content span). ClipsTimeline keeps its bespoke collapsed-gap/reaper engine —
+// see DESIGN.md decision log (Timeline core principles → scope B).
 
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { Gesture } from 'react-native-gesture-handler'
@@ -22,9 +23,11 @@ import {
   useAnimatedStyle,
   useAnimatedReaction,
   withDecay,
+  withTiming,
   cancelAnimation,
   runOnJS,
   clamp,
+  Easing,
 } from 'react-native-reanimated'
 
 const SEEK_THROTTLE_MS = 80
@@ -38,36 +41,50 @@ type Opts = {
   onScrubStart?: () => void // a grab begins (caller pauses playback)
   onScrub?: (ms: number) => void // throttled, as the centre time changes (drag + decay) → seek
   onSettle?: (ms: number) => void // after a flick's decay settles → final seek + resume play
+  onPlayEnd?: () => void // the playback glide reached the tail
 }
 
-export function useTimelineScroll({ fieldW, contentMs, minZoom = 0.5, maxZoom = 8, onScrubStart, onScrub, onSettle }: Opts) {
-  const progress = useSharedValue(0) // 0..1 centre time over the content
+export function useTimelineScroll({
+  fieldW,
+  contentMs,
+  minZoom = 0.5,
+  maxZoom = 8,
+  onScrubStart,
+  onScrub,
+  onSettle,
+  onPlayEnd,
+}: Opts) {
+  const tx = useSharedValue(0) // px translateX, [-contentW, 0]
   const zoom = useSharedValue(1)
   const scrubbing = useSharedValue(false) // true during a drag + its decay → enables JS seeks
-  const progStart = useSharedValue(0)
+  const txStart = useSharedValue(0)
   const zoomStart = useSharedValue(1)
   const [zoomState, setZoomState] = useState(1) // JS mirror (drives the content/cell width)
 
   // Stable callbacks for runOnJS (so the gesture isn't rebuilt every render).
-  const cbRef = useRef({ onScrubStart, onScrub, onSettle, contentMs })
-  cbRef.current = { onScrubStart, onScrub, onSettle, contentMs }
+  const cbRef = useRef({ onScrubStart, onScrub, onSettle, onPlayEnd })
+  cbRef.current = { onScrubStart, onScrub, onSettle, onPlayEnd }
   const seekThrottleRef = useRef(0)
   const emitStart = useCallback(() => cbRef.current.onScrubStart?.(), [])
-  const emitScrub = useCallback((p: number) => {
+  const emitScrub = useCallback((ms: number) => {
     const now = Date.now()
     if (now - seekThrottleRef.current < SEEK_THROTTLE_MS) return
     seekThrottleRef.current = now
-    cbRef.current.onScrub?.(clampJS(p, 0, 1) * cbRef.current.contentMs)
+    cbRef.current.onScrub?.(ms)
   }, [])
-  const emitSettle = useCallback((p: number) => cbRef.current.onSettle?.(clampJS(p, 0, 1) * cbRef.current.contentMs), [])
+  const emitSettle = useCallback((ms: number) => cbRef.current.onSettle?.(ms), [])
+  const emitPlayEnd = useCallback(() => cbRef.current.onPlayEnd?.(), [])
   const mirrorZoom = useCallback((z: number) => setZoomState(z), [])
 
-  // Seek during a scrub/decay (throttled). Gated to `scrubbing` so programmatic playback (setProgress)
-  // never seeks the video to where it already is.
+  // Seek during a scrub/decay (throttled). Gated to `scrubbing` so the playback glide never seeks.
   useAnimatedReaction(
-    () => (scrubbing.value ? progress.value : -1),
+    () => (scrubbing.value ? tx.value : 1),
     (cur, prev) => {
-      if (cur >= 0 && cur !== prev) runOnJS(emitScrub)(cur)
+      if (scrubbing.value && cur !== prev) {
+        const cw = fieldW * zoom.value
+        const ms = cw > 0 ? clamp(-cur / cw, 0, 1) * contentMs : 0
+        runOnJS(emitScrub)(ms)
+      }
     },
   )
 
@@ -77,25 +94,26 @@ export function useTimelineScroll({ fieldW, contentMs, minZoom = 0.5, maxZoom = 
       .failOffsetY([-12, 12])
       .onBegin(() => {
         'worklet'
-        cancelAnimation(progress)
-        progStart.value = progress.value
+        cancelAnimation(tx)
+        txStart.value = tx.value
         scrubbing.value = true
         runOnJS(emitStart)()
       })
       .onUpdate((e) => {
         'worklet'
-        const w = fieldW * zoom.value
-        if (w <= 0) return
-        progress.value = clamp(progStart.value - e.translationX / w, 0, 1) // drag right → earlier
+        const cw = fieldW * zoom.value
+        tx.value = clamp(txStart.value + e.translationX, -cw, 0) // drag right → tx↑ → earlier
       })
       .onEnd((e) => {
         'worklet'
-        const w = fieldW * zoom.value
-        const vel = w > 0 ? -e.velocityX / w : 0 // progress units / s
-        progress.value = withDecay({ velocity: vel, clamp: [0, 1], deceleration: 0.998 }, (finished) => {
+        const cw = fieldW * zoom.value
+        tx.value = withDecay({ velocity: e.velocityX, clamp: [-cw, 0], deceleration: 0.998 }, (finished) => {
           'worklet'
           scrubbing.value = false
-          if (finished) runOnJS(emitSettle)(progress.value)
+          if (finished) {
+            const ms = cw > 0 ? clamp(-tx.value / cw, 0, 1) * contentMs : 0
+            runOnJS(emitSettle)(ms)
+          }
         })
       })
     const pinch = Gesture.Pinch()
@@ -105,33 +123,58 @@ export function useTimelineScroll({ fieldW, contentMs, minZoom = 0.5, maxZoom = 
       })
       .onUpdate((e) => {
         'worklet'
+        const oldCw = fieldW * zoom.value
+        const prog = oldCw > 0 ? -tx.value / oldCw : 0 // keep the centre time fixed across the zoom
         zoom.value = clamp(zoomStart.value * e.scale, minZoom, maxZoom)
-        runOnJS(mirrorZoom)(zoom.value) // JS mirror → cells re-tile (throttled by React batching)
+        tx.value = -prog * (fieldW * zoom.value)
+        runOnJS(mirrorZoom)(zoom.value)
       })
       .onEnd(() => {
         'worklet'
         runOnJS(mirrorZoom)(zoom.value)
       })
     return Gesture.Simultaneous(pan, pinch)
-  }, [fieldW, minZoom, maxZoom, emitStart, emitScrub, emitSettle, mirrorZoom, progress, zoom, scrubbing, progStart, zoomStart])
+  }, [fieldW, contentMs, minZoom, maxZoom, emitStart, emitScrub, emitSettle, mirrorZoom, tx, zoom, scrubbing, txStart, zoomStart])
 
   // The strip translates the content under the centre; head/tail = half-field padding each side.
   const stripStyle = useAnimatedStyle(() => ({
     width: fieldW + fieldW * zoom.value,
-    transform: [{ translateX: -progress.value * fieldW * zoom.value }],
+    transform: [{ translateX: tx.value }],
   }))
   // The clip block sits at headPad (fieldW/2), width = content width (animates with zoom).
   const blockStyle = useAnimatedStyle(() => ({ left: fieldW / 2, width: fieldW * zoom.value }))
 
-  // Imperative centre (playback follow + transport jumps). Writes the shared value; emits NO seek.
+  // Imperative centre (transport jumps / replay-from-head). Writes the value; emits NO seek.
   const setProgress = useCallback(
     (p: number) => {
-      cancelAnimation(progress)
+      cancelAnimation(tx)
       scrubbing.value = false
-      progress.value = clampJS(p, 0, 1)
+      tx.value = -clampJS(p, 0, 1) * (fieldW * zoom.value)
     },
-    [progress, scrubbing],
+    [fieldW, tx, zoom, scrubbing],
   )
+  const getProgress = useCallback(() => {
+    const cw = fieldW * zoom.value
+    return cw > 0 ? clampJS(-tx.value / cw, 0, 1) : 0
+  }, [fieldW, tx, zoom])
+  // Playhead-driven playback: glide tx → tail over the remaining real time (UI thread, linear). The
+  // caller plays the video alongside (they start synced from the last seek, both 1×). Smooth — no
+  // per-frame JS / no video.currentTime polling.
+  const startPlayback = useCallback(() => {
+    const cw = fieldW * zoom.value
+    if (cw <= 0) return
+    scrubbing.value = false
+    const prog = clampJS(-tx.value / cw, 0, 1)
+    const remainingMs = contentMs * (1 - prog)
+    if (remainingMs <= 0) return
+    tx.value = withTiming(-cw, { duration: remainingMs, easing: Easing.linear }, (finished) => {
+      'worklet'
+      if (finished) runOnJS(emitPlayEnd)()
+    })
+  }, [fieldW, contentMs, emitPlayEnd, tx, zoom, scrubbing])
+  const stopPlayback = useCallback(() => {
+    cancelAnimation(tx)
+  }, [tx])
 
-  return { gesture, stripStyle, blockStyle, zoomState, blockW: fieldW * zoomState, setProgress }
+  return { gesture, stripStyle, blockStyle, zoomState, blockW: fieldW * zoomState, setProgress, getProgress, startPlayback, stopPlayback }
 }

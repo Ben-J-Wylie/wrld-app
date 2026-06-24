@@ -66,7 +66,6 @@ export function SegmentPreview({
 
   const [playing, setPlaying] = useState(false)
   const [fieldW, setFieldW] = useState(0)
-  const progressRef = useRef(0) // JS mirror of the centre (0..1) for the transport + end check
   const wasPlaying = useRef(false)
   // The expo-video player is released when this unmounts (the sheet closes); any player call after
   // that throws FunctionCallException. Guard every access with this + try/catch.
@@ -94,70 +93,49 @@ export function SegmentPreview({
         setPlaying(false)
       }
     },
+    // Seek the video as the playhead scrubs/glides (engine drives the playhead; video follows).
     onScrub: (ms) => {
-      progressRef.current = clamp01(ms / durationMs)
       if (hasMedia) safe(() => (player.currentTime = ms / 1000))
     },
+    // After a flick settles, land the video on the frame + resume the smooth playback glide.
     onSettle: (ms) => {
-      progressRef.current = clamp01(ms / durationMs)
-      if (hasMedia) {
-        safe(() => (player.currentTime = ms / 1000))
-        if (wasPlaying.current) {
-          safe(() => player.play())
-          setPlaying(true)
-        }
+      if (!hasMedia) return
+      safe(() => (player.currentTime = ms / 1000))
+      if (wasPlaying.current) {
+        safe(() => player.play())
+        ts.startPlayback()
+        setPlaying(true)
       }
     },
+    onPlayEnd: () => {
+      safe(() => player.pause())
+      setPlaying(false)
+    },
   })
-
-  // Advance the playhead from the video while playing (RAF; feeds the engine, no seek). Pause at end.
-  useEffect(() => {
-    if (!playing || !hasMedia) return
-    let raf = 0
-    const tick = () => {
-      if (!aliveRef.current) return
-      try {
-        const d = player.duration || durationSec
-        const p = clamp01(player.currentTime / d)
-        progressRef.current = p
-        ts.setProgress(p)
-        if (p >= 0.999) {
-          player.pause()
-          setPlaying(false)
-          return
-        }
-      } catch {
-        return // player released mid-frame
-      }
-      raf = requestAnimationFrame(tick)
-    }
-    raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playing, hasMedia])
 
   // Jump the centre (transport / replay-from-head) — moves the engine + seeks the video.
   const goTo = (p: number) => {
     const c = clamp01(p)
-    progressRef.current = c
     ts.setProgress(c)
     if (hasMedia) safe(() => (player.currentTime = c * durationSec))
   }
   const togglePlay = () => {
     if (!hasMedia) return
     if (playing) {
+      ts.stopPlayback()
       safe(() => player.pause())
       setPlaying(false)
     } else {
-      if (progressRef.current >= 0.999) goTo(0) // replay from head if parked at the tail
+      if (ts.getProgress() >= 0.999) goTo(0) // replay from head if parked at the tail
       safe(() => player.play())
+      ts.startPlayback() // playhead glides on the UI thread; the video follows
       setPlaying(true)
     }
   }
   const toHead = () => goTo(0)
   const toTail = () => goTo(1)
-  const frameBack = () => hasMedia && goTo(progressRef.current - FRAME_SEC / durationSec)
-  const frameForward = () => hasMedia && goTo(progressRef.current + FRAME_SEC / durationSec)
+  const frameBack = () => hasMedia && goTo(ts.getProgress() - FRAME_SEC / durationSec)
+  const frameForward = () => hasMedia && goTo(ts.getProgress() + FRAME_SEC / durationSec)
 
   return (
     <View style={styles.wrap}>
