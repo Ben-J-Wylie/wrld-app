@@ -11,6 +11,7 @@
 import { memo } from 'react'
 import { StyleSheet, View } from 'react-native'
 import { BottomSheet } from '@/components/primitives/BottomSheet'
+import { Pressable } from '@/components/primitives/Pressable'
 import { SegmentedToggle } from '@/components/primitives/SegmentedToggle'
 import { Toggle } from '@/components/primitives/Toggle'
 import { Text } from '@/components/primitives/Text'
@@ -66,9 +67,22 @@ export const SegmentSettingsSheet = memo(function SegmentSettingsSheet({
   return (
     <BottomSheet visible={visible} onClose={onClose} variant="peek" peekHeight={460} dragToDismiss>
       <View style={styles.body}>
-        <Text variant="bodyEmphasized" style={styles.title}>
-          Segment {rangeLabel}
-        </Text>
+        <View style={styles.header}>
+          <Text variant="bodyEmphasized" style={styles.title}>
+            Segment {rangeLabel}
+          </Text>
+          <Pressable
+            variant="subtle"
+            hitSlop={12}
+            accessibilityLabel="Close"
+            onPress={() => {
+              if (__DEV__) console.log('[sheet] X tapped → onClose()')
+              onClose()
+            }}
+          >
+            <Icon name="x" size="md" color={theme.colors.text.muted} />
+          </Pressable>
+        </View>
 
         <Row label="Visibility">
           <SegmentedToggle options={VISIBILITY_OPTIONS} value={settings.visibility} onChange={(v) => onChange({ visibility: v })} />
@@ -117,6 +131,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 
 const styles = StyleSheet.create({
   body: { paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.md, gap: theme.spacing.md },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   title: { marginBottom: theme.spacing.xs },
   row: { gap: theme.spacing.xs },
   rowLabel: {},

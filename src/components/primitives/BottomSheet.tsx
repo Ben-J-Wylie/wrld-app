@@ -108,9 +108,14 @@ export function BottomSheet({
       onPanResponderMove: (_, g) => {
         if (g.dy > 0) dragY.setValue(g.dy)
       },
+      onPanResponderGrant: () => {
+        if (__DEV__) console.log('[sheet] pan grant')
+      },
       onPanResponderRelease: (_, g) => {
+        if (__DEV__) console.log('[sheet] pan release dy=', Math.round(g.dy), 'vy=', g.vy.toFixed(2))
         if (g.dy > 80 || g.vy > 0.5) {
           dragY.setValue(0)
+          if (__DEV__) console.log('[sheet] pan → onClose()')
           onClose()
         } else {
           Animated.spring(dragY, {
@@ -130,7 +135,14 @@ export function BottomSheet({
             style={[styles.scrim, { opacity: scrimOpacity }]}
             pointerEvents={visible ? 'auto' : 'none'}
           >
-            <Pressable variant="none" style={StyleSheet.absoluteFill} onPress={onClose} />
+            <Pressable
+              variant="none"
+              style={StyleSheet.absoluteFill}
+              onPress={() => {
+                if (__DEV__) console.log('[sheet] scrim tapped → onClose()')
+                onClose()
+              }}
+            />
           </Animated.View>
         )}
         <Animated.View

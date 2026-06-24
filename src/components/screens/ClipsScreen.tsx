@@ -683,11 +683,15 @@ export const ClipsScreen = () => {
       },
     }
   }, [sheetClip, settingsRanges, sourcesForSession])
-  const closeSheet = useCallback(() => setSheetClip(null), [])
+  const closeSheet = useCallback(() => {
+    if (__DEV__) console.log('[seg-sheet] closeSheet → setSheetClip(null)')
+    setSheetClip(null)
+  }, [])
   // Stable onChange — depends only on the open segment (changes on open/close, not per playhead tick),
   // so the memoised sheet doesn't re-render (and cancel taps) while the screen churns.
   const onSheetChange = useCallback(
     (patch: SegSettings) => {
+      if (__DEV__) console.log('[seg-sheet] onChange', JSON.stringify(patch))
       if (sheetClip) applySegSetting(sheetClip, patch)
     },
     [sheetClip, applySegSetting],
