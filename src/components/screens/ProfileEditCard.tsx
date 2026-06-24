@@ -21,6 +21,18 @@ import { usersApi } from '@/api/users'
 import { useCurrentUser, useSetCurrentUser } from '@/hooks/useCurrentUser'
 import { useAuthStore } from '@/stores/authStore'
 
+// Proactive handle-change cooldown copy from /auth/me's `handleChangeAvailableAt`
+// (server-authoritative — no client-side cooldown config to drift). Returns null
+// when the handle can be changed now.
+function handleCooldownLabel(availableAt: string | null | undefined): string | null {
+  if (!availableAt) return null
+  const ms = new Date(availableAt).getTime() - Date.now()
+  if (!(ms > 0)) return null
+  const days = Math.ceil(ms / (1000 * 60 * 60 * 24))
+  const dateStr = new Date(availableAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+  return `You can change your handle again in ${days} day${days === 1 ? '' : 's'} (${dateStr}).`
+}
+
 export function ProfileEditCard() {
   const { data: user } = useCurrentUser()
   const setCurrentUser = useSetCurrentUser()
@@ -45,6 +57,8 @@ export function ProfileEditCard() {
   const [avatarVersion, setAvatarVersion] = useState(0)
 
   if (!user) return null
+
+  const handleCooldown = handleCooldownLabel(user.handleChangeAvailableAt)
 
   function startEditName() {
     setDisplayName(user!.displayName)
@@ -199,10 +213,10 @@ export function ProfileEditCard() {
         ) : (
           <View style={styles.fieldRow}>
             <Text variant="body">@{user.handle}</Text>
-            <Button label="Edit" onPress={startEditHandle} variant="secondary" />
+            <Button label="Edit" onPress={startEditHandle} variant="secondary" disabled={!!handleCooldown} />
           </View>
         )}
-        <HelpText>Handle can be changed once every 30 days.</HelpText>
+        <HelpText>{handleCooldown ?? 'Handle can be changed once every 30 days.'}</HelpText>
       </View>
     </View>
   )
