@@ -697,7 +697,6 @@ export const ClipsScreen = () => {
   // so the memoised sheet doesn't re-render (and cancel taps) while the screen churns.
   const onSheetChange = useCallback(
     (patch: SegSettings) => {
-      if (__DEV__) console.log('[seg-sheet] onChange', JSON.stringify(patch))
       if (sheetClip) applySegSetting(sheetClip, patch)
     },
     [sheetClip, applySegSetting],

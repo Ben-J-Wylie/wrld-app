@@ -169,10 +169,7 @@ export function BottomSheet({
             // Raw responder on the scrim itself — most fundamental touch path (a child Pressable
             // wasn't receiving the tap in a high-churn screen). Tap-anywhere-outside → dismiss.
             onStartShouldSetResponder={() => true}
-            onResponderRelease={() => {
-              if (__DEV__) console.log('[sheet] scrim responder release → onClose()')
-              onClose()
-            }}
+            onResponderRelease={onClose}
           />
         )}
         {dragToDismiss ? <GestureDetector gesture={dragGesture}>{sheet}</GestureDetector> : sheet}

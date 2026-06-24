@@ -75,10 +75,7 @@ export const SegmentSettingsSheet = memo(function SegmentSettingsSheet({
             variant="subtle"
             hitSlop={12}
             accessibilityLabel="Close"
-            onPress={() => {
-              if (__DEV__) console.log('[sheet] X tapped → onClose()')
-              onClose()
-            }}
+            onPress={onClose}
           >
             <Icon name="x" size="md" color={theme.colors.text.muted} />
           </Pressable>
