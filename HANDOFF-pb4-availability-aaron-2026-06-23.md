@@ -186,3 +186,21 @@ zoom pyramid for that lat/lng + the time-tiles the range spans).
   planet × viewport × scrub-time) reusing `tiles.ts` + the live count/pin rendering; resolve pins (high z)
   / playhead-count (low z) locally; push subscription per held cell; replace the window+poll in
   `useHistoricalAvailability`.
+
+---
+
+## Follow-up (Ben, 2026-06-23) — title + tags on directives
+
+The per-segment settings sheet now also edits a **title** + **tags** per segment, sent on the
+same `PATCH /buffer/me/sessions/:id/directives` body:
+
+```
+{ startAtMs, endAtMs, visibility?, precision?, attributed?, sources?,
+  title?: string,          // per-segment title (absent = none)
+  tags?: string[] }        // per-segment tags (absent/empty = none)
+```
+
+App already sends + re-seeds these (authoritative replace, same as the other axes). **Backend
+TODO:** add `title` + `tags` to `DirectiveRange` and echo them in `GET /buffer/me` `directives[]`.
+Until then they round-trip in-session only (lost on reload). Also worth carrying onto the saved
+`Clip`/promoted manifest so a saved clip keeps its segment titles/tags.
