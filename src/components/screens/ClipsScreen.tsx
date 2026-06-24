@@ -168,10 +168,15 @@ function applySplits(entries: LaneClip[], splits: SplitPoint[], markParent = fal
   if (!splits.length) return entries
   const out: LaneClip[] = []
   for (const e of entries) {
-    const pts = splits
+    const raw = splits
       .filter((s) => s.sessionId === e.sourceSessionId && s.atMs > e.startMs + MIN_REMAINDER_MS && s.atMs < e.endMs - MIN_REMAINDER_MS)
       .map((s) => s.atMs)
       .sort((x, y) => x - y)
+    // Collapse coincident splits — a snip and a settings boundary often land at the SAME instant;
+    // two splits at one point would make a zero-width piece (a gap + a duplicate React key, since
+    // a piece's id is keyed on its start). Keep points ≥ MIN_REMAINDER_MS apart.
+    const pts: number[] = []
+    for (const p of raw) if (!pts.length || p - pts[pts.length - 1]! > MIN_REMAINDER_MS) pts.push(p)
     if (!pts.length) {
       out.push(e)
       continue
