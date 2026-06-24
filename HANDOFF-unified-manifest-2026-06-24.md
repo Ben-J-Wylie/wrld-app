@@ -120,7 +120,10 @@ U1 is the smallest high-value start. U4 is separable and last.
 
 ## App slice detail (Ben — for when each phase lands)
 
-- **U1:** dashboard **lane** SegmentedToggle (BUFFER|SAVED) next to arming; pass on go-live.
+- **U1:** the **lane** control is BUILT + ready to wire — `features/broadcast/LaneToggle.tsx`
+  (`BUFFER|SAVED`, flag-row idiom like Identity/Chat; in the FeatureGallery). Remaining: a
+  `captureConfig.lane` field + drop `LaneToggle` into `DashboardScreen` + forward `lane` on
+  `createRoom` (the screen/config wiring — pairs with Aaron's go-live-lane tag).
 - **U2:** the dashboard's per-range controls emit the "settings changed" intent live (the
   dashboard *is* the now-edge editor); the existing `captureConfig` becomes the now-edge slice.
 - **U3:** **revert** the reaper-disable guard (drag + sheet stay enabled during reap); the

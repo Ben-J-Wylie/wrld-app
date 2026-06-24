@@ -2971,6 +2971,21 @@ the right. No tier numbers live in the component.
 and Record (right) — each idle / armed (cued) / active (firing), since
 going live and recording are independent intents.
 
+##### `LaneToggle`
+
+- **Tier:** feature (composes SegmentedToggle + Icon + Text)
+- **Location:** `src/components/features/broadcast/LaneToggle.tsx` *(built 2026-06-24 · unified
+  manifest U1)*
+- **What:** the dashboard go-live **lane** control — `BUFFER` (time-windowed; the reaper clears it;
+  no storage) ↔ `SAVED` (kept until deleted; uses storage quota). A flag, same row idiom as
+  Identity/Chat (leading icon tile + label/detail + a `SegmentedToggle`), with an auto detail line
+  that explains the chosen lane (overridable to fold in remaining-storage context).
+- **Props:** `value: 'buffer' | 'saved'` · `onChange` · `detail?`
+- **Status:** **presentational, ready to wire** — not yet in `DashboardScreen` (that's Aaron's U1
+  lane: a `captureConfig.lane` field forwarded to `createRoom`). Per CONTENT.md §5 the lane is one
+  per-range setting; this is the now-edge starting choice. (Visibility is deliberately NOT exposed
+  here — live is always public.)
+
 **Code does (shipped):** Tall (min-h 96) card composing an icon-or-dot +
 label ledge, a state dot top-right, and a mono-caps state label.
 `armed` swaps to accent surface + border; `active` fills accent with

@@ -63,6 +63,7 @@ import { BroadcastStatusIndicator } from '@/components/features/broadcast/Broadc
 import { BufferWindowLabel } from '@/components/features/broadcast/BufferWindowLabel'
 import { SaveClipButton } from '@/components/features/broadcast/SaveClipButton'
 import { RewindLadder } from '@/components/features/broadcast/RewindLadder'
+import { LaneToggle, type CaptureLane } from '@/components/features/broadcast/LaneToggle'
 import { PageTabs } from '@/components/features/navigation/PageTabs'
 import { ClipCard } from '@/components/features/clip/ClipCard'
 import { ClipPreview } from '@/components/features/clip/ClipPreview'
@@ -1151,6 +1152,14 @@ export function FeatureGallery() {
         </Row>
         <Row label="no current tier">
           <RewindLadder />
+        </Row>
+      </Section>
+
+      <Section title="LaneToggle (dashboard go-live lane — U1)">
+        <Row label="BUFFER (reaper clears it) ↔ SAVED (kept · uses storage) — flag row, like Identity/Chat">
+          <View style={{ width: 320 }}>
+            <LaneToggleDemo />
+          </View>
         </Row>
       </Section>
 
@@ -2627,6 +2636,11 @@ function StatePickerRowDemo() {
       }
     />
   )
+}
+
+function LaneToggleDemo() {
+  const [lane, setLane] = useState<CaptureLane>('buffer')
+  return <LaneToggle value={lane} onChange={setLane} />
 }
 
 function RecordConsentSheetDemo() {
