@@ -11,6 +11,31 @@ visibility/precision/attributed; `directives[]` already fold into `GET /buffer/m
 
 ---
 
+> **✅ LANE A BACKEND DONE + DEPLOYED (Aaron, 2026-06-24, `wrld-backend` `a1c48bc` + `5423527`).**
+> A1–A4 are live on prod. Exact shapes Ben builds against:
+> - **A1 snips:** `PATCH /buffer/me/sessions/:id/snips { snips: [{ atMs }] }` (authoritative
+>   replace; mend = send the reduced list / `[]`). `snips: [{ atMs }]` is returned on every
+>   `GET /buffer/me` session **and** each `GET /buffer/me/clips` saved clip; saved-lane snips
+>   also persist via `PATCH /buffer/me/clips/:id { snips }`. Storage is the existing
+>   `splitPoints` slot — `splitPoints` + `/splits` stay as **back-compat aliases**; switch the
+>   app to `snips`/`/snips` and we retire the aliases after your build ships.
+> - **A2 multi-axis:** `PATCH /buffer/me/sessions/:id/directives` (still PB3_PER_RANGE-gated,
+>   authoritative replace) now accepts a per-range **`sources?: { [kind]: boolean } | null`**
+>   alongside `visibility`/`precision`/`attributed` (null/absent = inherit/enabled). `GET
+>   /buffer/me` `directives[]` now carries `sources`. (Saved clips keep using per-track
+>   `enabled` + `removedRanges` — already built — so A2's new axis is the BUFFER-session twin.)
+> - **A3:** the reaper deletes a session's standalone directives + snips when its footage
+>   evicts — no orphaned manifest metadata. Saved (retained) content keeps its manifest.
+> - **A4 (first cut):** `GET /buffer/session/:id` returns **`sourceWindows: [{ startAtMs,
+>   endAtMs, sources }]`** (only ranges with a `sources` map) so the time-machine viewer
+>   filters its rail per segment. Private windows are already excluded from the served HLS;
+>   **full server-side manifest exclusion of source-off windows is the deferred fuller A4 cut**
+>   — flag it if app-side rail filtering isn't enough.
+>
+> Remaining for Lane A is the **app side** (Ben): derived segmentation from `session.snips` ∪
+> directive boundaries, the multi-axis per-segment settings panel + mend, and honouring
+> `sourceWindows` in the viewer rail.
+
 ## LANE A — PB4 manifest (persist snips + multi-axis directives)
 
 **Model:** the manifest is a piecewise-constant function over the wall clock. **Snips** =
@@ -53,6 +78,41 @@ return the per-range `sources` in the detail; the app's source rail already rend
 kinds set — it can honour per-segment.)
 
 ---
+
+> **✅ LANE B BACKEND DONE + DEPLOYED (Aaron, 2026-06-24, `wrld-backend` `cdc6cd0` + `597f35c`).**
+> B1–B3 live on prod. Exact shapes Ben builds the cell manager against:
+> - **Time-tile size:** `AVAILABILITY_TILE_MS = 3_600_000` (1h) is a **shared constant in
+>   `src/lib/tiles.ts`** (NOT RemoteConfig — keeps it off /admin/config and lets client +
+>   server compute the same `t`). **Mirror it in the app `tiles.ts`** (that file is already
+>   "keep byte-identical"). `t = floor(T_ms / AVAILABILITY_TILE_MS)`. Cell key =
+>   `availabilityCellKey(planet,t,z,x,y)` → `"planet/t/z/x/y"` (also added to `tiles.ts`).
+> - **B1 cell GET:** `GET /clips/discover?planet=earth&t&z&x&y` → one cacheable cell.
+>   - **high zoom** (`z ≥ PIN_ZOOM_THRESHOLD`): `{ planet,t,z,x,y, tileMs, mode:'pins',
+>     clips:[…], bufferPins:[…] }` — same pin shapes as the `?from&to` feed, each with
+>     `intervals`, geo-bounded to the tile + time-bounded to `[t·TILE, (t+1)·TILE)`.
+>   - **low zoom**: `{ …, mode:'counts', bucketMs:60000, counts:number[] }` — a 60-entry
+>     per-minute distinct-pin alive-count; read `counts[floor((T − t·TILE)/bucketMs)]` at
+>     the playhead. (A scalar would over-count; the series is the right shape.)
+>   - `Cache-Control: public, max-age=30` + `ETag` (304 on `If-None-Match`) — cells are
+>     identical per viewer → edge/CDN-cacheable. Unknown planet → empty cell (Earth is the
+>     only geo-tiled time-machine content today). `?at=` + `?from&to` still work.
+> - **B2 push:** `wss://api.wrld.cam/clips/availability` (no auth). Client →
+>   `{type:'subscribe',cells:[…]}` (authoritative replace) / `{type:'add',cells}` /
+>   `{type:'remove',cells}`. Server → `{type:'cell_changed', cell:"planet/t/z/x/y"}` when an
+>   edit touches a held cell → refetch that B1 cell. Replaces the 60s poll (keep a long poll
+>   only as a socket-down backstop).
+> - **B3:** the per-segment **directives PATCH** emits `cell_changed` for every cell the
+>   edited session's footage occupies (best-effort). Snips don't change availability so they
+>   don't push.
+>
+> **Scale follow-up (noted, not built):** the push registry is in-memory (single-server,
+> correct now). Multi-server needs Redis fan-out of invalidations (the `emitCellsChanged`
+> seam), mirroring `discoveryService`. Build when the box goes multi-instance.
+>
+> Remaining for Lane B is the **app side** (Ben): the cell manager (fetch/hold/evict cacheable
+> `(planet,t,z,x,y)` cells over planet × viewport × scrub-time; resolve pins high-z /
+> playhead-count low-z locally; reuse the live count/pin rendering) + the push subscription per
+> held cell, replacing the window + poll in `useHistoricalAvailability`.
 
 ## LANE B — Scalable availability: **zoom-adaptive SPACE-TIME tiles + push** (the live P2 viewport protocol, plus a time coordinate)
 
