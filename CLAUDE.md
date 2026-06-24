@@ -3397,10 +3397,11 @@ drop, audio amplitude) — everything below is app-side and done.
 
 - **Stream report submit — ✅** the ⚑ flag button in `StreamScreen` (Phase 5/22) →
   `streamsApi.report` + the base64 snapshot upload. Unchanged.
-- **Clip report submit — ☐ no UI.** The backend route exists (`POST /clips/:id/report`,
-  built with the Report Centre), but there's **no ⚑ entry point on the clip viewer /
-  profile clip cards** — net-new front-end (Ben's lane; the stream ⚑ button is the
-  template).
+- **Clip report submit — 🔶 clip viewer ✅, profile cards ☐.** `clipsApi.report(id, reason)`
+  → `POST /clips/:id/report` + a ⚑ flag in `ClipViewerScreen`'s top chrome → the same
+  `ActionSheet` reason picker as the live-stream flag (auth-gated; no snapshot — the Report
+  Centre copies the clip itself). Built 2026-06-24. **Still TODO:** a ⚑ entry on the
+  **profile clip cards** (the other surface named in the original gap).
 - **Moderation hold (Report Centre) — invisible by design.** On report, the backend
   copies the footage to a platform hold; nothing surfaces in the app (correct — the
   creator must never see it). So **there's nothing for Ben to test in-app** beyond the

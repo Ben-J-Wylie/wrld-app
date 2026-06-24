@@ -14,7 +14,9 @@
 // wall-clock instant (startAtMs + currentTime). Mirrors ClipsScreen's clip replay.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, StyleSheet, View } from 'react-native'
+import { ActivityIndicator, Alert, StyleSheet, View } from 'react-native'
+import { useAuth } from '@clerk/clerk-expo'
+import { ActionSheet } from '@/components/sections/ActionSheet'
 import { useLocalSearchParams, router, useFocusEffect } from 'expo-router'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useQuery } from '@tanstack/react-query'
@@ -166,6 +168,29 @@ export function ClipViewerScreen() {
 
   function back() {
     router.navigate('/(app)/globe')
+  }
+
+  // Report → the backend Report Centre copies the clip to the platform moderation hold (CONTENT.md
+  // §3). Auth required; the moderator review UI is v0.3. No snapshot (unlike a live stream — the
+  // hold copies the clip itself).
+  const { isSignedIn } = useAuth()
+  const [reportVisible, setReportVisible] = useState(false)
+  const handleReportPress = () => {
+    if (!isSignedIn) {
+      Alert.alert('Sign in to report', 'Create an account or sign in to report a clip.')
+      return
+    }
+    setReportVisible(true)
+  }
+  const submitReport = async (reason: string) => {
+    if (!id) return
+    setReportVisible(false)
+    try {
+      await clipsApi.report(id, reason)
+      Alert.alert('Reported', "Thanks for letting us know. We'll review this clip.")
+    } catch {
+      Alert.alert('Error', 'Could not submit report. Please try again.')
+    }
   }
 
   const host = clip?.host
@@ -374,6 +399,7 @@ export function ClipViewerScreen() {
             </Text>
           </View>
         </View>
+        <IconButton name="flag" onPress={handleReportPress} accessibilityLabel="Report clip" variant="surface" />
       </SafeAreaView>
 
       {/* Bottom chrome, bottom-up above the footer: clock · transport · source rail
@@ -427,6 +453,19 @@ export function ClipViewerScreen() {
           />
         )}
       </View>
+
+      {/* Report reason picker — same ActionSheet + reasons as the live-stream flag. */}
+      <ActionSheet
+        visible={reportVisible}
+        onClose={() => setReportVisible(false)}
+        header="Report clip"
+        actions={[
+          { id: 'inappropriate', iconName: 'alert-octagon', label: 'Inappropriate content', tone: 'warn', onPress: () => submitReport('Inappropriate content') },
+          { id: 'harassment', iconName: 'user-x', label: 'Harassment or bullying', tone: 'warn', onPress: () => submitReport('Harassment or bullying') },
+          { id: 'spam', iconName: 'slash', label: 'Spam', onPress: () => submitReport('Spam') },
+          { id: 'other', iconName: 'more-horizontal', label: 'Other', onPress: () => submitReport('Other') },
+        ]}
+      />
     </View>
   )
 }

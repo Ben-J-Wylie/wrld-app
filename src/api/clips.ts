@@ -147,6 +147,12 @@ export const clipsApi = {
     return res.data.clip
   },
 
+  // Report a public clip → the Report Centre copies the clip to the platform moderation hold
+  // (backend; CONTENT.md §3). Auth required. The moderator review UI is v0.3 — this is just submit.
+  report: async (id: string, reason: string): Promise<void> => {
+    await apiClient.post(`/clips/${id}/report`, { reason })
+  },
+
   // PB1 — a public buffer session for playback (GET /buffer/session/:id, the clips/:id
   // analog). Normalised into ClipDetail so the viewer is source-agnostic. 403 when the
   // session is subscriber/ppv-gated and the caller lacks access; 404 when owner-private
