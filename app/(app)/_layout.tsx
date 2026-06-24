@@ -56,6 +56,36 @@ function SuspensionBanner() {
   )
 }
 
+// Over-quota strip. Saved clips are keep-forever — exceeding your plan's storage
+// (e.g. after a downgrade) doesn't delete anything, it just blocks NEW saves until
+// you free space or upgrade. This explains that, rather than only surfacing a blunt
+// error at save time. Reads the cached user (/auth/me returns both fields).
+const GB = 1024 ** 3
+function StorageBanner() {
+  const wrldUser = useAuthStore((s) => s.wrldUser)
+  const insets = useSafeAreaInsets()
+
+  const used = wrldUser?.usedStorageBytes
+  const quota = wrldUser?.storageQuotaBytes
+  // Suspension takes precedence (its own banner); don't stack two.
+  if (wrldUser?.suspendedUntil && new Date(wrldUser.suspendedUntil) > new Date()) return null
+  if (used == null || quota == null || quota <= 0 || used < quota) return null
+
+  const quotaGb = quota >= GB ? Math.round(quota / GB) : +(quota / GB).toFixed(1)
+
+  return (
+    <Pressable
+      onPress={() => router.navigate('/(app)/clips')}
+      style={[styles.banner, { paddingTop: insets.top + theme.spacing.xs }]}
+    >
+      <Text variant="caption" color={theme.colors.warn} style={styles.bannerText}>
+        Over your {quotaGb} GB storage limit — your clips are safe, but you can’t save new
+        ones until you free space or upgrade.
+      </Text>
+    </Pressable>
+  )
+}
+
 // Center stream icon: accent dot; while live, two concentric rings pulse
 // outward (radar ping). Opacity/scale only → native driver, no layout cost.
 function StreamTabIcon({ live }: { live: boolean }) {
@@ -173,6 +203,7 @@ export default function AppLayout() {
   return (
     <View style={styles.root}>
       <SuspensionBanner />
+      <StorageBanner />
       <Tabs
         tabBar={() => <AppTabBar />}
         screenOptions={{ headerShown: false }}

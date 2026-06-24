@@ -38,6 +38,30 @@ export const usersApi = {
     return res.data.user
   },
 
+  // ─── Account deletion (soft delete + grace-period reactivation) ───────────
+  // DELETE schedules deletion (sets deletedAt; Clerk + PII survive until the
+  // anonymise job runs after the grace period), so the user can still sign in and
+  // reactivate during the window. Returns the scheduled anonymisation date.
+  deleteAccount: async (): Promise<{ deletedAt: string; anonymizeAt: string }> => {
+    const res = await apiClient.delete<{ ok: true; deletedAt: string; anonymizeAt: string }>('/users/me')
+    return res.data
+  },
+
+  // Cancel a pending deletion within the grace period (clears deletedAt).
+  reactivateAccount: async (): Promise<void> => {
+    await apiClient.post('/users/me/reactivate')
+  },
+
+  // Active vs scheduled-for-deletion. /auth/me 403s a deleted account, so this is
+  // how the app learns an account is in its grace period (to show the gate).
+  accountStatus: async (): Promise<
+    | { status: 'active' }
+    | { status: 'pending_deletion'; deletedAt: string; anonymizeAt: string }
+  > => {
+    const res = await apiClient.get('/users/me/account-status')
+    return res.data
+  },
+
   uploadAvatar: async (uri: string, mimeType: string): Promise<User> => {
     const ext = mimeType.split('/')[1] ?? 'jpg'
     const formData = new FormData()
