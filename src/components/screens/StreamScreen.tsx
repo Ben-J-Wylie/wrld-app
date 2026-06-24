@@ -645,6 +645,21 @@ export function StreamScreen() {
   // The armed set comes from captureConfig (mapped to backend kind names).
   const armedKinds = useMemo(() => new Set(recordedSourcesFromConfig(cfg)), [cfg])
   useTelemetryCapture(armedKinds, sendTelemetry, isLiveBroadcast)
+  // First-state baseline for torch (a control, not a sensor): on go-live with torch armed, record
+  // its initial state once so the torch source has a track + shows in the editor even if never
+  // toggled during the broadcast. Subsequent toggles emit via toggleTorch.
+  const torchBaselineRef = useRef(false)
+  useEffect(() => {
+    if (!isLiveBroadcast) {
+      torchBaselineRef.current = false
+      return
+    }
+    if (torchBaselineRef.current || !armedKinds.has('torch')) return
+    torchBaselineRef.current = true
+    try {
+      sendTelemetry({ kind: 'torch', ts: Date.now(), on: torchOn })
+    } catch {}
+  }, [isLiveBroadcast, armedKinds, sendTelemetry, torchOn])
   // SP6a item 4 — emit the live audio loudness as `audiolevel` telemetry while live
   // with audio armed, so mediasoup records the audio-amplitude track for clip-waveform
   // replay. Companion to the audio media track (not a phone sensor → its own emitter).
