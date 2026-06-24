@@ -18,6 +18,7 @@ import { RevenueCatProvider } from '@/hooks/useRevenueCat'
 import { useUserSocket } from '@/hooks/useUserSocket'
 import { usersApi } from '@/api/users'
 import { hydrateCaptureLadder } from '@/lib/tierCaps'
+import { AccountReactivationGate } from '@/components/features/account/AccountReactivationGate'
 
 // Show notifications as banners even when the app is foregrounded
 Notifications.setNotificationHandler({
@@ -43,6 +44,7 @@ function RootNavigator() {
   const { isLoaded, isSignedIn, getToken } = useAuth()
   const setWrldUser = useAuthStore((s) => s.setWrldUser)
   const clearWrldUser = useAuthStore((s) => s.clearWrldUser)
+  const setDeletionPending = useAuthStore((s) => s.setDeletionPending)
   const pathname = usePathname()
   const everLoaded = useRef(false)
   if (isLoaded) everLoaded.current = true
@@ -67,10 +69,29 @@ function RootNavigator() {
     if (isSignedIn) {
       usersApi
         .getMe()
-        .then(setWrldUser)
-        .catch(console.warn)
+        .then((u) => {
+          setWrldUser(u)
+          setDeletionPending(null)
+        })
+        .catch(async (err) => {
+          // /auth/me 403s a soft-deleted account in its grace period. Confirm via
+          // account-status and surface the reactivation gate instead of failing silent.
+          if (err?.response?.status === 403) {
+            try {
+              const st = await usersApi.accountStatus()
+              if (st.status === 'pending_deletion') {
+                setDeletionPending(st.anonymizeAt)
+                return
+              }
+            } catch {
+              /* fall through */
+            }
+          }
+          console.warn(err)
+        })
     } else {
       clearWrldUser()
+      setDeletionPending(null)
     }
   }, [isLoaded, isSignedIn])
 
@@ -179,12 +200,17 @@ function RootNavigator() {
   if (!everLoaded.current) return null
 
   return (
-    <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="index" />
-      <Stack.Screen name="(auth)" />
-      <Stack.Screen name="(app)" />
-      <Stack.Screen name="onboarding" options={{ gestureEnabled: false }} />
-    </Stack>
+    <>
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="index" />
+        <Stack.Screen name="(auth)" />
+        <Stack.Screen name="(app)" />
+        <Stack.Screen name="onboarding" options={{ gestureEnabled: false }} />
+      </Stack>
+      {/* Full-screen reactivation gate — renders over everything when the signed-in
+          account is soft-deleted and in its grace period (no-op otherwise). */}
+      <AccountReactivationGate />
+    </>
   )
 }
 

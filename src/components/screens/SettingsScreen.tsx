@@ -30,6 +30,7 @@ export function SettingsScreen({ embedded = false }: { embedded?: boolean } = {}
   const clearWrldUser = useAuthStore((s) => s.clearWrldUser)
   const wrldUser = useAuthStore((s) => s.wrldUser)
   const setWrldUser = useAuthStore((s) => s.setWrldUser)
+  const setDeletionPending = useAuthStore((s) => s.setDeletionPending)
   const qc = useQueryClient()
 
   const [followedLive, setFollowedLive] = useState(wrldUser?.notifyOnFollowedLive ?? true)
@@ -82,6 +83,27 @@ export function SettingsScreen({ embedded = false }: { embedded?: boolean } = {}
       { text: 'Cancel', style: 'cancel' },
       { text: 'Sign out', style: 'destructive', onPress: handleSignOut },
     ])
+  }
+
+  async function handleDeleteAccount() {
+    try {
+      const { anonymizeAt } = await usersApi.deleteAccount()
+      // The reactivation gate (rendered in the root layout) takes over from here.
+      setDeletionPending(anonymizeAt)
+    } catch {
+      Alert.alert('Error', 'Could not delete your account — try again, or contact support@wrld.cam.')
+    }
+  }
+
+  function confirmDeleteAccount() {
+    Alert.alert(
+      'Delete account?',
+      'Your account will be scheduled for deletion. You have 30 days to change your mind — sign back in and reactivate, and everything returns. After 30 days your profile, clips, and balances are permanently removed.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete account', style: 'destructive', onPress: handleDeleteAccount },
+      ],
+    )
   }
 
   async function toggleFollowedLive(value: boolean) {
@@ -378,9 +400,14 @@ export function SettingsScreen({ embedded = false }: { embedded?: boolean } = {}
 
       <View style={styles.bottom}>
         <Button label="Sign out" onPress={confirmSignOut} variant="primary" />
+        <Pressable onPress={confirmDeleteAccount} style={styles.deleteBtn} hitSlop={8}>
+          <Text variant="bodyEmphasized" color={theme.colors.accent.default}>
+            Delete account
+          </Text>
+        </Pressable>
         <Text variant="caption" color={theme.colors.text.muted} style={styles.note}>
-          To delete your account, contact us at support@wrld.cam. Your data will be removed
-          within 30 days.
+          Scheduling deletion gives you a 30-day grace period to reactivate before your
+          data is permanently removed.
         </Text>
       </View>
     </>
@@ -436,6 +463,10 @@ const styles = StyleSheet.create({
   bottom: {
     marginTop: theme.spacing.lg,
     gap: theme.spacing.md,
+  },
+  deleteBtn: {
+    alignItems: 'center',
+    paddingVertical: theme.spacing.sm,
   },
   note: {
     textAlign: 'center',
