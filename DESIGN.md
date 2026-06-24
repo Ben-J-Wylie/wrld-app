@@ -4679,6 +4679,37 @@ above. The seam is not a separate motion category.
 Append-only. Most recent first. Each entry: date, decision, rationale,
 constraint it imposes downstream.
 
+### 2026-06-23 — Unified settings shelf (one element for dashboard · stream · clip-editor)
+
+**Direction (not built yet; recorded for the post-PB4 pass).** Dashboard, stream, and the
+clip editor all configure the **same settings object** — `visibility · location precision ·
+identity · source inclusion` — so they should share **one slide-out "settings shelf"**, not
+three bespoke surfaces.
+
+**Why it's principled, not just consistent:** it's the *same object at different scopes*,
+which maps directly onto the manifest model (`segmentSettings.ts`):
+- **Dashboard / stream shelf = the BASE** settings (the go-live defaults for the whole broadcast).
+- **Clip-editor shelf = a per-segment OVERRIDE** of that base (`applySetting`).
+
+**Source inclusion is one axis, scoped + nested:**
+- Dashboard/stream = **capture**-include (the **full** source suite; off → the source never exists).
+- Clip-editor = **view**-include (only the **captured** subset; off → captured-but-hidden from
+  time-machine viewers, still on disk).
+- You can only view-include what was capture-included → the clip shelf naturally shows *only
+  captured sources*; the stream shelf shows *all*. **Legibility constraint:** the UI must make
+  clear that a source toggle off **live** (delete-from-capture) ≠ off **in a clip** (hide-from-view).
+
+**Interaction (retires two pages):** one slide-out shelf + one gesture app-wide —
+- **stream page:** slide the shelf out → the dashboard's arming/prefs, live → the separate
+  **dashboard page collapses into the shelf**;
+- **clips page:** double-tap a segment → the same shelf scoped to that segment → the separate
+  **grid-editor page (`ClipEditScreen`) retires.**
+
+**Constraint / sequencing:** `SegmentSettingsSheet` (built 2026-06-23, presentational,
+sources-passed-in, scope-agnostic) **is the prototype of this shared shelf** — build PB4 on it
+first (per-segment correctness), then do the dashboard+grid-editor consolidation as a deliberate
+follow-on pass so PB4 isn't throwaway. Don't entangle the consolidation with the in-flight PB4 build.
+
 ### 2026-06-18 — Public buffer + one-store / retain-in-place (content-model; UI follows)
 
 **Decision:** the rolling buffer is **public by default** (in the time machine), and
