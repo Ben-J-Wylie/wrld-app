@@ -66,6 +66,9 @@ export type BufferSession = {
     attributed?: boolean
     // PB4 A2 — per-source on/off for a time-machine viewer (absent/null = inherit/enabled).
     sources?: Record<string, boolean> | null
+    // PB4 — per-segment title + tags (saved alongside the other axes).
+    title?: string | null
+    tags?: string[] | null
   }[]
   // PB4 A1 — the session's server-authoritative snips (explicit display boundaries, incl.
   // no-op). The grid seeds `splitPoints` from these on load so snips survive a reload.
@@ -198,6 +201,9 @@ export type SegmentDirective = {
   attributed?: boolean
   // PB4 A2 — per-source on/off for a time-machine viewer (null = inherit/enabled).
   sources?: Record<string, boolean> | null
+  // PB4 — per-segment title + tags.
+  title?: string
+  tags?: string[]
 }
 
 // One contiguous in-window slice of a buffer session — the manifest body (C4).

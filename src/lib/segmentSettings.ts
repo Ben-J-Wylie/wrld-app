@@ -21,6 +21,8 @@ export type SegSettings = {
   precision?: Precision
   identity?: Identity
   sources?: Record<string, boolean>
+  title?: string
+  tags?: string[]
 }
 
 // One non-overlapping override span on a session (wall-clock ms).
@@ -33,12 +35,20 @@ function sourcesEqual(a?: Record<string, boolean>, b?: Record<string, boolean>):
   return ak.every((k) => a![k] === b?.[k])
 }
 
+function tagsEqual(a?: string[], b?: string[]): boolean {
+  const aa = a ?? []
+  const bb = b ?? []
+  return aa.length === bb.length && aa.every((t, i) => t === bb[i])
+}
+
 export function settingsEqual(a: SegSettings, b: SegSettings): boolean {
   return (
     a.visibility === b.visibility &&
     a.precision === b.precision &&
     a.identity === b.identity &&
-    sourcesEqual(a.sources, b.sources)
+    sourcesEqual(a.sources, b.sources) &&
+    (a.title ?? '') === (b.title ?? '') &&
+    tagsEqual(a.tags, b.tags)
   )
 }
 
@@ -47,7 +57,9 @@ export function isEmptySettings(s: SegSettings): boolean {
     s.visibility === undefined &&
     s.precision === undefined &&
     s.identity === undefined &&
-    (s.sources === undefined || Object.keys(s.sources).length === 0)
+    (s.sources === undefined || Object.keys(s.sources).length === 0) &&
+    (s.title === undefined || s.title === '') &&
+    (s.tags === undefined || s.tags.length === 0)
   )
 }
 
@@ -63,6 +75,8 @@ export function mergeSettings(base: SegSettings, patch: SegSettings): SegSetting
     out.sources = Object.keys(merged).length ? merged : undefined
     if (out.sources === undefined) delete out.sources
   }
+  if ('title' in patch) { if (!patch.title) delete out.title; else out.title = patch.title }
+  if ('tags' in patch) { if (!patch.tags || !patch.tags.length) delete out.tags; else out.tags = patch.tags }
   return out
 }
 

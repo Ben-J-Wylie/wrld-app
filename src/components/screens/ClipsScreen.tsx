@@ -559,6 +559,8 @@ export const ClipsScreen = () => {
         if (d.precision) settings.precision = d.precision // 'off' is a real precision; null/absent = inherit
         if (d.attributed != null) settings.identity = d.attributed ? 'attributed' : 'anon'
         if (d.sources) settings.sources = d.sources
+        if (d.title) settings.title = d.title
+        if (d.tags && d.tags.length) settings.tags = d.tags
         if (!isEmptySettings(settings)) seeded.push({ sessionId: s.id, startMs: d.startAtMs, endMs: d.endAtMs, settings })
       }
     }
@@ -609,6 +611,8 @@ export const ClipsScreen = () => {
           ...(r.settings.precision ? { precision: r.settings.precision } : {}),
           ...(r.settings.identity ? { attributed: r.settings.identity === 'attributed' } : {}),
           ...(r.settings.sources ? { sources: r.settings.sources } : {}),
+          ...(r.settings.title ? { title: r.settings.title } : {}),
+          ...(r.settings.tags && r.settings.tags.length ? { tags: r.settings.tags } : {}),
         }))
       bufferApi
         .patchDirectives(sessionId, directives)
@@ -645,7 +649,8 @@ export const ClipsScreen = () => {
     [patchSessionDirectives],
   )
   // The captured sources (FeedKinds) for a segment's session → drives the sheet's per-source rows.
-  // Identity is its own axis (not a source toggle), so 'profile' is excluded here.
+  // Identity is its own axis ('profile'), and location has its own precision axis (incl. OFF), so
+  // both are excluded from the per-source on/off rows.
   const sourcesForSession = useCallback(
     (sessionId?: string | null): FeedKind[] => {
       const s = sessions.find((x) => x.id === sessionId)
@@ -653,7 +658,7 @@ export const ClipsScreen = () => {
       const set = new Set<FeedKind>()
       for (const k of [...(s.kinds ?? []), ...Object.keys(s.dataUrls ?? {})]) {
         const fk = KIND_TO_FEEDKIND[k]
-        if (fk && fk !== 'profile') set.add(fk)
+        if (fk && fk !== 'profile' && fk !== 'loc') set.add(fk)
       }
       return SOURCE_RAIL_ORDER.filter((k) => set.has(k))
     },
@@ -690,6 +695,8 @@ export const ClipsScreen = () => {
         precision: override.precision ?? ('exact' as const),
         identity: override.identity ?? ('attributed' as const),
         sources: { ...baseSources, ...overrideSources },
+        title: override.title,
+        tags: override.tags,
       },
     }
   }, [sheetClip, settingsRanges, sourcesForSession])
@@ -2180,6 +2187,7 @@ export const ClipsScreen = () => {
       {/* PB4 A2 — per-segment settings sheet (double-tap a segment). Multi-axis; PATCHes directives. */}
       {pb3Enabled && sheetClip && sheetData && (
         <SegmentSettingsSheet
+          key={sheetClip.id}
           visible={sheetVisible}
           onClose={closeSheet}
           rangeLabel={sheetData.rangeLabel}

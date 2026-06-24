@@ -8,12 +8,14 @@
 // emits a partial patch on change; the screen owns the piecewise model (segmentSettings.ts), the
 // PATCH, and which sources the segment captured. `availableSources` = the segment's captured kinds.
 
-import { memo } from 'react'
+import { memo, useState } from 'react'
 import { Dimensions, StyleSheet, View } from 'react-native'
 import { BottomSheet } from '@/components/primitives/BottomSheet'
 import { Pressable } from '@/components/primitives/Pressable'
 import { SegmentedToggle } from '@/components/primitives/SegmentedToggle'
 import { Toggle } from '@/components/primitives/Toggle'
+import { Input } from '@/components/primitives/Input'
+import { Chip } from '@/components/primitives/Chip'
 import { Text } from '@/components/primitives/Text'
 import { Icon } from '@/components/primitives/Icon'
 import { SOURCE_META } from '@/components/features/stream/sourceMeta'
@@ -29,6 +31,8 @@ type Props = {
   /** Resolved settings for the segment (override merged over the go-live defaults). */
   settings: Required<Pick<SegSettings, 'visibility' | 'precision' | 'identity'>> & {
     sources: Record<string, boolean>
+    title?: string
+    tags?: string[]
   }
   /** The kinds this segment actually captured (drives the per-source rows). */
   availableSources: FeedKind[]
@@ -64,17 +68,50 @@ export const SegmentSettingsSheet = memo(function SegmentSettingsSheet({
   availableSources,
   onChange,
 }: Props) {
-  // Grow with content (title + 3 axis rows + a sources header + one row per source), capped at
+  // Local input state (committed to the screen on change/submit). The parent keys this sheet by
+  // segment id, so this state resets to the segment's saved values each time it opens.
+  const [title, setTitle] = useState(settings.title ?? '')
+  const [tags, setTags] = useState<string[]>(settings.tags ?? [])
+  const [tagDraft, setTagDraft] = useState('')
+  const commitTitle = () => onChange({ title: title.trim() || undefined })
+  const addTags = () => {
+    const next = [...tags]
+    for (const raw of tagDraft.split(',')) {
+      const t = raw.trim()
+      if (t && !next.includes(t)) next.push(t)
+    }
+    setTagDraft('')
+    if (next.length !== tags.length) {
+      setTags(next)
+      onChange({ tags: next })
+    }
+  }
+  const removeTag = (t: string) => {
+    const next = tags.filter((x) => x !== t)
+    setTags(next)
+    onChange({ tags: next })
+  }
+  // Grow with content (title + 3 axes + tags + a sources header + one row per source), capped at
   // ~85% of the screen — the BottomSheet scrolls past the cap (e.g. all sources armed).
-  const rowCount = 3 + (availableSources.length ? 1 + availableSources.length : 0)
-  const height = Math.min(160 + rowCount * 58, Math.round(Dimensions.get('window').height * 0.85))
+  const rowCount = 5 + (availableSources.length ? 1 + availableSources.length : 0)
+  const height = Math.min(190 + rowCount * 58, Math.round(Dimensions.get('window').height * 0.85))
   return (
     <BottomSheet visible={visible} onClose={onClose} variant="peek" peekHeight={height} dragToDismiss scrollable>
       <View style={styles.body}>
         <View style={styles.header}>
-          <Text variant="bodyEmphasized" style={styles.title}>
-            Segment {rangeLabel}
-          </Text>
+          <View style={styles.headerMain}>
+            <Input
+              value={title}
+              onChangeText={setTitle}
+              onEndEditing={commitTitle}
+              onBlur={commitTitle}
+              placeholder="Untitled segment"
+              returnKeyType="done"
+            />
+            <Text variant="monoCaption" color={theme.colors.text.muted} style={styles.rangeCaption}>
+              {rangeLabel}
+            </Text>
+          </View>
           <Pressable
             variant="subtle"
             hitSlop={12}
@@ -114,6 +151,27 @@ export const SegmentSettingsSheet = memo(function SegmentSettingsSheet({
             ))}
           </View>
         )}
+
+        <View style={styles.sources}>
+          <Text variant="monoCaption" color={theme.colors.text.muted} style={styles.sourcesLabel}>
+            TAGS
+          </Text>
+          {tags.length > 0 && (
+            <View style={styles.tagRow}>
+              {tags.map((t) => (
+                <Chip key={t} label={t} selected onPress={() => removeTag(t)} />
+              ))}
+            </View>
+          )}
+          <Input
+            value={tagDraft}
+            onChangeText={setTagDraft}
+            onSubmitEditing={addTags}
+            onEndEditing={addTags}
+            placeholder="Add a tag"
+            returnKeyType="done"
+          />
+        </View>
       </View>
     </BottomSheet>
   )
@@ -132,12 +190,14 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 
 const styles = StyleSheet.create({
   body: { paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.md, gap: theme.spacing.md },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  title: { marginBottom: theme.spacing.xs },
+  header: { flexDirection: 'row', alignItems: 'flex-start', gap: theme.spacing.sm },
+  headerMain: { flex: 1, gap: theme.spacing.xxs },
+  rangeCaption: { marginLeft: theme.spacing.xxs },
   row: { gap: theme.spacing.xs },
   rowLabel: {},
   sources: { gap: theme.spacing.sm, marginTop: theme.spacing.xs },
   sourcesLabel: {},
   sourceRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
   sourceName: { flex: 1 },
+  tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.xs },
 })
