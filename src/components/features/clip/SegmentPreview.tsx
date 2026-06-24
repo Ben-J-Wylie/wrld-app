@@ -6,8 +6,10 @@
 // and tail — same feel as the Clips page), then a transport (BufferTransport with the buffer
 // head/tail buttons hidden — a single clip only snaps to its OWN head/tail).
 //
-// Self-contained: owns one expo-video player + the playhead. Starts PAUSED (no autoplay audio in
-// a settings sheet). Scrub is a horizontal RNGH pan (vertical passes through to the sheet scroll).
+// The timeline clip block uses the SAME film-cell band as the Clips-page ClipBlock (sprocket bands
+// + constant-size square frame cells) and supports pinch-to-zoom (scales the clip's width → more
+// cells, finer scrub). Self-contained: owns one expo-video player + the playhead. Starts PAUSED
+// (no autoplay audio in a sheet). Horizontal scrub passes vertical through to the sheet scroll.
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Animated, StyleSheet, View } from 'react-native'
@@ -21,9 +23,20 @@ import { Icon } from '@/components/primitives/Icon'
 import { BufferTransport } from './BufferTransport'
 import { theme } from '@/tokens/theme'
 
-const TIMELINE_H = 48
+const TIMELINE_H = 50
 const FRAME_SEC = 0.3 // frame-step size for the transport chevrons
+const MIN_ZOOM = 0.5 // clip spans half the field (whole clip visible)
+const MAX_ZOOM = 8 // clip spans 8× the field (fine scrub)
+// Film strip (matches ClipBlock): constant-size square frame cells + sprocket bands.
+const FILM_SPROCKET_H = 6
+const FILM_GAP = 4
+const FILM_CELL = 22
+const FILM_PITCH = FILM_CELL + FILM_GAP
+const FILM_SPK_W = 4
+const FILM_SPK_PITCH = FILM_PITCH / 2
+const MAX_CELLS = 120
 const clamp01 = (n: number) => (n < 0 ? 0 : n > 1 ? 1 : n)
+const clampZoom = (n: number) => (n < MIN_ZOOM ? MIN_ZOOM : n > MAX_ZOOM ? MAX_ZOOM : n)
 
 type Props = {
   manifestUrl: string | null
@@ -60,13 +73,19 @@ export function SegmentPreview({
 
   const [playing, setPlaying] = useState(false)
   const [fieldW, setFieldW] = useState(0)
-  const tx = useRef(new Animated.Value(0)).current // strip translateX = -progress * fieldW
+  const [zoom, setZoom] = useState(1)
+  const fieldWRef = useRef(0)
+  fieldWRef.current = fieldW
+  const zoomRef = useRef(1)
+  zoomRef.current = zoom
+  const tx = useRef(new Animated.Value(0)).current // strip translateX = -progress * clipW
   const progressRef = useRef(0) // 0..1 over the clip
 
+  const clipW = () => fieldWRef.current * zoomRef.current
   const setProgress = (p: number) => {
     const c = clamp01(p)
     progressRef.current = c
-    if (fieldW > 0) tx.setValue(-c * fieldW)
+    if (fieldWRef.current > 0) tx.setValue(-c * clipW())
   }
   const seekToProgress = (p: number) => {
     const c = clamp01(p)
@@ -92,7 +111,13 @@ export function SegmentPreview({
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playing, hasMedia, fieldW])
+  }, [playing, hasMedia])
+
+  // Re-pin the playhead under the centre when the field is measured or the zoom changes.
+  useEffect(() => {
+    if (fieldW > 0) setProgress(progressRef.current)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fieldW, zoom])
 
   useEffect(() => () => player.pause(), [player])
 
@@ -112,43 +137,58 @@ export function SegmentPreview({
   const frameBack = () => hasMedia && seekToProgress(progressRef.current - FRAME_SEC / durationSec)
   const frameForward = () => hasMedia && seekToProgress(progressRef.current + FRAME_SEC / durationSec)
 
-  // Horizontal scrub: drag the strip; vertical passes to the sheet's ScrollView.
+  // Horizontal scrub (1 finger); vertical passes to the sheet's ScrollView. Pinch (2 fingers) zooms.
   const scrubStart = useRef(0)
   const wasPlaying = useRef(false)
-  const pan = useMemo(
-    () =>
-      Gesture.Pan()
-        .runOnJS(true)
-        .activeOffsetX([-10, 10])
-        .failOffsetY([-12, 12])
-        .onBegin(() => {
-          scrubStart.current = progressRef.current
-          wasPlaying.current = playing
-          if (playing) {
-            player.pause()
-            setPlaying(false)
-          }
-        })
-        .onUpdate((e) => {
-          if (fieldW <= 0) return
-          setProgress(scrubStart.current - e.translationX / fieldW) // drag right → earlier
-          if (hasMedia) player.currentTime = progressRef.current * durationSec
-        })
-        .onEnd(() => {
-          if (wasPlaying.current) togglePlay()
-        }),
+  const zoomStart = useRef(1)
+  const gesture = useMemo(() => {
+    const pan = Gesture.Pan()
+      .runOnJS(true)
+      .activeOffsetX([-10, 10])
+      .failOffsetY([-12, 12])
+      .onBegin(() => {
+        scrubStart.current = progressRef.current
+        wasPlaying.current = playing
+        if (playing) {
+          player.pause()
+          setPlaying(false)
+        }
+      })
+      .onUpdate((e) => {
+        const w = clipW()
+        if (w <= 0) return
+        setProgress(scrubStart.current - e.translationX / w) // drag right → earlier
+        if (hasMedia) player.currentTime = progressRef.current * durationSec
+      })
+      .onEnd(() => {
+        if (wasPlaying.current) togglePlay()
+      })
+    const pinch = Gesture.Pinch()
+      .runOnJS(true)
+      .onBegin(() => {
+        zoomStart.current = zoomRef.current
+      })
+      .onUpdate((e) => {
+        const z = clampZoom(zoomStart.current * e.scale)
+        zoomRef.current = z
+        setZoom(z)
+        tx.setValue(-progressRef.current * clipW()) // keep the playhead pinned to centre while zooming
+      })
+    return Gesture.Simultaneous(pan, pinch)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [fieldW, hasMedia, playing, durationSec],
-  )
+  }, [hasMedia, playing, durationSec])
+
+  const blockW = fieldW * zoom
 
   return (
     <View style={styles.wrap}>
       <View style={styles.header}>
         <View style={styles.viewer}>
           {hasMedia ? (
-            <VideoView player={player} style={StyleSheet.absoluteFill} contentFit="cover" nativeControls={false} />
+            // contain → letterbox/pillarbox within the square (no crop); the panel bg fills the bars.
+            <VideoView player={player} style={StyleSheet.absoluteFill} contentFit="contain" nativeControls={false} />
           ) : posterUrl ? (
-            <Image source={{ uri: posterUrl }} style={StyleSheet.absoluteFill} contentFit="cover" />
+            <Image source={{ uri: posterUrl }} style={StyleSheet.absoluteFill} contentFit="contain" />
           ) : (
             <View style={[StyleSheet.absoluteFill, styles.viewerEmpty]}>
               <Icon name="film" size="lg" color={theme.colors.text.subtle} />
@@ -176,12 +216,12 @@ export function SegmentPreview({
         </Pressable>
       </View>
 
-      <GestureDetector gesture={pan}>
+      <GestureDetector gesture={gesture}>
         <View style={styles.timeline} onLayout={(e) => setFieldW(e.nativeEvent.layout.width)}>
           {fieldW > 0 && (
-            <Animated.View style={[styles.strip, { width: fieldW * 2, transform: [{ translateX: tx }] }]}>
-              <View style={[styles.clipBlock, { left: fieldW / 2, width: fieldW }]}>
-                {posterUrl ? <Image source={{ uri: posterUrl }} style={StyleSheet.absoluteFill} contentFit="cover" /> : null}
+            <Animated.View style={[styles.strip, { width: fieldW + blockW, transform: [{ translateX: tx }] }]}>
+              <View style={[styles.clipBlock, { left: fieldW / 2, width: blockW }]}>
+                <FilmCells width={blockW} posterUrl={posterUrl} />
               </View>
             </Animated.View>
           )}
@@ -202,6 +242,35 @@ export function SegmentPreview({
         onNextClip={toTail}
         onToEnd={toTail}
       />
+    </View>
+  )
+}
+
+// The Clips-page film strip, static (the whole clip block translates as one unit): sprocket bands
+// top + bottom, a row of constant-size square frame cells. Cell count scales with the block width
+// (zoom), capped so a deep zoom can't render unbounded cells.
+function FilmCells({ width, posterUrl }: { width: number; posterUrl: string | null }) {
+  const cells = Math.min(Math.max(1, Math.ceil(width / FILM_PITCH)), MAX_CELLS)
+  const sprockets = cells * 2
+  return (
+    <View style={styles.filmRow} pointerEvents="none">
+      <View style={styles.sprocketBand}>
+        {Array.from({ length: sprockets }).map((_, i) => (
+          <View key={i} style={styles.sprocket} />
+        ))}
+      </View>
+      <View style={styles.cellBand}>
+        {Array.from({ length: cells }).map((_, i) => (
+          <View key={i} style={styles.filmCell}>
+            {posterUrl ? <Image source={{ uri: posterUrl }} style={styles.filmImg} contentFit="cover" transition={120} /> : null}
+          </View>
+        ))}
+      </View>
+      <View style={styles.sprocketBand}>
+        {Array.from({ length: sprockets }).map((_, i) => (
+          <View key={i} style={styles.sprocket} />
+        ))}
+      </View>
     </View>
   )
 }
@@ -244,4 +313,33 @@ const styles = StyleSheet.create({
     bottom: 0,
     backgroundColor: theme.colors.accent.default,
   },
+  filmRow: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    flexDirection: 'column',
+    justifyContent: 'space-between',
+    paddingVertical: 1,
+  },
+  sprocketBand: { height: FILM_SPROCKET_H, flexDirection: 'row', alignItems: 'center' },
+  sprocket: {
+    width: FILM_SPK_W,
+    height: 3,
+    borderRadius: 1.5,
+    marginRight: FILM_SPK_PITCH - FILM_SPK_W,
+    backgroundColor: theme.colors.border.strong,
+  },
+  cellBand: { flexDirection: 'row', alignItems: 'center' },
+  filmCell: {
+    width: FILM_CELL,
+    height: FILM_CELL,
+    marginRight: FILM_GAP,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: theme.colors.border.strong,
+    backgroundColor: theme.colors.bg.panelHi,
+    overflow: 'hidden',
+  },
+  filmImg: { width: '100%', height: '100%' },
 })
