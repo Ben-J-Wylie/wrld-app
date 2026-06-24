@@ -129,3 +129,37 @@ U1 is the smallest high-value start. U4 is separable and last.
   rail); reflect the renegotiation state.
 - The clip editor (`SegmentSettingsSheet` + the per-range directives PATCH) already covers the
   retrospective half — no change needed there beyond honoring the new server fields.
+
+---
+
+## Time Machine compatibility (design the feed with this in mind)
+
+The unified model and Time Machine ride the **same primitive** — *"public intervals over the
+per-range manifest."* Time Machine already asks "what public range is alive at instant T?"; the
+unified model just makes the manifest finer and live-edited. So the substrate is right
+(per-range visibility = availability, the windowed/cell feed, invalidate-on-edit, the public
+buffer in discovery, the universal clock). These are **refinements, not a redesign** — but design
+the feed/coalescing for them:
+
+1. **Segment-count discipline (the big one).** Snip-at-now fires on *any* setting change, so a
+   long broadcast can spawn many tiny segments → manifest + availability-feed bloat + pin density.
+   **Coalesce adjacent EQUAL ranges server-side, drop no-op snips, debounce trivial changes.**
+   (Same as the "coalesce-noise" open question above, but it matters *doubly* here.) Co-located
+   pins still **cluster** via the existing globe clustering, so visual density is handled; the
+   discipline is about not exploding the data.
+2. **Discovery resolves per-range, at the instant.** Since clip ≡ segment, a pin already carries
+   one visibility/precision/identity, so C4.5's "read the clip's current values" holds — just
+   confirm the feed resolves the **range alive at T**. No new mechanism.
+3. **Live snips in the clips-page timeline (DEVICE-TEST item).** The `clips-timeline-clock-v1`
+   smooth-build grows ONE now-edge segment; snip-at-now will **close it and open a new one
+   mid-build**. Should be just a new boundary (build continues on the new segment), but it's a new
+   dynamic vs what was tuned — **regression-pass against the milestone's device-test cases.**
+4. **Replay across boundaries.** A clustered/coalesced span may cross underlying segments whose
+   sources/title differ; the ClipViewer's source rail should update at those boundaries during
+   replay (it already handles track/group changes for buffer VODs — minor extension).
+5. **Reaping shrinks the past** — already the model (CONTENT.md §6: "the past is thinner — only
+   surviving clips"); verify reaped buffer intervals **drop out of the feed** under the finer
+   segmentation (the 15s refetch + the `cell_changed` push cover this — confirm).
+
+**No fundamental conflict** — the Time Machine work holds. The reconciliation is entirely "the
+feed operates per-range + coalesces by equality, and the live timeline tolerates mid-build snips."
