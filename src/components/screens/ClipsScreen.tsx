@@ -1754,15 +1754,29 @@ export const ClipsScreen = () => {
 
   // PB4 sheet — the open segment's lane (drives the Lane toggle), and whether it's being reaped
   // (then the toggle hides — it can no longer move). Changing the toggle saves / un-saves it.
-  const sheetLane: 'buffered' | 'saved' = !!sheetClip && savedLane.some((c) => c.id === sheetClip.id) ? 'saved' : 'buffered'
+  // Membership is RANGE-based, NOT id-based: saving the buffer segment creates a NEW-id saved clip
+  // (+ an optimistic pending placeholder) covering the SAME footage range, so an id match would
+  // never see it → the toggle would snap back to BUFFERED and each tap would save another copy.
+  // Match by session + the segment's midpoint inside a saved clip's span instead.
+  const savedCoveringSheet = useMemo(() => {
+    if (!sheetClip?.sourceSessionId) return null
+    const mid = (sheetClip.startMs + sheetClip.endMs) / 2
+    return (
+      savedLane.find((c) => c.sourceSessionId === sheetClip.sourceSessionId && mid >= c.startMs && mid < c.endMs) ?? null
+    )
+  }, [sheetClip, savedLane])
+  const sheetLane: 'buffered' | 'saved' = savedCoveringSheet ? 'saved' : 'buffered'
   const sheetShowLane = !!sheetClip && !(reaping && oldestClip?.id === sheetClip.id)
   const onSheetLaneChange = useCallback(
     (next: 'buffered' | 'saved') => {
-      if (!sheetClip || next === (savedLane.some((c) => c.id === sheetClip.id) ? 'saved' : 'buffered')) return
-      if (next === 'saved') saveClip(sheetClip)
-      else unsaveClip(sheetClip)
+      if (!sheetClip) return
+      if (next === 'saved') {
+        if (!savedCoveringSheet) saveClip(sheetClip) // guard: never save a copy of an already-saved span
+      } else if (savedCoveringSheet) {
+        unsaveClip(savedCoveringSheet)
+      }
     },
-    [sheetClip, savedLane, saveClip, unsaveClip],
+    [sheetClip, savedCoveringSheet, saveClip, unsaveClip],
   )
 
   const reaperBoundaryMs = windowStartMs != null && !reaping ? windowStartMs : null
