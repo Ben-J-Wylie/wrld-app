@@ -204,3 +204,12 @@ App already sends + re-seeds these (authoritative replace, same as the other axe
 TODO:** add `title` + `tags` to `DirectiveRange` and echo them in `GET /buffer/me` `directives[]`.
 Until then they round-trip in-session only (lost on reload). Also worth carrying onto the saved
 `Clip`/promoted manifest so a saved clip keeps its segment titles/tags.
+
+> **✅ DONE + DEPLOYED (Aaron, 2026-06-24, `wrld-backend` `5344b42`).** `DirectiveRange` gained
+> `title String?` + `tags String[] @default([])` (migration `20260624010000`, additive). The
+> directives PATCH body accepts `title?`/`tags?` and persists them; `GET /buffer/me`
+> `directives[]` now echoes `title` + `tags`, so they survive reload (no longer in-session
+> only). Display metadata — no reaper/serve/availability impact (no B3 push). **NOT carried
+> onto the saved `Clip`/promoted manifest yet** — a saved clip doesn't keep per-segment
+> titles/tags through promote; flag it if that's needed (it's a `Clip`/`ClipRange`-side
+> change, separate from the buffer-session round-trip).
