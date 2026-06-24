@@ -69,3 +69,19 @@ export const KIND_TO_FEEDKIND: Record<string, FeedKind | undefined> = {
   torch: 'torch',
   chat: 'chat',
 }
+
+// Inverse of KIND_TO_FEEDKIND — a FeedKind → its backend track/source name. Used at the wire
+// boundary: per-segment `sources` directives + `sourceWindows` are keyed by backend kind, not
+// FeedKind. (profile/motion/temp aren't backend tracks, so they're absent.)
+export const FEEDKIND_TO_KIND: Partial<Record<FeedKind, string>> = {
+  cam: 'camera',
+  audio: 'audio',
+  screen: 'screen',
+  loc: 'location',
+  compass: 'compass',
+  gyro: 'gyro',
+  accel: 'accel',
+  speed: 'speed',
+  torch: 'torch',
+  chat: 'chat',
+}

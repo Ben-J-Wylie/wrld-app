@@ -30,6 +30,7 @@ import {
   SOURCE_META,
   SOURCE_RAIL_ORDER,
   KIND_TO_FEEDKIND,
+  FEEDKIND_TO_KIND,
   pickDefaultView,
 } from '@/components/features/stream/sourceMeta'
 import type { FeedKind } from '@/components/features/broadcast/FeedThumb'
@@ -175,6 +176,13 @@ export function ClipViewerScreen() {
   const playheadMs = startAtMs != null ? startAtMs + currentMs : 0
 
   // ── Source rail: the clip's captured sources, replaying at the playhead ──────
+  // PB4 A4 — the per-segment source window covering the playhead (buffer sessions only).
+  // `find` returns the live array element, so the reference is stable within a window
+  // (it only changes when the playhead crosses a boundary) — no per-tick rail churn.
+  const activeWindow = useMemo(
+    () => clip?.sourceWindows?.find((w) => playheadMs >= w.startAtMs && playheadMs < w.endAtMs) ?? null,
+    [clip?.sourceWindows, playheadMs],
+  )
   // The rail shows only CAPTURED sources (the clip's enabled tracks), mapped to
   // FeedKind + ordered like the dashboard; identity is always present.
   const availableViews = useMemo<FeedKind[]>(() => {
@@ -191,8 +199,19 @@ export function ClipViewerScreen() {
     // (the GET /clips/:id tracks include needs deploying for the rest of the rail).
     if (hasMedia) set.add('cam')
     set.add('profile') // identity always
-    return SOURCE_RAIL_ORDER.filter((k) => set.has(k))
-  }, [clip?.tracks, hasMedia])
+    let views = SOURCE_RAIL_ORDER.filter((k) => set.has(k))
+    // PB4 A4 — over a window where the creator toggled a source OFF, hide it from the rail
+    // (first-cut: app-side rail filtering; full manifest exclusion is the deferred A4 cut).
+    // Identity is its own axis, never a per-source toggle, so it's always kept.
+    if (activeWindow) {
+      views = views.filter((k) => {
+        if (k === 'profile') return true
+        const bk = FEEDKIND_TO_KIND[k]
+        return !bk || activeWindow.sources[bk] !== false
+      })
+    }
+    return views
+  }, [clip?.tracks, hasMedia, activeWindow])
 
   const [view, setView] = useState<FeedKind>('cam')
   useEffect(() => {

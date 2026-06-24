@@ -32,7 +32,7 @@ import { ClipsTimeline, type ClipsTimelineHandle } from '@/components/features/c
 import { ClipViewer } from '@/components/features/clip/ClipViewer'
 import { SourceRail } from '@/components/features/clip/SourceRail'
 import { SourceStage, type SourceRender } from '@/components/sections/SourceStage'
-import { SOURCE_META, SOURCE_RAIL_ORDER, KIND_TO_FEEDKIND, pickDefaultView } from '@/components/features/stream/sourceMeta'
+import { SOURCE_META, SOURCE_RAIL_ORDER, KIND_TO_FEEDKIND, FEEDKIND_TO_KIND, pickDefaultView } from '@/components/features/stream/sourceMeta'
 import { useLocalTelemetry } from '@/hooks/useLocalTelemetry'
 import { useLocationTrail } from '@/hooks/useLocationTrail'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
@@ -621,8 +621,18 @@ export const ClipsScreen = () => {
     (c: LaneClip, patch: SegSettings) => {
       const sid = c.sourceSessionId
       if (!sid) return
+      // The sheet keys `sources` by FeedKind; the wire (directives) keys by backend kind. Convert.
+      let wire = patch
+      if (patch.sources) {
+        const bk: Record<string, boolean> = {}
+        for (const [fk, v] of Object.entries(patch.sources)) {
+          const k = FEEDKIND_TO_KIND[fk as FeedKind]
+          if (k) bk[k] = v
+        }
+        wire = { ...patch, sources: bk }
+      }
       setSettingsRanges((prev) => {
-        const next = applySetting(prev, { sessionId: sid, startMs: c.startMs, endMs: c.endMs }, patch)
+        const next = applySetting(prev, { sessionId: sid, startMs: c.startMs, endMs: c.endMs }, wire)
         patchSessionDirectives(sid, next)
         return next
       })
@@ -655,13 +665,19 @@ export const ClipsScreen = () => {
     const avail = sourcesForSession(sid)
     const baseSources: Record<string, boolean> = {}
     for (const k of avail) baseSources[k] = true
+    // Override sources are backend-kind keyed (wire) → convert to FeedKind for the sheet.
+    const overrideSources: Record<string, boolean> = {}
+    for (const [bk, v] of Object.entries(override.sources ?? {})) {
+      const fk = KIND_TO_FEEDKIND[bk]
+      if (fk) overrideSources[fk] = v
+    }
     return {
       avail,
       settings: {
         visibility: override.visibility ?? ('public' as const),
         precision: override.precision ?? ('exact' as const),
         identity: override.identity ?? ('attributed' as const),
-        sources: { ...baseSources, ...(override.sources ?? {}) },
+        sources: { ...baseSources, ...overrideSources },
       },
     }
   }, [sheetClip, settingsRanges, sourcesForSession])

@@ -82,6 +82,10 @@ export type ClipDetail = {
   startAtMs: number | null
   endAtMs: number | null
   tracks: ClipTrack[]
+  // PB4 A4 — per-segment source enablement (buffer sessions only). Each window's `sources` is
+  // backend-kind → on/off; the viewer hides a source over a window where it's toggled off.
+  // Absent (saved clips) = no per-segment filtering (the `tracks` list already reflects enabled).
+  sourceWindows?: { startAtMs: number; endAtMs: number; sources: Record<string, boolean> }[]
 }
 
 export const clipsApi = {
@@ -131,6 +135,7 @@ export const clipsApi = {
         accessTier: 'public' | 'subscriber' | 'ppv'
         manifestUrl: string | null
         tracks: ClipTrack[]
+        sourceWindows?: { startAtMs: number; endAtMs: number; sources: Record<string, boolean> }[]
         host: { id: string; handle: string; displayName: string; avatarUrl: string | null }
       }
     }>(`/buffer/session/${id}`)
@@ -147,6 +152,7 @@ export const clipsApi = {
       startAtMs: s.startAtMs,
       endAtMs: s.endAtMs,
       tracks: s.tracks,
+      sourceWindows: s.sourceWindows,
     }
   },
 }
