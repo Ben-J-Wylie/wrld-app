@@ -671,8 +671,10 @@ export const ClipsScreen = () => {
       const fk = KIND_TO_FEEDKIND[bk]
       if (fk) overrideSources[fk] = v
     }
+    const t = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
     return {
       avail,
+      rangeLabel: `${t(sheetClip.startMs)}–${t(sheetClip.endMs)}`,
       settings: {
         visibility: override.visibility ?? ('public' as const),
         precision: override.precision ?? ('exact' as const),
@@ -681,6 +683,15 @@ export const ClipsScreen = () => {
       },
     }
   }, [sheetClip, settingsRanges, sourcesForSession])
+  const closeSheet = useCallback(() => setSheetClip(null), [])
+  // Stable onChange — depends only on the open segment (changes on open/close, not per playhead tick),
+  // so the memoised sheet doesn't re-render (and cancel taps) while the screen churns.
+  const onSheetChange = useCallback(
+    (patch: SegSettings) => {
+      if (sheetClip) applySegSetting(sheetClip, patch)
+    },
+    [sheetClip, applySegSetting],
+  )
   // No auto-selection on open — the page defaults to RIDING THE NOW EDGE (below), so the viewer
   // follows the live/now edge rather than highlighting a past clip. (Tapping a clip still selects it.)
 
@@ -2154,11 +2165,11 @@ export const ClipsScreen = () => {
       {pb3Enabled && sheetClip && sheetData && (
         <SegmentSettingsSheet
           visible
-          onClose={() => setSheetClip(null)}
-          rangeLabel={`${new Date(sheetClip.startMs).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}–${new Date(sheetClip.endMs).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`}
+          onClose={closeSheet}
+          rangeLabel={sheetData.rangeLabel}
           settings={sheetData.settings}
           availableSources={sheetData.avail}
-          onChange={(patch) => applySegSetting(sheetClip, patch)}
+          onChange={onSheetChange}
         />
       )}
     </View>

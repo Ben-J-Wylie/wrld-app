@@ -46,6 +46,9 @@ type Props = {
   peekHeight?: number
   showGrabber?: boolean
   showScrim?: boolean
+  // When set, a downward drag ANYWHERE on the sheet dismisses (not just the grabber). Use for
+  // sheets with no internal vertical scroll (e.g. a settings shelf), so the body is draggable too.
+  dragToDismiss?: boolean
   children: ReactNode
   contentStyle?: StyleProp<ViewStyle>
 }
@@ -57,6 +60,7 @@ export function BottomSheet({
   peekHeight = DEFAULT_PEEK,
   showGrabber = true,
   showScrim = true,
+  dragToDismiss = false,
   children,
   contentStyle,
 }: Props) {
@@ -135,9 +139,10 @@ export function BottomSheet({
             { height: sheetHeight, transform: [{ translateY: Animated.add(translateY, dragY) }] },
             contentStyle,
           ]}
+          {...(dragToDismiss ? panResponder.panHandlers : {})}
         >
           {showGrabber && (
-            <View {...panResponder.panHandlers} style={styles.grabberHit}>
+            <View {...(dragToDismiss ? {} : panResponder.panHandlers)} style={styles.grabberHit}>
               <View style={styles.grabber} />
             </View>
           )}

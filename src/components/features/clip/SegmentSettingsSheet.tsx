@@ -8,6 +8,7 @@
 // emits a partial patch on change; the screen owns the piecewise model (segmentSettings.ts), the
 // PATCH, and which sources the segment captured. `availableSources` = the segment's captured kinds.
 
+import { memo } from 'react'
 import { StyleSheet, View } from 'react-native'
 import { BottomSheet } from '@/components/primitives/BottomSheet'
 import { SegmentedToggle } from '@/components/primitives/SegmentedToggle'
@@ -50,9 +51,20 @@ const IDENTITY_OPTIONS: { value: Identity; label: string }[] = [
   { value: 'anon', label: 'ANON' },
 ]
 
-export function SegmentSettingsSheet({ visible, onClose, rangeLabel, settings, availableSources, onChange }: Props) {
+// Memoised — it lives inside a high-churn screen (ClipsScreen re-renders on every playhead
+// commit). Without this the sheet subtree reconciles mid-tap and cancels the scrim press +
+// grabber pan, so it "won't close". Props must be referentially stable (the screen useCallbacks
+// onChange/onClose + folds rangeLabel/settings into a memo).
+export const SegmentSettingsSheet = memo(function SegmentSettingsSheet({
+  visible,
+  onClose,
+  rangeLabel,
+  settings,
+  availableSources,
+  onChange,
+}: Props) {
   return (
-    <BottomSheet visible={visible} onClose={onClose} variant="peek" peekHeight={460}>
+    <BottomSheet visible={visible} onClose={onClose} variant="peek" peekHeight={460} dragToDismiss>
       <View style={styles.body}>
         <Text variant="bodyEmphasized" style={styles.title}>
           Segment {rangeLabel}
@@ -90,7 +102,7 @@ export function SegmentSettingsSheet({ visible, onClose, rangeLabel, settings, a
       </View>
     </BottomSheet>
   )
-}
+})
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
