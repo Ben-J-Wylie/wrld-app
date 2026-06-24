@@ -657,6 +657,11 @@ export const ClipsScreen = () => {
   // PB4 A2 — the per-segment settings sheet (double-tap a segment → this; supersedes the grid
   // editor + the scab-in eye/lock toggle). Holds the segment whose settings are being edited.
   const [sheetClip, setSheetClip] = useState<LaneClip | null>(null)
+  // `sheetVisible` drives the open/close ANIMATION independently of mount: on close we flip it
+  // false (BottomSheet animates out), then unmount after the exit (so the close animates like the
+  // open, instead of vanishing). `sheetData` (from sheetClip) stays alive through the animation.
+  const [sheetVisible, setSheetVisible] = useState(false)
+  const sheetCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Resolved settings (override over the go-live defaults) + captured sources for the sheet.
   const sheetData = useMemo(() => {
     if (!sheetClip?.sourceSessionId) return null
@@ -684,8 +689,9 @@ export const ClipsScreen = () => {
     }
   }, [sheetClip, settingsRanges, sourcesForSession])
   const closeSheet = useCallback(() => {
-    if (__DEV__) console.log('[seg-sheet] closeSheet → setSheetClip(null)')
-    setSheetClip(null)
+    setSheetVisible(false) // animate out (BottomSheet slides down + fades the scrim)
+    if (sheetCloseTimer.current) clearTimeout(sheetCloseTimer.current)
+    sheetCloseTimer.current = setTimeout(() => setSheetClip(null), 270) // unmount after the 250ms exit
   }, [])
   // Stable onChange — depends only on the open segment (changes on open/close, not per playhead tick),
   // so the memoised sheet doesn't re-render (and cancel taps) while the screen churns.
@@ -1742,7 +1748,9 @@ export const ClipsScreen = () => {
   const openClip = useCallback((clip: LaneClip, _kind: 'buffered' | 'saved') => {
     // The optimistic live placeholder has no real footage / session yet — nothing to edit.
     if (clip.sourceSessionId === OPT_LIVE_SESSION || !clip.sourceSessionId) return
+    if (sheetCloseTimer.current) clearTimeout(sheetCloseTimer.current) // re-open before unmount
     setSheetClip(clip)
+    setSheetVisible(true)
   }, [])
 
   // Poll the playhead → when it's over a snip whose two pieces are still in the SAME lane, the
@@ -2168,7 +2176,7 @@ export const ClipsScreen = () => {
       {/* PB4 A2 — per-segment settings sheet (double-tap a segment). Multi-axis; PATCHes directives. */}
       {pb3Enabled && sheetClip && sheetData && (
         <SegmentSettingsSheet
-          visible
+          visible={sheetVisible}
           onClose={closeSheet}
           rangeLabel={sheetData.rangeLabel}
           settings={sheetData.settings}

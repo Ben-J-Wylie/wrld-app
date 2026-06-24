@@ -18,7 +18,7 @@
 // Existing one-offs (AuthModal, TipSheet, NearbyStreamsDrawer) refactor
 // to content-only callers in 12.6.
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import {
   Animated,
   Dimensions,
@@ -30,6 +30,7 @@ import {
   type ViewStyle,
 } from 'react-native'
 import type { ReactNode } from 'react'
+import { GestureDetector, GestureHandlerRootView, Gesture } from 'react-native-gesture-handler'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { theme } from '@/tokens/theme'
 
@@ -133,9 +134,51 @@ export function BottomSheet({
     }),
   ).current
 
+  // RNGH drag-to-dismiss (dragToDismiss sheets). RN PanResponder doesn't receive moves here —
+  // the sheet's child controls are RNGH, which consume the gesture natively and starve RN's
+  // responder. So drag with RNGH too (it composes with the child handlers via activeOffsetY).
+  // runOnJS so the callbacks can drive the RN Animated.Value directly.
+  const dragGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .runOnJS(true)
+        .activeOffsetY(12) // engage on a clear vertical drag; taps still reach the controls
+        .failOffsetX([-24, 24]) // bail if it's mostly horizontal
+        .onUpdate((e) => {
+          if (e.translationY > 0) dragY.setValue(e.translationY)
+        })
+        .onEnd((e) => {
+          if (e.translationY > 80 || e.velocityY > 600) {
+            dragY.setValue(0)
+            if (__DEV__) console.log('[sheet] rngh drag → onClose()')
+            onClose()
+          } else {
+            Animated.spring(dragY, { toValue: 0, useNativeDriver: true }).start()
+          }
+        }),
+    [onClose, dragY],
+  )
+
+  const sheet = (
+    <Animated.View
+      style={[
+        styles.sheet,
+        { height: sheetHeight, transform: [{ translateY: Animated.add(translateY, dragY) }] },
+        contentStyle,
+      ]}
+    >
+      {showGrabber && (
+        <View {...(dragToDismiss ? {} : panResponder.panHandlers)} style={styles.grabberHit}>
+          <View style={styles.grabber} />
+        </View>
+      )}
+      <View style={styles.body}>{children}</View>
+    </Animated.View>
+  )
+
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
-      <View style={styles.root}>
+      <GestureHandlerRootView style={styles.root}>
         {showScrim && (
           <Animated.View
             style={[styles.scrim, { opacity: scrimOpacity }]}
@@ -149,22 +192,8 @@ export function BottomSheet({
             }}
           />
         )}
-        <Animated.View
-          style={[
-            styles.sheet,
-            { height: sheetHeight, transform: [{ translateY: Animated.add(translateY, dragY) }] },
-            contentStyle,
-          ]}
-          {...(dragToDismiss ? panResponder.panHandlers : {})}
-        >
-          {showGrabber && (
-            <View {...(dragToDismiss ? {} : panResponder.panHandlers)} style={styles.grabberHit}>
-              <View style={styles.grabber} />
-            </View>
-          )}
-          <View style={styles.body}>{children}</View>
-        </Animated.View>
-      </View>
+        {dragToDismiss ? <GestureDetector gesture={dragGesture}>{sheet}</GestureDetector> : sheet}
+      </GestureHandlerRootView>
     </Modal>
   )
 }
