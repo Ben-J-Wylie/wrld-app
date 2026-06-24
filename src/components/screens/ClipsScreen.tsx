@@ -687,9 +687,11 @@ export const ClipsScreen = () => {
       if (fk) overrideSources[fk] = v
     }
     const t = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+    const dateLabel = new Date(sheetClip.startMs).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })
     return {
       avail,
       rangeLabel: `${t(sheetClip.startMs)}–${t(sheetClip.endMs)}`,
+      dateLabel,
       settings: {
         visibility: override.visibility ?? ('public' as const),
         precision: override.precision ?? ('exact' as const),
@@ -1750,6 +1752,19 @@ export const ClipsScreen = () => {
   const reaping = windowStartMs != null && oldestClip != null && oldestClip.startMs <= windowStartMs + 1
   const reaperLane: 'buffered' | 'saved' = oldestClip != null && savedLane.some((c) => c.id === oldestClip.id) ? 'saved' : 'buffered'
 
+  // PB4 sheet — the open segment's lane (drives the Lane toggle), and whether it's being reaped
+  // (then the toggle hides — it can no longer move). Changing the toggle saves / un-saves it.
+  const sheetLane: 'buffered' | 'saved' = !!sheetClip && savedLane.some((c) => c.id === sheetClip.id) ? 'saved' : 'buffered'
+  const sheetShowLane = !!sheetClip && !(reaping && oldestClip?.id === sheetClip.id)
+  const onSheetLaneChange = useCallback(
+    (next: 'buffered' | 'saved') => {
+      if (!sheetClip || next === (savedLane.some((c) => c.id === sheetClip.id) ? 'saved' : 'buffered')) return
+      if (next === 'saved') saveClip(sheetClip)
+      else unsaveClip(sheetClip)
+    },
+    [sheetClip, savedLane, saveClip, unsaveClip],
+  )
+
   const reaperBoundaryMs = windowStartMs != null && !reaping ? windowStartMs : null
   const reapAtMs = oldestClip != null && windowMs > 0 ? oldestClip.startMs + windowMs : null
   const reapAtRef = useRef<number | null>(null)
@@ -2191,6 +2206,10 @@ export const ClipsScreen = () => {
           visible={sheetVisible}
           onClose={closeSheet}
           rangeLabel={sheetData.rangeLabel}
+          dateLabel={sheetData.dateLabel}
+          lane={sheetLane}
+          onLaneChange={onSheetLaneChange}
+          showLane={sheetShowLane}
           settings={sheetData.settings}
           availableSources={sheetData.avail}
           onChange={onSheetChange}

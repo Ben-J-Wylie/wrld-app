@@ -13,7 +13,6 @@ import { Dimensions, StyleSheet, View } from 'react-native'
 import { BottomSheet } from '@/components/primitives/BottomSheet'
 import { Pressable } from '@/components/primitives/Pressable'
 import { SegmentedToggle } from '@/components/primitives/SegmentedToggle'
-import { Toggle } from '@/components/primitives/Toggle'
 import { Input } from '@/components/primitives/Input'
 import { Chip } from '@/components/primitives/Chip'
 import { Text } from '@/components/primitives/Text'
@@ -26,8 +25,16 @@ import { theme } from '@/tokens/theme'
 type Props = {
   visible: boolean
   onClose: () => void
-  /** Label for the segment span, e.g. "0:12–0:34". */
+  /** Time-of-day span label, e.g. "3:04–3:05 PM". */
   rangeLabel: string
+  /** Date label, e.g. "Sat, Jun 14". */
+  dateLabel: string
+  /** Which lane the segment is in (drives + reflects the Lane toggle). */
+  lane: 'buffered' | 'saved'
+  /** Move the segment between lanes (save / un-save). */
+  onLaneChange: (lane: 'buffered' | 'saved') => void
+  /** Hide the Lane toggle once the reaper has reached this segment (no longer movable). */
+  showLane: boolean
   /** Resolved settings for the segment (override merged over the go-live defaults). */
   settings: Required<Pick<SegSettings, 'visibility' | 'precision' | 'identity'>> & {
     sources: Record<string, boolean>
@@ -40,21 +47,32 @@ type Props = {
   onChange: (patch: SegSettings) => void
 }
 
-const VISIBILITY_OPTIONS: { value: Visibility; label: string }[] = [
-  { value: 'public', label: 'PUBLIC' },
-  { value: 'private', label: 'PRIVATE' },
+// All controls are multistate toggles, OFF/least → ON/most reading left→right (Ben's order).
+const LANE_OPTIONS: { value: 'buffered' | 'saved'; label: string }[] = [
+  { value: 'buffered', label: 'BUFFERED' },
+  { value: 'saved', label: 'SAVED' },
 ]
-const PRECISION_OPTIONS: { value: Precision; label: string }[] = [
-  { value: 'exact', label: 'EXACT' },
-  { value: 'city', label: 'CITY' },
-  { value: 'country', label: 'COUNTRY' },
-  { value: 'off', label: 'OFF' },
+const VISIBILITY_OPTIONS: { value: Visibility; label: string }[] = [
+  { value: 'private', label: 'PRIVATE' },
+  { value: 'public', label: 'PUBLIC' },
 ]
 // Identity is separate from visibility: it's whose name shows on public content (vs anon).
 const IDENTITY_OPTIONS: { value: Identity; label: string }[] = [
-  { value: 'attributed', label: 'SHOWN' },
   { value: 'anon', label: 'ANON' },
+  { value: 'attributed', label: 'SHOWN' },
 ]
+const PRECISION_OPTIONS: { value: Precision; label: string }[] = [
+  { value: 'off', label: 'OFF' },
+  { value: 'country', label: 'COUNTRY' },
+  { value: 'city', label: 'CITY' },
+  { value: 'exact', label: 'EXACT' },
+]
+const ON_OFF_OPTIONS: { value: 'off' | 'on'; label: string }[] = [
+  { value: 'off', label: 'OFF' },
+  { value: 'on', label: 'ON' },
+]
+// The per-source rows, in Ben's order (only those the segment actually captured render).
+const SHEET_SOURCE_ORDER: FeedKind[] = ['cam', 'audio', 'chat', 'compass', 'gyro', 'accel', 'speed', 'torch']
 
 // Memoised — it lives inside a high-churn screen (ClipsScreen re-renders on every playhead
 // commit). Without this the sheet subtree reconciles mid-tap and cancels the scrim press +
@@ -64,10 +82,16 @@ export const SegmentSettingsSheet = memo(function SegmentSettingsSheet({
   visible,
   onClose,
   rangeLabel,
+  dateLabel,
+  lane,
+  onLaneChange,
+  showLane,
   settings,
   availableSources,
   onChange,
 }: Props) {
+  // The segment's captured sources, in Ben's fixed order.
+  const orderedSources = SHEET_SOURCE_ORDER.filter((k) => availableSources.includes(k))
   // Local input state (committed to the screen on change/submit). The parent keys this sheet by
   // segment id, so this state resets to the segment's saved values each time it opens.
   const [title, setTitle] = useState(settings.title ?? '')
@@ -91,9 +115,9 @@ export const SegmentSettingsSheet = memo(function SegmentSettingsSheet({
     setTags(next)
     onChange({ tags: next })
   }
-  // Grow with content (title + 3 axes + tags + a sources header + one row per source), capped at
-  // ~85% of the screen — the BottomSheet scrolls past the cap (e.g. all sources armed).
-  const rowCount = 5 + (availableSources.length ? 1 + availableSources.length : 0)
+  // Grow with content (title + lane + 3 axes + one row per source + tags), capped at ~85% of the
+  // screen — the BottomSheet scrolls past the cap (e.g. all sources armed).
+  const rowCount = 4 + (showLane ? 1 : 0) + orderedSources.length + 1
   const height = Math.min(190 + rowCount * 58, Math.round(Dimensions.get('window').height * 0.85))
   return (
     <BottomSheet visible={visible} onClose={onClose} variant="peek" peekHeight={height} dragToDismiss scrollable>
@@ -109,48 +133,41 @@ export const SegmentSettingsSheet = memo(function SegmentSettingsSheet({
               returnKeyType="done"
             />
             <Text variant="monoCaption" color={theme.colors.text.muted} style={styles.rangeCaption}>
+              {dateLabel}
+            </Text>
+            <Text variant="monoCaption" color={theme.colors.text.muted} style={styles.rangeCaption}>
               {rangeLabel}
             </Text>
           </View>
-          <Pressable
-            variant="subtle"
-            hitSlop={12}
-            accessibilityLabel="Close"
-            onPress={onClose}
-          >
+          <Pressable variant="subtle" hitSlop={12} accessibilityLabel="Close" onPress={onClose}>
             <Icon name="x" size="md" color={theme.colors.text.muted} />
           </Pressable>
         </View>
 
+        {/* All controls are multistate toggles, in a fixed order (Ben). Lane hides once reaping. */}
+        {showLane && (
+          <Row label="Lane">
+            <SegmentedToggle options={LANE_OPTIONS} value={lane} onChange={onLaneChange} />
+          </Row>
+        )}
         <Row label="Visibility">
           <SegmentedToggle options={VISIBILITY_OPTIONS} value={settings.visibility} onChange={(v) => onChange({ visibility: v })} />
-        </Row>
-        <Row label="Location">
-          <SegmentedToggle options={PRECISION_OPTIONS} value={settings.precision} onChange={(v) => onChange({ precision: v })} />
         </Row>
         <Row label="Identity">
           <SegmentedToggle options={IDENTITY_OPTIONS} value={settings.identity} onChange={(v) => onChange({ identity: v })} />
         </Row>
-
-        {availableSources.length > 0 && (
-          <View style={styles.sources}>
-            <Text variant="monoCaption" color={theme.colors.text.muted} style={styles.sourcesLabel}>
-              SOURCES
-            </Text>
-            {availableSources.map((kind) => (
-              <View key={kind} style={styles.sourceRow}>
-                <Icon name={SOURCE_META[kind].icon} size="sm" color={theme.colors.text.muted} />
-                <Text variant="body" style={styles.sourceName}>
-                  {SOURCE_META[kind].label}
-                </Text>
-                <Toggle
-                  value={settings.sources[kind] ?? true}
-                  onValueChange={(on) => onChange({ sources: { [kind]: on } })}
-                />
-              </View>
-            ))}
-          </View>
-        )}
+        <Row label="Location">
+          <SegmentedToggle options={PRECISION_OPTIONS} value={settings.precision} onChange={(v) => onChange({ precision: v })} />
+        </Row>
+        {orderedSources.map((kind) => (
+          <Row key={kind} label={SOURCE_META[kind].label}>
+            <SegmentedToggle
+              options={ON_OFF_OPTIONS}
+              value={(settings.sources[kind] ?? true) ? 'on' : 'off'}
+              onChange={(v) => onChange({ sources: { [kind]: v === 'on' } })}
+            />
+          </Row>
+        ))}
 
         <View style={styles.sources}>
           <Text variant="monoCaption" color={theme.colors.text.muted} style={styles.sourcesLabel}>
@@ -197,7 +214,5 @@ const styles = StyleSheet.create({
   rowLabel: {},
   sources: { gap: theme.spacing.sm, marginTop: theme.spacing.xs },
   sourcesLabel: {},
-  sourceRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
-  sourceName: { flex: 1 },
   tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.xs },
 })
