@@ -268,3 +268,18 @@ compass bearing, initial torch state, etc.
 >
 > **On-device verify owed:** arm chat with zero messages + a sensor that doesn't move → both show
 > as captured sources in the editor (chat = empty thread), live and after reload.
+
+---
+
+## Follow-up (Ben, 2026-06-24) — edited per-segment title must proliferate to the time-machine pin
+
+A user edits a segment's title in the clip shelf (persisted on `DirectiveRange.title` — already
+done). But the time-machine **pin card** (tapped on the globe) still shows the OLD title, because
+`GET /clips/discover` selects **`c.title`** (clip pins) / **`s.title`** (buffer-session pins), not
+the covering directive's current title.
+
+**Backend TODO (Aaron):** in the discover feed, surface the per-segment title — `COALESCE` the
+covering `DirectiveRange.title` over `Clip.title` / `Stream.title` for the pin at that instant
+(mirrors how location precision already reads the clip's *current* value). Then an edited segment
+title shows on the pin immediately. The app already renders `pin.title`, so no app change — it'll
+just work once the feed coalesces. (Go-live `Stream.title` → buffer-pin title already works.)
