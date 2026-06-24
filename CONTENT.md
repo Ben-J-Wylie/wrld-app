@@ -254,6 +254,9 @@ decided principle now.)*
   the on-air indicator are the working form of principle #1.
 - **Data-only is valid.** A location share, a telemetry feed, a torch channel —
   any armed source can go live; AV is not required for a live room.
+- **The dashboard is the live (now-edge) editor.** Arming + every per-range setting
+  change snips the live manifest at *now* and prints forward with the new value — the
+  dashboard and the clip editor are the same editor at different edges. See §5.
 
 ---
 
@@ -281,6 +284,80 @@ decided principle now.)*
   metadata (which ranges carry `retain`), not "which pool the bytes were copied to."
 - **Mid-clip delete** = one clip with two ranges and a gap (an HLS
   discontinuity), not an auto-split into two entities.
+
+**Clip ≡ segment (decided 2026-06-24).** A *clip* and a *segment* are the same thing —
+a contiguous **range** of the one footage store carrying a self-contained set of
+per-range directives. "Saved clip" and "buffer segment" are the same kind of object
+differing only in their **lane** directive. Snip → two; mend → one. The raw
+**recording / session** (one go-live = one continuous byte span) is the substrate
+underneath, **not** a user-facing unit. We standardize on **"clip"** as the user word;
+"segment" is a legacy synonym for the same range. *(The clips page's two lanes are just
+the **retention axis rendered as two rows** — a visual cue for that one axis, not two
+entity types.)*
+
+### Snips — one boundary, planted by hand or by a live edge
+
+A **snip** plants a manifest boundary; the range forward of it can carry different
+settings. It's one operation with two families of trigger:
+
+- **Manual — the scissors at the playhead.** Deliberate, at **any instant**, on any
+  footage (past, retained, or buffered). The primary explicit editing cut.
+- **Live edges — automatic, server-authoritative.** Three edges plant the same kind of
+  boundary on the fly, where live activity crystallizes:
+  - **Now edge** — incoming footage. The dashboard is its editor (below): change any
+    setting → snip at *now* → keep printing forward with the new settings. A live
+    broadcast is therefore a sequence of **settings-eras**, naturally segmented.
+  - **Reaper edge** — the oldest footage being consumed, **symmetric to the now edge**.
+    Any edit to a being-reaped clip applies **from the reaper edge forward** (the rest
+    is already evicted) — a snip at that edge; if the forward range is *saved* it
+    persists as its own clip. Toggling save↔buffer while reaping plants successive snips
+    → **distinct saved clips with evicted gaps between them** (each gap-free internally,
+    each independently editable). No *interior* gaps — the reaper only eats from the left.
+  - **Storage cap** — a length bound. Live-to-saved that hits the cap snips at the cap,
+    **auto-flips the lane to buffered**, and keeps printing there (a warning if the user
+    tries to toggle back with no room).
+
+A save's range is bounded by all three: `[max(start, reaperEdge), min(end, nowEdge,
+edge + storageRemaining)]`. **The live edges are server-authoritative** — the client's
+edge is stale by the round-trip, so the client sends *edge-relative intent* ("save from
+the live edge forward") and the **server snips at its own edge at commit time**. A sliver
+evicted during the round-trip may be lost; nothing is over-claimed.
+
+### The dashboard is the live (now-edge) editor
+
+The dashboard and the clip editor are **the same editor over the same per-range
+manifest** — one scoped to the **now edge** (live), one to **any past range**
+(retrospective), same toggles. At go-live the user picks the starting **lane** (buffer
+or saved — a new dashboard toggle); the server tags the incoming clip accordingly.
+Changing **anything** the server stores per-range — lane, a source on/off, **location
+granularity**, identity, title, tags — snips at now and prints forward with the new
+value. Every source is treated equally, **each in its own way**: a data source
+(location, sensors, chat) snips as pure metadata; an **AV source (camera/audio) snips
+with a real mediasoup renegotiation** (add/remove a producer) — different cost, same
+manifest result.
+
+**Visibility is the one per-range setting withheld from the dashboard** — not because
+the server can't (it's wired identically) but by choice: **live is always public**
+(§3), so there's nothing to choose live. Visibility becomes editable only **post-hoc**,
+in the clip editor.
+
+### Self-contained clips — each snip stamps its own initial state
+
+Because every clip must stand alone (playable, editable, saveable without reaching into
+its neighbour), **each snip stamps the new clip's initial state**: at the boundary,
+every state-bearing source re-emits its **current value** as the new clip's first
+sample — chat → empty-thread marker, location → current pin, compass/gyro/accel/speed →
+current reading, torch → current on/off. Continuous media (camera/audio) just keeps
+flowing — no first sample needed. This is the go-live "nothing reads blank" promise
+**generalized to every snip**. **Mend** reverses it: reconcile the two clips' settings
+(or keep them snipped), then **coalesce → one clip**.
+
+### One source of truth — the server does the snipping
+
+All snipping, saving, eviction, and clamping happen **server-side**; the client sends
+intent and renders the result. The live edges move continuously and only the server sees
+them authoritatively, so the server is the **single source of truth** for where a snip
+lands and what persists. *(Decided 2026-06-24.)*
 
 ---
 
