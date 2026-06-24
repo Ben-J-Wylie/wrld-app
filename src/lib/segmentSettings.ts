@@ -81,7 +81,7 @@ export function settingsBoundaries(ranges: SettingsRange[], sessionId: string): 
 }
 
 // Coalesce adjacent same-session ranges with equal settings; drop empty (= inherit) ranges.
-function coalesce(ranges: SettingsRange[]): SettingsRange[] {
+export function coalesce(ranges: SettingsRange[]): SettingsRange[] {
   const bySession = new Map<string, SettingsRange[]>()
   for (const r of ranges) {
     if (r.endMs <= r.startMs || isEmptySettings(r.settings)) continue

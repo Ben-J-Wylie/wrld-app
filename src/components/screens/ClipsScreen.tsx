@@ -49,7 +49,16 @@ import { useDrafts } from '@/hooks/useDrafts'
 import { useBroadcastStore } from '@/stores/broadcastStore'
 import { serverNow, feedServerNow } from '@/lib/serverClock'
 import { usePublicConfig, configBool } from '@/hooks/usePublicConfig'
-import { coalesce, addRange, subtractRange as subtractPriv, isCovered, type PrivRange } from '@/lib/privacyRanges'
+import {
+  applySetting,
+  settingsAt,
+  settingsEqual,
+  isEmptySettings,
+  coalesce,
+  type SettingsRange,
+  type SegSettings,
+} from '@/lib/segmentSettings'
+import { SegmentSettingsSheet } from '@/components/features/clip/SegmentSettingsSheet'
 import { bufferApi, type BufferSession, type BufferTrackKind } from '@/api/buffer'
 
 const FRAME_MS = 1000 / 30 // one frame at the 30fps capture (transport frame-step)
@@ -308,25 +317,26 @@ export const ClipsScreen = () => {
   const [splitPoints, setSplitPoints] = useState<SplitPoint[]>([])
   // When the playhead is over a (same-lane-healable) snip, the scissor becomes a bandaid → un-snip.
   const [unsnip, setUnsnip] = useState<SplitPoint | null>(null)
-  // PB4(a) — the session's coalesced PRIVATE ranges (multi-axis settings land with Aaron's
-  // backend; today this is the visibility axis). Declared up here so the DISPLAY segmentation can
-  // derive blocks from privacy boundaries. Seeded from the server + edited below.
-  const [privRanges, setPrivRanges] = useState<PrivRange[]>([])
-  // Display segmentation = the user's snips UNION every privacy boundary, so a segment is always
-  // uniformly public OR private (the "auto-split blocks" UX — a private sub-range becomes its own
-  // block, which structurally kills the straddle + makes the toggle exact). Privacy boundaries are
-  // display-only: they're NOT added to `splitPoints` (the user's explicit, un-snippable set).
-  const privacyBoundaries = useMemo<SplitPoint[]>(
+  // PB4(a) — the session's per-segment SETTINGS as a non-overlapping, coalesced list of override
+  // ranges (multi-axis: visibility · location precision · identity · per-source on/off). Every axis
+  // is first-class; a gap = inherit the go-live value. Declared up here so the DISPLAY segmentation
+  // derives blocks from every settings boundary. Seeded from the server + edited via the sheet.
+  const [settingsRanges, setSettingsRanges] = useState<SettingsRange[]>([])
+  // Display segmentation = the user's snips UNION every settings boundary, so a segment is always
+  // uniform across ALL axes (the "auto-split blocks" UX — a differing sub-range becomes its own
+  // block, which structurally kills the straddle + makes a per-segment toggle exact). Settings
+  // boundaries are display-only: they're NOT added to `splitPoints` (the user's explicit snip set).
+  const settingBoundaries = useMemo<SplitPoint[]>(
     () =>
-      privRanges.flatMap((r) => [
+      settingsRanges.flatMap((r) => [
         { sessionId: r.sessionId, atMs: r.startMs },
         { sessionId: r.sessionId, atMs: r.endMs },
       ]),
-    [privRanges],
+    [settingsRanges],
   )
   const effectiveSplits = useMemo(
-    () => [...splitPoints, ...privacyBoundaries],
-    [splitPoints, privacyBoundaries],
+    () => [...splitPoints, ...settingBoundaries],
+    [splitPoints, settingBoundaries],
   )
   // In-flight un-save of a saved PIECE: the piece's range is optimistically punched out of its
   // parent's claim (→ returns to buffer) while the parent is trimmed on the backend.
@@ -536,14 +546,19 @@ export const ClipsScreen = () => {
   const seededPrivateRef = useRef(false)
   useEffect(() => {
     if (seededPrivateRef.current || sessions.length === 0) return
-    const seeded: PrivRange[] = []
+    const seeded: SettingsRange[] = []
     for (const s of sessions) {
       for (const d of s.directives ?? []) {
-        if (d.visibility === 'private') seeded.push({ sessionId: s.id, startMs: d.startAtMs, endMs: d.endAtMs })
+        const settings: SegSettings = {}
+        if (d.visibility) settings.visibility = d.visibility
+        if (d.precision) settings.precision = d.precision // 'off' is a real precision; null/absent = inherit
+        if (d.attributed != null) settings.identity = d.attributed ? 'attributed' : 'anon'
+        if (d.sources) settings.sources = d.sources
+        if (!isEmptySettings(settings)) seeded.push({ sessionId: s.id, startMs: d.startAtMs, endMs: d.endAtMs, settings })
       }
     }
     seededPrivateRef.current = true
-    if (seeded.length) setPrivRanges(coalesce(seeded))
+    if (seeded.length) setSettingsRanges(seeded) // server sends a coalesced authoritative list
   }, [sessions])
   // PB4 A1 — seed snips from the server (Aaron's `session.snips`) once, so user snips survive a
   // reload. Local state owns afterward (snip/mend PATCH `/snips`). Merge (don't clobber any local).
@@ -566,20 +581,30 @@ export const ClipsScreen = () => {
       .patchSessionSnips(sessionId, splits.filter((s) => s.sessionId === sessionId).map((s) => ({ atMs: Math.round(s.atMs) })))
       .catch(() => {})
   }, [])
-  const segIsPrivate = useCallback(
-    (c: LaneClip) => {
+  // The resolved settings AT a segment (the covering override merged over the go-live defaults).
+  // Used by the sheet (to show current values) and the mend differ-guard (to compare neighbours).
+  const settingsForSeg = useCallback(
+    (c: LaneClip): SegSettings => {
       const sid = c.sourceSessionId
-      return !!sid && isCovered(privRanges, { sessionId: sid, startMs: c.startMs, endMs: c.endMs })
+      if (!sid) return {}
+      return settingsAt(settingsRanges, sid, (c.startMs + c.endMs) / 2)
     },
-    [privRanges],
+    [settingsRanges],
   )
-  // PATCH the authoritative (coalesced) private-range list for one session — the public
-  // spans are the omitted complement.
+  // PATCH the authoritative (coalesced) per-segment directive list for one session. Each override
+  // range carries every set axis; an omitted range = the go-live default. AUTHORITATIVE replace.
   const patchSessionDirectives = useCallback(
-    (sessionId: string, ranges: PrivRange[]) => {
+    (sessionId: string, ranges: SettingsRange[]) => {
       const directives = ranges
         .filter((r) => r.sessionId === sessionId)
-        .map((r) => ({ startAtMs: Math.round(r.startMs), endAtMs: Math.round(r.endMs), visibility: 'private' as const }))
+        .map((r) => ({
+          startAtMs: Math.round(r.startMs),
+          endAtMs: Math.round(r.endMs),
+          ...(r.settings.visibility ? { visibility: r.settings.visibility } : {}),
+          ...(r.settings.precision ? { precision: r.settings.precision } : {}),
+          ...(r.settings.identity ? { attributed: r.settings.identity === 'attributed' } : {}),
+          ...(r.settings.sources ? { sources: r.settings.sources } : {}),
+        }))
       bufferApi
         .patchDirectives(sessionId, directives)
         // PB3.5 — tagging edits the time-machine availability map: refresh the globe's
@@ -590,29 +615,56 @@ export const ClipsScreen = () => {
     },
     [qc],
   )
-  // Toggle a segment public↔private by INTERVAL ARITHMETIC: private → subtract its range
-  // (any rest of a covering range stays private); public → add + coalesce. So marking one
-  // half of an already-private clip public leaves the other half private.
-  const toggleSegPrivacy = useCallback(
-    (c: LaneClip) => {
+  // Apply a partial settings patch over a segment's span (split-merge-coalesce via segmentSettings),
+  // then PATCH the recomputed authoritative list. The single edit path for the settings sheet.
+  const applySegSetting = useCallback(
+    (c: LaneClip, patch: SegSettings) => {
       const sid = c.sourceSessionId
       if (!sid) return
-      const r: PrivRange = { sessionId: sid, startMs: c.startMs, endMs: c.endMs }
-      setPrivRanges((prev) => {
-        const next = isCovered(prev, r) ? subtractPriv(prev, r) : addRange(prev, r)
+      setSettingsRanges((prev) => {
+        const next = applySetting(prev, { sessionId: sid, startMs: c.startMs, endMs: c.endMs }, patch)
         patchSessionDirectives(sid, next)
         return next
       })
     },
     [patchSessionDirectives],
   )
-  // The per-segment toggle shows for any selected timeline segment with a source
-  // session — BUFFER or SAVED. Post-PB2 (retain-in-place) a saved clip's footage stays
-  // in its buffer session, so the SAME directive range (over sourceSessionId) governs
-  // its time-machine pin — public/private is symmetric across the lanes (the only lane
-  // difference is reaper survival, per Ben). Gated on the flag.
-  const selectedSegHasSession = !!selectedClip?.sourceSessionId
-  const selectedPrivate = !!selectedClip && segIsPrivate(selectedClip)
+  // The captured sources (FeedKinds) for a segment's session → drives the sheet's per-source rows.
+  // Identity is its own axis (not a source toggle), so 'profile' is excluded here.
+  const sourcesForSession = useCallback(
+    (sessionId?: string | null): FeedKind[] => {
+      const s = sessions.find((x) => x.id === sessionId)
+      if (!s) return []
+      const set = new Set<FeedKind>()
+      for (const k of [...(s.kinds ?? []), ...Object.keys(s.dataUrls ?? {})]) {
+        const fk = KIND_TO_FEEDKIND[k]
+        if (fk && fk !== 'profile') set.add(fk)
+      }
+      return SOURCE_RAIL_ORDER.filter((k) => set.has(k))
+    },
+    [sessions],
+  )
+  // PB4 A2 — the per-segment settings sheet (double-tap a segment → this; supersedes the grid
+  // editor + the scab-in eye/lock toggle). Holds the segment whose settings are being edited.
+  const [sheetClip, setSheetClip] = useState<LaneClip | null>(null)
+  // Resolved settings (override over the go-live defaults) + captured sources for the sheet.
+  const sheetData = useMemo(() => {
+    if (!sheetClip?.sourceSessionId) return null
+    const sid = sheetClip.sourceSessionId
+    const override = settingsAt(settingsRanges, sid, (sheetClip.startMs + sheetClip.endMs) / 2)
+    const avail = sourcesForSession(sid)
+    const baseSources: Record<string, boolean> = {}
+    for (const k of avail) baseSources[k] = true
+    return {
+      avail,
+      settings: {
+        visibility: override.visibility ?? ('public' as const),
+        precision: override.precision ?? ('exact' as const),
+        identity: override.identity ?? ('attributed' as const),
+        sources: { ...baseSources, ...(override.sources ?? {}) },
+      },
+    }
+  }, [sheetClip, settingsRanges, sourcesForSession])
   // No auto-selection on open — the page defaults to RIDING THE NOW EDGE (below), so the viewer
   // follows the live/now edge rather than highlighting a past clip. (Tapping a clip still selects it.)
 
@@ -1654,22 +1706,12 @@ export const ClipsScreen = () => {
   const reapAtMs = oldestClip != null && windowMs > 0 ? oldestClip.startMs + windowMs : null
   const reapAtRef = useRef<number | null>(null)
   reapAtRef.current = reapAtMs
-  const openClip = useCallback((clip: LaneClip, kind: 'buffered' | 'saved') => {
-    // The optimistic live placeholder has no real footage yet — don't open the editor on it.
-    if (clip.sourceSessionId === OPT_LIVE_SESSION) return
-    // Pass the window so the editor scopes to a carved buffer interval (whose id is synthetic),
-    // and the source session so it can play the right buffer footage.
-    router.navigate({
-      pathname: '/(app)/clip-editor',
-      params: {
-        clipId: clip.id,
-        kind,
-        startMs: String(Math.round(clip.startMs)),
-        endMs: String(Math.round(clip.endMs)),
-        sessionId: clip.sourceSessionId ?? '',
-        draftId: clip.draftId ?? '', // reopen an existing draft (continue editing it)
-      },
-    })
+  // PB4 A2 — double-tap a segment → the settings sheet (the decided UX; supersedes navigating to
+  // the bracket-trim grid editor, which retires under the snip + per-segment-shelf model).
+  const openClip = useCallback((clip: LaneClip, _kind: 'buffered' | 'saved') => {
+    // The optimistic live placeholder has no real footage / session yet — nothing to edit.
+    if (clip.sourceSessionId === OPT_LIVE_SESSION || !clip.sourceSessionId) return
+    setSheetClip(clip)
   }, [])
 
   // Poll the playhead → when it's over a snip whose two pieces are still in the SAME lane, the
@@ -1705,20 +1747,30 @@ export const ClipsScreen = () => {
         setSplitPoints(next)
         persistSnips(sid, next)
       }
-      // PB3 mend differ-guard: un-snipping merges the two pieces at the snip. If their
-      // privacy DIFFERS, prompt-to-pick which the merged range keeps (keeping it snipped
-      // is always an option — just cancel). Same/none → merge silently.
+      // PB4 mend differ-guard: un-snipping merges the two pieces at the snip. If their SETTINGS
+      // differ on ANY axis (visibility/precision/identity/sources), prompt-to-pick which side the
+      // merged span keeps (keeping it snipped is always an option — just cancel). Same/none → merge
+      // silently. (Note: even after the snip is removed, differing settings keep an auto-split
+      // boundary — so the only way to truly merge two blocks is to make their settings equal.)
       const left = bufferedLane.find((c) => c.sourceSessionId === sid && Math.abs(c.endMs - unsnip.atMs) < SEG_TOL)
       const right = bufferedLane.find((c) => c.sourceSessionId === sid && Math.abs(c.startMs - unsnip.atMs) < SEG_TOL)
-      const lPriv = !!left && segIsPrivate(left)
-      const rPriv = !!right && segIsPrivate(right)
-      // Merge the whole [left.start, right.end] range to the chosen state via interval
-      // arithmetic (add → private, subtract → public). The snip itself is display-only.
-      const mergeWith = (priv: boolean) => {
+      const lSet = left ? settingsForSeg(left) : {}
+      const rSet = right ? settingsForSeg(right) : {}
+      // Replace the merged span [left.start, right.end] with one side's settings, fully: split at the
+      // edges, DROP any inside overrides, insert the chosen settings, coalesce. (A merge of the
+      // sources maps would leak the other side's per-source flags — a true replace is correct.)
+      const mergeWith = (chosen: SegSettings) => {
         if (left && right) {
-          const merged: PrivRange = { sessionId: sid, startMs: left.startMs, endMs: right.endMs }
-          setPrivRanges((prev) => {
-            const next = priv ? addRange(prev, merged) : subtractPriv(prev, merged)
+          const span = { sessionId: sid, startMs: left.startMs, endMs: right.endMs }
+          setSettingsRanges((prev) => {
+            const out: SettingsRange[] = []
+            for (const r of prev) {
+              if (r.sessionId !== sid || r.endMs <= span.startMs || r.startMs >= span.endMs) { out.push(r); continue }
+              if (r.startMs < span.startMs) out.push({ sessionId: sid, startMs: r.startMs, endMs: span.startMs, settings: { ...r.settings } })
+              if (r.endMs > span.endMs) out.push({ sessionId: sid, startMs: span.endMs, endMs: r.endMs, settings: { ...r.settings } })
+            }
+            if (!isEmptySettings(chosen)) out.push({ sessionId: sid, startMs: span.startMs, endMs: span.endMs, settings: { ...chosen } })
+            const next = coalesce(out)
             patchSessionDirectives(sid, next)
             return next
           })
@@ -1726,10 +1778,16 @@ export const ClipsScreen = () => {
         removeSnip()
         setUnsnip(null)
       }
-      if (left && right && lPriv !== rPriv) {
-        Alert.alert('Segments differ', 'These two segments have different privacy. Keep the merged clip:', [
-          { text: 'Public', onPress: () => mergeWith(false) },
-          { text: 'Private', onPress: () => mergeWith(true) },
+      if (left && right && !settingsEqual(lSet, rSet)) {
+        const sum = (s: SegSettings) => {
+          const p: string[] = [s.visibility === 'private' ? 'Private' : 'Public']
+          if (s.precision && s.precision !== 'exact') p.push(s.precision)
+          if (s.identity === 'anon') p.push('Anon')
+          return p.join(' · ')
+        }
+        Alert.alert('Segments differ', 'Keep the merged clip as:', [
+          { text: `Left · ${sum(lSet)}`, onPress: () => mergeWith(lSet) },
+          { text: `Right · ${sum(rSet)}`, onPress: () => mergeWith(rSet) },
           { text: 'Cancel', style: 'cancel' },
         ])
         return
@@ -1748,7 +1806,7 @@ export const ClipsScreen = () => {
     const next = [...laneRefs.current.splits, { sessionId, atMs: c.timeMs }]
     setSplitPoints(next)
     persistSnips(sessionId, next)
-  }, [unsnip, allClips, bufferedLane, segIsPrivate, patchSessionDirectives, persistSnips])
+  }, [unsnip, allClips, bufferedLane, settingsForSeg, patchSessionDirectives, persistSnips])
 
   // ── transport navigation: smooth-scroll the timeline so a boundary lands on the playhead ──
   // Boundaries = every clip head + tail; plus the reaper (oldest) and now (live) edges.
@@ -2024,18 +2082,8 @@ export const ClipsScreen = () => {
             onUnsave={unsaveClip}
           />
           {/* Scissor / bandaid — cuts the clip at the playhead, or un-snips when over a snip mark.
-              PB3 (scab-in): a selected segment (buffer OR saved) gets a public/private toggle. */}
+              PB4: per-segment settings now live in the sheet (double-tap a segment), not a toggle. */}
           <View style={styles.scissorRow} pointerEvents="box-none">
-            {pb3Enabled && selectedSegHasSession && (
-              <Pressable
-                variant="none"
-                accessibilityLabel={selectedPrivate ? 'Make this segment public' : 'Make this segment private'}
-                onPress={() => selectedClip && toggleSegPrivacy(selectedClip)}
-                style={[styles.scissorBtn, selectedPrivate && styles.bandaidBtn]}
-              >
-                <Icon name={selectedPrivate ? 'lock' : 'eye'} size="md" color={theme.colors.text.inverse} />
-              </Pressable>
-            )}
             <Pressable
               variant="none"
               accessibilityLabel={unsnip ? 'Remove the snip at the playhead' : 'Cut clip at the playhead'}
@@ -2085,6 +2133,18 @@ export const ClipsScreen = () => {
           />
         </View>
       ) : null}
+
+      {/* PB4 A2 — per-segment settings sheet (double-tap a segment). Multi-axis; PATCHes directives. */}
+      {pb3Enabled && sheetClip && sheetData && (
+        <SegmentSettingsSheet
+          visible
+          onClose={() => setSheetClip(null)}
+          rangeLabel={`${new Date(sheetClip.startMs).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}–${new Date(sheetClip.endMs).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`}
+          settings={sheetData.settings}
+          availableSources={sheetData.avail}
+          onChange={(patch) => applySegSetting(sheetClip, patch)}
+        />
+      )}
     </View>
   )
 }
