@@ -11,9 +11,10 @@
 // cells, finer scrub). Self-contained: owns one expo-video player + the playhead. Starts PAUSED
 // (no autoplay audio in a sheet). Horizontal scrub passes vertical through to the sheet scroll.
 
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { Animated, StyleSheet, View } from 'react-native'
-import { Gesture, GestureDetector } from 'react-native-gesture-handler'
+import { useEffect, useRef, useState } from 'react'
+import { StyleSheet, View } from 'react-native'
+import Animated from 'react-native-reanimated'
+import { GestureDetector } from 'react-native-gesture-handler'
 import { useVideoPlayer, VideoView } from 'expo-video'
 import { Image } from 'expo-image'
 import { Input } from '@/components/primitives/Input'
@@ -22,14 +23,12 @@ import { Text } from '@/components/primitives/Text'
 import { Icon } from '@/components/primitives/Icon'
 import { BufferTransport } from './BufferTransport'
 import { FilmStrip } from './FilmStrip'
+import { useTimelineScroll } from './useTimelineScroll'
 import { theme } from '@/tokens/theme'
 
 const TIMELINE_H = 50
 const FRAME_SEC = 0.3 // frame-step size for the transport chevrons
-const MIN_ZOOM = 0.5 // clip spans half the field (whole clip visible)
-const MAX_ZOOM = 8 // clip spans 8× the field (fine scrub)
 const clamp01 = (n: number) => (n < 0 ? 0 : n > 1 ? 1 : n)
-const clampZoom = (n: number) => (n < MIN_ZOOM ? MIN_ZOOM : n > MAX_ZOOM ? MAX_ZOOM : n)
 
 type Props = {
   manifestUrl: string | null
@@ -59,6 +58,7 @@ export function SegmentPreview({
 }: Props) {
   const hasMedia = !!manifestUrl
   const durationSec = Math.max(0.1, (endMs - startMs) / 1000)
+  const durationMs = durationSec * 1000
   const player = useVideoPlayer(hasMedia ? { uri: manifestUrl!, contentType: 'hls' } : null, (p) => {
     p.timeUpdateEventInterval = 0.25
     p.loop = false
@@ -66,18 +66,11 @@ export function SegmentPreview({
 
   const [playing, setPlaying] = useState(false)
   const [fieldW, setFieldW] = useState(0)
-  const [zoom, setZoom] = useState(1)
-  const fieldWRef = useRef(0)
-  fieldWRef.current = fieldW
-  const zoomRef = useRef(1)
-  zoomRef.current = zoom
-  const tx = useRef(new Animated.Value(0)).current // strip translateX = -progress * clipW
-  const progressRef = useRef(0) // 0..1 over the clip
+  const progressRef = useRef(0) // JS mirror of the centre (0..1) for the transport + end check
+  const wasPlaying = useRef(false)
   // The expo-video player is released when this unmounts (the sheet closes); any player call after
   // that throws FunctionCallException. Guard every access with this + try/catch.
   const aliveRef = useRef(true)
-  const decayListener = useRef<string | null>(null)
-  const seekThrottle = useRef(0)
   const safe = (fn: () => void) => {
     if (!aliveRef.current) return
     try {
@@ -86,28 +79,38 @@ export function SegmentPreview({
       /* player released mid-teardown */
     }
   }
-  useEffect(
-    () => () => {
-      aliveRef.current = false
-      tx.stopAnimation()
-      if (decayListener.current) tx.removeListener(decayListener.current)
+  useEffect(() => () => { aliveRef.current = false }, [])
+
+  // The SHARED timeline scroll engine — inertia + pinch + centre playhead (DESIGN.md timeline
+  // principles). It owns the gesture + the animated strip/block; we wire its scrub callbacks to the
+  // video seek (the scrub path) and feed it the centre during playback (no seek).
+  const ts = useTimelineScroll({
+    fieldW,
+    contentMs: durationMs,
+    onScrubStart: () => {
+      wasPlaying.current = playing
+      if (playing) {
+        safe(() => player.pause())
+        setPlaying(false)
+      }
     },
-    [],
-  )
+    onScrub: (ms) => {
+      progressRef.current = clamp01(ms / durationMs)
+      if (hasMedia) safe(() => (player.currentTime = ms / 1000))
+    },
+    onSettle: (ms) => {
+      progressRef.current = clamp01(ms / durationMs)
+      if (hasMedia) {
+        safe(() => (player.currentTime = ms / 1000))
+        if (wasPlaying.current) {
+          safe(() => player.play())
+          setPlaying(true)
+        }
+      }
+    },
+  })
 
-  const clipW = () => fieldWRef.current * zoomRef.current
-  const setProgress = (p: number) => {
-    const c = clamp01(p)
-    progressRef.current = c
-    if (fieldWRef.current > 0) tx.setValue(-c * clipW())
-  }
-  const seekToProgress = (p: number) => {
-    const c = clamp01(p)
-    setProgress(c)
-    if (hasMedia) safe(() => (player.currentTime = c * durationSec))
-  }
-
-  // Advance the playhead from the video while playing (RAF; no per-frame React render). Pause at end.
+  // Advance the playhead from the video while playing (RAF; feeds the engine, no seek). Pause at end.
   useEffect(() => {
     if (!playing || !hasMedia) return
     let raf = 0
@@ -116,7 +119,8 @@ export function SegmentPreview({
       try {
         const d = player.duration || durationSec
         const p = clamp01(player.currentTime / d)
-        setProgress(p)
+        progressRef.current = p
+        ts.setProgress(p)
         if (p >= 0.999) {
           player.pause()
           setPlaying(false)
@@ -132,108 +136,28 @@ export function SegmentPreview({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playing, hasMedia])
 
-  // Re-pin the playhead under the centre when the field is measured or the zoom changes.
-  useEffect(() => {
-    if (fieldW > 0) setProgress(progressRef.current)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fieldW, zoom])
-
+  // Jump the centre (transport / replay-from-head) — moves the engine + seeks the video.
+  const goTo = (p: number) => {
+    const c = clamp01(p)
+    progressRef.current = c
+    ts.setProgress(c)
+    if (hasMedia) safe(() => (player.currentTime = c * durationSec))
+  }
   const togglePlay = () => {
     if (!hasMedia) return
     if (playing) {
       safe(() => player.pause())
       setPlaying(false)
     } else {
-      if (progressRef.current >= 0.999) seekToProgress(0) // replay from head if parked at the tail
+      if (progressRef.current >= 0.999) goTo(0) // replay from head if parked at the tail
       safe(() => player.play())
       setPlaying(true)
     }
   }
-  const toHead = () => seekToProgress(0)
-  const toTail = () => seekToProgress(1)
-  const frameBack = () => hasMedia && seekToProgress(progressRef.current - FRAME_SEC / durationSec)
-  const frameForward = () => hasMedia && seekToProgress(progressRef.current + FRAME_SEC / durationSec)
-
-  // Horizontal scrub (1 finger); vertical passes to the sheet's ScrollView. Pinch (2 fingers) zooms.
-  const scrubStart = useRef(0)
-  const wasPlaying = useRef(false)
-  const zoomStart = useRef(1)
-  // Release inertia (matches the Clips page): decay tx after a flick, clamped to the head/tail, with
-  // throttled seeks as it glides; resume play (if it was) once it settles.
-  const stopDecay = () => {
-    tx.stopAnimation()
-    if (decayListener.current) {
-      tx.removeListener(decayListener.current)
-      decayListener.current = null
-    }
-  }
-  const startDecay = (velocityPxPerSec: number) => {
-    const w = clipW()
-    if (w <= 0) return
-    stopDecay()
-    decayListener.current = tx.addListener(({ value }) => {
-      let v = value
-      if (v > 0) {
-        v = 0
-        stopDecay()
-        tx.setValue(0)
-      } else if (v < -w) {
-        v = -w
-        stopDecay()
-        tx.setValue(-w)
-      }
-      progressRef.current = clamp01(-v / w)
-      const now = Date.now()
-      if (hasMedia && now - seekThrottle.current > 80) {
-        seekThrottle.current = now
-        safe(() => (player.currentTime = progressRef.current * durationSec))
-      }
-    })
-    Animated.decay(tx, { velocity: velocityPxPerSec / 1000, deceleration: 0.997, useNativeDriver: false }).start(() => {
-      stopDecay()
-      if (hasMedia) safe(() => (player.currentTime = progressRef.current * durationSec)) // settle on an exact frame
-      if (wasPlaying.current) togglePlay()
-    })
-  }
-  const gesture = useMemo(() => {
-    const pan = Gesture.Pan()
-      .runOnJS(true)
-      .activeOffsetX([-10, 10])
-      .failOffsetY([-12, 12])
-      .onBegin(() => {
-        stopDecay() // a new grab cancels any gliding inertia
-        scrubStart.current = progressRef.current
-        wasPlaying.current = playing
-        if (playing) {
-          safe(() => player.pause())
-          setPlaying(false)
-        }
-      })
-      .onUpdate((e) => {
-        const w = clipW()
-        if (w <= 0) return
-        setProgress(scrubStart.current - e.translationX / w) // drag right → earlier
-        if (hasMedia) safe(() => (player.currentTime = progressRef.current * durationSec))
-      })
-      .onEnd((e) => {
-        startDecay(e.velocityX) // glide with inertia, then resume play on settle
-      })
-    const pinch = Gesture.Pinch()
-      .runOnJS(true)
-      .onBegin(() => {
-        zoomStart.current = zoomRef.current
-      })
-      .onUpdate((e) => {
-        const z = clampZoom(zoomStart.current * e.scale)
-        zoomRef.current = z
-        setZoom(z)
-        tx.setValue(-progressRef.current * clipW()) // keep the playhead pinned to centre while zooming
-      })
-    return Gesture.Simultaneous(pan, pinch)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasMedia, playing, durationSec])
-
-  const blockW = fieldW * zoom
+  const toHead = () => goTo(0)
+  const toTail = () => goTo(1)
+  const frameBack = () => hasMedia && goTo(progressRef.current - FRAME_SEC / durationSec)
+  const frameForward = () => hasMedia && goTo(progressRef.current + FRAME_SEC / durationSec)
 
   return (
     <View style={styles.wrap}>
@@ -271,13 +195,13 @@ export function SegmentPreview({
         </Pressable>
       </View>
 
-      <GestureDetector gesture={gesture}>
+      <GestureDetector gesture={ts.gesture}>
         <View style={styles.timeline} onLayout={(e) => setFieldW(e.nativeEvent.layout.width)}>
           {fieldW > 0 && (
-            <Animated.View style={[styles.strip, { width: fieldW + blockW, transform: [{ translateX: tx }] }]}>
-              <View style={[styles.clipBlock, { left: fieldW / 2, width: blockW }]}>
-                <FilmStrip widthPx={blockW} posterUrl={posterUrl} />
-              </View>
+            <Animated.View style={[styles.strip, ts.stripStyle]}>
+              <Animated.View style={[styles.clipBlock, ts.blockStyle]}>
+                <FilmStrip widthPx={ts.blockW} posterUrl={posterUrl} />
+              </Animated.View>
             </Animated.View>
           )}
           <View style={styles.playhead} pointerEvents="none" />

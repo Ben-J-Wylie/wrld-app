@@ -4701,22 +4701,44 @@ new timeline that diverges from them is a bug, not a variant:
 **Allowed variations** (layer on top; never alter the five above): lane count (1 vs 2), time gaps
 (collapsed vs none), height (thin vs tall), reaper/now edges, labels on/off, save/un-save drags.
 
-**Enforcement / constraint downstream.** The **clip-block visual is now ONE implementation** —
-`features/clip/FilmStrip.tsx` (the sprocket bands + constant-size square poster cells), used by
-BOTH `ClipBlock` (Clips page, with the `cellLeftSv` grid-skate) and `SegmentPreview` (the shelf,
-static). They can no longer drift. The container around it (light-paper `bg.primary` band + hairline
-outline) is matched by hand in both (ClipBlock's `topSpan` / SegmentPreview's `clipBlock`) — keep
-them matched. The remaining shared-ness to extract on the **rule-of-three** is the **scroll
-engine** — a `useTimelineScroll` hook wrapping the reanimated scroll + `withDecay` + pinch +
-centre-playhead mapping ClipsTimeline already implements (SegmentPreview currently re-implements a
-lighter version with `Animated.decay`). Until then, any change to a timeline's foundation must be
-mirrored across timelines in the same PR.
+**Enforcement / constraint downstream.** Two of the three shared layers are now ONE implementation:
+- **Block visual** → `features/clip/FilmStrip.tsx` (sprocket bands + constant-size square poster
+  cells), used by BOTH `ClipBlock` (Clips page, `cellLeftSv` grid-skate) and `SegmentPreview` (the
+  shelf, static). Can't drift. (Its container — light `bg.primary` band + hairline outline — is
+  still matched by hand: ClipBlock's `topSpan` / SegmentPreview's `clipBlock`. Keep them matched.)
+- **Scroll engine (scope A, DONE 2026-06-24)** → `features/clip/useTimelineScroll.ts`: reanimated
+  `progress` (centre time) + `zoom`, pan→scrub with clamped `withDecay` inertia, pinch→zoom pinned
+  to centre, half-field head/tail pad, UI-thread translate + throttled JS seek (gated to scrubbing).
+  `SegmentPreview` now uses it (dropped its `Animated.decay` copy) — so the FEEL is the engine, not
+  an approximation. The hook is the standard for any new single-span timeline.
+
+`ClipsTimeline` does NOT use the hook yet (see scope B). Until it does, a foundation change must be
+mirrored across both in the same PR.
+
+**Scope B — migrating ClipsTimeline onto the shared engine (insight for later; NOT done).** The
+prize is one codepath everywhere; the cost is real. ClipsTimeline is ~1,293 lines and its engine is
+fused with things the hook deliberately omits:
+- a **collapsed-gap** time axis (`timeToX` removes empty time → fixed-width gap markers) — the hook
+  is a *linear* axis;
+- the **reaper edge's gap-rush** mapping (`reaperEdgeX`) + per-frame edge advance;
+- the **live build** (`extendLive`) growing the open session each frame;
+- the **server clock** (`setNowUi`) + the riding-latch + now-edge follow + `scrollToTime` handle.
+The hook would need to be parameterized by a **time↔x mapping** (linear vs gap-collapsing) and an
+optional **frontier/auto-camera** layer, and ClipsTimeline's `scroll`/`px`/`withDecay`/pinch would
+have to be lifted out of that logic without regressing the **`clips-timeline-clock-v1`** milestone
+(a hard-won smooth baseline — see CONTENT.md §6). **Risk: high; reward: dedup of an already-stable
+component.** Recommendation: do it only if the two engines start visibly drifting in feel, or when a
+THIRD timeline needs the gap/reaper behavior (rule-of-three). Approach if taken: (1) add a
+`mapping: { timeToX, xToTime }` param + a `frontier` plugin to `useTimelineScroll`; (2) port
+ClipsTimeline's gap/reaper mapping into that shape behind the hook; (3) keep the milestone's
+device-test cases as the regression gate.
 
 **What this fixed (2026-06-24).** The segment shelf's mini timeline had drifted (red block bg, no
-outline, panelHi cells reading darker than the page's `bg.primary` band, no release inertia)
-because it was hand-rolled. Brought to parity: **extracted `FilmStrip`** (now shared with the page
-— fixes the cell/colour drift by construction), matched the container to ClipBlock's `topSpan`
-(light `bg.primary` + outline + rounded), and added clamped release decay. Pinch was already present.
+outline, panelHi cells reading darker than the page's `bg.primary` band, `Animated.decay`
+approximation of the inertia) because it was hand-rolled. Brought to parity: extracted `FilmStrip`
+(shared block visual — fixes the cell/colour drift by construction), matched the container to
+ClipBlock's `topSpan` (light `bg.primary` + outline + rounded), and **extracted `useTimelineScroll`
+(scope A)** so the scrub/inertia/pinch is the same reanimated engine, not a copy.
 
 ### 2026-06-23 — Unified settings shelf (one element for dashboard · stream · clip-editor)
 
