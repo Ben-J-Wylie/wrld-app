@@ -3912,3 +3912,62 @@ deliberate Mapbox decision. **Filed as Jira [KAN-52](https://aaronwyliework.atla
 (project KAN, Type Task, assigned Ben) — full technical context + the fork + tunable dials
 live in **`HANDOFF-day-night-terminator-2026-06-22.md`**. Pure JS, no EAS rebuild. Nothing
 ships until the decision is made.
+
+---
+
+## Updates — June 2026 (PB4 Lane A app — snips persistence + multi-axis per-segment settings)
+
+Lane A app side of the public-buffer / one-store initiative, wired to Aaron's now-deployed
+backend (snips PATCH, multi-axis directives with `sources`, `GET /buffer/session/:id`
+`sourceWindows`). All on `design` → `main`, pure JS (no native module, no EAS rebuild). The
+clip-EDITING paradigm is now **snip → tap-a-segment → settings shelf** (the bracket-trim grid
+editor retires — confirmed with Ben 2026-06-23; the timeline survives only as a viewer/selector).
+
+### A1 — snips server-authoritative (`0c7d5d2`)
+`bufferApi.patchSessionSnips(id, [{atMs}])` → `PATCH /buffer/me/sessions/:id/snips` (authoritative
+replace). `BufferSession.snips` seeded into `splitPoints` once on load (merge, don't clobber
+local); a snip/mend persists the session's full snip list. User snips now survive reload +
+cross-device. (`splitPoints`/`/splits` are Aaron's back-compat aliases — app uses `snips`/`/snips`.)
+
+### A2 — multi-axis per-segment settings sheet (`5ff70ea`, `87e6d68`)
+- Migrated `ClipsScreen`'s per-segment model from the boolean `privRanges` (`privacyRanges.ts`) →
+  the multi-axis `segmentSettings.ts` (`SettingsRange[]`: visibility · location precision ·
+  identity · per-source on/off — all axes first-class). Seeded from `session.directives` (now
+  carrying `sources`).
+- **Double-tap a segment → `SegmentSettingsSheet`** (the decided UX). This **displaces the
+  double-tap → grid-editor** (begins the editor's retirement — option A; the grid covers viewing,
+  so nothing's lost). The scab-in eye/lock scissor-row toggle is **removed** (superseded by the
+  sheet). Edits flow `applySetting` → authoritative `patchDirectives` (full axes) + invalidate the
+  availability feed.
+- **Auto-split** now derives from ALL settings boundaries (`settingBoundaries ∪ snips`), so a
+  segment is uniform across every axis (kills the straddle; makes a per-segment toggle exact).
+- **Mend differ-guard** generalised to multi-axis: un-snipping two segments that differ on ANY
+  axis prompts which side's settings the merged span keeps (true span-replace via the now-exported
+  `coalesce` — a sources-map merge would leak the other side's flags). Note: differing settings
+  keep an auto-split boundary even after the snip is gone, so the only way to truly merge two
+  blocks is to equalise their settings.
+- **Sources keying:** per-segment `sources` directives are keyed by **backend kind** (Aaron's
+  contract / the rail's kinds set), but the sheet works in `FeedKind`. New `FEEDKIND_TO_KIND`
+  (inverse of `KIND_TO_FEEDKIND`) converts at the wire boundary (feed→backend in the PATCH,
+  backend→feed in the sheet's resolved sources). `SegmentDirective.sources` + `BufferSession`
+  `directives[].sources` + `snips[]` added to `bufferApi`.
+
+### A4 — viewer rail honours `sourceWindows` (`87e6d68`)
+`ClipDetail` + `clipsApi.getBufferSession` carry `sourceWindows` ([{startAtMs,endAtMs,sources}]).
+`ClipViewerScreen` (the time-machine watch) finds the window covering the playhead (stable ref →
+no per-tick rail churn) and **hides any source toggled off there** from the rail (identity always
+kept; auto-switches view via `pickDefaultView` if the current source vanishes). First cut =
+app-side rail filtering; full server-side manifest exclusion is Aaron's deferred A4. The owner's
+in-grid viewer is intentionally **unfiltered** (their own editing surface).
+
+### Not yet device-tested / remaining
+- **Needs an on-device pass:** double-tap → sheet on a real segment; each axis PATCHing +
+  surviving reload; auto-split when a sub-range differs; multi-axis mend prompt; the time-machine
+  viewer hiding a source-off window. Plus the redundant `sources:{kind:true}` (equals default —
+  harmless, not dropped by coalesce; could prune later).
+- **Lane B app (next):** the cacheable `(planet,t,z,x,y)` cell manager + the
+  `wss://api.wrld.cam/clips/availability` push subscription — replacing the window+poll in
+  `useHistoricalAvailability`. Mirror `AVAILABILITY_TILE_MS = 3_600_000` + `availabilityCellKey`
+  from the backend `tiles.ts`. (Aaron's Lane B endpoints are live + verified.)
+- **Editor retirement (consolidation pass, later):** delete `ClipEditScreen` + the `[Clips|Editor]`
+  page-tab once the sheet has soaked; unify the dashboard/stream/clip settings into one shelf.
