@@ -18,7 +18,7 @@
 // Existing one-offs (AuthModal, TipSheet, NearbyStreamsDrawer) refactor
 // to content-only callers in 12.6.
 
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Animated,
   Dimensions,
@@ -65,71 +65,45 @@ export function BottomSheet({
   contentStyle,
 }: Props) {
   const insets = useSafeAreaInsets()
+  // ONE value drives open / close / drag (0 = open, SCREEN_H = closed). Sharing it means a drag
+  // flows straight into the exit animation with no snap-back.
   const translateY = useRef(new Animated.Value(SCREEN_H)).current
   const scrimOpacity = useRef(new Animated.Value(0)).current
-  const dragY = useRef(new Animated.Value(0)).current
+  // Mounted is decoupled from `visible` so the EXIT animation plays BEFORE the Modal hides — a
+  // Modal with visible=false vanishes instantly, so the internal animation would never show.
+  const [mounted, setMounted] = useState(visible)
 
   const sheetHeight = resolveHeight(variant, peekHeight, insets.top)
 
   useEffect(() => {
     if (visible) {
+      setMounted(true)
+      translateY.setValue(SCREEN_H) // start offscreen → spring up
       Animated.parallel([
-        Animated.spring(translateY, {
-          toValue: 0,
-          useNativeDriver: true,
-          stiffness: 220,
-          damping: 24,
-        }),
-        Animated.timing(scrimOpacity, {
-          toValue: 1,
-          ...theme.motion.patterns.overlay,
-          useNativeDriver: true,
-        }),
+        Animated.spring(translateY, { toValue: 0, useNativeDriver: true, stiffness: 220, damping: 24 }),
+        Animated.timing(scrimOpacity, { toValue: 1, ...theme.motion.patterns.overlay, useNativeDriver: true }),
       ]).start()
     } else {
+      // Animate out FROM the current position (a drag continues smoothly), then unmount the Modal.
       Animated.parallel([
-        Animated.timing(translateY, {
-          toValue: SCREEN_H,
-          ...theme.motion.patterns.overlay,
-          useNativeDriver: true,
-        }),
-        Animated.timing(scrimOpacity, {
-          toValue: 0,
-          ...theme.motion.patterns.overlay,
-          useNativeDriver: true,
-        }),
-      ]).start()
+        Animated.timing(translateY, { toValue: SCREEN_H, ...theme.motion.patterns.overlay, useNativeDriver: true }),
+        Animated.timing(scrimOpacity, { toValue: 0, ...theme.motion.patterns.overlay, useNativeDriver: true }),
+      ]).start(({ finished }) => {
+        if (finished) setMounted(false)
+      })
     }
   }, [visible, translateY, scrimOpacity])
 
+  // Grabber drag (non-dragToDismiss sheets) — drives the same translateY.
   const panResponder = useRef(
     PanResponder.create({
-      // Capture-phase: claim a downward drag even when a child (toggle/row) wants the touch.
-      // (>10px so a tap on a control isn't swallowed.) onMove alone wasn't firing on device.
-      onMoveShouldSetPanResponderCapture: (_, g) => {
-        const want = g.dy > 10 && g.dy > Math.abs(g.dx)
-        if (__DEV__ && want) console.log('[sheet] pan capture (dy=', Math.round(g.dy), ')')
-        return want
-      },
       onMoveShouldSetPanResponder: (_, g) => g.dy > 4,
       onPanResponderMove: (_, g) => {
-        if (g.dy > 0) dragY.setValue(g.dy)
-      },
-      onPanResponderGrant: () => {
-        if (__DEV__) console.log('[sheet] pan grant')
+        if (g.dy > 0) translateY.setValue(g.dy)
       },
       onPanResponderRelease: (_, g) => {
-        if (__DEV__) console.log('[sheet] pan release dy=', Math.round(g.dy), 'vy=', g.vy.toFixed(2))
-        if (g.dy > 80 || g.vy > 0.5) {
-          dragY.setValue(0)
-          if (__DEV__) console.log('[sheet] pan → onClose()')
-          onClose()
-        } else {
-          Animated.spring(dragY, {
-            toValue: 0,
-            useNativeDriver: true,
-          }).start()
-        }
+        if (g.dy > 80 || g.vy > 0.5) onClose()
+        else Animated.spring(translateY, { toValue: 0, useNativeDriver: true }).start()
       },
     }),
   ).current
@@ -137,7 +111,8 @@ export function BottomSheet({
   // RNGH drag-to-dismiss (dragToDismiss sheets). RN PanResponder doesn't receive moves here —
   // the sheet's child controls are RNGH, which consume the gesture natively and starve RN's
   // responder. So drag with RNGH too (it composes with the child handlers via activeOffsetY).
-  // runOnJS so the callbacks can drive the RN Animated.Value directly.
+  // runOnJS so the callbacks drive the RN Animated.Value directly. On dismiss we just call
+  // onClose() — the visible→false exit animation continues translateY from the drag position.
   const dragGesture = useMemo(
     () =>
       Gesture.Pan()
@@ -145,27 +120,18 @@ export function BottomSheet({
         .activeOffsetY(12) // engage on a clear vertical drag; taps still reach the controls
         .failOffsetX([-24, 24]) // bail if it's mostly horizontal
         .onUpdate((e) => {
-          if (e.translationY > 0) dragY.setValue(e.translationY)
+          if (e.translationY > 0) translateY.setValue(e.translationY)
         })
         .onEnd((e) => {
-          if (e.translationY > 80 || e.velocityY > 600) {
-            dragY.setValue(0)
-            if (__DEV__) console.log('[sheet] rngh drag → onClose()')
-            onClose()
-          } else {
-            Animated.spring(dragY, { toValue: 0, useNativeDriver: true }).start()
-          }
+          if (e.translationY > 80 || e.velocityY > 600) onClose()
+          else Animated.spring(translateY, { toValue: 0, useNativeDriver: true }).start()
         }),
-    [onClose, dragY],
+    [onClose, translateY],
   )
 
   const sheet = (
     <Animated.View
-      style={[
-        styles.sheet,
-        { height: sheetHeight, transform: [{ translateY: Animated.add(translateY, dragY) }] },
-        contentStyle,
-      ]}
+      style={[styles.sheet, { height: sheetHeight, transform: [{ translateY }] }, contentStyle]}
     >
       {showGrabber && (
         <View {...(dragToDismiss ? {} : panResponder.panHandlers)} style={styles.grabberHit}>
@@ -177,7 +143,7 @@ export function BottomSheet({
   )
 
   return (
-    <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
+    <Modal visible={mounted} transparent animationType="none" onRequestClose={onClose}>
       <GestureHandlerRootView style={styles.root}>
         {showScrim && (
           <Animated.View
