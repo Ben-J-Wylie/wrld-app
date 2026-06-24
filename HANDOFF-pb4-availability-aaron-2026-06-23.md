@@ -251,20 +251,3 @@ compass bearing, initial torch state, etc.
   (so the editor's captured-only shelf shows every armed source). This — plus the app baselines —
   is how we deliver "show all armed sources" without a separate `armedSources` field or disabled
   placeholders.
-=======
-> only). Display metadata — no reaper/serve/availability impact (no B3 push).
->
-> **✅ CARRY-THROUGH-PROMOTE DONE + DEPLOYED (Aaron, 2026-06-24, `wrld-backend` `51e52c9`).**
-> Per-segment settings are now first-class through save, like the other axes. Promote builds
-> the saved clip's OWN per-segment directives FROM the buffer's clipId=null directives
-> (`splitRangeByDirectives` splits each retain range at the segment boundaries, carrying
-> visibility/precision/identity **+ title/tags** per segment; gaps → clip defaults; full
-> retention coverage preserved). Both promote paths (window-save + draft→save) + the
-> re-materialise (edit-saved-clip) path (preserves from the clip's own rows across the
-> footage edit). They live on the clip's `clipId`-set rows so they **survive the A3
-> cascade-clean** of the buffer's clipId=null directives. **`GET /buffer/me/clips` now
-> returns each saved clip's per-segment `directives[]`** (`{startAtMs,endAtMs,visibility,
-> precision,attributed,title,tags}`) so the editor reloads them on a saved clip. Gated on
-> `PB3_PER_RANGE` (as the rest of the directive write-path). On-device verify owed: save a
-> clip with per-segment titles/tags → reload → they persist on the saved clip.
->>>>>>> 1a93517 (PB4: per-segment title/tags now carried through promote onto saved clips (DONE))
