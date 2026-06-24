@@ -59,6 +59,7 @@ import { useLocation } from '@/hooks/useLocation'
 import { useViewportDiscovery, type TileCount } from '@/hooks/useViewportDiscovery'
 import { useHistoricalClips } from '@/hooks/useHistoricalClips'
 import { useHistoricalAvailability } from '@/hooks/useHistoricalAvailability'
+import { useHistoricalCells } from '@/hooks/useHistoricalCells'
 import type { Interval } from '@/api/clips'
 import type { ClipPin, BufferPin } from '@/api/clips'
 import { useStreamsNear } from '@/hooks/useStreamsNear'
@@ -562,16 +563,48 @@ export function GlobeScreenMapbox() {
   //    per-tick query, no bucket, no stale-pin (kills the blink / half-missing anomalies).
   // Both hooks are called every render (hooks rules); only the active one is enabled.
   const availabilityEnabled = configBool(config, 'AVAILABILITY_FEED', false)
-  const legacyHist = useHistoricalClips(historicalMode && !availabilityEnabled ? playheadMs : 0)
-  const windowedHist = useHistoricalAvailability(playheadMs, historicalMode && availabilityEnabled)
+  // PB4 Lane B — the SCALABLE feed: subscribe to the viewport×scrub-time cells + push, instead of
+  // the ±12h window. Supersedes the windowed feed when on. Time-machine is an Earth concept, so the
+  // cells query Earth. High zoom → pins (resolved locally below); low zoom → count bubbles.
+  const tilesEnabled = configBool(config, 'AVAILABILITY_TILES', false)
+  const legacyHist = useHistoricalClips(historicalMode && !availabilityEnabled && !tilesEnabled ? playheadMs : 0)
+  const windowedHist = useHistoricalAvailability(playheadMs, historicalMode && availabilityEnabled && !tilesEnabled)
+  const cellsHist = useHistoricalCells({
+    planet: 'earth',
+    playheadMs,
+    active: historicalMode && tilesEnabled,
+    pinZoomThreshold,
+    countMinZoom,
+  })
   const publicBufferEnabled = configBool(config, 'PUBLIC_BUFFER_ENABLED', false)
+  // The historical cell feed shares the map's viewport; pushViewport drives its setView too.
+  const cellsSetViewRef = useRef(cellsHist.setView)
+  cellsSetViewRef.current = cellsHist.setView
 
-  // Source pin sets (stable query refs). Windowed feed carries `intervals`; legacy is
-  // already alive-at-T.
-  const srcClips = (availabilityEnabled ? windowedHist.data?.clips : legacyHist.data?.clips) ?? EMPTY_CLIPS
+  // Both the windowed feed and the tiles feed carry per-pin `intervals` (resolved locally by
+  // playhead ∈ interval); legacy `?at=` is already alive-at-T.
+  const withIntervals = availabilityEnabled || tilesEnabled
+  // In the tiles feed's COUNT regime (globe overview) there are no individual pins — bubbles only.
+  const cellsCountMode = tilesEnabled && cellsHist.mode === 'counts'
+
+  // Source pin sets (stable query refs).
+  const srcClips =
+    (tilesEnabled
+      ? cellsCountMode
+        ? EMPTY_CLIPS
+        : cellsHist.clips
+      : availabilityEnabled
+        ? windowedHist.data?.clips
+        : legacyHist.data?.clips) ?? EMPTY_CLIPS
   const srcBuffer = !publicBufferEnabled
     ? EMPTY_BUFFER
-    : (availabilityEnabled ? windowedHist.data?.bufferPins : legacyHist.data?.bufferPins) ?? EMPTY_BUFFER
+    : (tilesEnabled
+        ? cellsCountMode
+          ? EMPTY_BUFFER
+          : cellsHist.bufferPins
+        : availabilityEnabled
+          ? windowedHist.data?.bufferPins
+          : legacyHist.data?.bufferPins) ?? EMPTY_BUFFER
   const inInterval = (intervals?: Interval[]) =>
     !!intervals && intervals.some((iv) => playheadMs >= iv.startMs && playheadMs < iv.endMs)
   // Windowed: resolve the visible set LOCALLY (playhead ∈ interval). The set genuinely
@@ -579,19 +612,19 @@ export function GlobeScreenMapbox() {
   // REFERENTIALLY STABLE between renders unless the visible id-set actually changes (memo
   // keyed on a signature, not on playheadMs) — so the card-sync effects don't loop on the
   // 1s ticker. Legacy: the server already returned only alive-at-T pins (stable query ref).
-  const clipSig = availabilityEnabled
+  const clipSig = withIntervals
     ? srcClips.filter((c) => inInterval(c.intervals)).map((c) => c.id).join(',')
     : `legacy:${srcClips.length}`
-  const bufferSig = availabilityEnabled
+  const bufferSig = withIntervals
     ? srcBuffer.filter((b) => inInterval(b.intervals)).map((b) => b.sessionId).join(',')
     : `legacy:${srcBuffer.length}`
   const clipPins = useMemo(
-    () => (availabilityEnabled ? srcClips.filter((c) => inInterval(c.intervals)) : srcClips),
-    [availabilityEnabled, srcClips, clipSig], // eslint-disable-line react-hooks/exhaustive-deps
+    () => (withIntervals ? srcClips.filter((c) => inInterval(c.intervals)) : srcClips),
+    [withIntervals, srcClips, clipSig], // eslint-disable-line react-hooks/exhaustive-deps
   )
   const bufferPins = useMemo(
-    () => (availabilityEnabled ? srcBuffer.filter((b) => inInterval(b.intervals)) : srcBuffer),
-    [availabilityEnabled, srcBuffer, bufferSig], // eslint-disable-line react-hooks/exhaustive-deps
+    () => (withIntervals ? srcBuffer.filter((b) => inInterval(b.intervals)) : srcBuffer),
+    [withIntervals, srcBuffer, bufferSig], // eslint-disable-line react-hooks/exhaustive-deps
   )
   const clipPinById = useMemo(() => new Map(clipPins.map((c) => [c.id, c] as const)), [clipPins])
   const bufferPinById = useMemo(
@@ -866,7 +899,9 @@ export function GlobeScreenMapbox() {
       .then((b) => {
         if (!b) return
         const [[east, north], [west, south]] = b as [[number, number], [number, number]]
-        setViewRef.current({ west, south, east, north }, mapZoomRef.current)
+        const bounds = { west, south, east, north }
+        setViewRef.current(bounds, mapZoomRef.current)
+        cellsSetViewRef.current(bounds, mapZoomRef.current) // PB4 Lane B — same viewport, time feed
       })
       .catch(() => {})
   }, [])
@@ -1288,10 +1323,12 @@ export function GlobeScreenMapbox() {
   // centroid the server snapped to a real pin. Empty in pins mode.
   const countsGeoJSON = {
     type: 'FeatureCollection' as const,
-    // In the past, pins come from the clip feed (no server tile-counts); on Haven
-    // the tile feed is geographic + irrelevant — suppress the count bubbles in
-    // both cases (only Earth-live has real viewport tile counts).
-    features: (historicalMode || planet.id !== 'earth' ? [] : counts).map((c: TileCount) => ({
+    // In the past, the tiles feed (Lane B) provides per-minute count bubbles at low zoom
+    // (cellsHist.counts); the legacy/windowed feeds don't, so they show none. On Haven the
+    // tile feed is geographic + irrelevant. Only Earth-live has real viewport tile counts.
+    features: (
+      historicalMode ? (cellsCountMode ? cellsHist.counts : []) : planet.id !== 'earth' ? [] : counts
+    ).map((c: TileCount) => ({
       type: 'Feature' as const,
       geometry: { type: 'Point' as const, coordinates: [c.lng, c.lat] },
       properties: {

@@ -10,6 +10,13 @@ import { apiClient } from './client'
 // inside one — interval membership resolved locally, no per-instant server sample.
 export type Interval = { startMs: number; endMs: number }
 
+// PB4 Lane B — one availability cell's payload (GET /clips/discover?planet&t&z&x&y).
+// Discriminated by `mode`: 'pins' at high zoom (resolved locally by playhead ∈ interval),
+// 'counts' at low zoom (a 60-entry per-minute alive-count series over the cell's hour).
+export type AvailabilityCell =
+  | { mode: 'pins'; planet: string; t: number; z: number; x: number; y: number; clips: ClipPin[]; bufferPins: BufferPin[] }
+  | { mode: 'counts'; planet: string; t: number; z: number; x: number; y: number; bucketMs: number; counts: number[] }
+
 // One surviving clip alive at a scrubbed instant — a globe pin in playback mode.
 // Returned by GET /clips/discover?at=<ISO>. The backend honours the clip's CURRENT
 // precision + identity (reversible — decision A): an anon clip reports host
@@ -113,6 +120,25 @@ export const clipsApi = {
       { params: { from: fromISO, to: toISO } },
     )
     return { clips: res.data.clips ?? [], bufferPins: res.data.bufferPins ?? [] }
+  },
+
+  // PB4 Lane B — ONE space-time availability cell `(planet,t,z,x,y)`. Cacheable
+  // (Cache-Control max-age 30 + ETag). High zoom → `{mode:'pins', clips, bufferPins}`
+  // (each with `intervals`, geo+time bounded to the cell); low zoom → `{mode:'counts',
+  // bucketMs, counts}` (a per-minute alive-count series over the cell's hour — read
+  // counts[floor((T − t·AVAILABILITY_TILE_MS)/bucketMs)]). The client holds the cells in
+  // view × scrub-time and resolves locally; the push channel invalidates a cell on edit.
+  discoverCell: async (
+    planet: string,
+    t: number,
+    z: number,
+    x: number,
+    y: number,
+  ): Promise<AvailabilityCell> => {
+    const res = await apiClient.get<AvailabilityCell>('/clips/discover', {
+      params: { planet, t, z, x, y },
+    })
+    return res.data
   },
 
   // One clip for playback. 403s on a subscribers-only clip without a subscription.

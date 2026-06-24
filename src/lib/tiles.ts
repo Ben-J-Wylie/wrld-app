@@ -32,6 +32,18 @@ export const PIN_ZOOM_THRESHOLD = 4
 // knob — ~z5 is the practical max as a global floor (z6 = 4096 tiles globally).
 export const COUNT_MIN_ZOOM = 5
 
+// PB4 Lane B — the time-machine availability feed adds a TIME coordinate to the geo tiles: a
+// space-time cell is `(planet, t, z, x, y)` where `t = floor(T_ms / AVAILABILITY_TILE_MS)`. One
+// cell covers a 1h slice of the wall clock × one slippy tile. MIRRORED from wrld-backend's
+// tiles.ts — client + server MUST build the cell key identically (the push channel emits these
+// keys and the client subscribes by them).
+export const AVAILABILITY_TILE_MS = 3_600_000 // 1 hour
+
+// The canonical space-time cell key `planet/t/z/x/y`.
+export function availabilityCellKey(planet: string, t: number, z: number, x: number, y: number): string {
+  return `${planet}/${t}/${z}/${x}/${y}`
+}
+
 export type Tile = { z: number; x: number; y: number }
 export type LngLatBounds = { west: number; south: number; east: number; north: number }
 
