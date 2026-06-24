@@ -11,12 +11,11 @@
 import { memo, useState } from 'react'
 import { Dimensions, StyleSheet, View } from 'react-native'
 import { BottomSheet } from '@/components/primitives/BottomSheet'
-import { Pressable } from '@/components/primitives/Pressable'
 import { SegmentedToggle } from '@/components/primitives/SegmentedToggle'
 import { Input } from '@/components/primitives/Input'
 import { Chip } from '@/components/primitives/Chip'
 import { Text } from '@/components/primitives/Text'
-import { Icon } from '@/components/primitives/Icon'
+import { SegmentPreview } from './SegmentPreview'
 import { SOURCE_META } from '@/components/features/stream/sourceMeta'
 import type { FeedKind } from '@/components/features/broadcast/FeedThumb'
 import type { SegSettings, Visibility, Precision, Identity } from '@/lib/segmentSettings'
@@ -35,6 +34,11 @@ type Props = {
   onLaneChange: (lane: 'buffered' | 'saved') => void
   /** Hide the Lane toggle once the reaper has reached this segment (no longer movable). */
   showLane: boolean
+  /** Clip media for the preview viewer + timeline. */
+  manifestUrl: string | null
+  posterUrl: string | null
+  startMs: number
+  endMs: number
   /** Resolved settings for the segment (override merged over the go-live defaults). */
   settings: Required<Pick<SegSettings, 'visibility' | 'precision' | 'identity'>> & {
     sources: Record<string, boolean>
@@ -86,6 +90,10 @@ export const SegmentSettingsSheet = memo(function SegmentSettingsSheet({
   lane,
   onLaneChange,
   showLane,
+  manifestUrl,
+  posterUrl,
+  startMs,
+  endMs,
   settings,
   availableSources,
   onChange,
@@ -122,27 +130,18 @@ export const SegmentSettingsSheet = memo(function SegmentSettingsSheet({
   return (
     <BottomSheet visible={visible} onClose={onClose} variant="peek" peekHeight={height} dragToDismiss scrollable>
       <View style={styles.body}>
-        <View style={styles.header}>
-          <View style={styles.headerMain}>
-            <Input
-              value={title}
-              onChangeText={setTitle}
-              onEndEditing={commitTitle}
-              onBlur={commitTitle}
-              placeholder="Untitled segment"
-              returnKeyType="done"
-            />
-            <Text variant="monoCaption" color={theme.colors.text.muted} style={styles.rangeCaption}>
-              {dateLabel}
-            </Text>
-            <Text variant="monoCaption" color={theme.colors.text.muted} style={styles.rangeCaption}>
-              {rangeLabel}
-            </Text>
-          </View>
-          <Pressable variant="subtle" hitSlop={12} accessibilityLabel="Close" onPress={onClose}>
-            <Icon name="x" size="md" color={theme.colors.text.muted} />
-          </Pressable>
-        </View>
+        <SegmentPreview
+          manifestUrl={manifestUrl}
+          posterUrl={posterUrl}
+          startMs={startMs}
+          endMs={endMs}
+          titleValue={title}
+          onTitleChangeText={setTitle}
+          onTitleCommit={commitTitle}
+          dateLabel={dateLabel}
+          rangeLabel={rangeLabel}
+          onClose={onClose}
+        />
 
         {/* All controls are multistate toggles, in a fixed order (Ben). Lane hides once reaping. */}
         {showLane && (
@@ -207,9 +206,6 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 
 const styles = StyleSheet.create({
   body: { paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.md, gap: theme.spacing.md },
-  header: { flexDirection: 'row', alignItems: 'flex-start', gap: theme.spacing.sm },
-  headerMain: { flex: 1, gap: theme.spacing.xxs },
-  rangeCaption: { marginLeft: theme.spacing.xxs },
   row: { gap: theme.spacing.xs },
   rowLabel: {},
   sources: { gap: theme.spacing.sm, marginTop: theme.spacing.xs },

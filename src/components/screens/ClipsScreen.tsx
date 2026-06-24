@@ -2210,6 +2210,10 @@ export const ClipsScreen = () => {
           lane={sheetLane}
           onLaneChange={onSheetLaneChange}
           showLane={sheetShowLane}
+          manifestUrl={sheetClip.manifestUrl ?? null}
+          posterUrl={sheetClip.posterUrl ?? null}
+          startMs={sheetClip.startMs}
+          endMs={sheetClip.endMs}
           settings={sheetData.settings}
           availableSources={sheetData.avail}
           onChange={onSheetChange}

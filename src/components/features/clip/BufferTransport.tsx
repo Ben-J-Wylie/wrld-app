@@ -42,6 +42,9 @@ type Props = {
   canNext?: boolean
   canFrameBack?: boolean
   canFrameForward?: boolean
+  // When false, the head-of-buffer (1st) + tail-of-buffer (7th) buttons are hidden — e.g. a
+  // single-clip preview that only snaps to the clip's own head/tail (prev/next-clip), not the buffer.
+  showBufferEdges?: boolean
   style?: StyleProp<ViewStyle>
 }
 
@@ -61,11 +64,12 @@ export function BufferTransport({
   canNext = true,
   canFrameBack = true,
   canFrameForward = true,
+  showBufferEdges = true,
   style,
 }: Props) {
   return (
     <View style={[styles.row, style]}>
-      <StepButton icon="skip-back" label="Head of buffer" onPress={onToStart} />
+      {showBufferEdges && <StepButton icon="skip-back" label="Head of buffer" onPress={onToStart} />}
       <StepButton icon="chevrons-left" label="Previous clip edge" onPress={onPrevClip} disabled={!canPrev} />
       <HoldStepButton
         icon="chevron-left"
@@ -101,7 +105,7 @@ export function BufferTransport({
         disabled={!canFrameForward}
       />
       <StepButton icon="chevrons-right" label="Next clip edge" onPress={onNextClip} disabled={!canNext} />
-      <StepButton icon="skip-forward" label="Tail of buffer" onPress={onToEnd} />
+      {showBufferEdges && <StepButton icon="skip-forward" label="Tail of buffer" onPress={onToEnd} />}
     </View>
   )
 }
