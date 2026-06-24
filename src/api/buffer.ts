@@ -64,7 +64,12 @@ export type BufferSession = {
     visibility: 'public' | 'private'
     precision?: 'exact' | 'city' | 'country' | 'off' | null
     attributed?: boolean
+    // PB4 A2 — per-source on/off for a time-machine viewer (absent/null = inherit/enabled).
+    sources?: Record<string, boolean> | null
   }[]
+  // PB4 A1 — the session's server-authoritative snips (explicit display boundaries, incl.
+  // no-op). The grid seeds `splitPoints` from these on load so snips survive a reload.
+  snips?: { atMs: number }[]
 }
 
 // One codec-uniform run of the camera buffer: a contiguous group of sessions
@@ -174,6 +179,12 @@ export const bufferApi = {
   patchDirectives: async (sessionId: string, directives: SegmentDirective[]): Promise<void> => {
     await apiClient.patch(`/buffer/me/sessions/${sessionId}/directives`, { directives })
   },
+
+  // PB4 A1 — persist a session's snips (server-authoritative; `splitPoints` slot). Authoritative
+  // replace — send the full snip list for the session (mend = the reduced list / []).
+  patchSessionSnips: async (sessionId: string, snips: { atMs: number }[]): Promise<void> => {
+    await apiClient.patch(`/buffer/me/sessions/${sessionId}/snips`, { snips })
+  },
 }
 
 // One per-segment directive over a buffer session (PB3). `visibility` is the headline;
@@ -182,9 +193,11 @@ export const bufferApi = {
 export type SegmentDirective = {
   startAtMs: number
   endAtMs: number
-  visibility: 'public' | 'private'
+  visibility?: 'public' | 'private'
   precision?: 'exact' | 'city' | 'country' | 'off' | null
   attributed?: boolean
+  // PB4 A2 — per-source on/off for a time-machine viewer (null = inherit/enabled).
+  sources?: Record<string, boolean> | null
 }
 
 // One contiguous in-window slice of a buffer session — the manifest body (C4).

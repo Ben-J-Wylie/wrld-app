@@ -545,6 +545,27 @@ export const ClipsScreen = () => {
     seededPrivateRef.current = true
     if (seeded.length) setPrivRanges(coalesce(seeded))
   }, [sessions])
+  // PB4 A1 — seed snips from the server (Aaron's `session.snips`) once, so user snips survive a
+  // reload. Local state owns afterward (snip/mend PATCH `/snips`). Merge (don't clobber any local).
+  const seededSnipsRef = useRef(false)
+  useEffect(() => {
+    if (seededSnipsRef.current || sessions.length === 0) return
+    const seeded: SplitPoint[] = []
+    for (const s of sessions) for (const sn of s.snips ?? []) seeded.push({ sessionId: s.id, atMs: sn.atMs })
+    seededSnipsRef.current = true
+    if (seeded.length)
+      setSplitPoints((prev) => {
+        const have = new Set(prev.map((p) => `${p.sessionId}~${Math.round(p.atMs)}`))
+        const add = seeded.filter((s) => !have.has(`${s.sessionId}~${Math.round(s.atMs)}`))
+        return add.length ? [...prev, ...add] : prev
+      })
+  }, [sessions])
+  // Persist a session's snips (authoritative replace) after a snip/mend.
+  const persistSnips = useCallback((sessionId: string, splits: SplitPoint[]) => {
+    bufferApi
+      .patchSessionSnips(sessionId, splits.filter((s) => s.sessionId === sessionId).map((s) => ({ atMs: Math.round(s.atMs) })))
+      .catch(() => {})
+  }, [])
   const segIsPrivate = useCallback(
     (c: LaneClip) => {
       const sid = c.sourceSessionId
@@ -1679,8 +1700,11 @@ export const ClipsScreen = () => {
   const handleScissor = useCallback(() => {
     if (unsnip) {
       const sid = unsnip.sessionId
-      const removeSnip = () =>
-        setSplitPoints((prev) => prev.filter((s) => !(s.sessionId === sid && s.atMs === unsnip.atMs)))
+      const removeSnip = () => {
+        const next = laneRefs.current.splits.filter((s) => !(s.sessionId === sid && s.atMs === unsnip.atMs))
+        setSplitPoints(next)
+        persistSnips(sid, next)
+      }
       // PB3 mend differ-guard: un-snipping merges the two pieces at the snip. If their
       // privacy DIFFERS, prompt-to-pick which the merged range keeps (keeping it snipped
       // is always an option — just cancel). Same/none → merge silently.
@@ -1720,8 +1744,11 @@ export const ClipsScreen = () => {
     const sessionId = clip?.sourceSessionId
     if (!clip || !sessionId) return
     if (c.timeMs <= clip.startMs + MIN_REMAINDER_MS || c.timeMs >= clip.endMs - MIN_REMAINDER_MS) return // not strictly inside
-    setSplitPoints((prev) => (prev.some((s) => s.sessionId === sessionId && Math.abs(s.atMs - c.timeMs) < 1) ? prev : [...prev, { sessionId, atMs: c.timeMs }]))
-  }, [unsnip, allClips, bufferedLane, segIsPrivate, patchSessionDirectives])
+    if (laneRefs.current.splits.some((s) => s.sessionId === sessionId && Math.abs(s.atMs - c.timeMs) < 1)) return
+    const next = [...laneRefs.current.splits, { sessionId, atMs: c.timeMs }]
+    setSplitPoints(next)
+    persistSnips(sessionId, next)
+  }, [unsnip, allClips, bufferedLane, segIsPrivate, patchSessionDirectives, persistSnips])
 
   // ── transport navigation: smooth-scroll the timeline so a boundary lands on the playhead ──
   // Boundaries = every clip head + tail; plus the reaper (oldest) and now (live) edges.
