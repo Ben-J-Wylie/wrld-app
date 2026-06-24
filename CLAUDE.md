@@ -3971,3 +3971,58 @@ in-grid viewer is intentionally **unfiltered** (their own editing surface).
   from the backend `tiles.ts`. (Aaron's Lane B endpoints are live + verified.)
 - **Editor retirement (consolidation pass, later):** delete `ClipEditScreen` + the `[Clips|Editor]`
   page-tab once the sheet has soaked; unify the dashboard/stream/clip settings into one shelf.
+
+---
+
+## Updates — June 2026 (PB4 Lane B app — scalable time-machine availability: space-time cells + push)
+
+App side of PB4 Lane B (the public-buffer initiative's scale lane), wired to Aaron's deployed
+backend (the `(planet,t,z,x,y)` cell GET + the `/clips/availability` push channel). On `design` →
+`main`, pure JS (no native module, no EAS rebuild). **Behind a new `AVAILABILITY_TILES` RemoteConfig
+flag (defaults off → inert until flipped)**, so it lands dark and supersedes the windowed feed only
+when enabled.
+
+### The model
+The temporal twin of the live globe's viewport-tile protocol (P2): instead of pulling a ±12h
+window for the whole world + polling every 60s (`useHistoricalAvailability`), the globe subscribes
+to the **space-time cells it currently shows** — viewport × scrub-time. A cell is `(planet, t, z,
+x, y)` with `t = floor(T_ms / AVAILABILITY_TILE_MS)` (1h slices). High zoom → individual pins
+(resolved locally by `playhead ∈ interval`); low zoom → a per-minute alive-count series read at the
+playhead minute → count bubbles (the windowed feed never had historical counts).
+
+### What shipped (`design`)
+- **`src/lib/tiles.ts`** — `AVAILABILITY_TILE_MS = 3_600_000` + `availabilityCellKey(planet,t,z,x,y)`,
+  mirrored byte-for-byte from `wrld-backend/src/lib/tiles.ts` (client + server build the key
+  identically — the push channel emits these keys and the client subscribes by them).
+- **`src/api/clips.ts`** — `clipsApi.discoverCell(planet,t,z,x,y)` → `GET /clips/discover?planet&t&z&x&y`
+  (cacheable: `Cache-Control max-age 30` + ETag) + the `AvailabilityCell` discriminated type
+  (`{mode:'pins', clips, bufferPins}` | `{mode:'counts', bucketMs, counts}`).
+- **`src/hooks/useHistoricalCells.ts`** (new) — the cell manager. `setView(bounds, zoom)` (same
+  shape as `useViewportDiscovery`); derives the needed cells from viewport × scrub-time-tile (count
+  mode = the whole world at a low zoom, stable as the globe spins; pins mode = the viewport bbox).
+  Holds the cell GETs via **`useQueries`** so the set auto-fetches/dedups/GCs as you pan + scrub
+  (`staleTime 30s` = the cell `max-age`; off-screen cells become inactive + collect). One WS to
+  `/clips/availability` subscribes the held cell keys (authoritative `{type:'subscribe', cells}`
+  re-sent on set change) and **invalidates just the changed cell** on `{type:'cell_changed', cell}`
+  — no poll. Returns raw pins (the globe resolves intervals) + playhead-resolved count bubbles +
+  `mode`.
+- **`GlobeScreenMapbox.tsx`** — the `AVAILABILITY_TILES` path supersedes the windowed feed
+  (`withIntervals = availabilityEnabled || tilesEnabled` reuses the existing `inInterval` +
+  signature memos for pins); surfaces **historical count bubbles** at low zoom; drives the cell
+  feed's `setView` from the same `pushViewport`. Time-machine is an Earth concept, so the cells
+  query `'earth'`. The legacy `?at=` + windowed paths stay as the fallbacks until this soaks.
+
+### Verified / status
+Verified against the **deployed** backend: the cell GET pins/counts shapes + the
+`/clips/availability` push route (subscribe → `cell_changed`, key `planet/t/z/x/y`) match. `tsc`
+clean. **Not yet device-tested** — needs an on-device pass with `AVAILABILITY_TILES` flipped on:
+scrubbing back populates clip/buffer pins from the cells, count bubbles at low zoom in the past,
+re-subscribe on pan/rotate, and an edit pushing `cell_changed` → the cell refreshing. **P5** (retire
+the legacy global-snapshot/windowed paths) follows a soak.
+
+### Also live now (Aaron, this round) — full "show all armed sources"
+Aaron landed the first-state-at-go-live backend (mediasoup chat initial empty-thread + "report
+armed-empty data tracks") + per-segment title/tags carried through promote. Combined with the app's
+go-live baseline emits (sensors + torch), **every armed source now records a first state**, so the
+clip editor's captured-only shelf shows all armed sources (incl. chat, location) without disabled
+placeholders.
