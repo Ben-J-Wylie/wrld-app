@@ -92,6 +92,11 @@ import { TimeGapMarker } from '@/components/features/clip/TimeGapMarker'
 import { ClipTimeRuler } from '@/components/features/clip/ClipTimeRuler'
 import { ClipViewer } from '@/components/features/clip/ClipViewer'
 import { ClipsTimeline } from '@/components/features/clip/ClipsTimeline'
+import { FilmStrip } from '@/components/features/clip/FilmStrip'
+import { SegmentPreview } from '@/components/features/clip/SegmentPreview'
+import { SegmentSettingsSheet } from '@/components/features/clip/SegmentSettingsSheet'
+import type { SegSettings, Visibility, Precision, Identity } from '@/lib/segmentSettings'
+import type { FeedKind } from '@/components/features/broadcast/FeedThumb'
 import { DiscoveryHandoffCard } from '@/components/features/stream/DiscoveryHandoffCard'
 import { LegalAcceptanceCard } from '@/components/features/onboarding/LegalAcceptanceCard'
 import { ContextStrip } from '@/components/features/report/ContextStrip'
@@ -1400,6 +1405,47 @@ export function FeatureGallery() {
         <Row label="head · ‹‹clip · ‹frame(hold=rev) · play · frame›(hold=play) · clip›› · tail">
           <BufferTransportDemo />
         </Row>
+        <Row label="showBufferEdges=false — 1st/7th hidden (single-clip preview: snaps to clip head/tail)">
+          <BufferTransport
+            showBufferEdges={false}
+            playing={false}
+            onToStart={() => {}}
+            onPrevClip={() => {}}
+            onFrameBack={() => {}}
+            onFrameBackHold={() => {}}
+            onTogglePlay={() => {}}
+            onFrameForward={() => {}}
+            onFrameForwardHold={() => {}}
+            onNextClip={() => {}}
+            onToEnd={() => {}}
+          />
+        </Row>
+      </Section>
+
+      {/* ── Segment settings shelf (PB4 · per-segment manifest editing) ── */}
+      <Section title="FilmStrip (shared clip-block fill)">
+        <Row label="sprocket bands + constant-size frame cells — one renderer for every timeline (with / without poster)">
+          <View style={{ gap: theme.spacing.sm }}>
+            <View style={galleryStyles.filmBand}>
+              <FilmStrip widthPx={280} posterUrl="https://picsum.photos/seed/wrldfilm/80/80" />
+            </View>
+            <View style={galleryStyles.filmBand}>
+              <FilmStrip widthPx={280} />
+            </View>
+          </View>
+        </Row>
+      </Section>
+
+      <Section title="SegmentPreview (the shelf's top)">
+        <Row label="square viewer (letterbox) + title/date/time · thin clip timeline (scrub · pinch · inertia) · transport">
+          <SegmentPreviewDemo />
+        </Row>
+      </Section>
+
+      <Section title="SegmentSettingsSheet (double-tap a segment)">
+        <Row label="all controls as ordered multistate toggles — lane · visibility · identity · location · sources · tags">
+          <SegmentSettingsSheetDemo />
+        </Row>
       </Section>
 
       <Section title="ClipBlock (clips grid)">
@@ -2242,6 +2288,79 @@ function BufferTransportDemo() {
   )
 }
 
+function SegmentPreviewDemo() {
+  const [title, setTitle] = useState('Morning ride')
+  const now = useMemo(() => Date.now(), [])
+  return (
+    <View style={{ width: 320 }}>
+      {/* No manifest in the gallery → the viewer shows the poster (contain); the timeline + transport
+          are still fully interactive (scrub / pinch / inertia) over the 30s span. */}
+      <SegmentPreview
+        manifestUrl={null}
+        posterUrl="https://picsum.photos/seed/wrldseg/240/240"
+        startMs={now - 30_000}
+        endMs={now}
+        titleValue={title}
+        onTitleChangeText={setTitle}
+        onTitleCommit={() => {}}
+        dateLabel="Sat, Jun 14"
+        rangeLabel="3:04–3:05 PM"
+        onClose={() => {}}
+      />
+    </View>
+  )
+}
+
+function SegmentSettingsSheetDemo() {
+  const [open, setOpen] = useState(false)
+  const [lane, setLane] = useState<'buffered' | 'saved'>('buffered')
+  const now = useMemo(() => Date.now(), [])
+  const [settings, setSettings] = useState<{
+    visibility: Visibility
+    precision: Precision
+    identity: Identity
+    sources: Record<string, boolean>
+    title?: string
+    tags?: string[]
+  }>({
+    visibility: 'public',
+    precision: 'exact',
+    identity: 'attributed',
+    sources: { cam: true, audio: true, chat: true, compass: false, gyro: true },
+    title: 'Morning ride',
+    tags: ['ride', 'sunrise'],
+  })
+  const onChange = (patch: SegSettings) =>
+    setSettings((s) => ({
+      ...s,
+      ...patch,
+      sources: patch.sources ? { ...s.sources, ...patch.sources } : s.sources,
+    }))
+  return (
+    <>
+      <Pressable variant="default" onPress={() => setOpen(true)} style={galleryStyles.openBtn}>
+        <Text variant="bodyEmphasized">Open segment shelf</Text>
+      </Pressable>
+      <SegmentSettingsSheet
+        visible={open}
+        onClose={() => setOpen(false)}
+        rangeLabel="3:04–3:05 PM"
+        dateLabel="Sat, Jun 14"
+        lane={lane}
+        onLaneChange={setLane}
+        showLane
+        manifestUrl={null}
+        posterUrl="https://picsum.photos/seed/wrldseg2/240/240"
+        startMs={now - 60_000}
+        endMs={now}
+        settings={settings}
+        availableSources={['cam', 'audio', 'chat', 'compass', 'gyro'] as FeedKind[]}
+        onChange={onChange}
+      />
+    </>
+  )
+}
+
 function ClipSourcesDrawerDemo() {
   const [open, setOpen] = useState(false)
   const [sources, setSources] = useState<ClipSource[]>([
@@ -2287,6 +2406,16 @@ function SavedClipRowDemo() {
 }
 
 const galleryStyles = StyleSheet.create({
+  // FilmStrip bounding band (matches ClipBlock's topSpan / SegmentPreview's clipBlock).
+  filmBand: {
+    height: 40,
+    width: 280,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border.strong,
+    backgroundColor: theme.colors.bg.primary,
+    overflow: 'hidden',
+  },
   gapSeg: {
     flex: 1,
     backgroundColor: theme.colors.bg.panelHi,
