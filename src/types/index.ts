@@ -7,6 +7,8 @@ export type User = {
   avatarUrl: string | null
   avatarUserSet: boolean
   lastHandleChangeAt: string | null
+  // null/absent = can change handle now; ISO timestamp = locked until then.
+  handleChangeAvailableAt?: string | null
   createdAt: string
   notifyOnFollowedLive: boolean
   notifyOnNearbyLive: boolean
