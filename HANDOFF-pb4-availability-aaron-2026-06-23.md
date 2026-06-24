@@ -251,3 +251,20 @@ compass bearing, initial torch state, etc.
   (so the editor's captured-only shelf shows every armed source). This — plus the app baselines —
   is how we deliver "show all armed sources" without a separate `armedSources` field or disabled
   placeholders.
+
+> **✅ DONE + DEPLOYED (Aaron, 2026-06-24, `wrld-mediasoup` `49b432a`).** Mediasoup-only — no
+> backend change needed.
+> - **chat** — `startRecording` writes an initial `{ts, init:true}` marker to the chat track at
+>   session start, so it exists + renders an empty thread even with zero messages (the marker has
+>   no handle/text → the chat-log renderer skips it). Make sure the app's chat parser treats an
+>   `init:true` line as "no message" (it already skips lines without handle/text).
+> - **location** — confirmed: the track DIR is created at `startRecording`, the broadcaster's
+>   `locationUpdate`s append from go-live, and a data-only go-live now starts recording on
+>   `createRoom` (SP6a) so an early fix isn't dropped.
+> - **`GET /buffer/me` lists armed-but-quiet tracks** — `finalizeRecording` now reports every
+>   armed data track on a buffer session even when 0 bytes (legacy recordings still drop empties),
+>   so ended sessions list them; active sessions already list them (track dir created at start).
+>   So a kind with only a baseline (or none) still shows as a captured source.
+>
+> **On-device verify owed:** arm chat with zero messages + a sensor that doesn't move → both show
+> as captured sources in the editor (chat = empty thread), live and after reload.
