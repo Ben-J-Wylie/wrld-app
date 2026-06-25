@@ -99,6 +99,30 @@ edges authoritatively. The client sends **edge-relative intent**, never a frozen
 
 U1 is the smallest high-value start. U4 is separable and last.
 
+> **✅ U1 BACKEND + MEDIASOUP DONE + DEPLOYED (Aaron, 2026-06-25, `wrld-backend` `3f4527c` +
+> `wrld-mediasoup` `2b8be57`).** The engine half of U1 is live; remaining U1 is the **app
+> dashboard toggle** (Ben).
+> - **Wire:** `createRoom` accepts **`lane: 'buffer' | 'saved'`** (omitted → `'buffer'`).
+>   It's stashed on `room._meta.lane` and forwarded to the backend's `allocateRecording`,
+>   which tags the new **`BufferSession.lane`**. So the dashboard's only job is to send
+>   `lane` on go-live (next to the existing `sources`/`subscribersOnly`/`visibility`).
+> - **Retain-from-start:** a `saved`-lane session's footage is **never reaped** (live AND
+>   after end) — the reaper honours the lane directly (independent of the PB2/PB3 flags).
+> - **Render:** `GET /buffer/me` now returns **`session.lane`**, so the clips page can put
+>   a live saved-lane session in the **saved row** from go-live.
+> - **Deferred to later U-phases (so you don't expect them yet):** a saved-lane session is
+>   retained but NOT yet materialised into a durable `Clip` — it won't appear in
+>   `GET /buffer/me/clips` (it's a saved-lane *session* in `GET /buffer/me`); that
+>   materialise + live quota accounting + the **storage cap** are **U3**, and the live
+>   lane-toggle + snip-at-now is **U2/U3**. For U1, `saved` simply means "retained from
+>   the start." There's also no cap yet → a saved go-live retains unbounded (fine at f&f;
+>   U3 adds the cap).
+>
+> **App slice for U1 (Ben):** the dashboard **lane SegmentedToggle (BUFFER | SAVED)** next
+> to arming; send `lane` on `createRoom`; render a `session.lane === 'saved'` live session
+> in the saved lane. On-device verify owed: go live tagged `saved` → footage isn't reaped +
+> shows in the saved lane.
+
 ---
 
 ## Open questions for Aaron (decide + pin in your CLAUDE.md)
