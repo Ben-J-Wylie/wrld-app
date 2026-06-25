@@ -28,6 +28,12 @@ The U1–U3 app slices are wired + the app-side bugs are fixed; two issues are b
     `bufferPins` discover path reads **session-level** `s.locationPrecision` + is **always
     attributed**; only per-range *title* (U5) + *private* are honored. Extend the directive-at-instant
     resolution (already there for title) to precision + attributed on the buffer-pin path — see #13.
+- **(2c) the systemic fix for (2b) — coalesce the directive in the LIBRARY + VIEWER too.** App side
+  now dual-writes a saved-clip rename (directive + `patchClip` on `c.*`) so it reaches everywhere,
+  but that's a workaround for the Clip row + the directive being separate reads. The clean fix:
+  `GET /buffer/me/clips` (`name`) and `GET /clips/:id` should **coalesce the per-segment directive
+  title / precision / identity at the instant** — exactly what `discover` does (U5 + #13). With that,
+  the app can drop the `patchClip` dual-write and the directive is the single authority everywhere.
 - **(3) save (incl. save-while-reaping) doesn't persist into the Library — BACKEND/CONFIG.** The app
   saves correctly (`POST /buffer/me/clips` with `fromReaperEdge`/`toNow`) + refetches `['buffer','clips']`;
   the clip just never becomes listable. `GET /buffer/me/clips` returns **`status:'ready'` only**, and
