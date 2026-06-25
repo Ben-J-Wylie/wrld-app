@@ -210,10 +210,16 @@ U1 is the smallest high-value start. U4 is separable and last.
 >   snip when the new settings equal the current era's. (Server-side coalesce-on-equal is a
 >   possible follow-up; for now the app should not fire no-op snips.)
 >
-> **App slice for U2 (Ben):** the dashboard's per-range controls call `POST …/snip` on a live
-> change (the dashboard *is* the now-edge editor; `captureConfig` is the now-edge slice) +
-> re-emit the changed source's current value; debounce. On-device verify: change precision/
-> identity/title mid-broadcast → the time machine shows distinct eras with the right settings.
+> **App slice for U2 (Ben) — ✅ DONE 2026-06-25 (`24323e9`, on `design`).** `bufferApi.snipSession`
+> + a `broadcastStore` snip channel (dashboard → mounted StreamScreen, reusing the command pattern)
+> + `useTelemetryCapture.reemit()` (the go-live baseline, re-fired per snip). StreamScreen snips the
+> OPEN buffer session (id via `useBuffer`) then re-emits; the dashboard requests a debounced (600ms)
+> snip on **location-precision / identity / title** changes while live (skips the first-live baseline
+> + no-ops). **Scoped to the cleanly-mapping metadata axes** — `sources` omitted (partial-map risk;
+> chat + AV source toggles fold into U4), `visibility` = server default public, no tags control.
+> **On-device verify owed:** change precision/identity/title mid-broadcast → the time machine shows
+> distinct eras with the right settings; confirm the open-session id resolves (snip dropped silently
+> in the ~secs before the backend creates the session).
 
 > **✅ U5 DONE + DEPLOYED (Aaron, 2026-06-25, `wrld-backend` `0eadbc1`).** `GET /clips/discover`
 > now coalesces the **per-segment directive title alive at the instant** over the clip/stream

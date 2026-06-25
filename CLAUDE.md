@@ -4140,8 +4140,20 @@ done** on `design` → `main` (`a821d27`). Pure JS — no native module, no EAS 
 
 **On-device verify owed:** go live tagged `saved` → footage isn't reaped + shows in the saved lane.
 
-**Remaining app slices (Aaron's backend deployed):** **U2** (per-range controls → `POST
-/buffer/me/sessions/:id/snip` on a live change + re-emit + debounce), **U3** (revert the
-reaper-disable guard; edge-relative save `fromReaperEdge`/`toNow`; save↔buffer = successive saves;
-`409 storage_cap` → warn + flip to buffer), **U4** (live cam/audio rail → `setSourcePaused` + the
-U2 snip; viewers handle `producerPaused`/`producerResumed`). **U5** needs no app change.
+**Remaining app slices (Aaron's backend deployed):** **U3** (revert the reaper-disable guard;
+edge-relative save `fromReaperEdge`/`toNow`; save↔buffer = successive saves; `409 storage_cap` →
+warn + flip to buffer), **U4** (live cam/audio rail → `setSourcePaused` + the U2 snip; viewers
+handle `producerPaused`/`producerResumed`). **U5** needs no app change.
+
+### U2 — live snip-at-now (DONE 2026-06-25, `24323e9`)
+The dashboard is the now-edge editor: while live, a per-range **metadata** change snips the open
+buffer session. `bufferApi.snipSession(id, settings)` → `POST /buffer/me/sessions/:id/snip` (+
+`SnipSettings`). The dashboard (no live hooks) signals via a new `broadcastStore` snip channel
+(`pendingSnip`/`requestSnip`/`consumeSnip`, mirroring the command pattern); the mounted StreamScreen
+executes the snip against the OPEN session (id from `useBuffer`; dropped if not yet created) then
+re-emits each armed sensor's first state via `useTelemetryCapture.reemit()` (its go-live baseline,
+extracted + returned) so the new era is self-contained. The dashboard fires a debounced (600ms)
+snip on **location-precision · identity · title** changes (skips the first-live baseline + no-ops),
+scoped to the cleanly-mapping metadata axes — `sources` omitted (partial-map risk; chat + AV source
+toggles are U4), `visibility` = server default public, no tags control. Pure JS, no rebuild. Not
+device-tested.
