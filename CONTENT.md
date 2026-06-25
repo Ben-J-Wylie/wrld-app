@@ -496,6 +496,136 @@ gaps are tracked as gaps, not silently lived with:
   It works, but a clip isn't yet *literally* "a named set of per-range directives over the one
   store." A long-term collapse, flagged as north-star, not scheduled.
 
+### Target architecture (north star) — the done state
+
+> **What this is:** the destination model — clean-slate, fully named. Today's schema has three
+> levels (`Stream`/`Clip`/`DirectiveRange`) with duplicated, inconsistently-named fields and a
+> resolution chain; the dual-write + fallback we run now is the **bridge** toward this. This is
+> *not* current reality — it's the shape the migration (the R4 collapse) heads to. Canonized
+> 2026-06-25 so the target is fixed and nothing drifts. *(See "Conformance status" above for how
+> close the build is; the §12 bridge table below maps current → target.)*
+
+**1. Three entities (named by role).**
+- **`Track`** — captured per-source footage. The immutable substrate.
+- **`Clip`** — the **one** manifest unit: a wall-clock range over the Tracks + the 7 axes. Snip →
+  two clips; mend → one. (*Clip ≡ segment.*)
+- **`Stream`** — the live broadcast's **identity + access only** (host, coords, `subscribersOnly`,
+  `ppvEventId`, `contentRating`). Holds **no** settings axis.
+
+**2. The substrate — what's recorded (10 sources; 9 live, screen pending).** Each captured
+**source** is stored as a **`Track`** (drop "kind" — a source *is* the track's identity), with an
+initial-state sample at every boundary (go-live + each snip) so it always registers:
+
+| Source | What |
+|---|---|
+| camera | video |
+| audio | sound (+ companion `audiolevel` track → the scrubbable waveform) |
+| location | GPS trail |
+| compass | heading |
+| gyro | orientation |
+| accel | 3-axis (motion is a derived view) |
+| speed | m/s |
+| torch | on/off (signaled channel, not the LED — v0.3) |
+| chat | the message thread |
+| screen | screen-share (capture not wired — v0.3) |
+
+*Not tracks:* **identity** is an axis (a flag), not recorded data; `temp` is deprecated (no sensor).
+
+**3. The manifest — the 7 axes (columns on `Clip`, all equal).** One name, one home (`Clip`), one
+vocabulary each. Written only on the `Clip`:
+
+| Axis | Column | Values |
+|---|---|---|
+| Title | `title` | free text |
+| Tags | `tags` | `text[]` |
+| Visibility | `visibility` | `public \| private` |
+| Identity | `identity` | `shown \| anon` *(bool retired)* |
+| Location precision | `precision` | `exact \| city \| country \| private` *(`private`, not "hidden"/"off")* |
+| Source inclusion | `sources` | `{ [source]: shown }` — view-mask over the captured Tracks |
+| Retention | `keep` | `kept \| reapable` *(UI lane: saved \| buffer)* |
+
+**4. Structure — 3 ops (boundaries + destroy).**
+- **snip** — add a boundary inside a clip → two clips.
+- **mend** — remove a boundary between adjacent clips → one (coalesces when axes agree).
+- **delete** — permanent: a whole clip, or one `Track` (the only destructive per-source op; reclaims).
+
+**`trim` is not a primitive** — trimming = **snip + the off-cut reverts to `keep: reapable`**
+(non-destructive). It stays a user gesture, composed of the above; nothing "trim" is stored. So
+structure = **boundaries + `keep`**, nothing else (no `splitPoints` field).
+
+**5. Immutable substrate (recorded, never user-editable).** The footage bytes (the `Track`s); the
+wall-clock timestamps (`startMs`/`endMs` — when it was printed); the source session id; and the
+**capture-fidelity exact coords + real identity** — always retained server-side; `precision` /
+`identity` are reversible **display choices** over them, never a re-capture.
+
+**6. The flow — read / write / render (one path, identical for all 7 axes).**
+- **WRITE → `editClip(range, patch)`** writes the axis column on the `Clip` (splitting as needed);
+  the live now-edge edit is the same verb at the now edge. **One write path; no parallel field,
+  ever.** Only **two writers**: the **drawer** (all 7 axes) and the **timeline block** (`keep` via
+  lane-drag + the structural ops). Every other surface is read-only.
+- **READ → select, then read current.** A **selector** finds the clip (`clipAt(t)` for a past/live
+  instant, or the clip itself); the axes are then read as the clip's **current** values. **No
+  resolution chain** — the `Clip` is the sole home.
+- **RENDER → one resolver** feeds every surface; every edit invalidates every surface's query.
+
+**7. The time-machine rule (selection vs. value — keeps replay honest about edits).** Two times are
+involved; only one is the playhead. **`t` (or `now`) selects *which* clip** is shown (capture-span
+overlap, filtered by **current** `visibility`); **every axis is read as the clip's *current*
+value** — never frozen at `t` (§1.4 reversibility). So renaming, sharpening precision, flipping a
+source, or going private **proliferates to the past pin immediately**, because the pin reads the
+current clip object — `t` only chose it. `clipAt(t).title` means **(the clip alive at `t`) . (its
+current title)** — not "title as it was at `t`." The **only** things tied to `t` are the footage
+bytes + the retained capture-fidelity substrate. (Edits are per-range: editing the era covering `t`
+updates that range; an un-snipped clip edits wholesale.)
+
+**8. The surface × axis read map.** Every non-dash cell reads the **same field** — `clip.<axis>` —
+selected by `t`/`now` for time-indexed surfaces, or the clip directly otherwise:
+
+| Surface | title | tags | visibility | identity | precision | sources | keep |
+|---|---|---|---|---|---|---|---|
+| Live globe pin | label | — | listed? + planet | — | placement + halo | — | — |
+| Time-machine pin | label | — | listed? + planet | — | placement + halo | — | — |
+| Discovery card (tap) | ✓ | — | access badge\* | host ✓ | location caption | — | — |
+| Clips timeline block | label | — | — | — | — | lane fill | lane ✓ (write) |
+| Clip / Library drawer (editor) | ✓ rw | ✓ rw | ✓ rw | ✓ rw | ✓ rw | ✓ rw | ✓ rw |
+| Library entry | ✓ | (✓) | — | — | — | — | (kept) |
+| Live stream viewer | chrome | — | access gate\* | host ✓ | location chrome | source rail | — |
+| Time-machine clip viewer | chrome | (✓) | access gate\* | host ✓ | location chrome | source rail | — |
+| Analytics — top clips | ✓ | — | — | — | — | — | — |
+
+\* **Access** (`subscribersOnly`/`ppvEventId`) + the **host avatar/@handle** are **`Stream`-level**,
+not clip axes — `visibility` only decides public/private (→ listed + which planet); `identity` only
+decides shown-vs-anon. **Compose inputs** (dashboard + stream-preview title fields) read/write
+`captureConfig.title` — the *next* clip's title at go-live, the one legitimate title input that isn't
+`clip.title`.
+
+**9. Planet / realm — derived routing, not a precision value.** Which globe a clip lands on is a
+**read-time discovery decision** over single-meaning axes, never baked into `precision`:
+`precision: private` → **Haven**; `contentRating: adult` → **Venus**; else → **Earth** (at the
+`precision` blur); a new planet → **a new routing rule**, never a new `precision` value or any change
+to stored clip data. *(If a creator ever picks a planet explicitly, that becomes its own `realm`
+axis beside `precision` — not inside it. Today it's fully derived, so no `realm` axis yet.)*
+
+**10. The count.** 3 entities · 10 sources/Tracks (9 live) · 7 equal axes · 3 structural ops · 1
+read · 1 write (2 writers) · 1 resolver. No second copy of any fact → no resolution chain, no name
+collision, no vocab tangle. The naming enforces it: there's nowhere else to put a `title`.
+
+**11. The one-line model.** A **`Clip`** is a wall-clock range over the footage **`Track`s**,
+carrying seven axes — `title` · `tags` · `visibility` · `identity` · `precision` · `sources` ·
+`keep`. `snip`/`mend`/`delete` change its shape; `editClip` changes its axes; a selector
+(`t`/`now`/the clip) finds it and every axis is read **current**; the **`Stream`** is just live
+identity + access; the planet is derived. One home per fact, rendered everywhere.
+
+**12. North-star vs. built (the bridge — so this isn't mistaken for reality).**
+
+| Target (this section) | Today | Bridge |
+|---|---|---|
+| `Clip` is the sole home; no chain | `Stream`/`Clip`/`DirectiveRange` each copy axes; `?? clip ?? stream` chain | reads coalesce the directive (#13 ✓; 2c deploy-pending) |
+| `editClip` only writes the directive | dual-write directive + `Clip.*` | dual-write is scaffolding — deleted when 2c ships |
+| `keep` is the one retention signal | `BufferSession.lane` + retain rows + `DirectiveRange.retain` OR'd | R2 collapses to one |
+| `Clip` ≡ range + axes (one entity) | `Clip` + `ClipRange` + `DirectiveRange` + `ClipTrack` | R4 north-star collapse |
+| consistent names: `precision\|…\|private`, `identity: shown\|anon`, `keep` | `precision`/`locDisplayPrecision`/`locationPrecision`; `visibility: public\|anon\|draft`; bool `attributed`; `lane` | rename + vocab split during the collapse |
+
 ---
 
 ## 6. Content representation (how it's shown, honestly)
