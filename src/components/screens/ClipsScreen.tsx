@@ -1778,6 +1778,42 @@ export const ClipsScreen = () => {
     },
     [sheetClip, savedCoveringSheet, saveClip, unsaveClip],
   )
+  // Permanent delete — drops the clip from the server + reclaims (a copy survives only via the
+  // reporting path, per CONTENT.md §3). Saved clips have an endpoint today (deleteSavedClip); a
+  // buffered clip's explicit permanent-delete + per-source track delete are backend TODOs (Aaron —
+  // flagged in the handoff). Confirmed before any destructive call.
+  const onDeleteClip = useCallback(() => {
+    if (!sheetClip) return
+    Alert.alert('Delete clip?', 'This removes it from the server and frees the storage. This can’t be undone.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => {
+          if (savedCoveringSheet) {
+            bufferApi
+              .deleteSavedClip(savedCoveringSheet.id)
+              .then(() => {
+                qc.invalidateQueries({ queryKey: ['buffer', 'clips'] })
+                refetchSavedSoon()
+              })
+              .catch(() => Alert.alert('Error', 'Could not delete the clip. Please try again.'))
+            closeSheet()
+          } else {
+            // Buffered footage: no explicit permanent-delete endpoint yet (it ages out via the reaper).
+            Alert.alert('Coming soon', 'Permanent delete of buffered footage needs the backend — for now it clears as it ages out.')
+          }
+        },
+      },
+    ])
+  }, [sheetClip, savedCoveringSheet, qc, refetchSavedSoon, closeSheet])
+  const onDeleteSource = useCallback((kind: FeedKind) => {
+    Alert.alert('Delete source?', `Permanently remove the ${kind.toUpperCase()} track from this clip. This can’t be undone.`, [
+      { text: 'Cancel', style: 'cancel' },
+      // Per-source track delete needs a backend endpoint (Aaron — flagged). UI is wired + ready.
+      { text: 'Delete', style: 'destructive', onPress: () => Alert.alert('Coming soon', 'Per-source delete needs the backend.') },
+    ])
+  }, [])
 
   const reaperBoundaryMs = windowStartMs != null && !reaping ? windowStartMs : null
   const reapAtMs = oldestClip != null && windowMs > 0 ? oldestClip.startMs + windowMs : null
@@ -2231,6 +2267,8 @@ export const ClipsScreen = () => {
           settings={sheetData.settings}
           availableSources={sheetData.avail}
           onChange={onSheetChange}
+          onDelete={onDeleteClip}
+          onDeleteSource={onDeleteSource}
         />
       )}
     </View>

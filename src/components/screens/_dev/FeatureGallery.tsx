@@ -6,7 +6,7 @@
 //
 // Reachable in dev via expo-router push to `/(app)/feature-gallery`.
 
-import { ScrollView, View, StyleSheet } from 'react-native'
+import { Alert, ScrollView, View, StyleSheet } from 'react-native'
 import { ScreenScroll } from '@/components/sections/ScreenScroll'
 import { Text } from '@/components/primitives/Text'
 import { LivePill } from '@/components/features/stream/LivePill'
@@ -2365,6 +2365,8 @@ function SegmentSettingsSheetDemo() {
         settings={settings}
         availableSources={['cam', 'audio', 'chat', 'compass', 'gyro'] as FeedKind[]}
         onChange={onChange}
+        onDelete={() => Alert.alert('Delete clip (demo)')}
+        onDeleteSource={(k) => Alert.alert(`Delete ${k} (demo)`)}
       />
     </>
   )

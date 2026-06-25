@@ -15,6 +15,8 @@ import { SegmentedToggle } from '@/components/primitives/SegmentedToggle'
 import { Input } from '@/components/primitives/Input'
 import { Chip } from '@/components/primitives/Chip'
 import { Text } from '@/components/primitives/Text'
+import { Pressable } from '@/components/primitives/Pressable'
+import { Icon } from '@/components/primitives/Icon'
 import { SegmentPreview } from './SegmentPreview'
 import { SOURCE_META } from '@/components/features/stream/sourceMeta'
 import type { FeedKind } from '@/components/features/broadcast/FeedThumb'
@@ -49,6 +51,12 @@ type Props = {
   availableSources: FeedKind[]
   /** Emit a partial override for the segment. */
   onChange: (patch: SegSettings) => void
+  /** Permanently delete the whole clip (drop from the server + reclaim; a copy survives only via
+   *  the reporting path). The screen confirms + calls the API. Omit to hide the button. */
+  onDelete?: () => void
+  /** Permanently delete one captured source's track (the only destructive per-source edit, distinct
+   *  from the on/off visibility toggle). The screen confirms + calls the API. Omit to hide. */
+  onDeleteSource?: (kind: FeedKind) => void
 }
 
 // All controls are multistate toggles, OFF/least → ON/most reading left→right (Ben's order).
@@ -97,6 +105,8 @@ export const SegmentSettingsSheet = memo(function SegmentSettingsSheet({
   settings,
   availableSources,
   onChange,
+  onDelete,
+  onDeleteSource,
 }: Props) {
   // The segment's captured sources, in Ben's fixed order.
   const orderedSources = SHEET_SOURCE_ORDER.filter((k) => availableSources.includes(k))
@@ -143,15 +153,17 @@ export const SegmentSettingsSheet = memo(function SegmentSettingsSheet({
           onClose={onClose}
         />
 
-        {/* All controls are multistate toggles, in a fixed order (Ben). Lane hides once reaping. */}
+        {/* All controls are multistate toggles, in a fixed order. Visibility above Lane; Lane hides
+            once the reaper has reached the clip (re-laning would need a snip — the drawer is
+            prefs-only, the dashboard/live edges do the snipping). */}
+        <Row label="Visibility">
+          <SegmentedToggle options={VISIBILITY_OPTIONS} value={settings.visibility} onChange={(v) => onChange({ visibility: v })} />
+        </Row>
         {showLane && (
           <Row label="Lane">
             <SegmentedToggle options={LANE_OPTIONS} value={lane} onChange={onLaneChange} />
           </Row>
         )}
-        <Row label="Visibility">
-          <SegmentedToggle options={VISIBILITY_OPTIONS} value={settings.visibility} onChange={(v) => onChange({ visibility: v })} />
-        </Row>
         <Row label="Identity">
           <SegmentedToggle options={IDENTITY_OPTIONS} value={settings.identity} onChange={(v) => onChange({ identity: v })} />
         </Row>
@@ -160,11 +172,23 @@ export const SegmentSettingsSheet = memo(function SegmentSettingsSheet({
         </Row>
         {orderedSources.map((kind) => (
           <Row key={kind} label={SOURCE_META[kind].label}>
-            <SegmentedToggle
-              options={ON_OFF_OPTIONS}
-              value={(settings.sources[kind] ?? true) ? 'on' : 'off'}
-              onChange={(v) => onChange({ sources: { [kind]: v === 'on' } })}
-            />
+            <View style={styles.sourceCtl}>
+              <SegmentedToggle
+                options={ON_OFF_OPTIONS}
+                value={(settings.sources[kind] ?? true) ? 'on' : 'off'}
+                onChange={(v) => onChange({ sources: { [kind]: v === 'on' } })}
+              />
+              {onDeleteSource && (
+                <Pressable
+                  variant="subtle"
+                  hitSlop={8}
+                  accessibilityLabel={`Delete ${SOURCE_META[kind].label} permanently`}
+                  onPress={() => onDeleteSource(kind)}
+                >
+                  <Icon name="trash-2" size="sm" color={theme.colors.text.muted} />
+                </Pressable>
+              )}
+            </View>
           </Row>
         ))}
 
@@ -188,6 +212,17 @@ export const SegmentSettingsSheet = memo(function SegmentSettingsSheet({
             returnKeyType="done"
           />
         </View>
+
+        {/* Permanent delete — drops the clip from the server + reclaims (a copy survives only via
+            the reporting path). The screen confirms + calls the API. */}
+        {onDelete && (
+          <Pressable variant="subtle" accessibilityLabel="Delete clip permanently" onPress={onDelete} style={styles.deleteBtn}>
+            <Icon name="trash-2" size="sm" color={theme.colors.accent.default} />
+            <Text variant="bodyEmphasized" color={theme.colors.accent.default}>
+              Delete clip
+            </Text>
+          </Pressable>
+        )}
       </View>
     </BottomSheet>
   )
@@ -208,7 +243,16 @@ const styles = StyleSheet.create({
   body: { paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.md, gap: theme.spacing.md },
   row: { gap: theme.spacing.xs },
   rowLabel: {},
+  sourceCtl: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
   sources: { gap: theme.spacing.sm, marginTop: theme.spacing.xs },
   sourcesLabel: {},
   tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.xs },
+  deleteBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: theme.spacing.xs,
+    paddingVertical: theme.spacing.sm,
+    marginTop: theme.spacing.sm,
+  },
 })

@@ -84,6 +84,16 @@ edges authoritatively. The client sends **edge-relative intent**, never a frozen
     `COALESCE(directive.title, clip.title, stream.title)` so an edited per-segment title
     proliferates to the time-machine pin (same pattern as reversible location precision). App
     already renders `pin.title`.
+11. **Permanent delete — two missing endpoints (drawer UI is built + wired).** The clip drawer
+    (`SegmentSettingsSheet`) now has a **Delete clip** button + **per-source delete** trash icons
+    (built 2026-06-24, behind `onDelete`/`onDeleteSource`). Wired today: **saved-clip delete** via
+    the existing `bufferApi.deleteSavedClip`. Still need:
+    - **Permanent-delete of a BUFFERED clip** — drop the footage now + reclaim, *as if evicted*; a
+      copy survives only via the reporting path (CONTENT.md §3). (Today buffered footage only goes
+      via the reaper; the app shows a "coming soon" notice.)
+    - **Per-source track delete** — remove ONE captured source's track from a clip + reclaim (the
+      only destructive per-source edit, distinct from the reversible on/off visibility toggle). No
+      endpoint yet; the app shows "coming soon".
 
 ---
 
