@@ -132,6 +132,12 @@ export const bufferApi = {
     endAtMs: number
     name: string
     kinds: string[]
+    // U3 edge-relative save: the server uses ITS live edges instead of a (possibly stale) client ms.
+    // `fromReaperEdge` → clamp the start to the current reaper edge (earliestAt) = "save the
+    // remainder" of a being-reaped clip. `toNow` → clamp the end to the server's `now` (the live
+    // edge). The numeric startAtMs/endAtMs stay as best-effort; the server re-clamps to [earliest, now].
+    fromReaperEdge?: boolean
+    toNow?: boolean
   }): Promise<{ clipId: string }> => {
     const res = await apiClient.post<{ clip: { id: string } }>('/buffer/me/clips', input)
     return { clipId: res.data.clip.id }

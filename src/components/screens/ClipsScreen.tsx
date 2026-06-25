@@ -47,6 +47,7 @@ import { useBuffer } from '@/hooks/useBuffer'
 import { useSavedClips } from '@/hooks/useSavedClips'
 import { useDrafts } from '@/hooks/useDrafts'
 import { useBroadcastStore } from '@/stores/broadcastStore'
+import { loadCaptureConfig, saveCaptureConfig } from '@/lib/captureConfig'
 import { serverNow, feedServerNow } from '@/lib/serverClock'
 import { usePublicConfig, configBool } from '@/hooks/usePublicConfig'
 import {
@@ -1654,7 +1655,13 @@ export const ClipsScreen = () => {
         ...prev,
         { tempId, sessionId, startMs: clip.startMs, endMs: clip.endMs, label: clip.label, posterUrl: clip.posterUrl, manifestUrl: clip.manifestUrl },
       ])
-      const payload = { startAtMs: Math.round(clip.startMs), endAtMs: Math.round(clip.endMs), name: clip.label, kinds }
+      // U3 edge-relative save: a clip whose start has reached the reaper edge is being evicted →
+      // `fromReaperEdge` so the server clamps the start to ITS current earliest ("save the
+      // remainder"); the live block (the still-growing session) → `toNow` so the end clamps to the
+      // server's `now`. The numeric bounds stay best-effort; the server re-clamps to [earliest, now].
+      const fromReaperEdge = windowStartMs != null && clip.startMs <= windowStartMs
+      const toNow = sessionId === realLiveSessionId
+      const payload = { startAtMs: Math.round(clip.startMs), endAtMs: Math.round(clip.endMs), name: clip.label, kinds, fromReaperEdge, toNow }
       bufferApi
         .saveClip(payload)
         .then((res) => {
@@ -1665,12 +1672,27 @@ export const ClipsScreen = () => {
         })
         .catch((err: unknown) => {
           setPendingSaves((prev) => prev.filter((p) => p.tempId !== tempId)) // revert the optimistic carve
-          const e = err as { response?: { status?: number; data?: { message?: string; error?: string } }; message?: string }
+          const e = err as { response?: { status?: number; data?: { message?: string; error?: string; usedBytes?: number; quotaBytes?: number } }; message?: string }
+          // U3 storage cap: the save is rejected because saved storage is full. Warn, and — if this
+          // was the LIVE saved-lane span — flip the dashboard's go-live lane back to buffer (the
+          // broadcast keeps printing to buffer). A retrospective save just fails (no lane to flip).
+          if (e.response?.status === 409 && e.response.data?.error === 'storage_cap') {
+            const d = e.response.data
+            const gb = (n?: number) => (n != null ? `${(n / 1_073_741_824).toFixed(1)} GB` : null)
+            const detail = d.quotaBytes != null ? ` (${gb(d.usedBytes)} of ${gb(d.quotaBytes)} used)` : ''
+            if (toNow) {
+              loadCaptureConfig().then((c) => (c.lane === 'saved' ? saveCaptureConfig({ ...c, lane: 'buffer' }) : undefined))
+              Alert.alert('Storage full', `Your saved-clip storage is full${detail}. Recording continues to the buffer instead.`)
+            } else {
+              Alert.alert('Storage full', `Your saved-clip storage is full${detail}. Free up space or delete some saved clips to save this one.`)
+            }
+            return
+          }
           const msg = e.response?.data?.message ?? e.response?.data?.error ?? e.message ?? 'Could not save clip'
           Alert.alert('Save failed', msg)
         })
     },
-    [sessions, refetchSavedSoon, qc],
+    [sessions, refetchSavedSoon, qc, windowStartMs, realLiveSessionId],
   )
 
   // Drag a SAVED clip up → un-save. A WHOLE clip is deleted; a scissor PIECE only trims that range
@@ -1772,11 +1794,10 @@ export const ClipsScreen = () => {
   const reaping = windowStartMs != null && oldestClip != null && oldestClip.startMs <= windowStartMs + 1
   const reaperLane: 'buffered' | 'saved' = oldestClip != null && savedLane.some((c) => c.id === oldestClip.id) ? 'saved' : 'buffered'
 
-  // PB4 sheet — the open segment's lane (drives the Lane toggle), and whether it's being reaped
-  // (then the toggle hides — it can no longer move). Changing the toggle saves / un-saves it.
-  // Membership is RANGE-based, NOT id-based: saving the buffer segment creates a NEW-id saved clip
-  // (+ an optimistic pending placeholder) covering the SAME footage range, so an id match would
-  // never see it → the toggle would snap back to BUFFERED and each tap would save another copy.
+  // PB4 sheet — the open segment's lane (drives the Lane toggle). Changing the toggle saves /
+  // un-saves it. Membership is RANGE-based, NOT id-based: saving the buffer segment creates a NEW-id
+  // saved clip (+ an optimistic pending placeholder) covering the SAME footage range, so an id match
+  // would never see it → the toggle would snap back to BUFFERED and each tap would save another copy.
   // Match by session + the segment's midpoint inside a saved clip's span instead.
   const savedCoveringSheet = useMemo(() => {
     if (!sheetClip?.sourceSessionId) return null
@@ -1786,7 +1807,10 @@ export const ClipsScreen = () => {
     )
   }, [sheetClip, savedLane])
   const sheetLane: 'buffered' | 'saved' = savedCoveringSheet ? 'saved' : 'buffered'
-  const sheetShowLane = !!sheetClip && !(reaping && oldestClip?.id === sheetClip.id)
+  // U3 — the lane toggle STAYS enabled during reap (the earlier guard hid it for the being-reaped
+  // oldest clip). Saving a being-reaped clip is now valid: `saveClip` sends `fromReaperEdge`, so the
+  // server retains [current reaper edge → end] — "save the remainder."
+  const sheetShowLane = !!sheetClip
   const onSheetLaneChange = useCallback(
     (next: 'buffered' | 'saved') => {
       if (!sheetClip) return
