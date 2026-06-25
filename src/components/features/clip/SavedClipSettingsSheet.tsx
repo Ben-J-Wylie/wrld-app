@@ -56,7 +56,8 @@ export function SavedClipSettingsSheet({ clip, visible, onClose }: Props) {
       bufferApi
         .patchClip(id, body)
         .then(() => {
-          qc.invalidateQueries({ queryKey: ['buffer', 'clips'] })
+          qc.invalidateQueries({ queryKey: ['buffer', 'clips'] }) // library + saved lane
+          qc.invalidateQueries({ queryKey: ['clip'] }) // the clip viewer (time-machine rewatch)
           // Refetch the time-machine pin feeds so an edit (title / precision / identity) proliferates
           // to the rewatch globe. The pins come from `historical-clips` (windowed) / `avail-cell`
           // (Lane B); `historical-availability` is the third feed. All three keyed on time/cell, so
@@ -152,7 +153,8 @@ export function SavedClipSettingsSheet({ clip, visible, onClose }: Props) {
         precision: (clip.locDisplayPrecision as Precision) ?? 'exact',
         identity: clip.attributed ? 'attributed' : 'anon',
         sources: sourceVals,
-        title: clip.name,
+        // 'Untitled clip' is the backend's no-title fallback → treat as empty so the placeholder shows.
+        title: clip.name && clip.name !== 'Untitled clip' ? clip.name : undefined,
       }}
       availableSources={avail}
       onChange={(patch) => apply(clip.id, patch)}
