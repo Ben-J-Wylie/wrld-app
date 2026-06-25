@@ -118,6 +118,17 @@ U1 is the smallest high-value start. U4 is separable and last.
   stamp the boundary at its `now`.
 - **Snip-at-now vs coalesce-noise.** Rapid toggles → many tiny ranges. Coalesce adjacent equal
   ranges server-side (the app already coalesces in the editor); define a min-range or debounce.
+  **Ben's recommendation (2026-06-24), three layers — pick the threshold, the shape is settled:**
+  1. **Coalesce-by-equality (always).** A setting change whose new value equals the adjacent
+     range's value plants **no** boundary (a no-op snip). This alone kills most "bounce" — a
+     toggle there-and-back nets to nothing.
+  2. **Settle-debounce ~400 ms.** A flurry of changes within the window collapses to the *final*
+     value before a boundary is committed (don't snip per keystroke / per rapid toggle). 300–500 ms
+     is the reasonable band; 400 ms is the pick.
+  3. **Min-segment floor ~1 s (backstop).** Any range shorter than ~1 s coalesces into its
+     neighbour, so even a debounce miss can't leave a sub-second sliver. Ben's bar is "no clips
+     that are only a few **frames** long" — a few frames at 30 fps is ~33–130 ms, so the 400 ms
+     debounce **and** the 1 s floor each independently clear it with wide margin.
 - **Edge-relative intent encoding.** A sentinel ("from live reaper edge" / "to now") vs a
   client-best-effort ms the server re-clamps. Recommend the sentinel for the live edges.
 - **AV renegotiation recording semantics.** When a producer is removed mid-room, the recorder
