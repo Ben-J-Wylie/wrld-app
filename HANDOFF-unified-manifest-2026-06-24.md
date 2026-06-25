@@ -99,6 +99,32 @@ edges authoritatively. The client sends **edge-relative intent**, never a frozen
 
 U1 is the smallest high-value start. U4 is separable and last.
 
+> **✅ U4 MEDIASOUP DONE + DEPLOYED (Aaron, 2026-06-25, `wrld-mediasoup` `8857e07`) —
+> pause/resume model.** Decided with Ben: AV behaves like every other source — **one track
+> with a gap where it's off**, not a new track per toggle. So the AV toggle is
+> `producer.pause()/resume()` (the recorder's consumer + viewers' consumers go quiet → a gap
+> in the same track), NOT close/re-attach. No recorder refactor, no new codec group, no
+> backend change.
+> - **Wire:** `setSourcePaused { kind: 'camera'|'audio'|'screen', paused: boolean }` (WS,
+>   broadcaster-only). The server pauses/resumes the producer; on resume it requests a
+>   keyframe (recorder + viewers get a fresh IDR after the gap); it notifies viewers
+>   **`producerPaused`** / **`producerResumed`** (so the app shows camera-off + re-renders on
+>   resume). Additive + inert until the app sends it.
+> - **Manifest half is U2:** mark the off range with a `sources:{kind:false}` snip
+>   (`POST …/snip`) so the clip editor + replay honour it; the footage genuinely has the gap.
+> - **⚠️ ON-DEVICE GATE (mediasoup is unverifiable headlessly):** confirm FFmpeg survives the
+>   paused RTP gap — go live, pause camera ~30s, resume → recording continues as ONE track
+>   with a gap, the session does NOT stop. (UDP input, no read timeout → should block + resume;
+>   if it dies on the gap, the fallback is close/re-attach.)
+>
+> **App slice for U4 (Ben):** the live source-rail camera/audio toggle sends `setSourcePaused`
+> (+ the U2 `sources:{kind:false}` snip), and the producer-side `produce`/`closeProducer` for
+> the WebRTC track is handled by the source-rail/`useMediasoup` path; viewers handle
+> `producerPaused`/`producerResumed` (show camera-off, re-render). Note: turning ON a source
+> that was NEVER produced this session is a first `produce` (not pause/resume) — viewers see
+> it via `newProducer`, but the recorder attaching a brand-new chain mid-session is the
+> close/re-attach case, still out of scope (arm AV at go-live for the common path).
+
 > **✅ U3 CORE DONE + DEPLOYED (Aaron, 2026-06-25, `wrld-backend` `d643bcc`).** Edge-relative
 > save + server clamp + the storage-cap gate — backend-only; remaining U3 is **app** (Ben).
 > - **Edge-relative save (`POST /buffer/me/clips`):** new body flags **`fromReaperEdge`** /
