@@ -5,10 +5,10 @@
 // (kept until deleted; counts against storage quota). A flag, like Identity / Chat — same row
 // idiom (icon tile + label/detail + a SegmentedToggle).
 //
-// PRESENTATIONAL + ready to wire. The dashboard owns the value (a `captureConfig.lane` field, once
-// Aaron's go-live-lane backend lands) and forwards it to `createRoom`. Per CONTENT.md §5, the lane
-// is just one per-range setting; this is the now-edge starting choice. (Visibility is the one
-// per-range setting deliberately NOT exposed on the dashboard — live is always public.)
+// PRESENTATIONAL. WIRED (U1, 2026-06-25): the dashboard owns the value via `captureConfig.lane`
+// and forwards it on `createRoom` (Aaron's go-live-lane backend is deployed). Per CONTENT.md §5,
+// the lane is just one per-range setting; this is the now-edge starting choice. (Visibility is the
+// one per-range setting deliberately NOT exposed on the dashboard — live is always public.)
 
 import { StyleSheet, View } from 'react-native'
 import { SegmentedToggle } from '@/components/primitives/SegmentedToggle'

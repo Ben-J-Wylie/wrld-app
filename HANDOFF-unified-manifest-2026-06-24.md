@@ -244,10 +244,12 @@ U1 is the smallest high-value start. U4 is separable and last.
 >   the start." There's also no cap yet → a saved go-live retains unbounded (fine at f&f;
 >   U3 adds the cap).
 >
-> **App slice for U1 (Ben):** the dashboard **lane SegmentedToggle (BUFFER | SAVED)** next
-> to arming; send `lane` on `createRoom`; render a `session.lane === 'saved'` live session
-> in the saved lane. On-device verify owed: go live tagged `saved` → footage isn't reaped +
-> shows in the saved lane.
+> **App slice for U1 (Ben) — ✅ DONE 2026-06-25 (`a821d27`, on `design`/`main`).** `captureConfig.lane`
+> (default buffer) + the `LaneToggle` on the dashboard + `lane` forwarded on `createRoom`
+> (mediasoupSignaling/useSignaling/StreamScreen). `BufferSession.lane` + ClipsScreen renders a
+> `lane:'saved'` session (live + ended) in the SAVED lane, excluded from the buffered carve (gated
+> on `lane==='saved'` → existing data + the clips-timeline milestone untouched). **On-device verify
+> still owed:** go live tagged `saved` → footage isn't reaped + shows in the saved lane.
 
 ---
 

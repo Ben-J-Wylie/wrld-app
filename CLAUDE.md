@@ -4115,3 +4115,33 @@ direct write path**: `patchClip` sets exactly the discover/viewer fields (`c.tit
 `c.locDisplayPrecision`, sources). The one true gap is **per-segment title edits on the clips page**,
 which write `DirectiveRange`s, not `c.title` → those need the directive-title COALESCE (contract #10).
 Source access shows through the clip viewer (`GET /clips/:id` tracks + the rail's `sourceWindows`).
+
+---
+
+## Updates — June 2026 (Unified manifest U1 app slice — go-live lane wired)
+
+Aaron landed U1–U5 backend/mediasoup (all deployed 2026-06-25); the app slices are Ben's. **U1
+done** on `design` → `main` (`a821d27`). Pure JS — no native module, no EAS rebuild.
+
+- **`captureConfig.lane: 'buffer' | 'saved'`** (default `buffer`) — the now-edge starting lane; the
+  dashboard loads/saves/auto-persists it like the other arming fields.
+- **`LaneToggle` wired into `DashboardScreen`** (after the source groups) — the already-built
+  BUFFER|SAVED flag-row; its value forwards on go-live.
+- **`createRoom` carries `lane?: 'buffer' | 'saved'`** (mediasoupSignaling client message + method,
+  `useSignaling`, `StreamScreen.handleGoLive` → `createRoom({ lane: c.lane })`). Omitted → buffer.
+  Aaron's engine stashes it on `room._meta.lane` → `BufferSession.lane`; a `saved` session is
+  retained from go-live (never reaped).
+- **`BufferSession.lane?`** + **ClipsScreen renders a `lane:'saved'` session in the SAVED lane**
+  (live block + ended, not-yet-materialised sessions) and excludes it from the buffered carve. Gated
+  purely on `lane === 'saved'`, so existing buffer/absent-lane data — and the
+  `clips-timeline-clock-v1` milestone behavior — is untouched. (U1 caveat: a saved-lane session
+  isn't a durable `Clip` yet — materialise + quota + the storage cap are U3 — so it shows on the
+  clips timeline but not the profile feed until U3.)
+
+**On-device verify owed:** go live tagged `saved` → footage isn't reaped + shows in the saved lane.
+
+**Remaining app slices (Aaron's backend deployed):** **U2** (per-range controls → `POST
+/buffer/me/sessions/:id/snip` on a live change + re-emit + debounce), **U3** (revert the
+reaper-disable guard; edge-relative save `fromReaperEdge`/`toNow`; save↔buffer = successive saves;
+`409 storage_cap` → warn + flip to buffer), **U4** (live cam/audio rail → `setSourcePaused` + the
+U2 snip; viewers handle `producerPaused`/`producerResumed`). **U5** needs no app change.
