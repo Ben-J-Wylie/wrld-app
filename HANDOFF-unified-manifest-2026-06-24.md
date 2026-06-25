@@ -448,3 +448,19 @@ Each lists the principle it serves, the guardrail, and its dependency. Sequencin
 a U2 contract miss); the drawer title **prefills** the current title; a saved-clip rename
 **dual-writes** so it reaches the library + viewer + pin; all edit paths invalidate the library +
 viewer + time-machine feeds.
+
+> **✅ #12 + (2c) + #11 CODE DONE + PUSHED (Aaron, 2026-06-25, `wrld-backend` `d721f12`) — ⏳ DEPLOY PENDING.**
+> Typecheck-clean (my files) + 299 tests green. **Not yet deployed:** the box's working tree has
+> concurrent **M-series moderation WIP** (uncommitted `schema.prisma` + `src/services/moderation/*`
+> + an untracked `20260625000000_moderation_cases` migration + modified `internal.ts`/`server.ts`/
+> `env.ts`) that does **not** `tsc`-compile (4 `Buffer|undefined` errors in `moderation/scanner.ts`
+> + `scanQueueService.ts`), so the Docker build fails. My changes deploy on the next clean build
+> once the M-series compiles. What landed:
+> - **#12** — `GET /buffer/me/clips` returns `visibility` (clip-level) + `tags` (union of the clip's
+>   per-range directives) for the profile/Me drawer.
+> - **(2c)** — `GET /buffer/me/clips` (name/attributed/locDisplayPrecision) + `GET /clips/:id`
+>   (title/attributed/locDisplayPrecision) coalesce the per-range directive (at the clip's start)
+>   over the clip-level → the directive is the single authority; the app can drop the dual-write.
+> - **#11** — `DELETE /buffer/me/clips/:id/tracks/:kind` (destructive per-source delete + reclaim;
+>   refuses the last track) and `DELETE /buffer/me/sessions/:id` (permanent-delete a buffered clip's
+>   footage now; refuses live/retained sessions; reaper reconciles the pool).
