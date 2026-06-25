@@ -51,6 +51,7 @@ import { GoLiveRecordBar } from '@/components/features/broadcast/GoLiveRecordBar
 import { LaneToggle } from '@/components/features/broadcast/LaneToggle'
 import { LiveClockBar } from '@/components/features/discovery/LiveClockBar'
 import { useBroadcastStore } from '@/stores/broadcastStore'
+import type { SnipSettings } from '@/api/buffer'
 import { useAuth } from '@clerk/clerk-expo'
 import { useLocation } from '@/hooks/useLocation'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
@@ -303,6 +304,36 @@ export function DashboardScreen() {
   // Shared broadcast state (so the buttons read the same as the stream view).
   const isLive = useBroadcastStore((s) => s.isLive)
   const isRecording = useBroadcastStore((s) => s.isRecording)
+
+  // U2 (unified manifest) — the dashboard is the now-edge editor: while live, changing a per-range
+  // METADATA setting (location precision · identity · title) requests a snip-at-now (debounced), and
+  // the mounted StreamScreen closes the current era + opens a new one with these values. We send only
+  // the cleanly-mapping metadata axes — omitting `sources` (no partial-map risk; chat/source toggles
+  // while live fold into a later slice), `visibility` (live is always public → server default), and
+  // `tags` (no dashboard control). `attributed` carries identity; `precision` maps PRIVATE→'off'.
+  // Skipped on the first live run (baseline = the go-live era's values) and on no-op changes.
+  const lastSnipRef = useRef<string | null>(null)
+  const snipTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    if (!isLive) {
+      lastSnipRef.current = null // re-baseline next time we go live
+      return
+    }
+    const settings: SnipSettings = {
+      precision: precision === 'private' ? 'off' : precision,
+      attributed: identity === 'public',
+      title: title.trim() || undefined,
+    }
+    const key = JSON.stringify(settings)
+    if (lastSnipRef.current === null) {
+      lastSnipRef.current = key // first live run = the current era's values; don't snip
+      return
+    }
+    if (lastSnipRef.current === key) return // no-op change
+    lastSnipRef.current = key
+    if (snipTimer.current) clearTimeout(snipTimer.current)
+    snipTimer.current = setTimeout(() => useBroadcastStore.getState().requestSnip(settings), 600)
+  }, [isLive, precision, identity, title])
 
   // Starting a broadcast navigates to the stream view (stream/new) with go=1
   // (and rec=1 for Record), which goes live on arrival. The stream view reads

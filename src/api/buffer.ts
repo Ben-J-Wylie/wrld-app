@@ -193,6 +193,27 @@ export const bufferApi = {
   patchSessionSnips: async (sessionId: string, snips: { atMs: number }[]): Promise<void> => {
     await apiClient.patch(`/buffer/me/sessions/${sessionId}/snips`, { snips })
   },
+
+  // U2 (unified manifest) — snip-at-now on a live setting change. The server closes the current
+  // OPEN era at ITS authoritative `now` and opens a new one with these settings. Send ONLY the new
+  // settings (no ms) — a missing axis inherits the era default. Owner + PB3_PER_RANGE gated,
+  // LIVE-ONLY (409 once the session has ended). `lane` is NOT part of the snip (U3); AV source
+  // toggles are U4 — U2 covers the data/metadata axes.
+  snipSession: async (sessionId: string, settings: SnipSettings): Promise<void> => {
+    await apiClient.post(`/buffer/me/sessions/${sessionId}/snip`, { settings })
+  },
+}
+
+// The per-range settings carried by a live snip (U2). Every axis optional; a missing axis inherits
+// the current era's value. `sources` keyed by BACKEND kind (camera/audio/location/…); `precision`
+// uses the backend vocab ('off' = private/hidden); `attributed` is the identity axis.
+export type SnipSettings = {
+  visibility?: 'public' | 'private'
+  precision?: 'exact' | 'city' | 'country' | 'off'
+  attributed?: boolean
+  sources?: Record<string, boolean>
+  title?: string
+  tags?: string[]
 }
 
 // One per-segment directive over a buffer session (PB3). `visibility` is the headline;

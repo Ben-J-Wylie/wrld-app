@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { DeviceMotion } from 'expo-sensors'
 import * as Location from 'expo-location'
 import type { TelemetryPayload } from '@/lib/mediasoupSignaling'
@@ -37,36 +37,29 @@ export function useTelemetryCapture(
   const wantCompass = airedKinds.has('compass')
   const wantSpeed = airedKinds.has('speed')
 
-  // First-state baseline: on go-live, emit ONE sample per armed sensor immediately (best-effort
-  // real read, else a default) so every armed source records a first state even with no movement /
-  // no signal — the track is created and the source shows in the clip editor with a baseline.
-  useEffect(() => {
-    if (!enabled) return
-    let cancelled = false
-    ;(async () => {
-      const ts = Date.now()
-      if (wantGyro) sendRef.current({ kind: 'gyro', ts, pitch: 0, roll: 0, yaw: 0 })
-      if (wantAccel) sendRef.current({ kind: 'accel', ts, x: 0, y: 0, z: 0 })
-      if (wantSpeed) sendRef.current({ kind: 'speed', ts, mps: -1 })
-      if (wantCompass) {
-        let heading = 0
-        let accuracy: number | undefined
-        try {
-          const h = await Location.getHeadingAsync()
-          if (h) {
-            heading = h.trueHeading >= 0 ? h.trueHeading : h.magHeading
-            accuracy = h.accuracy
-          }
-        } catch {
-          /* heading unavailable → 0 baseline so the compass track still exists */
-        }
-        if (!cancelled) sendRef.current({ kind: 'compass', ts: Date.now(), heading, accuracy })
-      }
-    })()
-    return () => {
-      cancelled = true
+  // First-state baseline: emit ONE sample per armed sensor immediately (best-effort real read, else
+  // a default) so every armed source records a first state even with no movement / no signal — the
+  // track is created and the source shows in the clip editor with a baseline. Fired on go-live AND,
+  // via the returned `reemit`, at every live snip (U2: each new era gets self-contained initial
+  // state; the 10 Hz motion/compass loops correct the 0-defaults within a frame).
+  const reemit = useCallback(() => {
+    const ts = Date.now()
+    if (wantGyro) sendRef.current({ kind: 'gyro', ts, pitch: 0, roll: 0, yaw: 0 })
+    if (wantAccel) sendRef.current({ kind: 'accel', ts, x: 0, y: 0, z: 0 })
+    if (wantSpeed) sendRef.current({ kind: 'speed', ts, mps: -1 })
+    if (wantCompass) {
+      Location.getHeadingAsync()
+        .then((h) => {
+          const heading = h && h.trueHeading >= 0 ? h.trueHeading : h?.magHeading ?? 0
+          sendRef.current({ kind: 'compass', ts: Date.now(), heading, accuracy: h?.accuracy })
+        })
+        .catch(() => sendRef.current({ kind: 'compass', ts: Date.now(), heading: 0 }))
     }
-  }, [enabled, wantGyro, wantAccel, wantSpeed, wantCompass])
+  }, [wantGyro, wantAccel, wantSpeed, wantCompass])
+
+  useEffect(() => {
+    if (enabled) reemit()
+  }, [enabled, reemit])
 
   // DeviceMotion → gyro attitude + accel vector (one listener feeds both).
   useEffect(() => {
@@ -153,4 +146,8 @@ export function useTelemetryCapture(
       sub?.remove()
     }
   }, [enabled, wantSpeed])
+
+  // Re-seed every armed sensor's first state — called at a live snip so the new era is
+  // self-contained (StreamScreen invokes it after a successful POST …/snip).
+  return { reemit }
 }

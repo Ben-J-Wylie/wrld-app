@@ -69,6 +69,8 @@ import { useStreamTelemetry } from '@/hooks/useStreamTelemetry'
 import { useLocalTelemetry } from '@/hooks/useLocalTelemetry'
 import { useLocationTrail } from '@/hooks/useLocationTrail'
 import { useTelemetryCapture } from '@/hooks/useTelemetryCapture'
+import { useBuffer } from '@/hooks/useBuffer'
+import { bufferApi } from '@/api/buffer'
 import { useAudioLevelCapture } from '@/hooks/useAudioLevelCapture'
 import type { FeedKind } from '@/components/features/broadcast/FeedThumb'
 import { Avatar } from '@/components/primitives/Avatar'
@@ -644,7 +646,7 @@ export function StreamScreen() {
   // emit `telemetry` (compass/speed via expo-location, gyro/accel via DeviceMotion).
   // The armed set comes from captureConfig (mapped to backend kind names).
   const armedKinds = useMemo(() => new Set(recordedSourcesFromConfig(cfg)), [cfg])
-  useTelemetryCapture(armedKinds, sendTelemetry, isLiveBroadcast)
+  const { reemit: reemitTelemetry } = useTelemetryCapture(armedKinds, sendTelemetry, isLiveBroadcast)
   // First-state baseline for torch (a control, not a sensor): on go-live with torch armed, record
   // its initial state once so the torch source has a track + shows in the editor even if never
   // toggled during the broadcast. Subsequent toggles emit via toggleTorch.
@@ -1104,6 +1106,31 @@ export function StreamScreen() {
     useBroadcastStore.getState().consumeCommand()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [command, commandNonce])
+
+  // U2 (unified manifest) — execute a dashboard-requested live snip-at-now: POST the new per-range
+  // settings to the OPEN buffer session (the server stamps its authoritative `now`), then re-emit
+  // each armed sensor's first state so the new era is self-contained. Owner + live only; the open
+  // session is the one still being written (no endedAt) — null until the backend creates it (~secs
+  // after go-live), in which case the snip is dropped (no footage yet to snip).
+  const pendingSnip = useBroadcastStore((s) => s.pendingSnip)
+  const snipNonce = useBroadcastStore((s) => s.snipNonce)
+  const { data: bufferForSnip } = useBuffer(isNew && isLiveBroadcast, isLiveBroadcast)
+  const openSessionRef = useRef<string | null>(null)
+  openSessionRef.current = bufferForSnip?.sessions.find((s) => !s.endedAt)?.id ?? null
+  useEffect(() => {
+    if (!isNew || !pendingSnip) return
+    const sid = openSessionRef.current
+    if (!sid) {
+      useBroadcastStore.getState().consumeSnip()
+      return
+    }
+    bufferApi
+      .snipSession(sid, pendingSnip)
+      .then(() => reemitTelemetry())
+      .catch(() => {})
+      .finally(() => useBroadcastStore.getState().consumeSnip())
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingSnip, snipNonce])
 
   // Tell the room our orientation: a coarse 'portrait'|'landscape' for the
   // viewer-side layout hint, plus the precise rotation degrees the recorder bakes

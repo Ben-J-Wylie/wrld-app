@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { SourceType } from '@/types'
+import type { SnipSettings } from '@/api/buffer'
 import { serverNow } from '@/lib/serverClock'
 
 // Global broadcast state shared across screens so the Go Live / Record
@@ -37,6 +38,12 @@ type BroadcastState = {
   // repeated identical commands re-fire.
   command: Command | null
   commandNonce: number
+  // U2 (unified manifest) — a live snip-at-now requested from a remote control surface (the
+  // dashboard, the now-edge editor) carrying the new per-range settings. The mounted StreamScreen
+  // (which knows the open buffer session + owns the sensor capture) executes the snip + re-emits
+  // each armed source's current value, then calls consumeSnip(). Nonce so repeats re-fire.
+  pendingSnip: SnipSettings | null
+  snipNonce: number
   setLive: (sources: SourceType[]) => void
   setRecording: (isRecording: boolean) => void
   setLiveStream: (url: string | null, mirror: boolean) => void
@@ -44,6 +51,8 @@ type BroadcastState = {
   clear: () => void
   sendCommand: (command: Command) => void
   consumeCommand: () => void
+  requestSnip: (settings: SnipSettings) => void
+  consumeSnip: () => void
 }
 
 export const useBroadcastStore = create<BroadcastState>((set) => ({
@@ -56,6 +65,8 @@ export const useBroadcastStore = create<BroadcastState>((set) => ({
   liveAudioLevel: 0,
   command: null,
   commandNonce: 0,
+  pendingSnip: null,
+  snipNonce: 0,
   // Stamp liveSince only on the transition into live (preserve it across source changes). Reads the
   // UNIVERSAL wall clock (serverNow), not raw Date.now() — the Clips timeline positions the optimistic
   // live clip by serverNow(), so a device↔server skew would otherwise misplace its start (CONTENT.md §6).
@@ -66,4 +77,6 @@ export const useBroadcastStore = create<BroadcastState>((set) => ({
   clear: () => set({ isLive: false, isRecording: false, sources: [], liveSince: null, liveStreamUrl: null, liveMirror: false, liveAudioLevel: 0 }),
   sendCommand: (command) => set((s) => ({ command, commandNonce: s.commandNonce + 1 })),
   consumeCommand: () => set({ command: null }),
+  requestSnip: (settings) => set((s) => ({ pendingSnip: settings, snipNonce: s.snipNonce + 1 })),
+  consumeSnip: () => set({ pendingSnip: null }),
 }))
