@@ -474,7 +474,11 @@ export const ClipsScreen = () => {
   const bufferedLaneRaw = useMemo(() => {
     // While live, the real open session IS the single persistent liveClip — exclude it from the normal
     // carve so it isn't drawn twice (a zero-width-then-growing duplicate beside the live block).
-    const carveSessions = realLiveSessionId ? sessions.filter((s) => s.id !== realLiveSessionId) : sessions
+    // Saved-lane sessions (U1, `lane:'saved'`) are retained from go-live → they render in the SAVED
+    // lane (savedLaneSessions), so exclude them from the buffered carve.
+    const carveSessions = (realLiveSessionId ? sessions.filter((s) => s.id !== realLiveSessionId) : sessions).filter(
+      (s) => s.lane !== 'saved',
+    )
     const base = [...applySplits(carveBuffer(carveSessions, claims), effectiveSplits), ...drafts]
     // The live block is ONE [liveSince → now] piece, but a snip on it divides it like any other clip:
     // applySplits cuts at the live session's split points so the EARLIER (bounded) pieces become normal
@@ -484,16 +488,32 @@ export const ClipsScreen = () => {
     // carveLiveBlock first removes any saved/pending ranges (so saving a live piece doesn't leave a
     // duplicate buffered copy beside the new saved block), then applySplits divides the remainder at
     // the snip points.
-    if (liveClip) base.push(...applySplits(carveLiveBlock(liveClip, claims), effectiveSplits))
+    // The live block goes to the buffered lane UNLESS this go-live is saved-lane (then savedLaneSessions
+    // carries it).
+    if (liveClip && realLiveSession?.lane !== 'saved') base.push(...applySplits(carveLiveBlock(liveClip, claims), effectiveSplits))
     return base
-  }, [sessions, claims, drafts, effectiveSplits, liveClip, realLiveSessionId])
+  }, [sessions, claims, drafts, effectiveSplits, liveClip, realLiveSessionId, realLiveSession])
+
+  // U1 — saved-lane SESSIONS (retained from go-live; not yet materialised into durable Clips, so they
+  // live in `sessions` with `lane:'saved'`, not in savedLaneReal). Carve them like buffer sessions but
+  // render them in the SAVED lane, plus the live block when this go-live is saved-lane. Merged into
+  // savedLane below. Gated on `lane === 'saved'` → no effect on existing (buffer/absent-lane) data.
+  const savedLaneSessions = useMemo<LaneClip[]>(() => {
+    const ended = sessions.filter((s) => s.lane === 'saved' && s.id !== realLiveSessionId)
+    const out = applySplits(carveBuffer(ended, claims), effectiveSplits)
+    if (liveClip && realLiveSession?.lane === 'saved') out.push(...applySplits(carveLiveBlock(liveClip, claims), effectiveSplits))
+    return out
+  }, [sessions, claims, effectiveSplits, liveClip, realLiveSessionId, realLiveSession])
   // Window the timeline to the buffer window: drop anything fully older than the reaper boundary
   // (removes SAVED clips older than the window). Clips straddling the boundary stay full-extent —
   // the timeline draws an advancing reaper MASK over their reaped part (smooth, on the UI thread),
   // so the consumption looks as fluid as the playhead, with no per-tick layout shift.
   const inWindow = useCallback((c: LaneClip) => windowStartMs == null || c.endMs > windowStartMs, [windowStartMs])
   const bufferedLane = useMemo(() => bufferedLaneRaw.filter(inWindow), [bufferedLaneRaw, inWindow])
-  const savedLane = useMemo(() => savedLaneAll.filter(inWindow), [savedLaneAll, inWindow])
+  const savedLane = useMemo(
+    () => [...savedLaneAll, ...savedLaneSessions].filter(inWindow),
+    [savedLaneAll, savedLaneSessions, inWindow],
+  )
   const allClips = useMemo(() => [...bufferedLane, ...savedLane], [bufferedLane, savedLane])
   const hasAny = allClips.length > 0
 

@@ -1262,6 +1262,7 @@ export function StreamScreen() {
         locationPrecision,
         ppvEventId: activeBroadcast.get()?.ppvEventId,
         visibility: c.visibility,
+        lane: c.lane,
       })
       await startBroadcasting(av)
     } catch (err) {

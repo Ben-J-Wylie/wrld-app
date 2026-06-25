@@ -28,6 +28,11 @@ export type Visibility = 'public' | 'private'
 // Whether the live chat stream is included on the broadcast. A flag (like
 // identity), not a media track — its multistate is CHAT / NO CHAT.
 export type ChatMode = 'on' | 'off'
+// Which lane the live broadcast prints into (PB4 / unified manifest — U1). 'buffer'
+// (default) → the time-windowed rolling buffer (the reaper clears it; no storage);
+// 'saved' → retained from the start (kept until deleted; counts against storage quota).
+// The now-edge starting choice; per CONTENT.md §5 the lane is one per-range setting.
+export type CaptureLane = 'buffer' | 'saved'
 
 // air is keyed by source kind (string) → on/off. Kept as a plain
 // string-keyed map so this module stays free of component-tier imports.
@@ -39,11 +44,12 @@ export type CaptureConfig = {
   chat: ChatMode
   subscribersOnly: boolean
   visibility: Visibility
+  lane: CaptureLane
 }
 
 // Fresh-install defaults: empty title; camera + audio + location all aired;
 // every other source off; identity public; location precision ceiling at exact;
-// chat on.
+// chat on; record to the buffer lane.
 export const DEFAULT_CAPTURE_CONFIG: CaptureConfig = {
   title: '',
   air: { cam: true, audio: true, loc: true },
@@ -52,6 +58,7 @@ export const DEFAULT_CAPTURE_CONFIG: CaptureConfig = {
   chat: 'on',
   subscribersOnly: false,
   visibility: 'public',
+  lane: 'buffer',
 }
 
 export async function loadCaptureConfig(): Promise<CaptureConfig> {

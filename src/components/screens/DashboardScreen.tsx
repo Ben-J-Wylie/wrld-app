@@ -48,6 +48,7 @@ import { Divider } from '@/components/primitives/Divider'
 import { FeedRow, type SourceAvailability } from '@/components/features/broadcast/FeedRow'
 import { type FeedKind } from '@/components/features/broadcast/FeedThumb'
 import { GoLiveRecordBar } from '@/components/features/broadcast/GoLiveRecordBar'
+import { LaneToggle } from '@/components/features/broadcast/LaneToggle'
 import { LiveClockBar } from '@/components/features/discovery/LiveClockBar'
 import { useBroadcastStore } from '@/stores/broadcastStore'
 import { useAuth } from '@clerk/clerk-expo'
@@ -62,6 +63,7 @@ import {
   type IdentityFlag,
   type ChatMode,
   type Visibility,
+  type CaptureLane,
 } from '@/lib/captureConfig'
 import { ppvApi } from '@/api/ppvEvents'
 import { usePublicConfig, configBool } from '@/hooks/usePublicConfig'
@@ -239,6 +241,7 @@ export function DashboardScreen() {
   const [chat, setChat] = useState<ChatMode>(DEFAULT_CAPTURE_CONFIG.chat)
   const [subscribersOnly, setSubscribersOnly] = useState(DEFAULT_CAPTURE_CONFIG.subscribersOnly)
   const [visibility, setVisibility] = useState<Visibility>(DEFAULT_CAPTURE_CONFIG.visibility)
+  const [lane, setLane] = useState<CaptureLane>(DEFAULT_CAPTURE_CONFIG.lane)
   // The "Public replay" control only shows once the public-buffer feature is on.
   const { config: publicConfig } = usePublicConfig()
   const publicBufferEnabled = configBool(publicConfig, 'PUBLIC_BUFFER_ENABLED', false)
@@ -260,6 +263,7 @@ export function DashboardScreen() {
         setChat(cfg.chat)
         setSubscribersOnly(cfg.subscribersOnly)
         setVisibility(cfg.visibility)
+        setLane(cfg.lane)
         hydratedRef.current = true
       })
       return () => {
@@ -271,8 +275,8 @@ export function DashboardScreen() {
   // Auto-save on any capture-config change (no save button) — title included.
   useEffect(() => {
     if (!hydratedRef.current) return
-    saveCaptureConfig({ title, air, precision, identity, chat, subscribersOnly, visibility })
-  }, [title, air, precision, identity, chat, subscribersOnly, visibility])
+    saveCaptureConfig({ title, air, precision, identity, chat, subscribersOnly, visibility, lane })
+  }, [title, air, precision, identity, chat, subscribersOnly, visibility, lane])
 
   function setAirFor(kind: FeedKind, v: boolean) {
     setAir((prev) => ({ ...prev, [kind]: v }))
@@ -312,7 +316,7 @@ export function DashboardScreen() {
       Alert.alert('Title not allowed', 'Your stream title contains prohibited content. Please choose a different title.')
       return
     }
-    await saveCaptureConfig({ title: title.trim(), air, precision, identity, chat, subscribersOnly, visibility })
+    await saveCaptureConfig({ title: title.trim(), air, precision, identity, chat, subscribersOnly, visibility, lane })
     activeBroadcast.set({ ppvEventId: ppvEventId ?? undefined, ppvTitle })
     router.push({
       pathname: '/(app)/stream/[id]',
@@ -468,6 +472,9 @@ export function DashboardScreen() {
             </Fragment>
           ))}
         </View>
+
+        {/* Lane (U1) — buffer vs saved: where this go-live's footage prints. */}
+        <LaneToggle value={lane} onChange={setLane} />
 
         {publicBufferEnabled && (
           <View style={styles.subscribersOnlyRow}>

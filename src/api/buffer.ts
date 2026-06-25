@@ -29,6 +29,11 @@ export type BufferSession = {
   startedAt: string          // ISO
   endedAt: string | null     // ISO, null while still live
   durationSec: number
+  // Lane the session was started in (U1 / unified manifest). 'saved' → retained from
+  // go-live (never reaped, counts against quota); 'buffer' (default) → reapable. Lets the
+  // Clips grid put a live saved-lane session straight in the saved row. Absent on older
+  // backends → treat as 'buffer'.
+  lane?: 'buffer' | 'saved'
   // Time model (option b): the footage block occupies
   // [startedAt + mediaStartOffsetMs, + mediaDurationSec]; anything outside is a gap
   // (encoder warm-up at the head, the live HLS latency at the tail). `mediaDurationSec`
