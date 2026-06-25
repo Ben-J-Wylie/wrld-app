@@ -4140,10 +4140,9 @@ done** on `design` → `main` (`a821d27`). Pure JS — no native module, no EAS 
 
 **On-device verify owed:** go live tagged `saved` → footage isn't reaped + shows in the saved lane.
 
-**Remaining app slices (Aaron's backend deployed):** **U3** (revert the reaper-disable guard;
-edge-relative save `fromReaperEdge`/`toNow`; save↔buffer = successive saves; `409 storage_cap` →
-warn + flip to buffer), **U4** (live cam/audio rail → `setSourcePaused` + the U2 snip; viewers
-handle `producerPaused`/`producerResumed`). **U5** needs no app change.
+**Remaining app slices (Aaron's backend deployed):** **U4** (live cam/audio rail →
+`setSourcePaused` + the U2 snip; viewers handle `producerPaused`/`producerResumed`). **U5** needs no
+app change.
 
 ### U2 — live snip-at-now (DONE 2026-06-25, `24323e9`)
 The dashboard is the now-edge editor: while live, a per-range **metadata** change snips the open
@@ -4157,3 +4156,14 @@ snip on **location-precision · identity · title** changes (skips the first-liv
 scoped to the cleanly-mapping metadata axes — `sources` omitted (partial-map risk; chat + AV source
 toggles are U4), `visibility` = server default public, no tags control. Pure JS, no rebuild. Not
 device-tested.
+
+### U3 — edge-relative save + storage cap (DONE 2026-06-25, `fc265b2`)
+`bufferApi.saveClip` gains `fromReaperEdge`/`toNow`; `ClipsScreen.saveClip` computes them (start ≤
+`windowStartMs` → `fromReaperEdge` = "save the remainder"; the live session block → `toNow`) so the
+server clamps to ITS `[earliest, now]`. The save↔buffer lane toggle while reaping is just successive
+edge-relative saves (one per span — falls out of the primitive, no new endpoint). `409 { error:
+'storage_cap', usedBytes, quotaBytes }` → a quota warning; on the LIVE span (`toNow`) it also flips
+the dashboard go-live lane back to `buffer` (via `captureConfig`, so the broadcast keeps printing to
+buffer); a retrospective save just shows the out-of-storage notice. Reverted the reaper-disable
+guard — the sheet's Lane toggle stays enabled during reap (saving a being-reaped clip is valid via
+`fromReaperEdge`). Pure JS, no rebuild. Not device-tested.

@@ -179,12 +179,15 @@ U1 is the smallest high-value start. U4 is separable and last.
 >   saved-lane real-time quota (needs a bytes↔time estimate) — for now the cap is
 >   all-or-nothing per save + app-flips-to-buffer. **U4** is AV-live renegotiation.
 >
-> **App slice for U3 (Ben):** revert the reaper-disable guard (drag + sheet stay enabled
-> during reap); save a being-reaped clip with `fromReaperEdge` (+ `toNow` for the live edge);
-> map the dashboard save↔buffer toggle to successive saves; on `409 storage_cap` show the
-> warning + flip the lane to buffer. On-device verify: save while reaping retains the
-> surviving remainder; toggling save↔buffer mid-reap yields distinct clips with gaps; hitting
-> the cap flips to buffer with a warning.
+> **App slice for U3 (Ben) — ✅ DONE 2026-06-25 (`fc265b2`, on `design`).** `bufferApi.saveClip`
+> gains `fromReaperEdge`/`toNow`; `ClipsScreen.saveClip` computes them (start ≤ reaper edge →
+> `fromReaperEdge`; live session block → `toNow`) — the save↔buffer toggle while reaping is just
+> successive edge-relative saves (one per span, falls out). `409 storage_cap` → warn with the quota,
+> and on the LIVE span (`toNow`) flip the dashboard go-live lane back to buffer (via captureConfig);
+> a retrospective save just shows the out-of-storage notice. Reverted the reaper-disable guard — the
+> sheet's Lane toggle stays enabled during reap (saving a being-reaped clip is valid via
+> `fromReaperEdge`). **On-device verify owed:** save while reaping retains the remainder; toggling
+> save↔buffer mid-reap yields distinct clips with gaps; hitting the cap flips to buffer with a warning.
 
 > **✅ U2 BACKEND DONE + DEPLOYED (Aaron, 2026-06-25, `wrld-backend` `11333c3`).** The
 > segmented live manifest (data/metadata) — backend-only; remaining U2 is **app** (Ben).
