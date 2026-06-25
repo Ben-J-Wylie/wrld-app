@@ -541,3 +541,49 @@ These are the gaps where the build still diverges from the invariants. Ordered b
   debouncing to the app; without a server merge of adjacent ranges whose every axis matches, live
   edits can bloat eras/segments and fragment the availability feed + Time-Machine pins. Belongs
   server-side eventually.
+
+---
+
+## Preference unification — per-axis status + the app build plan (2026-06-25)
+
+Canonical principle: **CONTENT.md §5 → "Preference unification — one path for every axis"** (the
+3-layer rule: write the directive · server coalesces everywhere · app renders one resolved source).
+The title saga is **one instance**; this is the general plan so EVERY axis proliferates to EVERY
+surface. Per-axis state of the three layers:
+
+| Axis | Server read (L2) | App render (L3) gap | Unify blocker |
+|---|---|---|---|
+| **title** | discover ✓ (U5) · library/viewer = `c.title` until **(2c)** | buffer-lane timeline label reads `s.title`; library drawer input empty (key bug) | (2c) deploy + app render fixes |
+| **precision** | discover ✓ (#13) · library/viewer = `c.*` until (2c) | globe halos use stream precision (correct for *live*) | (2c) deploy |
+| **identity** | discover ✓ (#13) · library/viewer = `c.attributed` until (2c) | — | (2c) deploy |
+| **visibility** | discover ✓ · library = `c.visibility` (vocab gap) · not on viewer | hidden in the library drawer (read gap #12) | (2c)+#12 deploy + vocab unify |
+| **per-source** | discover/viewer = directive `sources`/`sourceWindows` ✓ | — | mostly unified |
+| **tags** | library = union (#12, R5) · per-range in `directives[]` | hidden in the library drawer | #12 deploy |
+| **lane** | `BufferSession.lane` + retain rows — **NOT a directive** | timeline lanes + drawer toggle are bespoke | **R2** (server) + app thread #2 |
+
+### App build plan (the general mechanism — supersedes title-only fixes)
+1. **One resolver — `resolveClipSettings(clip)`** → the resolved `{title, visibility, precision,
+   identity, sources, tags, lane}` from the server's (directive-coalesced) data. Future-proof: it
+   reads whatever the server returns today and upgrades for free as (2c)/#13 land. *(Pure app, not
+   blocked.)*
+2. **Render from the resolver, everywhere** — timeline labels (both lanes), both drawers, the viewer
+   chrome, the pin card. Kills the `s.title`/`c.name`/raw-field reads. *(Pure app, not blocked.)*
+3. **One drawer** — unify the clips-page `SegmentSettingsSheet` host + the library
+   `SavedClipSettingsSheet` into one (app thread #1). *(Needs #12 deploy for visibility/tags read
+   parity to show every axis.)*
+4. **One write path** — every edit → `patchDirectives`; the directive + `c.*` **dual-write stays as
+   the temporary bridge** until (2c) deploys, then delete it (app thread #3).
+5. **Invalidation** — every edit refetches every surface's query (done; keep it complete as surfaces
+   are added).
+
+### Not blocked — can land now (against the resolver, before (2c)):
+- The **library-drawer empty-title key bug** (`SegmentSettingsSheet` unkeyed inside
+  `SavedClipSettingsSheet` + empty-shell → `useState` never re-inits).
+- The **buffer-lane timeline label reading `s.title`** → read the resolved title (directive/clip ??
+  s.title fallback).
+- The **library drawer not writing the directive** (so its renames reach the time-machine pin too).
+
+### Blocked on Aaron's deploy / build:
+- (2c)+#12 deploy (R1, the M-series compile) → unblocks one-drawer + dropping the dual-write + tags/
+  visibility in the library drawer.
+- **R2** (lane as a directive) → makes lane the 7th equal axis; pairs with app thread #2.

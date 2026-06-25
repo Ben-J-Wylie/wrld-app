@@ -321,6 +321,54 @@ a feature that breaks one is a bug against the model, not a new behaviour:
    reaper and cap edges are the *same* rule at the trailing end (a being-reaped or
    capped clip's edit lands on the surviving forward span). *(Confirmed 2026-06-25.)*
 
+### The clip's data model (canonical reference)
+
+The concrete enumeration of the model above — what a clip is made of. *(Canonized 2026-06-25;
+matches the app's `BufferTrackKind` + the `DirectiveRange` axes.)*
+
+- **Recorded tracks (the captured data) — 10 kinds (9 live, screen pending).** Each is a per-source
+  track in the one store, with an **initial-state sample at every boundary** (go-live + each snip) so
+  the track always registers: **camera** (video) · **audio** (sound; + a companion `audiolevel` data
+  track → the scrubbable waveform) · **location** (GPS trail) · **compass** (heading) · **gyro**
+  (orientation) · **accel** (3-axis; `motion` is a derived view) · **speed** (m/s) · **torch**
+  (on/off — a signaled channel, not the LED; v0.3) · **chat** (the thread) · **screen** (capture not
+  wired — v0.3). *Not tracks:* identity/profile is a **flag**; `temp` is deprecated (no sensor).
+- **Preference axes (editable per-range directives) — 7, all equal.** **title** · **tags** ·
+  **visibility** (public|private) · **identity** (shown|anon) · **location precision**
+  (exact|city|country|off) · **per-source inclusion** (on/off per captured source — what a viewer may
+  see) · **lane** (buffer|saved — the retention axis). Each is a `DirectiveRange` field, written + read
+  identically.
+- **Structural edits — 3 ops.** **trim** (in/out ranges) · **snip/mend** (split into eras / rejoin) ·
+  **permanent delete** (whole clip; per-source track delete — the only destructive per-source op).
+- **Immutable substrate (recorded, never user-editable).** The footage bytes; the wall-clock
+  timestamps (when it was printed); the source session id; and the **capture-fidelity exact coords +
+  real identity** — always retained server-side, so precision/identity are reversible *display*
+  choices over them, never a re-capture.
+
+### Preference unification — one path for every axis
+
+The invariants only hold if **every axis travels the same path**. A preference is unified when all
+three layers treat the **per-range directive as the one authority** — this is the general rule the
+title saga is just the first instance of:
+
+1. **Write — one path.** Every edit, on any surface, writes the per-range **directive**. No surface
+   writes a parallel field. *(Lane is the outstanding exception — it rides `BufferSession.lane` +
+   retain rows, not a directive; making it a directive is the server's **R2**, the twin of the app's
+   "lane as a peer axis.")*
+2. **Read — coalesce everywhere.** Every server read resolves the directive at the instant — discover
+   pins, library, viewer, globe — so no read returns a stale parallel field (`Stream.title` /
+   `.locationPrecision`, `Clip.title` / `.attributed` / …). *(discover ✓; library + viewer = **(2c)**,
+   deploy-pending; lane = R2.)*
+3. **Render — one resolved source.** Every app surface renders the resolved value the server returns,
+   via a **single resolver** — never a local immutable field (the buffer-lane timeline label reading
+   `Stream.title` is the classic violation). **One drawer, not two**, so there's one rendering of the
+   resolved settings.
+
+**The bridge (temporary).** While read-coalesce (2c) is undeployed, the app **dual-writes** the
+directive + the clip-level field so the clip-level readers still update. The dual-write is scaffolding
+— **deleted the moment (2c) deploys**, leaving directive-only writes. A new axis must never add its
+own parallel field; it rides the directive from day one.
+
 ### Snips — one boundary, planted by hand or by a live edge
 
 A **snip** plants a manifest boundary; the range forward of it can carry different
