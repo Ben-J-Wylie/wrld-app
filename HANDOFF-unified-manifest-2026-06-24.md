@@ -99,6 +99,35 @@ edges authoritatively. The client sends **edge-relative intent**, never a frozen
 
 U1 is the smallest high-value start. U4 is separable and last.
 
+> **✅ U2 BACKEND DONE + DEPLOYED (Aaron, 2026-06-25, `wrld-backend` `11333c3`).** The
+> segmented live manifest (data/metadata) — backend-only; remaining U2 is **app** (Ben).
+> - **Wire (decided):** **`POST /buffer/me/sessions/:id/snip { settings }`** (owner +
+>   `PB3_PER_RANGE` gated, **live-only** — 409 once ended). The directive is backend-owned,
+>   so the snip is plain HTTP (no mediasoup hop). **Send only the new settings — no `ms`;**
+>   the server stamps its authoritative `now`. `settings` = the full per-range values
+>   `{ visibility?, precision?, attributed?, sources?, title?, tags? }` (missing axis →
+>   default). On each snip the server closes the current OPEN era at now and opens a new one.
+> - **`lane` is NOT in the snip** — per-range lane + its retain+snip mechanics are **U3**;
+>   AV (camera/audio) toggles are **U4**. So U2 = the data/metadata axes only.
+> - **Per-snip initial state:** the **chat marker** (the one source the app can't seed) is
+>   written server-side at the snip. **Client-sourced (location/sensors/torch) is yours:**
+>   on a snip, re-emit each armed source's current value via the existing live channels
+>   (`locationUpdate`/`telemetry`) — exactly your go-live baselines, fired again at the snip —
+>   so a clip cut at the new era has initial state.
+> - **Open-era detail for the app:** a live era is a directive with `endAtMs` = a max-date
+>   sentinel (`8_640_000_000_000_000`). `GET /buffer/me` `directives[]` will show it; treat
+>   that end as "open / to the live edge." It's clamped to the session end on stop.
+> - **⚠️ Coalesce / debounce (decided open question — important):** snip-at-now fires on *any*
+>   setting change, so rapid toggles spawn tiny eras → manifest + availability-feed bloat +
+>   pin density (Time-Machine compat #1). **Debounce trivial changes app-side** and avoid a
+>   snip when the new settings equal the current era's. (Server-side coalesce-on-equal is a
+>   possible follow-up; for now the app should not fire no-op snips.)
+>
+> **App slice for U2 (Ben):** the dashboard's per-range controls call `POST …/snip` on a live
+> change (the dashboard *is* the now-edge editor; `captureConfig` is the now-edge slice) +
+> re-emit the changed source's current value; debounce. On-device verify: change precision/
+> identity/title mid-broadcast → the time machine shows distinct eras with the right settings.
+
 > **✅ U5 DONE + DEPLOYED (Aaron, 2026-06-25, `wrld-backend` `0eadbc1`).** `GET /clips/discover`
 > now coalesces the **per-segment directive title alive at the instant** over the clip/stream
 > title, so an edited per-segment title shows on the time-machine pin. Resolved in the active
