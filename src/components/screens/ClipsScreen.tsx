@@ -16,7 +16,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { router, useFocusEffect } from 'expo-router'
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router'
 import { Alert, StyleSheet, View } from 'react-native'
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -1828,6 +1828,19 @@ export const ClipsScreen = () => {
     setSheetClip(clip)
     setSheetVisible(true)
   }, [])
+
+  // Deep-link: a profile/Me-tab saved-clip tap navigates here with `openClipId` → open that clip's
+  // settings drawer (the new editor; supersedes the retired clip-edit grid). Fires once per id when
+  // the matching clip has loaded; graceful no-op if it's not in this user's lanes.
+  const { openClipId } = useLocalSearchParams<{ openClipId?: string }>()
+  const openedDeepLink = useRef<string | null>(null)
+  useEffect(() => {
+    if (!openClipId || openedDeepLink.current === openClipId) return
+    const clip = savedLane.find((c) => c.id === openClipId) ?? bufferedLane.find((c) => c.id === openClipId)
+    if (!clip) return
+    openedDeepLink.current = openClipId
+    openClip(clip, savedLane.some((c) => c.id === clip.id) ? 'saved' : 'buffered')
+  }, [openClipId, savedLane, bufferedLane, openClip])
 
   // Poll the playhead → when it's over a snip whose two pieces are still in the SAME lane, the
   // scissor turns into a bandaid (un-snip). Reads lanes via a ref so the interval stays stable.

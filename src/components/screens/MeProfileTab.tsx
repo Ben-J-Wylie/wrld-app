@@ -89,7 +89,7 @@ function FeedRow({ clip }: { clip: SavedClip }) {
       durationSec={durSec}
       thumbnailUrl={clip.thumbnailUrl}
       showPlayGlyph
-      onToggleExpand={() => router.navigate({ pathname: '/(app)/clip-editor', params: { clipId: clip.id, kind: 'saved' } })}
+      onToggleExpand={() => router.navigate({ pathname: '/(app)/clips', params: { openClipId: clip.id } })}
     />
   )
 }

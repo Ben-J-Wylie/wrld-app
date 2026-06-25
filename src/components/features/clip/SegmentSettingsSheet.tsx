@@ -173,11 +173,13 @@ export const SegmentSettingsSheet = memo(function SegmentSettingsSheet({
         {orderedSources.map((kind) => (
           <Row key={kind} label={SOURCE_META[kind].label}>
             <View style={styles.sourceCtl}>
-              <SegmentedToggle
-                options={ON_OFF_OPTIONS}
-                value={(settings.sources[kind] ?? true) ? 'on' : 'off'}
-                onChange={(v) => onChange({ sources: { [kind]: v === 'on' } })}
-              />
+              <View style={styles.sourceToggle}>
+                <SegmentedToggle
+                  options={ON_OFF_OPTIONS}
+                  value={(settings.sources[kind] ?? true) ? 'on' : 'off'}
+                  onChange={(v) => onChange({ sources: { [kind]: v === 'on' } })}
+                />
+              </View>
               {onDeleteSource && (
                 <Pressable
                   variant="subtle"
@@ -244,6 +246,9 @@ const styles = StyleSheet.create({
   row: { gap: theme.spacing.xs },
   rowLabel: {},
   sourceCtl: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
+  // The toggle flexes to fill the row beside the trash icon — otherwise it sizes to its intrinsic
+  // (full) width + the trash pushes the row past the right edge.
+  sourceToggle: { flex: 1 },
   sources: { gap: theme.spacing.sm, marginTop: theme.spacing.xs },
   sourcesLabel: {},
   tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.xs },
