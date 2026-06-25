@@ -1117,6 +1117,9 @@ export function StreamScreen() {
   const { data: bufferForSnip } = useBuffer(isNew && isLiveBroadcast, isLiveBroadcast)
   const openSessionRef = useRef<string | null>(null)
   openSessionRef.current = bufferForSnip?.sessions.find((s) => !s.endedAt)?.id ?? null
+  // Last GPS fix (set by the broadcaster location watcher below) so a snip can re-seed location's
+  // first state without waiting for the next movement-triggered update.
+  const lastLocationRef = useRef<{ lat: number; lng: number } | null>(null)
   useEffect(() => {
     if (!isNew || !pendingSnip) return
     const sid = openSessionRef.current
@@ -1126,7 +1129,16 @@ export function StreamScreen() {
     }
     bufferApi
       .snipSession(sid, pendingSnip)
-      .then(() => reemitTelemetry())
+      .then(() => {
+        // Per-snip initial state — re-emit EVERY armed source's current value so the new era is
+        // self-contained (U2 contract). `reemitTelemetry` covers compass/gyro/accel/speed; location +
+        // torch ride their own live channels, so re-seed them here too (the chat marker is server-side).
+        reemitTelemetry()
+        if (armedKinds.has('location') && lastLocationRef.current) {
+          sendLocationUpdate(lastLocationRef.current.lat, lastLocationRef.current.lng)
+        }
+        if (armedKinds.has('torch')) sendTelemetry({ kind: 'torch', ts: Date.now(), on: torchOn })
+      })
       .catch(() => {})
       .finally(() => useBroadcastStore.getState().consumeSnip())
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1204,6 +1216,7 @@ export function StreamScreen() {
         distanceInterval: 10,
       },
       (loc) => {
+        lastLocationRef.current = { lat: loc.coords.latitude, lng: loc.coords.longitude }
         sendLocationUpdate(loc.coords.latitude, loc.coords.longitude)
       },
     ).then((s) => { sub = s }).catch(() => {})
