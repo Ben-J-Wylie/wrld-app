@@ -99,6 +99,32 @@ edges authoritatively. The client sends **edge-relative intent**, never a frozen
 
 U1 is the smallest high-value start. U4 is separable and last.
 
+> **✅ U3 CORE DONE + DEPLOYED (Aaron, 2026-06-25, `wrld-backend` `d643bcc`).** Edge-relative
+> save + server clamp + the storage-cap gate — backend-only; remaining U3 is **app** (Ben).
+> - **Edge-relative save (`POST /buffer/me/clips`):** new body flags **`fromReaperEdge`** /
+>   **`toNow`** → the server uses ITS live edges (`earliestAt` / `now`) instead of a stale
+>   client ms. Numeric `startAtMs`/`endAtMs` are ALSO clamped to `[earliestAt, now]`, so a
+>   save never over-claims evicted or future footage — **"save the remainder."** (Send a
+>   numeric best-effort + the flag for the live edge; the server re-clamps. Decided over
+>   strict sentinels per the handoff's robustness note.)
+> - **Distinct-clips-with-gaps falls out of the primitive:** the lane toggle while reaping =
+>   **successive edge-relative saves** over the saved spans; the buffer gaps between reap. No
+>   new "lane toggle" endpoint — the app fires a save per saved span (`fromReaperEdge`/`toNow`
+>   for the live ones). The reaper only eats from the left → no interior gaps.
+> - **Storage cap:** the save returns **`409 { error: 'storage_cap', usedBytes, quotaBytes,
+>   neededBytes }`** when `used + thisSave > quota`. **App:** catch it → show the warning +
+>   **flip the dashboard lane back to buffer** (the broadcast keeps printing to buffer).
+> - **Deferred (noted):** partial snip-AT-cap *during a live saved-lane print* + the U1
+>   saved-lane real-time quota (needs a bytes↔time estimate) — for now the cap is
+>   all-or-nothing per save + app-flips-to-buffer. **U4** is AV-live renegotiation.
+>
+> **App slice for U3 (Ben):** revert the reaper-disable guard (drag + sheet stay enabled
+> during reap); save a being-reaped clip with `fromReaperEdge` (+ `toNow` for the live edge);
+> map the dashboard save↔buffer toggle to successive saves; on `409 storage_cap` show the
+> warning + flip the lane to buffer. On-device verify: save while reaping retains the
+> surviving remainder; toggling save↔buffer mid-reap yields distinct clips with gaps; hitting
+> the cap flips to buffer with a warning.
+
 > **✅ U2 BACKEND DONE + DEPLOYED (Aaron, 2026-06-25, `wrld-backend` `11333c3`).** The
 > segmented live manifest (data/metadata) — backend-only; remaining U2 is **app** (Ben).
 > - **Wire (decided):** **`POST /buffer/me/sessions/:id/snip { settings }`** (owner +
