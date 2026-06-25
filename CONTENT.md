@@ -295,6 +295,32 @@ underneath, **not** a user-facing unit. We standardize on **"clip"** as the user
 the **retention axis rendered as two rows** — a visual cue for that one axis, not two
 entity types.)*
 
+### The invariants (the tight principles — guardrails)
+
+The model is only as good as these holding **everywhere**. Treat them as guardrails;
+a feature that breaks one is a bug against the model, not a new behaviour:
+
+1. **One element, one truth.** A clip is a single server-side element — its ranges +
+   per-range directives + the initial-state samples. Every surface (the clips-page
+   drawer, the library drawer, the time-machine pin **and** its viewer, every clip
+   reference) is a *rendering* of that one element. They show the same thing because they
+   read the same element — never a per-surface copy of the truth.
+2. **An edit proliferates everywhere.** Changing any preference writes that one element on
+   the server; every rendering reflects it (after a refetch/invalidation). If an edit
+   shows on one surface but not another, the surfaces are reading divergently — that's the
+   bug to fix, not a place to special-case.
+3. **Every axis is equal.** Title · tags · visibility · identity · location precision ·
+   per-source on/off · lane — all are per-range directives, written the same way and read
+   the same way. No axis gets a bespoke path. (Capture-fidelity coords + real identity are
+   always retained server-side; precision/identity are reversible *display* choices over
+   them.)
+4. **Forward-only snips — the clip AHEAD, never the clip behind.** A snip — manual at the
+   playhead, or at any **live edge** (**now**, **reaper**, **storage cap**) — applies to
+   the range **forward** of the boundary. The range **behind keeps the permissions it had
+   when it was printed.** Editing live changes the future, never rewrites the past; the
+   reaper and cap edges are the *same* rule at the trailing end (a being-reaped or
+   capped clip's edit lands on the surviving forward span). *(Confirmed 2026-06-25.)*
+
 ### Snips — one boundary, planted by hand or by a live edge
 
 A **snip** plants a manifest boundary; the range forward of it can carry different

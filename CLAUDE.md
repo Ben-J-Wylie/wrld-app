@@ -4167,3 +4167,64 @@ the dashboard go-live lane back to `buffer` (via `captureConfig`, so the broadca
 buffer); a retrospective save just shows the out-of-storage notice. Reverted the reaper-disable
 guard — the sheet's Lane toggle stays enabled during reap (saving a being-reaped clip is valid via
 `fromReaperEdge`). Pure JS, no rebuild. Not device-tested.
+
+---
+
+## Updates — June 2026 (Unified-manifest invariants + on-device fixes + app roadmap)
+
+On-device testing of U1–U3 (Ben, 2026-06-25) surfaced proliferation bugs; the app-side ones are
+fixed, the rest are backend items for Aaron, and the **unified-manifest principles are now written
+as guardrails**. All on `design` → `main`, pure JS (no native module, no EAS rebuild).
+
+### Invariants (canonical: CONTENT.md §5 "The invariants")
+The tight principles, as guardrails — a feature that breaks one is a bug against the model:
+1. **One element, one truth** — a clip is one server element; every surface (clips-page drawer,
+   library drawer, time-machine pin + viewer) *renders* it, never copies the truth.
+2. **An edit proliferates everywhere** — write the one element; if it shows on one surface but not
+   another, that's a divergent-read bug, not a place to special-case.
+3. **Every axis is equal** — title · tags · visibility · identity · location precision · per-source
+   on/off · lane — one write path, one read path, no bespoke axis.
+4. **Forward-only snips** — a snip (manual, or at the **now / reaper / storage-cap** edge) applies to
+   the clip **AHEAD**; the clip **behind keeps the permissions it had when printed.** Confirmed
+   2026-06-25 across all three live edges (now `print forward`, reaper `from the edge forward`, cap
+   `keep printing there`) — no code change, captured so it can't regress.
+
+### Fixed this round (app)
+- **Time-machine edits didn't proliferate (`cf5111e`)** — the edit sites invalidated
+  `['historical-availability']`, but the rewatch pins come from `['historical-clips']`/`['avail-cell']`
+  (held-instant views never refetched). Every edit path now invalidates the library
+  (`['buffer','clips']`), the viewer (`['clip']`), and all three time-machine feeds.
+- **Title prefill + rename proliferation (`7ce86c5`)** — the drawer title input prefills the
+  segment's CURRENT title (was the placeholder); a saved-clip rename **dual-writes** the per-range
+  directive (→ time-machine pin via U5) AND `patchClip` on `c.*` (→ library `name` + viewer), so it
+  lands everywhere. The dual-write is a workaround (see thread #3 below).
+- **Per-snip re-emit completion (`1731753`)** — the U2 snip re-emit covered only
+  compass/gyro/accel/speed; **location + torch** are now re-seeded at a snip too (a `lastLocationRef`
+  + the torch state), completing the "every armed source registers initial state at every boundary"
+  contract.
+
+### Backend items for Aaron (in HANDOFF-unified-manifest-2026-06-24.md "On-device findings")
+- **#13** — buffer-pin discover honours per-range **precision + identity** (today session-level +
+  always-attributed; only title (U5) + private coalesce). This is why location-accuracy/identity
+  edits don't show on a time-machine pin.
+- **(2c)** — coalesce the directive in the **library `name` + the viewer** (like discover) → the app
+  can then drop the dual-write; one authority everywhere.
+- **(3)** — saves don't list: a save creates `status:'processing'` that only flips to `'ready'`
+  synchronously when `PB2_RETAIN_IN_PLACE` is ON (the decided model). Turn the flag on (or fix the
+  copy-path promote job).
+
+### App-side roadmap toward the invariants (Ben's lane — full detail in the HANDOFF)
+Not in the contracts; sequencing: #3 + #5 dissolve once (2c) lands, #1 + #2 are the real moves,
+#4 is the structural backstop.
+1. **One drawer, not two** — unify `SegmentSettingsSheet` (clips) + `SavedClipSettingsSheet`
+   (library) into one host. *Guardrail: new clip-pref UI goes in the one drawer.* *Dep: backend #12.*
+2. **Lane as a peer axis** — drop the bespoke `saveClip`/`unsaveClip` flow; edit lane (`retain`) on
+   the directive path like every other axis. *Guardrail: no axis gets its own write path.* *Dep: PB2
+   retain-in-place being live.*
+3. **Retire the dual-write** — delete the `patchClip` branch in `onSheetChange` once (2c) lands.
+   *Guardrail: it's a temporary workaround — don't build on it.*
+4. **One canonical clip type** — collapse `LaneClip`/`SavedClip`/`ClipPin`/`ClipDetail` to one
+   canonical clip + per-surface adapters so "same element everywhere" is type-enforced. *Guardrail:
+   add a clip field to the canonical type, not one surface.* *Dep: none (pure refactor).*
+5. **Title-default heuristic** — collapse the `directive ?? saved-name ?? session-title` prefill to
+   reading the server-resolved title once (2c) returns it.

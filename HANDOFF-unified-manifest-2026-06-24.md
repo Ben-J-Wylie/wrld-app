@@ -373,3 +373,56 @@ the feed/coalescing for them:
 
 **No fundamental conflict** — the Time Machine work holds. The reconciliation is entirely "the
 feed operates per-range + coalesces by equality, and the live timeline tolerates mid-build snips."
+
+---
+
+## The invariants (canonical: CONTENT.md §5 "The invariants") + forward-only confirmation
+
+The unified-manifest principles are now stated as guardrails in **CONTENT.md §5 → "The
+invariants (the tight principles — guardrails)"**. Read them there; in one line each:
+**(1)** one server element, rendered (not copied) by every surface; **(2)** an edit proliferates
+everywhere or it's a divergent-read bug; **(3)** every preference axis is equal (one write path,
+one read path); **(4)** **forward-only snips** — a snip (manual, or at the **now / reaper / storage-cap**
+edge) applies to the clip **AHEAD**; the clip **behind keeps the permissions it had when printed.**
+
+**Forward-only — confirmed 2026-06-25 (Ben's check).** All three live edges already snip forward in
+the deployed model: now (`snip at now → print forward`), reaper (`from the reaper edge forward`,
+"save the remainder"), storage cap (`snip at the cap, auto-flip to buffer, keep printing there`).
+Nothing rewrites the range behind the edge. No code change — captured as the §5 invariant so it
+can't silently regress.
+
+## App-side threads toward the invariants (Ben's lane — NOT in the contracts above)
+
+Beyond the backend contracts, these are the **app** gaps between today's build and the invariants.
+Each lists the principle it serves, the guardrail, and its dependency. Sequencing note: #3 + #5
+**dissolve** once backend (2c) lands; #1 + #2 are the real moves; #4 is the structural backstop.
+
+1. **One drawer, not two** *(invariant 1)*. The clips-page drawer (`SegmentSettingsSheet`) and the
+   library/profile drawer (`SavedClipSettingsSheet`) are two components → unify into one host both
+   surfaces feed identically, so "the same clip shows the same drawer" is literal, not by
+   convention. **Guardrail:** new clip-pref UI goes in the ONE drawer; don't fork a second.
+   **Dep:** read-parity needs backend #12 (expose visibility/tags on the saved-clip read) before the
+   library drawer can show every axis.
+2. **Lane as a peer axis** *(invariant 3)*. Six axes flow through the directive edit; **lane** alone
+   rides a bespoke `saveClip`/`unsaveClip` optimistic flow. Make it a directive (`retain`) edited on
+   the same path. **Guardrail:** no axis gets its own write path. **Dep:** the retain-in-place
+   backend (PB2) being the live model (it's flag-gated today — see finding (3)).
+3. **Retire the dual-write** *(invariant 1/2, cleanup)*. `onSheetChange` currently writes a saved
+   clip's title/identity/precision **twice** (the directive + `patchClip` on `c.*`) because the
+   library/viewer read the Clip row, not the directive. **Once backend (2c) coalesces the directive
+   in the library + viewer, delete the `patchClip` branch** → one write path. **Guardrail:** the
+   dual-write is a temporary workaround — don't build on it; remove it when 2c lands.
+4. **One canonical clip type** *(invariant 1, structural backstop)*. The same element is modeled as
+   four app types — `LaneClip` (timeline) · `SavedClip` (library) · `ClipPin` (time machine) ·
+   `ClipDetail` (viewer). A shared canonical clip + thin per-surface adapters makes "same element
+   everywhere" **type-enforced** (a new field can't be shown in one place and forgotten in another).
+   **Guardrail:** when adding a clip field, add it to the canonical type, not one surface's type.
+   **Dep:** none (pure refactor) — do once the model stops moving.
+5. **Title-default heuristic** *(minor, dissolves with 2c)*. The drawer title prefill reads
+   `directive ?? saved-name ?? session-title` with string-filtering of the `'Untitled clip'`/time
+   fallbacks. When backend (2c) returns the resolved title as one field, collapse to reading it.
+
+**Done this round (app):** per-snip re-emit now covers **location + torch** too (was sensors-only —
+a U2 contract miss); the drawer title **prefills** the current title; a saved-clip rename
+**dual-writes** so it reaches the library + viewer + pin; all edit paths invalidate the library +
+viewer + time-machine feeds.
