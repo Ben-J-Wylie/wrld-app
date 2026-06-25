@@ -11,6 +11,35 @@ cross-repo build plan for making it real. Decided with Ben 2026-06-24.
 
 ---
 
+## ⚠️ On-device findings 2026-06-25 (Ben tested U1–U3 → two BACKEND items for Aaron)
+
+The U1–U3 app slices are wired + the app-side bugs are fixed; two issues are backend/config:
+
+- **(2a) forward-only snip — CONFIRMED correct, no action.** A live setting change snips at the
+  server's `now` and applies **forward only**; already-printed footage keeps the permissions it had
+  when printed. (The app sends only the new settings, no ms.) Retrospectively editing a *past* clip
+  via the settings sheet intentionally changes that range — a separate path.
+- **(2b) edits not proliferating to the time-machine rewatch globe.**
+  - **App half — FIXED (`cf5111e`).** The edit sites invalidated `['historical-availability']` but
+    the rewatch pins come from `['historical-clips']` / `['avail-cell']`; held-instant views never
+    refetched. Both sites now invalidate all three feeds. **Title now proliferates** (U5).
+  - **BACKEND half — STILL OPEN (contract #13).** Per-range **location precision + identity** don't
+    show on **buffer-session pins** (which are *all* current globe content — `clips` is empty). The
+    `bufferPins` discover path reads **session-level** `s.locationPrecision` + is **always
+    attributed**; only per-range *title* (U5) + *private* are honored. Extend the directive-at-instant
+    resolution (already there for title) to precision + attributed on the buffer-pin path — see #13.
+- **(3) save (incl. save-while-reaping) doesn't persist into the Library — BACKEND/CONFIG.** The app
+  saves correctly (`POST /buffer/me/clips` with `fromReaperEdge`/`toNow`) + refetches `['buffer','clips']`;
+  the clip just never becomes listable. `GET /buffer/me/clips` returns **`status:'ready'` only**, and
+  a save creates `status:'processing'` that flips to `'ready'` **synchronously only when
+  `PB2_RETAIN_IN_PLACE` is ON** (the decided one-store model). With the flag **OFF (default)** the
+  legacy async **copy path** (`promoteBufferClip`) runs and the clip stays `processing` until the copy
+  job completes — if it lags/fails, the clip never lists (matches the symptom: the optimistic pending
+  shows in the saved lane, but the durable clip never appears). **Action:** turn on
+  `PB2_RETAIN_IN_PLACE` (the decided retain-in-place model) **or** fix the copy-path promote job.
+
+---
+
 ## The model in one breath
 
 There is **one footage store** and **one per-range manifest**. A **clip ≡ a segment** = a
