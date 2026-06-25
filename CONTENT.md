@@ -369,6 +369,38 @@ directive + the clip-level field so the clip-level readers still update. The dua
 — **deleted the moment (2c) deploys**, leaving directive-only writes. A new axis must never add its
 own parallel field; it rides the directive from day one.
 
+**The directive, by axis.** The per-range directive is a **`DirectiveRange`** (server row) /
+`SegmentDirective` (wire shape) / `SegSettings` (the partial an edit emits). One field per axis — this
+is the read/write/render unit:
+
+| Axis | Directive field | Domain |
+|---|---|---|
+| title | `title` | free text |
+| tags | `tags` | `string[]` |
+| visibility | `visibility` | `public` \| `private` |
+| identity | `attributed` | bool (`true` = shown / attributed) |
+| location precision | `precision` | `exact` \| `city` \| `country` \| `off` |
+| per-source inclusion | `sources` | `{ [kind]: bool }` |
+| lane | *(R2 — not a directive yet: rides `BufferSession.lane` + retain rows; target = a `retain` directive the reaper reads)* | `buffer` \| `saved` |
+
+**The three prerogatives — identical for every axis (that's the point):**
+
+- **WRITE → the directive, one path.** *Retrospective* (a past clip/range): `PATCH
+  /buffer/me/sessions/:id/directives` (app `bufferApi.patchDirectives`). *Live* (the now edge): `POST
+  /buffer/me/sessions/:id/snip { settings }` (app `snipSession`) — closes the open era at the
+  server's `now`, opens the next forward. The edit UI emits a `SegSettings` partial → the screen
+  merges it into the covering range → PATCHes the authoritative list. *Bridge:* until (2c) a saved
+  clip ALSO `patchClip`s the `Clip.*` mirror (deleted when (2c) ships). *Exception:* lane → save /
+  un-save until R2.
+- **READ → resolve the directive at the instant, on every feed.** The `DirectiveRange` covering T
+  wins, falling back **directive → clip-level (`Clip.*`) → stream-level (`Stream.*`) → type
+  default**. discover ✓ (`directiveAt`/`titleAt`); library + viewer = (2c). No feed returns a stale
+  parallel field.
+- **RENDER → one resolver, every surface.** `resolveClipSettings(clip)` returns the resolved 7 axes
+  from the server's (coalesced) data; the timeline labels (both lanes), the one drawer, the viewer
+  chrome, and the pin card **all render from it** — never a raw `Stream.title` / `Clip.name`. Every
+  edit invalidates every surface's query.
+
 ### Snips — one boundary, planted by hand or by a live edge
 
 A **snip** plants a manifest boundary; the range forward of it can carry different
