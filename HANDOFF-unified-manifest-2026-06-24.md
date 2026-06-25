@@ -84,6 +84,16 @@ edges authoritatively. The client sends **edge-relative intent**, never a frozen
     `COALESCE(directive.title, clip.title, stream.title)` so an edited per-segment title
     proliferates to the time-machine pin (same pattern as reversible location precision). App
     already renders `pin.title`.
+12. **Expose `visibility` + `tags` on the saved-clip read (profile-drawer parity).** The profile /
+    Me-tab saved-clip feed now opens the settings drawer **in place** (built 2026-06-24,
+    `SavedClipSettingsSheet`) and writes via `bufferApi.patchClip`. It edits title / location
+    precision / identity / per-source on/off cleanly, but **hides Visibility + Tags** because the
+    `GET /buffer/me/clips` payload (`SavedClip`) doesn't return them (the backend `Clip` row has
+    both; the list serializer just omits them). To unhide on the profile: add `visibility` + `tags`
+    to the saved-clips list response (+ the app `SavedClip` type). Note the **vocab gap** too —
+    `patchClip`'s `visibility` enum is `public|anon|draft` (pre-PB4); the drawer's axis is
+    `private|public`. Reconcile when wiring (likely: map the per-range `private|public` over the
+    clip-level field, or move saved-clip visibility onto the per-range directive PATCH).
 11. **Permanent delete — two missing endpoints (drawer UI is built + wired).** The clip drawer
     (`SegmentSettingsSheet`) now has a **Delete clip** button + **per-source delete** trash icons
     (built 2026-06-24, behind `onDelete`/`onDeleteSource`). Wired today: **saved-clip delete** via
