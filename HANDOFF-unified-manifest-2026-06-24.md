@@ -99,6 +99,16 @@ edges authoritatively. The client sends **edge-relative intent**, never a frozen
 
 U1 is the smallest high-value start. U4 is separable and last.
 
+> **✅ U5 DONE + DEPLOYED (Aaron, 2026-06-25, `wrld-backend` `0eadbc1`).** `GET /clips/discover`
+> now coalesces the **per-segment directive title alive at the instant** over the clip/stream
+> title, so an edited per-segment title shows on the time-machine pin. Resolved in the active
+> windowed + tiled feed (at the pin's first visible interval start) AND the `?at=` fallback (at
+> T): `directive.title (covering the instant) → existing clip/stream title`. No titled directive
+> → unchanged. **App already renders `pin.title`** — no app change needed. (A pin spanning
+> multiple titled segments shows the first segment's title; the finer per-range *pin split* is
+> the larger Time-Machine reconciliation, not U5.) On-device verify owed: edit a segment title
+> in the clip editor → its globe pin shows the new title.
+
 > **✅ U1 BACKEND + MEDIASOUP DONE + DEPLOYED (Aaron, 2026-06-25, `wrld-backend` `3f4527c` +
 > `wrld-mediasoup` `2b8be57`).** The engine half of U1 is live; remaining U1 is the **app
 > dashboard toggle** (Ben).
