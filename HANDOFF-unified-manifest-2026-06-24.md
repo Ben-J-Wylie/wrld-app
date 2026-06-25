@@ -155,6 +155,28 @@ edges authoritatively. The client sends **edge-relative intent**, never a frozen
     Ben sees stale precision/identity on past pins; **title is fixed (U5), precision+identity on
     buffer pins are not.**
 
+> **✅ #13 DONE + DEPLOYED (Aaron, 2026-06-25, `wrld-backend` `5f1d5d2`).** Buffer-pin discover
+> now resolves the per-range directive covering the pin's instant for the **full** settings —
+> `directiveAt` + `DirAt` (title/precision/attributed) generalises U5's `titleAt`. Applied on
+> all three feeds (windowed + tiled + `?at=`): per-range **precision** re-obfuscates the
+> display coords (a per-range `'off'` hides the pin = the location-axis private), and
+> **`attributed:false`** → anonymous host — falling back to the session level when no directive
+> covers the instant. So a per-range blur/sharpen or anon edit now shows on the time-machine
+> pin. On-device verify: blur/anon a live segment → its past pin reflects it. *(The clips path
+> already resolved clip-level precision/identity; left as-is.)*
+>
+> **Finding (3) — flag is already ON:** `PB2_RETAIN_IN_PLACE`, `PB3_PER_RANGE`,
+> `PUBLIC_BUFFER_ENABLED`, `AVAILABILITY_FEED` are all **`true`** in prod (verified 2026-06-25).
+> So the "flag OFF → copy path → save never lists" diagnosis doesn't apply — retain-in-place is
+> active and a save should flip to `ready` synchronously. If a save still doesn't list, it's a
+> different bug (investigate the retain-in-place save path / `GET /buffer/me/clips` filter), not
+> the flag.
+>
+> **Still open for me (noted, not in this commit):** #12 (expose `visibility`+`tags` on the
+> saved-clip read) · (2c) (coalesce per-range title/precision/identity on `GET /buffer/me/clips`
+> + `GET /clips/:id` so the app drops the dual-write) · #11 (permanent-delete endpoints:
+> buffered-clip + per-source track).
+
 ---
 
 ## Suggested phasing (U-series)
