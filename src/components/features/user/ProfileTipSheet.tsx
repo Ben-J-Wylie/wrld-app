@@ -18,6 +18,7 @@ import {
 import { useMutation } from '@tanstack/react-query'
 import { newIdempotencyKey } from '@/lib/idempotency'
 import { Filter as ProfanityFilter } from 'bad-words'
+import { foldLeetspeak } from '@/lib/profanity'
 import { theme } from '@/tokens/theme'
 import { Text } from '@/components/primitives/Text'
 import { HelpText } from '@/components/primitives/HelpText'
@@ -62,7 +63,7 @@ export function ProfileTipSheet({ visible, handle, displayName, onClose }: Props
     custom ? (Number.isFinite(customAmount) && customAmount > 0 ? customAmount : 0) : (selected ?? 0)
   const insufficient = amount > 0 && amount > balance
   const belowMin = amount > 0 && amount < minTip
-  const messageProfane = message.trim().length > 0 && profanityFilter.isProfane(message)
+  const messageProfane = message.trim().length > 0 && profanityFilter.isProfane(foldLeetspeak(message))
   const canTip = amount >= minTip && !insufficient && !messageProfane
 
   // Stable dedup key for THIS logical tip. Set lazily on send and kept across a

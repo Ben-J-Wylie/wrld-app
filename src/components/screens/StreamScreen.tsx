@@ -47,6 +47,7 @@ import { useEffect, useMemo, useRef, useState, useCallback, type ReactNode } fro
 import { useQuery } from '@tanstack/react-query'
 import { captureScreen } from 'react-native-view-shot'
 import { Filter as ProfanityFilter } from 'bad-words'
+import { foldLeetspeak } from '@/lib/profanity'
 
 const profanityFilter = new ProfanityFilter()
 import { useLocalSearchParams, router, useFocusEffect } from 'expo-router'
@@ -1268,7 +1269,7 @@ export function StreamScreen() {
     // valid — av may be empty; startBroadcasting skips getUserMedia then.
     // Only a title + coords are required.
     if (!title || !coords) return
-    if (profanityFilter.isProfane(title)) {
+    if (profanityFilter.isProfane(foldLeetspeak(title))) {
       Alert.alert('Title not allowed', 'Your stream title contains prohibited content. Please choose a different title.')
       return
     }
@@ -1501,7 +1502,7 @@ export function StreamScreen() {
   function handleSendChat() {
     const trimmed = chatInput.trim()
     if (!trimmed) return
-    if (profanityFilter.isProfane(trimmed)) {
+    if (profanityFilter.isProfane(foldLeetspeak(trimmed))) {
       Alert.alert('Message not sent', 'Your message contains prohibited content.')
       return
     }
