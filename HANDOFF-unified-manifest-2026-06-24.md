@@ -84,16 +84,6 @@ edges authoritatively. The client sends **edge-relative intent**, never a frozen
     `COALESCE(directive.title, clip.title, stream.title)` so an edited per-segment title
     proliferates to the time-machine pin (same pattern as reversible location precision). App
     already renders `pin.title`.
-12. **Expose `visibility` + `tags` on the saved-clip read (profile-drawer parity).** The profile /
-    Me-tab saved-clip feed now opens the settings drawer **in place** (built 2026-06-24,
-    `SavedClipSettingsSheet`) and writes via `bufferApi.patchClip`. It edits title / location
-    precision / identity / per-source on/off cleanly, but **hides Visibility + Tags** because the
-    `GET /buffer/me/clips` payload (`SavedClip`) doesn't return them (the backend `Clip` row has
-    both; the list serializer just omits them). To unhide on the profile: add `visibility` + `tags`
-    to the saved-clips list response (+ the app `SavedClip` type). Note the **vocab gap** too —
-    `patchClip`'s `visibility` enum is `public|anon|draft` (pre-PB4); the drawer's axis is
-    `private|public`. Reconcile when wiring (likely: map the per-range `private|public` over the
-    clip-level field, or move saved-clip visibility onto the per-range directive PATCH).
 11. **Permanent delete — two missing endpoints (drawer UI is built + wired).** The clip drawer
     (`SegmentSettingsSheet`) now has a **Delete clip** button + **per-source delete** trash icons
     (built 2026-06-24, behind `onDelete`/`onDeleteSource`). Wired today: **saved-clip delete** via
@@ -104,6 +94,31 @@ edges authoritatively. The client sends **edge-relative intent**, never a frozen
     - **Per-source track delete** — remove ONE captured source's track from a clip + reclaim (the
       only destructive per-source edit, distinct from the reversible on/off visibility toggle). No
       endpoint yet; the app shows "coming soon".
+12. **Expose `visibility` + `tags` on the saved-clip read (profile-drawer parity).** The profile /
+    Me-tab saved-clip feed now opens the settings drawer **in place** (built 2026-06-24,
+    `SavedClipSettingsSheet`) and writes via `bufferApi.patchClip`. It edits title / location
+    precision / identity / per-source on/off cleanly, but **hides Visibility + Tags** because the
+    `GET /buffer/me/clips` payload (`SavedClip`) doesn't return them (the backend `Clip` row has
+    both; the list serializer just omits them). To unhide on the profile: add `visibility` + `tags`
+    to the saved-clips list response (+ the app `SavedClip` type). Note the **vocab gap** too —
+    `patchClip`'s `visibility` enum is `public|anon|draft` (pre-PB4); the drawer's axis is
+    `private|public`. Reconcile when wiring (likely: map the per-range `private|public` over the
+    clip-level field, or move saved-clip visibility onto the per-range directive PATCH).
+13. **Buffer-pin discover honours per-range precision + identity at the instant (C4.5 completeness).**
+    Audited on the deployed box 2026-06-25. `GET /clips/discover` resolves per-range correctly for
+    **saved-clip pins** (the `clips` path): title (U5 `titleAt`), precision (`COALESCE(c.locDisplayPrecision,
+    s.locationPrecision)`), identity (`attributed ? host : anonymous`). But **buffer-session pins**
+    (the `bufferPins` path — *all current globe content*, since `clips` is empty) only honour
+    **title** (U5 `titleAt(sessionTitled,…)`) + the **private-range exclusion**. Precision is still
+    session-level (`COALESCE(s.locationPrecision,'exact')`) and the host is **always attributed**
+    (no anon). So a per-range **blur/sharpen** or **anon** edit on a live buffer session does NOT
+    show on its time-machine pin — only a per-range **title** or **private** edit does. **Fix
+    (same pattern already there for title/private):** resolve the DirectiveRange covering instant T
+    for the buffer pin and use its **precision** + **attributed** (fall back to session) — extend
+    `fetchTitledDirectives`/`titleAt` to a `fetchDirectivesAt` returning precision/attributed too,
+    and apply in the `bufferPins` map (anon → `host: anonymous`, like the clips path). This is why
+    Ben sees stale precision/identity on past pins; **title is fixed (U5), precision+identity on
+    buffer pins are not.**
 
 ---
 
