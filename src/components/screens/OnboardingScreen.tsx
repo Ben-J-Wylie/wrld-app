@@ -18,6 +18,7 @@
 import { useState } from 'react'
 import { Alert } from 'react-native'
 import { Filter as ProfanityFilter } from 'bad-words'
+import { foldLeetspeak } from '@/lib/profanity'
 
 const profanityFilter = new ProfanityFilter()
 import { router } from 'expo-router'
@@ -39,7 +40,7 @@ function computeHandleRules(handle: string): Rule[] {
   const len = handle.length
   const lenStatus: Rule['status'] = len === 0 ? 'neutral' : len >= 3 && len <= 20 ? 'met' : 'bad'
   const charStatus: Rule['status'] = len === 0 ? 'neutral' : HANDLE_RE.test(handle) ? 'met' : 'bad'
-  const profanityStatus: Rule['status'] = len === 0 ? 'neutral' : profanityFilter.isProfane(handle) ? 'bad' : 'met'
+  const profanityStatus: Rule['status'] = len === 0 ? 'neutral' : profanityFilter.isProfane(foldLeetspeak(handle)) ? 'bad' : 'met'
   return [
     { label: '3–20 CHARACTERS', status: lenStatus },
     { label: 'LETTERS, NUMBERS, AND UNDERSCORES ONLY', status: charStatus },

@@ -117,6 +117,26 @@ export function ProfileScreen() {
     )
   }
 
+  // Report: a preset-reason picker, then files a report that raises a moderation
+  // case. Distinct from Block (which hides the pair). Auth-gated by the caller.
+  const REPORT_REASONS = ['Inappropriate content', 'Harassment or bullying', 'Spam', 'Impersonation', 'Other']
+  function handleReport() {
+    Alert.alert(`Report @${handle}?`, 'Why are you reporting this account?', [
+      ...REPORT_REASONS.map((reason) => ({
+        text: reason,
+        onPress: async () => {
+          try {
+            await usersApi.report(handle!, reason)
+            Alert.alert('Report submitted', 'Thanks — our team will review this account.')
+          } catch {
+            Alert.alert('Error', 'Could not submit the report — try again.')
+          }
+        },
+      })),
+      { text: 'Cancel', style: 'cancel' as const },
+    ])
+  }
+
   const { data: subStatus, refetch: refetchSubStatus } = useQuery({
     queryKey: ['subscription-status', handle],
     queryFn: () => usersApi.getSubscriptionStatus(handle!),
@@ -224,11 +244,18 @@ export function ProfileScreen() {
       )}
 
       {isSignedIn && !isOwnProfile && (
-        <Pressable onPress={handleBlock} disabled={blocking} style={styles.blockRow}>
-          <Text variant="caption" color={theme.colors.text.muted}>
-            {blocking ? 'Blocking…' : `Block @${handle}`}
-          </Text>
-        </Pressable>
+        <View style={styles.modRow}>
+          <Pressable onPress={handleReport} style={styles.blockRow}>
+            <Text variant="caption" color={theme.colors.text.muted}>
+              {`Report @${handle}`}
+            </Text>
+          </Pressable>
+          <Pressable onPress={handleBlock} disabled={blocking} style={styles.blockRow}>
+            <Text variant="caption" color={theme.colors.text.muted}>
+              {blocking ? 'Blocking…' : `Block @${handle}`}
+            </Text>
+          </Pressable>
+        </View>
       )}
 
       {!isOwnProfile && profile.subscriptionEnabled && profile.subscriptionPriceUsd && (
@@ -565,5 +592,10 @@ const styles = StyleSheet.create({
   blockRow: {
     alignItems: 'center',
     paddingVertical: theme.spacing.sm,
+  },
+  modRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: theme.spacing.lg,
   },
 })

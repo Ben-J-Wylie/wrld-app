@@ -31,6 +31,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type Compo
 import { Alert, ScrollView, StyleSheet, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Filter as ProfanityFilter } from 'bad-words'
+import { foldLeetspeak } from '@/lib/profanity'
 
 const profanityFilter = new ProfanityFilter()
 import { router, useFocusEffect } from 'expo-router'
@@ -343,7 +344,7 @@ export function DashboardScreen() {
   // (activeBroadcast) + coords + the autostart flags.
   async function startBroadcast(record: boolean) {
     if (!canGoLive) return
-    if (profanityFilter.isProfane(title.trim())) {
+    if (profanityFilter.isProfane(foldLeetspeak(title.trim()))) {
       Alert.alert('Title not allowed', 'Your stream title contains prohibited content. Please choose a different title.')
       return
     }

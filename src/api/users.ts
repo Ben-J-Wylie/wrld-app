@@ -104,6 +104,29 @@ export const usersApi = {
     await apiClient.delete(`/users/${handle}/block`)
   },
 
+  // Report a user (distinct from blocking) — raises a moderation case.
+  report: async (handle: string, reason: string, detail?: string): Promise<string> => {
+    const res = await apiClient.post<{ ok: boolean; reportId: string }>(`/users/${handle}/report`, {
+      reason,
+      detail,
+    })
+    return res.data.reportId
+  },
+
+  // Report a single chat message (keyed on the sender for the moderation queue).
+  reportChatMessage: async (messageId: string, reason?: string, detail?: string): Promise<string> => {
+    const res = await apiClient.post<{ ok: boolean; reportId: string }>(`/chat/${messageId}/report`, {
+      reason,
+      detail,
+    })
+    return res.data.reportId
+  },
+
+  // Appeal a suspension — surfaces to admins; never auto-actions anything.
+  appeal: async (message: string): Promise<void> => {
+    await apiClient.post('/users/me/appeal', { message })
+  },
+
   // The users the current user has blocked (Settings management list).
   getBlocks: async (): Promise<BlockedUser[]> => {
     const res = await apiClient.get<{ blocks: BlockedUser[] }>('/users/me/blocks')

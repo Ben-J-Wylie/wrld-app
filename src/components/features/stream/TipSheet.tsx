@@ -21,6 +21,7 @@ import {
   View,
 } from 'react-native'
 import { Filter as ProfanityFilter } from 'bad-words'
+import { foldLeetspeak } from '@/lib/profanity'
 import { theme } from '@/tokens/theme'
 import { Text } from '@/components/primitives/Text'
 import { HelpText } from '@/components/primitives/HelpText'
@@ -58,7 +59,7 @@ export function TipSheet({ visible, balance, onClose, onTip, minTip = 10 }: Prop
     (custom ? (Number.isFinite(customAmount) && customAmount > 0 ? customAmount : 0) : 0)
   const insufficient = amount > 0 && amount > balance
   const belowMin = amount > 0 && amount < minTip
-  const messageProfane = message.trim().length > 0 && profanityFilter.isProfane(message)
+  const messageProfane = message.trim().length > 0 && profanityFilter.isProfane(foldLeetspeak(message))
   const canTip = amount >= minTip && !insufficient && !messageProfane
 
   function handleTip() {
