@@ -464,3 +464,80 @@ viewer + time-machine feeds.
 > - **#11** — `DELETE /buffer/me/clips/:id/tracks/:kind` (destructive per-source delete + reclaim;
 >   refuses the last track) and `DELETE /buffer/me/sessions/:id` (permanent-delete a buffered clip's
 >   footage now; refuses live/retained sessions; reaper reconciles the pool).
+
+---
+
+## STATUS ROLL-UP — Aaron → Ben (2026-06-25): unified-manifest backend, end to end
+
+A full read of where the backend/mediasoup side of the unified manifest stands, what you can build
+on now, what's still owed, and the red-flag items that would move us closer to the §5 core
+principles. Companion to CONTENT.md §5 "Conformance status" + `wrld-backend/CLAUDE.md`
+"Unified-manifest conformance review" (both written this pass).
+
+### ✅ Completed (built + deployed unless noted)
+
+- **U1 — go-live lane.** `BufferSession.lane` ('buffer'|'saved'); `createRoom`→`allocate` carries it;
+  a `saved` session is retained from go-live (reaper never evicts it). `GET /buffer/me` returns
+  `session.lane`. *(Deployed.)*
+- **U2 — snip-at-now.** `POST /buffer/me/sessions/:id/snip` (live-only, PB3-gated): closes the open
+  era at the server's `now`, opens a new era forward, seeds the chat init marker. `bufferSessionEnded`
+  clamps any open era to session end. *(Deployed.)*
+- **U3 — edge-relative save + storage-cap gate.** `fromReaperEdge`/`toNow` flags + always-clamp to
+  `[earliest, now]`; `409 { storage_cap, usedBytes, quotaBytes, neededBytes }` replaces the coarse
+  reject. *(Deployed.)*
+- **U4 — AV-live toggle (mediasoup).** `setSourcePaused {kind,paused}` → producer pause/resume (one
+  track with a gap, not a new track) + keyframe-on-resume + `producerPaused`/`producerResumed` to
+  viewers. *(Deployed — needs the on-device gap test, see below.)*
+- **U5 — discover title coalesce.** `titleAt` over the per-range directive on every feed. *(Deployed.)*
+- **#13 — buffer-pin per-range precision + identity** on all three feeds (`directiveAt`). *(Deployed.)*
+- **#12 / (2c) / #11 — saved-clip read parity, per-range coalesce, destructive deletes.** Code done +
+  pushed (`wrld-backend d721f12`); **DEPLOY PENDING** (see red flag R1).
+- **PB4 carry-through** (prior rounds): per-segment title/tags persisted on `DirectiveRange` +
+  `splitRangeByDirectives` carries the full per-segment manifest through promote.
+
+### ⏳ Pending / owed
+
+- **DEPLOY of #12/(2c)/#11** — blocked, see R1. Once live: your app threads **#1 (one drawer)**,
+  **#3 (retire the dual-write)**, **#5 (title heuristic)** are all unblocked — (2c) returns the
+  resolved title/identity/precision as one field, so you can delete the `patchClip` dual-write and
+  collapse the title prefill to reading the server value.
+- **On-device gates (CI can't run mediasoup):** U4 pause/resume gap (go live → pause camera ~30s →
+  resume → recording stays ONE track with a gap, session does NOT stop; if FFmpeg dies on the gap the
+  fallback is close/re-attach); #13 blur/anon actually showing on a time-machine pin; U1/U2/U3 app
+  slices.
+- **Principled deferrals (not omissions):** storage-cap as a *live* server snip + the U1 saved-lane
+  *real-time* quota — both need a bytes↔time estimate (R3 below). Today the cap is all-or-nothing per
+  save and the client flips the lane to buffer.
+
+### 🚩 Red flags — items that move us toward the §5 core principles
+
+These are the gaps where the build still diverges from the invariants. Ordered by leverage.
+
+- **R1 — DEPLOY BLOCKER (not mine to fix).** The box's working tree has concurrent **M-series
+  moderation WIP** (uncommitted `schema.prisma`, untracked `src/services/moderation/*` +
+  `adminModeration.ts`/`hiveWebhook.ts` + the `20260625000000_moderation_cases` migration, modified
+  `internal.ts`/`server.ts`/`env.ts`/`streams.ts`/`users.ts`) that does **not** `tsc`-compile, so the
+  Docker build fails. **#12/(2c)/#11 are committed + pushed and ship on the next clean build** once
+  that compiles. I did not touch/commit/deploy the M-series work.
+- **R2 — Lane is special-cased (the real invariant-3 break). ⬅ highest leverage.** Every other axis
+  (visibility · precision · identity · sources · title · tags) is a `DirectiveRange` field on one
+  write/read path; **lane is not** — it rides `BufferSession.lane` (U1) *plus* retain `Clip`/`ClipRange`
+  rows (U3). The reaper honours **three** separate retain signals. The fix — a per-range `retain`/`lane`
+  directive the reaper reads as *the* retain signal — collapses that duality, makes "no axis gets its
+  own write path" literally true, and is the **server-side twin of your app thread #2 ("lane as a peer
+  axis")**. Your #2 and this backend change should land together.
+- **R3 — Storage-cap edge isn't a true forward snip (invariant 4).** It's a `409` + client lane flip,
+  not a server snip-at-cap + auto-flip + print-forward. Needs the bytes↔time estimate (same one the U1
+  saved-lane live quota needs).
+- **R4 — A saved clip's manifest is three representations (invariant 1, structural).** `ClipRange`
+  (retain body) + `DirectiveRange` (per-segment settings) + `ClipTrack` (per-source), reconciled by
+  `splitRangeByDirectives`. Works, but a clip isn't *literally* "a named set of per-range directives
+  over the one store." North-star refactor — pairs with your app thread #4 ("one canonical clip type").
+- **R5 — `#12` tags is a union flattening.** `Clip` has no tags column, so `tags` on
+  `GET /buffer/me/clips` is the union of the per-range directive tags. The real per-range truth is in
+  the `directives[]` on the same read — use that when a per-segment tag view matters; the union is for
+  the drawer's coarse display only.
+- **R6 — Server-side coalesce-adjacent-equal directives (missing backstop).** U2 left no-op-snip
+  debouncing to the app; without a server merge of adjacent ranges whose every axis matches, live
+  edits can bloat eras/segments and fragment the availability feed + Time-Machine pins. Belongs
+  server-side eventually.

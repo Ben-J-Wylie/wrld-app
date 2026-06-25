@@ -385,6 +385,37 @@ intent and renders the result. The live edges move continuously and only the ser
 them authoritatively, so the server is the **single source of truth** for where a snip
 lands and what persists. *(Decided 2026-06-24.)*
 
+### Conformance status — how close the build is to these invariants (2026-06-25)
+
+The U-series + the on-device findings (#13/#12/(2c)/#11) brought the backend most of the
+way to the invariants. An honest read of where it holds and where it still diverges, so the
+gaps are tracked as gaps, not silently lived with:
+
+- **Invariant 1 (one element) — strong.** `DirectiveRange` is now the single read authority
+  across all three discover feeds, the buffer pins (precision/identity/title), the saved-clip
+  reads, and `GET /clips/:id`. PB2 retain-in-place means a save is a directive, not a copy —
+  one footage store.
+- **Invariant 2 (an edit proliferates) — strong, deploy-pending.** (2c) is exactly the change
+  that lets a directive edit reach the library + viewer + pin from one write; until it deploys
+  the app still dual-writes `Clip.*`.
+- **Invariant 4 (forward-only) — holds** for the now + reaper edges. **Soft spot:** the
+  **storage-cap edge is not yet a true server snip** — over-budget saves return `409
+  storage_cap` and the *client* flips the lane, rather than the server snipping at the cap +
+  auto-flipping + printing forward. Deferred behind a bytes↔time estimate.
+- **Invariant 3 (every axis equal) — the real divergence.** **Lane is special-cased.** Every
+  other axis (visibility · precision · identity · sources · title · tags) is a `DirectiveRange`
+  field on one write/read path; **lane is not** — it rides `BufferSession.lane` (U1) *plus*
+  retain `Clip`/`ClipRange` rows (U3 save). "Lane is just one of the per-range directives" is
+  true in this doc but **not in the schema**. Closing this (a per-range `retain`/`lane`
+  directive the reaper reads as *the* retain signal, collapsing the session-flag + retain-row
+  duality) is the single highest-leverage step toward invariant 3, and the server-side twin of
+  the app's "lane as a peer axis" thread.
+- **Deeper structural gap (toward invariant 1's "clip ≡ segment").** A saved clip's manifest
+  is still spread across **`ClipRange` (retain body) + `DirectiveRange` (per-segment settings)
+  + `ClipTrack` (per-source)** — three representations reconciled by `splitRangeByDirectives`.
+  It works, but a clip isn't yet *literally* "a named set of per-range directives over the one
+  store." A long-term collapse, flagged as north-star, not scheduled.
+
 ---
 
 ## 6. Content representation (how it's shown, honestly)
