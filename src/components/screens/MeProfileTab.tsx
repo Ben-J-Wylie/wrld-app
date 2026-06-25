@@ -10,6 +10,7 @@
 //   • Feed — a timeline of the clips in the user's saved lane (the durable
 //     Clip rows from useSavedClips), newest first; tap a row to open the clip.
 
+import { useState } from 'react'
 import { ActivityIndicator, StyleSheet, View } from 'react-native'
 import { router } from 'expo-router'
 import { useQuery } from '@tanstack/react-query'
@@ -21,10 +22,12 @@ import { Pressable } from '@/components/primitives/Pressable'
 import { Divider } from '@/components/primitives/Divider'
 import { AccountIDPill } from '@/components/features/user/AccountIDPill'
 import { SavedClipRow } from '@/components/features/clip/SavedClipRow'
+import { SavedClipSettingsSheet } from '@/components/features/clip/SavedClipSettingsSheet'
 import { usersApi } from '@/api/users'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
 import { useUserProfile } from '@/hooks/useUserProfile'
 import { useSavedClips } from '@/hooks/useSavedClips'
+import { useBuffer } from '@/hooks/useBuffer'
 import type { SavedClip } from '@/api/buffer'
 import type { User } from '@/types'
 
@@ -74,9 +77,10 @@ const TIER_LABEL: Record<User['tier'], string> = {
   pro: 'PRO',
 }
 
-// One saved-lane clip (a durable Clip) as a feed row. Tapping opens it in the clip
-// editor/viewer (same target as a double-tap on the Clips grid). Read-only here.
-function FeedRow({ clip }: { clip: SavedClip }) {
+// One saved-lane clip (a durable Clip) as a feed row. Tapping opens the per-clip settings drawer
+// in place (edit this clip's preferences — title / location / identity / sources / delete); it does
+// NOT navigate away.
+function FeedRow({ clip, onOpen }: { clip: SavedClip; onOpen: (clip: SavedClip) => void }) {
   const durSec = Math.max(0, Math.round((clip.endAtMs - clip.startAtMs) / 1000))
   const meta = [formatDate(clip.startAtMs), formatTime(clip.startAtMs), formatDuration(durSec)]
     .filter(Boolean)
@@ -89,7 +93,7 @@ function FeedRow({ clip }: { clip: SavedClip }) {
       durationSec={durSec}
       thumbnailUrl={clip.thumbnailUrl}
       showPlayGlyph
-      onToggleExpand={() => router.navigate({ pathname: '/(app)/clips', params: { openClipId: clip.id } })}
+      onToggleExpand={() => onOpen(clip)}
     />
   )
 }
@@ -100,6 +104,7 @@ export function MeProfileTab() {
   // /auth/me — fetch our own profile to surface them.
   const { data: profile } = useUserProfile(user?.handle ?? null)
   const { data: savedClips, isLoading: clipsLoading } = useSavedClips(!!user)
+  const { data: buffer } = useBuffer(!!user)
   // Who's subscribed to me — creators only (non-creators always get []).
   const { data: subscribers = [] } = useQuery({
     queryKey: ['my-subscribers'],
@@ -108,12 +113,31 @@ export function MeProfileTab() {
     staleTime: 60_000,
   })
 
+  // The settings drawer for a tapped saved clip (opened in place; `sheetVisible` drives the
+  // open/close animation independently of mount so the close animates like the open).
+  const [sheetClip, setSheetClip] = useState<SavedClip | null>(null)
+  const [sheetVisible, setSheetVisible] = useState(false)
+  const openSheet = (clip: SavedClip) => {
+    setSheetClip(clip)
+    setSheetVisible(true)
+  }
+  const closeSheet = () => {
+    setSheetVisible(false)
+    setTimeout(() => setSheetClip(null), 270)
+  }
+
   if (!user) return null
 
   const gifts = profile?.giftsReceived ?? []
   const totalGifts = gifts.reduce((sum, g) => sum + g.count, 0)
   // Saved-lane feed: the user's durable saved clips, newest first.
   const feed = [...(savedClips ?? [])].sort((a, b) => b.startAtMs - a.startAtMs)
+  // Divider: clips whose footage is still inside the rolling-buffer window vs clips the reaper has
+  // moved past (kept only because they were saved). Floor = now − windowHours (server clock).
+  const nowMs = buffer?.serverNowMs ?? Date.now()
+  const windowFloorMs = buffer?.windowHours ? nowMs - buffer.windowHours * 3_600_000 : null
+  const inWindow = windowFloorMs == null ? feed : feed.filter((c) => c.startAtMs >= windowFloorMs)
+  const postReaper = windowFloorMs == null ? [] : feed.filter((c) => c.startAtMs < windowFloorMs)
 
   return (
     <View style={styles.root}>
@@ -236,12 +260,27 @@ export function MeProfileTab() {
           </View>
         ) : (
           <View style={styles.feedList}>
-            {feed.map((c) => (
-              <FeedRow key={c.id} clip={c} />
+            {/* Newest first. Above the divider: still inside the rolling-buffer window. Below:
+                saved clips the reaper has moved past (kept only because they were saved). */}
+            {inWindow.map((c) => (
+              <FeedRow key={c.id} clip={c} onOpen={openSheet} />
+            ))}
+            {postReaper.length > 0 && (
+              <View style={styles.reaperDivider}>
+                <Divider />
+                <Text variant="monoCaption" color={theme.colors.text.subtle} style={styles.reaperLabel}>
+                  SAVED · PAST THE BUFFER WINDOW
+                </Text>
+              </View>
+            )}
+            {postReaper.map((c) => (
+              <FeedRow key={c.id} clip={c} onOpen={openSheet} />
             ))}
           </View>
         )}
       </View>
+
+      <SavedClipSettingsSheet clip={sheetClip} visible={sheetVisible} onClose={closeSheet} />
     </View>
   )
 }
@@ -320,6 +359,13 @@ const styles = StyleSheet.create({
   },
   feedList: {
     gap: theme.spacing.sm,
+  },
+  reaperDivider: {
+    gap: theme.spacing.xs,
+    marginTop: theme.spacing.sm,
+  },
+  reaperLabel: {
+    marginTop: theme.spacing.xs,
   },
   feedLoading: {
     paddingVertical: theme.spacing.xl,

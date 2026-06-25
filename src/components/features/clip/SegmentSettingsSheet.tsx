@@ -49,6 +49,13 @@ type Props = {
   }
   /** The kinds this segment actually captured (drives the per-source rows). */
   availableSources: FeedKind[]
+  /** Show the Visibility (private/public) row. Default true. The standalone saved-clip editor
+   *  hides it — the saved-clip endpoint doesn't yet expose visibility on read (full parity is an
+   *  Aaron follow-up); Ben's profile-edit axes are title/location/identity/sources. */
+  showVisibility?: boolean
+  /** Show the Tags block. Default true. Hidden in the standalone saved-clip editor (tags aren't
+   *  on the saved-clip read yet — same follow-up as visibility). */
+  showTags?: boolean
   /** Emit a partial override for the segment. */
   onChange: (patch: SegSettings) => void
   /** Permanently delete the whole clip (drop from the server + reclaim; a copy survives only via
@@ -104,6 +111,8 @@ export const SegmentSettingsSheet = memo(function SegmentSettingsSheet({
   endMs,
   settings,
   availableSources,
+  showVisibility = true,
+  showTags = true,
   onChange,
   onDelete,
   onDeleteSource,
@@ -135,7 +144,8 @@ export const SegmentSettingsSheet = memo(function SegmentSettingsSheet({
   }
   // Grow with content (title + lane + 3 axes + one row per source + tags), capped at ~85% of the
   // screen — the BottomSheet scrolls past the cap (e.g. all sources armed).
-  const rowCount = 4 + (showLane ? 1 : 0) + orderedSources.length + 1
+  const rowCount =
+    2 + (showVisibility ? 1 : 0) + (showLane ? 1 : 0) + orderedSources.length + (showTags ? 1 : 0)
   const height = Math.min(190 + rowCount * 58, Math.round(Dimensions.get('window').height * 0.85))
   return (
     <BottomSheet visible={visible} onClose={onClose} variant="peek" peekHeight={height} dragToDismiss scrollable>
@@ -156,9 +166,11 @@ export const SegmentSettingsSheet = memo(function SegmentSettingsSheet({
         {/* All controls are multistate toggles, in a fixed order. Visibility above Lane; Lane hides
             once the reaper has reached the clip (re-laning would need a snip — the drawer is
             prefs-only, the dashboard/live edges do the snipping). */}
-        <Row label="Visibility">
-          <SegmentedToggle options={VISIBILITY_OPTIONS} value={settings.visibility} onChange={(v) => onChange({ visibility: v })} />
-        </Row>
+        {showVisibility && (
+          <Row label="Visibility">
+            <SegmentedToggle options={VISIBILITY_OPTIONS} value={settings.visibility} onChange={(v) => onChange({ visibility: v })} />
+          </Row>
+        )}
         {showLane && (
           <Row label="Lane">
             <SegmentedToggle options={LANE_OPTIONS} value={lane} onChange={onLaneChange} />
@@ -194,26 +206,28 @@ export const SegmentSettingsSheet = memo(function SegmentSettingsSheet({
           </Row>
         ))}
 
-        <View style={styles.sources}>
-          <Text variant="monoCaption" color={theme.colors.text.muted} style={styles.sourcesLabel}>
-            TAGS
-          </Text>
-          {tags.length > 0 && (
-            <View style={styles.tagRow}>
-              {tags.map((t) => (
-                <Chip key={t} label={t} selected onPress={() => removeTag(t)} />
-              ))}
-            </View>
-          )}
-          <Input
-            value={tagDraft}
-            onChangeText={setTagDraft}
-            onSubmitEditing={addTags}
-            onEndEditing={addTags}
-            placeholder="Add a tag"
-            returnKeyType="done"
-          />
-        </View>
+        {showTags && (
+          <View style={styles.sources}>
+            <Text variant="monoCaption" color={theme.colors.text.muted} style={styles.sourcesLabel}>
+              TAGS
+            </Text>
+            {tags.length > 0 && (
+              <View style={styles.tagRow}>
+                {tags.map((t) => (
+                  <Chip key={t} label={t} selected onPress={() => removeTag(t)} />
+                ))}
+              </View>
+            )}
+            <Input
+              value={tagDraft}
+              onChangeText={setTagDraft}
+              onSubmitEditing={addTags}
+              onEndEditing={addTags}
+              placeholder="Add a tag"
+              returnKeyType="done"
+            />
+          </View>
+        )}
 
         {/* Permanent delete — drops the clip from the server + reclaims (a copy survives only via
             the reporting path). The screen confirms + calls the API. */}
