@@ -57,7 +57,13 @@ export function SavedClipSettingsSheet({ clip, visible, onClose }: Props) {
         .patchClip(id, body)
         .then(() => {
           qc.invalidateQueries({ queryKey: ['buffer', 'clips'] })
-          qc.invalidateQueries({ queryKey: ['historical-availability'] })
+          // Refetch the time-machine pin feeds so an edit (title / precision / identity) proliferates
+          // to the rewatch globe. The pins come from `historical-clips` (windowed) / `avail-cell`
+          // (Lane B); `historical-availability` is the third feed. All three keyed on time/cell, so
+          // a held-instant view won't auto-refetch — invalidate them all.
+          for (const k of ['historical-clips', 'avail-cell', 'historical-availability']) {
+            qc.invalidateQueries({ queryKey: [k] })
+          }
         })
         .catch((e) => Alert.alert('Could not save', e?.message ?? 'Please try again.'))
     },

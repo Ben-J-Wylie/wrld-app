@@ -637,10 +637,15 @@ export const ClipsScreen = () => {
         }))
       bufferApi
         .patchDirectives(sessionId, directives)
-        // PB3.5 — tagging edits the time-machine availability map: refresh the globe's
-        // windowed feed so the edit reflects there (the "tagging updates what's available"
-        // step). Harmless when the availability feed is off (no such query cached).
-        .then(() => qc.invalidateQueries({ queryKey: ['historical-availability'] }))
+        // A per-segment edit (title / precision / identity / visibility) must reflect on the
+        // time-machine rewatch globe. Its pins come from `historical-clips` (windowed) / `avail-cell`
+        // (Lane B), with `historical-availability` the third feed — all keyed on time/cell, so a
+        // held-instant view won't auto-refetch; invalidate them all. Harmless when a feed isn't cached.
+        .then(() => {
+          for (const k of ['historical-clips', 'avail-cell', 'historical-availability']) {
+            qc.invalidateQueries({ queryKey: [k] })
+          }
+        })
         .catch(() => {})
     },
     [qc],
