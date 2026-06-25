@@ -587,3 +587,81 @@ surface. Per-axis state of the three layers:
 - (2c)+#12 deploy (R1, the M-series compile) → unblocks one-drawer + dropping the dual-write + tags/
   visibility in the library drawer.
 - **R2** (lane as a directive) → makes lane the 7th equal axis; pairs with app thread #2.
+
+---
+
+## ⛳ Rollout to complete delivery (2026-06-25) — assessed across all 3 repos
+
+Assessed wrld-app + wrld-backend (origin/main, 32 commits ahead of the stale local) +
+wrld-mediasoup. **R1 is RESOLVED** — the M-series moderation that blocked the #12/(2c)/#11 compile is
+now committed to backend `origin/main` (16 moderation commits + a conformance-review doc landed
+after the deploy-blocker note), so #12/(2c)/#11 are deployable/likely-deployed. The destination is
+**CONTENT.md §5 "Target architecture (north star)"**; this is the phased path to it.
+
+### State at the start line
+- **Deployed:** U1–U5, #13, PB2 retain-in-place, discover/buffer-pin directive coalesce, M-series.
+- **Deployable now (confirm):** #12 (saved-clip visibility/tags read) · (2c) (library+viewer coalesce
+  the directive) · #11 (per-source + buffered-clip delete endpoints).
+- **App, landed + pushed:** U1/U2/U3 slices; title prefill + saved-clip rename dual-write +
+  library/viewer/time-machine invalidation; per-snip location/torch re-emit.
+
+### The phases (each: goal · owner · depends · done-bar)
+Ordered so **user-visible unification lands first** and the risky structural collapse is **last** —
+by which point behaviour is already unified, so the collapse is invisible to users.
+
+**P0 — Confirm deploy + verify the foundation on device.** *Owner: Aaron (deploy) + Ben (device).*
+Confirm #12/(2c)/#11 live on the box. Then on-device verify the landed work: U1 saved-lane render ·
+U2 snip-eras + **title rename proliferates** · U3 edge-relative save + storage-cap + **save→Library**
+(PB2 flag ON) · #13 **precision/identity on a past pin**. **Done:** Ben's three bugs pass; #12/(2c)/#11
+confirmed live. *(Gates dropping the dual-write.)*
+
+**P1 — App: one resolver + retire the dual-write (the "one read/one write" realization).**
+*Owner: Ben. Depends: P0 (2c live).* Build `resolveClipSettings` (§5); route EVERY surface's reads
+through it (timeline labels off `Stream.title`, drawer prefill, viewer chrome, pin cards). Land the 3
+not-blocked fixes: **library-drawer key bug** (unkeyed `SegmentSettingsSheet` + empty-shell → title
+input stays empty) · **timeline label reads the resolved title** (not `s.title`) · **library drawer
+writes the directive** (so its renames hit the pin). Once (2c) confirmed: **delete the `patchClip`
+dual-write** → directive-only writes. **Done:** every surface reads the resolver; one write path; an
+edit on any axis from any surface proliferates everywhere on device.
+
+**P2 — App: one drawer.** *Owner: Ben. Depends: #12 live.* Unify the clips-page `SegmentSettingsSheet`
+host + the library `SavedClipSettingsSheet` into one (app thread #1); folds in the
+**`ben-frontend` SaveClip precision/identity controls** (axis editing on save) + tags/visibility now
+that #12 exposes them. **Done:** the same drawer everywhere; all 7 axes editable in it.
+
+**P3 — Lane becomes the 7th equal axis.** *Owner: Aaron (R2) + Ben (app thread #2). Highest-leverage
+gap.* Backend: make lane a `DirectiveRange` axis (`retain`/`lane` field; the reaper reads it as *the*
+retain signal — collapse the 3 OR'd signals). App: drop the bespoke `saveClip`/`unsaveClip`; lane
+flows through `editClip` + the resolver like every axis. **Done:** lane is a directive; no save/un-save
+special path; all 7 axes literally equal.
+
+**P4 — Complete the live edges.** *Owner: Ben (U4 app) + Aaron (R3).* U4 app slice: the live
+cam/audio **pause/resume** toggle (`setSourcePaused`, backend deployed) + viewer
+`producerPaused`/`producerResumed` handling + the on-device FFmpeg-gap test. R3: storage-cap as a
+true server **snip-at-cap + auto-flip** (the bytes↔time estimate) → invariant 4 complete. **Done:**
+AV toggles live as one-track-with-a-gap; the cap snips server-side forward.
+
+**P5 — Backstops.** *Owner: Aaron.* **R6** server-side coalesce-adjacent-equal directives (stop
+live-edit era bloat) · **R5** real per-clip tags (or keep the documented union). **Done:** live edits
+don't fragment the manifest / availability feed.
+
+**P6 — The structural collapse + rename (the north star realized).** *Owner: Aaron (schema) + Ben
+(types). Large; last; flag-don't-start until P1–P5 soak.* Collapse `Clip` + `ClipRange` +
+`DirectiveRange` + `ClipTrack` → the one **Clip = range + axes** model (R4); rename to the clean vocab
+(`precision`/`identity`/`keep`/`source`/`Track`; drop `locDisplayPrecision`/`locationPrecision`,
+`visibility: public|anon|draft`, bool `attributed`, `lane`, `splitPoints`, the stale `motion`/`temp`
+kinds). App: types follow; the resolver collapses to a column read (fallback chain gone); delete the
+bridge scaffolding. **Done:** the schema IS §5; flip the §12 bridge table to "done."
+
+### Adjacent open items (tracked, NOT part of this rollout)
+- **Day/night terminator (KAN-52)** — architecture decision (Mapbox fill vs three.js); separate.
+- **Haven viewport-tiles** — planet-keyed tile index + app subscribe; separate scaling lane.
+- **PPV badge** (`ppv-badge-ben`) — small viewer-UI piece; separate.
+- **DiscoveryHandoffCard `kind:'clip'` variant** (`ben-frontend`) — time-machine clip-pin card;
+  lands with the Time-Machine consumer, adjacent to P1.
+
+### Sequencing logic
+P0 gates P1. P1+P2 are pure-app and deliver the unification users feel (edits proliferate, one
+drawer) on the *current* schema. P3+P4 complete the axes + live edges. P5 hardens. **P6 is the only
+schema migration** and is deliberately last — once P1–P5 hold, the collapse changes nothing
+user-visible, just deletes the scaffolding. Each phase is independently shippable + verifiable.
