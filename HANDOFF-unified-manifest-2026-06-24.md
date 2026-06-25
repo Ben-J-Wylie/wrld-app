@@ -119,6 +119,121 @@ edges authoritatively. The client sends **edge-relative intent**, never a frozen
 
 U1 is the smallest high-value start. U4 is separable and last.
 
+> **✅ U4 MEDIASOUP DONE + DEPLOYED (Aaron, 2026-06-25, `wrld-mediasoup` `8857e07`) —
+> pause/resume model.** Decided with Ben: AV behaves like every other source — **one track
+> with a gap where it's off**, not a new track per toggle. So the AV toggle is
+> `producer.pause()/resume()` (the recorder's consumer + viewers' consumers go quiet → a gap
+> in the same track), NOT close/re-attach. No recorder refactor, no new codec group, no
+> backend change.
+> - **Wire:** `setSourcePaused { kind: 'camera'|'audio'|'screen', paused: boolean }` (WS,
+>   broadcaster-only). The server pauses/resumes the producer; on resume it requests a
+>   keyframe (recorder + viewers get a fresh IDR after the gap); it notifies viewers
+>   **`producerPaused`** / **`producerResumed`** (so the app shows camera-off + re-renders on
+>   resume). Additive + inert until the app sends it.
+> - **Manifest half is U2:** mark the off range with a `sources:{kind:false}` snip
+>   (`POST …/snip`) so the clip editor + replay honour it; the footage genuinely has the gap.
+> - **⚠️ ON-DEVICE GATE (mediasoup is unverifiable headlessly):** confirm FFmpeg survives the
+>   paused RTP gap — go live, pause camera ~30s, resume → recording continues as ONE track
+>   with a gap, the session does NOT stop. (UDP input, no read timeout → should block + resume;
+>   if it dies on the gap, the fallback is close/re-attach.)
+>
+> **App slice for U4 (Ben):** the live source-rail camera/audio toggle sends `setSourcePaused`
+> (+ the U2 `sources:{kind:false}` snip), and the producer-side `produce`/`closeProducer` for
+> the WebRTC track is handled by the source-rail/`useMediasoup` path; viewers handle
+> `producerPaused`/`producerResumed` (show camera-off, re-render). Note: turning ON a source
+> that was NEVER produced this session is a first `produce` (not pause/resume) — viewers see
+> it via `newProducer`, but the recorder attaching a brand-new chain mid-session is the
+> close/re-attach case, still out of scope (arm AV at go-live for the common path).
+
+> **✅ U3 CORE DONE + DEPLOYED (Aaron, 2026-06-25, `wrld-backend` `d643bcc`).** Edge-relative
+> save + server clamp + the storage-cap gate — backend-only; remaining U3 is **app** (Ben).
+> - **Edge-relative save (`POST /buffer/me/clips`):** new body flags **`fromReaperEdge`** /
+>   **`toNow`** → the server uses ITS live edges (`earliestAt` / `now`) instead of a stale
+>   client ms. Numeric `startAtMs`/`endAtMs` are ALSO clamped to `[earliestAt, now]`, so a
+>   save never over-claims evicted or future footage — **"save the remainder."** (Send a
+>   numeric best-effort + the flag for the live edge; the server re-clamps. Decided over
+>   strict sentinels per the handoff's robustness note.)
+> - **Distinct-clips-with-gaps falls out of the primitive:** the lane toggle while reaping =
+>   **successive edge-relative saves** over the saved spans; the buffer gaps between reap. No
+>   new "lane toggle" endpoint — the app fires a save per saved span (`fromReaperEdge`/`toNow`
+>   for the live ones). The reaper only eats from the left → no interior gaps.
+> - **Storage cap:** the save returns **`409 { error: 'storage_cap', usedBytes, quotaBytes,
+>   neededBytes }`** when `used + thisSave > quota`. **App:** catch it → show the warning +
+>   **flip the dashboard lane back to buffer** (the broadcast keeps printing to buffer).
+> - **Deferred (noted):** partial snip-AT-cap *during a live saved-lane print* + the U1
+>   saved-lane real-time quota (needs a bytes↔time estimate) — for now the cap is
+>   all-or-nothing per save + app-flips-to-buffer. **U4** is AV-live renegotiation.
+>
+> **App slice for U3 (Ben):** revert the reaper-disable guard (drag + sheet stay enabled
+> during reap); save a being-reaped clip with `fromReaperEdge` (+ `toNow` for the live edge);
+> map the dashboard save↔buffer toggle to successive saves; on `409 storage_cap` show the
+> warning + flip the lane to buffer. On-device verify: save while reaping retains the
+> surviving remainder; toggling save↔buffer mid-reap yields distinct clips with gaps; hitting
+> the cap flips to buffer with a warning.
+
+> **✅ U2 BACKEND DONE + DEPLOYED (Aaron, 2026-06-25, `wrld-backend` `11333c3`).** The
+> segmented live manifest (data/metadata) — backend-only; remaining U2 is **app** (Ben).
+> - **Wire (decided):** **`POST /buffer/me/sessions/:id/snip { settings }`** (owner +
+>   `PB3_PER_RANGE` gated, **live-only** — 409 once ended). The directive is backend-owned,
+>   so the snip is plain HTTP (no mediasoup hop). **Send only the new settings — no `ms`;**
+>   the server stamps its authoritative `now`. `settings` = the full per-range values
+>   `{ visibility?, precision?, attributed?, sources?, title?, tags? }` (missing axis →
+>   default). On each snip the server closes the current OPEN era at now and opens a new one.
+> - **`lane` is NOT in the snip** — per-range lane + its retain+snip mechanics are **U3**;
+>   AV (camera/audio) toggles are **U4**. So U2 = the data/metadata axes only.
+> - **Per-snip initial state:** the **chat marker** (the one source the app can't seed) is
+>   written server-side at the snip. **Client-sourced (location/sensors/torch) is yours:**
+>   on a snip, re-emit each armed source's current value via the existing live channels
+>   (`locationUpdate`/`telemetry`) — exactly your go-live baselines, fired again at the snip —
+>   so a clip cut at the new era has initial state.
+> - **Open-era detail for the app:** a live era is a directive with `endAtMs` = a max-date
+>   sentinel (`8_640_000_000_000_000`). `GET /buffer/me` `directives[]` will show it; treat
+>   that end as "open / to the live edge." It's clamped to the session end on stop.
+> - **⚠️ Coalesce / debounce (decided open question — important):** snip-at-now fires on *any*
+>   setting change, so rapid toggles spawn tiny eras → manifest + availability-feed bloat +
+>   pin density (Time-Machine compat #1). **Debounce trivial changes app-side** and avoid a
+>   snip when the new settings equal the current era's. (Server-side coalesce-on-equal is a
+>   possible follow-up; for now the app should not fire no-op snips.)
+>
+> **App slice for U2 (Ben):** the dashboard's per-range controls call `POST …/snip` on a live
+> change (the dashboard *is* the now-edge editor; `captureConfig` is the now-edge slice) +
+> re-emit the changed source's current value; debounce. On-device verify: change precision/
+> identity/title mid-broadcast → the time machine shows distinct eras with the right settings.
+
+> **✅ U5 DONE + DEPLOYED (Aaron, 2026-06-25, `wrld-backend` `0eadbc1`).** `GET /clips/discover`
+> now coalesces the **per-segment directive title alive at the instant** over the clip/stream
+> title, so an edited per-segment title shows on the time-machine pin. Resolved in the active
+> windowed + tiled feed (at the pin's first visible interval start) AND the `?at=` fallback (at
+> T): `directive.title (covering the instant) → existing clip/stream title`. No titled directive
+> → unchanged. **App already renders `pin.title`** — no app change needed. (A pin spanning
+> multiple titled segments shows the first segment's title; the finer per-range *pin split* is
+> the larger Time-Machine reconciliation, not U5.) On-device verify owed: edit a segment title
+> in the clip editor → its globe pin shows the new title.
+
+> **✅ U1 BACKEND + MEDIASOUP DONE + DEPLOYED (Aaron, 2026-06-25, `wrld-backend` `3f4527c` +
+> `wrld-mediasoup` `2b8be57`).** The engine half of U1 is live; remaining U1 is the **app
+> dashboard toggle** (Ben).
+> - **Wire:** `createRoom` accepts **`lane: 'buffer' | 'saved'`** (omitted → `'buffer'`).
+>   It's stashed on `room._meta.lane` and forwarded to the backend's `allocateRecording`,
+>   which tags the new **`BufferSession.lane`**. So the dashboard's only job is to send
+>   `lane` on go-live (next to the existing `sources`/`subscribersOnly`/`visibility`).
+> - **Retain-from-start:** a `saved`-lane session's footage is **never reaped** (live AND
+>   after end) — the reaper honours the lane directly (independent of the PB2/PB3 flags).
+> - **Render:** `GET /buffer/me` now returns **`session.lane`**, so the clips page can put
+>   a live saved-lane session in the **saved row** from go-live.
+> - **Deferred to later U-phases (so you don't expect them yet):** a saved-lane session is
+>   retained but NOT yet materialised into a durable `Clip` — it won't appear in
+>   `GET /buffer/me/clips` (it's a saved-lane *session* in `GET /buffer/me`); that
+>   materialise + live quota accounting + the **storage cap** are **U3**, and the live
+>   lane-toggle + snip-at-now is **U2/U3**. For U1, `saved` simply means "retained from
+>   the start." There's also no cap yet → a saved go-live retains unbounded (fine at f&f;
+>   U3 adds the cap).
+>
+> **App slice for U1 (Ben):** the dashboard **lane SegmentedToggle (BUFFER | SAVED)** next
+> to arming; send `lane` on `createRoom`; render a `session.lane === 'saved'` live session
+> in the saved lane. On-device verify owed: go live tagged `saved` → footage isn't reaped +
+> shows in the saved lane.
+
 ---
 
 ## Open questions for Aaron (decide + pin in your CLAUDE.md)
