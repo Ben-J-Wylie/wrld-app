@@ -1186,11 +1186,30 @@ slice (define the type + adapters, migrate one surface to prove it), NOT a big-b
     ClipDetail/SavedClip/LaneClip) now **compile-prove** as `CanonicalClip` projections (the foundation
     is total). Local-only commits `64b0da0` etc. (holding pushes until Aaron's D1 lands).
   - **next slices (need device testing or a decision — paused until we resume pushing / D1 lands):**
-    - **Discovery pins** (`clipToStream`/`bufferPinToStream`): blocked on a **design decision** — the
-      buffer pin carries **access/monetization** fields (`subscriptionPriceUsd`, `accessTier`,
-      `ppvEventId`) that are NOT clip content axes. Decide whether `CanonicalClip` grows an optional
-      `access` projection (so it can represent a discovery pin) or those stay a discovery-only extra
-      outside the canonical core. Also it's device-verified pin code (#1) → migrate with a device check.
+    - **Discovery pins** (`clipToStream`/`bufferPinToStream`): needs the **access-fields decision**
+      (below) + it's device-verified pin code (#1) → migrate with a device check.
+
+      **ACCESS-FIELDS DECISION (recommendation, 2026-06-26 — confirm at CU4):** the buffer pin carries
+      `subscriptionPriceUsd` · `accessTier` · `ppvEventId`. These are **NOT clip content axes** — §5
+      defines a clip as range + the **7** axes (title/tags/visibility/identity/precision/sources/keep);
+      monetization/access is "who may watch," derived from the host's subscription settings + the
+      stream/clip gate, orthogonal to the content. **Recommend: keep the 7 axes pure; add an OPTIONAL
+      `access` projection on `CanonicalClip`** (sibling to `axes`, NOT inside it), populated only by the
+      discovery adapters, absent on library/viewer projections:
+      ```ts
+      access?: {
+        tier: 'public' | 'subscriber' | 'ppv'       // BufferPin.accessTier; clip pin → from subscribersOnly
+        subscriptionPriceUsd?: number | null         // host's price (card "Subscribers only · $X/mo")
+        ppvEventId?: string | null
+      }
+      ```
+      `subscribersOnly: boolean` stays a top-level resolved gate (already present, widely read). The
+      `clipToStream`/`bufferPinToStream` unification then routes through `canonicalToStream(canon)`,
+      mapping `access.subscriptionPriceUsd → host.subscriptionPriceUsd` etc. — behaviour-preserving.
+      Rationale: keeps `ResolvedAxes` exactly the §5 seven (so CU4's schema collapse stays clean — the
+      axes become columns; access stays its own concern), while letting `CanonicalClip` fully represent
+      a discovery pin so every surface (incl. discovery) is one shape. *Alternative considered + rejected:
+      folding access into the axes — pollutes the §5 seven and conflates content with entitlement.*
     - **Viewer chrome** (`fromClipDetail`) + **clips-grid `LaneClip` runtime**: behaviour-preserving but
       on verified/high-churn code → do with a device pass.
   - The CU3 app pieces (the `keep` axis in the drawer + retiring the bespoke save flow) wait on D1/D3.
