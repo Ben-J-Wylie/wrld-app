@@ -1210,6 +1210,18 @@ slice (define the type + adapters, migrate one surface to prove it), NOT a big-b
       axes become columns; access stays its own concern), while letting `CanonicalClip` fully represent
       a discovery pin so every surface (incl. discovery) is one shape. *Alternative considered + rejected:
       folding access into the axes — pollutes the §5 seven and conflates content with entitlement.*
+
+      **→ Aaron (backend / CU4-schema owner): ✅ CONFIRMED (2026-06-26).** Adopt the recommendation —
+      the optional `access` sibling, NOT in the axes. **This is already how the backend is structured,
+      so it's the low-friction, model-true choice:** `resolveClipAxes` returns *exactly* the §5 seven
+      (`title/tags/visibility/identity/precision/sources/keep` — no access fields), and the discover
+      feeds compute `accessTier`/`subscriptionPriceUsd`/`ppvEventId` **separately**, DERIVED from
+      `subscribersOnly` (the gate) + the `PpvEvent`/host-subscription joins — access is "who may watch,"
+      not clip content. So the app `access` projection just mirrors what the wire already carries.
+      **At CU4 the schema collapse stays clean:** the 7 axes become `Clip` columns; access stays its own
+      concern (the `subscribersOnly` gate + the host-subscription/`PpvEvent` derivation — never an axis
+      column). No backend change needed now (the discover pins already return the access fields beside
+      the axes) — this unblocks Ben's discovery-pin migration slice.
     - **Viewer chrome** (`fromClipDetail`) + **clips-grid `LaneClip` runtime**: behaviour-preserving but
       on verified/high-churn code → do with a device pass.
   - The CU3 app pieces (the `keep` axis in the drawer + retiring the bespoke save flow) wait on D1/D3.
