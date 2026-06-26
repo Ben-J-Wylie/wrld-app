@@ -19,6 +19,7 @@ import { KIND_TO_FEEDKIND, FEEDKIND_TO_KIND, SOURCE_RAIL_ORDER } from '@/compone
 import type { FeedKind } from '@/components/features/broadcast/FeedThumb'
 import { applySetting, mergeSettings, type SegSettings, type SettingsRange, type Precision } from '@/lib/segmentSettings'
 import { wirePatch, feedSourcesToWire, persistDirectives, invalidateClipReads } from '@/lib/clipDirectives'
+import { fromSavedClip, precisionToEditable, identityToEditable } from '@/types/clip'
 import { useBuffer } from '@/hooks/useBuffer'
 import { bufferApi, type SavedClip, type ClipPatch } from '@/api/buffer'
 
@@ -141,13 +142,18 @@ export function SavedClipSettingsSheet({ clip, visible, onClose }: Props) {
       const bk = FEEDKIND_TO_KIND[fk]
       sourceVals[fk] = bk ? clip.sources[bk] ?? true : true
     }
+    // CU4 prep — the seed's scalar axes are read through the canonical clip adapter + vocab bridge
+    // (one shape, one translation point) instead of inline field reads. Behaviour-preserving: the
+    // bridge mappers are exact inverses of the prior inline logic (off↔private, attributed↔shown,
+    // the 'Untitled clip'→null title rule lives in `fromSavedClip`). `sources` stays the drawer's
+    // per-available-row map (display-specific), not the canonical backend-keyed map.
+    const canon = fromSavedClip(clip)
     const seed: SegSettings = {
-      visibility: 'public',
-      precision: (clip.locDisplayPrecision as Precision) ?? 'exact',
-      identity: clip.attributed ? 'attributed' : 'anon',
+      visibility: canon.axes.visibility,
+      precision: precisionToEditable(canon.axes.precision),
+      identity: identityToEditable(canon.axes.identity),
       sources: sourceVals,
-      // 'Untitled clip' is the backend's no-title fallback → treat as empty so the placeholder shows.
-      title: clip.name && clip.name !== 'Untitled clip' ? clip.name : undefined,
+      title: canon.axes.title ?? undefined,
     }
     const display = optimistic && optimistic.id === clip.id ? mergeSettings(seed, optimistic.patch) : seed
     return {
