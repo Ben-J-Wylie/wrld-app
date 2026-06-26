@@ -840,9 +840,13 @@ the CU1 single-authority guarantees (and is why authority = `clipId=null`).
 
 - **Authority:** `clipId=null` session `DirectiveRange` rows, **retained with the footage** (CU1 reaper
   guarantee). `Clip.*`/`stream.*`/`clipId`-set = read-fallbacks → deleted in CU4.
-- **`ResolvedAxes`** (every backend read returns it, resolved at the queried instant T):
-  `{ title, tags[], visibility:'public'|'private', identity:'shown'|'anon',
+- **`ResolvedAxes`** (every **single-instant** backend read returns it, resolved at the queried
+  instant T): `{ title, tags[], visibility:'public'|'private', identity:'shown'|'anon',
   precision:'exact'|'city'|'country'|'private', sources:{[source]:bool}, keep:'kept'|'reapable' }`.
+  **AMENDED 2026-06-26 (see "CU1 COMPLETENESS" #1):** **window/tile** feeds (windowed/tiled discover)
+  return the per-range **`AxisDirective[]`**, not pre-resolved axes — a window has no single T, so the
+  **app** resolves at the playhead via `resolveClipSettings`. Single-instant reads
+  (`/clips/:id`, `/buffer/me/clips`, `/buffer/session/:id`, `?at=`) are unchanged.
 - **App reads it via one `resolveClipSettings(serverClip) → ResolvedAxes`** — a thin pass-through;
   every surface reads *that*. (Pre-CU1 the impl maps today's per-endpoint shapes; post-CU1 it's a
   pass-through — one-place swap.)
@@ -939,21 +943,31 @@ Device test (Ben): a clips-page edit (which writes the `clipId=null` directive o
 updates everything that reads `GET /buffer/me/clips` (saved lane, library, library-drawer title) but
 **NOT the time machine or the buffer-lane timeline label**. Root cause is in CU1's read routing:
 
-1. **Windowed/tiled discover resolves at the wrong instant.** `windowAvailability` calls
-   `resolveClipAxes(sessionAxes, intervals[0].startMs, …)` — the session's **first public interval**
-   (≈ session start / encoder warm-up). But edits live on the **clip's range**, which starts *later*
-   than `intervals[0].startMs` whenever the session has any leading footage. So the covering directive
-   at `intervals[0].startMs` is the *pre-edit* (or empty) era → the pin resolves stale. The legacy
-   `?at=` path is correct (`resolveClipAxes(atSessionAxes, Tms)` — the playhead). **Fix:** the
-   windowed/tiled feed must resolve per-pin at an instant that reflects edits — either (a) return the
-   per-range directives and let the app resolve at the **playhead** (matches "clipAt(t) selects + axes
-   current"; the app already resolves *which* interval is alive locally), or (b) resolve at the clip's
-   representative instant, not the session's first interval. (a) is the model-true fix. *(This is the
-   "pin COVERAGE nuance" from "CU1 — THE PEDANTIC DETAIL" §D — it's the live blocker for the time
-   machine; Ben's globe uses the windowed/tiled feed, not `?at=`.)*
-2. **`GET /buffer/me` not routed through `resolveClipAxes`.** The buffer descriptor's `session.title`
-   (read by the clips-page **buffer-lane** timeline label) is still raw `stream.title`. Route it like
-   the others so the buffer-lane label resolves. (Minor vs #1, same family.)
+1. **Windowed/tiled discover resolves at the wrong instant — ✅ DECIDED (a), 2026-06-26.**
+   `windowAvailability` calls `resolveClipAxes(sessionAxes, intervals[0].startMs, …)` — the session's
+   **first public interval** (≈ session start / warm-up). Edits live on the **clip's range** (later
+   than `intervals[0].startMs` whenever the session has leading footage) → the covering directive at
+   that instant is pre-edit/empty → the pin resolves stale. (The `?at=` path is correct —
+   `resolveClipAxes(atSessionAxes, Tms)`, the playhead.) A window feed has **no single T** (it's a
+   window the app scrubs within), so resolving server-side to one value can't reflect the playhead.
+   The contract amendment:
+   > **CONTRACT AMENDMENT (2026-06-26): window/tile feeds return the per-range directives, NOT
+   > pre-resolved axes; the app resolves at the playhead. Single-instant reads (`/clips/:id`,
+   > `/buffer/me/clips`, `/buffer/session/:id`, `?at=`) keep returning `ResolvedAxes` server-side.**
+   - **Aaron (small, his only remaining read-routing item):** attach each pin's per-range
+     **`AxisDirective[]`** to the windowed/tiled pin payload — `fetchDiscoverDirectives` already loads
+     `sessionAxes`; pass through the directives covering the pin's window instead of pre-resolving at
+     `intervals[0].startMs`. Drop that resolve.
+   - **Ben/app (CU2 follow-on, mine):** resolve the pin's displayed axes (title/precision/identity) at
+     the **playhead** via `resolveClipSettings(pinDirectives, playheadMs)` — the app already computes
+     the playhead + which interval is alive locally. Model-true (resolves at the exact instant shown).
+   *(The "pin COVERAGE nuance" from "CU1 — THE PEDANTIC DETAIL" §D.)*
+2. **Buffer-lane timeline label — ✅ REASSIGNED to app (Ben), NOT Aaron.** `GET /buffer/me` ALREADY
+   returns each `session.directives` (the clipId=null rows the clips page seeds `settingsRanges` from),
+   so the app can resolve the buffer-lane label itself —
+   `resolveClipSettings(session.directives, segmentStart).title ?? session.title` — no backend change.
+   (Was filed as an Aaron routing item; the data's already on the wire.)
 
-Both are CU1 read-routing completeness — the **write side is unified** (clips page + library both
-write `clipId=null` after CU2 step 2); these close the last two read paths.
+Write side is unified (clips page + library both write `clipId=null` after CU2 step 2). After the
+amendment, **Aaron's only remaining read-routing work is #1's backend half** (pass directives on
+windowed/tiled pins); #2 is app-side; the single-instant reads already return `ResolvedAxes`.
