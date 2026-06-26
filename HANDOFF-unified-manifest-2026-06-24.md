@@ -872,3 +872,39 @@ guarantee + route every read path; the "CU1 — THE PEDANTIC DETAIL" appendix is
 **Ben/app → CU2** lands the moment CU1 returns `ResolvedAxes` (this work-map is the mechanical
 change; the throwaway pre-CU1 impl is optional — cleaner to wait for CU1's pass-through). No app code
 builds on the fragmented model before CU1.
+
+> **✅ CU1 BACKEND DONE + DEPLOYED + VERIFIED (Aaron, 2026-06-26) — ⏳ not yet committed to git.**
+> Built per the work-order + the locked contract; **no schema change / no migration**
+> (`DirectiveRange` already carries all 7 axes — CU1 is read-path consolidation + the reaper
+> guarantee). `tsc` + `npm run build` clean · **331 tests green** (+12 resolver, +2 reaper
+> guarantee). **Deployed to the box** (api rebuilt; "No pending migrations"; health 200) +
+> **verified live** via a minted-JWT pass: windowed discover (11 buffer pins resolved through
+> `resolveClipAxes`), `?at=` (7), tiled cell (counts), `GET /buffer/me/clips` (200 authed),
+> `GET /buffer/session/:id` (200, title + identity resolved). All 200, behaviour-preserving on
+> real data. *(The resolver's OVERRIDE — anon/precision/title changing the output — is unit-tested;
+> live data is external-cam buffer sessions with no clipId=null directives yet, so the on-device
+> proof is Ben editing a segment + watching it proliferate to pin/viewer/library identically.)*
+> Detail in `wrld-backend/CLAUDE.md` "CU1 — one clip-axes resolver". What landed:
+> - **`src/lib/resolveClipAxes.ts`** — the ONE pure resolver returning the LOCKED `ResolvedAxes`
+>   `{ title, tags[], visibility:'public'|'private', identity:'shown'|'anon',
+>   precision:'exact'|'city'|'country'|'private', sources, keep:'kept'|'reapable' }`. Authority =
+>   `clipId=null` session directives at the queried instant T; clip/stream = read-fallbacks.
+>   `precision:'private'` = the location-hidden (legacy 'off') state.
+> - **Every read path routed through it:** windowed/tiled + legacy `?at=` discover buffer pins,
+>   `GET /clips/:id`, `GET /buffer/me/clips`, `GET /buffer/session/:id` (the last now honours **anon**
+>   too — closes the #13 buffer-viewer gap). Behaviour-preserving where the deployed code already
+>   coalesced; adds the full-axis plumbing CU2 reads.
+> - **Reaper guarantee:** a `retain:true` `clipId=null` directive + its `BufferSession` row survive
+>   retention (never cascade-cleaned) — additive + inert today (no clipId=null retain rows exist yet),
+>   the foundation CU3's lane-as-a-directive retain builds on.
+>
+> **➡️ CU2 (Ben) IS GO NOW — CU1 is live on the box.** Build `resolveClipSettings` as the thin
+> pass-through over the server's `ResolvedAxes`, route EVERY surface's reads through it (the "CU2 —
+> app surface work-map" table above is the mechanical change), and **delete the `patchClip`
+> dual-write** + the clips-page `clipId`-vs-session routing in `onSheetChange` (CU1 resolves
+> `clipId=null` as the single authority, so the library/viewer/pin all read the same value). Collapse
+> `SavedClipSettingsSheet` into the one `SegmentSettingsSheet` host. **On-device proof of CU1 you can
+> watch:** edit a segment's title / blur / anon on the clips page → it proliferates IDENTICALLY to the
+> time-machine pin, the clip viewer, and the library (live data today is external-cam buffer sessions
+> with no per-segment directives yet, so the override only shows once you make one). Backend `git
+> be1e9c5` (`wrld-backend/main`).
