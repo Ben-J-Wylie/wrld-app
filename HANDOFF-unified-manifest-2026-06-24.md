@@ -1009,8 +1009,8 @@ already return `ResolvedAxes`.
   start**, which is the SAME stale-instant bug #1 fixed for the pin.
 
 **Net:** a clips-page / library-drawer edit now proliferates to saved lane · library · buffer-lane
-label · clips-page viewer · **time-machine pin (title/identity playhead-resolved)**. The **time-machine
-viewer is still stale (#3)**.
+label · clips-page viewer · **time-machine pin (title/identity playhead-resolved)**. The time-machine
+viewer's **backend** now resolves at the playhead too (#3 ✅ below) — **app just needs to pass `at`**.
 
 ### #3 — Time-machine VIEWER resolves at the raw start (Aaron — the symmetric #1 fix). On-device 2026-06-26.
 Device test (Ben): the time-machine **pin label updates** (title + identity, playhead-resolved) but the
@@ -1024,12 +1024,24 @@ The pin avoids this by resolving at the **playhead** (inside the footage). This 
 read-routing — the viewer half of #1.** The app CANNOT fix it alone: these reads return resolved
 scalars, not the directives.
 
-**Recommended contract (symmetric with #1, decide at kickoff):** the **app passes the viewed instant**
-(`?at=<absoluteMs>` — the time-machine playhead at tap, = `clip/session.startAtMs + seekSec`), and the
-backend **resolves axes at `at`** (clamped to the clip/session range) instead of the raw start; absent
-`at` → today's start behaviour (no regression).
-- **Aaron (backend):** accept `at` on `GET /clips/:id` + `GET /buffer/session/:id`; resolve there.
-- **Ben (app):** `ClipViewerScreen` passes `at` (it already has the playhead/seekSec) on both reads.
+**Contract (symmetric with #1):** the **app passes the viewed instant** (`?at=<absoluteMs>` — the
+time-machine playhead at tap, = `clip/session.startAtMs + seekSec`), and the backend **resolves axes at
+`at`** (clamped to the clip/session range) instead of the raw start; absent `at` → today's start
+behaviour (no regression).
+- **Aaron (backend) — ✅ DONE + DEPLOYED + VERIFIED (2026-06-26, `wrld-backend 60f7c5f`).** Both
+  `GET /clips/:id` and `GET /buffer/session/:id` accept an optional **`?at=<absoluteMs>`** and resolve
+  the axes there, **clamped to the clip/session range** (`/clips/:id` → `[startAtMs, endAtMs]`;
+  `/buffer/session/:id` → `[session start, endedAt|now]`). Absent/invalid `at` → the raw start (today's
+  behaviour, zero regression). Verified live: `?at=` accepted + clamped (mid-window / 0 / far-future /
+  garbage all 200) + regression-free (same title with/without `at` on the no-edit prod sessions); the
+  per-instant override is unit-tested (`resolveClipAxes` "resolves PER INSTANT"). **Note:** these reads
+  still return resolved SCALARS (not directives) — single-instant, per the contract; only the
+  window/tile PINS carry `directives` (#1).
+- **Ben (app) — remaining:** `ClipViewerScreen` passes **`at = clip/session.startAtMs + seekSec`** (the
+  playhead it already tracks) on **both** reads (`GET /clips/:id?at=` and `GET /buffer/session/:id?at=`).
+  **Verify on device:** edit a later segment's title/anon → open its time-machine viewer at that era →
+  the viewer chrome reflects the edit (live prod data is no-edit external cams, so the change only shows
+  once a per-range edit exists — same as the pin).
 
 Minimal-fix alternative (no app change): resolve at a **footage-interior** instant (e.g. the first
 public interval start, like the pin's pin-level fallback) instead of the raw start — fixes whole-clip /
