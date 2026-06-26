@@ -11,13 +11,13 @@
 // vocab predates the PB4 private|public axis) + tags aren't on the SavedClip read yet, so they're
 // hidden here (full parity is an Aaron follow-up — expose visibility/tags on the saved-clip read).
 
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Alert } from 'react-native'
 import { useQueryClient } from '@tanstack/react-query'
 import { SegmentSettingsSheet } from './SegmentSettingsSheet'
 import { KIND_TO_FEEDKIND, FEEDKIND_TO_KIND, SOURCE_RAIL_ORDER } from '@/components/features/stream/sourceMeta'
 import type { FeedKind } from '@/components/features/broadcast/FeedThumb'
-import { applySetting, type SegSettings, type SettingsRange, type Precision } from '@/lib/segmentSettings'
+import { applySetting, mergeSettings, type SegSettings, type SettingsRange, type Precision } from '@/lib/segmentSettings'
 import { useBuffer } from '@/hooks/useBuffer'
 import { bufferApi, type SavedClip, type ClipPatch, type SegmentDirective } from '@/api/buffer'
 
@@ -37,6 +37,11 @@ function fmtDate(ms: number): string {
 export function SavedClipSettingsSheet({ clip, visible, onClose }: Props) {
   const qc = useQueryClient()
   const { data: buffer } = useBuffer(!!clip)
+
+  // Optimistic display patch so a toggle SLIDES immediately (the server read `clip.*` only updates
+  // on refetch; without this the control reads the stale prop and doesn't move). Scoped to the open
+  // clip's id — it auto-resets when a different clip opens (the `id !== clip.id` guard), no effect.
+  const [optimistic, setOptimistic] = useState<{ id: string; patch: SegSettings } | null>(null)
 
   // Refetch every surface that reads the clip's axes so a resolved edit re-reads.
   const invalidate = useCallback(() => {
@@ -77,6 +82,8 @@ export function SavedClipSettingsSheet({ clip, visible, onClose }: Props) {
   const apply = useCallback(
     (patch: SegSettings) => {
       if (!clip) return
+      // Slide the control now (optimistic), regardless of which write path runs below.
+      setOptimistic((o) => ({ id: clip.id, patch: mergeSettings(o && o.id === clip.id ? o.patch : {}, patch) }))
       // Legacy clip with no buffer session → the old clip-level path (recordings purged; rare).
       if (!sid) {
         const body: ClipPatch = {}
@@ -142,7 +149,47 @@ export function SavedClipSettingsSheet({ clip, visible, onClose }: Props) {
     [qc, onClose],
   )
 
-  if (!clip) {
+  // Build the sheet's `settings` + `availableSources` once per (clip, optimistic) — the sheet is
+  // `memo`'d and wants referentially-stable props (a new object every render would reconcile it
+  // mid-gesture). `display` = the server-resolved clip view + the optimistic patch (slides controls).
+  const built = useMemo(() => {
+    if (!clip) return null
+    const avail: FeedKind[] = []
+    const sourceVals: Record<string, boolean> = {}
+    const fkSet = new Set<FeedKind>()
+    for (const k of clip.kinds) {
+      const fk = KIND_TO_FEEDKIND[k]
+      if (fk && fk !== 'profile' && fk !== 'loc') fkSet.add(fk)
+    }
+    for (const fk of SOURCE_RAIL_ORDER) {
+      if (!fkSet.has(fk)) continue
+      avail.push(fk)
+      const bk = FEEDKIND_TO_KIND[fk]
+      sourceVals[fk] = bk ? clip.sources[bk] ?? true : true
+    }
+    const seed: SegSettings = {
+      visibility: 'public',
+      precision: (clip.locDisplayPrecision as Precision) ?? 'exact',
+      identity: clip.attributed ? 'attributed' : 'anon',
+      sources: sourceVals,
+      // 'Untitled clip' is the backend's no-title fallback → treat as empty so the placeholder shows.
+      title: clip.name && clip.name !== 'Untitled clip' ? clip.name : undefined,
+    }
+    const display = optimistic && optimistic.id === clip.id ? mergeSettings(seed, optimistic.patch) : seed
+    return {
+      avail,
+      settings: {
+        visibility: display.visibility ?? 'public',
+        precision: display.precision ?? 'exact',
+        identity: display.identity ?? 'attributed',
+        sources: display.sources ?? {},
+        title: display.title,
+        tags: display.tags,
+      },
+    }
+  }, [clip, optimistic])
+
+  if (!clip || !built) {
     // Keep the sheet mounted so the close animation can run; render an empty/invisible shell.
     // `key` distinct from the real clip below so React re-mounts (re-seeds the title `useState`)
     // when a clip opens — without it the input stays stuck on the empty shell's '' (the empty-title bug).
@@ -167,22 +214,6 @@ export function SavedClipSettingsSheet({ clip, visible, onClose }: Props) {
     />
   }
 
-  // The captured sources as FeedKinds (identity is its own axis; location has the precision axis) —
-  // ordered by the shared rail order, value from the clip's stored per-source map.
-  const avail: FeedKind[] = []
-  const sourceVals: Record<string, boolean> = {}
-  const fkSet = new Set<FeedKind>()
-  for (const k of clip.kinds) {
-    const fk = KIND_TO_FEEDKIND[k]
-    if (fk && fk !== 'profile' && fk !== 'loc') fkSet.add(fk)
-  }
-  for (const fk of SOURCE_RAIL_ORDER) {
-    if (!fkSet.has(fk)) continue
-    avail.push(fk)
-    const bk = FEEDKIND_TO_KIND[fk]
-    sourceVals[fk] = bk ? clip.sources[bk] ?? true : true
-  }
-
   return (
     <SegmentSettingsSheet
       key={clip.id}
@@ -199,15 +230,8 @@ export function SavedClipSettingsSheet({ clip, visible, onClose }: Props) {
       posterUrl={clip.thumbnailUrl}
       startMs={clip.startAtMs}
       endMs={clip.endAtMs}
-      settings={{
-        visibility: 'public',
-        precision: (clip.locDisplayPrecision as Precision) ?? 'exact',
-        identity: clip.attributed ? 'attributed' : 'anon',
-        sources: sourceVals,
-        // 'Untitled clip' is the backend's no-title fallback → treat as empty so the placeholder shows.
-        title: clip.name && clip.name !== 'Untitled clip' ? clip.name : undefined,
-      }}
-      availableSources={avail}
+      settings={built.settings}
+      availableSources={built.avail}
       onChange={apply}
       onDelete={() => onDelete(clip.id)}
     />
