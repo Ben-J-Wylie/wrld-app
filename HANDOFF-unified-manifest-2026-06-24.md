@@ -1166,7 +1166,15 @@ slice (define the type + adapters, migrate one surface to prove it), NOT a big-b
     proof). First runtime migration: `SavedClipSettingsSheet`'s seed reads its scalar axes via
     `fromSavedClip` + the bridge (behaviour-preserving). `LaneClip` adapter + the remaining surface
     migrations are the next slices.
-  - **next slices:** migrate the discovery pin → Stream mapping (`clipToStream`/`bufferPinToStream`),
-    the viewer chrome (`fromClipDetail`), and the clips-grid (`LaneClip`) to consume the canonical
-    adapters — one surface per slice, each device-checked, until every surface reads one shape.
+  - **✅ slice 2 (2026-06-26):** `fromLaneClip` added — **all 5 surfaces** (ClipPin/BufferPin/
+    ClipDetail/SavedClip/LaneClip) now **compile-prove** as `CanonicalClip` projections (the foundation
+    is total). Local-only commits `64b0da0` etc. (holding pushes until Aaron's D1 lands).
+  - **next slices (need device testing or a decision — paused until we resume pushing / D1 lands):**
+    - **Discovery pins** (`clipToStream`/`bufferPinToStream`): blocked on a **design decision** — the
+      buffer pin carries **access/monetization** fields (`subscriptionPriceUsd`, `accessTier`,
+      `ppvEventId`) that are NOT clip content axes. Decide whether `CanonicalClip` grows an optional
+      `access` projection (so it can represent a discovery pin) or those stay a discovery-only extra
+      outside the canonical core. Also it's device-verified pin code (#1) → migrate with a device check.
+    - **Viewer chrome** (`fromClipDetail`) + **clips-grid `LaneClip` runtime**: behaviour-preserving but
+      on verified/high-churn code → do with a device pass.
   - The CU3 app pieces (the `keep` axis in the drawer + retiring the bespoke save flow) wait on D1/D3.
