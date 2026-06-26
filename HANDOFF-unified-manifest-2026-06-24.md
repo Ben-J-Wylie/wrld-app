@@ -930,3 +930,30 @@ machine **without an app read change**. CU2 is the write/drawer unification:
 - 🚩 **CU1 residual for Aaron:** `GET /buffer/me` (the buffer descriptor's `session.title`, read by the
   clips-page BUFFER-lane timeline label) was NOT routed through `resolveClipAxes` — still raw
   `stream.title`. Route it too so the buffer-lane label resolves (minor; discover + viewers covered).
+
+---
+
+## CU1 COMPLETENESS — two backend gaps from on-device CU2 testing (2026-06-26, Aaron)
+
+Device test (Ben): a clips-page edit (which writes the `clipId=null` directive over the clip's range)
+updates everything that reads `GET /buffer/me/clips` (saved lane, library, library-drawer title) but
+**NOT the time machine or the buffer-lane timeline label**. Root cause is in CU1's read routing:
+
+1. **Windowed/tiled discover resolves at the wrong instant.** `windowAvailability` calls
+   `resolveClipAxes(sessionAxes, intervals[0].startMs, …)` — the session's **first public interval**
+   (≈ session start / encoder warm-up). But edits live on the **clip's range**, which starts *later*
+   than `intervals[0].startMs` whenever the session has any leading footage. So the covering directive
+   at `intervals[0].startMs` is the *pre-edit* (or empty) era → the pin resolves stale. The legacy
+   `?at=` path is correct (`resolveClipAxes(atSessionAxes, Tms)` — the playhead). **Fix:** the
+   windowed/tiled feed must resolve per-pin at an instant that reflects edits — either (a) return the
+   per-range directives and let the app resolve at the **playhead** (matches "clipAt(t) selects + axes
+   current"; the app already resolves *which* interval is alive locally), or (b) resolve at the clip's
+   representative instant, not the session's first interval. (a) is the model-true fix. *(This is the
+   "pin COVERAGE nuance" from "CU1 — THE PEDANTIC DETAIL" §D — it's the live blocker for the time
+   machine; Ben's globe uses the windowed/tiled feed, not `?at=`.)*
+2. **`GET /buffer/me` not routed through `resolveClipAxes`.** The buffer descriptor's `session.title`
+   (read by the clips-page **buffer-lane** timeline label) is still raw `stream.title`. Route it like
+   the others so the buffer-lane label resolves. (Minor vs #1, same family.)
+
+Both are CU1 read-routing completeness — the **write side is unified** (clips page + library both
+write `clipId=null` after CU2 step 2); these close the last two read paths.
