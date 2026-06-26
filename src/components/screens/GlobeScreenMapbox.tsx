@@ -63,7 +63,6 @@ import { useHistoricalAvailability } from '@/hooks/useHistoricalAvailability'
 import { useHistoricalCells } from '@/hooks/useHistoricalCells'
 import type { Interval } from '@/api/clips'
 import { resolvePinAxes, type ClipPin, type BufferPin } from '@/api/clips'
-import { useStreamsNear } from '@/hooks/useStreamsNear'
 import { useDiscoverySocket } from '@/hooks/useDiscoverySocket'
 import { usePublicConfig, configNumber, configBool } from '@/hooks/usePublicConfig'
 import { PIN_ZOOM_THRESHOLD, COUNT_MIN_ZOOM } from '@/lib/tiles'
@@ -510,15 +509,6 @@ export function GlobeScreenMapbox() {
   const setViewRef = useRef(setView)
   setViewRef.current = setView
 
-  // ── Drawer / search / LIVE count: nearest streams via bounded REST ─────────
-  // The viewport feed only knows what's on screen (and nothing individual at low
-  // zoom), so the drawer's "Nearby now" list, the search box, and the LIVE pill
-  // read from streamsApi.near instead. A generous radius keeps it populated at
-  // today's sparse global scale (server caps at 100 nearest); it tightens to
-  // genuinely-nearby as density grows. Falls back to (20,0) before a GPS fix so
-  // the drawer isn't empty for location-denied users.
-  const nearbyQuery = useStreamsNear(coords?.latitude ?? 20, coords?.longitude ?? 0, 20000)
-  const nearbyStreams = nearbyQuery.data ?? []
   const insets = useSafeAreaInsets()
   // The viewer's own user id — used to identify their own live stream on the
   // globe: it's excluded from the drawer + cards, its pin renders black, and
@@ -723,21 +713,31 @@ export function GlobeScreenMapbox() {
   const planet = planetById(activePlanetId)
 
   // ── HAVEN DATA SEAM ────────────────────────────────────────────────────────
-  // Earth's pins ride the geographic viewport feed (useViewportDiscovery) + the
-  // nearby-REST drawer. PRIVATE ('off') streams are coordless, so they can't ride
-  // either — Haven reads the discovery socket filtered to 'off' instead, and the
-  // registry's placePin scatters them on the island by stream id. The socket
-  // snapshot/events now carry 'off' streams (backend findAllLiveStreams + the
-  // streamStarted push). Earth ignores this feed entirely.
+  // Earth's pins ride the geographic viewport feed (useViewportDiscovery); the
+  // drawer list (+ search + LIVE pill) rides the global discovery socket, filtered
+  // to located streams — so a new stream PUSHES into the drawer instantly
+  // (stream_started) and clears on stream_ended, with live viewer counts, instead
+  // of waiting on a 60s REST poll. PRIVATE ('off') streams are coordless — Haven
+  // reads the same socket filtered to 'off' and scatters them on the island. The
+  // socket snapshot/events carry every live stream (backend findAllLiveStreams +
+  // the streamStarted push).
+  // NOTE (scale): the socket is a GLOBAL feed — fine at today's sparse scale (the
+  // drawer is already viewer-count-sorted, not distance-bounded). At real density
+  // the drawer wants a bounded live feed (viewport-list / a nearby live endpoint);
+  // tracked with the global-socket replacement in wrld-backend/CLAUDE.md.
   const socketStreams = useDiscoverySocket()
   const privateStreams = useMemo(
     () => socketStreams.filter((s) => s.locationPrecision === 'off'),
     [socketStreams],
   )
-  // Active-planet pin + drawer sources. Both stable references (one of two
-  // memoised arrays), so the card-sync effects don't loop.
+  const locatedStreams = useMemo(
+    () => socketStreams.filter((s) => s.locationPrecision !== 'off'),
+    [socketStreams],
+  )
+  // Active-planet pin + drawer sources. Both stable references (memoised on the
+  // socket), so the card-sync effects don't loop.
   const planetPins = planet.id === 'haven' ? privateStreams : pins
-  const drawerSource = planet.id === 'haven' ? privateStreams : nearbyStreams
+  const drawerSource = planet.id === 'haven' ? privateStreams : locatedStreams
   const [transitioning, setTransitioning] = useState(false)
   const transitioningRef = useRef(false)
   const pendingToRef = useRef<PlanetId | null>(null)
@@ -1245,9 +1245,14 @@ export function GlobeScreenMapbox() {
       // results and people search. Today the search filters streams
       // only — query gets matched against title + handle + displayName.
     }
-    // Order by viewer count desc for now (until a real "trending"
-    // weighting lands).
-    return out.slice().sort((a, b) => b.viewerCount - a.viewerCount)
+    // Real creator streams rank above external cams; within each group, order by
+    // viewer count desc (until a real "trending" weighting lands).
+    return out.slice().sort((a, b) => {
+      const ax = a.isExternal ? 1 : 0
+      const bx = b.isExternal ? 1 : 0
+      if (ax !== bx) return ax - bx
+      return b.viewerCount - a.viewerCount
+    })
   }, [drawerSource, chipId, query, isSelfStream, planet])
 
   // ── Navigation ────────────────────────────────────────────────────────────
