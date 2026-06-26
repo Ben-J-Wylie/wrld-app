@@ -670,6 +670,14 @@ user-visible, just deletes the scaffolding. Each phase is independently shippabl
 
 ## ⛳⛳ THE CANONICAL UNIFICATION ROLLOUT (rearchitecture — supersedes the incremental P0–P6)
 
+> **🛑 STATUS: PAUSED — awaiting a focused Ben + Aaron joint kickoff (2026-06-25).** Do not start CU
+> work or deploy more one-off coalesce fixes until then. This is a coordinated cross-repo
+> rearchitecture, not parallel ad-hoc patching (this session hit 4+ push collisions patching alone).
+> All repos pulled + aligned (app `b119da2` · backend `60ee42f` · mediasoup `8930ee2`). At kickoff:
+> Aaron takes CU1 (this section IS his work-order) / CU3-backend / CU4-schema; Ben takes CU2 +
+> CU4-app-types + the drawer unification. Read CONTENT.md §5 "Target architecture" for the WHAT, then
+> this for the HOW.
+
 **Decision 2026-06-25 (Ben):** stop patching read paths. The incremental "coalesce each feed" approach
 is whack-a-mole — the time machine alone has ~4 read paths (legacy `?at=`, windowed, tiled, the
 buffer-session viewer) and the title/precision/identity live in 3 places (`Stream.*` / `Clip.*` /

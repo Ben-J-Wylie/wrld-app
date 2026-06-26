@@ -4228,3 +4228,48 @@ Not in the contracts; sequencing: #3 + #5 dissolve once (2c) lands, #1 + #2 are 
    add a clip field to the canonical type, not one surface.* *Dep: none (pure refactor).*
 5. **Title-default heuristic** — collapse the `directive ?? saved-name ?? session-title` prefill to
    reading the server-resolved title once (2c) returns it.
+
+---
+
+## Canonical Unification initiative — the clip-manifest rearchitecture (PAUSED pending coordination, 2026-06-25)
+
+> **STATUS: PAUSED — do not start executing.** Decided 2026-06-25 (Ben): the unified clip manifest is
+> delivered as a **coordinated cross-repo rearchitecture**, not incremental patches. Ben + Aaron will
+> sit down, focus solely on this, and move forward together. Until that kickoff, **no CU work starts
+> and no more one-off coalesce fixes deploy** (they're superseded by CU1). This section is the
+> readiness brief so the kickoff is turnkey.
+
+**Why a rearchitecture, not more patches.** The incremental "coalesce each read path" approach is
+whack-a-mole: title / precision / identity live in **3 places** (`Stream.*` / `Clip.*` /
+`DirectiveRange`) with **two** directive row-sets (`clipId=null` session vs `clipId`-set clip), read
+by **~4 discover feeds + the library + two viewers**, each with its OWN resolution. Every fix clears
+one path; the next reveals another (device-confirmed 2026-06-25: fixed the viewer's `stream.title`
+read; the pin + feeds stayed stale). **The fragmentation is the disease.**
+
+**The target (canonical):** `CONTENT.md` §5 → **"Target architecture (north star)"** — one **`Clip`**
+= range + **7 axes** (`title` · `tags` · `visibility` · `identity` · `precision` · `sources` · `keep`)
+over **`Track`** footage; **`Stream`** = live identity. One read, one write, one resolver; planet
+derived; forward-only snips.
+
+**The rollout (canonical: `HANDOFF-unified-manifest-2026-06-24.md` → "THE CANONICAL UNIFICATION
+ROLLOUT"):**
+- **CU1 — one authority + one shared resolver/writer** *(backend, Aaron — the spine).* The directive
+  becomes the single source for all 7 axes; ONE `resolveClipAxes()` called by every read path; ONE
+  write path. *Fixes the staleness everywhere at once — no feed can diverge.*
+- **CU2 — app: one resolver + one render + one drawer** *(Ben).* Drop the dual-write + the
+  `Stream.title`/`Clip.name` reads.
+- **CU3 — lane as the 7th axis (R2) + live edges** *(Aaron + Ben + mediasoup).*
+- **CU4 — structural collapse (R4): clip ≡ segment** + the clean rename + one discover feed *(Aaron
+  schema + Ben types).*
+- **CU5 — delete the old + flip the §5 bridge** *(both).*
+Behaviour unified first (CU1), structure collapsed last (CU4). Each CU independently shippable + device-verifiable.
+
+**Ownership at kickoff:** Aaron = CU1 / CU3-backend / CU4-schema (his lane + the deploys); Ben = CU2 +
+CU4-app-types + the drawer unification. **Coordinated, not ad-hoc parallel** (this session hit 4+
+push collisions patching alone — the rearchitecture needs a focused joint window).
+
+**Kickoff readiness (turnkey):** target canonized (§5); rollout + per-CU work-orders canonized (the
+handoff); all 3 repos pulled + aligned (2026-06-25 — app `b119da2`, backend `60ee42f`, mediasoup
+`8930ee2`). Down-payments already in: the buffer-session title coalesce (`wrld-backend`, the
+`GET /buffer/session/:id` fix — pending box deploy) + the library-drawer key fix (`89a6fc2`) — both
+subsumed by CU1, so don't chase them further.
