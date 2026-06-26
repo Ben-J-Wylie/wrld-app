@@ -10,6 +10,52 @@ import { apiClient } from './client'
 // inside one — interval membership resolved locally, no per-instant server sample.
 export type Interval = { startMs: number; endMs: number }
 
+// CU1 completeness #1 (pin contract amendment, 2026-06-26). A window/tile feed has no single
+// instant T (the app scrubs WITHIN the window), so each pin carries its per-range display
+// directives covering the window and the APP resolves title/identity/precision at the PLAYHEAD.
+// The display subset of the backend's AxisDirective (no coords/host — those stay pin-level +
+// server-obfuscated, so nothing real leaks). `[]` → no per-range edits → the pin-level fallback.
+export type PinDirective = {
+  startMs: number
+  endMs: number
+  title: string | null
+  precision: string | null // 'exact'|'city'|'country'|'off'|'hidden'|'private'|null (null = inherit)
+  attributed: boolean
+}
+
+// Mirrors the backend `resolveClipAxes` for the display subset. The covering directive at the
+// playhead wins; otherwise the pin-level fallback. Empty directives (legacy `?at=` feed +
+// un-edited sessions) → the fallback unchanged (zero regression). Precision 'off'/'hidden'/
+// 'private' → 'private' (the location-hidden state — the globe drops the pin from Earth).
+export function resolvePinAxes(
+  directives: PinDirective[] | undefined,
+  playheadMs: number,
+  fallback: { title: string | null; precision: 'exact' | 'city' | 'country' },
+): { title: string | null; precision: 'exact' | 'city' | 'country' | 'private'; anonymous: boolean } {
+  const cover = directives?.find((d) => d.startMs <= playheadMs && playheadMs < d.endMs)
+  const rawP = cover?.precision ?? fallback.precision
+  let precision: 'exact' | 'city' | 'country' | 'private'
+  switch (rawP) {
+    case 'city':
+    case 'country':
+      precision = rawP
+      break
+    case 'off':
+    case 'hidden':
+    case 'private':
+      precision = 'private'
+      break
+    default:
+      precision = 'exact'
+  }
+  return {
+    title: cover?.title ?? fallback.title,
+    precision,
+    // A covering directive's identity wins; no cover → not forced anon (the pin-level host is used).
+    anonymous: cover ? !cover.attributed : false,
+  }
+}
+
 // PB4 Lane B — one availability cell's payload (GET /clips/discover?planet&t&z&x&y).
 // Discriminated by `mode`: 'pins' at high zoom (resolved locally by playhead ∈ interval),
 // 'counts' at low zoom (a 60-entry per-minute alive-count series over the cell's hour).
@@ -38,6 +84,10 @@ export type ClipPin = {
   // PB3.5 (windowed feed only): public spans within the window. When present the client
   // resolves visibility locally (playhead ∈ interval); absent on the legacy `?at=` feed.
   intervals?: Interval[]
+  // CU1 completeness #1 (window/tile feeds only): per-range display directives covering the
+  // window. The app resolves title/precision/identity at the playhead via `resolvePinAxes`;
+  // `[]`/absent → the pin-level fields above (the `?at=` feed resolves server-side).
+  directives?: PinDirective[]
 }
 
 // One public/gated buffer session alive at a scrubbed instant — a globe pin in
@@ -62,6 +112,9 @@ export type BufferPin = {
   // PB3.5 (windowed feed only): public spans within the window. A live session's open
   // interval ends at the window `to`; the client extends it to the live edge.
   intervals?: Interval[]
+  // CU1 completeness #1 (window/tile feeds only): per-range display directives covering the
+  // window — resolved at the playhead via `resolvePinAxes`; `[]`/absent → the pin-level fields.
+  directives?: PinDirective[]
 }
 
 // One captured/included source track on a clip (durable public /media/clips URLs).

@@ -61,7 +61,7 @@ import { useHistoricalClips } from '@/hooks/useHistoricalClips'
 import { useHistoricalAvailability } from '@/hooks/useHistoricalAvailability'
 import { useHistoricalCells } from '@/hooks/useHistoricalCells'
 import type { Interval } from '@/api/clips'
-import type { ClipPin, BufferPin } from '@/api/clips'
+import { resolvePinAxes, type ClipPin, type BufferPin } from '@/api/clips'
 import { useStreamsNear } from '@/hooks/useStreamsNear'
 import { useDiscoverySocket } from '@/hooks/useDiscoverySocket'
 import { usePublicConfig, configNumber, configBool } from '@/hooks/usePublicConfig'
@@ -417,6 +417,9 @@ type BannerData =
 // card-sync effects rely on).
 const EMPTY_CLIPS: ClipPin[] = []
 const EMPTY_BUFFER: BufferPin[] = []
+// The placeholder host a pin resolves to when the playhead lands in an anon range (CU1
+// completeness #1). Mirrors the backend's anonymous host so the card reads "Anonymous".
+const ANON_PIN_HOST = { id: '', handle: 'anonymous', displayName: 'Anonymous', avatarUrl: null }
 
 // Time Machine — map a surviving-clip pin into the Stream shape the globe's pin
 // renderer + card already consume, so historical pins reuse the whole live path.
@@ -607,24 +610,49 @@ export function GlobeScreenMapbox() {
           : legacyHist.data?.bufferPins) ?? EMPTY_BUFFER
   const inInterval = (intervals?: Interval[]) =>
     !!intervals && intervals.some((iv) => playheadMs >= iv.startMs && playheadMs < iv.endMs)
-  // Windowed: resolve the visible set LOCALLY (playhead ∈ interval). The set genuinely
-  // changes as the playhead crosses an interval edge, but we keep `clipPins`/`bufferPins`
-  // REFERENTIALLY STABLE between renders unless the visible id-set actually changes (memo
-  // keyed on a signature, not on playheadMs) — so the card-sync effects don't loop on the
-  // 1s ticker. Legacy: the server already returned only alive-at-T pins (stable query ref).
-  const clipSig = withIntervals
-    ? srcClips.filter((c) => inInterval(c.intervals)).map((c) => c.id).join(',')
-    : `legacy:${srcClips.length}`
-  const bufferSig = withIntervals
-    ? srcBuffer.filter((b) => inInterval(b.intervals)).map((b) => b.sessionId).join(',')
-    : `legacy:${srcBuffer.length}`
+  // CU1 completeness #1 — resolve each visible pin's display axes (title/precision/identity) at
+  // the PLAYHEAD from its per-range `directives`, so a clips-page edit on a LATER range
+  // proliferates to the time-machine pin + card. `?at=`/un-edited pins carry no directives →
+  // `resolvePinAxes` returns the pin-level value (zero change). A range resolving to precision
+  // 'private' (off/hidden) drops the pin from Earth. Returns the SAME object when nothing
+  // changed so the id-set memo stays referentially stable.
+  const resolveClip = (c: ClipPin): ClipPin | null => {
+    const r = resolvePinAxes(c.directives, playheadMs, { title: c.title, precision: c.locationPrecision })
+    if (r.precision === 'private') return null
+    if (r.title === c.title && r.precision === c.locationPrecision && !r.anonymous) return c
+    return { ...c, title: r.title, locationPrecision: r.precision, host: r.anonymous ? ANON_PIN_HOST : c.host }
+  }
+  const resolveBuffer = (b: BufferPin): BufferPin | null => {
+    const r = resolvePinAxes(b.directives, playheadMs, { title: b.title, precision: b.locationPrecision })
+    if (r.precision === 'private') return null
+    if (r.title === b.title && r.precision === b.locationPrecision && !r.anonymous) return b
+    return { ...b, title: r.title, locationPrecision: r.precision, host: r.anonymous ? ANON_PIN_HOST : b.host }
+  }
+  // Windowed: resolve the visible set LOCALLY (playhead ∈ interval, then per-range axes). The
+  // set/values genuinely change as the playhead crosses an interval or directive edge, but we
+  // keep `clipPins`/`bufferPins` REFERENTIALLY STABLE between renders unless the visible set OR
+  // a resolved axis actually changes (memo keyed on a signature that encodes both, not on
+  // playheadMs) — so the card-sync effects don't loop on the 1s ticker. Legacy: the server
+  // already returned only alive-at-T pins, resolved server-side (no directives → stable).
+  const resolvedClips = (withIntervals ? srcClips.filter((c) => inInterval(c.intervals)) : srcClips)
+    .map(resolveClip)
+    .filter((c): c is ClipPin => !!c)
+  const resolvedBuffer = (withIntervals ? srcBuffer.filter((b) => inInterval(b.intervals)) : srcBuffer)
+    .map(resolveBuffer)
+    .filter((b): b is BufferPin => !!b)
+  const clipSig = resolvedClips
+    .map((c) => `${c.id}:${c.title ?? ''}:${c.locationPrecision}:${c.host.id}`)
+    .join(',')
+  const bufferSig = resolvedBuffer
+    .map((b) => `${b.sessionId}:${b.title ?? ''}:${b.locationPrecision}:${b.host.id}`)
+    .join(',')
   const clipPins = useMemo(
-    () => (withIntervals ? srcClips.filter((c) => inInterval(c.intervals)) : srcClips),
-    [withIntervals, srcClips, clipSig], // eslint-disable-line react-hooks/exhaustive-deps
+    () => resolvedClips,
+    [clipSig], // eslint-disable-line react-hooks/exhaustive-deps
   )
   const bufferPins = useMemo(
-    () => (withIntervals ? srcBuffer.filter((b) => inInterval(b.intervals)) : srcBuffer),
-    [withIntervals, srcBuffer, bufferSig], // eslint-disable-line react-hooks/exhaustive-deps
+    () => resolvedBuffer,
+    [bufferSig], // eslint-disable-line react-hooks/exhaustive-deps
   )
   const clipPinById = useMemo(() => new Map(clipPins.map((c) => [c.id, c] as const)), [clipPins])
   const bufferPinById = useMemo(
