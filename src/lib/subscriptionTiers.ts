@@ -8,10 +8,10 @@
 export type CreatorSubTier = { tier: number; priceUsd: number }
 
 export const CREATOR_SUB_TIERS: CreatorSubTier[] = [
-  { tier: 1, priceUsd: 499 },
-  { tier: 2, priceUsd: 999 },
-  { tier: 3, priceUsd: 1499 },
-  { tier: 4, priceUsd: 2499 },
+  { tier: 1, priceUsd: 500 },
+  { tier: 2, priceUsd: 1000 },
+  { tier: 3, priceUsd: 1500 },
+  { tier: 4, priceUsd: 2500 },
 ]
 
 export function tierPriceUsd(tier: number | null | undefined): number | null {
