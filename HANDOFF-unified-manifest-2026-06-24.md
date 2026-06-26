@@ -1261,7 +1261,18 @@ slice (define the type + adapters, migrate one surface to prove it), NOT a big-b
     also **edit a per-range title/anon on a saved/saved-lane clip that has snips and confirm it still
     proliferates** (pin + viewer) — i.e. the backfill didn't shadow. The shadow-safe fix is deployed but
     only exercised when the flag is ON.
-- **D4 — AV-pause/resume → a `sources` directive (mediasoup). ✅ STILL OPEN (Aaron's next; no app dep).**
+- **D4 — AV-pause/resume → a `sources` directive (mediasoup). ✅ DONE + DEPLOYED (2026-06-26,
+  `wrld-backend 804d6f3` + `wrld-mediasoup bf68024`).** `setSourcePaused` (the media plane — producer
+  pause/resume, one track with a gap) now also fires the **manifest plane**: mediasoup calls a new
+  internal route `POST /internal/buffer/sessions/:id/source-snip { kind, paused }` (fire-and-forget),
+  which snips the live session through the **same era model as U2** — closes the open era at now, opens
+  a new one carrying the current axes (title/precision/identity/visibility/**retain**, so the toggle
+  doesn't reset them and a saved-lane session stays retained per D2) with the toggled kind merged into
+  `sources` (enabled = `!paused`). PB3-gated + live-only. So the off-range is marked in the per-range
+  manifest and the saved-clip rail's `sourceWindows` (#4) reads it. **No app dep — the app sends only
+  `setSourcePaused`** (do NOT also send a sources snip → double-write). **On-device gate:** pause camera
+  ~30s mid-broadcast → confirm a `sources:{camera:false}` era marks the gap and the clip rail hides
+  camera over it. **D4 confirms snip-at-now (U2) + AV-pause are now one unified directive write.**
 - **D3 — save/un-save = a `keep`/`retain` directive edit; drop the copy-path + `saveClip`/`unsaveClip`/
   edge-relative endpoints; + U3 (materialise a `keep` range into a Library clip, per obs 2). 🔶 GATED on
   the D1 cutover passing** (Ben is running it — flip `CU3_RETAIN_ONLY` on + prove saved survives / unsaved
