@@ -8,7 +8,7 @@
 // NOTE: the PPV "delivery problem" report (never started / ended early / …) is a
 // SEPARATE thing (escrow review at payout), not this — don't fold it in here.
 export const REPORT_REASONS = [
-  'Involves a minor',
+  'Child safety',
   'Nudity or sexual content',
   'Violence or dangerous acts',
   'Self-harm or suicide',
