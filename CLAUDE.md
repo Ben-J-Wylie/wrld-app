@@ -4231,15 +4231,30 @@ Not in the contracts; sequencing: #3 + #5 dissolve once (2c) lands, #1 + #2 are 
 
 ---
 
-## Canonical Unification initiative — the clip-manifest rearchitecture (ACTIVE — CU1/CU2 done, CU3 kicked off 2026-06-26)
+## Canonical Unification initiative — the clip-manifest rearchitecture (ACTIVE — CU1/CU2 done, CU3 D1 shipped 2026-06-26)
 
 > **STATUS: ACTIVE.** **CU1 ✅ + CU2 ✅ done + verified on device (2026-06-26)** — every clip axis now
 > proliferates from the one `clipId=null` directive authority to every surface (time-machine pin +
 > viewer, library, clips page, buffer-lane label, sources rail), resolving at the watched instant. The
-> write side is unified via `src/lib/clipDirectives.ts`. **CU3 (lane-as-axis + live edges) kicked off
-> 2026-06-26** — work-orders + the contract decisions to lock are in
-> `HANDOFF-unified-manifest-2026-06-24.md` → "CU3/CU4 KICKOFF". CU4 (structural collapse + rename)
-> follows once CU3 proves the model; CU5 deletes the old. *(Original 2026-06-25 readiness brief below.)*
+> write side is unified via `src/lib/clipDirectives.ts`. **CU3 (lane-as-axis + live edges) is in
+> progress:**
+> - **D1 ✅ shipped DEPLOYED-INERT (Aaron, `wrld-backend 8ddf95a`)** — the reaper collapses its 3 OR'd
+>   retain signals (PB2 ClipRange · PB3 `DirectiveRange.retain` · U1 saved-lane) to the single
+>   `DirectiveRange.retain` authority, **flag-gated `CU3_RETAIN_ONLY` (default OFF → unchanged)**, with a
+>   per-pass backfill so the cutover is lossless. **⛔ The flag flip is the on-device cutover gate (not
+>   yet done — data-sensitive).** D2/D3 are unblocked; the app's `keep`-axis drawer + drag-to-save
+>   retirement wait on D3 backend live.
+> - **D2/D3/D4** (go-live writes the retain directive · save = a retain-axis edit, drop the bespoke
+>   endpoints · snip/AV-pause unified) — work-orders in `HANDOFF-unified-manifest-2026-06-24.md` →
+>   "CU3/CU4 KICKOFF".
+>
+> **CU4 (structural collapse + rename)** follows once CU3 proves the model; CU5 deletes the old. CU4 app
+> prep is underway dep-free (Ben: `src/types/clip.ts` canonical `Clip` type — all 5 surfaces compile as
+> projections). **CU4 ACCESS-FIELDS DECISION ✅ CONFIRMED (2026-06-26):** keep `ResolvedAxes` = the §5
+> seven axes; access (`tier`/`subscriptionPriceUsd`/`ppvEventId`) is an OPTIONAL `access` projection on
+> `CanonicalClip`, NOT an axis — mirrors the backend (`resolveClipAxes` returns only the 7; discover
+> feeds compute access separately), keeping the schema collapse clean. *(Original 2026-06-25 readiness
+> brief below.)*
 
 **Why a rearchitecture, not more patches.** The incremental "coalesce each read path" approach is
 whack-a-mole: title / precision / identity live in **3 places** (`Stream.*` / `Clip.*` /
