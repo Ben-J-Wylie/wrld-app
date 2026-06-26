@@ -1076,3 +1076,24 @@ playhead. The **saved-clip viewer** (`GET /clips/:id`) does **not** return `sour
   up the moment the backend returns the field — zero app change, zero rebuild.
 - **Verify on device (after deploy):** toggle a source off on a segment → open its time-machine viewer
   at that era → the source is gone from the rail (and the view auto-switches if it was selected).
+  **✅ VERIFIED ON DEVICE (Ben, 2026-06-26).**
+
+---
+
+## ✅ CU1 COMPLETENESS — 100% DONE + VERIFIED ON DEVICE (2026-06-26)
+All four read-routing gaps from the on-device CU2 testing are closed end-to-end across both repos and
+verified on device by Ben. Every clip axis now proliferates from the one `clipId=null` directive
+authority to every surface, resolving consistently at the watched instant:
+
+| # | Surface / axis | Backend | App | Verified |
+|---|---|---|---|---|
+| 1 | time-machine **pin** title/identity | `7d09d78` | `resolvePinAxes` @ playhead | ✅ |
+| 2 | **buffer-lane** label | (directives on `GET /buffer/me`) | `sessionTitleAt` | ✅ |
+| 3 | time-machine **viewer** axes | `60f7c5f` (`?at=`) | viewer passes `at` | ✅ |
+| 4 | **sources** → saved-clip viewer rail | `2dab272` (`sourceWindows`) | already wired | ✅ |
+
+Plus the write side is unified (clips page + library both write `clipId=null` via the shared
+`src/lib/clipDirectives.ts` core). **What's left is the coordinated rearchitecture only** — CU3
+(lane-as-axis + live edges), CU4 (structural collapse + clean rename + one discover feed), CU5 (delete
+the fallbacks). Solo CU-prep available meanwhile: ✅ shared directive-edit core (done); ☐ one canonical
+clip type (dep-free); ☐ one drawer host (dep: backend #12 — visibility/tags on the library read).
