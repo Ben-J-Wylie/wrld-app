@@ -62,12 +62,17 @@ export function ClipViewerScreen() {
   const params = useLocalSearchParams<{
     id?: string
     seekSec?: string
+    at?: string
     title?: string
     handle?: string
     source?: string
   }>()
   const id = typeof params.id === 'string' ? params.id : undefined
   const seekSec = params.seekSec ? Math.max(0, Math.floor(Number(params.seekSec)) || 0) : 0
+  // CU1 #3 — the absolute instant being watched (the time-machine playhead at tap). Drives the
+  // server's per-instant axis resolution (title/identity/precision) so a later-segment edit shows.
+  const atMs = params.at ? Number(params.at) : undefined
+  const atKey = atMs != null && Number.isFinite(atMs) ? Math.round(atMs) : undefined
   const paramTitle = typeof params.title === 'string' ? params.title : undefined
   const paramHandle = typeof params.handle === 'string' ? params.handle : undefined
   // 'buffer' → a public buffer session (PB1, GET /buffer/session/:id); else a saved
@@ -80,8 +85,8 @@ export function ClipViewerScreen() {
     isError,
     error,
   } = useQuery({
-    queryKey: ['clip', source, id],
-    queryFn: () => (source === 'buffer' ? clipsApi.getBufferSession(id!) : clipsApi.get(id!)),
+    queryKey: ['clip', source, id, atKey],
+    queryFn: () => (source === 'buffer' ? clipsApi.getBufferSession(id!, atKey) : clipsApi.get(id!, atKey)),
     enabled: !!id,
     retry: 1,
   })

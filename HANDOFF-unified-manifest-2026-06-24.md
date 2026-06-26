@@ -1037,11 +1037,14 @@ behaviour (no regression).
   per-instant override is unit-tested (`resolveClipAxes` "resolves PER INSTANT"). **Note:** these reads
   still return resolved SCALARS (not directives) — single-instant, per the contract; only the
   window/tile PINS carry `directives` (#1).
-- **Ben (app) — remaining:** `ClipViewerScreen` passes **`at = clip/session.startAtMs + seekSec`** (the
-  playhead it already tracks) on **both** reads (`GET /clips/:id?at=` and `GET /buffer/session/:id?at=`).
-  **Verify on device:** edit a later segment's title/anon → open its time-machine viewer at that era →
-  the viewer chrome reflects the edit (live prod data is no-edit external cams, so the change only shows
-  once a per-range edit exists — same as the pin).
+- **Ben (app) — ✅ DONE (2026-06-26).** `clipsApi.get(id, atMs)` / `getBufferSession(id, atMs)` append
+  `?at=`; `GlobeScreenMapbox.watchHistorical` passes `at: playheadMs` (the absolute instant tapped, which
+  it already has — simpler than `start + seekSec`); `ClipViewerScreen` reads `at`, threads it into the
+  query + keys on it (`['clip', source, id, atKey]`, so the edit-invalidate `['clip']` still prefix-
+  matches). Non-time-machine viewer entries omit `at` → raw-start resolution (unchanged). **Verify on
+  device:** edit a later segment's title/anon → open its time-machine viewer at that era → the viewer
+  chrome reflects the edit (live prod data is no-edit external cams, so the change only shows once a
+  per-range edit exists — same as the pin).
 
 Minimal-fix alternative (no app change): resolve at a **footage-interior** instant (e.g. the first
 public interval start, like the pin's pin-level fallback) instead of the raw start — fixes whole-clip /

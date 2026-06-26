@@ -181,8 +181,13 @@ export const clipsApi = {
   },
 
   // One clip for playback. 403s on a subscribers-only clip without a subscription.
-  get: async (id: string): Promise<ClipDetail> => {
-    const res = await apiClient.get<{ clip: ClipDetail }>(`/clips/${id}`)
+  // CU1 #3 — `atMs` (the viewer's playhead = the time-machine instant being watched, absolute ms)
+  // resolves the clip's title/identity/precision AT that instant (clamped server-side), so a
+  // later-segment edit shows. Omitted → the backend resolves at the clip start (no regression).
+  get: async (id: string, atMs?: number): Promise<ClipDetail> => {
+    const res = await apiClient.get<{ clip: ClipDetail }>(`/clips/${id}`, {
+      params: atMs != null ? { at: Math.round(atMs) } : undefined,
+    })
     return res.data.clip
   },
 
@@ -196,7 +201,7 @@ export const clipsApi = {
   // analog). Normalised into ClipDetail so the viewer is source-agnostic. 403 when the
   // session is subscriber/ppv-gated and the caller lacks access; 404 when owner-private
   // / flag off / not found.
-  getBufferSession: async (id: string): Promise<ClipDetail> => {
+  getBufferSession: async (id: string, atMs?: number): Promise<ClipDetail> => {
     const res = await apiClient.get<{
       session: {
         id: string
@@ -209,7 +214,9 @@ export const clipsApi = {
         sourceWindows?: { startAtMs: number; endAtMs: number; sources: Record<string, boolean> }[]
         host: { id: string; handle: string; displayName: string; avatarUrl: string | null }
       }
-    }>(`/buffer/session/${id}`)
+    }>(`/buffer/session/${id}`, {
+      params: atMs != null ? { at: Math.round(atMs) } : undefined,
+    })
     const s = res.data.session
     return {
       id: s.id,

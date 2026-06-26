@@ -1287,6 +1287,9 @@ export function GlobeScreenMapbox() {
         id,
         source: buf ? 'buffer' : 'clip',
         seekSec: String(seekSec),
+        // CU1 #3 — the absolute instant being watched; the viewer reads resolve title/identity/
+        // precision AT this instant (clamped server-side) so a later-segment edit shows.
+        at: String(Math.round(playheadMs)),
         title: pin.title ?? '',
         handle: pin.host.handle,
       },
