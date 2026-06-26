@@ -1243,10 +1243,25 @@ slice (define the type + adapters, migrate one surface to prove it), NOT a big-b
    not the Library.)*
 
 ### ⮕ AARON — START HERE (next steps, readiness)
-- **D2 — go-live `lane` → opening-range `retain` directive. ✅ has what's needed, START NOW** (no app dep;
-  do at go-live exactly what D1's backfill does retroactively for a saved-lane session: write `retain:true`,
-  `clipId=null`, range `[start, endedAt ?? OPEN]`). Retires the saved-lane half of the backfill.
-- **D4 — AV-pause/resume → a `sources` directive (mediasoup). ✅ START NOW** (no app dep).
+- **D2 — go-live `lane` → opening-range `retain` directive. ✅ DONE + DEPLOYED (2026-06-26,
+  `wrld-backend 10f9349`).** A saved-lane go-live (`allocate`) writes its opening era `[start, OPEN]`
+  `retain:true` with **default display axes** (invisible to reads — carries only `keep`); `snipSession`
+  now **carries `retain` forward** (the new era inherits the closing open era's value, was hardcoded
+  false) so a saved-lane broadcast stays retained across snips. Additive/safe with the flag OFF
+  (redundant with U1; PB3 honours retain). Retires the saved-lane half of D1's backfill for new go-lives.
+  - **⚠️ Found + fixed while doing D2 — a SHADOWING risk in D1's backfill (matters for the cutover).**
+    D1 inserted a *separate full-span* retain row (`[start,OPEN]` / `[a,b]`). When a session ALSO has
+    per-range setting eras (snips), that row OVERLAPS them and `directiveCovering` (first-cover) could
+    return the retain row — whose display axes are default — **shadowing the per-range title/precision/
+    identity → the CU1 staleness bug, but only once `CU3_RETAIN_ONLY` flips ON.** Hardened the backfill
+    to be **shadow-safe**: it now **UPDATEs** overlapping eras to `retain:true` (the keep axis added to
+    the existing era) and only **INSERTs** over a gap with no era — never an overlapping row. (D2 itself
+    never shadows; it works with the era model.)
+  - **⮕ Add to the D1 cutover gate, Ben:** besides "saved survives / unsaved reaps," with the flag ON
+    also **edit a per-range title/anon on a saved/saved-lane clip that has snips and confirm it still
+    proliferates** (pin + viewer) — i.e. the backfill didn't shadow. The shadow-safe fix is deployed but
+    only exercised when the flag is ON.
+- **D4 — AV-pause/resume → a `sources` directive (mediasoup). ✅ STILL OPEN (Aaron's next; no app dep).**
 - **D3 — save/un-save = a `keep`/`retain` directive edit; drop the copy-path + `saveClip`/`unsaveClip`/
   edge-relative endpoints; + U3 (materialise a `keep` range into a Library clip, per obs 2). 🔶 GATED on
   the D1 cutover passing** (Ben is running it — flip `CU3_RETAIN_ONLY` on + prove saved survives / unsaved

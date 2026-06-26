@@ -21,6 +21,7 @@ import { PageTabs } from '@/components/features/navigation/PageTabs'
 import { usersApi } from '@/api/users'
 import { ppvApi } from '@/api/ppvEvents'
 import { CREATOR_SUB_TIERS, formatUsd } from '@/lib/subscriptionTiers'
+import { usePublicConfig, configTiers } from '@/hooks/usePublicConfig'
 
 export function MonetizeScreen() {
   const qc = useQueryClient()
@@ -34,6 +35,12 @@ export function MonetizeScreen() {
     queryKey: ['my-ppv-events'],
     queryFn: () => ppvApi.listMyEvents(),
   })
+
+  // Tier ladder from config (server is the charge authority); falls back to the
+  // hardcoded ladder before the fetch resolves / offline. A price change is now
+  // config-only — no EAS ship to update these labels.
+  const { config } = usePublicConfig()
+  const tiers = configTiers(config, CREATOR_SUB_TIERS)
 
   const [saving, setSaving] = useState(false)
   // Hybrid-nav: Subscriptions / Events as in-place page-tabs.
@@ -160,7 +167,7 @@ export function MonetizeScreen() {
               </Text>
             )}
             <View style={styles.tierGrid}>
-              {CREATOR_SUB_TIERS.map(t => {
+              {tiers.map(t => {
                 const selected = settings.subscriptionTier === t.tier
                 return (
                   <Pressable

@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { configApi, type PublicConfig } from '@/api/config'
+import type { CreatorSubTier } from '@/lib/subscriptionTiers'
 
 // Fallbacks so the UI renders correct values before the fetch resolves or when
 // offline. Mirrors the backend allowlist (cents). Keep in sync as keys are added.
@@ -57,6 +58,22 @@ export function configBundles(config: PublicConfig, fallback: TopUpBundleConfig[
     v.every((b) => b && typeof b.amount === 'number' && typeof b.priceCents === 'number')
   ) {
     return v as TopUpBundleConfig[]
+  }
+  return fallback
+}
+
+// Helper: read the SUBSCRIPTION_TIERS creator-sub ladder from config, falling back
+// to the local hardcoded ladder if the key is absent or malformed. The server is
+// the charge authority (it resolves the tier → its Stripe Price); this only drives
+// the picker labels, so a price change is config-only — no EAS ship.
+export function configTiers(config: PublicConfig, fallback: CreatorSubTier[]): CreatorSubTier[] {
+  const v = config['SUBSCRIPTION_TIERS']
+  if (
+    Array.isArray(v) &&
+    v.length > 0 &&
+    v.every((t) => t && typeof t.tier === 'number' && typeof t.priceUsd === 'number')
+  ) {
+    return v as CreatorSubTier[]
   }
   return fallback
 }
