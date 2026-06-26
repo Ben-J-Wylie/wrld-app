@@ -76,6 +76,8 @@ import {
   CLOCK_EXPANDED_H,
 } from '@/components/features/discovery/TimeScrubber'
 import { StreamCard } from '@/components/features/stream/StreamCard'
+import { BroadcasterRow } from '@/components/features/user/BroadcasterRow'
+import { useUserSearch } from '@/hooks/useUserSearch'
 import {
   DiscoveryHandoffCard,
   type DiscoveryStream,
@@ -684,6 +686,16 @@ export function GlobeScreenMapbox() {
   }, [historicalMode])
   const [query, setQuery] = useState('')
   const [chipId, setChipId] = useState<string | null>(null)
+  // People search — finds people whether or not they're live (GET /users/search,
+  // 3-char gated in the hook), surfaced in the drawer alongside matching streams.
+  // Debounced because it's a network call per keystroke; the stream filter below
+  // uses the live `query` (client-side, cheap).
+  const [debouncedQuery, setDebouncedQuery] = useState('')
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(query.trim()), 300)
+    return () => clearTimeout(t)
+  }, [query])
+  const { data: people = [] } = useUserSearch(debouncedQuery)
   const [drawerState, setDrawerState] = useState<DrawerState>('closed')
   const [mapCenterLat, setMapCenterLat] = useState(20)
   const [mapZoom, setMapZoom] = useState(1.5)
@@ -2045,7 +2057,11 @@ export function GlobeScreenMapbox() {
           <>
             <View style={styles.drawerHeader}>
               <Text variant="monoLabel" color={theme.colors.text.muted}>
-                {drawerHeaderLabel(query, chipId, visibleStreams.length)}
+                {drawerHeaderLabel(
+                  query,
+                  chipId,
+                  query.trim().length > 0 ? people.length + visibleStreams.length : visibleStreams.length,
+                )}
               </Text>
               <Pressable onPress={handleSeeAllPress} hitSlop={8}>
                 <Text variant="bodyEmphasized" color={theme.colors.accent.default}>
@@ -2054,7 +2070,59 @@ export function GlobeScreenMapbox() {
               </Pressable>
             </View>
 
-            {visibleStreams.length === 0 ? (
+            {query.trim().length > 0 ? (
+              // Search → one vertical list: people (live or not) then matching streams.
+              // People fold in once the 3-char-gated query returns results.
+              <ScrollView
+                contentContainerStyle={styles.drawerVerticalList}
+                showsVerticalScrollIndicator={false}
+              >
+                {people.length > 0 && (
+                  <>
+                    <Text variant="monoLabel" color={theme.colors.text.muted} style={styles.drawerSectionLabel}>
+                      People
+                    </Text>
+                    {people.map((u) => (
+                      <BroadcasterRow
+                        key={u.id}
+                        avatarUrl={u.avatarUrl}
+                        displayName={u.displayName}
+                        handle={u.handle}
+                        followerCount={u.followerCount}
+                        showFollowButton={false}
+                        onPress={() =>
+                          router.navigate({ pathname: '/(app)/profile/[handle]', params: { handle: u.handle } })
+                        }
+                      />
+                    ))}
+                  </>
+                )}
+                {visibleStreams.length > 0 && (
+                  <>
+                    {people.length > 0 && (
+                      <Text variant="monoLabel" color={theme.colors.text.muted} style={styles.drawerSectionLabel}>
+                        Streams
+                      </Text>
+                    )}
+                    {visibleStreams.map((s) => (
+                      <StreamCard
+                        key={s.id}
+                        variant="compact"
+                        title={s.title}
+                        viewerCount={s.viewerCount}
+                        channel={`@${s.host?.handle ?? 'unknown'}`}
+                        city={s.host?.displayName ?? undefined}
+                        isLive={s.isLive}
+                        onPress={() => joinStream(s)}
+                      />
+                    ))}
+                  </>
+                )}
+                {people.length === 0 && visibleStreams.length === 0 && (
+                  <DrawerEmptyState chipId={chipId} query={query} />
+                )}
+              </ScrollView>
+            ) : visibleStreams.length === 0 ? (
               <DrawerEmptyState chipId={chipId} query={query} />
             ) : drawerState === 'expanded' ? (
               <ScrollView
@@ -2231,6 +2299,9 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
     paddingHorizontal: theme.spacing.xs,
     paddingBottom: theme.spacing.lg,
+  },
+  drawerSectionLabel: {
+    marginTop: theme.spacing.xs,
   },
   drawerEmpty: {
     alignItems: 'center',
