@@ -731,3 +731,96 @@ parallels. **CU4 (the risky structural migration) is deferred until CU1–CU3 pr
 CU5 deletes the old. This is a **coordinated cross-repo effort** (Aaron = the backend spine CU1/CU3/CU4;
 Ben = app CU2 + CU4 types) — not ad-hoc patch-by-patch. Each CU is independently shippable + verifiable
 on device. The incremental P0–P6 above is **superseded** by this (its app-side pieces fold into CU2).
+
+---
+
+## CU1 — THE PEDANTIC DETAIL (exact read paths, write targets, row-sets) + DO / DON'T
+
+Everything CU1 must reconcile, from the device + deployed-code audit (2026-06-25). This is the precise
+version of "one authority + one shared resolver." If anything here is wrong, fix it at the source —
+don't route around it.
+
+### A. Every axis, every field today → the one authority
+Resolution today is `directive ?? clip ?? stream ?? default`. Note the **field names differ per level**
+(the naming inconsistency is itself a symptom):
+
+| Axis | Stream level | Clip level | Directive level (target) | Resolves to |
+|---|---|---|---|---|
+| title | `Stream.title` (go-live, NOT NULL) | `Clip.title?` | `DirectiveRange.title?` | `directive.title ?? clip.title ?? stream.title` |
+| precision | `Stream.locationPrecision?` | `Clip.locDisplayPrecision?` | `DirectiveRange.precision?` | `directive.precision ?? clip.locDisplayPrecision ?? stream.locationPrecision ?? 'exact'` |
+| identity | — | `Clip.attributed` (bool) | `DirectiveRange.attributed` | `directive ?? clip ?? true` → target enum `shown\|anon` |
+| visibility | `Stream.visibility` (live-private gate) | `Clip.visibility` = **`public\|anon\|draft`** (3-concept tangle) | `DirectiveRange.visibility` = `public\|private` | `directive ?? clip(normalized) ?? 'public'` |
+| tags | — | — (**no `Clip.tags` column**; `#12` returns the union of directive tags) | `DirectiveRange.tags[]` | `directive.tags` |
+| sources | `Stream.sources[]` (armed = what EXISTS) | `ClipTrack.enabled` + `.removedRanges` | `DirectiveRange.sources` (Json) | `directive ?? clipTrack.enabled ?? all-captured-on` |
+| lane/keep | `BufferSession.lane` | `Clip`/`ClipRange` retain rows | `DirectiveRange.retain` (**exists!**) | today **3 signals OR'd**; target = `directive.retain` alone |
+
+Target name cleanups (CU4): `precision` (drop `locDisplayPrecision`/`locationPrecision`), `identity:
+shown|anon` (drop bool `attributed`), `visibility: public|private` (move `anon`→identity, `draft`→keep),
+`keep` (drop `lane`/retain rows), `Track` (drop `BufferTrack`/`ClipTrack`), `precision: …|private`
+(drop `hidden`/`off`).
+
+### B. The TWO directive row-sets — the root of the divergence (CRITICAL)
+`DirectiveRange` exists in two flavours, written + read by **different** paths:
+- **`clipId = null` (SESSION directives).** WRITTEN by the app's per-segment edit
+  (`patchSessionDirectives` ← `applySegSetting`). READ by: the windowed/tiled **buffer PINS**
+  (`directiveAt` over `sessionDirs`) + `GET /buffer/session/:id` (the buffer viewer, after the
+  down-payment fix).
+- **`clipId` set (the saved CLIP's own directives).** WRITTEN **only at promote** (carry-through —
+  **FROZEN at save**, never updated by a later edit). READ by: the windowed/tiled **clip PINS**
+  (`titleAt`/`clipTitled`) + the **library** (`GET /buffer/me/clips`, `c.directiveRanges`) + `GET
+  /clips/:id` ((2c)).
+- **THE BUG CLASS:** a post-save edit writes `clipId=null` (session) + `Clip.*` (the app dual-write),
+  but the saved-clip read paths coalesce `clipId`-set (frozen) ?? `Clip.*`. Which value wins depends
+  on the feed → the staleness is feed-by-feed.
+- **CU1 AUTHORITY: pick `clipId = null` (session rows) as THE source** — the buffer is the one store;
+  a saved clip is a retain over it. Every edit writes `clipId=null`; every read resolves `clipId=null`.
+  `Clip.*` + `stream.*` + the `clipId`-set carry-through become **read-fallbacks only** (deleted in CU4).
+
+### C. Every read path + its CURRENT resolution → replace with the one resolver
+| Read path | endpoint / fn | current TITLE | current PRECISION | current IDENTITY |
+|---|---|---|---|---|
+| Legacy `?at=` discover (`useHistoricalClips`) | `GET /clips/discover?at=` | `c.title` **raw (no coalesce)** | `COALESCE(c.locDisplayPrecision, s.locationPrecision)` | `c.attributed` |
+| Windowed/tiled BUFFER pins | `windowAvailability` | `cover?.title ?? row.title` (`cover`=`directiveAt(sessionDirs[clipId=null], intervals[0].startMs)`) | `cover?.precision ?? s.locationPrecision` | `cover ? cover.attributed : true` |
+| Windowed/tiled CLIP pins | `windowAvailability` | `titleAt(clipTitled[clipId-set], intervals[0].startMs) ?? row.title` | `COALESCE(c.locDisplayPrecision, s.locationPrecision)` | `c.attributed` |
+| Library | `GET /buffer/me/clips` | `cover?.title ?? c.title` (`cover`=`c.directiveRanges[clipId-set]` covering start) | (2c) coalesce over `c.locDisplayPrecision` | (2c) over `c.attributed` |
+| Clip viewer | `GET /clips/:id` | (2c) coalesce ?? `c.title` | `COALESCE(c.locDisplayPrecision, s.locationPrecision)` | `c.attributed` |
+| Buffer viewer | `GET /buffer/session/:id` | **was `stream.title`** → now `clipId=null cover ?? stream.title` (down-payment) | (n/a in viewer) | (host shown unconditionally — anon NOT honoured yet) |
+
+**CU1 = delete every cell above and call `resolveClipAxes(clipId=null dirs, T) ?? <fallbacks>`.**
+
+### D. The pin COVERAGE nuance
+The windowed/tiled pins resolve at **`intervals[0].startMs`** (the first PUBLIC interval), NOT the
+playhead. A directive over a **sub-range** that doesn't cover `intervals[0].startMs` → `cover=null` →
+stale fallback. `resolveClipAxes` must resolve at a **consistent, principled instant** — recommend the
+**queried instant T** (per-instant, matches "clipAt(t) selects + axes are current"), not the first
+interval. This is why a whole-clip rename showed but a sub-range edit may not.
+
+### E. The buffer-session DEDUP (why the time machine shows the SESSION, not the saved clip)
+`windowAvailability` dedups: a clip whose session is **also** a returned bufferPin is dropped (same
+footage) → the time machine renders the **buffer SESSION** pin (`source=buffer`), which reads
+`clipId=null`. So an edit on the saved CLIP must land on the SESSION's `clipId=null` directive — which
+the CU1 single-authority guarantees (and is why authority = `clipId=null`).
+
+### F. Write targets to consolidate (one writer)
+- `applySegSetting` → `patchSessionDirectives` (`clipId=null`) — **keep as the one writer.**
+- `patchClip` (`Clip.*`) — the **dual-write** — **DELETE in CU2** once reads resolve `clipId=null`.
+- promote carry-through (`clipId`-set, frozen) — vestigial once reads stop using it (CU1); **deleted in CU4.**
+
+### G. DO / DON'T
+**DO:**
+- Make `clipId=null` the single authority; route EVERY read through one `resolveClipAxes`.
+- Resolve at the **queried instant T** (`clipAt(t)` selects WHICH clip; axes are read CURRENT — only
+  footage + retained capture-fidelity coords/identity are tied to T; §1.4 reversibility).
+- Keep **forward-only** snips (now/reaper/cap → the clip AHEAD, never behind).
+- Honour `anon` everywhere a host renders (the buffer viewer currently doesn't).
+
+**DON'T:**
+- Don't add per-feed bespoke resolution — that's the whack-a-mole CU1 kills.
+- Don't read `stream.title` / `Clip.title` / `Clip.locDisplayPrecision` in any feed once CU1 lands
+  (fallback-only, then deleted in CU4).
+- Don't **freeze axes at save** (the `clipId`-set carry-through is the anti-pattern that caused the
+  staleness — a saved clip's axes must stay live-editable, read from the authority).
+- Don't deploy more one-off coalesce patches before the joint kickoff.
+- Don't start CU4 (the table collapse / rename) before CU1–CU3 prove the model on device.
+- Don't break the `clips-timeline-clock-v1` milestone (the universal wall clock / smooth scrub) — the
+  manifest rearchitecture is orthogonal to timeline playback; verify against its device-test cases.

@@ -4273,3 +4273,9 @@ handoff); all 3 repos pulled + aligned (2026-06-25 — app `b119da2`, backend `6
 `8930ee2`). Down-payments already in: the buffer-session title coalesce (`wrld-backend`, the
 `GET /buffer/session/:id` fix — pending box deploy) + the library-drawer key fix (`89a6fc2`) — both
 subsumed by CU1, so don't chase them further.
+
+**The pedantic detail + DO/DON'T (read before CU1):** every field-level fragmentation, the two
+`DirectiveRange` row-sets (`clipId=null` session vs `clipId`-set clip — the root of the divergence),
+each feed's exact current resolution to replace, the pin coverage nuance, the buffer-session dedup,
+the write targets, and an explicit DO/DON'T list are in `HANDOFF-unified-manifest-2026-06-24.md` →
+**"CU1 — THE PEDANTIC DETAIL."** Nothing we unearthed this session is left only in conversation.

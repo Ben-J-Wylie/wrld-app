@@ -626,6 +626,12 @@ identity + access; the planet is derived. One home per fact, rendered everywhere
 | `Clip` ≡ range + axes (one entity) | `Clip` + `ClipRange` + `DirectiveRange` + `ClipTrack` | R4 north-star collapse |
 | consistent names: `precision\|…\|private`, `identity: shown\|anon`, `keep` | `precision`/`locDisplayPrecision`/`locationPrecision`; `visibility: public\|anon\|draft`; bool `attributed`; `lane` | rename + vocab split during the collapse |
 
+> **Field-by-field fragmentation + the exact read paths to collapse** (the two `DirectiveRange`
+> row-sets `clipId=null`/`clipId`-set, every feed's current resolution, the pin coverage nuance, the
+> buffer-session dedup, the write targets, and the DO/DON'T) are itemized in
+> `HANDOFF-unified-manifest-2026-06-24.md` → **"CU1 — THE PEDANTIC DETAIL."** That's the CU1
+> work-order; this section is the principle.
+
 ---
 
 ## 6. Content representation (how it's shown, honestly)
