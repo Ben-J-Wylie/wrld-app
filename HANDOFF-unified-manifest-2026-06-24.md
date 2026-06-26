@@ -908,3 +908,25 @@ builds on the fragmented model before CU1.
 > time-machine pin, the clip viewer, and the library (live data today is external-cam buffer sessions
 > with no per-segment directives yet, so the override only shows once you make one). Backend `git
 > be1e9c5` (`wrld-backend/main`).
+
+---
+
+## CU2 — app progress (2026-06-26, on CU1 `be1e9c5`)
+
+CU1 is live: `resolveClipAxes` (authority `clipId=null` at T) populates the existing response fields
+on every read path (discover pins, library, viewers, buffer-session) — so the app's existing reads
+now get RESOLVED values. A clips-page edit (which writes `clipId=null`) proliferates to the time
+machine **without an app read change**. CU2 is the write/drawer unification:
+
+- ✅ **Dual-write deleted.** `ClipsScreen.onSheetChange` now writes ONLY the `clipId=null` directive
+  (`applySegSetting` → `patchSessionDirectives`); the `patchClip` `Clip.*` sync is gone (CU1 reads
+  `clipId=null ?? Clip.*`, so it was redundant). The clips page is a pure authority writer. tsc clean.
+- ⏳ **Library drawer → authority (next).** `SavedClipSettingsSheet` still writes `Clip.*` via
+  `patchClip` — works via CU1's fallback for library-only edits, but a clips-page edit on the same
+  range would mask it. Switch it to write the `clipId=null` directive (`useBuffer` session directives
+  + `segmentSettings` merge + `patchDirectives`); the two hosts then share one write path. (The
+  `SegmentSettingsSheet` UI is already the single drawer; the hosts differ only because the clips page
+  shares its `settingsRanges` with the timeline carve — so "one host" stays two hosts, one write.)
+- 🚩 **CU1 residual for Aaron:** `GET /buffer/me` (the buffer descriptor's `session.title`, read by the
+  clips-page BUFFER-lane timeline label) was NOT routed through `resolveClipAxes` — still raw
+  `stream.title`. Route it too so the buffer-lane label resolves (minor; discover + viewers covered).

@@ -637,14 +637,11 @@ export const ClipsScreen = () => {
         }))
       bufferApi
         .patchDirectives(sessionId, directives)
-        // A per-segment edit (visibility / sources / tags via this path) must reflect everywhere it's
-        // read: the time-machine rewatch globe pins (`historical-clips` windowed / `avail-cell` Lane B
-        // / `historical-availability`), the clip viewer (`clip`), and the library + saved lane
-        // (`buffer/clips`). All are keyed on time/cell/id, so a held view won't auto-refetch —
-        // invalidate them all. Harmless when a feed isn't cached. (NB: the library `name` + viewer
-        // still read the Clip ROW's title until the backend coalesces the directive — see HANDOFF
-        // #13/#12; saved-clip title/identity/precision are routed through patchClip in onSheetChange
-        // for exactly that reason.)
+        // CU1/CU2: this clipId=null directive is the single authority — every read path resolves it
+        // via `resolveClipAxes` (time-machine pins `historical-clips`/`avail-cell`/`historical-availability`,
+        // the clip viewer `clip`, the library + saved lane `buffer/clips`). All are keyed on
+        // time/cell/id, so a held view won't auto-refetch — invalidate them all so the resolved value
+        // re-reads. Harmless when a feed isn't cached.
         .then(() => {
           qc.invalidateQueries({ queryKey: ['buffer', 'clips'] })
           qc.invalidateQueries({ queryKey: ['clip'] })
@@ -753,43 +750,15 @@ export const ClipsScreen = () => {
   const onSheetChange = useCallback(
     (patch: SegSettings) => {
       if (!sheetClip) return
-      // ALWAYS write the per-range directive (the PB4 authority): it drives the clips-page reload AND
-      // the time-machine PIN, which — while the session is still in the buffer window — is a
-      // buffer-session pin that reads the SESSION directive (title via U5), not the Clip row.
+      // CU2 (Canonical Unification): write ONLY the per-range `clipId=null` directive — the single
+      // authority CU1's `resolveClipAxes` reads on every path (time-machine pin + viewer, library,
+      // clips page, live globe), so an edit proliferates everywhere identically. The old `patchClip`
+      // dual-write (syncing the `Clip.*` row, needed pre-CU1 when each feed read the Clip row raw) is
+      // DELETED — `Clip.*` is now a read-fallback only. `applySegSetting` → `patchSessionDirectives`
+      // owns the write + the invalidations.
       applySegSetting(sheetClip, patch)
-      // For a SAVED clip, ALSO sync the canonical Clip ROW for the axes the library (`name`), the
-      // clip viewer, and the discover c.* fallback read — the directive write alone never touches the
-      // Clip row, so without this the rename stays test12 there. Title / identity / precision map
-      // cleanly; visibility (clip row has no 'private'), sources + tags are range-only → directive.
-      // (Precision/identity on the buffer-pin tag still need the backend directive-coalesce — HANDOFF
-      // #13 — but library + viewer + the saved-clip discover pin update from this.)
-      const sid = sheetClip.sourceSessionId
-      const mid = (sheetClip.startMs + sheetClip.endMs) / 2
-      const saved = sid
-        ? savedLane.find((x) => x.sourceSessionId === sid && mid >= x.startMs && mid < x.endMs && !x.id.startsWith('pending:'))
-        : null
-      const clipId = saved ? saved.parentSavedId ?? saved.id : null
-      if (!clipId) return
-      const body: ClipPatch = {}
-      if (patch.title !== undefined) body.title = patch.title ?? null
-      if (patch.identity !== undefined) body.attributed = patch.identity === 'attributed'
-      if (patch.precision !== undefined) body.locDisplayPrecision = patch.precision
-      if (Object.keys(body).length === 0) return
-      bufferApi
-        .patchClip(clipId, body)
-        .then(() => {
-          qc.invalidateQueries({ queryKey: ['buffer', 'clips'] }) // library + saved lane
-          qc.invalidateQueries({ queryKey: ['clip'] }) // the clip viewer (time-machine rewatch)
-          for (const k of ['historical-clips', 'avail-cell', 'historical-availability']) {
-            qc.invalidateQueries({ queryKey: [k] }) // time-machine pins
-          }
-        })
-        .catch((e: unknown) => {
-          const msg = (e as { response?: { data?: { message?: string } }; message?: string }).response?.data?.message
-          Alert.alert('Could not save', msg ?? 'Please try again.')
-        })
     },
-    [sheetClip, savedLane, applySegSetting, qc],
+    [sheetClip, applySegSetting],
   )
   // No auto-selection on open — the page defaults to RIDING THE NOW EDGE (below), so the viewer
   // follows the live/now edge rather than highlighting a past clip. (Tapping a clip still selects it.)
