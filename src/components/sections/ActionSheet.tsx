@@ -7,7 +7,8 @@
 // and other contextual menus.
 
 import type { ComponentProps } from 'react'
-import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
+import { Dimensions, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { BottomSheet } from '@/components/primitives/BottomSheet'
 import { Pressable } from '@/components/primitives/Pressable'
 import { Text } from '@/components/primitives/Text'
@@ -41,9 +42,20 @@ export function ActionSheet({
   cancelLabel = 'Cancel',
   style,
 }: Props) {
+  const insets = useSafeAreaInsets()
+  // Size the sheet to its content (the default `peek` is a fixed 280 → longer
+  // lists clip the bottom rows). Generous per-row estimate; cap at 85% of the
+  // screen and scroll past that.
+  const ROW_H = 52
+  const needed =
+    24 /* grabber */ + (header ? 44 : 0) + actions.length * ROW_H +
+    64 /* cancel + its margin */ + theme.spacing.md + insets.bottom
+  const maxH = Math.round(Dimensions.get('window').height * 0.85)
+  const scrollable = needed > maxH
+
   return (
-    <BottomSheet visible={visible} onClose={onClose}>
-      <View style={style}>
+    <BottomSheet visible={visible} onClose={onClose} peekHeight={Math.min(needed, maxH)} scrollable={scrollable}>
+      <View style={[style, !scrollable && { paddingBottom: insets.bottom }]}>
         {header && (
           <View style={styles.header}>
             <Text variant="monoLabel" color={theme.colors.text.subtle}>
