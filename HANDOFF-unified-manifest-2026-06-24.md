@@ -1225,3 +1225,31 @@ slice (define the type + adapters, migrate one surface to prove it), NOT a big-b
     - **Viewer chrome** (`fromClipDetail`) + **clips-grid `LaneClip` runtime**: behaviour-preserving but
       on verified/high-churn code → do with a device pass.
   - The CU3 app pieces (the `keep` axis in the drawer + retiring the bespoke save flow) wait on D1/D3.
+
+### On-device observations during the D1 gate (Ben, 2026-06-26) — both are pre-unification seams CU3 closes
+1. **Go-live-to-saved starts in the buffer lane, then flips to saved.** Cosmetic live-build lag — the
+   optimistic live block renders before the real session's `lane='saved'` loads. **App, Ben's lane,
+   deferred** (smooth by reading `captureConfig.lane` on the live block immediately). No data effect.
+2. **"Printed to saved" doesn't show in the Library; "dragged to saved" does.** EXPECTED pre-D3:
+   drag-to-save creates a durable **Clip** (→ Library); a saved-lane go-live only marks the *session*
+   `lane='saved'` (retained, won't reap) but **doesn't materialise a Clip** → it lives in the clips-grid
+   saved lane, not the Library. **→ Aaron: this is U3** — materialise a saved-lane (`keep`) range into a
+   durable Library clip (+ quota), so "printed to saved" and "dragged to saved" surface identically. Folds
+   into D3 (save = the one `keep` directive). *(Test note: verify saved-lane survival in the **clips grid**,
+   not the Library.)*
+
+### ⮕ AARON — START HERE (next steps, readiness)
+- **D2 — go-live `lane` → opening-range `retain` directive. ✅ has what's needed, START NOW** (no app dep;
+  do at go-live exactly what D1's backfill does retroactively for a saved-lane session: write `retain:true`,
+  `clipId=null`, range `[start, endedAt ?? OPEN]`). Retires the saved-lane half of the backfill.
+- **D4 — AV-pause/resume → a `sources` directive (mediasoup). ✅ START NOW** (no app dep).
+- **D3 — save/un-save = a `keep`/`retain` directive edit; drop the copy-path + `saveClip`/`unsaveClip`/
+  edge-relative endpoints; + U3 (materialise a `keep` range into a Library clip, per obs 2). 🔶 GATED on
+  the D1 cutover passing** (Ben is running it — flip `CU3_RETAIN_ONLY` on + prove saved survives / unsaved
+  reaps). Once the gate passes and the flag stays ON, D3 is safe (the legacy writers it removes are the
+  protections the cutover proved redundant). **Open sub-question for D3/U3:** under retain-in-place, what
+  makes a range appear in the Library — a still-materialised `Clip` row, or the Library query shifting to
+  "ranges with `keep=kept`"? (CU4 makes clip ≡ segment; D3 picks the interim.) Worth a quick Ben+Aaron
+  call when D3 starts.
+- **Ben (app), after D3 lands:** the `keep` axis in the drawer + retire the bespoke save flow (writes via
+  `clipDirectives`). In parallel now: the canonical-type discovery-pin slice (unblocked).
