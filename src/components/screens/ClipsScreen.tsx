@@ -32,7 +32,8 @@ import { ClipsTimeline, type ClipsTimelineHandle } from '@/components/features/c
 import { ClipViewer } from '@/components/features/clip/ClipViewer'
 import { SourceRail } from '@/components/features/clip/SourceRail'
 import { SourceStage, type SourceRender } from '@/components/sections/SourceStage'
-import { SOURCE_META, SOURCE_RAIL_ORDER, KIND_TO_FEEDKIND, FEEDKIND_TO_KIND, pickDefaultView } from '@/components/features/stream/sourceMeta'
+import { SOURCE_META, SOURCE_RAIL_ORDER, KIND_TO_FEEDKIND, pickDefaultView } from '@/components/features/stream/sourceMeta'
+import { wirePatch, wireSourcesToFeed, persistDirectives } from '@/lib/clipDirectives'
 import { useLocalTelemetry } from '@/hooks/useLocalTelemetry'
 import { useLocationTrail } from '@/hooks/useLocationTrail'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
@@ -633,36 +634,11 @@ export const ClipsScreen = () => {
   )
   // PATCH the authoritative (coalesced) per-segment directive list for one session. Each override
   // range carries every set axis; an omitted range = the go-live default. AUTHORITATIVE replace.
+  // Persist a session's recomputed authoritative directive list + invalidate every read path. The
+  // wire mapping + invalidate set live in the shared `clipDirectives` core (also used by the
+  // library/profile drawer host) — one place, no drift.
   const patchSessionDirectives = useCallback(
-    (sessionId: string, ranges: SettingsRange[]) => {
-      const directives = ranges
-        .filter((r) => r.sessionId === sessionId)
-        .map((r) => ({
-          startAtMs: Math.round(r.startMs),
-          endAtMs: Math.round(r.endMs),
-          ...(r.settings.visibility ? { visibility: r.settings.visibility } : {}),
-          ...(r.settings.precision ? { precision: r.settings.precision } : {}),
-          ...(r.settings.identity ? { attributed: r.settings.identity === 'attributed' } : {}),
-          ...(r.settings.sources ? { sources: r.settings.sources } : {}),
-          ...(r.settings.title ? { title: r.settings.title } : {}),
-          ...(r.settings.tags && r.settings.tags.length ? { tags: r.settings.tags } : {}),
-        }))
-      bufferApi
-        .patchDirectives(sessionId, directives)
-        // CU1/CU2: this clipId=null directive is the single authority — every read path resolves it
-        // via `resolveClipAxes` (time-machine pins `historical-clips`/`avail-cell`/`historical-availability`,
-        // the clip viewer `clip`, the library + saved lane `buffer/clips`). All are keyed on
-        // time/cell/id, so a held view won't auto-refetch — invalidate them all so the resolved value
-        // re-reads. Harmless when a feed isn't cached.
-        .then(() => {
-          qc.invalidateQueries({ queryKey: ['buffer', 'clips'] })
-          qc.invalidateQueries({ queryKey: ['clip'] })
-          for (const k of ['historical-clips', 'avail-cell', 'historical-availability']) {
-            qc.invalidateQueries({ queryKey: [k] })
-          }
-        })
-        .catch(() => {})
-    },
+    (sessionId: string, ranges: SettingsRange[]) => persistDirectives(qc, sessionId, ranges),
     [qc],
   )
   // Apply a partial settings patch over a segment's span (split-merge-coalesce via segmentSettings),
@@ -672,15 +648,7 @@ export const ClipsScreen = () => {
       const sid = c.sourceSessionId
       if (!sid) return
       // The sheet keys `sources` by FeedKind; the wire (directives) keys by backend kind. Convert.
-      let wire = patch
-      if (patch.sources) {
-        const bk: Record<string, boolean> = {}
-        for (const [fk, v] of Object.entries(patch.sources)) {
-          const k = FEEDKIND_TO_KIND[fk as FeedKind]
-          if (k) bk[k] = v
-        }
-        wire = { ...patch, sources: bk }
-      }
+      const wire = wirePatch(patch)
       setSettingsRanges((prev) => {
         const next = applySetting(prev, { sessionId: sid, startMs: c.startMs, endMs: c.endMs }, wire)
         patchSessionDirectives(sid, next)
@@ -722,11 +690,7 @@ export const ClipsScreen = () => {
     const baseSources: Record<string, boolean> = {}
     for (const k of avail) baseSources[k] = true
     // Override sources are backend-kind keyed (wire) → convert to FeedKind for the sheet.
-    const overrideSources: Record<string, boolean> = {}
-    for (const [bk, v] of Object.entries(override.sources ?? {})) {
-      const fk = KIND_TO_FEEDKIND[bk]
-      if (fk) overrideSources[fk] = v
-    }
+    const overrideSources = wireSourcesToFeed(override.sources ?? {})
     const t = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
     const dateLabel = new Date(sheetClip.startMs).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })
     // Pre-fill the title input with the segment's CURRENT title so the box reads "test12" (the

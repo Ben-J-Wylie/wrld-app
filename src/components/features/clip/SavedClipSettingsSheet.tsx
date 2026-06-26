@@ -18,8 +18,9 @@ import { SegmentSettingsSheet } from './SegmentSettingsSheet'
 import { KIND_TO_FEEDKIND, FEEDKIND_TO_KIND, SOURCE_RAIL_ORDER } from '@/components/features/stream/sourceMeta'
 import type { FeedKind } from '@/components/features/broadcast/FeedThumb'
 import { applySetting, mergeSettings, type SegSettings, type SettingsRange, type Precision } from '@/lib/segmentSettings'
+import { wirePatch, feedSourcesToWire, persistDirectives, invalidateClipReads } from '@/lib/clipDirectives'
 import { useBuffer } from '@/hooks/useBuffer'
-import { bufferApi, type SavedClip, type ClipPatch, type SegmentDirective } from '@/api/buffer'
+import { bufferApi, type SavedClip, type ClipPatch } from '@/api/buffer'
 
 type Props = {
   clip: SavedClip | null
@@ -43,15 +44,8 @@ export function SavedClipSettingsSheet({ clip, visible, onClose }: Props) {
   // clip's id — it auto-resets when a different clip opens (the `id !== clip.id` guard), no effect.
   const [optimistic, setOptimistic] = useState<{ id: string; patch: SegSettings } | null>(null)
 
-  // Refetch every surface that reads the clip's axes so a resolved edit re-reads.
-  const invalidate = useCallback(() => {
-    qc.invalidateQueries({ queryKey: ['buffer', 'me'] }) // the session directives (this drawer reseeds)
-    qc.invalidateQueries({ queryKey: ['buffer', 'clips'] }) // library + saved lane
-    qc.invalidateQueries({ queryKey: ['clip'] }) // the clip viewer (time-machine rewatch)
-    for (const k of ['historical-clips', 'avail-cell', 'historical-availability']) {
-      qc.invalidateQueries({ queryKey: [k] }) // time-machine pins
-    }
-  }, [qc])
+  // Refetch every surface that reads the clip's axes so a resolved edit re-reads (shared core).
+  const invalidate = useCallback(() => invalidateClipReads(qc), [qc])
 
   // CU2 — the clip's source session + a LOCAL copy of its `clipId=null` directives (the CU1
   // authority). Seeded on open so rapid toggles merge optimistically (matches the clips page). The
@@ -90,39 +84,19 @@ export function SavedClipSettingsSheet({ clip, visible, onClose }: Props) {
         if (patch.title !== undefined) body.title = patch.title ?? null
         if (patch.identity !== undefined) body.attributed = patch.identity === 'attributed'
         if (patch.precision !== undefined) body.locDisplayPrecision = patch.precision
-        if (patch.sources) {
-          const wire: Record<string, boolean> = {}
-          for (const [fk, v] of Object.entries(patch.sources)) { const k = FEEDKIND_TO_KIND[fk as FeedKind]; if (k) wire[k] = v }
-          body.sources = wire
-        }
+        if (patch.sources) body.sources = feedSourcesToWire(patch.sources)
         if (Object.keys(body).length === 0) return
         bufferApi.patchClip(clip.id, body).then(invalidate).catch((e) => Alert.alert('Could not save', e?.message ?? 'Please try again.'))
         return
       }
-      // The drawer keys `sources` by FeedKind; the directive wire keys by backend kind. Convert.
-      let wirePatch = patch
-      if (patch.sources) {
-        const bk: Record<string, boolean> = {}
-        for (const [fk, v] of Object.entries(patch.sources)) { const k = FEEDKIND_TO_KIND[fk as FeedKind]; if (k) bk[k] = v }
-        wirePatch = { ...patch, sources: bk }
-      }
-      const next = applySetting(rangesRef.current, { sessionId: sid, startMs: clip.startAtMs, endMs: clip.endAtMs }, wirePatch)
+      // The drawer keys `sources` by FeedKind; the directive wire keys by backend kind. Convert,
+      // recompute the authoritative range list, and persist via the shared core (same path the
+      // clips-grid editor uses — one wire mapping + one invalidate set).
+      const next = applySetting(rangesRef.current, { sessionId: sid, startMs: clip.startAtMs, endMs: clip.endAtMs }, wirePatch(patch))
       rangesRef.current = next
-      const directives: SegmentDirective[] = next
-        .filter((r) => r.sessionId === sid)
-        .map((r) => ({
-          startAtMs: Math.round(r.startMs),
-          endAtMs: Math.round(r.endMs),
-          ...(r.settings.visibility ? { visibility: r.settings.visibility } : {}),
-          ...(r.settings.precision ? { precision: r.settings.precision } : {}),
-          ...(r.settings.identity ? { attributed: r.settings.identity === 'attributed' } : {}),
-          ...(r.settings.sources ? { sources: r.settings.sources } : {}),
-          ...(r.settings.title ? { title: r.settings.title } : {}),
-          ...(r.settings.tags && r.settings.tags.length ? { tags: r.settings.tags } : {}),
-        }))
-      bufferApi.patchDirectives(sid, directives).then(invalidate).catch((e) => Alert.alert('Could not save', e?.message ?? 'Please try again.'))
+      persistDirectives(qc, sid, next)
     },
-    [clip, sid, invalidate],
+    [clip, sid, qc, invalidate],
   )
 
   const onDelete = useCallback(
