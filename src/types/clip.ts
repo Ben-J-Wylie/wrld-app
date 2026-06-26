@@ -29,6 +29,15 @@ export type ClipHost = {
   avatarUrl: string | null
 }
 
+// The access/monetization projection — "who may watch," NOT a clip content axis (decision
+// 2026-06-26, Aaron-confirmed). Sibling to `axes`, populated only by discovery projections; absent
+// on library/viewer ones. Derived from the gate + host-subscription/PpvEvent joins server-side.
+export type ClipAccess = {
+  tier: 'public' | 'subscriber' | 'ppv'
+  subscriptionPriceUsd?: number | null
+  ppvEventId?: string | null
+}
+
 // The 7 orthogonal axes, RESOLVED (the §5 north-star vocab; mirrors the backend `ResolvedAxes`).
 // `sources` is backend-kind keyed (camera/audio/location/…); `keep` is the retention/lane axis.
 export type ResolvedAxes = {
@@ -52,6 +61,8 @@ export type CanonicalClip = {
   endAtMs: number
   host: ClipHost | null
   axes: ResolvedAxes
+  // Access/monetization — present on discovery projections, absent on library/viewer ones.
+  access?: ClipAccess
   lat: number | null
   lng: number | null
   subscribersOnly: boolean
@@ -118,6 +129,8 @@ export function fromClipPin(c: ClipPin): CanonicalClip {
       sources: {},
       keep: 'kept',
     },
+    // ClipPin carries the gate but no price/ppv → derive tier from it.
+    access: { tier: c.subscribersOnly ? 'subscriber' : 'public' },
     lat: c.lat,
     lng: c.lng,
     subscribersOnly: c.subscribersOnly,
@@ -140,6 +153,11 @@ export function fromBufferPin(b: BufferPin): CanonicalClip {
       precision: b.locationPrecision,
       sources: {},
       keep: 'kept',
+    },
+    access: {
+      tier: b.accessTier,
+      subscriptionPriceUsd: b.subscriptionPriceUsd ?? null,
+      ppvEventId: b.ppvEventId ?? null,
     },
     lat: b.lat,
     lng: b.lng,

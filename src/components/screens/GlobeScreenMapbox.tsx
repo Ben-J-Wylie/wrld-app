@@ -63,6 +63,7 @@ import { useHistoricalAvailability } from '@/hooks/useHistoricalAvailability'
 import { useHistoricalCells } from '@/hooks/useHistoricalCells'
 import type { Interval } from '@/api/clips'
 import { resolvePinAxes, type ClipPin, type BufferPin } from '@/api/clips'
+import { fromClipPin, fromBufferPin, precisionToEditable, type CanonicalClip } from '@/types/clip'
 import { useDiscoverySocket } from '@/hooks/useDiscoverySocket'
 import { usePublicConfig, configNumber, configBool } from '@/hooks/usePublicConfig'
 import { PIN_ZOOM_THRESHOLD, COUNT_MIN_ZOOM } from '@/lib/tiles'
@@ -423,59 +424,48 @@ const EMPTY_BUFFER: BufferPin[] = []
 // completeness #1). Mirrors the backend's anonymous host so the card reads "Anonymous".
 const ANON_PIN_HOST = { id: '', handle: 'anonymous', displayName: 'Anonymous', avatarUrl: null }
 
-// Time Machine — map a surviving-clip pin into the Stream shape the globe's pin
-// renderer + card already consume, so historical pins reuse the whole live path.
-// Module-level + pure so the memoised `pins` stays referentially stable. Clips are
-// recorded (isLive false, no room, no viewers); their clip-ness is recovered by
-// `clipPinById.has(id)`, which drives the "Watch" CTA + replay caption.
-function clipToStream(c: ClipPin): Stream {
+// Time Machine — map a CanonicalClip (the one clip shape, CU4) into the Stream shape the globe's
+// pin renderer + card already consume, so historical pins reuse the whole live path. Clips are
+// recorded (isLive false, no room, no viewers); their clip-ness is recovered by `clipPinById.has(id)`,
+// which drives the "Watch" CTA + replay caption. Behaviour-preserving over the prior per-type
+// mappers: title default by source ('Clip'/'Buffer'); the buffer host's `subscriptionPriceUsd`
+// comes from the `access` projection (clip pins carry no access price → key omitted, as before);
+// precision maps back to the Stream vocab ('private'→'off', though pins never carry 'private').
+function canonicalToStream(c: CanonicalClip): Stream {
+  const priceKey = c.access && 'subscriptionPriceUsd' in c.access
   return {
     id: c.id,
-    hostId: c.host.id,
-    host: {
-      id: c.host.id,
-      handle: c.host.handle,
-      displayName: c.host.displayName,
-      avatarUrl: c.host.avatarUrl,
-    },
-    title: c.title ?? 'Clip',
+    hostId: c.host?.id ?? '',
+    host: c.host
+      ? {
+          id: c.host.id,
+          handle: c.host.handle,
+          displayName: c.host.displayName,
+          avatarUrl: c.host.avatarUrl,
+          ...(priceKey ? { subscriptionPriceUsd: c.access!.subscriptionPriceUsd } : {}),
+        }
+      : undefined,
+    title: c.axes.title ?? (c.source === 'buffer' ? 'Buffer' : 'Clip'),
     lat: c.lat,
     lng: c.lng,
-    startedAt: new Date(c.clipStartMs).toISOString(),
+    startedAt: new Date(c.startAtMs).toISOString(),
     viewerCount: 0,
     isLive: false,
     sources: [],
     mediasoupRoomId: null,
     subscribersOnly: c.subscribersOnly,
-    locationPrecision: c.locationPrecision,
+    locationPrecision: precisionToEditable(c.axes.precision),
   }
 }
-
-// PB1 — map a public/gated buffer session into the same Stream shape (so buffer pins
-// reuse the pin renderer + card). A subscriber/ppv tier reads as `subscribersOnly` so
-// the card shows the locked treatment; owner-private sessions never reach here.
+// Module-level + pure so the memoised `pins` stays referentially stable. Both pin kinds now route
+// through the one CanonicalClip → Stream projection (CU4 prep — one shape feeds discovery too).
+function clipToStream(c: ClipPin): Stream {
+  return canonicalToStream(fromClipPin(c))
+}
+// PB1 — a public/gated buffer session. A subscriber/ppv tier reads as `subscribersOnly` so the card
+// shows the locked treatment; owner-private sessions never reach here.
 function bufferPinToStream(b: BufferPin): Stream {
-  return {
-    id: b.sessionId,
-    hostId: b.host.id,
-    host: {
-      id: b.host.id,
-      handle: b.host.handle,
-      displayName: b.host.displayName,
-      avatarUrl: b.host.avatarUrl,
-      subscriptionPriceUsd: b.subscriptionPriceUsd ?? null,
-    },
-    title: b.title ?? 'Buffer',
-    lat: b.lat,
-    lng: b.lng,
-    startedAt: new Date(b.sessionStartMs).toISOString(),
-    viewerCount: 0,
-    isLive: false,
-    sources: [],
-    mediasoupRoomId: null,
-    subscribersOnly: b.accessTier !== 'public',
-    locationPrecision: b.locationPrecision,
-  }
+  return canonicalToStream(fromBufferPin(b))
 }
 
 export function GlobeScreenMapbox() {
