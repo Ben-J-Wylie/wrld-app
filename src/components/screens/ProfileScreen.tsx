@@ -31,6 +31,7 @@ import { useUserProfile } from '@/hooks/useUserProfile'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
 import { useMutes } from '@/hooks/useMutes'
 import { usersApi } from '@/api/users'
+import { REPORT_REASONS } from '@/lib/reportReasons'
 import { ppvApi } from '@/api/ppvEvents'
 import { useQuery } from '@tanstack/react-query'
 
@@ -127,9 +128,9 @@ export function ProfileScreen() {
     )
   }
 
-  // Report: a preset-reason picker, then files a report that raises a moderation
-  // case. Distinct from Block (which hides the pair). Auth-gated by the caller.
-  const REPORT_REASONS = ['Inappropriate content', 'Harassment or bullying', 'Spam', 'Impersonation', 'Other']
+  // Report: a preset-reason picker (REPORT_REASONS shared across surfaces), then
+  // files a report that raises a moderation case. Distinct from Block (hides the
+  // pair). Auth-gated by the caller.
   function handleReport() {
     Alert.alert(`Report @${handle}?`, 'Why are you reporting this account?', [
       ...REPORT_REASONS.map((reason) => ({
