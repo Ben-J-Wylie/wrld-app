@@ -1058,12 +1058,16 @@ returns **`sourceWindows: [{startAtMs, endAtMs, sources}]`** (`wrld-backend buff
 session's per-range `sources` directives, and the app filters the rail by the window covering the
 playhead. The **saved-clip viewer** (`GET /clips/:id`) does **not** return `sourceWindows` — it lists
 `tracks where enabled:true` only, so a per-range source toggle never reaches the clip rail.
-- **Aaron (backend, the only work):** mirror the buffer route — `GET /clips/:id` returns
-  `sourceWindows` resolved from the clip's **authority** per-range `sources` directives (the
-  `clipId=null` session rows for a retain-in-place clip; the clip's frozen `clipId`-set rows as the
-  fallback for a copied clip), same shape as the buffer route (only ranges carrying a `sources` map need
-  be included). Clipping to the clip's `[startAtMs, endAtMs]` is optional (the app only reads windows
-  covering the in-clip playhead). No `?at=` needed — it's a per-range list the app resolves locally.
+- **Aaron (backend) — ✅ DONE + DEPLOYED (2026-06-26, `wrld-backend 2dab272`).** `GET /clips/:id` now
+  returns **`sourceWindows: [{startAtMs, endAtMs, sources}]`** (same shape as the buffer route) on
+  **both** response paths (retain-in-place + copied), built from the clip's **authority** per-range
+  `sources` directives: the `clipId=null` SESSION rows (live, retain-in-place), falling back to the
+  clip's frozen `clipId`-set rows (a copied clip whose buffer session evicted). Only ranges carrying a
+  `sources` map are windows; not clipped (the app reads the window covering the in-clip playhead). No
+  `?at=` — per-range list, resolved app-side. tsc + build clean; 335 tests green. **Verify note:** no
+  prod `Clip` rows exist to exercise the field live (same data limitation as #1/#3 — `discover.clips`
+  empty platform-wide); it's additive + mirrors the proven buffer-route logic, so the on-device proof
+  (below) is Ben's.
 - **Ben (app) — ✅ NOTHING TO DO (verified 2026-06-26).** `ClipDetail.sourceWindows` already exists
   (`src/api/clips.ts` L134); `ClipViewerScreen` already (a) finds the `activeWindow` covering the
   playhead, (b) filters `availableViews` by `activeWindow.sources[bk] !== false` (identity always kept),
