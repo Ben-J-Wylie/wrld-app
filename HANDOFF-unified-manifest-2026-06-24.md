@@ -1050,3 +1050,25 @@ Minimal-fix alternative (no app change): resolve at a **footage-interior** insta
 public interval start, like the pin's pin-level fallback) instead of the raw start — fixes whole-clip /
 first-era edits, but a later-segment edit still won't match the scrubbed instant. The `at`-param
 contract is the model-true one (the viewer's chrome tracks the era you're watching, exactly like the pin).
+
+### #4 — Sources axis → the saved-clip VIEWER rail (Aaron, backend-only; app already wired). 2026-06-26.
+The last per-axis proliferation gap. Toggling a source OFF on a segment should hide it from the
+time-machine **viewer rail**. The **buffer-session viewer** already does this — `GET /buffer/session/:id`
+returns **`sourceWindows: [{startAtMs, endAtMs, sources}]`** (`wrld-backend buffer.ts` ~L3413) from the
+session's per-range `sources` directives, and the app filters the rail by the window covering the
+playhead. The **saved-clip viewer** (`GET /clips/:id`) does **not** return `sourceWindows` — it lists
+`tracks where enabled:true` only, so a per-range source toggle never reaches the clip rail.
+- **Aaron (backend, the only work):** mirror the buffer route — `GET /clips/:id` returns
+  `sourceWindows` resolved from the clip's **authority** per-range `sources` directives (the
+  `clipId=null` session rows for a retain-in-place clip; the clip's frozen `clipId`-set rows as the
+  fallback for a copied clip), same shape as the buffer route (only ranges carrying a `sources` map need
+  be included). Clipping to the clip's `[startAtMs, endAtMs]` is optional (the app only reads windows
+  covering the in-clip playhead). No `?at=` needed — it's a per-range list the app resolves locally.
+- **Ben (app) — ✅ NOTHING TO DO (verified 2026-06-26).** `ClipDetail.sourceWindows` already exists
+  (`src/api/clips.ts` L134); `ClipViewerScreen` already (a) finds the `activeWindow` covering the
+  playhead, (b) filters `availableViews` by `activeWindow.sources[bk] !== false` (identity always kept),
+  and (c) auto-switches via `pickDefaultView` when the viewed source vanishes. `clipsApi.get` returns
+  `res.data.clip` verbatim, so a `sourceWindows` field flows straight onto `ClipDetail`. The rail lights
+  up the moment the backend returns the field — zero app change, zero rebuild.
+- **Verify on device (after deploy):** toggle a source off on a segment → open its time-machine viewer
+  at that era → the source is gone from the rail (and the view auto-switches if it was selected).
