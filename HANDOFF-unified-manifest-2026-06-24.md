@@ -1097,3 +1097,67 @@ Plus the write side is unified (clips page + library both write `clipId=null` vi
 (lane-as-axis + live edges), CU4 (structural collapse + clean rename + one discover feed), CU5 (delete
 the fallbacks). Solo CU-prep available meanwhile: ✅ shared directive-edit core (done); ☐ one canonical
 clip type (dep-free); ☐ one drawer host (dep: backend #12 — visibility/tags on the library read).
+
+---
+
+## CU3 / CU4 KICKOFF (2026-06-26) — ACTIVE
+
+CU1 + CU2 are done + device-verified (above). Kicking off the structural phases. Same coordination
+discipline as CU1: **lock the contract decisions first** (recommend → Ben/Aaron confirm), then build in
+parallel lanes. CU3 first (lane-as-axis + live edges, parallels nothing left); CU4 (structural collapse
++ rename) once CU3 proves the model on device; CU5 deletes the old.
+
+### CU3 — Lane as the 7th axis + live edges
+
+**The goal.** `keep`/`lane` becomes a real `DirectiveRange` axis the reaper reads as its **single**
+retain signal (collapsing today's 3 OR'd signals: live-tail · saved-region · `BufferSession.lane`).
+Every live edge — go-live lane · snip-at-now · reaper · storage-cap · AV-pause/resume — writes the ONE
+unified directive model. Then all 7 axes are equal (title/tags/visibility/identity/precision/sources/
+**keep**), live editing rides the one model, and every edge is forward-only.
+
+**Contract decisions to lock (recommend → confirm):**
+- **D1 — Retain authority = `DirectiveRange.retain`.** The reaper survives a range iff a `retain:true`
+  directive pins it (or it's the live tail within the window). Collapse the 3 OR'd signals to this one.
+  *(retain-in-place, PB2 — saving is a `retain` flag, not a byte copy.)* → **Aaron.**
+- **D2 — Go-live lane → the opening range's `retain` directive.** App keeps sending `lane` in
+  `createRoom` (U1); Aaron's engine writes the initial `retain:true` directive over the opening range
+  instead of stashing `BufferSession.lane`. (Atomic at go-live, minimal app change.) → **Aaron** (app
+  unchanged for go-live).
+- **D3 — Save / un-save = a `keep` axis edit on the directive** (drop the bespoke
+  `saveClip`/`unsaveClip` + the edge-relative `fromReaperEdge`/`toNow` save endpoints). The clips-grid
+  drag-to-save + the drawer Lane toggle → `persistDirectives` with `retain` set on the range; the
+  reaper-edge "save the remainder" → a `retain` directive clamped server-side. *Dep: D1 live.* →
+  **Ben (app)** writes it via `clipDirectives`; **Aaron** drops the copy-path + the bespoke endpoints.
+- **D4 — snip-at-now (U2) + AV-pause/resume (U4) confirm-unified.** U2 already snips via `snipSession`
+  (a directive write) ✅; U4's `setSourcePaused` writes a `sources` directive snip. Confirm both route
+  through the unified write (no separate state). → **Aaron** (mediasoup/backend) + **Ben** (the AV-rail
+  pause control, if not already a directive write).
+
+**Work-orders:**
+- **Aaron (backend + mediasoup):** D1 reaper-reads-`retain`-only (collapse the OR'd signals); D2 go-live
+  writes the initial retain directive from `lane`; D3 drop the copy-path + `saveClip`/`unsaveClip`/
+  edge-relative endpoints (save = a `retain` directive); D4 AV-pause → sources directive. Each
+  independently shippable + device-verifiable.
+- **Ben (app):** add **`keep: 'kept' | 'reapable'`** to `SegSettings` + the drawer's Lane toggle writes
+  it via `persistDirectives` (the `clipDirectives` core already centralises the write); the clips-grid
+  **drag-to-save / lane toggle** → a `keep` directive edit (retire the bespoke `saveClip`/`unsaveClip`
+  calls); wherever the app reads `BufferSession.lane` / `captureConfig.lane` for display, read the
+  resolved `keep` axis instead. **Dep: D1/D3 backend live.** Until then the app's U1 `lane`→`createRoom`
+  + U3 edge-relative save stay as-is (they work; CU3 unifies their write path, not their behaviour).
+
+### CU4 — Structural collapse (clip ≡ segment) + clean rename
+Deferred until CU3 proves the model on device. **Aaron:** schema collapse (`Clip` + `ClipRange` +
+`DirectiveRange` + `ClipTrack` → one `Clip = range + axes` over `Track`); one discover feed (retire the
+legacy/windowed/tiled split); the rename (`precision`/`identity`/`keep`/`source`/`Track`; drop
+`locDisplayPrecision`/`locationPrecision`, bool `attributed`, `lane`, `splitPoints`, stale
+`motion`/`temp`); backfill. **Ben (app, dep-free prep can start now):** the **one canonical clip type**
+— collapse `LaneClip`/`SavedClip`/`ClipPin`/`BufferPin`/`ClipDetail` toward one canonical `Clip` + 7-axis
+`ResolvedAxes` + per-surface adapters, so "same element everywhere" is type-enforced. Done as a contained
+slice (define the type + adapters, migrate one surface to prove it), NOT a big-bang. The shared
+`clipDirectives` core + `resolvePinAxes` are the first pieces of this consolidation.
+
+### First moves (this kickoff)
+- **Aaron:** D1 (reaper reads `retain` only) — the CU3 spine; unblocks D2/D3.
+- **Ben (app, parallel, dep-free):** start the **canonical clip type** (CU4 app prep) as a contained
+  slice — it needs no backend and de-risks CU4. The CU3 app pieces (the `keep` axis in the drawer +
+  retiring the bespoke save flow) wait on D1/D3 landing.

@@ -4231,13 +4231,15 @@ Not in the contracts; sequencing: #3 + #5 dissolve once (2c) lands, #1 + #2 are 
 
 ---
 
-## Canonical Unification initiative — the clip-manifest rearchitecture (PAUSED pending coordination, 2026-06-25)
+## Canonical Unification initiative — the clip-manifest rearchitecture (ACTIVE — CU1/CU2 done, CU3 kicked off 2026-06-26)
 
-> **STATUS: PAUSED — do not start executing.** Decided 2026-06-25 (Ben): the unified clip manifest is
-> delivered as a **coordinated cross-repo rearchitecture**, not incremental patches. Ben + Aaron will
-> sit down, focus solely on this, and move forward together. Until that kickoff, **no CU work starts
-> and no more one-off coalesce fixes deploy** (they're superseded by CU1). This section is the
-> readiness brief so the kickoff is turnkey.
+> **STATUS: ACTIVE.** **CU1 ✅ + CU2 ✅ done + verified on device (2026-06-26)** — every clip axis now
+> proliferates from the one `clipId=null` directive authority to every surface (time-machine pin +
+> viewer, library, clips page, buffer-lane label, sources rail), resolving at the watched instant. The
+> write side is unified via `src/lib/clipDirectives.ts`. **CU3 (lane-as-axis + live edges) kicked off
+> 2026-06-26** — work-orders + the contract decisions to lock are in
+> `HANDOFF-unified-manifest-2026-06-24.md` → "CU3/CU4 KICKOFF". CU4 (structural collapse + rename)
+> follows once CU3 proves the model; CU5 deletes the old. *(Original 2026-06-25 readiness brief below.)*
 
 **Why a rearchitecture, not more patches.** The incremental "coalesce each read path" approach is
 whack-a-mole: title / precision / identity live in **3 places** (`Stream.*` / `Clip.*` /
