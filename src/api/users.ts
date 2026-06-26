@@ -12,6 +12,15 @@ export type BlockedUser = {
   blockedAt: string
 }
 
+export type MutedUser = {
+  id: string
+  handle: string
+  displayName: string
+  avatarUrl: string | null
+  scope: string
+  mutedAt: string
+}
+
 // The notification preference flags (mirrors the backend
 // PATCH /users/me/notification-preferences body + response).
 export type NotificationPreferences = {
@@ -131,6 +140,25 @@ export const usersApi = {
   getBlocks: async (): Promise<BlockedUser[]> => {
     const res = await apiClient.get<{ blocks: BlockedUser[] }>('/users/me/blocks')
     return res.data.blocks
+  },
+
+  // Mute / unmute a user. Soft, silent, one-directional: you stop seeing their
+  // chat + reactions; they're unaffected and unaware (follows/tips/streams are
+  // untouched). Filtering is client-side; these rows are the durable,
+  // cross-device source the client syncs. See wrld-backend/docs/design/user-mute.md.
+  mute: async (handle: string): Promise<void> => {
+    await apiClient.post(`/users/${handle}/mute`)
+  },
+
+  unmute: async (handle: string): Promise<void> => {
+    await apiClient.delete(`/users/${handle}/mute`)
+  },
+
+  // The users the current user has muted — the Settings list AND the mute set
+  // the client filters live chat/reactions against (handle-keyed).
+  getMutes: async (): Promise<MutedUser[]> => {
+    const res = await apiClient.get<{ mutes: MutedUser[] }>('/users/me/mutes')
+    return res.data.mutes
   },
 
   // The users currently subscribed to me (active/past_due), most-recent first.

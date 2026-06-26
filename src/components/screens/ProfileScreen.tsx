@@ -29,6 +29,7 @@ import { ProfileGiftSheet } from '@/components/features/user/ProfileGiftSheet'
 import { MetaStrip } from '@/components/features/user/MetaStrip'
 import { useUserProfile } from '@/hooks/useUserProfile'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
+import { useMutes } from '@/hooks/useMutes'
 import { usersApi } from '@/api/users'
 import { ppvApi } from '@/api/ppvEvents'
 import { useQuery } from '@tanstack/react-query'
@@ -90,6 +91,15 @@ export function ProfileScreen() {
   const [tipVisible, setTipVisible] = useState(false)
   const [giftVisible, setGiftVisible] = useState(false)
   const [blocking, setBlocking] = useState(false)
+
+  // Mute: soft, silent, one-directional — you stop seeing their chat + reactions,
+  // they're unaffected and unaware. Toggles in place (no navigation away).
+  const { isMuted, mute, unmute } = useMutes()
+  const muted = isMuted(handle)
+  function handleMuteToggle() {
+    if (muted) unmute.mutate(handle)
+    else mute.mutate(handle)
+  }
 
   // Block: once blocked, the pair is hidden (the profile 404s), so leave to the
   // globe on success. Unblock lives in Settings → Privacy.
@@ -248,6 +258,15 @@ export function ProfileScreen() {
           <Pressable onPress={handleReport} style={styles.blockRow}>
             <Text variant="caption" color={theme.colors.text.muted}>
               {`Report @${handle}`}
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={handleMuteToggle}
+            disabled={mute.isPending || unmute.isPending}
+            style={styles.blockRow}
+          >
+            <Text variant="caption" color={theme.colors.text.muted}>
+              {muted ? `Unmute @${handle}` : `Mute @${handle}`}
             </Text>
           </Pressable>
           <Pressable onPress={handleBlock} disabled={blocking} style={styles.blockRow}>

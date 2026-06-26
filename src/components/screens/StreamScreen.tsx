@@ -97,6 +97,7 @@ import { usePublicConfig, configNumber } from '@/hooks/usePublicConfig'
 import { newIdempotencyKey } from '@/lib/idempotency'
 import { FollowButton } from '@/components/features/user/FollowButton'
 import { useInvalidateCurrentUser } from '@/hooks/useCurrentUser'
+import { useMutes } from '@/hooks/useMutes'
 import { useInvalidateWallet } from '@/hooks/useWallet'
 import { useDeviceOrientation, RECORD_ROTATION_DEG } from '@/hooks/useDeviceOrientation'
 import { theme } from '@/tokens/theme'
@@ -389,6 +390,28 @@ export function StreamScreen() {
   const broadcaster = isNew
     ? (wrldUser ? { handle: wrldUser.handle, displayName: wrldUser.displayName, avatarUrl: wrldUser.avatarUrl } : null)
     : (streamData?.host ?? null)
+
+  // Mute is a personal, silent filter: drop muted senders' chat + reactions
+  // from our own view (everyone else still sees them). Client-side only.
+  const { mutedHandles, mute } = useMutes()
+  const visibleChatMessages = useMemo(
+    () => chatMessages.filter((m) => !mutedHandles.has(m.from.toLowerCase())),
+    [chatMessages, mutedHandles],
+  )
+  const visibleReactions = useMemo(
+    () => reactions.filter((r) => !mutedHandles.has((r.from ?? '').toLowerCase())),
+    [reactions, mutedHandles],
+  )
+  function confirmMute(handle: string) {
+    Alert.alert(
+      `Mute @${handle}?`,
+      "You'll stop seeing their chat and reactions. They won't be notified, and this only affects what you see. Unmute anytime in Settings.",
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Mute', style: 'destructive', onPress: () => mute.mutate(handle) },
+      ],
+    )
+  }
   // Broadcaster's local time, shown to viewers next to their identity.
   const broadcasterLocalTime = useBroadcasterClock(streamData?.timezone)
   const [activeSource, setActiveSource] = useState<FeedKind | null>(null)
@@ -558,7 +581,7 @@ export function StreamScreen() {
           // SP5 — live trail: broadcaster's own (localTel) / viewer's (fan-out), accumulated above.
           return { kind: 'loc', path: locTrail, position: locTrail[locTrail.length - 1] }
         case 'chat':
-          return { kind: 'chat', messages: chatMessages.map((m) => ({ handle: m.from, text: m.text })) }
+          return { kind: 'chat', messages: visibleChatMessages.map((m) => ({ handle: m.from, text: m.text })) }
         case 'profile':
           return {
             kind: 'profile',
@@ -571,7 +594,7 @@ export function StreamScreen() {
           return { kind: 'audio', level: audioLevel, variant: 'waveform' }
       }
     },
-    [monitorTel, audioLevel, chatMessages, broadcaster, locTrail, torchOn, toggleTorch, isNew],
+    [monitorTel, audioLevel, visibleChatMessages, broadcaster, locTrail, torchOn, toggleTorch, isNew],
   )
   // Has the selected source produced data yet? (idle/dim styling until then — honest, never faked).
   // audio is metered for the broadcaster whenever audio is armed — in PREVIEW (a local meter PC)
@@ -1533,7 +1556,7 @@ export function StreamScreen() {
   }
 
   const displayError = signalingError ?? mediaError
-  const burst = reactions.map((r) => ({ id: r.id, kind: r.kind }))
+  const burst = visibleReactions.map((r) => ({ id: r.id, kind: r.kind }))
 
   // Preview (center-tab) Go Live gating + shared-title editing. Editing the
   // title here persists to captureConfig so the dashboard shows the same value.
@@ -2095,14 +2118,24 @@ export function StreamScreen() {
             contentContainerStyle={styles.chatScrollContent}
             onContentSizeChange={() => chatScrollRef.current?.scrollToEnd({ animated: true })}
           >
-            {chatMessages.map((m, i) => (
-              <ChatMessageRow
-                key={`${m.ts}:${i}`}
-                role={chatRoleFor(m.from)}
-                handle={`@${m.from}`}
-                body={m.text}
-              />
-            ))}
+            {visibleChatMessages.map((m, i) => {
+              // Long-press a message to mute its sender (personal + silent).
+              // Not offered on your own messages or when signed out.
+              const canMute = !!isSignedIn && !!m.from && m.from !== wrldUser?.handle
+              return (
+                <Pressable
+                  key={`${m.ts}:${i}`}
+                  onLongPress={canMute ? () => confirmMute(m.from) : undefined}
+                  delayLongPress={350}
+                >
+                  <ChatMessageRow
+                    role={chatRoleFor(m.from)}
+                    handle={`@${m.from}`}
+                    body={m.text}
+                  />
+                </Pressable>
+              )
+            })}
           </ScrollView>
           {/* Bottom crop = footerPad — the same gap as below the End Stream button.
               Inset left past the far-left chat toggle so the input starts after it

@@ -57,6 +57,21 @@ export function SettingsScreen({ embedded = false }: { embedded?: boolean } = {}
     }
   }
 
+  const { data: mutes = [], refetch: refetchMutes } = useQuery({
+    queryKey: ['mutes'],
+    queryFn: usersApi.getMutes,
+    staleTime: 30_000,
+  })
+
+  async function handleUnmute(handle: string) {
+    try {
+      await usersApi.unmute(handle)
+      refetchMutes()
+    } catch {
+      Alert.alert('Error', 'Could not unmute — try again.')
+    }
+  }
+
   async function handleSignOut() {
     // Unregister push token before clearing session so the device stops
     // receiving notifications for this account immediately after sign-out.
@@ -352,6 +367,34 @@ export function SettingsScreen({ embedded = false }: { embedded?: boolean } = {}
                 <Pressable onPress={() => handleUnblock(u.handle)} hitSlop={8}>
                   <Text variant="bodyEmphasized" color={theme.colors.accent.default}>
                     Unblock
+                  </Text>
+                </Pressable>
+              }
+            />
+          ))
+        )}
+      </SettingsGroup>
+
+      <SettingsGroup title="PRIVACY · MUTED ACCOUNTS">
+        {mutes.length === 0 ? (
+          <SettingsRow
+            iconName="volume-x"
+            title="No muted accounts"
+            value="Mute someone from their profile or a chat message. You won't see muted accounts' chat or reactions — muting is silent and they can still follow, tip, and watch you."
+            showBorderTop={false}
+          />
+        ) : (
+          mutes.map((u, i) => (
+            <SettingsRow
+              key={u.id}
+              iconName="volume-x"
+              title={u.displayName}
+              value={`@${u.handle}`}
+              showBorderTop={i !== 0}
+              right={
+                <Pressable onPress={() => handleUnmute(u.handle)} hitSlop={8}>
+                  <Text variant="bodyEmphasized" color={theme.colors.accent.default}>
+                    Unmute
                   </Text>
                 </Pressable>
               }

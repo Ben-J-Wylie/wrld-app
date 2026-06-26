@@ -37,6 +37,7 @@ import {
 } from '@/components/features/stream/sourceMeta'
 import type { FeedKind } from '@/components/features/broadcast/FeedThumb'
 import { useDataTrack } from '@/hooks/useDataTrack'
+import { useMutes } from '@/hooks/useMutes'
 import { sampleAt, recentUpTo, torchStateAt, trailUpTo, chatUpTo } from '@/lib/dataTrackRender'
 import { TimeScrubber } from '@/components/features/discovery/TimeScrubber'
 import { serverNow } from '@/lib/serverClock'
@@ -260,6 +261,9 @@ export function ClipViewerScreen() {
         ? dataUrlByKind[FEED_TO_DATAKIND[view]!]
         : null
   const dataSamples = useDataTrack(currentDataUrl)
+  // The watcher's own mutes — applied to the replayed chat on top of the host
+  // filter the track already carries (personal + silent, same as live).
+  const { mutedHandles } = useMutes()
 
   // The recorded source picture, sampled at the playhead — same SourceRender shape
   // as live, rendered by the SourceStage visualizers (camera is the video below).
@@ -295,7 +299,14 @@ export function ClipViewerScreen() {
         return { kind: 'loc', path, position: path[path.length - 1] }
       }
       case 'chat':
-        return { kind: 'chat', messages: chatUpTo(dataSamples, playheadMs) }
+        // The track is already filtered to "what the creator saw" (host mutes,
+        // server-side). Layer the watcher's own mutes on top, same as live.
+        return {
+          kind: 'chat',
+          messages: chatUpTo(dataSamples, playheadMs).filter(
+            (m) => !mutedHandles.has((m.handle ?? '').toLowerCase()),
+          ),
+        }
       case 'profile':
         return {
           kind: 'profile',
@@ -307,7 +318,7 @@ export function ClipViewerScreen() {
       default:
         return null
     }
-  }, [isVideoView, view, dataSamples, playheadMs, host, handle])
+  }, [isVideoView, view, dataSamples, playheadMs, host, handle, mutedHandles])
   const recordedActive = view === 'profile' || dataSamples.length > 0
 
   // Broadcast clock offset: serverNow() − the wall-clock instant under the playhead,
