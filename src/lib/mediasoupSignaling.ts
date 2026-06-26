@@ -33,7 +33,7 @@ export type ClientMessage =
   | { type: 'produce'; kind: 'audio' | 'video'; rtpParameters: unknown }
   | { type: 'consume'; producerId: string; rtpCapabilities: unknown }
   | { type: 'chatMessage'; text: string; handle: string }
-  | { type: 'reaction'; kind: string; handle: string }
+  | { type: 'reaction'; kind: string; handle: string; count?: number }
   | { type: 'broadcasterPaused' }
   | { type: 'broadcasterResumed' }
   | { type: 'broadcasterOrientation'; orientation: 'portrait' | 'landscape'; rotationDeg?: number; hold?: string; platform?: 'ios' | 'android' }
@@ -65,8 +65,9 @@ export type ServerMessage =
   | { type: 'broadcasterResumed' }
   | { type: 'viewerCountUpdated'; viewerCount: number }
   | { type: 'chatMessage'; from: string; text: string; ts: number }
+  | { type: 'chatRateLimited' }
   | { type: 'telemetryUpdate'; payload: TelemetryPayload }
-  | { type: 'reaction'; from: string; kind: string; ts: number }
+  | { type: 'reaction'; from: string; kind: string; ts: number; count?: number }
   | { type: 'tipReceived'; handle: string; amount: number }
   | { type: 'tipConfirmed'; newBalance: number }
   | { type: 'tipFailed'; message: string }
@@ -245,8 +246,8 @@ class MediasoupSignalingClient {
     this.send({ type: 'chatMessage', text, handle })
   }
 
-  sendReaction(kind: string, handle: string): void {
-    this.send({ type: 'reaction', kind, handle })
+  sendReaction(kind: string, handle: string, count = 1): void {
+    this.send({ type: 'reaction', kind, handle, count })
   }
 
   sendBroadcasterPaused(): void {

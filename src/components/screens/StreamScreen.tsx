@@ -339,7 +339,7 @@ export function StreamScreen() {
     goLiveError, clearGoLiveError,
     tipError, clearTipError,
     giftError, clearGiftError,
-    chatMessages, reactions, broadcasterPaused,
+    chatMessages, reactions, chatRateLimited, broadcasterPaused,
     tipEvents, giftEvents, confirmedBalance,
     connect, createRoom, joinRoom, disconnect,
     sendChatMessage, sendReaction, dismissReaction,
@@ -419,6 +419,14 @@ export function StreamScreen() {
   const [hopError, setHopError] = useState<string | null>(null)
   const [chatOpen, setChatOpen] = useState(false)
   const [chatInput, setChatInput] = useState('')
+  // Brief "slow down" hint when the server drops a chat message for rate limiting.
+  const [chatNotice, setChatNotice] = useState(false)
+  useEffect(() => {
+    if (!chatRateLimited) return
+    setChatNotice(true)
+    const t = setTimeout(() => setChatNotice(false), 2500)
+    return () => clearTimeout(t)
+  }, [chatRateLimited])
   const [authModalVisible, setAuthModalVisible] = useState(false)
   const [tipSheetVisible, setTipSheetVisible] = useState(false)
   const [reportVisible, setReportVisible] = useState(false)
@@ -2142,6 +2150,11 @@ export function StreamScreen() {
               (with an sm gap) and the send mirrors it on the right — equal sm gaps
               on either side of the input. Identical for broadcaster and viewer. */}
           <View style={[styles.composerWrap, { paddingTop: footerPad, paddingLeft: 44 + theme.spacing.sm }]}>
+            {chatNotice && (
+              <Text variant="caption" color={theme.colors.text.muted} style={{ paddingBottom: theme.spacing.xs }}>
+                You&apos;re sending messages too fast — slow down.
+              </Text>
+            )}
             <ChatComposer
               value={chatInput}
               onChangeText={setChatInput}

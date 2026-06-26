@@ -32,6 +32,9 @@ export function useSignaling() {
   const [error, setError] = useState<string | null>(null)
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [reactions, setReactions] = useState<Reaction[]>([])
+  // Bumps each time the server drops a chat message for rate limiting, so the UI
+  // can flash a brief "slow down" hint. The send itself is already gone.
+  const [chatRateLimited, setChatRateLimited] = useState(0)
   const [broadcasterPaused, setBroadcasterPaused] = useState(false)
   const [tipEvents, setTipEvents] = useState<TipEvent[]>([])
   const [giftEvents, setGiftEvents] = useState<GiftEvent[]>([])
@@ -51,6 +54,11 @@ export function useSignaling() {
   const reactionCounterRef = useRef(0)
   const tipCounterRef = useRef(0)
   const giftCounterRef = useRef(0)
+  // Reaction send coalescing: rapid taps render a local float each (snappy) but
+  // the wire send is batched into one { kind, count } per window, so a flurry
+  // isn't N messages × every viewer. Keyed by kind.
+  const pendingReactRef = useRef<Map<string, { kind: string; handle: string; count: number }>>(new Map())
+  const reactFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Distinguishes intentional disconnect() calls from unexpected network drops.
   const intentionalRef = useRef(false)
 
@@ -66,9 +74,16 @@ export function useSignaling() {
         setChatMessages((prev) => [...prev, { from: msg.from, text: msg.text, ts: msg.ts }])
       }
       if (msg.type === 'reaction') {
-        const id = ++reactionCounterRef.current
-        setReactions((prev) => [...prev, { from: msg.from, kind: msg.kind, ts: msg.ts, id }])
+        // A coalesced burst carries a count → spawn that many floats (older
+        // servers/clients send none → 1). Clamp defensively.
+        const count = Math.min(20, Math.max(1, Math.floor(msg.count ?? 1)))
+        const adds: Reaction[] = []
+        for (let i = 0; i < count; i++) {
+          adds.push({ from: msg.from, kind: msg.kind, ts: msg.ts, id: ++reactionCounterRef.current })
+        }
+        setReactions((prev) => [...prev, ...adds])
       }
+      if (msg.type === 'chatRateLimited') setChatRateLimited((n) => n + 1)
       if (msg.type === 'tipReceived') {
         const id = ++tipCounterRef.current
         setTipEvents((prev) => [...prev, { handle: msg.handle, amount: msg.amount, id }])
@@ -179,6 +194,8 @@ export function useSignaling() {
     setError(null)
     setChatMessages([])
     setReactions([])
+    if (reactFlushTimerRef.current) { clearTimeout(reactFlushTimerRef.current); reactFlushTimerRef.current = null }
+    pendingReactRef.current.clear()
     setBroadcasterPaused(false)
     setTipEvents([])
     setGiftEvents([])
@@ -191,9 +208,20 @@ export function useSignaling() {
   }, [])
 
   const sendReaction = useCallback((kind: string, handle: string) => {
-    signalingClient.sendReaction(kind, handle)
+    // Render this tap's float immediately (snappy); coalesce the wire send.
     const id = ++reactionCounterRef.current
     setReactions((prev) => [...prev, { from: handle, kind, ts: Date.now(), id }])
+    const key = `${handle}:${kind}`
+    const pend = pendingReactRef.current.get(key)
+    if (pend) pend.count += 1
+    else pendingReactRef.current.set(key, { kind, handle, count: 1 })
+    if (!reactFlushTimerRef.current) {
+      reactFlushTimerRef.current = setTimeout(() => {
+        reactFlushTimerRef.current = null
+        for (const p of pendingReactRef.current.values()) signalingClient.sendReaction(p.kind, p.handle, p.count)
+        pendingReactRef.current.clear()
+      }, 250)
+    }
   }, [])
 
   const sendBroadcasterPaused = useCallback(() => signalingClient.sendBroadcasterPaused(), [])
@@ -235,6 +263,7 @@ export function useSignaling() {
     error, setError,
     chatMessages,
     reactions,
+    chatRateLimited,
     broadcasterPaused,
     tipEvents,
     giftEvents,
