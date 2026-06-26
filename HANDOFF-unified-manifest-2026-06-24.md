@@ -1157,7 +1157,23 @@ slice (define the type + adapters, migrate one surface to prove it), NOT a big-b
 `clipDirectives` core + `resolvePinAxes` are the first pieces of this consolidation.
 
 ### First moves (this kickoff)
-- **Aaron:** D1 (reaper reads `retain` only) — the CU3 spine; unblocks D2/D3. **(open)**
+- **Aaron:** D1 (reaper reads `retain` only) — the CU3 spine; unblocks D2/D3.
+  **✅ DONE + DEPLOYED INERT (2026-06-26, `wrld-backend 8ddf95a`).** The reaper now collapses its 3
+  OR'd retain signals to the single `DirectiveRange.retain` authority — **flag-gated `CU3_RETAIN_ONLY`,
+  default OFF → byte-for-byte today's behaviour** (data-sensitive; PB2 cutover discipline). When ON,
+  each pass first **backfills** `retain:true` clipId=null directives for every legacy-protected range
+  (a saved clip's ClipRange → `[start,end]`; a saved-lane session → `[start, endedAt ?? OPEN]` covering
+  the live tail; idempotent), then protects from `DirectiveRange.retain` ONLY — so the cutover loses no
+  footage. migration `20260626050000` seeds the flag (admin-tunable); `backfillRetainDirectives` +
+  `cu3RetainOnly.test.ts` (3 DB tests); 338 green; deployed inert (migration applied, flag OFF).
+  **⛔ The flip is the on-device cutover gate (NOT done): flip `CU3_RETAIN_ONLY` on `/admin/config`,
+  tighten a tier window to force a reap, and prove (a) a saved clip and (b) a saved-lane go-live both
+  survive under retain-only, AND non-retained past-window footage still reaps — BEFORE leaving it on.**
+  **D2/D3 are now unblocked:** D2 = go-live writes the initial `retain` directive from `lane` (retires
+  the saved-lane backfill); D3 = save/un-save = a `retain`-axis directive edit (drop the copy-path +
+  `saveClip`/`unsaveClip`/edge-relative endpoints — retires the ClipRange backfill). Ben's `keep`-axis
+  drawer + drag-to-save retirement still wait on **D3 backend live** (D1 alone doesn't change the app's
+  write path).
 - **Ben (app, parallel, dep-free):** the **canonical clip type** (CU4 app prep).
   - **✅ slice 1 (2026-06-26):** `src/types/clip.ts` — the one `CanonicalClip` = range + 7-axis
     `ResolvedAxes` (§5/backend vocab) every surface projects to, the editable↔resolved vocab bridge
