@@ -1186,8 +1186,12 @@ slice (define the type + adapters, migrate one surface to prove it), NOT a big-b
     ClipDetail/SavedClip/LaneClip) now **compile-prove** as `CanonicalClip` projections (the foundation
     is total). Local-only commits `64b0da0` etc. (holding pushes until Aaron's D1 lands).
   - **next slices (need device testing or a decision — paused until we resume pushing / D1 lands):**
-    - **Discovery pins** (`clipToStream`/`bufferPinToStream`): needs the **access-fields decision**
-      (below) + it's device-verified pin code (#1) → migrate with a device check.
+    - **Discovery pins** (`clipToStream`/`bufferPinToStream`): **✅ slice 3 DONE (2026-06-26, local
+      `b4f44ed`).** `CanonicalClip` gained the optional `access` projection (Aaron-confirmed);
+      `fromClipPin`/`fromBufferPin` populate it; both globe mappers now route through one
+      `canonicalToStream(fromClipPin/fromBufferPin(...))` — two mappers collapsed to one canonical path,
+      behaviour-preserving. **OWES A DEVICE CHECK** on the time-machine pins/cards (#1 — title/anon/
+      precision halo/subscription badge) when we resume pushing. (Original decision note kept below.)
 
       **ACCESS-FIELDS DECISION (recommendation, 2026-06-26 — confirm at CU4):** the buffer pin carries
       `subscriptionPriceUsd` · `accessTier` · `ppvEventId`. These are **NOT clip content axes** — §5
