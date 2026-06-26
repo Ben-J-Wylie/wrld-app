@@ -23,35 +23,21 @@ export type PinDirective = {
   attributed: boolean
 }
 
-// Mirrors the backend `resolveClipAxes` for the display subset. The covering directive at the
-// playhead wins; otherwise the pin-level fallback. Empty directives (legacy `?at=` feed +
-// un-edited sessions) → the fallback unchanged (zero regression). Precision 'off'/'hidden'/
-// 'private' → 'private' (the location-hidden state — the globe drops the pin from Earth).
+// The display axes the app may safely resolve at the playhead (per Aaron's realized-shape note,
+// `wrld-backend 7d09d78`): **title** + whether to **hide the host** during an `attributed:false`
+// era. PRECISION + COORDS stay PIN-LEVEL (server-obfuscated to match — resolving precision
+// client-side would draw a coarser halo over the exact coords = a leak; un-obfuscating is
+// impossible anyway). Identity only ever HIDES (an anon era → Anonymous); it can't REVEAL a
+// pin-level-anon host (the real one was never sent). Empty directives (legacy `?at=` feed +
+// un-edited sessions) → the pin-level fallback unchanged (zero regression).
 export function resolvePinAxes(
   directives: PinDirective[] | undefined,
   playheadMs: number,
-  fallback: { title: string | null; precision: 'exact' | 'city' | 'country' },
-): { title: string | null; precision: 'exact' | 'city' | 'country' | 'private'; anonymous: boolean } {
+  fallback: { title: string | null },
+): { title: string | null; anonymous: boolean } {
   const cover = directives?.find((d) => d.startMs <= playheadMs && playheadMs < d.endMs)
-  const rawP = cover?.precision ?? fallback.precision
-  let precision: 'exact' | 'city' | 'country' | 'private'
-  switch (rawP) {
-    case 'city':
-    case 'country':
-      precision = rawP
-      break
-    case 'off':
-    case 'hidden':
-    case 'private':
-      precision = 'private'
-      break
-    default:
-      precision = 'exact'
-  }
   return {
     title: cover?.title ?? fallback.title,
-    precision,
-    // A covering directive's identity wins; no cover → not forced anon (the pin-level host is used).
     anonymous: cover ? !cover.attributed : false,
   }
 }

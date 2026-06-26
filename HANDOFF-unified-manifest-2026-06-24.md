@@ -994,3 +994,19 @@ amendment, **#1's backend half is ✅ DONE + DEPLOYED (`7d09d78`) and Aaron has 
 read-routing work** — both #1 (app: resolve pin title/identity at the playhead from `directives`) and
 #2 (app: buffer-lane label from `session.directives`) are now app-side; the single-instant reads
 already return `ResolvedAxes`.
+
+### ✅ CU1 COMPLETENESS — DONE end-to-end (Ben, app side, 2026-06-26)
+- **#1 app:** `resolvePinAxes(directives, playheadMs, { title })` in `src/api/clips.ts` (returns
+  `{ title, anonymous }`); `GlobeScreenMapbox.resolveClip`/`resolveBuffer` override the pin's **title**
+  + swap in the **Anonymous host** on an `attributed:false` era at the playhead. **Precision + coords
+  stay pin-level** (per Aaron's realized-shape note — resolving precision client-side over pin-level-
+  obfuscated coords would leak; identity only ever HIDES, never reveals). `clipPins`/`bufferPins`
+  memos keyed on a signature encoding the resolved title/host → referentially stable across the 1s
+  ticker (no card-sync loop). Empty `directives` → pin-level fields (zero regression).
+- **#2 app:** `bufEntry` resolves the buffer-lane label via `settingsAt(session.directives, …)`.
+- **Single-instant reads (Aaron, deployed):** `GET /clips/:id` (clip start) + `GET /buffer/session/:id`
+  (session start) route through `resolveClipAxes` → the time-machine **viewer** reflects edits.
+
+**Net:** a clips-page / library-drawer edit now proliferates to saved lane · library · buffer-lane
+label · clips-page viewer · **time-machine pin (title/identity playhead-resolved)** · **time-machine
+viewer**. Owes an on-device pass (box must run `7d09d78` + `be1e9c5`).
