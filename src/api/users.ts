@@ -233,10 +233,13 @@ export const usersApi = {
 
   getSubscriptionStatus: async (
     handle: string,
-  ): Promise<{ subscribed: boolean; currentPeriodEnd: string | null; pastDue?: boolean }> => {
-    const res = await apiClient.get<{ subscribed: boolean; currentPeriodEnd: string | null; pastDue?: boolean }>(
-      `/users/${handle}/subscription-status`,
-    )
+  ): Promise<{ subscribed: boolean; currentPeriodEnd: string | null; pastDue?: boolean; cancelAtPeriodEnd?: boolean }> => {
+    const res = await apiClient.get<{
+      subscribed: boolean
+      currentPeriodEnd: string | null
+      pastDue?: boolean
+      cancelAtPeriodEnd?: boolean
+    }>(`/users/${handle}/subscription-status`)
     return res.data
   },
 
@@ -263,6 +266,13 @@ export const usersApi = {
 
   cancelSubscription: async (handle: string): Promise<void> => {
     await apiClient.delete(`/users/${handle}/subscribe`)
+  },
+
+  // Undo a pending cancel before the period ends — the sub renews as normal.
+  // Mirrors the platform-tier resume; only valid while still access-granting
+  // (active/past_due) and flagged cancelAtPeriodEnd.
+  resumeSubscription: async (handle: string): Promise<void> => {
+    await apiClient.post(`/users/${handle}/subscribe/resume`)
   },
 
   getSubscriptionSettings: async (): Promise<{

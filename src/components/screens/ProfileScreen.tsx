@@ -301,10 +301,33 @@ export function ProfileScreen() {
               label={
                 subStatus.pastDue
                   ? 'Manage subscription'
-                  : `Subscribed · $${(profile.subscriptionPriceUsd / 100).toFixed(2)}/mo`
+                  : subStatus.cancelAtPeriodEnd
+                    ? subStatus.currentPeriodEnd
+                      ? `Access until ${new Date(subStatus.currentPeriodEnd).toLocaleDateString()} · won't renew`
+                      : "Subscription won't renew"
+                    : `Subscribed · $${(profile.subscriptionPriceUsd / 100).toFixed(2)}/mo`
               }
               variant="secondary"
               onPress={() => {
+                if (subStatus.cancelAtPeriodEnd) {
+                  // Cancelling but still within the paid period — offer to undo it.
+                  Alert.alert(
+                    'Resume subscription',
+                    "Your subscription is set to cancel and won't renew. Resume it to keep your subscription active.",
+                    [
+                      { text: 'Resume subscription', onPress: async () => {
+                        try {
+                          await usersApi.resumeSubscription(profile.handle)
+                          refetchSubStatus()
+                        } catch {
+                          Alert.alert('Error', 'Could not resume subscription')
+                        }
+                      }},
+                      { text: 'Dismiss', style: 'cancel' },
+                    ],
+                  )
+                  return
+                }
                 Alert.alert(
                   'Manage subscription',
                   'Your subscription is active.',
