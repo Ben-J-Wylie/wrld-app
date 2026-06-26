@@ -23,7 +23,18 @@ export function useHistoricalClips(playheadMs: number) {
 
   return useQuery<{ clips: ClipPin[]; bufferPins: BufferPin[] }>({
     queryKey: ['historical-clips', bucket],
-    queryFn: () => clipsApi.discover(new Date(bucket * BUCKET_MS).toISOString()),
+    queryFn: async () => {
+      const res = await clipsApi.discover(new Date(bucket * BUCKET_MS).toISOString())
+      // TEMP trace (tm-feed): what the ?at= discover feed returns for a scrubbed instant — clip
+      // id (last 6) + title — so we can compare against the edit + the rendered pin. Remove after.
+      if (__DEV__) {
+        console.log(
+          `[tm-feed] bucket=${bucket} clips=${res.clips?.length ?? 0} buffer=${res.bufferPins?.length ?? 0} ::`,
+          (res.clips ?? []).map((c) => `${c.id?.slice(-6)}="${c.title}"`).join(' | '),
+        )
+      }
+      return res
+    },
     enabled: active,
     staleTime: BUCKET_MS,
     placeholderData: (prev) => prev,

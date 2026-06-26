@@ -769,6 +769,15 @@ export const ClipsScreen = () => {
         ? savedLane.find((x) => x.sourceSessionId === sid && mid >= x.startMs && mid < x.endMs && !x.id.startsWith('pending:'))
         : null
       const clipId = saved ? saved.parentSavedId ?? saved.id : null
+      // TEMP trace (tm-edit): what clip id + axes a drawer edit writes — to match against the
+      // time-machine feed/pin. `sheetClip.id` is the on-screen segment; `clipId` is the durable
+      // Clip row patchClip targets (null for a buffer segment → directive-only). Remove after.
+      if (__DEV__) {
+        console.log(
+          `[tm-edit] sheetClip=${sheetClip.id?.slice(-6)} session=${sid?.slice(-6)} savedClipId=${clipId?.slice(-6) ?? 'none'} patch=`,
+          JSON.stringify(patch),
+        )
+      }
       if (!clipId) return
       const body: ClipPatch = {}
       if (patch.title !== undefined) body.title = patch.title ?? null
