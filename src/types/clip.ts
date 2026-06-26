@@ -17,6 +17,7 @@
 
 import type { ClipPin, BufferPin, ClipDetail } from '@/api/clips'
 import type { SavedClip } from '@/api/buffer'
+import type { LaneClip } from '@/components/features/clip/ClipLane'
 import type { SegSettings } from '@/lib/segmentSettings'
 
 export type ClipSource = 'clip' | 'buffer'
@@ -196,5 +197,32 @@ export function fromSavedClip(c: SavedClip): CanonicalClip {
     lng: null,
     subscribersOnly: false,
     manifestUrl: c.manifestUrl,
+  }
+}
+
+// Clips-grid timeline block → canonical. A geometry+label view: it carries only the range, the
+// display `label` (the title, or a time fallback), and media — no axes. So everything but
+// title/geometry/media is defaulted; `sourceSessionId` (its "one lane" link) is not part of the
+// canonical content shape. Owner's own grid (host null).
+export function fromLaneClip(c: LaneClip): CanonicalClip {
+  return {
+    id: c.id,
+    source: 'buffer',
+    startAtMs: c.startMs,
+    endAtMs: c.endMs,
+    host: null,
+    axes: {
+      title: c.label,
+      tags: [],
+      visibility: 'public',
+      identity: 'shown',
+      precision: 'exact',
+      sources: {},
+      keep: 'kept',
+    },
+    lat: null,
+    lng: null,
+    subscribersOnly: false,
+    manifestUrl: c.manifestUrl ?? null,
   }
 }
