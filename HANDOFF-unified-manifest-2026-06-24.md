@@ -843,10 +843,12 @@ the CU1 single-authority guarantees (and is why authority = `clipId=null`).
 - **`ResolvedAxes`** (every **single-instant** backend read returns it, resolved at the queried
   instant T): `{ title, tags[], visibility:'public'|'private', identity:'shown'|'anon',
   precision:'exact'|'city'|'country'|'private', sources:{[source]:bool}, keep:'kept'|'reapable' }`.
-  **AMENDED 2026-06-26 (see "CU1 COMPLETENESS" #1):** **window/tile** feeds (windowed/tiled discover)
-  return the per-range **`AxisDirective[]`**, not pre-resolved axes — a window has no single T, so the
-  **app** resolves at the playhead via `resolveClipSettings`. Single-instant reads
-  (`/clips/:id`, `/buffer/me/clips`, `/buffer/session/:id`, `?at=`) are unchanged.
+  **AMENDED 2026-06-26 (✅ shipped `7d09d78`; see "CU1 COMPLETENESS" #1):** **window/tile** feeds
+  (windowed/tiled discover) additionally carry each pin's per-range **`directives: PinDirective[]`**
+  (the display subset `{startMs,endMs,title,precision,attributed}`) — a window has no single T, so the
+  **app** resolves title/identity at the playhead; coords/host stay pin-level + server-obfuscated, and
+  the pin-level fields are the fallback when `directives` is empty. Single-instant reads (`/clips/:id`,
+  `/buffer/me/clips`, `/buffer/session/:id`, `?at=`) are unchanged (still resolved server-side).
 - **App reads it via one `resolveClipSettings(serverClip) → ResolvedAxes`** — a thin pass-through;
   every surface reads *that*. (Pre-CU1 the impl maps today's per-endpoint shapes; post-CU1 it's a
   pass-through — one-place swap.)
@@ -954,13 +956,32 @@ updates everything that reads `GET /buffer/me/clips` (saved lane, library, libra
    > **CONTRACT AMENDMENT (2026-06-26): window/tile feeds return the per-range directives, NOT
    > pre-resolved axes; the app resolves at the playhead. Single-instant reads (`/clips/:id`,
    > `/buffer/me/clips`, `/buffer/session/:id`, `?at=`) keep returning `ResolvedAxes` server-side.**
-   - **Aaron (small, his only remaining read-routing item):** attach each pin's per-range
-     **`AxisDirective[]`** to the windowed/tiled pin payload — `fetchDiscoverDirectives` already loads
-     `sessionAxes`; pass through the directives covering the pin's window instead of pre-resolving at
-     `intervals[0].startMs`. Drop that resolve.
-   - **Ben/app (CU2 follow-on, mine):** resolve the pin's displayed axes (title/precision/identity) at
-     the **playhead** via `resolveClipSettings(pinDirectives, playheadMs)` — the app already computes
-     the playhead + which interval is alive locally. Model-true (resolves at the exact instant shown).
+   - **Aaron — ✅ DONE + DEPLOYED + VERIFIED (2026-06-26, `wrld-backend 7d09d78`).** Every
+     windowed/tiled discover pin (`AvailClip` + `AvailBufferPin`, so the `?from&to` feed AND the
+     `?planet&t&z&x&y` tiles) now carries **`directives: PinDirective[]`** = the per-range display
+     subset overlapping the feed window: `{ startMs, endMs, title, precision, attributed }`. Sourced
+     from the session's `clipId=null` rows (`fetchDiscoverDirectives` `sessionAxes`; clip pins source
+     from their session too). **Realized-shape notes for your wiring (read these):**
+     - It's the **display subset**, NOT the full `AxisDirective` — only `title/precision/attributed`
+       (the axes a pin renders). **Coords + host stay PIN-LEVEL and server-obfuscated** (the pin's
+       `lat/lng/locationPrecision/host`), because re-obfuscating coords / un-anon'ing a host
+       client-side would need the real values we never send → so per-range PRECISION→coords and
+       host-identity stay resolved server-side at the pin level; **`directives` drives `title` (the
+       reported bug) + lets you HIDE the pin's host during an `attributed:false` era at the playhead.**
+     - I **kept** the pin-level resolved `title`/coords/`host` as the **fallback** (didn't "drop that
+       resolve") — it's the correct single-era value and what you use when **`directives` is `[]`**
+       (no per-range edits → today's behaviour, zero regression). So: **`directives.length ? resolve
+       at playhead : use the pin-level fields`.**
+     - Single-instant reads (`?at=`, `/clips/:id`, `/buffer/me/clips`, `/buffer/session/:id`) are
+       **unchanged** — they still return resolved axes.
+   - **Ben/app (CU2 follow-on, mine):** for a pin with non-empty `directives`, resolve the displayed
+     **title + identity** at the **playhead** — `directives.find(d => playheadMs ∈ [startMs,endMs))`,
+     then `d.title ?? pin.title` and hide the host when `d.attributed === false`. (precision/coords =
+     the pin-level value — see Aaron's note.) Empty `directives` → render the pin-level fields as
+     today. The app already computes the playhead + which interval is alive locally. **Verify on
+     device:** edit a later segment's title/anon on the clips page → the time-machine pin reflects it
+     as the playhead crosses that era (live data is external-cam sessions with empty `directives`
+     today, so the override only shows once you make a per-range edit).
    *(The "pin COVERAGE nuance" from "CU1 — THE PEDANTIC DETAIL" §D.)*
 2. **Buffer-lane timeline label — ✅ REASSIGNED to app (Ben), NOT Aaron.** `GET /buffer/me` ALREADY
    returns each `session.directives` (the clipId=null rows the clips page seeds `settingsRanges` from),
@@ -969,5 +990,7 @@ updates everything that reads `GET /buffer/me/clips` (saved lane, library, libra
    (Was filed as an Aaron routing item; the data's already on the wire.)
 
 Write side is unified (clips page + library both write `clipId=null` after CU2 step 2). After the
-amendment, **Aaron's only remaining read-routing work is #1's backend half** (pass directives on
-windowed/tiled pins); #2 is app-side; the single-instant reads already return `ResolvedAxes`.
+amendment, **#1's backend half is ✅ DONE + DEPLOYED (`7d09d78`) and Aaron has no remaining
+read-routing work** — both #1 (app: resolve pin title/identity at the playhead from `directives`) and
+#2 (app: buffer-lane label from `session.directives`) are now app-side; the single-instant reads
+already return `ResolvedAxes`.
