@@ -111,6 +111,7 @@ import { ppvApi } from '@/api/ppvEvents'
 import { onPpvSocketEvent } from '@/lib/ppvSocketEvents'
 import { recordingsApi } from '@/api/recordings'
 import { usersApi } from '@/api/users'
+import { REPORT_REASONS } from '@/lib/reportReasons'
 import { useSignaling } from '@/hooks/useSignaling'
 import { useMediasoup } from '@/hooks/useMediasoup'
 import { useFullscreenVideo } from '@/hooks/useFullscreenVideo'
@@ -2260,12 +2261,13 @@ export function StreamScreen() {
         visible={reportVisible}
         onClose={() => setReportVisible(false)}
         header="Report stream"
-        actions={[
-          { id: 'inappropriate', iconName: 'alert-octagon', label: 'Inappropriate content', tone: 'warn', onPress: () => submitReport('Inappropriate content') },
-          { id: 'harassment', iconName: 'user-x', label: 'Harassment or bullying', tone: 'warn', onPress: () => submitReport('Harassment or bullying') },
-          { id: 'spam', iconName: 'slash', label: 'Spam', onPress: () => submitReport('Spam') },
-          { id: 'other', iconName: 'more-horizontal', label: 'Other', onPress: () => submitReport('Other') },
-        ]}
+        actions={REPORT_REASONS.map((reason) => ({
+          id: reason,
+          iconName: 'flag' as const,
+          label: reason,
+          tone: 'warn' as const,
+          onPress: () => submitReport(reason),
+        }))}
       />
 
       {/* Viewer list sheet — broadcaster only */}

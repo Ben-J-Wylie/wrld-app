@@ -42,6 +42,7 @@ import { sampleAt, recentUpTo, torchStateAt, trailUpTo, chatUpTo } from '@/lib/d
 import { TimeScrubber } from '@/components/features/discovery/TimeScrubber'
 import { serverNow } from '@/lib/serverClock'
 import { clipsApi } from '@/api/clips'
+import { REPORT_REASONS } from '@/lib/reportReasons'
 import { theme } from '@/tokens/theme'
 
 // FeedKind → the backend data-track kind that feeds its visualizer. cam/screen play
@@ -470,12 +471,13 @@ export function ClipViewerScreen() {
         visible={reportVisible}
         onClose={() => setReportVisible(false)}
         header="Report clip"
-        actions={[
-          { id: 'inappropriate', iconName: 'alert-octagon', label: 'Inappropriate content', tone: 'warn', onPress: () => submitReport('Inappropriate content') },
-          { id: 'harassment', iconName: 'user-x', label: 'Harassment or bullying', tone: 'warn', onPress: () => submitReport('Harassment or bullying') },
-          { id: 'spam', iconName: 'slash', label: 'Spam', onPress: () => submitReport('Spam') },
-          { id: 'other', iconName: 'more-horizontal', label: 'Other', onPress: () => submitReport('Other') },
-        ]}
+        actions={REPORT_REASONS.map((reason) => ({
+          id: reason,
+          iconName: 'flag' as const,
+          label: reason,
+          tone: 'warn' as const,
+          onPress: () => submitReport(reason),
+        }))}
       />
     </View>
   )
