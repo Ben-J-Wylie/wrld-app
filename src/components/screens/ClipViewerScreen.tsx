@@ -79,13 +79,7 @@ export function ClipViewerScreen() {
     error,
   } = useQuery({
     queryKey: ['clip', source, id],
-    queryFn: async () => {
-      const c = source === 'buffer' ? await clipsApi.getBufferSession(id!) : await clipsApi.get(id!)
-      // TEMP trace (tm-viewer): the clip id (last 6) + title the viewer actually fetched — compare
-      // against [tm-edit]/[tm-feed]/[tm-pins] to see if the viewer reads a stale/different row.
-      if (__DEV__) console.log(`[tm-viewer] source=${source} id=${id?.slice(-6)} title="${(c as any)?.title}"`)
-      return c
-    },
+    queryFn: () => (source === 'buffer' ? clipsApi.getBufferSession(id!) : clipsApi.get(id!)),
     enabled: !!id,
     retry: 1,
   })

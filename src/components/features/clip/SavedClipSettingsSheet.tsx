@@ -97,7 +97,10 @@ export function SavedClipSettingsSheet({ clip, visible, onClose }: Props) {
 
   if (!clip) {
     // Keep the sheet mounted so the close animation can run; render an empty/invisible shell.
+    // `key` distinct from the real clip below so React re-mounts (re-seeds the title `useState`)
+    // when a clip opens — without it the input stays stuck on the empty shell's '' (the empty-title bug).
     return <SegmentSettingsSheet
+      key="empty"
       visible={false}
       onClose={onClose}
       rangeLabel=""
@@ -135,6 +138,7 @@ export function SavedClipSettingsSheet({ clip, visible, onClose }: Props) {
 
   return (
     <SegmentSettingsSheet
+      key={clip.id}
       visible={visible}
       onClose={onClose}
       rangeLabel={`${fmtTime(clip.startAtMs)}–${fmtTime(clip.endAtMs)}`}

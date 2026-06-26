@@ -631,18 +631,6 @@ export function GlobeScreenMapbox() {
     () => new Map(bufferPins.map((b) => [b.sessionId, b] as const)),
     [bufferPins],
   )
-  // TEMP trace (tm-pins): the clip-pins actually rendered (id last-6 + title) while scrubbed —
-  // compare against [tm-feed] (what the server returned) + [tm-edit] (what was written). If the
-  // feed is fresh but this is stale → a memo in the pin pipeline; if this is fresh but the tapped
-  // card/viewer is stale → the card/viewer layer. Remove after diagnosis.
-  useEffect(() => {
-    if (__DEV__ && historicalMode) {
-      console.log(
-        `[tm-pins] rendered=${clipPins.length} ::`,
-        clipPins.map((c) => `${c.id?.slice(-6)}="${c.title}"`).join(' | '),
-      )
-    }
-  }, [clipPins, historicalMode])
   // Bumped whenever any overlay UI (not the globe, not the clock) is touched,
   // so the TimeScrubber blurs + collapses. Spinning/zooming the globe doesn't.
   const [clockCollapseSignal, setClockCollapseSignal] = useState(0)
