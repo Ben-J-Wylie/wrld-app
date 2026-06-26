@@ -85,13 +85,37 @@ function liveTimeLabel(sec: number): string {
 export function ProfileScreen() {
   const { handle } = useLocalSearchParams<{ handle: string }>()
   const { isSignedIn } = useAuth()
-  const { data: profile, isLoading, error } = useUserProfile(handle ?? null)
+  const { data: profile, isLoading, error, refetch: refetchProfile } = useUserProfile(handle ?? null)
   const { data: me } = useCurrentUser()
 
   const isOwnProfile = !!me && me.handle === handle
   const [tipVisible, setTipVisible] = useState(false)
   const [giftVisible, setGiftVisible] = useState(false)
   const [blocking, setBlocking] = useState(false)
+  const [unblocking, setUnblocking] = useState(false)
+
+  // Blocked-by-me: the backend 404s a blocked pair's profile, so without this the
+  // screen falls through to "User not found" with no way to unblock. Detect it from
+  // my blocks list and show a clean Unblock state instead.
+  const { data: myBlocks, refetch: refetchBlocks } = useQuery({
+    queryKey: ['blocks'],
+    queryFn: usersApi.getBlocks,
+    enabled: !!isSignedIn && !isOwnProfile,
+  })
+  const isBlockedByMe = !!myBlocks?.some((b) => b.handle === handle)
+
+  async function handleUnblock() {
+    setUnblocking(true)
+    try {
+      await usersApi.unblock(handle)
+      await refetchBlocks()
+      refetchProfile()
+    } catch {
+      Alert.alert('Error', 'Could not unblock — try again.')
+    } finally {
+      setUnblocking(false)
+    }
+  }
 
   // Mute: soft, silent, one-directional — you stop seeing their chat + reactions,
   // they're unaffected and unaware. Toggles in place (no navigation away).
@@ -117,9 +141,10 @@ export function ProfileScreen() {
             setBlocking(true)
             try {
               await usersApi.block(handle)
-              router.navigate('/(app)/globe')
+              await refetchBlocks() // → isBlockedByMe flips → the Unblock state renders
             } catch {
               Alert.alert('Error', 'Could not block this user — try again.')
+            } finally {
               setBlocking(false)
             }
           },
@@ -159,6 +184,30 @@ export function ProfileScreen() {
     queryFn: () => ppvApi.getCreatorEvents(handle!),
     enabled: !!handle,
   })
+
+  // You've blocked this account — a coherent Unblock state (the profile itself 404s).
+  if (isSignedIn && isBlockedByMe) {
+    return (
+      <ScreenScroll
+        header={<ScreenHeader onBack={() => router.back()} />}
+        contentContainerStyle={styles.content}
+      >
+        <View style={styles.blockedCard}>
+          <Text variant="heading" color={theme.colors.text.primary}>
+            You&apos;ve blocked @{handle}
+          </Text>
+          <Text variant="body" color={theme.colors.text.muted} style={styles.blockedBody}>
+            They can&apos;t view your profile, find you in search, follow you, tip or gift you, or join your live streams.
+          </Text>
+          <Button
+            label={unblocking ? 'Unblocking…' : `Unblock @${handle}`}
+            onPress={handleUnblock}
+            disabled={unblocking}
+          />
+        </View>
+      </ScreenScroll>
+    )
+  }
 
   if (isLoading) {
     return (
@@ -526,6 +575,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: theme.spacing.xxl,
+  },
+  blockedCard: {
+    flexGrow: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: theme.spacing.md,
+    paddingVertical: theme.spacing.xxl,
+    paddingHorizontal: theme.spacing.lg,
+  },
+  blockedBody: {
+    textAlign: 'center',
   },
   identity: {
     alignItems: 'center',
