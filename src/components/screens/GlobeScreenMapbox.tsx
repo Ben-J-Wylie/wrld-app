@@ -30,6 +30,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Animated,
   AppState,
+  Keyboard,
   PanResponder,
   Pressable,
   ScrollView,
@@ -696,6 +697,22 @@ export function GlobeScreenMapbox() {
     return () => clearTimeout(t)
   }, [query])
   const { data: people = [] } = useUserSearch(debouncedQuery)
+
+  // Tap-anywhere-outside to dismiss the keyboard. The native Mapbox MapView swallows
+  // touches before they reach any RN parent handler (iOS especially), so instead we
+  // mount a transparent full-screen dismiss layer ONLY while the keyboard is up — it
+  // sits below the search input (so editing still works) but above the globe, so a
+  // tap on the globe hits it and closes the keyboard. Unmounts when the keyboard is
+  // down, leaving the map fully interactive.
+  const [keyboardUp, setKeyboardUp] = useState(false)
+  useEffect(() => {
+    const show = Keyboard.addListener('keyboardDidShow', () => setKeyboardUp(true))
+    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardUp(false))
+    return () => {
+      show.remove()
+      hide.remove()
+    }
+  }, [])
   const [drawerState, setDrawerState] = useState<DrawerState>('closed')
   const [mapCenterLat, setMapCenterLat] = useState(20)
   const [mapZoom, setMapZoom] = useState(1.5)
@@ -1929,6 +1946,17 @@ export function GlobeScreenMapbox() {
           </Mapbox.MapView>
         </Animated.View>
       </Animated.View>
+
+      {/* Keyboard dismiss layer — mounted only while the keyboard is up (see
+          keyboardUp). Sits above the globe but below the top stack, so the search
+          input stays editable while a tap anywhere else closes the keyboard. */}
+      {keyboardUp && (
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPressIn={() => Keyboard.dismiss()}
+          accessible={false}
+        />
+      )}
 
       {/* Top scrim — paper100 fade muting the globe behind the top stack */}
       <LinearGradient
