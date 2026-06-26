@@ -665,3 +665,61 @@ P0 gates P1. P1+P2 are pure-app and deliver the unification users feel (edits pr
 drawer) on the *current* schema. P3+P4 complete the axes + live edges. P5 hardens. **P6 is the only
 schema migration** and is deliberately last — once P1–P5 hold, the collapse changes nothing
 user-visible, just deletes the scaffolding. Each phase is independently shippable + verifiable.
+
+---
+
+## ⛳⛳ THE CANONICAL UNIFICATION ROLLOUT (rearchitecture — supersedes the incremental P0–P6)
+
+**Decision 2026-06-25 (Ben):** stop patching read paths. The incremental "coalesce each feed" approach
+is whack-a-mole — the time machine alone has ~4 read paths (legacy `?at=`, windowed, tiled, the
+buffer-session viewer) and the title/precision/identity live in 3 places (`Stream.*` / `Clip.*` /
+`DirectiveRange`) with **two** directive row-sets (`clipId=null` session vs `clipId`-set clip). Each
+fix clears one path; the next reveals another. **The fragmentation is the disease.** Target =
+**CONTENT.md §5 "Target architecture (north star)."** Build the canonical model and migrate onto it.
+
+**Strategy:** unify the *behaviour* first (one authority + one shared resolver/writer → kills the
+staleness everywhere at once, no feed can diverge), then do the structural collapse. This converges
+fast (CU1 fixes the bugs) and lands clean (CU4 deletes the fragmentation).
+
+### CU1 — One authority + one shared resolver/writer (backend, Aaron). ⬅ the spine; fixes the bugs.
+Make the **per-range directive the single source** for all 7 axes. Write **ONE
+`resolveClipAxes(session|clip, atMs)`** and route **every** read path through it — the 3 discover
+feeds, `GET /buffer/me/clips` (library), `GET /clips/:id` + `GET /buffer/session/:id` (viewers).
+Delete each feed's bespoke title/precision/identity resolution. Write **ONE write path** (the
+directive). Pick **one** directive row-set as authority (recommend the session `clipId=null` rows; the
+clip's `clipId`-set carry-through becomes a read-fallback, then dies in CU4). **Done-bar:** an edit
+shows **identically** on the time-machine pin + viewer, the library, the clips page, and the live
+globe — because they all call the one resolver. *(This is the systemic version of the buffer-session
+fix I just pushed — that fix was one read path; CU1 makes it the only resolver.)*
+
+### CU2 — App: one resolver + one render + one drawer (Ben).
+`resolveClipSettings` (now a thin pass-through over CU1's server result) feeds **every** surface;
+the two drawers (`SegmentSettingsSheet` host + `SavedClipSettingsSheet`) collapse to **one**; every
+edit calls the **one** write path. Retire the `patchClip` dual-write + the `Stream.title`/`Clip.name`
+reads. **Done-bar:** every app surface reads/writes the one model; no surface-specific field reads.
+
+### CU3 — Lane as the 7th axis (R2) + live edges (U-series on the unified write).
+Lane → a `DirectiveRange` axis the reaper reads as its **one** retain signal (collapse the 3 OR'd
+signals); go-live / snip-at-now / reaper / storage-cap / AV-pause-resume all write the unified model.
+Owner: Aaron (backend + mediasoup) + Ben (app). **Done-bar:** all 7 axes equal; live editing on the
+one model; forward-only at every edge.
+
+### CU4 — Structural collapse (R4): clip ≡ segment (Aaron schema + Ben types).
+Collapse `Clip` + `ClipRange` + `DirectiveRange` + `ClipTrack` → the one **Clip = range + axes** over
+`Track` footage; **one** discover feed (retire legacy/windowed/tiled split); the clean **rename**
+(`precision`/`identity`/`keep`/`source`/`Track`; drop `locDisplayPrecision`/`locationPrecision`,
+`visibility: public|anon|draft`, bool `attributed`, `lane`, `splitPoints`, stale `motion`/`temp`).
+Backfill historical footage into the canonical model. **Done-bar:** the schema *is* §5; the
+`resolveClipAxes` of CU1 collapses to a column read (no fallback).
+
+### CU5 — Delete the old + flip the bridge (both).
+Remove the legacy tables / fields / feeds / dual-write / coalesce scaffolding; flip the §5 §12 bridge
+table to **done**. **Done-bar:** total canonized unification — one home per fact, one read, one write,
+one render; nothing left to diverge.
+
+### Sequencing + coordination
+CU1 is the spine and **delivers the bug fix early** (behavioural unification). CU2 follows CU1. CU3
+parallels. **CU4 (the risky structural migration) is deferred until CU1–CU3 prove the model**, then
+CU5 deletes the old. This is a **coordinated cross-repo effort** (Aaron = the backend spine CU1/CU3/CU4;
+Ben = app CU2 + CU4 types) — not ad-hoc patch-by-patch. Each CU is independently shippable + verifiable
+on device. The incremental P0–P6 above is **superseded** by this (its app-side pieces fold into CU2).
