@@ -1157,7 +1157,16 @@ slice (define the type + adapters, migrate one surface to prove it), NOT a big-b
 `clipDirectives` core + `resolvePinAxes` are the first pieces of this consolidation.
 
 ### First moves (this kickoff)
-- **Aaron:** D1 (reaper reads `retain` only) — the CU3 spine; unblocks D2/D3.
-- **Ben (app, parallel, dep-free):** start the **canonical clip type** (CU4 app prep) as a contained
-  slice — it needs no backend and de-risks CU4. The CU3 app pieces (the `keep` axis in the drawer +
-  retiring the bespoke save flow) wait on D1/D3 landing.
+- **Aaron:** D1 (reaper reads `retain` only) — the CU3 spine; unblocks D2/D3. **(open)**
+- **Ben (app, parallel, dep-free):** the **canonical clip type** (CU4 app prep).
+  - **✅ slice 1 (2026-06-26):** `src/types/clip.ts` — the one `CanonicalClip` = range + 7-axis
+    `ResolvedAxes` (§5/backend vocab) every surface projects to, the editable↔resolved vocab bridge
+    (`off`↔`private`, `attributed`↔`shown`), and **compile-proven adapters** `fromClipPin`/
+    `fromBufferPin`/`fromClipDetail`/`fromSavedClip` (each typechecks as a faithful projection — the
+    proof). First runtime migration: `SavedClipSettingsSheet`'s seed reads its scalar axes via
+    `fromSavedClip` + the bridge (behaviour-preserving). `LaneClip` adapter + the remaining surface
+    migrations are the next slices.
+  - **next slices:** migrate the discovery pin → Stream mapping (`clipToStream`/`bufferPinToStream`),
+    the viewer chrome (`fromClipDetail`), and the clips-grid (`LaneClip`) to consume the canonical
+    adapters — one surface per slice, each device-checked, until every surface reads one shape.
+  - The CU3 app pieces (the `keep` axis in the drawer + retiring the bespoke save flow) wait on D1/D3.
