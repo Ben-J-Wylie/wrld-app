@@ -136,12 +136,24 @@ type Claim = { sessionId: string; startMs: number; endMs: number }
 // backend may snap the saved range to segment boundaries, so a bounds-only match can miss and leave
 // the placeholder forever = a duplicate of the clip in the saved lane).
 type PendingSave = { tempId: string; sessionId: string; startMs: number; endMs: number; label: string; posterUrl?: string | null; manifestUrl?: string | null; realClipId?: string }
+// CU2 (HANDOFF "CU1 COMPLETENESS" #2): the buffer-lane label resolves the title from the session's
+// `clipId=null` directives (the CU1 authority, shipped on `GET /buffer/me`) at the segment instant —
+// not raw `s.title` (the immutable go-live title) — so a clips-page edit proliferates to this lane
+// + the viewer title (which reads the block's label) too. Segments auto-split on settings
+// boundaries, so a block is title-uniform; resolving at `a` (block start) is exact.
+function sessionTitleAt(s: BufferSession, atMs: number): string | undefined {
+  const ranges: SettingsRange[] = (s.directives ?? [])
+    .filter((d) => d.title != null && d.title !== '')
+    .map((d) => ({ sessionId: s.id, startMs: d.startAtMs, endMs: d.endAtMs, settings: { title: d.title! } }))
+  if (!ranges.length) return undefined
+  return settingsAt(ranges, s.id, atMs).title
+}
 function bufEntry(s: BufferSession, a: number, b: number): LaneClip {
   return {
     id: `${s.id}~${Math.round(a)}`,
     startMs: a,
     endMs: b,
-    label: s.title?.trim() || fmtTime(a),
+    label: (sessionTitleAt(s, a) ?? s.title?.trim()) || fmtTime(a),
     sublabel: fmtDur((b - a) / 1000),
     posterUrl: s.thumbnailUrl,
     manifestUrl: s.manifestUrl,
