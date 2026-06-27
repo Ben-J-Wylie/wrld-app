@@ -69,12 +69,11 @@ export function AppealScreen() {
       else await usersApi.appeal(message.trim())
       setDone(true)
     } catch (e: unknown) {
-      const status = (e as { response?: { status?: number } })?.response?.status
-      setError(
-        status === 400
-          ? 'There is no active suspension on this account.'
-          : 'Could not submit your appeal. Please try again.',
-      )
+      // Surface the server's specific reason (e.g. the appeal cooldown after a
+      // denial, or "no active suspension") rather than a generic retry message —
+      // most of these are not transient, so "try again" is misleading.
+      const serverMsg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
+      setError(serverMsg || 'Could not submit your appeal. Please try again.')
     } finally {
       setSubmitting(false)
     }
