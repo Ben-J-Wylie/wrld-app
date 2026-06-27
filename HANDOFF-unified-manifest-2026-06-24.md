@@ -1507,6 +1507,34 @@ legacy writers it removes are exactly D1's backfill sources, so the backfill the
       `saveClip`/`unsaveClip`.** One open nit for you: confirm per-session Clips are fine for the Library
       interim (vs. one Clip per logical multi-session save) — I'll assume yes unless you flag it.
 
+### D3 backend side-effect — ✅ DONE + DEPLOYED (Aaron, `wrld-backend f6fa2fa`)
+The `patchDirectives` Clip-lifecycle side-effect is built per the confirmed contract:
+- **Reconciles the retain DELTA:** `retainedRegions()`/`regionDelta()` (pure, 11 tests) diff old vs new
+  `retain:true` regions → a newly-retained region **materialises** a retain-in-place `Clip` (saved/ready,
+  ClipRange, ClipTracks from the session kinds, buffer-served, no copy) + charges storage; a no-longer-
+  retained region **removes** the overlapping retain-in-place Clip + reclaims storage. Net-new over the
+  saved-clip quota ⇒ **`409 storage_cap`** (whole PATCH rejected → you warn + flip the live lane→buffer).
+  Directive replace + Clip ops + storage delta in **one transaction**.
+- **🔑 KEEP-AWARE GUARDED:** the side-effect only runs when a directive in the PATCH carries `retain`.
+  So a legacy (retain-omitting) per-segment edit causes **zero Clip churn** — and it's **inert until
+  your app round-trips `retain`**, which is why it's safe with `CU3_RETAIN_ONLY` ON. (Copied legacy
+  clips are left to the old DELETE path — the side-effect never leaks `/media`.)
+- **Per-session interim** (one Clip per retained region of a session; cross-session = CU4).
+
+**➡️ Ben — over to you (the seam is live):** wire `clipDirectives` so drag-to-save / drag-to-buffer
+**round-trips `retain` on every directive** (true over the saved range / false over the un-saved one),
+and **render the saved lane by per-range `keep`** (not `BufferSession.lane`). The moment your PATCHes
+carry `retain`, save creates the Library `Clip` and un-save removes it + reaps — **no `saveClip`/
+`unsaveClip` calls**. Then re-gate (drag-half-to-buffer reaps + doesn't reappear saved; over-quota 409)
+→ keep the flag ON. I'll drop the bespoke endpoints once your app is fully on `patchDirectives`.
+
+> **⚠️ `CU3_RETAIN_ONLY` is ON again (2026-06-27).** Until your app round-trips `retain`, the side-effect
+> is inert and **un-save stays broken via the legacy path** (drag-saved→buffer over-retains — footage
+> doesn't reap; **not data loss** — the reaper backfill re-protects saved-lane/ClipRange footage every
+> pass). So with the flag ON now we're in "save works, un-save is a no-op" until your keep-writes land.
+> If you'd rather have working un-save in the meantime, flip the flag OFF until the re-gate; leaving it
+> ON is safe (just over-retains) and lets us drive straight to the re-gate once your side ships.
+
 - **ℹ️ FYI — ghost-block fix is DONE end-to-end (2026-06-27).** Aaron's backend half (`70a39c9`,
   `survivingStartMs`/`survivingEndMs` + thumbnail drop) + Ben's render half (blocks bound by the
   surviving range; reaped head → gap; fully-reaped → no block) are both in. Owes one on-device pass.
