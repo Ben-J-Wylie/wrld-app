@@ -14,7 +14,7 @@
 import { useEffect, useState } from 'react'
 import { Alert, Pressable, StyleSheet } from 'react-native'
 import { Link, router } from 'expo-router'
-import { useSignIn, useAuth } from '@clerk/clerk-expo'
+import { useSignIn, useSignUp, useAuth } from '@clerk/clerk-expo'
 import { Button } from '@/components/primitives/Button'
 import { Input } from '@/components/primitives/Input'
 import { Icon } from '@/components/primitives/Icon'
@@ -26,15 +26,46 @@ import { clerkError } from '@/lib/clerkError'
 
 export function LoginScreen() {
   const { signIn, setActive, isLoaded } = useSignIn()
+  const { signUp, setActive: setActiveSignUp, isLoaded: signUpLoaded } = useSignUp()
   const { isSignedIn } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
+  // Resume an abandoned sign-up: someone who created an account but left before
+  // entering the email code can't be signed in (Clerk has no completed user yet).
+  // When their login fails we resume the pending sign-up, resend the code, and show
+  // this verify form so they can finish.
+  const [pendingVerification, setPendingVerification] = useState(false)
+  const [code, setCode] = useState('')
 
   useEffect(() => {
     if (isSignedIn) router.replace('/(app)/globe')
   }, [isSignedIn])
+
+  // Try to resume an unverified sign-up for the entered creds. Returns true if a
+  // verification was (re)started (→ show the verify form) or completed.
+  const tryResumeVerification = async (): Promise<boolean> => {
+    if (!signUpLoaded) return false
+    try {
+      const su = await signUp.create({ emailAddress: email, password })
+      if (su.status === 'complete') {
+        await setActiveSignUp({ session: su.createdSessionId })
+        router.replace('/(app)/globe')
+        return true
+      }
+      if (su.unverifiedFields?.includes('email_address')) {
+        await su.prepareEmailAddressVerification({ strategy: 'email_code' })
+        setPendingVerification(true)
+        return true
+      }
+      return false
+    } catch {
+      // form_identifier_exists (a real, verified account → genuinely wrong password)
+      // or a password-policy error → fall back to the normal sign-in error.
+      return false
+    }
+  }
 
   const handleLogin = async () => {
     if (!isLoaded) return
@@ -54,10 +85,67 @@ export function LoginScreen() {
         Alert.alert('Sign in failed', 'Please check your email and password and try again.')
       }
     } catch (err) {
+      if (await tryResumeVerification()) return
       Alert.alert('Sign in failed', clerkError(err, 'Please check your email and password'))
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleVerify = async () => {
+    if (!signUpLoaded) return
+    setLoading(true)
+    try {
+      const result = await signUp.attemptEmailAddressVerification({ code })
+      if (result.status === 'complete') {
+        await setActiveSignUp({ session: result.createdSessionId })
+        router.replace('/(app)/globe')
+      } else {
+        Alert.alert('Verification incomplete', `Status: ${result.status}. Please try again.`)
+      }
+    } catch (err) {
+      Alert.alert('Verification failed', clerkError(err, 'Invalid or expired code'))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleResend = async () => {
+    if (!signUpLoaded) return
+    try {
+      await signUp.prepareEmailAddressVerification({ strategy: 'email_code' })
+      Alert.alert('Code sent', `We sent a new code to ${email}.`)
+    } catch (err) {
+      Alert.alert('Could not resend', clerkError(err, 'Please try again in a moment'))
+    }
+  }
+
+  if (pendingVerification) {
+    return (
+      <ScreenScroll contentContainerStyle={styles.content}>
+        <BrandMark size={64} />
+        <Text variant="display" style={styles.center}>
+          Verify your email
+        </Text>
+        <Text variant="body" color={theme.colors.text.muted} style={styles.center}>
+          Your account isn&apos;t verified yet. Enter the code we sent to {email} to finish
+          signing up.
+        </Text>
+        <Input
+          placeholder="Verification code"
+          value={code}
+          onChangeText={setCode}
+          keyboardType="number-pad"
+          autoComplete="one-time-code"
+        />
+        <Button label="Verify email" onPress={handleVerify} loading={loading} />
+        <Pressable accessibilityRole="link" accessibilityLabel="Resend code" onPress={handleResend}>
+          <Text variant="caption" color={theme.colors.accent.default} style={styles.link}>
+            Didn&apos;t get a code? Send a new one
+          </Text>
+        </Pressable>
+      </ScreenScroll>
+    )
   }
 
   return (

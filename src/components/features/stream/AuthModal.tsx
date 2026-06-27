@@ -99,9 +99,48 @@ export function AuthModal({ visible, onClose, onSuccess }: Props) {
         setError('Sign in could not be completed.')
       }
     } catch (err) {
+      // The account may be an abandoned sign-up whose email was never verified —
+      // Clerk can't sign that in. Resume the pending sign-up, resend the code, and
+      // drop the user into the verify step so they can finish.
+      if (await tryResumeVerification()) return
       setError(clerkError(err, 'Sign in failed'))
     } finally {
       setLoading(false)
+    }
+  }
+
+  // Returns true if a pending verification was (re)started or completed.
+  async function tryResumeVerification(): Promise<boolean> {
+    if (!signUpLoaded) return false
+    try {
+      const su = await signUp!.create({ emailAddress: email, password })
+      if (su.status === 'complete') {
+        await setActiveSignUp!({ session: su.createdSessionId })
+        reset()
+        onSuccess()
+        return true
+      }
+      if (su.unverifiedFields?.includes('email_address')) {
+        await su.prepareEmailAddressVerification({ strategy: 'email_code' })
+        setTab('signup')
+        setSignUpStep('verify')
+        return true
+      }
+      return false
+    } catch {
+      // form_identifier_exists (verified account → wrong password) → show the
+      // original sign-in error instead.
+      return false
+    }
+  }
+
+  async function handleResend() {
+    if (!signUpLoaded) return
+    setError(null)
+    try {
+      await signUp!.prepareEmailAddressVerification({ strategy: 'email_code' })
+    } catch (err) {
+      setError(clerkError(err, 'Could not resend the code'))
     }
   }
 
@@ -240,6 +279,20 @@ export function AuthModal({ visible, onClose, onSuccess }: Props) {
               />
               {error && <HelpText tone="err">{error}</HelpText>}
               <Button label="Verify" onPress={handleVerify} loading={loading} />
+              <Pressable
+                variant="default"
+                onPress={handleResend}
+                accessibilityRole="link"
+                accessibilityLabel="Resend code"
+                style={styles.switchRow}
+              >
+                <Text variant="body" color={theme.colors.text.muted}>
+                  Didn&apos;t get a code?{' '}
+                  <Text variant="bodyEmphasized" color={theme.colors.accent.default}>
+                    Send a new one
+                  </Text>
+                </Text>
+              </Pressable>
             </>
           )}
         </View>

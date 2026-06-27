@@ -84,6 +84,16 @@ export function SignupScreen() {
     }
   }
 
+  const handleResend = async () => {
+    if (!isLoaded) return
+    try {
+      await signUp.prepareEmailAddressVerification({ strategy: 'email_code' })
+      Alert.alert('Code sent', `We sent a new code to ${email}.`)
+    } catch (err) {
+      Alert.alert('Could not resend', clerkError(err, 'Please try again in a moment'))
+    }
+  }
+
   if (pendingVerification) {
     return (
       <ScreenScroll contentContainerStyle={styles.content}>
@@ -102,6 +112,11 @@ export function SignupScreen() {
           autoComplete="one-time-code"
         />
         <Button label="Verify email" onPress={handleVerify} loading={loading} />
+        <Pressable accessibilityRole="link" accessibilityLabel="Resend code" onPress={handleResend}>
+          <Text variant="caption" color={theme.colors.accent.default} style={styles.link}>
+            Didn&apos;t get a code? Send a new one
+          </Text>
+        </Pressable>
       </ScreenScroll>
     )
   }
