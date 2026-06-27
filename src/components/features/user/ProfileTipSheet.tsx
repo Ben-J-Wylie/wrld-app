@@ -7,14 +7,11 @@
 // + success state. Space Bucks → the creator's Stardust.
 
 import { useRef, useState } from 'react'
-import {
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  StyleSheet,
-  TextInput,
-  View,
-} from 'react-native'
+import { Modal, StyleSheet, TextInput, View } from 'react-native'
+// react-native-keyboard-controller's KeyboardAvoidingView (+ a KeyboardProvider inside
+// the Modal) — RN's is unreliable in a Modal (this sheet had NO avoidance on Android),
+// letting the keyboard cover the message field. No native change; already in the client.
+import { KeyboardAvoidingView, KeyboardProvider } from 'react-native-keyboard-controller'
 import { useMutation } from '@tanstack/react-query'
 import { newIdempotencyKey } from '@/lib/idempotency'
 import { Filter as ProfanityFilter } from 'bad-words'
@@ -107,8 +104,9 @@ export function ProfileTipSheet({ visible, handle, displayName, onClose }: Props
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
-      <Pressable variant="none" style={styles.backdrop} onPress={handleClose} />
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'position' : undefined}>
+      <KeyboardProvider>
+        <Pressable variant="none" style={styles.backdrop} onPress={handleClose} />
+        <KeyboardAvoidingView behavior="padding" style={styles.sheetWrapper}>
         <View style={styles.sheet}>
           <View style={styles.handle} />
 
@@ -201,7 +199,8 @@ export function ProfileTipSheet({ visible, handle, displayName, onClose }: Props
             </>
           )}
         </View>
-      </KeyboardAvoidingView>
+        </KeyboardAvoidingView>
+      </KeyboardProvider>
     </Modal>
   )
 }
@@ -210,6 +209,13 @@ const styles = StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: theme.colors.bg.overlay,
+  },
+  sheetWrapper: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    justifyContent: 'flex-end',
   },
   sheet: {
     backgroundColor: theme.colors.bg.elevated,

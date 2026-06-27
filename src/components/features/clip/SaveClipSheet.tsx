@@ -7,7 +7,11 @@
 // Cancel / backdrop dismisses. See DESIGN.md Section 3 (Buffer-trim clip editor).
 
 import { useEffect, useState } from 'react'
-import { KeyboardAvoidingView, Modal, Platform, StyleSheet, View } from 'react-native'
+import { Modal, StyleSheet, View } from 'react-native'
+// react-native-keyboard-controller's KeyboardAvoidingView (+ a KeyboardProvider inside
+// the Modal) — RN's is unreliable in a Modal/absolute sheet and lets the keyboard cover
+// the field. No native change; the module's already in the client.
+import { KeyboardAvoidingView, KeyboardProvider } from 'react-native-keyboard-controller'
 import { Pressable } from '@/components/primitives/Pressable'
 import { Input } from '@/components/primitives/Input'
 import { Button } from '@/components/primitives/Button'
@@ -32,11 +36,9 @@ export function SaveClipSheet({ visible, defaultName = '', durationLabel, onSave
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onCancel}>
-      <Pressable variant="none" style={styles.backdrop} onPress={onCancel} />
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.sheetWrapper}
-      >
+      <KeyboardProvider>
+        <Pressable variant="none" style={styles.backdrop} onPress={onCancel} />
+        <KeyboardAvoidingView behavior="padding" style={styles.sheetWrapper}>
         <View style={styles.sheet}>
           <View style={styles.handle} />
           <Text variant="heading" style={styles.center}>
@@ -68,7 +70,8 @@ export function SaveClipSheet({ visible, defaultName = '', durationLabel, onSave
             </Text>
           </Pressable>
         </View>
-      </KeyboardAvoidingView>
+        </KeyboardAvoidingView>
+      </KeyboardProvider>
     </Modal>
   )
 }
