@@ -1291,6 +1291,14 @@ the retain-only MECHANISM is proven; un-save is confirmed not-yet-wired (D3); + 
    → **Fix: Ben** (clips grid: reaped ranges → gaps, no thumbnail for evicted footage) **+ Aaron**
    (`GET /buffer/me` reports each session's *surviving* range so the app knows where the hole is).
    Data-safe (footage IS gone — only the UI lies); clips-grid eviction-UX correctness.
+   → **✅ DONE (2026-06-27).** **Aaron** (`wrld-backend 70a39c9`): `GET /buffer/me` reports
+   `survivingStartMs`/`survivingEndMs` per session (the on-disk media window; head shrinks as the
+   reaper eats; `null` = data-only) + drops `thumbnailUrl` when nothing survives. **Ben** (app):
+   `BufferSession` gains the two fields; `sessionStartMs`/`sessionEndMs` now bound the buffer block by
+   the surviving range (reaped head → gap; fully-reaped → zero-width → no block; thumbnail already
+   nulled). Falls back to the full media bounds on an older backend / data-only. **Owes an on-device
+   pass** (touches the clips-timeline carve + live build): confirm a reaped head renders as a clean
+   gap/edge and a fully-reaped session shows no ghost.
 
 **Flag decision:** the *read* side is proven, but with the flag ON **un-save is broken until D3**. So
 **flip `CU3_RETAIN_ONLY` back OFF on the box for now** (un-save keeps working via the legacy path — no

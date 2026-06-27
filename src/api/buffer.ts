@@ -41,6 +41,12 @@ export type BufferSession = {
   // Optional for back-compat with an older backend (fall back to durationSec / 0).
   mediaDurationSec?: number
   mediaStartOffsetMs?: number
+  // CU3 ghost-block fix — the media footage window STILL ON DISK (absolute UTC ms), after the reaper
+  // eats from the head. The grid renders a block only over this range; the reaped remainder is a gap
+  // (no ghost block/thumbnail). `null` on a data-only session (no media to ghost). Absent on an older
+  // backend → the grid falls back to the full media bounds (mediaStartOffsetMs/mediaDurationSec).
+  survivingStartMs?: number | null
+  survivingEndMs?: number | null
   kinds: BufferTrackKind[]
   playableKind: BufferTrackKind | null
   manifestUrl: string | null // tokenized HLS (unused by the thumbnail field, kept for later)

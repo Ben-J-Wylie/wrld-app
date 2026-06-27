@@ -98,14 +98,21 @@ const FEEDKIND_TO_BUFFER: Partial<Record<FeedKind, BufferTrackKind>> = {
   screen: 'screen',
 }
 
-const sessionStartMs = (s: BufferSession) => Date.parse(s.startedAt) + (s.mediaStartOffsetMs ?? 0)
+// The full MEDIA start, from go-live metadata (before any reaping).
+const mediaStartMs = (s: BufferSession) => Date.parse(s.startedAt) + (s.mediaStartOffsetMs ?? 0)
+// CU3 ghost-block fix — render the buffer block only over the footage STILL ON DISK. The reaper eats
+// from the head, so `survivingStartMs` advances as footage is evicted; using it turns the reaped head
+// into a gap (no ghost block — the carve fills the space between blocks). Falls back to the full media
+// start on an older backend (`survivingStartMs` absent) or a data-only session (`null`).
+const sessionStartMs = (s: BufferSession) => s.survivingStartMs ?? mediaStartMs(s)
 // A session's length: its flushed MEDIA when there is media (camera/audio — the footage length, which
 // trails wall-clock by encoder warm-up/latency), else its WALL-CLOCK span (`durationSec`). Without the
 // fallback a DATA-ONLY session (location/sensors, no camera) has mediaDurationSec 0 → zero width → it
 // vanishes from the timeline once the broadcast stops (Ben 2026-06-17). `?? 0` for a brand-new live
-// session that has both fields undefined.
+// session that has both fields undefined. Prefer `survivingEndMs` (the on-disk tail) when present.
 const sessionEndMs = (s: BufferSession) =>
-  sessionStartMs(s) + ((s.mediaDurationSec ?? 0) > 0 ? s.mediaDurationSec! : (s.durationSec ?? 0)) * 1000
+  s.survivingEndMs ??
+  mediaStartMs(s) + ((s.mediaDurationSec ?? 0) > 0 ? s.mediaDurationSec! : (s.durationSec ?? 0)) * 1000
 
 function clamp(v: number, lo: number, hi: number) {
   return Math.max(lo, Math.min(hi, v))
