@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { signalingClient, type TelemetryPayload } from '@/lib/mediasoupSignaling'
+import { useAuthStore } from '@/stores/authStore'
 import { getClerkToken } from '@/lib/clerkToken'
 import { getDeviceId } from '@/lib/deviceId'
 import { env } from '@/lib/env'
@@ -202,12 +203,23 @@ export function useSignaling() {
     setConfirmedBalance(null)
   }, [])
 
+  // Suspended users are blocked at the mediasoup layer (the server drops their chat +
+  // reactions), but the client optimistically renders its own first — so it LOOKS like
+  // it worked even though no one else sees it. Catch it here: gate the send + the local
+  // render on the cached suspension state, and surface the same suspension Alert instead.
+  const suspended = useAuthStore(
+    (s) => !!s.wrldUser?.suspendedUntil && new Date(s.wrldUser.suspendedUntil).getTime() > Date.now(),
+  )
+  const SUSPENDED_ENGAGE_MSG = "You can't chat or react while your account is suspended."
+
   const sendChatMessage = useCallback((text: string, handle: string) => {
+    if (suspended) { setSuspensionError(SUSPENDED_ENGAGE_MSG); return }
     signalingClient.sendChatMessage(text, handle)
     setChatMessages((prev) => [...prev, { from: handle, text, ts: Date.now() }])
-  }, [])
+  }, [suspended])
 
   const sendReaction = useCallback((kind: string, handle: string) => {
+    if (suspended) { setSuspensionError(SUSPENDED_ENGAGE_MSG); return }
     // Render this tap's float immediately (snappy); coalesce the wire send.
     const id = ++reactionCounterRef.current
     setReactions((prev) => [...prev, { from: handle, kind, ts: Date.now(), id }])
@@ -222,7 +234,7 @@ export function useSignaling() {
         pendingReactRef.current.clear()
       }, 250)
     }
-  }, [])
+  }, [suspended])
 
   const sendBroadcasterPaused = useCallback(() => signalingClient.sendBroadcasterPaused(), [])
   const sendBroadcasterResumed = useCallback(() => signalingClient.sendBroadcasterResumed(), [])
