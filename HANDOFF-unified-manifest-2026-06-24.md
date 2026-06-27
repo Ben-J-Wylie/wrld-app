@@ -1156,6 +1156,20 @@ legacy/windowed/tiled split); the rename (`precision`/`identity`/`keep`/`source`
 slice (define the type + adapters, migrate one surface to prove it), NOT a big-bang. The shared
 `clipDirectives` core + `resolvePinAxes` are the first pieces of this consolidation.
 
+> **💡 CU4 design option to weigh before locking the schema — "materialized segments / resolve-at-write" (Ben, 2026-06-26, LIGHT log).**
+> Instead of CU4's *resolve-at-read* (a clip's axes may be `null` → inherit the go-live default via a
+> fallback chain), make every **Segment fully self-contained**: all 7 axes carry concrete values, no
+> nulls, no inherit. Then:
+> - **the resolver disappears** — a read is just `segment.field` (no `resolveClipAxes`, no fallback);
+> - **kills the `null`-inherit bug class** (the CU3 D1 shadowing bug was exactly an inherit/coverage issue);
+> - **snip = copy** the segment into two (ranges split); **mend = pick a winner WHOLESALE** (not per-field;
+>   span → `[min start, max end]`; survivor's id persists);
+> - **forward-only falls out for free** (each segment is an independent copy — editing one never touches another).
+> Trade: resolve-at-write means a one-time **backfill** (materialise existing inherited values) + each
+> segment stores its own 7 scalars (negligible). **Boundary:** footage stays SHARED under the recording —
+> segments are time-ranges *pointing into* the same files; **snip/mend move ZERO bytes** (pure metadata).
+> Net: the cleanest end-state — drop the inherit columns + the resolver. Revisit at the CU4 schema-lock.
+
 ### First moves (this kickoff)
 - **Aaron:** D1 (reaper reads `retain` only) — the CU3 spine; unblocks D2/D3.
   **✅ DONE + DEPLOYED INERT (2026-06-26, `wrld-backend 8ddf95a`).** The reaper now collapses its 3
