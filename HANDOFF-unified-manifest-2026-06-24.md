@@ -1267,6 +1267,37 @@ slice (define the type + adapters, migrate one surface to prove it), NOT a big-b
    into D3 (save = the one `keep` directive). *(Test note: verify saved-lane survival in the **clips grid**,
    not the Library.)*
 
+### D1 CUTOVER GATE — RESULTS (Ben + Aaron on-device, 2026-06-27; playback/disk signal)
+Re-ran with the corrected signal (playback "won't play" = reaped, not timeline presence). **Verdict:
+the retain-only MECHANISM is proven; un-save is confirmed not-yet-wired (D3); + one new ghost-block bug.**
+
+1. **✅ MECHANISM PROVEN.** Broadcast→buffer, saved half snipped into shown/anon eras → the **unsaved
+   half was evicted** (gone), the **saved eras survived**, and the **per-range shown/anon edits were
+   honored in the time machine**. So under `CU3_RETAIN_ONLY` ON: save protects · unsaved reaps · edits
+   don't shadow. D1 + D2 work; the cutover *read* side is safe.
+2. **🔴 Findings 2 + 4 = ONE bug: un-save isn't wired (the D3 gap, expected).** Broadcast→**saved lane**,
+   snip, drag half to **buffer** → that half (a) was **NOT evicted** (#2) and (b) **reappeared in the
+   saved lane** on reload (#4). Root cause: **D2 writes a `retain:true` directive at go-live, but
+   un-save still uses the legacy path and never clears it** — so the stale `retain` keeps the half alive
+   and the persisted truth re-renders it saved. **This is exactly what D3 builds.**
+   → **D3 spec (sharpened): un-save (drag saved→buffer) must DURABLY flip the dragged range's
+   `retain` → false** (Aaron backend: clear/split the retain directive over that range + drop the
+   bespoke un-save endpoint; Ben app: drag-to-buffer writes the `keep` directive via `clipDirectives`).
+3. **🔴 NEW BUG — ghost block + thumbnail for reaped footage (separate from CU3).** After expanding the
+   window, the **correctly-evicted** buffer section reappeared as a **block with a thumbnail but no
+   playable content**. The clips grid builds blocks from session *metadata* (start/end + stored
+   thumbnail), not from *surviving* segments → a partially-reaped session draws a **ghost** where the
+   footage is gone. Should render as a **gap / eviction edge**, no thumbnail.
+   → **Fix: Ben** (clips grid: reaped ranges → gaps, no thumbnail for evicted footage) **+ Aaron**
+   (`GET /buffer/me` reports each session's *surviving* range so the app knows where the hole is).
+   Data-safe (footage IS gone — only the UI lies); clips-grid eviction-UX correctness.
+
+**Flag decision:** the *read* side is proven, but with the flag ON **un-save is broken until D3**. So
+**flip `CU3_RETAIN_ONLY` back OFF on the box for now** (un-save keeps working via the legacy path — no
+regression), Aaron builds D3 + Ben wires the app un-save, **re-run this gate with D3 in place, then flip
+ON for good** as part of the D3 cutover. The gate did its job: D1+D2 retain-only read proven; D3 confirmed
+as the required next piece.
+
 ### ⮕ AARON — START HERE (next steps, readiness)
 - **D2 — go-live `lane` → opening-range `retain` directive. ✅ DONE + DEPLOYED (2026-06-26,
   `wrld-backend 10f9349`).** A saved-lane go-live (`allocate`) writes its opening era `[start, OPEN]`
