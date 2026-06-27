@@ -118,6 +118,23 @@ const SPIN_WINDOW_MS = 12_000 // how long each spin window lasts before resting
 const SPIN_EASE_MS = 2_500 // taper the angular speed to zero over the tail
 const SPIN_STEP_DEG = 0.15 // per-tick longitude advance at full speed
 
+// Render-cost optimisation (2026-06-27). Two coupled changes:
+//   1. Memoise the pin + count-bubble GeoJSON so a parent re-render doesn't
+//      re-serialise + re-upload the whole feature set to native Mapbox.
+//   2. Only push mapZoom/mapCenterLat into React state when they actually
+//      change enough to move the UI (globe fitScale + ScaleBar), so a spin/pan
+//      — which changes only centre-longitude — no longer triggers a host
+//      re-render (and thus no per-frame GeoJSON re-upload). Zoom still updates
+//      smoothly during a pinch.
+// ROLLBACK: set this to `false` to restore the exact previous behaviour (rebuild
+// the GeoJSON every render + setState on every camera frame).
+const GLOBE_RENDER_OPT = true
+// Min change in centre-latitude (deg) / zoom before we re-render for the ScaleBar
+// + globe fitScale. Below these, a camera move is visually inert, so we skip the
+// setState. Only consulted when GLOBE_RENDER_OPT is true.
+const SCALE_LAT_EPSILON = 0.5
+const SCALE_ZOOM_EPSILON = 0.01
+
 // Shortest angular distance between two longitudes (degrees, 0..180), wrapping the
 // ±180 seam. Used to tell the auto-rotate tick's own camera writes from user moves.
 function angularDistDeg(a: number, b: number) {
@@ -696,6 +713,10 @@ export function GlobeScreenMapbox() {
   const [drawerState, setDrawerState] = useState<DrawerState>('closed')
   const [mapCenterLat, setMapCenterLat] = useState(20)
   const [mapZoom, setMapZoom] = useState(1.5)
+  // Last centre-lat / zoom we pushed into React state (for the GLOBE_RENDER_OPT
+  // change-threshold gate in handleCameraChanged). Seeded to the initial state.
+  const lastScaleLatRef = useRef(20)
+  const lastScaleZoomRef = useRef(1.5)
 
   // ── Active planet + swap transition ────────────────────────────────────────
   const { width: windowW } = useWindowDimensions()
@@ -960,9 +981,25 @@ export function GlobeScreenMapbox() {
     gestures: { isGestureActive: boolean }
   }) {
     const [lng, lat] = state.properties.center as [number, number]
-    setMapCenterLat(lat)
-    setMapZoom(state.properties.zoom)
-    mapZoomRef.current = state.properties.zoom
+    const zoom = state.properties.zoom
+    if (GLOBE_RENDER_OPT) {
+      // Only re-render when a value that actually drives UI moved enough to
+      // matter: zoom → globe fitScale + ScaleBar, lat → ScaleBar. Centre-lng
+      // (the spin/pan axis) drives neither, so a spin/pan no longer triggers a
+      // host re-render (and the pin-GeoJSON re-upload that rides on it).
+      if (Math.abs(lat - lastScaleLatRef.current) > SCALE_LAT_EPSILON) {
+        lastScaleLatRef.current = lat
+        setMapCenterLat(lat)
+      }
+      if (Math.abs(zoom - lastScaleZoomRef.current) > SCALE_ZOOM_EPSILON) {
+        lastScaleZoomRef.current = zoom
+        setMapZoom(zoom)
+      }
+    } else {
+      setMapCenterLat(lat)
+      setMapZoom(zoom)
+    }
+    mapZoomRef.current = zoom
     throttledPushViewport()
     // Always resume rotation from wherever the map actually is — not only when
     // Mapbox flags the change as a gesture. On Android `isGestureActive` is
@@ -1333,57 +1370,69 @@ export function GlobeScreenMapbox() {
   // Pins for the active planet only. Earth uses real coords + location precision
   // halos; Haven places each private stream at its stable island spot (by id) and
   // renders sharp dots (precision halos are meaningless on a synthetic planet).
-  const geoJSON = {
-    type: 'FeatureCollection' as const,
-    features: planetPins
-      .filter(planet.belongsTo)
-      .map((s) => {
-        // Earth: real coords + precision halos. Haven: stable island spot by id,
-        // sharp dots (halos are meaningless on a synthetic planet).
-        const [lng, lat] = planet.placePin(s)
-        if (lng == null || lat == null || Number.isNaN(lng) || Number.isNaN(lat)) {
-          return null
-        }
-        return {
-          type: 'Feature' as const,
-          geometry: { type: 'Point' as const, coordinates: [lng, lat] },
-          properties: {
-            streamId: s.id,
-            mediasoupRoomId: s.mediasoupRoomId ?? '',
-            title: s.title,
-            viewerCount: s.viewerCount,
-            handle: s.host?.handle ?? 'unknown',
-            sources: (s.sources ?? []).join(','),
-            precision: planet.id === 'earth' ? (s.locationPrecision ?? 'exact') : 'exact',
-            subscribersOnly: s.subscribersOnly === true,
-            ppv: s.ppvEvent != null,
-            isSelf: treatAsSelf(s),
-          },
-        }
-      })
-      .filter((f): f is NonNullable<typeof f> => f != null),
-  }
+  const buildGeoJSON = useCallback(
+    () => ({
+      type: 'FeatureCollection' as const,
+      features: planetPins
+        .filter(planet.belongsTo)
+        .map((s) => {
+          // Earth: real coords + precision halos. Haven: stable island spot by id,
+          // sharp dots (halos are meaningless on a synthetic planet).
+          const [lng, lat] = planet.placePin(s)
+          if (lng == null || lat == null || Number.isNaN(lng) || Number.isNaN(lat)) {
+            return null
+          }
+          return {
+            type: 'Feature' as const,
+            geometry: { type: 'Point' as const, coordinates: [lng, lat] },
+            properties: {
+              streamId: s.id,
+              mediasoupRoomId: s.mediasoupRoomId ?? '',
+              title: s.title,
+              viewerCount: s.viewerCount,
+              handle: s.host?.handle ?? 'unknown',
+              sources: (s.sources ?? []).join(','),
+              precision: planet.id === 'earth' ? (s.locationPrecision ?? 'exact') : 'exact',
+              subscribersOnly: s.subscribersOnly === true,
+              ppv: s.ppvEvent != null,
+              isSelf: treatAsSelf(s),
+            },
+          }
+        })
+        .filter((f): f is NonNullable<typeof f> => f != null),
+    }),
+    [planetPins, planet, treatAsSelf],
+  )
+  // ROLLBACK: GLOBE_RENDER_OPT=false → rebuild the GeoJSON every render (old behaviour).
+  const geoJSONMemo = useMemo(buildGeoJSON, [buildGeoJSON])
+  const geoJSON = GLOBE_RENDER_OPT ? geoJSONMemo : buildGeoJSON()
 
   // Count bubbles (low zoom): one per populated tile, drawn at the cluster
   // centroid the server snapped to a real pin. Empty in pins mode.
-  const countsGeoJSON = {
-    type: 'FeatureCollection' as const,
-    // In the past, the tiles feed (Lane B) provides per-minute count bubbles at low zoom
-    // (cellsHist.counts); the legacy/windowed feeds don't, so they show none. On Haven the
-    // tile feed is geographic + irrelevant. Only Earth-live has real viewport tile counts.
-    features: (
-      historicalMode ? (cellsCountMode ? cellsHist.counts : []) : planet.id !== 'earth' ? [] : counts
-    ).map((c: TileCount) => ({
-      type: 'Feature' as const,
-      geometry: { type: 'Point' as const, coordinates: [c.lng, c.lat] },
-      properties: {
-        tile: c.tile,
-        count: c.count,
-        label:
-          c.count >= 1000 ? `${(c.count / 1000).toFixed(c.count >= 10000 ? 0 : 1)}k` : `${c.count}`,
-      },
-    })),
-  }
+  const buildCountsGeoJSON = useCallback(
+    () => ({
+      type: 'FeatureCollection' as const,
+      // In the past, the tiles feed (Lane B) provides per-minute count bubbles at low zoom
+      // (cellsHist.counts); the legacy/windowed feeds don't, so they show none. On Haven the
+      // tile feed is geographic + irrelevant. Only Earth-live has real viewport tile counts.
+      features: (
+        historicalMode ? (cellsCountMode ? cellsHist.counts : []) : planet.id !== 'earth' ? [] : counts
+      ).map((c: TileCount) => ({
+        type: 'Feature' as const,
+        geometry: { type: 'Point' as const, coordinates: [c.lng, c.lat] },
+        properties: {
+          tile: c.tile,
+          count: c.count,
+          label:
+            c.count >= 1000 ? `${(c.count / 1000).toFixed(c.count >= 10000 ? 0 : 1)}k` : `${c.count}`,
+        },
+      })),
+    }),
+    [historicalMode, cellsCountMode, cellsHist.counts, planet, counts],
+  )
+  // ROLLBACK: GLOBE_RENDER_OPT=false → rebuild the count GeoJSON every render (old behaviour).
+  const countsGeoJSONMemo = useMemo(buildCountsGeoJSON, [buildCountsGeoJSON])
+  const countsGeoJSON = GLOBE_RENDER_OPT ? countsGeoJSONMemo : buildCountsGeoJSON()
 
   // ── Pin tap handling ──────────────────────────────────────────────────────
 

@@ -7,14 +7,12 @@
 // + success state. Space Bucks → the creator's Stardust.
 
 import { useRef, useState } from 'react'
-import {
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  StyleSheet,
-  TextInput,
-  View,
-} from 'react-native'
+import { Modal, StyleSheet, TextInput, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
+// The sheet pads itself by the live keyboard height (the app's proven manual listener
+// — react-native-keyboard-controller's KeyboardAvoidingView can't see the keyboard
+// inside a Modal on Android; this sheet previously had NO avoidance on Android at all).
+import { useKeyboardHeight } from '@/hooks/useKeyboardHeight'
 import { useMutation } from '@tanstack/react-query'
 import { newIdempotencyKey } from '@/lib/idempotency'
 import { Filter as ProfanityFilter } from 'bad-words'
@@ -46,6 +44,11 @@ type Props = {
 }
 
 export function ProfileTipSheet({ visible, handle, displayName, onClose }: Props) {
+  // Keyboard height + bottom inset as clearance (Android Modal content spans to screen
+  // bottom and the reported height excludes the gesture/nav inset).
+  const insets = useSafeAreaInsets()
+  const kb = useKeyboardHeight()
+  const liftBottom = kb > 0 ? kb + insets.bottom : 0
   const { data: me } = useCurrentUser()
   const setCurrentUser = useSetCurrentUser()
   const { config } = usePublicConfig()
@@ -108,7 +111,7 @@ export function ProfileTipSheet({ visible, handle, displayName, onClose }: Props
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
       <Pressable variant="none" style={styles.backdrop} onPress={handleClose} />
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'position' : undefined}>
+      <View style={[styles.sheetWrapper, { paddingBottom: liftBottom }]}>
         <View style={styles.sheet}>
           <View style={styles.handle} />
 
@@ -201,7 +204,7 @@ export function ProfileTipSheet({ visible, handle, displayName, onClose }: Props
             </>
           )}
         </View>
-      </KeyboardAvoidingView>
+      </View>
     </Modal>
   )
 }
@@ -210,6 +213,13 @@ const styles = StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: theme.colors.bg.overlay,
+  },
+  sheetWrapper: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    justifyContent: 'flex-end',
   },
   sheet: {
     backgroundColor: theme.colors.bg.elevated,

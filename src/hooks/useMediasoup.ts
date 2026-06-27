@@ -160,14 +160,31 @@ export function useMediasoup() {
     if (!stream) return
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const videoTrack = (stream as any).getVideoTracks()[0]
-    if (!videoTrack) return
+    // Only a live, enabled camera track can flip. A track that's ended/disabled —
+    // camera released on an Android background→resume, or an audio/data-only
+    // broadcast — makes the native switch throw "camera is not running".
+    if (!videoTrack || videoTrack.readyState !== 'live' || videoTrack.enabled === false) return
     switchingCamera.current = true
-    // react-native-webrtc exposes _switchCamera() to flip between front/back
-    // without creating a new stream — the existing producer track continues uninterrupted
-    videoTrack._switchCamera()
-    setFacingMode(prev => prev === 'environment' ? 'user' : 'environment')
-    // Android takes ~800ms to complete the switch; block re-entry until it's done
-    setTimeout(() => { switchingCamera.current = false }, 1_000)
+    const release = () => { switchingCamera.current = false }
+    // NOTE: react-native-webrtc's `_switchCamera()` is void — it fires the async
+    // `applyConstraints()` and DROPS the promise, so a rejection ("camera is not
+    // running") surfaces as an uncaught-in-promise error. We replicate it but OWN
+    // the promise so the rejection is handled here. Cloning `_settings` preserves
+    // the pinned capture resolution (only facingMode flips); the producer track
+    // continues uninterrupted (no new stream).
+    try {
+      const settings = { ...(videoTrack._settings ?? {}) }
+      delete settings.deviceId
+      const next: 'user' | 'environment' = settings.facingMode === 'user' ? 'environment' : 'user'
+      settings.facingMode = next
+      Promise.resolve(videoTrack.applyConstraints(settings))
+        .then(() => setFacingMode(next))
+        .catch(() => { /* camera released / not running — leave facingMode as-is */ })
+        // Android takes ~800ms to complete the switch; block re-entry until it settles.
+        .finally(() => setTimeout(release, 1_000))
+    } catch {
+      setTimeout(release, 1_000)
+    }
   }, [])
 
   // Acquire local camera/audio for an on-screen PREVIEW without going live

@@ -30,6 +30,7 @@ type Props = {
   onSubmit: () => void
   sending?: boolean
   authenticated?: boolean
+  suspended?: boolean
   onAuthRequest?: () => void
   placeholder?: string
   style?: StyleProp<ViewStyle>
@@ -41,11 +42,29 @@ export function ChatComposer({
   onSubmit,
   sending = false,
   authenticated = true,
+  suspended = false,
   onAuthRequest,
   placeholder = 'Say something…',
   style,
 }: Props) {
-  const canSend = authenticated && !sending && value.trim().length > 0
+  const canSend = authenticated && !suspended && !sending && value.trim().length > 0
+
+  // Suspended: chat is disabled (the server drops it anyway). Show a non-editable
+  // field that says so, with the send button greyed.
+  if (suspended) {
+    return (
+      <View style={[styles.row, style]}>
+        <Input
+          value=""
+          editable={false}
+          placeholder="Chat disabled while suspended"
+          pointerEvents="none"
+          style={styles.input}
+        />
+        <IconButton name="send" variant="accent" size="lg" onPress={() => {}} accessibilityLabel="Chat disabled" disabled />
+      </View>
+    )
+  }
 
   if (!authenticated) {
     return (

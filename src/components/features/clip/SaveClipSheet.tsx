@@ -7,7 +7,12 @@
 // Cancel / backdrop dismisses. See DESIGN.md Section 3 (Buffer-trim clip editor).
 
 import { useEffect, useState } from 'react'
-import { KeyboardAvoidingView, Modal, Platform, StyleSheet, View } from 'react-native'
+import { Modal, StyleSheet, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
+// The sheet pads itself by the live keyboard height (the app's proven manual listener
+// — react-native-keyboard-controller's KeyboardAvoidingView can't see the keyboard
+// inside a Modal on Android, so iOS lifted but Android stayed covered).
+import { useKeyboardHeight } from '@/hooks/useKeyboardHeight'
 import { Pressable } from '@/components/primitives/Pressable'
 import { Input } from '@/components/primitives/Input'
 import { Button } from '@/components/primitives/Button'
@@ -24,6 +29,11 @@ type Props = {
 }
 
 export function SaveClipSheet({ visible, defaultName = '', durationLabel, onSave, onCancel }: Props) {
+  // Keyboard height + bottom inset as clearance (Android Modal content spans to screen
+  // bottom and the reported height excludes the gesture/nav inset).
+  const insets = useSafeAreaInsets()
+  const kb = useKeyboardHeight()
+  const liftBottom = kb > 0 ? kb + insets.bottom : 0
   const [name, setName] = useState(defaultName)
   // Reset to the default each time it opens.
   useEffect(() => {
@@ -33,10 +43,7 @@ export function SaveClipSheet({ visible, defaultName = '', durationLabel, onSave
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onCancel}>
       <Pressable variant="none" style={styles.backdrop} onPress={onCancel} />
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.sheetWrapper}
-      >
+      <View style={[styles.sheetWrapper, { paddingBottom: liftBottom }]}>
         <View style={styles.sheet}>
           <View style={styles.handle} />
           <Text variant="heading" style={styles.center}>
@@ -68,7 +75,7 @@ export function SaveClipSheet({ visible, defaultName = '', durationLabel, onSave
             </Text>
           </Pressable>
         </View>
-      </KeyboardAvoidingView>
+      </View>
     </Modal>
   )
 }
