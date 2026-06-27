@@ -42,6 +42,7 @@ import { sampleAt, recentUpTo, torchStateAt, trailUpTo, chatUpTo } from '@/lib/d
 import { TimeScrubber } from '@/components/features/discovery/TimeScrubber'
 import { serverNow } from '@/lib/serverClock'
 import { clipsApi } from '@/api/clips'
+import { fromClipDetail } from '@/types/clip'
 import { REPORT_REASONS } from '@/lib/reportReasons'
 import { theme } from '@/tokens/theme'
 
@@ -200,9 +201,14 @@ export function ClipViewerScreen() {
     }
   }
 
-  const host = clip?.host
+  // CU4 prep — read the chrome's title/host through the one CanonicalClip adapter (the same shape
+  // every surface projects to) rather than raw `clip` fields. Behaviour-preserving: `fromClipDetail`
+  // maps `clip.title`→`axes.title` and passes `clip.host` straight through. Falls back to the nav
+  // params while the clip row is still loading.
+  const canon = clip ? fromClipDetail(clip) : null
+  const host = canon?.host ?? undefined
   const handle = host?.handle ?? paramHandle ?? 'unknown'
-  const title = clip?.title ?? paramTitle ?? 'Clip'
+  const title = canon?.axes.title ?? paramTitle ?? 'Clip'
   const hasMedia = !!clip?.manifestUrl
   const startAtMs = clip?.startAtMs ?? null
   const playheadMs = startAtMs != null ? startAtMs + currentMs : 0
