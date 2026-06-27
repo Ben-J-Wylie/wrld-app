@@ -79,7 +79,12 @@ export function AppealScreen() {
     }
   }
 
-  const close = () => router.navigate('/(app)/globe')
+  // replace (not navigate) so the appeal screen leaves the stack — Done / Back
+  // land on the globe rather than risk a no-op back to an already-mounted route.
+  // (For a permanently banned account the globe is then covered by the BanGate,
+  // by design — a ban walls off the app; the only ways off the gate are appeal or
+  // sign out.)
+  const close = () => router.replace('/(app)/globe')
 
   return (
     <ScreenScroll
