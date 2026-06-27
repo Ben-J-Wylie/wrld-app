@@ -1444,8 +1444,10 @@ legacy writers it removes are exactly D1's backfill sources, so the backfill the
      reaper-affecting, data-sensitive half — build it with the flag OFF, then re-gate.
   3. **Re-gate** (Ben runs): flag ON → repeat the 4-point gate (now incl. drag-half-to-buffer reaps +
      un-save doesn't reappear saved) → **flip `CU3_RETAIN_ONLY` ON for good.**
-- **🔴 STILL OWED (human): flip `CU3_RETAIN_ONLY` → OFF on `/admin/config`** (it's still ON from the
-  gate; my sandbox blocks prod-flag changes). Un-save stays broken via the legacy path until then.
+- **✅ DONE (Ben, 2026-06-27): `CU3_RETAIN_ONLY` flipped OFF** on `/admin/config` — back to the safe
+  3-signal reaper; un-save works via the legacy path again while D3 is built. Re-flip ON only after the
+  D3 re-gate (and heed the "no-flip-back once real retain-only saves exist" invariant — treat that flip
+  as the commit).
 
 - **📌 D3 SAVE/UN-SAVE CONTRACT — confirm before we both build (Ben, 2026-06-27).** The remaining-D3
   steps above leave *how* save/un-save is driven implicit. Proposed contract (so the app keep-writes and
