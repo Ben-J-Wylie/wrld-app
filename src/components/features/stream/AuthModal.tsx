@@ -9,7 +9,6 @@
 
 import { useState } from 'react'
 import { Modal, StyleSheet, View } from 'react-native'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
 // The sheet pads itself by the live keyboard height (the app's proven manual
 // listener — react-native-keyboard-controller's KeyboardAvoidingView can't see the
 // keyboard inside a Modal on Android, so iOS lifted but Android stayed covered).
@@ -33,11 +32,10 @@ type Props = {
 }
 
 export function AuthModal({ visible, onClose, onSuccess }: Props) {
-  const insets = useSafeAreaInsets()
-  // Keyboard height is measured from the real screen bottom; the sheet sits inside
-  // the inset bottom, so lift it by (keyboard − inset) to hug the keyboard top.
-  const keyboardHeight = useKeyboardHeight()
-  const liftBottom = keyboardHeight > 0 ? Math.max(0, keyboardHeight - insets.bottom) : 0
+  // The Modal's content area spans to the real screen bottom on Android, so lift the
+  // sheet by the FULL keyboard height to clear it (no safe-area subtraction — that's
+  // only for the chat composer, which sits inside a SafeAreaView).
+  const liftBottom = useKeyboardHeight()
   const [tab, setTab] = useState<Tab>('signin')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')

@@ -8,7 +8,6 @@
 
 import { useEffect, useState } from 'react'
 import { Modal, StyleSheet, View } from 'react-native'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
 // The sheet pads itself by the live keyboard height (the app's proven manual listener
 // — react-native-keyboard-controller's KeyboardAvoidingView can't see the keyboard
 // inside a Modal on Android, so iOS lifted but Android stayed covered).
@@ -29,9 +28,8 @@ type Props = {
 }
 
 export function SaveClipSheet({ visible, defaultName = '', durationLabel, onSave, onCancel }: Props) {
-  const insets = useSafeAreaInsets()
-  const keyboardHeight = useKeyboardHeight()
-  const liftBottom = keyboardHeight > 0 ? Math.max(0, keyboardHeight - insets.bottom) : 0
+  // Lift by the full keyboard height (Android Modal content spans to screen bottom).
+  const liftBottom = useKeyboardHeight()
   const [name, setName] = useState(defaultName)
   // Reset to the default each time it opens.
   useEffect(() => {
