@@ -8,13 +8,12 @@
 // a BottomSheet wrapping AuthChoiceList. Until then, token-clean it.
 
 import { useState } from 'react'
-import {
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  StyleSheet,
-  View,
-} from 'react-native'
+import { Modal, StyleSheet, View } from 'react-native'
+// RN's KeyboardAvoidingView is unreliable inside a Modal / absolute-positioned sheet
+// (the heading + inputs get covered by the keyboard). Use react-native-keyboard-
+// controller's, wrapped in a KeyboardProvider INSIDE the Modal — the root provider
+// doesn't reach the Modal's separate native window.
+import { KeyboardAvoidingView, KeyboardProvider } from 'react-native-keyboard-controller'
 import { useSignIn, useSignUp } from '@clerk/clerk-expo'
 import { theme } from '@/tokens/theme'
 import { Text } from '@/components/primitives/Text'
@@ -126,11 +125,9 @@ export function AuthModal({ visible, onClose, onSuccess }: Props) {
       animationType="slide"
       onRequestClose={handleClose}
     >
-      <Pressable variant="none" style={styles.backdrop} onPress={handleClose} />
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.sheetWrapper}
-      >
+      <KeyboardProvider>
+        <Pressable variant="none" style={styles.backdrop} onPress={handleClose} />
+        <KeyboardAvoidingView behavior="padding" style={styles.sheetWrapper}>
         <View style={styles.sheet}>
           <View style={styles.handle} />
 
@@ -223,7 +220,8 @@ export function AuthModal({ visible, onClose, onSuccess }: Props) {
             </>
           )}
         </View>
-      </KeyboardAvoidingView>
+        </KeyboardAvoidingView>
+      </KeyboardProvider>
     </Modal>
   )
 }
