@@ -1447,6 +1447,31 @@ legacy writers it removes are exactly D1's backfill sources, so the backfill the
 - **🔴 STILL OWED (human): flip `CU3_RETAIN_ONLY` → OFF on `/admin/config`** (it's still ON from the
   gate; my sandbox blocks prod-flag changes). Un-save stays broken via the legacy path until then.
 
+- **📌 D3 SAVE/UN-SAVE CONTRACT — confirm before we both build (Ben, 2026-06-27).** The remaining-D3
+  steps above leave *how* save/un-save is driven implicit. Proposed contract (so the app keep-writes and
+  Aaron's Clip lifecycle meet at one seam):
+  - **Single write path:** the app drives save/un-save by writing **`retain`** on the per-range
+    directive via **`patchDirectives`** (the one path for all 7 axes) — **no separate save/un-save
+    endpoint** to call. (The bespoke `saveClip`/`unsaveClip` are dropped.)
+  - **Backend side-effects of `retain` flipping (inside the directive PATCH handler), option-a:**
+    `retain` false→true ⇒ **materialise the `Clip` row** (the artifact wrapper) **+ enforce the
+    saved-storage cap** (reject/signal over-quota — the `409 storage_cap` the old `saveClip` returned);
+    `retain` true→false ⇒ **remove the `Clip` row**.
+  - **Edge-relative save** ("save the remainder from the reaper edge") is expressed as the directive's
+    **range** (`[reaperEdge, …]`, which the app already computes) — not a special endpoint param. So the
+    `fromReaperEdge`/`toNow` logic moves into "what range the retain directive covers."
+  - **Over-quota response:** the PATCH must surface the over-quota case (e.g. `409 storage_cap` +
+    used/quota) so the app shows the warning and, for a LIVE-span save, flips the go-live lane back to
+    `buffer` (matches today's U3 behaviour).
+  - **Why this shape:** keeps "save = a directive edit" literally true (one write path), makes the Clip
+    lifecycle a backend-internal consequence of the keep axis (not a thing the app orchestrates), and
+    gives the dropped `saveClip`'s storage-cap + edge-relative concerns a clean home. **Aaron: confirm
+    or counter** — it determines whether I wire save/un-save against `patchDirectives` or a new endpoint.
+
+- **ℹ️ FYI — ghost-block fix is DONE end-to-end (2026-06-27).** Aaron's backend half (`70a39c9`,
+  `survivingStartMs`/`survivingEndMs` + thumbnail drop) + Ben's render half (blocks bound by the
+  surviving range; reaped head → gap; fully-reaped → no block) are both in. Owes one on-device pass.
+
 ### Ben's lane
 - **Now (unblocked):** the canonical-type **discovery-pin slice** (CU4 prep) — in flight.
 - **After D3 lands:** the `keep` axis in the drawer + retire the bespoke `saveClip`/`unsaveClip` flow
