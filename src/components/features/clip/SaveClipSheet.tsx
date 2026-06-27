@@ -11,7 +11,11 @@ import { Modal, StyleSheet, View } from 'react-native'
 // react-native-keyboard-controller's KeyboardAvoidingView (+ a KeyboardProvider inside
 // the Modal) — RN's is unreliable in a Modal/absolute sheet and lets the keyboard cover
 // the field. No native change; the module's already in the client.
+// ANDROID: the Modal is a separate native window; the controller only reads the keyboard
+// there when the Modal goes edge-to-edge (statusBar/navigationBar translucent) + the
+// inner provider matches — otherwise iOS works but Android stays covered.
 import { KeyboardAvoidingView, KeyboardProvider } from 'react-native-keyboard-controller'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Pressable } from '@/components/primitives/Pressable'
 import { Input } from '@/components/primitives/Input'
 import { Button } from '@/components/primitives/Button'
@@ -28,6 +32,7 @@ type Props = {
 }
 
 export function SaveClipSheet({ visible, defaultName = '', durationLabel, onSave, onCancel }: Props) {
+  const insets = useSafeAreaInsets()
   const [name, setName] = useState(defaultName)
   // Reset to the default each time it opens.
   useEffect(() => {
@@ -35,11 +40,18 @@ export function SaveClipSheet({ visible, defaultName = '', durationLabel, onSave
   }, [visible, defaultName])
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onCancel}>
-      <KeyboardProvider>
+    <Modal
+      visible={visible}
+      transparent
+      statusBarTranslucent
+      navigationBarTranslucent
+      animationType="slide"
+      onRequestClose={onCancel}
+    >
+      <KeyboardProvider navigationBarTranslucent>
         <Pressable variant="none" style={styles.backdrop} onPress={onCancel} />
         <KeyboardAvoidingView behavior="padding" style={styles.sheetWrapper}>
-        <View style={styles.sheet}>
+        <View style={[styles.sheet, { paddingBottom: theme.spacing.xxl + insets.bottom }]}>
           <View style={styles.handle} />
           <Text variant="heading" style={styles.center}>
             Name this clip

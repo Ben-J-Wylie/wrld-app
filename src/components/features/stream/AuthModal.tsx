@@ -13,7 +13,11 @@ import { Modal, StyleSheet, View } from 'react-native'
 // (the heading + inputs get covered by the keyboard). Use react-native-keyboard-
 // controller's, wrapped in a KeyboardProvider INSIDE the Modal — the root provider
 // doesn't reach the Modal's separate native window.
+// ANDROID: a Modal is a separate native window; the controller can only read the
+// keyboard there if the Modal goes edge-to-edge (statusBar/navigationBar translucent)
+// + the inner provider matches. Without this iOS works but Android stays covered.
 import { KeyboardAvoidingView, KeyboardProvider } from 'react-native-keyboard-controller'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useSignIn, useSignUp } from '@clerk/clerk-expo'
 import { theme } from '@/tokens/theme'
 import { Text } from '@/components/primitives/Text'
@@ -33,6 +37,7 @@ type Props = {
 }
 
 export function AuthModal({ visible, onClose, onSuccess }: Props) {
+  const insets = useSafeAreaInsets()
   const [tab, setTab] = useState<Tab>('signin')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -122,13 +127,15 @@ export function AuthModal({ visible, onClose, onSuccess }: Props) {
     <Modal
       visible={visible}
       transparent
+      statusBarTranslucent
+      navigationBarTranslucent
       animationType="slide"
       onRequestClose={handleClose}
     >
-      <KeyboardProvider>
+      <KeyboardProvider navigationBarTranslucent>
         <Pressable variant="none" style={styles.backdrop} onPress={handleClose} />
         <KeyboardAvoidingView behavior="padding" style={styles.sheetWrapper}>
-        <View style={styles.sheet}>
+        <View style={[styles.sheet, { paddingBottom: theme.spacing.xxl + insets.bottom }]}>
           <View style={styles.handle} />
 
           {tab === 'signin' ? (
