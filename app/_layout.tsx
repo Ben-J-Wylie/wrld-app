@@ -108,6 +108,8 @@ function RootNavigator() {
   const pendingStreamRef = useRef<{ roomId: string; streamId: string; sources: string } | null>(null)
   // Tip/gift notifications deep-link to the sender's profile.
   const pendingProfileRef = useRef<string | null>(null)
+  // Suspension notifications deep-link to the appeal screen, carrying the signed token.
+  const pendingAppealRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (!isLoaded) return
@@ -124,6 +126,11 @@ function RootNavigator() {
       pendingProfileRef.current = null
       router.push(`/(app)/profile/${handle}`)
     }
+    const appealToken = pendingAppealRef.current
+    if (appealToken !== null) {
+      pendingAppealRef.current = null
+      router.push(appealToken ? { pathname: '/appeal', params: { t: appealToken } } : '/appeal')
+    }
   }, [isLoaded])
 
   useEffect(() => {
@@ -136,6 +143,7 @@ function RootNavigator() {
         mediasoupRoomId?: string
         sources?: string
         url?: string
+        appealUrl?: string
       }
 
       // Tip/gift/follow/subscribe notifications deep-link to the sender's profile.
@@ -147,6 +155,18 @@ function RootNavigator() {
           router.push(`/(app)/profile/${data.senderHandle}`)
         } else {
           pendingProfileRef.current = data.senderHandle
+        }
+        return
+      }
+
+      // Suspension notification → the appeal screen. The signed token rides in the
+      // appealUrl (WEB_BASE_URL/appeal?t=…); pull it out so the token works natively.
+      if (data.type === 'suspension') {
+        const token = data.appealUrl?.match(/[?&]t=([^&]+)/)?.[1] ?? ''
+        if (everLoaded.current) {
+          router.push(token ? { pathname: '/appeal', params: { t: token } } : '/appeal')
+        } else {
+          pendingAppealRef.current = token
         }
         return
       }
@@ -206,6 +226,7 @@ function RootNavigator() {
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="(app)" />
         <Stack.Screen name="onboarding" options={{ gestureEnabled: false }} />
+        <Stack.Screen name="appeal" />
       </Stack>
       {/* Full-screen reactivation gate — renders over everything when the signed-in
           account is soft-deleted and in its grace period (no-op otherwise). */}
