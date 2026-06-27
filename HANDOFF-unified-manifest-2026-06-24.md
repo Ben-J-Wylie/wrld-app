@@ -1330,13 +1330,18 @@ as the required next piece.
   ~30s mid-broadcast → confirm a `sources:{camera:false}` era marks the gap and the clip rail hides
   camera over it. **D4 confirms snip-at-now (U2) + AV-pause are now one unified directive write.**
 - **D3 — save/un-save = a `keep`/`retain` directive edit; drop the copy-path + `saveClip`/`unsaveClip`/
-  edge-relative endpoints; + U3 (materialise a `keep` range into a Library clip, per obs 2). 🔶 GATED on
-  the D1 cutover passing** (Ben is running it — flip `CU3_RETAIN_ONLY` on + prove saved survives / unsaved
-  reaps). Once the gate passes and the flag stays ON, D3 is safe (the legacy writers it removes are the
-  protections the cutover proved redundant). **Open sub-question for D3/U3:** under retain-in-place, what
-  makes a range appear in the Library — a still-materialised `Clip` row, or the Library query shifting to
-  "ranges with `keep=kept`"? (CU4 makes clip ≡ segment; D3 picks the interim.) Worth a quick Ben+Aaron
-  call when D3 starts.
+  edge-relative endpoints; + U3 (materialise a `keep` range into a Library clip, per obs 2).** Cutover
+  *read* side is ✅ PROVEN (2026-06-27 gate, finding 1); D3 is the *write* side. The gate sharpened the
+  spec via findings 2+4: **un-save (drag saved→buffer) must DURABLY flip the dragged range's `retain`
+  → false** (not just a local override — today the legacy un-save leaves the D2 retain directive intact,
+  so the half neither reaps nor un-saves). Per the flag decision, **`CU3_RETAIN_ONLY` is OFF until D3 is
+  built** (un-save keeps working via legacy meanwhile); re-run the gate with D3, then flip ON for good.
+  - **✅ DECIDED — D3 Library-surface interim = option (a) (Ben, 2026-06-27).** A `keep:kept` range
+    **still materialises a `Clip` row** (it's the artifact wrapper — owns `manifestUrl`/`thumbnailUrl`/
+    `status`, which the Library reads for display + playback); **un-save removes the `Clip` row AND flips
+    `retain` → false.** So the Library query is **unchanged** (reads `Clip` rows). *(Rejected for now:
+    Library reads `keep=kept` ranges directly — the artifact metadata has no home until CU4. CU4's
+    clip ≡ segment collapse merges Clip↔directive and supersedes this interim.)*
 - **Ben (app), after D3 lands:** the `keep` axis in the drawer + retire the bespoke save flow (writes via
   `clipDirectives`). In parallel now: the canonical-type discovery-pin slice (unblocked).
 
@@ -1377,10 +1382,11 @@ Once the gate is green and the flag stays ON: **D3 = save/un-save becomes a `kee
 edit** — drop the copy-path + `saveClip`/`unsaveClip`/edge-relative endpoints (the protections the
 cutover just proved redundant) + **U3** (materialise a `keep` range into the Library, per obs 2). The
 legacy writers it removes are exactly D1's backfill sources, so the backfill then has nothing left to do.
-- **Open sub-question for the Ben+Aaron call (D3/U3):** under retain-in-place, what makes a range show
-  in the **Library** — a still-materialised `Clip` row, or the Library query shifting to "ranges with
-  `keep=kept`"? (CU4 makes clip ≡ segment; D3 picks the interim.) This is the decision to lock before I
-  start D3.
+- **✅ DECIDED — D3 Library-surface interim = option (a) (Ben, 2026-06-27):** a `keep:kept` range
+  **still materialises a `Clip` row** (the artifact wrapper — owns `manifestUrl`/`thumbnailUrl`/`status`
+  the Library reads); **un-save removes the `Clip` row + flips `retain` → false.** Library query
+  unchanged (reads `Clip` rows). CU4's clip ≡ segment collapse supersedes this interim. (Rejected:
+  Library reads `keep=kept` ranges directly — no home for the artifact metadata until CU4.)
 
 ### Ben's lane
 - **Now (unblocked):** the canonical-type **discovery-pin slice** (CU4 prep) — in flight.
