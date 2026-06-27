@@ -23,6 +23,7 @@ export function AppealScreen() {
   const { t } = useLocalSearchParams<{ t?: string }>()
   const token = typeof t === 'string' && t.length > 0 ? t : null
   const wrldUser = useAuthStore((s) => s.wrldUser)
+  const setWrldUser = useAuthStore((s) => s.setWrldUser)
 
   // Token mode: fetch context from the signed link (no session).
   const { data: tokenCtx, isLoading: ctxLoading, isError: ctxError } = useQuery({
@@ -45,11 +46,15 @@ export function AppealScreen() {
       permanent: until.getFullYear() >= 2090,
       suspendedUntil: wrldUser.suspendedUntil,
       suspendedReason: wrldUser.suspendedReason ?? null,
-      alreadyAppealed: false,
+      alreadyAppealed: wrldUser.appealState === 'pending',
     }
   })()
 
   const ctx = token ? tokenCtx ?? null : sessionCtx
+  // A prior appeal was reviewed + denied within the cooldown — show that instead
+  // of a form that would just 429 on submit. (Session mode only; the token feed
+  // signals an existing appeal via alreadyAppealed.)
+  const deniedCooldown = !token && wrldUser?.appealState === 'denied'
 
   const [message, setMessage] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -68,6 +73,10 @@ export function AppealScreen() {
       if (token) await usersApi.appealWithToken(token, message.trim())
       else await usersApi.appeal(message.trim())
       setDone(true)
+      // Optimistically mark the cached user's appeal pending so the ban gate /
+      // banner immediately read "under review" instead of re-inviting an appeal
+      // when Done returns there (server reflects it on the next /auth/me).
+      if (!token && wrldUser) setWrldUser({ ...wrldUser, appealState: 'pending' })
     } catch (e: unknown) {
       // Surface the server's specific reason (e.g. the appeal cooldown after a
       // denial, or "no active suspension") rather than a generic retry message —
@@ -106,6 +115,8 @@ export function AppealScreen() {
             <Invalid onClose={close} />
           ) : !ctx ? (
             <NoSuspension signedIn={!!wrldUser} onClose={close} />
+          ) : deniedCooldown && !done ? (
+            <Denied onClose={close} />
           ) : done ? (
             <Submitted onClose={close} />
           ) : (
@@ -182,6 +193,21 @@ function Submitted({ onClose }: { onClose: () => void }) {
         A moderator will review it. We'll email you the decision.
       </Text>
       <Button label="Done" onPress={onClose} variant="secondary" />
+    </View>
+  )
+}
+
+function Denied({ onClose }: { onClose: () => void }) {
+  return (
+    <View style={styles.centered}>
+      <Icon name="slash" size={40} color={theme.colors.text.subtle} />
+      <Text variant="heading" color={theme.colors.text.primary} style={styles.heading}>
+        Appeal reviewed
+      </Text>
+      <Text variant="body" color={theme.colors.text.muted} style={styles.centeredBody}>
+        A moderator reviewed your appeal and the suspension stands. If anything changes you'll be notified by email.
+      </Text>
+      <Button label="Back to globe" onPress={onClose} variant="secondary" />
     </View>
   )
 }

@@ -45,13 +45,22 @@ function SuspensionBanner() {
   if (until.getFullYear() >= 2090) return null
   const bannerMsg = `Your account is suspended until ${until.toLocaleDateString()}.`
 
+  // Reflect appeal state so the banner doesn't keep saying "Appeal" after one's
+  // filed. pending = under review; denied = reviewed (cooldown); else = Appeal link.
+  const appealState = wrldUser.appealState
+  const trailing =
+    appealState === 'pending' ? 'Appeal under review'
+    : appealState === 'denied' ? 'Appeal reviewed'
+    : 'Appeal'
+
   return (
     <Pressable
       onPress={() => router.navigate('/appeal')}
       style={[styles.banner, { paddingTop: insets.top + theme.spacing.xs }]}
     >
       <Text variant="caption" color={theme.colors.warn} style={styles.bannerText}>
-        {bannerMsg} <Text variant="caption" color={theme.colors.warn} style={styles.bannerLink}>Appeal</Text>
+        {bannerMsg}{' '}
+        <Text variant="caption" color={theme.colors.warn} style={appealState ? undefined : styles.bannerLink}>{trailing}</Text>
       </Text>
     </Pressable>
   )
@@ -92,9 +101,21 @@ function BanGate() {
           </Text>
         )}
 
-        <Pressable style={styles.appealBtn} onPress={() => router.navigate('/appeal')}>
-          <Text variant="bodyEmphasized" color={theme.colors.text.inverse}>Appeal this decision</Text>
-        </Pressable>
+        {/* Reflect appeal state so a user who just appealed isn't re-invited to
+            appeal. pending = under review; denied = reviewed (cooldown); else = appeal. */}
+        {wrldUser?.appealState === 'pending' ? (
+          <Text variant="body" color={theme.colors.text.primary} style={styles.gateBody}>
+            Your appeal is under review — we'll email you the decision.
+          </Text>
+        ) : wrldUser?.appealState === 'denied' ? (
+          <Text variant="body" color={theme.colors.text.primary} style={styles.gateBody}>
+            Your appeal was reviewed and the suspension stands.
+          </Text>
+        ) : (
+          <Pressable style={styles.appealBtn} onPress={() => router.navigate('/appeal')}>
+            <Text variant="bodyEmphasized" color={theme.colors.text.inverse}>Appeal this decision</Text>
+          </Pressable>
+        )}
 
         <Pressable style={styles.gateSignOut} onPress={handleSignOut}>
           <Text variant="body" color={theme.colors.text.muted}>Sign out</Text>
