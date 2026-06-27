@@ -8,7 +8,7 @@
 // wrld-web's AppealPage.
 
 import { useEffect, useState } from 'react'
-import { StyleSheet, TextInput, View } from 'react-native'
+import { Pressable, StyleSheet, TextInput, View } from 'react-native'
 import { router, useLocalSearchParams } from 'expo-router'
 import { useQuery } from '@tanstack/react-query'
 import { Button } from '@/components/primitives/Button'
@@ -82,7 +82,16 @@ export function AppealScreen() {
   const close = () => router.navigate('/(app)/globe')
 
   return (
-    <ScreenScroll contentContainerStyle={styles.scroll} bottomOffset={theme.spacing.xl}>
+    <ScreenScroll
+      header={
+        <Pressable onPress={close} style={styles.backRow} accessibilityRole="button" accessibilityLabel="Back to globe">
+          <Icon name="chevron-left" size="md" color={theme.colors.text.muted} />
+          <Text variant="body" color={theme.colors.text.muted}>Back to globe</Text>
+        </Pressable>
+      }
+      contentContainerStyle={styles.scroll}
+      bottomOffset={theme.spacing.xl}
+    >
         <View style={styles.card}>
           {token && ctxLoading ? (
             <Text variant="body" color={theme.colors.text.muted}>
@@ -205,6 +214,13 @@ function NoSuspension({ signedIn, onClose }: { signedIn: boolean; onClose: () =>
 }
 
 const styles = StyleSheet.create({
+  backRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.lg,
+    alignSelf: 'flex-start',
+  },
   scroll: {
     flexGrow: 1,
     justifyContent: 'center',
