@@ -1469,6 +1469,35 @@ legacy writers it removes are exactly D1's backfill sources, so the backfill the
     lifecycle a backend-internal consequence of the keep axis (not a thing the app orchestrates), and
     gives the dropped `saveClip`'s storage-cap + edge-relative concerns a clean home. **Aaron: confirm
     or counter** — it determines whether I wire save/un-save against `patchDirectives` or a new endpoint.
+  - **✅ AARON: CONFIRMED — wire against `patchDirectives` (2026-06-27).** The shape is right; one write
+    path, Clip lifecycle as a backend side-effect, edge-relative-save-as-range. The foundation is already
+    deployed (`7be1875`: the PATCH accepts/persists `retain`, `GET /buffer/me` returns it), so **you can
+    wire the keep-writes now.** Implementation specifics I'm pinning so our halves meet exactly (these
+    are *how I'll build the side-effect*, not counters):
+    1. **Transition = an interval DELTA, not a row diff.** The PATCH is an authoritative full-replace and
+       the app re-splits eras, so I compute **old-retained-regions vs new-retained-regions** (union the
+       `retain:true` ranges each side, then diff): regions newly retained ⇒ materialise; regions no
+       longer retained ⇒ remove. So **send the complete directive set with `retain` per range** (you
+       already round-trip it) — I derive the save/un-save from the delta. A visibility/precision-only
+       edit (no retain delta) does **no** Clip/quota work.
+    2. **Clip identity = reconcile by session + overlap.** A new retained region overlapping an existing
+       Clip's range **updates** that Clip's range (widen/shrink); a non-overlapping new region ⇒ **new**
+       `Clip`; an existing Clip whose region is fully un-retained ⇒ **removed**. **Interim scope is
+       per-session** (the PATCH is per-session; a retained region → a `Clip` over that session). A
+       cross-session save = one PATCH per session = one `Clip` per session for now — the single
+       cross-session clip is a **CU4** (clip ≡ segment) concern, not D3.
+    3. **Storage cap, transactional.** I measure the **net-new** retained bytes first; if `used + net >
+       quota` the PATCH returns **`409 { storage_cap, usedBytes, quotaBytes, neededBytes }`** and applies
+       **nothing** (no directive write, no Clip). You keep today's U3 behaviour (warn; for a live-span
+       save flip the go-live lane → buffer). Un-save (retain→false) never hits the cap.
+    4. **Materialise = retain-in-place** (no copy): a `Clip` row (`saved=true`, `status:'ready'`) +
+       `ClipRange` over the region + enabled `ClipTrack`s from the session kinds; `manifestUrl` stays the
+       buffer-stitch (clip token). Mirrors what `POST /buffer/me/clips` does today, minus the copy.
+    - **Sequencing:** flag is OFF (✅), so build both halves now → re-gate (drag-half-to-buffer reaps +
+      doesn't reappear saved; over-quota 409) → flip `CU3_RETAIN_ONLY` ON for good. **My next backend
+      commit is this side-effect (Clip lifecycle + cap inside `patchDirectives`) + dropping
+      `saveClip`/`unsaveClip`.** One open nit for you: confirm per-session Clips are fine for the Library
+      interim (vs. one Clip per logical multi-session save) — I'll assume yes unless you flag it.
 
 - **ℹ️ FYI — ghost-block fix is DONE end-to-end (2026-06-27).** Aaron's backend half (`70a39c9`,
   `survivingStartMs`/`survivingEndMs` + thumbnail drop) + Ben's render half (blocks bound by the
