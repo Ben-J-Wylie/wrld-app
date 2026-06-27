@@ -1438,6 +1438,14 @@ legacy writers it removes are exactly D1's backfill sources, so the backfill the
      drag-to-buffer (→false), round-tripping `retain` on every directive; **render the saved lane by the
      per-range `keep`**, not `BufferSession.lane`/`captureConfig.lane` (this is what fixes gate finding
      #4 — a saved-lane half dragged to buffer stops showing saved).
+     - **✅ keep-axis ROUND-TRIP done (Ben, 2026-06-27).** `SegSettings` gained `keep`; the seeds
+       (`ClipsScreen` + `SavedClipSettingsSheet`) read it from `directive.retain`; `rangesToDirectives`
+       writes it back. So a per-segment edit now **re-asserts** an existing `retain` instead of dropping
+       it — fixes a latent bug Aaron's foundation introduced (authoritative-replace defaults omitted
+       `retain`→false, so pre-this every per-axis edit silently un-retained; harmless only with the flag
+       OFF). App types (`BufferSession.directives[].retain`, `SegmentDirective.retain`) added. **Still
+       remaining in step 1:** the drag-to-save/buffer WRITE flip + **render-by-keep** (the carve change —
+       coupled to step 2 + a device pass on the `clips-timeline-clock-v1` milestone grid).
   2. **Backend (Aaron) — option-a Clip lifecycle:** on save, write `retain:true` over the range + keep
      materialising the `Clip` row; on un-save, **flip `retain`→false over the range + remove the `Clip`
      row** (drop the bespoke copy-path `saveClip`/`unsaveClip`/edge-relative endpoints). This is the

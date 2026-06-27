@@ -13,6 +13,9 @@
 export type Visibility = 'public' | 'private'
 export type Precision = 'exact' | 'city' | 'country' | 'off'
 export type Identity = 'attributed' | 'anon'
+// CU3 D3 — the keep/retain axis: 'kept' pins the range from the reaper (saved); 'reapable' lets it
+// expire. Absent inherits the session default (a saved-lane session is kept; a buffer session reapable).
+export type Keep = 'kept' | 'reapable'
 
 // A PARTIAL override — an absent field inherits the go-live/capture value. `sources` is per-kind
 // on/off (which captured sources a time-machine viewer may see over this span).
@@ -23,6 +26,7 @@ export type SegSettings = {
   sources?: Record<string, boolean>
   title?: string
   tags?: string[]
+  keep?: Keep
 }
 
 // One non-overlapping override span on a session (wall-clock ms).
@@ -48,7 +52,8 @@ export function settingsEqual(a: SegSettings, b: SegSettings): boolean {
     a.identity === b.identity &&
     sourcesEqual(a.sources, b.sources) &&
     (a.title ?? '') === (b.title ?? '') &&
-    tagsEqual(a.tags, b.tags)
+    tagsEqual(a.tags, b.tags) &&
+    a.keep === b.keep
   )
 }
 
@@ -59,7 +64,8 @@ export function isEmptySettings(s: SegSettings): boolean {
     s.identity === undefined &&
     (s.sources === undefined || Object.keys(s.sources).length === 0) &&
     (s.title === undefined || s.title === '') &&
-    (s.tags === undefined || s.tags.length === 0)
+    (s.tags === undefined || s.tags.length === 0) &&
+    s.keep === undefined
   )
 }
 
@@ -77,6 +83,7 @@ export function mergeSettings(base: SegSettings, patch: SegSettings): SegSetting
   }
   if ('title' in patch) { if (!patch.title) delete out.title; else out.title = patch.title }
   if ('tags' in patch) { if (!patch.tags || !patch.tags.length) delete out.tags; else out.tags = patch.tags }
+  if ('keep' in patch) { if (patch.keep === undefined) delete out.keep; else out.keep = patch.keep }
   return out
 }
 

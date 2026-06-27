@@ -80,6 +80,10 @@ export type BufferSession = {
     // PB4 — per-segment title + tags (saved alongside the other axes).
     title?: string | null
     tags?: string[] | null
+    // CU3 D3 foundation — the keep/retain axis (reaper authority once CU3_RETAIN_ONLY is ON). The app
+    // ROUND-TRIPS it through `patchDirectives` (authoritative-replace persists it) so a per-segment edit
+    // doesn't silently reset an existing retain → false (which would un-retain footage when the flag flips).
+    retain?: boolean
   }[]
   // PB4 A1 — the session's server-authoritative snips (explicit display boundaries, incl.
   // no-op). The grid seeds `splitPoints` from these on load so snips survive a reload.
@@ -242,6 +246,9 @@ export type SegmentDirective = {
   // PB4 — per-segment title + tags.
   title?: string
   tags?: string[]
+  // CU3 D3 — the keep/retain axis. Round-tripped on every PATCH (authoritative-replace) so an edit to
+  // one axis never drops a range's existing retain. Omitted → backend defaults false (today's behaviour).
+  retain?: boolean
 }
 
 // One contiguous in-window slice of a buffer session — the manifest body (C4).

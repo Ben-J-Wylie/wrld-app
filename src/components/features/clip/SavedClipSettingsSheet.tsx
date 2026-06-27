@@ -68,6 +68,8 @@ export function SavedClipSettingsSheet({ clip, visible, onClose }: Props) {
             ...(d.sources != null ? { sources: d.sources } : {}),
             ...(d.title != null ? { title: d.title } : {}),
             ...(d.tags && d.tags.length ? { tags: d.tags } : {}),
+            // CU3 D3 — round-trip the keep/retain axis so an edit doesn't drop an existing retain.
+            ...(d.retain ? { keep: 'kept' as const } : {}),
           },
         }))
       : []

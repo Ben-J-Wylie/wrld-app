@@ -58,6 +58,10 @@ export function rangesToDirectives(ranges: SettingsRange[], sessionId: string): 
       ...(r.settings.sources ? { sources: r.settings.sources } : {}),
       ...(r.settings.title ? { title: r.settings.title } : {}),
       ...(r.settings.tags && r.settings.tags.length ? { tags: r.settings.tags } : {}),
+      // CU3 D3 — round-trip the keep/retain axis (omit when unset → backend default false). Seeded
+      // from `directive.retain` on load, so a per-axis edit re-asserts an existing retain instead of
+      // dropping it (the authoritative-replace would otherwise reset it → un-retain when the flag flips).
+      ...(r.settings.keep ? { retain: r.settings.keep === 'kept' } : {}),
     }))
 }
 

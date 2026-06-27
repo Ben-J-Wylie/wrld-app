@@ -602,6 +602,9 @@ export const ClipsScreen = () => {
         if (d.sources) settings.sources = d.sources
         if (d.title) settings.title = d.title
         if (d.tags && d.tags.length) settings.tags = d.tags
+        // CU3 D3 — seed the keep axis from the directive's retain so a per-axis edit round-trips it
+        // (the authoritative-replace PATCH would otherwise drop an existing retain → un-retain on flip).
+        if (d.retain) settings.keep = 'kept'
         if (!isEmptySettings(settings)) seeded.push({ sessionId: s.id, startMs: d.startAtMs, endMs: d.endAtMs, settings })
       }
     }
