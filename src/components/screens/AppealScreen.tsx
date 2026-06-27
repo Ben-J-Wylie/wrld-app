@@ -26,7 +26,7 @@ export function AppealScreen() {
   const setWrldUser = useAuthStore((s) => s.setWrldUser)
 
   // Token mode: fetch context from the signed link (no session).
-  const { data: tokenCtx, isLoading: ctxLoading, isError: ctxError } = useQuery({
+  const { data: tokenCtx, isLoading: ctxLoading, isError: ctxError, refetch: refetchCtx } = useQuery({
     queryKey: ['appeal-context', token],
     queryFn: () => usersApi.appealContext(token!),
     enabled: !!token,
@@ -58,12 +58,30 @@ export function AppealScreen() {
 
   const [message, setMessage] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const [done, setDone] = useState(false)
+  // Optimistic "just submitted this session" flag. The submitted screen is shown
+  // when this is set OR the server reports an open appeal — NOT a sticky latch, so
+  // it clears once the server says there's no open appeal (e.g. the suspension was
+  // lifted + re-applied, which moots the prior appeal → a fresh ban is appealable).
+  const [submittedNow, setSubmittedNow] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const done = submittedNow || !!ctx?.alreadyAppealed
+
   useEffect(() => {
-    if (ctx?.alreadyAppealed) setDone(true)
-  }, [ctx?.alreadyAppealed])
+    // Server is the source of truth: when there's no open appeal on record, drop any
+    // stale submitted view so the appeal form returns for the new suspension. Guarded
+    // on !submitting so it can't race the in-flight submit before its refetch lands.
+    if (ctx && ctx.alreadyAppealed === false && !submitting) setSubmittedNow(false)
+  }, [ctx, ctx?.alreadyAppealed, submitting])
+
+  // Session mode derives appealState from the cached user, which can lag a fast
+  // unban→reban (the /auth/me poll runs on a 60s interval). Refresh once on open so
+  // the form/submitted state reflects the CURRENT suspension immediately — a re-ban
+  // whose prior appeal was mooted shows the form, not a stale "submitted".
+  useEffect(() => {
+    if (token) return
+    usersApi.getMe().then(setWrldUser).catch(() => {})
+  }, [token, setWrldUser])
 
   const submit = async () => {
     if (!message.trim()) return
@@ -72,11 +90,14 @@ export function AppealScreen() {
     try {
       if (token) await usersApi.appealWithToken(token, message.trim())
       else await usersApi.appeal(message.trim())
-      setDone(true)
       // Optimistically mark the cached user's appeal pending so the ban gate /
       // banner immediately read "under review" instead of re-inviting an appeal
       // when Done returns there (server reflects it on the next /auth/me).
       if (!token && wrldUser) setWrldUser({ ...wrldUser, appealState: 'pending' })
+      // Token mode has no store to update — refetch the signed-link context so
+      // `alreadyAppealed` becomes authoritative (true) before submitting clears.
+      if (token) await refetchCtx()
+      setSubmittedNow(true)
     } catch (e: unknown) {
       // Surface the server's specific reason (e.g. the appeal cooldown after a
       // denial, or "no active suspension") rather than a generic retry message —
