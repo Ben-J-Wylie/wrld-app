@@ -19,6 +19,7 @@ import { theme } from '@/tokens/theme'
 import { Text } from '@/components/primitives/Text'
 import { HelpText } from '@/components/primitives/HelpText'
 import { Input } from '@/components/primitives/Input'
+import { Icon } from '@/components/primitives/Icon'
 import { Button } from '@/components/primitives/Button'
 import { Pressable } from '@/components/primitives/Pressable'
 import { clerkError } from '@/lib/clerkError'
@@ -45,6 +46,7 @@ export function AuthModal({ visible, onClose, onSuccess }: Props) {
   const [password, setPassword] = useState('')
   const [code, setCode] = useState('')
   const [signUpStep, setSignUpStep] = useState<SignUpStep>('form')
+  const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -56,9 +58,22 @@ export function AuthModal({ visible, onClose, onSuccess }: Props) {
     setPassword('')
     setCode('')
     setSignUpStep('form')
+    setShowPassword(false)
     setError(null)
     setLoading(false)
   }
+
+  // Tap-to-reveal eye toggle, shared by the sign-in + create-account password fields.
+  const passwordToggle = (
+    <Pressable
+      variant="none"
+      onPress={() => setShowPassword((v) => !v)}
+      accessibilityRole="button"
+      accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+    >
+      <Icon name={showPassword ? 'eye-off' : 'eye'} size="md" color={theme.colors.text.muted} />
+    </Pressable>
+  )
 
   function handleClose() {
     reset()
@@ -153,7 +168,8 @@ export function AuthModal({ visible, onClose, onSuccess }: Props) {
                 placeholder="Password"
                 value={password}
                 onChangeText={setPassword}
-                secureTextEntry
+                secureTextEntry={!showPassword}
+                rightAffordance={passwordToggle}
               />
               {error && <HelpText tone="err">{error}</HelpText>}
               <Button label="Sign in" onPress={handleSignIn} loading={loading} />
@@ -188,7 +204,8 @@ export function AuthModal({ visible, onClose, onSuccess }: Props) {
                 placeholder="Password"
                 value={password}
                 onChangeText={setPassword}
-                secureTextEntry
+                secureTextEntry={!showPassword}
+                rightAffordance={passwordToggle}
               />
               {error && <HelpText tone="err">{error}</HelpText>}
               <Button label="Sign up" onPress={handleSignUp} loading={loading} />

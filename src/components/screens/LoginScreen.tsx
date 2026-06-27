@@ -17,6 +17,7 @@ import { Link, router } from 'expo-router'
 import { useSignIn, useAuth } from '@clerk/clerk-expo'
 import { Button } from '@/components/primitives/Button'
 import { Input } from '@/components/primitives/Input'
+import { Icon } from '@/components/primitives/Icon'
 import { Text } from '@/components/primitives/Text'
 import { BrandMark } from '@/components/primitives/BrandMark'
 import { ScreenScroll } from '@/components/sections/ScreenScroll'
@@ -28,6 +29,7 @@ export function LoginScreen() {
   const { isSignedIn } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
@@ -78,7 +80,16 @@ export function LoginScreen() {
         placeholder="Password"
         value={password}
         onChangeText={setPassword}
-        secureTextEntry
+        secureTextEntry={!showPassword}
+        rightAffordance={
+          <Pressable
+            onPress={() => setShowPassword((v) => !v)}
+            accessibilityRole="button"
+            accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+          >
+            <Icon name={showPassword ? 'eye-off' : 'eye'} size="md" color={theme.colors.text.muted} />
+          </Pressable>
+        }
       />
       <Button label="Sign in" onPress={handleLogin} loading={loading} />
       <Link href="/(auth)/signup" asChild>

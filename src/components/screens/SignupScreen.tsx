@@ -15,6 +15,7 @@ import { Link, router } from 'expo-router'
 import { useSignUp, useAuth } from '@clerk/clerk-expo'
 import { Button } from '@/components/primitives/Button'
 import { Input } from '@/components/primitives/Input'
+import { Icon } from '@/components/primitives/Icon'
 import { Text } from '@/components/primitives/Text'
 import { BrandMark } from '@/components/primitives/BrandMark'
 import { ScreenScroll } from '@/components/sections/ScreenScroll'
@@ -44,6 +45,7 @@ export function SignupScreen() {
   const [password, setPassword] = useState('')
   const [code, setCode] = useState('')
   const [pendingVerification, setPendingVerification] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
@@ -123,7 +125,16 @@ export function SignupScreen() {
         placeholder="Password"
         value={password}
         onChangeText={setPassword}
-        secureTextEntry
+        secureTextEntry={!showPassword}
+        rightAffordance={
+          <Pressable
+            onPress={() => setShowPassword((v) => !v)}
+            accessibilityRole="button"
+            accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+          >
+            <Icon name={showPassword ? 'eye-off' : 'eye'} size="md" color={theme.colors.text.muted} />
+          </Pressable>
+        }
       />
       {password.length > 0 && <PasswordStrengthMeter score={score} />}
       <Button label="Sign up" onPress={handleSignup} loading={loading} />
