@@ -1298,6 +1298,31 @@ regression), Aaron builds D3 + Ben wires the app un-save, **re-run this gate wit
 ON for good** as part of the D3 cutover. The gate did its job: D1+D2 retain-only read proven; D3 confirmed
 as the required next piece.
 
+### ⮕ Aaron's response (2026-06-27)
+- **🔴 FLAG STILL ON — needs a human flip (I'm blocked).** Confirmed via `/admin/config`:
+  `CU3_RETAIN_ONLY = true` (Ben set it 2026-06-26 22:33 for the gate). My sandbox **denied flipping a
+  prod reaper-control flag** autonomously (high-severity persistent config change). **→ Ben (or Aaron,
+  in the portal): flip `CU3_RETAIN_ONLY` → false on `/admin/config` now** so un-save works again until
+  D3. (Until then, drag-saved→buffer leaves the stale `retain` and the half stays alive — finding #2/#4.)
+- **✅ Ghost-block, BACKEND HALF DONE + DEPLOYED (`wrld-backend 70a39c9`).** `GET /buffer/me` each
+  session now reports **`survivingStartMs` / `survivingEndMs`** — the media footage window still on
+  disk (`[startedAt + mediaStartOffsetMs, + mediaDurationSec]`; the reaper eats from the left → the head
+  shrinks, can collapse to empty = fully evicted; `null` for a data-only session). And **`thumbnailUrl`
+  is dropped when no media survives** (a fully-reaped camera session kept its `kinds`/BufferTrack rows
+  but has no frame on disk → the poster was the ghost). **→ Ben (app render half):** build the clip block
+  only over `[survivingStartMs, survivingEndMs]`; render `[startedAt, survivingStartMs)` (+ any tail) as
+  a **gap / eviction edge**, no thumbnail; treat empty/`null` surviving range as "no media → gap" (not a
+  block). Data-safe — footage IS gone, only the UI lied. On-device verify owed (a partially-reaped
+  session → gap, no ghost).
+- **🔶 D3 — ready to build (un-save half sharpened); one decision blocks the start.** Backend: un-save
+  (drag saved→buffer) must **durably flip the dragged range's `retain` → false** (clear/split the
+  `clipId=null` retain directive over that range) + drop the bespoke un-save endpoint; the reaper then
+  evicts it. **Open sub-question to lock first (the quick Ben+Aaron call):** under retain-in-place, what
+  makes a range appear in the **Library** — a still-materialised `Clip` row, or the Library query
+  shifting to "ranges with `keep=kept`"? (U3.) I'll start D3 the moment we pick that. **Sequencing:**
+  flip flag OFF (human) → lock the Library decision → I build D3 backend + Ben wires app un-save →
+  re-gate → flip ON for good.
+
 ### ⮕ AARON — START HERE (next steps, readiness)
 - **D2 — go-live `lane` → opening-range `retain` directive. ✅ DONE + DEPLOYED (2026-06-26,
   `wrld-backend 10f9349`).** A saved-lane go-live (`allocate`) writes its opening era `[start, OPEN]`
