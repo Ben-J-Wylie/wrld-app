@@ -90,6 +90,7 @@ import { ToastBanner } from '@/components/features/feedback/ToastBanner'
 import { ActionSheet } from '@/components/sections/ActionSheet'
 import { NearbyStreamsDrawer } from '@/components/features/stream/NearbyStreamsDrawer'
 import { AuthModal } from '@/components/features/stream/AuthModal'
+import { GoLiveSignedOut } from '@/components/features/broadcast/GoLiveSignedOut'
 import { TipSheet } from '@/components/features/stream/TipSheet'
 import { GiftRail } from '@/components/features/stream/GiftRail'
 import { useGiftCatalog } from '@/hooks/useGiftCatalog'
@@ -1580,6 +1581,12 @@ export function StreamScreen() {
     // Your own handle → primary accent; everyone else → secondary accent.
     if (wrldUser && from === wrldUser.handle) return 'self'
     return 'user'
+  }
+
+  // Center Stream tab while signed out: going live needs an account. Show the same
+  // Sign in / Sign up prompt as the Dashboard instead of a blank preview.
+  if (isNew && !isSignedIn) {
+    return <GoLiveSignedOut />
   }
 
   return (

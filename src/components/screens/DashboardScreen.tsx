@@ -49,6 +49,7 @@ import { Divider } from '@/components/primitives/Divider'
 import { FeedRow, type SourceAvailability } from '@/components/features/broadcast/FeedRow'
 import { type FeedKind } from '@/components/features/broadcast/FeedThumb'
 import { GoLiveRecordBar } from '@/components/features/broadcast/GoLiveRecordBar'
+import { GoLiveSignedOut } from '@/components/features/broadcast/GoLiveSignedOut'
 import { LaneToggle } from '@/components/features/broadcast/LaneToggle'
 import { LiveClockBar } from '@/components/features/discovery/LiveClockBar'
 import { useBroadcastStore } from '@/stores/broadcastStore'
@@ -376,15 +377,7 @@ export function DashboardScreen() {
   }
 
   if (!isSignedIn) {
-    return (
-      <ScreenScroll contentContainerStyle={styles.center}>
-        <Text variant="display">Go Live</Text>
-        <Text variant="body" color={theme.colors.text.muted}>
-          Sign in to go live
-        </Text>
-        <Button label="Sign In" onPress={() => router.push('/(auth)/login')} variant="secondary" />
-      </ScreenScroll>
-    )
+    return <GoLiveSignedOut />
   }
 
   if (currentUser && !currentUser.creatorReady) {
