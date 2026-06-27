@@ -343,7 +343,7 @@ export function StreamScreen() {
     chatMessages, reactions, chatRateLimited, broadcasterPaused,
     tipEvents, giftEvents, confirmedBalance,
     connect, createRoom, joinRoom, disconnect,
-    sendChatMessage, sendReaction, dismissReaction,
+    sendChatMessage, sendReaction, dismissReaction, suspended,
     sendTip, dismissTip,
     sendGift, dismissGift,
     sendLocationUpdate,
@@ -2161,6 +2161,7 @@ export function StreamScreen() {
               onChangeText={setChatInput}
               onSubmit={handleSendChat}
               authenticated={!!isSignedIn}
+              suspended={suspended}
               onAuthRequest={() => setAuthModalVisible(true)}
             />
           </View>
@@ -2174,6 +2175,7 @@ export function StreamScreen() {
             reactions={REACTION_CONFIGS}
             burst={burst}
             authenticated={!!isSignedIn}
+            suspended={suspended}
             onReact={handleReact}
             onAuthRequest={() => setAuthModalVisible(true)}
             onBurstDismiss={dismissReaction}

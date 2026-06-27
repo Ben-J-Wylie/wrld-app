@@ -276,6 +276,7 @@ export function useSignaling() {
     chatMessages,
     reactions,
     chatRateLimited,
+    suspended,
     broadcasterPaused,
     tipEvents,
     giftEvents,

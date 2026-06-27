@@ -52,6 +52,7 @@ type Props = {
   reactions: ReactionConfig[]
   burst: BurstEntry[]
   authenticated?: boolean
+  suspended?: boolean
   onReact: (kind: string) => void
   onAuthRequest?: () => void
   onBurstDismiss: (id: number) => void
@@ -62,11 +63,14 @@ export function ReactionRail({
   reactions,
   burst,
   authenticated = true,
+  suspended = false,
   onReact,
   onAuthRequest,
   onBurstDismiss,
   style,
 }: Props) {
+  // Suspended: dim the rail. The tap still routes through onReact → useSignaling,
+  // which blocks the send and surfaces the "you can't react" suspension Alert.
   function handlePress(kind: string) {
     if (authenticated) onReact(kind)
     else onAuthRequest?.()
@@ -87,7 +91,7 @@ export function ReactionRail({
         ))}
       </View>
 
-      <View style={styles.column}>
+      <View style={[styles.column, suspended && { opacity: 0.4 }]}>
         {reactions.map((r) => (
           <ReactionButton key={r.kind} config={r} onPress={() => handlePress(r.kind)} />
         ))}
