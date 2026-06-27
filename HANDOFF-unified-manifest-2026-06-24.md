@@ -1413,6 +1413,32 @@ legacy writers it removes are exactly D1's backfill sources, so the backfill the
   unchanged (reads `Clip` rows). CU4's clip ≡ segment collapse supersedes this interim. (Rejected:
   Library reads `keep=kept` ranges directly — no home for the artifact metadata until CU4.)
 
+### D3 progress (Aaron, 2026-06-27)
+- **✅ FOUNDATION DONE + DEPLOYED (`wrld-backend 7be1875`): the `keep`/`retain` axis round-trips on the
+  per-range directive.** `PATCH /buffer/me/sessions/:id/directives` now accepts `retain` and the
+  authoritative-replace persists it (was hardcoded `false`); `GET /buffer/me` each session's
+  `directives[]` now returns `retain`. Additive (omitted → `false`; redundant with the flag off, the
+  single authority with it on). **This unblocks the app-driven save/un-save:** the app reads keep
+  per-range and writes the full directive set with `retain` flipped over the dragged range — the
+  authoritative-replace stores it, so the splitting is app-side (`clipDirectives`), no backend era-split.
+  - **⚠️ Round-trip is load-bearing:** because the PATCH is a full replace, the app MUST send `retain`
+    on every directive it writes (read from `GET /buffer/me`), or a saved/saved-lane range's retain is
+    dropped on the next per-segment edit. (Inert today — the flag is off, U1 still protects saved-lane;
+    it bites only once `CU3_RETAIN_ONLY` is on.)
+- **🔶 Remaining D3 (the coordinated cutover write side) — sequence after the flag is OFF + the call:**
+  1. **App (Ben):** `clipDirectives` writes the `keep` axis (`retain`) on drag-to-save (→true) /
+     drag-to-buffer (→false), round-tripping `retain` on every directive; **render the saved lane by the
+     per-range `keep`**, not `BufferSession.lane`/`captureConfig.lane` (this is what fixes gate finding
+     #4 — a saved-lane half dragged to buffer stops showing saved).
+  2. **Backend (Aaron) — option-a Clip lifecycle:** on save, write `retain:true` over the range + keep
+     materialising the `Clip` row; on un-save, **flip `retain`→false over the range + remove the `Clip`
+     row** (drop the bespoke copy-path `saveClip`/`unsaveClip`/edge-relative endpoints). This is the
+     reaper-affecting, data-sensitive half — build it with the flag OFF, then re-gate.
+  3. **Re-gate** (Ben runs): flag ON → repeat the 4-point gate (now incl. drag-half-to-buffer reaps +
+     un-save doesn't reappear saved) → **flip `CU3_RETAIN_ONLY` ON for good.**
+- **🔴 STILL OWED (human): flip `CU3_RETAIN_ONLY` → OFF on `/admin/config`** (it's still ON from the
+  gate; my sandbox blocks prod-flag changes). Un-save stays broken via the legacy path until then.
+
 ### Ben's lane
 - **Now (unblocked):** the canonical-type **discovery-pin slice** (CU4 prep) — in flight.
 - **After D3 lands:** the `keep` axis in the drawer + retire the bespoke `saveClip`/`unsaveClip` flow
