@@ -206,6 +206,7 @@ function RootNavigator() {
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="(app)" />
         <Stack.Screen name="onboarding" options={{ gestureEnabled: false }} />
+        <Stack.Screen name="appeal" />
       </Stack>
       {/* Full-screen reactivation gate — renders over everything when the signed-in
           account is soft-deleted and in its grace period (no-op otherwise). */}

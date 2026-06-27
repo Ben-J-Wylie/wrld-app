@@ -1275,7 +1275,18 @@ slice (define the type + adapters, migrate one surface to prove it), NOT a big-b
     also **edit a per-range title/anon on a saved/saved-lane clip that has snips and confirm it still
     proliferates** (pin + viewer) — i.e. the backfill didn't shadow. The shadow-safe fix is deployed but
     only exercised when the flag is ON.
-- **D4 — AV-pause/resume → a `sources` directive (mediasoup). ✅ STILL OPEN (Aaron's next; no app dep).**
+- **D4 — AV-pause/resume → a `sources` directive (mediasoup). ✅ DONE + DEPLOYED (2026-06-26,
+  `wrld-backend 804d6f3` + `wrld-mediasoup bf68024`).** `setSourcePaused` (the media plane — producer
+  pause/resume, one track with a gap) now also fires the **manifest plane**: mediasoup calls a new
+  internal route `POST /internal/buffer/sessions/:id/source-snip { kind, paused }` (fire-and-forget),
+  which snips the live session through the **same era model as U2** — closes the open era at now, opens
+  a new one carrying the current axes (title/precision/identity/visibility/**retain**, so the toggle
+  doesn't reset them and a saved-lane session stays retained per D2) with the toggled kind merged into
+  `sources` (enabled = `!paused`). PB3-gated + live-only. So the off-range is marked in the per-range
+  manifest and the saved-clip rail's `sourceWindows` (#4) reads it. **No app dep — the app sends only
+  `setSourcePaused`** (do NOT also send a sources snip → double-write). **On-device gate:** pause camera
+  ~30s mid-broadcast → confirm a `sources:{camera:false}` era marks the gap and the clip rail hides
+  camera over it. **D4 confirms snip-at-now (U2) + AV-pause are now one unified directive write.**
 - **D3 — save/un-save = a `keep`/`retain` directive edit; drop the copy-path + `saveClip`/`unsaveClip`/
   edge-relative endpoints; + U3 (materialise a `keep` range into a Library clip, per obs 2). 🔶 GATED on
   the D1 cutover passing** (Ben is running it — flip `CU3_RETAIN_ONLY` on + prove saved survives / unsaved
@@ -1286,3 +1297,56 @@ slice (define the type + adapters, migrate one surface to prove it), NOT a big-b
   call when D3 starts.
 - **Ben (app), after D3 lands:** the `keep` axis in the drawer + retire the bespoke save flow (writes via
   `clipDirectives`). In parallel now: the canonical-type discovery-pin slice (unblocked).
+
+---
+
+## CU3 STATUS ROLL-UP — Aaron → Ben (2026-06-26)
+
+Where the lane-as-the-7th-axis work stands after this session. **3 of the 4 D-decisions are built +
+deployed; D3 is the one gate left.** The through-line: every live edge now writes the ONE
+`DirectiveRange` model, and retention is collapsing onto the single `DirectiveRange.retain` authority.
+
+### ✅ Shipped this session (all deployed)
+| | What landed | State | Repo |
+|---|---|---|---|
+| **D1** | Reaper reads `DirectiveRange.retain` as its single retain authority (collapses the 3 OR'd signals), with a **shadow-safe backfill** that migrates legacy ClipRange/saved-lane retention into per-range `retain` (UPDATEs eras, never inserts overlapping rows). | **DEPLOYED INERT** behind `CU3_RETAIN_ONLY` (default OFF → reaper byte-for-byte unchanged). | backend `8ddf95a`/`10f9349` |
+| **D2** | A saved-lane go-live writes its opening `retain` era; `snipSession` carries `retain` forward so a saved-lane broadcast stays retained across snips. | **DEPLOYED + LIVE** (additive — safe with the flag off; redundant with U1). | backend `10f9349` |
+| **D4** | AV-pause/resume writes a `sources` directive snip (the manifest plane), unified with U2's snip-at-now. | **DEPLOYED + LIVE** (additive — inert until the app sends `setSourcePaused`). | backend `804d6f3` + mediasoup `bf68024` |
+
+CU3 invariant now true on the engine: **go-live · snip-at-now · AV-pause all write the one per-range
+model**, and retention has a single authority once the flag flips.
+
+### ⛔ The one gate left — the D1 cutover (Ben runs it; data-sensitive)
+Everything above is **inert/additive** until you flip **`CU3_RETAIN_ONLY` ON** (`/admin/config`). That
+flip is the irreversible-ish cutover: the reaper stops honouring ClipRange/saved-lane directly and
+relies on the (backfilled) `retain` directives. **Gate checklist — prove ALL before leaving it on:**
+1. Tighten a tier window (`BUFFER_WINDOW_HOURS_*`) to force a reap.
+2. A **saved clip** survives the reap; a **saved-lane go-live's** footage survives.
+3. **Non-retained** past-window footage still reaps (the collapse didn't over-retain everything).
+4. **(the shadow check I added)** Edit a **per-range title/anon on a snipped saved/saved-lane clip** →
+   it still proliferates to the pin + viewer (proves the backfill didn't shadow the setting eras).
+
+> **🚨 No-flip-back once real retain-only saves exist** (same invariant as PB2): with the flag ON, new
+> retention rides `retain` directives alone — flipping OFF later would make that footage reap. Flip back
+> is only safe while the gate is still proving (no D3 saves yet). Treat the flip as the commit.
+
+### 🔶 D3 — gated on the cutover passing (then it's Aaron + a quick call)
+Once the gate is green and the flag stays ON: **D3 = save/un-save becomes a `keep`/`retain` directive
+edit** — drop the copy-path + `saveClip`/`unsaveClip`/edge-relative endpoints (the protections the
+cutover just proved redundant) + **U3** (materialise a `keep` range into the Library, per obs 2). The
+legacy writers it removes are exactly D1's backfill sources, so the backfill then has nothing left to do.
+- **Open sub-question for the Ben+Aaron call (D3/U3):** under retain-in-place, what makes a range show
+  in the **Library** — a still-materialised `Clip` row, or the Library query shifting to "ranges with
+  `keep=kept`"? (CU4 makes clip ≡ segment; D3 picks the interim.) This is the decision to lock before I
+  start D3.
+
+### Ben's lane
+- **Now (unblocked):** the canonical-type **discovery-pin slice** (CU4 prep) — in flight.
+- **After D3 lands:** the `keep` axis in the drawer + retire the bespoke `saveClip`/`unsaveClip` flow
+  (write via `clipDirectives`); read the resolved `keep` instead of `BufferSession.lane`/`captureConfig.lane`.
+- **On-device gates owed** (mediasoup/data-sensitive paths are headless-unverifiable, no prod data):
+  the D1 cutover checklist above · D2 (a saved-lane go-live writes the opening retain era + survives a
+  reap) · D4 (pause camera ~30s → a `sources:{camera:false}` era marks the gap, the clip rail hides it).
+
+**Next move:** Ben runs the D1 cutover gate; when it's green we take the quick D3/U3 Library call and I
+start D3. Until then CU3 is safely paused at "engine writes the one model, nothing cut over yet."

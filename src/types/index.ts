@@ -23,6 +23,10 @@ export type User = {
   tier: 'free' | 'plus' | 'pro'
   suspendedUntil: string | null
   suspendedReason: string | null
+  // Where the user's appeal stands (from GET /auth/me; only meaningful while
+  // suspended) — drives the ban gate / banner: 'pending' = under review,
+  // 'denied' = reviewed within cooldown, 'none' = can appeal.
+  appealState?: 'none' | 'pending' | 'denied'
   dateOfBirth?: string
   creatorReady: boolean
   // saved-clip pool

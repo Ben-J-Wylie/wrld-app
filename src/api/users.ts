@@ -21,6 +21,19 @@ export type MutedUser = {
   mutedAt: string
 }
 
+// Context for the appeal surface. In token mode it comes from GET /appeal/context
+// (the signed emailed link); in session mode the client derives it from the cached
+// suspended user. Same shape either way so the screen renders identically.
+export type AppealContext = {
+  handle: string
+  displayName: string | null
+  suspended: boolean
+  permanent: boolean
+  suspendedUntil: string | null
+  suspendedReason: string | null
+  alreadyAppealed: boolean
+}
+
 // The notification preference flags (mirrors the backend
 // PATCH /users/me/notification-preferences body + response).
 export type NotificationPreferences = {
@@ -134,6 +147,18 @@ export const usersApi = {
   // Appeal a suspension — surfaces to admins; never auto-actions anything.
   appeal: async (message: string): Promise<void> => {
     await apiClient.post('/users/me/appeal', { message })
+  },
+
+  // Token path (the emailed appeal link, deep-linked via wrld://appeal?t=…). No
+  // session needed — the signed token identifies the appellant, so it works even
+  // for a hard-banned account that can't otherwise reach the form.
+  appealContext: async (token: string): Promise<AppealContext> => {
+    const res = await apiClient.get<AppealContext>('/appeal/context', { params: { t: token } })
+    return res.data
+  },
+
+  appealWithToken: async (token: string, message: string): Promise<void> => {
+    await apiClient.post('/appeal', { t: token, message })
   },
 
   // The users the current user has blocked (Settings management list).

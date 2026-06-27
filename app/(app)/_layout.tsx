@@ -15,15 +15,14 @@
 // Also hosts a top-level SuspensionBanner (poll source: app/_layout.tsx
 // /auth/me poll — Phase 17).
 
-import { useEffect, useRef, useState } from 'react'
-import { Animated, Modal, Pressable, StyleSheet, TextInput, View } from 'react-native'
+import { useEffect, useRef } from 'react'
+import { Animated, Pressable, StyleSheet, View } from 'react-native'
 import { Tabs, usePathname, router } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { theme } from '@/tokens/theme'
 import { Text } from '@/components/primitives/Text'
 import { Icon } from '@/components/primitives/Icon'
 import { useAuthStore } from '@/stores/authStore'
-import { usersApi } from '@/api/users'
 import { useClerk } from '@clerk/clerk-expo'
 import { useBroadcastStore } from '@/stores/broadcastStore'
 import { useFullscreenStore } from '@/stores/fullscreenStore'
@@ -37,11 +36,6 @@ const WARN_BORDER = 'rgba(200,134,30,0.45)'
 function SuspensionBanner() {
   const wrldUser = useAuthStore((s) => s.wrldUser)
   const insets = useSafeAreaInsets()
-  const [open, setOpen] = useState(false)
-  const [message, setMessage] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-  const [done, setDone] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   if (!wrldUser?.suspendedUntil) return null
   const until = new Date(wrldUser.suspendedUntil)
@@ -51,75 +45,24 @@ function SuspensionBanner() {
   if (until.getFullYear() >= 2090) return null
   const bannerMsg = `Your account is suspended until ${until.toLocaleDateString()}.`
 
-  const submit = async () => {
-    if (!message.trim()) return
-    setSubmitting(true)
-    setError(null)
-    try {
-      await usersApi.appeal(message.trim())
-      setDone(true)
-    } catch {
-      setError('Could not submit your appeal. Please try again.')
-    } finally {
-      setSubmitting(false)
-    }
-  }
+  // Reflect appeal state so the banner doesn't keep saying "Appeal" after one's
+  // filed. pending = under review; denied = reviewed (cooldown); else = Appeal link.
+  const appealState = wrldUser.appealState
+  const trailing =
+    appealState === 'pending' ? 'Appeal under review'
+    : appealState === 'denied' ? 'Appeal reviewed'
+    : 'Appeal'
 
   return (
-    <>
-      <Pressable
-        onPress={() => setOpen(true)}
-        style={[styles.banner, { paddingTop: insets.top + theme.spacing.xs }]}
-      >
-        <Text variant="caption" color={theme.colors.warn} style={styles.bannerText}>
-          {bannerMsg} <Text variant="caption" color={theme.colors.warn} style={styles.bannerLink}>Appeal</Text>
-        </Text>
-      </Pressable>
-
-      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
-        <Pressable style={styles.appealBackdrop} onPress={() => setOpen(false)}>
-          <Pressable style={styles.appealCard} onPress={() => {}}>
-            {done ? (
-              <>
-                <Text variant="heading" color={theme.colors.text.primary}>Appeal submitted</Text>
-                <Text variant="body" color={theme.colors.text.muted} style={styles.appealBody}>
-                  A moderator will review it. We'll email you the decision.
-                </Text>
-                <Pressable style={styles.appealBtn} onPress={() => setOpen(false)}>
-                  <Text variant="bodyEmphasized" color={theme.colors.text.inverse}>Done</Text>
-                </Pressable>
-              </>
-            ) : (
-              <>
-                <Text variant="heading" color={theme.colors.text.primary}>Appeal your suspension</Text>
-                <Text variant="body" color={theme.colors.text.muted} style={styles.appealBody}>
-                  Tell us why this should be reviewed. A moderator will look at it.
-                </Text>
-                <TextInput
-                  value={message}
-                  onChangeText={setMessage}
-                  multiline
-                  maxLength={1000}
-                  placeholder="Explain your side…"
-                  placeholderTextColor={theme.colors.text.subtle}
-                  style={styles.appealInput}
-                />
-                {error && <Text variant="caption" color={theme.colors.warn} style={styles.appealBody}>{error}</Text>}
-                <Pressable
-                  style={[styles.appealBtn, (!message.trim() || submitting) && styles.appealBtnDisabled]}
-                  onPress={submit}
-                  disabled={!message.trim() || submitting}
-                >
-                  <Text variant="bodyEmphasized" color={theme.colors.text.inverse}>
-                    {submitting ? 'Submitting…' : 'Submit appeal'}
-                  </Text>
-                </Pressable>
-              </>
-            )}
-          </Pressable>
-        </Pressable>
-      </Modal>
-    </>
+    <Pressable
+      onPress={() => router.navigate('/appeal')}
+      style={[styles.banner, { paddingTop: insets.top + theme.spacing.xs }]}
+    >
+      <Text variant="caption" color={theme.colors.warn} style={styles.bannerText}>
+        {bannerMsg}{' '}
+        <Text variant="caption" color={theme.colors.warn} style={appealState ? undefined : styles.bannerLink}>{trailing}</Text>
+      </Text>
+    </Pressable>
   )
 }
 
@@ -132,30 +75,12 @@ function BanGate() {
   const clearWrldUser = useAuthStore((s) => s.clearWrldUser)
   const insets = useSafeAreaInsets()
   const { signOut } = useClerk()
-  const [message, setMessage] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-  const [done, setDone] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   const until = wrldUser?.suspendedUntil ? new Date(wrldUser.suspendedUntil) : null
   const permanent = !!until && until.getFullYear() >= 2090
   if (!permanent) return null
 
   const balance = (wrldUser?.spaceBucks ?? 0) + (wrldUser?.stardust ?? 0)
-
-  const submit = async () => {
-    if (!message.trim()) return
-    setSubmitting(true)
-    setError(null)
-    try {
-      await usersApi.appeal(message.trim())
-      setDone(true)
-    } catch {
-      setError('Could not submit your appeal. Please try again.')
-    } finally {
-      setSubmitting(false)
-    }
-  }
 
   const handleSignOut = async () => {
     clearWrldUser()
@@ -176,33 +101,20 @@ function BanGate() {
           </Text>
         )}
 
-        {done ? (
+        {/* Reflect appeal state so a user who just appealed isn't re-invited to
+            appeal. pending = under review; denied = reviewed (cooldown); else = appeal. */}
+        {wrldUser?.appealState === 'pending' ? (
           <Text variant="body" color={theme.colors.text.primary} style={styles.gateBody}>
-            Appeal submitted. A moderator will review it — we'll email you the decision.
+            Your appeal is under review — we'll email you the decision.
+          </Text>
+        ) : wrldUser?.appealState === 'denied' ? (
+          <Text variant="body" color={theme.colors.text.primary} style={styles.gateBody}>
+            Your appeal was reviewed and the suspension stands.
           </Text>
         ) : (
-          <>
-            <Text variant="bodyEmphasized" color={theme.colors.text.primary} style={styles.gateBody}>Appeal this decision</Text>
-            <TextInput
-              value={message}
-              onChangeText={setMessage}
-              multiline
-              maxLength={1000}
-              placeholder="Tell us why this should be reviewed…"
-              placeholderTextColor={theme.colors.text.subtle}
-              style={styles.appealInput}
-            />
-            {error && <Text variant="caption" color={theme.colors.warn} style={styles.gateBody}>{error}</Text>}
-            <Pressable
-              style={[styles.appealBtn, (!message.trim() || submitting) && styles.appealBtnDisabled]}
-              onPress={submit}
-              disabled={!message.trim() || submitting}
-            >
-              <Text variant="bodyEmphasized" color={theme.colors.text.inverse}>
-                {submitting ? 'Submitting…' : 'Submit appeal'}
-              </Text>
-            </Pressable>
-          </>
+          <Pressable style={styles.appealBtn} onPress={() => router.navigate('/appeal')}>
+            <Text variant="bodyEmphasized" color={theme.colors.text.inverse}>Appeal this decision</Text>
+          </Pressable>
         )}
 
         <Pressable style={styles.gateSignOut} onPress={handleSignOut}>
@@ -411,40 +323,12 @@ const styles = StyleSheet.create({
   bannerLink: {
     textDecorationLine: 'underline',
   },
-  appealBackdrop: {
-    flex: 1,
-    backgroundColor: theme.colors.bg.overlay,
-    justifyContent: 'center',
-    paddingHorizontal: theme.spacing.xl,
-  },
-  appealCard: {
-    backgroundColor: theme.colors.bg.elevated,
-    borderRadius: theme.radius.md,
-    padding: theme.spacing.xl,
-    gap: theme.spacing.sm,
-  },
-  appealBody: {
-    marginBottom: theme.spacing.xs,
-  },
-  appealInput: {
-    minHeight: 96,
-    borderWidth: 1,
-    borderColor: theme.colors.border.strong,
-    borderRadius: theme.radius.md,
-    padding: theme.spacing.md,
-    color: theme.colors.text.primary,
-    textAlignVertical: 'top',
-    marginTop: theme.spacing.xs,
-  },
   appealBtn: {
     backgroundColor: theme.colors.accent.default,
     borderRadius: theme.radius.md,
     paddingVertical: theme.spacing.md,
     alignItems: 'center',
     marginTop: theme.spacing.sm,
-  },
-  appealBtnDisabled: {
-    opacity: 0.4,
   },
   gate: {
     ...StyleSheet.absoluteFillObject,
