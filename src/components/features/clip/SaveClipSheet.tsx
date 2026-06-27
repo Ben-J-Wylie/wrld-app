@@ -8,14 +8,11 @@
 
 import { useEffect, useState } from 'react'
 import { Modal, StyleSheet, View } from 'react-native'
-// react-native-keyboard-controller's KeyboardAvoidingView (+ a KeyboardProvider inside
-// the Modal) — RN's is unreliable in a Modal/absolute sheet and lets the keyboard cover
-// the field. No native change; the module's already in the client.
-// ANDROID: the Modal is a separate native window; the controller only reads the keyboard
-// there when the Modal goes edge-to-edge (statusBar/navigationBar translucent) + the
-// inner provider matches — otherwise iOS works but Android stays covered.
-import { KeyboardAvoidingView, KeyboardProvider } from 'react-native-keyboard-controller'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+// The sheet pads itself by the live keyboard height (the app's proven manual listener
+// — react-native-keyboard-controller's KeyboardAvoidingView can't see the keyboard
+// inside a Modal on Android, so iOS lifted but Android stayed covered).
+import { useKeyboardHeight } from '@/hooks/useKeyboardHeight'
 import { Pressable } from '@/components/primitives/Pressable'
 import { Input } from '@/components/primitives/Input'
 import { Button } from '@/components/primitives/Button'
@@ -33,6 +30,8 @@ type Props = {
 
 export function SaveClipSheet({ visible, defaultName = '', durationLabel, onSave, onCancel }: Props) {
   const insets = useSafeAreaInsets()
+  const keyboardHeight = useKeyboardHeight()
+  const liftBottom = keyboardHeight > 0 ? Math.max(0, keyboardHeight - insets.bottom) : 0
   const [name, setName] = useState(defaultName)
   // Reset to the default each time it opens.
   useEffect(() => {
@@ -40,18 +39,10 @@ export function SaveClipSheet({ visible, defaultName = '', durationLabel, onSave
   }, [visible, defaultName])
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      statusBarTranslucent
-      navigationBarTranslucent
-      animationType="slide"
-      onRequestClose={onCancel}
-    >
-      <KeyboardProvider navigationBarTranslucent>
-        <Pressable variant="none" style={styles.backdrop} onPress={onCancel} />
-        <KeyboardAvoidingView behavior="padding" style={styles.sheetWrapper}>
-        <View style={[styles.sheet, { paddingBottom: theme.spacing.xxl + insets.bottom }]}>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onCancel}>
+      <Pressable variant="none" style={styles.backdrop} onPress={onCancel} />
+      <View style={[styles.sheetWrapper, { paddingBottom: liftBottom }]}>
+        <View style={styles.sheet}>
           <View style={styles.handle} />
           <Text variant="heading" style={styles.center}>
             Name this clip
@@ -82,8 +73,7 @@ export function SaveClipSheet({ visible, defaultName = '', durationLabel, onSave
             </Text>
           </Pressable>
         </View>
-        </KeyboardAvoidingView>
-      </KeyboardProvider>
+      </View>
     </Modal>
   )
 }

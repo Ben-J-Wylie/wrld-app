@@ -8,14 +8,11 @@
 
 import { useRef, useState } from 'react'
 import { Modal, StyleSheet, TextInput, View } from 'react-native'
-// react-native-keyboard-controller's KeyboardAvoidingView (+ a KeyboardProvider inside
-// the Modal) — RN's is unreliable in a Modal (this sheet had NO avoidance on Android),
-// letting the keyboard cover the message field. No native change; already in the client.
-// ANDROID: the Modal is a separate native window; the controller only reads the keyboard
-// there when the Modal goes edge-to-edge (statusBar/navigationBar translucent) + the
-// inner provider matches — otherwise iOS works but Android stays covered.
-import { KeyboardAvoidingView, KeyboardProvider } from 'react-native-keyboard-controller'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+// The sheet pads itself by the live keyboard height (the app's proven manual listener
+// — react-native-keyboard-controller's KeyboardAvoidingView can't see the keyboard
+// inside a Modal on Android; this sheet previously had NO avoidance on Android at all).
+import { useKeyboardHeight } from '@/hooks/useKeyboardHeight'
 import { useMutation } from '@tanstack/react-query'
 import { newIdempotencyKey } from '@/lib/idempotency'
 import { Filter as ProfanityFilter } from 'bad-words'
@@ -48,6 +45,8 @@ type Props = {
 
 export function ProfileTipSheet({ visible, handle, displayName, onClose }: Props) {
   const insets = useSafeAreaInsets()
+  const keyboardHeight = useKeyboardHeight()
+  const liftBottom = keyboardHeight > 0 ? Math.max(0, keyboardHeight - insets.bottom) : 0
   const { data: me } = useCurrentUser()
   const setCurrentUser = useSetCurrentUser()
   const { config } = usePublicConfig()
@@ -108,18 +107,10 @@ export function ProfileTipSheet({ visible, handle, displayName, onClose }: Props
   const dollarEquiv = amount > 0 ? `$${(amount / SPACE_BUCKS_PER_DOLLAR).toFixed(2)}` : null
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      statusBarTranslucent
-      navigationBarTranslucent
-      animationType="slide"
-      onRequestClose={handleClose}
-    >
-      <KeyboardProvider navigationBarTranslucent>
-        <Pressable variant="none" style={styles.backdrop} onPress={handleClose} />
-        <KeyboardAvoidingView behavior="padding" style={styles.sheetWrapper}>
-        <View style={[styles.sheet, { paddingBottom: theme.spacing.xl + insets.bottom }]}>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
+      <Pressable variant="none" style={styles.backdrop} onPress={handleClose} />
+      <View style={[styles.sheetWrapper, { paddingBottom: liftBottom }]}>
+        <View style={styles.sheet}>
           <View style={styles.handle} />
 
           {sent ? (
@@ -211,8 +202,7 @@ export function ProfileTipSheet({ visible, handle, displayName, onClose }: Props
             </>
           )}
         </View>
-        </KeyboardAvoidingView>
-      </KeyboardProvider>
+      </View>
     </Modal>
   )
 }

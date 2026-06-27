@@ -9,15 +9,11 @@
 
 import { useState } from 'react'
 import { Modal, StyleSheet, View } from 'react-native'
-// RN's KeyboardAvoidingView is unreliable inside a Modal / absolute-positioned sheet
-// (the heading + inputs get covered by the keyboard). Use react-native-keyboard-
-// controller's, wrapped in a KeyboardProvider INSIDE the Modal — the root provider
-// doesn't reach the Modal's separate native window.
-// ANDROID: a Modal is a separate native window; the controller can only read the
-// keyboard there if the Modal goes edge-to-edge (statusBar/navigationBar translucent)
-// + the inner provider matches. Without this iOS works but Android stays covered.
-import { KeyboardAvoidingView, KeyboardProvider } from 'react-native-keyboard-controller'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+// The sheet pads itself by the live keyboard height (the app's proven manual
+// listener — react-native-keyboard-controller's KeyboardAvoidingView can't see the
+// keyboard inside a Modal on Android, so iOS lifted but Android stayed covered).
+import { useKeyboardHeight } from '@/hooks/useKeyboardHeight'
 import { useSignIn, useSignUp } from '@clerk/clerk-expo'
 import { theme } from '@/tokens/theme'
 import { Text } from '@/components/primitives/Text'
@@ -38,6 +34,10 @@ type Props = {
 
 export function AuthModal({ visible, onClose, onSuccess }: Props) {
   const insets = useSafeAreaInsets()
+  // Keyboard height is measured from the real screen bottom; the sheet sits inside
+  // the inset bottom, so lift it by (keyboard − inset) to hug the keyboard top.
+  const keyboardHeight = useKeyboardHeight()
+  const liftBottom = keyboardHeight > 0 ? Math.max(0, keyboardHeight - insets.bottom) : 0
   const [tab, setTab] = useState<Tab>('signin')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -127,15 +127,12 @@ export function AuthModal({ visible, onClose, onSuccess }: Props) {
     <Modal
       visible={visible}
       transparent
-      statusBarTranslucent
-      navigationBarTranslucent
       animationType="slide"
       onRequestClose={handleClose}
     >
-      <KeyboardProvider navigationBarTranslucent>
-        <Pressable variant="none" style={styles.backdrop} onPress={handleClose} />
-        <KeyboardAvoidingView behavior="padding" style={styles.sheetWrapper}>
-        <View style={[styles.sheet, { paddingBottom: theme.spacing.xxl + insets.bottom }]}>
+      <Pressable variant="none" style={styles.backdrop} onPress={handleClose} />
+      <View style={[styles.sheetWrapper, { paddingBottom: liftBottom }]}>
+        <View style={styles.sheet}>
           <View style={styles.handle} />
 
           {tab === 'signin' ? (
@@ -227,8 +224,7 @@ export function AuthModal({ visible, onClose, onSuccess }: Props) {
             </>
           )}
         </View>
-        </KeyboardAvoidingView>
-      </KeyboardProvider>
+      </View>
     </Modal>
   )
 }
