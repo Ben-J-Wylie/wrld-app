@@ -1170,6 +1170,17 @@ slice (define the type + adapters, migrate one surface to prove it), NOT a big-b
 > segments are time-ranges *pointing into* the same files; **snip/mend move ZERO bytes** (pure metadata).
 > Net: the cleanest end-state — drop the inherit columns + the resolver. Revisit at the CU4 schema-lock.
 
+> **💡 Possible future simplification (beyond CU4) — "live gates = the live-time read of the same rules" (Ben, 2026-06-26, LIGHT log).**
+> Today `Stream.subscribersOnly` (who may watch LIVE) and a clip's `visibility` (who may watch the
+> REPLAY) are stored **separately** — but they're conceptually **one rule** ("who may watch this
+> content?"), just **enforced at two moments**: in real time at room-join during the broadcast, and at
+> read-time on every replay. The dashboard sets the value; it gates the live room; the same value seeds
+> + then governs replay. So the `Stream`'s access fields could be understood as the **live-time read of
+> the one rules layer**, not a separate store. **Asymmetry to respect:** the live read is *frozen
+> history* once the broadcast ends (you can't re-gate a moment that already happened); the replay read
+> stays editable forever. **Not in the CU plan** — a clean post-CU4 cleanup candidate (collapse the
+> Stream access fields into "the rules, read live"). Logged so it's on the table.
+
 ### First moves (this kickoff)
 - **Aaron:** D1 (reaper reads `retain` only) — the CU3 spine; unblocks D2/D3.
   **✅ DONE + DEPLOYED INERT (2026-06-26, `wrld-backend 8ddf95a`).** The reaper now collapses its 3
