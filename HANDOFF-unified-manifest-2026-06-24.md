@@ -2218,3 +2218,27 @@ samples), this looks systemic, not three separate causes. Two candidates:
 - **DISAMBIGUATION TEST:** broadcast w/ torch armed → a viewer switches to the torch source + watch the
   lamp as you toggle. **Reacts** ⇒ emit+relay OK ⇒ it's the recorder/deploy (B, Aaron). **No react** ⇒
   emit/relay broken (A). Run this first; it splits app-vs-backend with no code spelunking.
+
+#### Gap 4 — RESOLVED to a single BACKEND bug (disambiguation test run, Ben, 2026-06-28)
+**Test result:** torch armed → viewer saw Torch in the rail (arming propagated to `Stream.sources` ✓) →
+broadcaster toggled on/off → **viewer's torch lamp updated LIVE** (app emit + mediasoup relay both work ✓)
+→ **server torch folder EMPTY** (recorder did not persist ✗).
+
+**Conclusion: the app is exonerated. The recorder relays telemetry to viewers but does NOT write the data
+track to the buffer `.jsonl`.** Even *live toggles that reach the viewer* aren't persisted, so this is not
+the `trySend`/baseline edge (A) — it's the record-to-disk path (B). One bug explains all three empties
+(torch · location · chat): fan-out works, the record path doesn't run.
+
+**→ AARON (mediasoup + backend), clean + scoped:** the telemetry/data path has TWO sinks — the viewer
+fan-out (`telemetry` → `telemetryUpdate`, ✅ works) and the **buffer recorder** (append the sample to
+`buffers/<userId>/<kind>/<sessionId>/<chunk>.jsonl`, ✗ not happening). Fix the recorder sink: confirm the
+kind-agnostic telemetry handler writes armed `DATA_KINDS` to disk; verify the **`ts/t` data-sample fix is
+deployed** (the known "without which ALL data tracks promoted empty"); add the **"report armed-empty data
+tracks"** initial marker as the backstop. **No app change** (emit/relay/arming all verified working).
+
+**Blast radius (why it's the priority CU-lifecycle gap):** with no data source persisting, saved clips
+carry empty telemetry/location/chat tracks → C6 "data tracks play back in clips" + source-parity "every
+source saves" are non-functional until this lands. Not cosmetic — the save half of the feature is dark.
+
+**Re-test after the fix:** rerun the same torch test → folder non-empty; then scrub a saved clip to that
+window → the torch/location/chat source replays from the recorded track.
