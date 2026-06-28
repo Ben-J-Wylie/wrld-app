@@ -2242,3 +2242,22 @@ source saves" are non-functional until this lands. Not cosmetic — the save hal
 
 **Re-test after the fix:** rerun the same torch test → folder non-empty; then scrub a saved clip to that
 window → the torch/location/chat source replays from the recorded track.
+
+## CU4 Phase B — FLIP DECIDED (Ben, 2026-06-28): set CU4_UNIFIED_DISCOVER on
+Soak is clean: `verifyMaterializedAxes` (the endpoint's exact call, read-only in the container) returned
+**`{ checked: 37, unmaterialized: 0, drift: 0 }`** — and `checked` grew **25 → 37** since deploy from
+Ben's test go-lives, so it's proven through the **resolve-at-write** path on live edits, not just the
+one-time backfill. Column == resolver everywhere ⟹ the resolver is provably redundant (Phase B done-bar).
+
+**Decision: FLIP `CU4_UNIFIED_DISCOVER` ON.** → **Aaron: set the flag true** (backend config). It's an
+observable no-op (parity by construction → identical pins/axes), it soaks the unified-read path in prod
+with the resolver still as fallback + the hourly verify watching, and it's **freely reversible** before
+Phase C (no data-migration commitment — unlike `CU3_RETAIN_ONLY`; flip back any time if drift ever WARNs).
+**No app change** (backend-internal; the app gets the same pin shapes).
+- **Post-flip sanity (Ben, device):** globe pins + a time-machine scrub still render correctly (should be
+  identical by parity). If anything looks off → flip back + read the verify `sample[]`.
+- **CU4 status after this:** A ✅ · B ✅ (flipped, soaking the read path) · **C remaining** = the
+  destructive collapse (merge tables → one `Clip = range + axes over Track`, drop the resolver + legacy
+  feeds + dead columns, the rename) — still human-gated, its own session, only after flag-on soaks clean.
+- **Independent of the open CU-lifecycle gaps** (directive GC · per-era thumbs · telemetry cull · Gap 4
+  data-recording) — those are the reaper/recorder/thumb layers, not the manifest-resolution layer this flag governs.
