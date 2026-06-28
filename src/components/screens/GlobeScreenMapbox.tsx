@@ -1289,8 +1289,9 @@ export function GlobeScreenMapbox() {
     setSelectedStream(null)
     setSelectedClusterStreams(null)
     router.push({
-      pathname: `/(app)/stream/${stream.mediasoupRoomId}`,
+      pathname: '/(app)/stream/[id]',
       params: {
+        id: stream.mediasoupRoomId,
         streamId: stream.id,
         sources: (stream.sources ?? []).join(','),
         // External cams branch to the HLS viewer (no mediasoup join) — see stream/[id].tsx.
@@ -1305,8 +1306,11 @@ export function GlobeScreenMapbox() {
     const { stream } = banner
     dismissBanner()
     router.push({
-      pathname: `/(app)/stream/${stream.mediasoupRoomId}`,
+      pathname: '/(app)/stream/[id]',
       params: {
+        // non-null: the handleBannerTap guard returns unless banner.stream.mediasoupRoomId is set
+        // (TS doesn't narrow the `stream` alias from the `banner.stream.*` guard).
+        id: stream.mediasoupRoomId!,
         streamId: stream.id,
         sources: stream.sources.join(','),
         isExternal: String(stream.isExternal ?? false),

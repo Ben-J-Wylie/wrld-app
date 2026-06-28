@@ -1,0 +1,24 @@
+name: CI
+
+# H3 — the shared gate: typecheck + unit tests on every push to the active branches
+# and on PRs. Both must pass. No app build / no native compile here — this is the
+# fast correctness check (tsc --noEmit + vitest run over the pure helpers).
+on:
+  push:
+    branches: [main, design]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      # Deterministic install from the lockfile (must succeed without --force, per the
+      # repo's dependency-hygiene rule). Runs the patch-package postinstall.
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test

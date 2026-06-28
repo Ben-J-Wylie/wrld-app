@@ -115,8 +115,8 @@ function RootNavigator() {
     if (p) {
       pendingStreamRef.current = null
       router.push({
-        pathname: `/(app)/stream/${p.roomId}`,
-        params: { streamId: p.streamId, sources: p.sources },
+        pathname: '/(app)/stream/[id]',
+        params: { id: p.roomId, streamId: p.streamId, sources: p.sources },
       })
     }
     const handle = pendingProfileRef.current
@@ -170,8 +170,8 @@ function RootNavigator() {
       const payload = { roomId, streamId, sources }
       if (everLoaded.current) {
         router.push({
-          pathname: `/(app)/stream/${payload.roomId}`,
-          params: { streamId: payload.streamId, sources: payload.sources },
+          pathname: '/(app)/stream/[id]',
+          params: { id: payload.roomId, streamId: payload.streamId, sources: payload.sources },
         })
       } else {
         pendingStreamRef.current = payload
