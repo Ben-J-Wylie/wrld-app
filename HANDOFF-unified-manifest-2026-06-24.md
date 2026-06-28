@@ -1939,7 +1939,23 @@ a human decision surfaced below; Phase C stays human-gated.** Four commits, per 
 **Canonical fallback = the originating Stream's go-live defaults** (`title` + `locationPrecision`),
 matching the DISCOVER surface (the most complete reader).
 
-### 🔴 DECISION NEEDED before A4-read-routing + Phase B — the per-surface fallback divergence
+### ✅ DECISION RESOLVED (Ben, 2026-06-28) — unify on `stream.locationPrecision`
+**A null-precision era falls back to `stream.locationPrecision` on EVERY surface.** `GET /buffer/session`
+stops special-casing `'exact'` — its null-precision eras now resolve to the go-live precision the column
+already bakes (an accepted output shift: it's the owner's own editor, showing them what viewers see is
+*more* correct, and they can still sharpen since capture keeps exact coords). This is CU4's one-resolver
+goal; no special-case. **Aaron's next steps, now unblocked:**
+1. **Wire resolve-at-write into the directive write paths** (`patchDirectives` / `snip` / D2-`allocate`)
+   — set `materializedAxes` on write with the `stream.locationPrecision` fallback, so an edited era's
+   fresh row isn't NULL until the next boot's backfill. (Aaron flagged this as the same-session companion
+   to the decision.)
+2. **A4 read-routing ON** — route reads through the column; drop the per-surface fallback branches.
+3. **Phase B** — the unified feed now parity-matches the legacy feeds (the divergence is gone) → B2 reachable.
+4. **Phase C** stays human-gated.
+
+The original framing (kept for context):
+
+### 🔴 (was) DECISION NEEDED before A4-read-routing + Phase B — the per-surface fallback divergence
 The literal A4 ("route reads through the columns") and Phase B (a unified feed compared to the legacy
 feeds) are **NOT mechanically safe**, because the read surfaces pass **different fallbacks** to
 `resolveClipAxes` for a null-field era:
