@@ -1319,11 +1319,12 @@ ON for good** as part of the D3 cutover. The gate did its job: D1+D2 retain-only
 as the required next piece.
 
 ### ⮕ Aaron's response (2026-06-27)
-- **🔴 FLAG STILL ON — needs a human flip (I'm blocked).** Confirmed via `/admin/config`:
-  `CU3_RETAIN_ONLY = true` (Ben set it 2026-06-26 22:33 for the gate). My sandbox **denied flipping a
-  prod reaper-control flag** autonomously (high-severity persistent config change). **→ Ben (or Aaron,
-  in the portal): flip `CU3_RETAIN_ONLY` → false on `/admin/config` now** so un-save works again until
-  D3. (Until then, drag-saved→buffer leaves the stale `retain` and the half stays alive — finding #2/#4.)
+- **⚑ FLAG HISTORY (reconciled 2026-06-27).** `CU3_RETAIN_ONLY`: ON for the first gate → Ben flipped
+  **OFF** (2026-06-26, safe 3-signal reaper) → Ben flipped **ON** for the 2026-06-27 re-gate (which
+  surfaced the interior-eviction "dam" bug below). **→ It should be OFF again now** — the retain-only
+  reaper is NOT safe to leave on until the interior-eviction fix + a clean re-gate. **Ben: confirm
+  `CU3_RETAIN_ONLY` is OFF on `/admin/config`.** Re-flip ON only after the reaper fix + re-gate (and heed
+  "no-flip-back once real retain-only saves exist").
 - **✅ Ghost-block, BACKEND HALF DONE + DEPLOYED (`wrld-backend 70a39c9`).** `GET /buffer/me` each
   session now reports **`survivingStartMs` / `survivingEndMs`** — the media footage window still on
   disk (`[startedAt + mediaStartOffsetMs, + mediaDurationSec]`; the reaper eats from the left → the head
@@ -1333,15 +1334,18 @@ as the required next piece.
   only over `[survivingStartMs, survivingEndMs]`; render `[startedAt, survivingStartMs)` (+ any tail) as
   a **gap / eviction edge**, no thumbnail; treat empty/`null` surviving range as "no media → gap" (not a
   block). Data-safe — footage IS gone, only the UI lied. On-device verify owed (a partially-reaped
-  session → gap, no ghost).
-- **🔶 D3 — ready to build (un-save half sharpened); one decision blocks the start.** Backend: un-save
-  (drag saved→buffer) must **durably flip the dragged range's `retain` → false** (clear/split the
-  `clipId=null` retain directive over that range) + drop the bespoke un-save endpoint; the reaper then
-  evicts it. **Open sub-question to lock first (the quick Ben+Aaron call):** under retain-in-place, what
-  makes a range appear in the **Library** — a still-materialised `Clip` row, or the Library query
-  shifting to "ranges with `keep=kept`"? (U3.) I'll start D3 the moment we pick that. **Sequencing:**
-  flip flag OFF (human) → lock the Library decision → I build D3 backend + Ben wires app un-save →
-  re-gate → flip ON for good.
+  session → gap, no ghost). **⚠️ EXTENDED by the re-gate (below): a single `[start,end]` window can't
+  represent INTERIOR holes (interleaved saved/buffer) — `survivingStartMs/EndMs` must become a
+  `survivingRegions` LIST, and the render draws a block per region with interior gaps. See "D3 RE-GATE
+  FINDINGS."**
+- **✅ D3 — contract + foundation + side-effect DONE (superseded the "ready to build" note here).** The
+  Library decision is locked (**option a** — keep materialising a `Clip` row); the contract is confirmed
+  (single write path = `retain` on the directive); the keep-axis round-trip (Ben) + the side-effect
+  (Aaron `f6fa2fa`: materialise/remove the retain-in-place Clip on the retain delta + storage cap) are
+  deployed; **step 1 (drag-to-save via `patchDirectives`) is built + device-verified.** **➡ CURRENT D3
+  work is in "D3 RE-GATE FINDINGS" below** (the reaper interior-eviction "dam" bug + surviving-regions),
+  plus: **Ben** — step 1b (un-save → `keep:'reapable'`) + step 2 (render-by-keep); **Aaron** — drop the
+  bespoke `saveClip`/`unsaveClip` once the app's fully on `patchDirectives`, then **re-gate → flag ON**.
 
 ### D3 RE-GATE FINDINGS — interior eviction (the "saved-segment dam") + surviving-regions (Ben+Aaron device, 2026-06-27, flag ON)
 On-device re-test with the unified write (step 1) + flag **ON**. Setup: one buffer go-live, snipped into
