@@ -1856,3 +1856,48 @@ Setup: saved #1/#3, buffer #2/#4; #2/#4 evicted (disk-confirmed).
 - **🟡 Time machine shows all 4 (should have holes).** = the discover-pin-during-a-hole follow-up Aaron
   flagged in `248b6ff` (cosmetic; playback no longer scrambles). Fix = intersect clips/buffer discover
   intervals with per-session surviving regions (Aaron, adds per-pin disk I/O — tracked).
+
+## CU4 — SEQUENCED DELIVERABLES (autonomous-run-ready) — Aaron, 2026-06-28
+Schema is LOCKED (materialized segments — one full standalone rule object per era). This turns the
+CU4 spec into an ordered, independently-shippable backlog for an unattended run.
+
+> **⚠️ SAFETY FRAME (read first).** CU4 is a schema migration on **prod data**. **Phases A + B are
+> ADDITIVE** (add columns · backfill · a *parallel* feed — never destroy, fully reversible) → **safe to
+> run autonomously this evening.** **Phase C is DESTRUCTIVE** (drop tables/columns/resolver/feeds +
+> rename) → **HUMAN-GATED; do NOT run unattended** (same discipline as the CU3 cutover gate). So tonight
+> = grind A → B, each shipped + tested; leave C for a human session. Every phase: additive, idempotent
+> backfill, **shadow-compare before trusting**, flag-off path untouched, `tsc`+build+tests green, commit
+> per sub-step.
+
+### Phase A — materialize the axes (additive · resolve-at-write)
+- **A1.** Add the 7 concrete axis columns (the §5 names: `title`·`tags`·`visibility`·`identity`·
+  `precision`·`sources`·`keep`) to the authority rows (`clipId=null` directives / the segment), nullable
+  for now. *(No reads change yet.)*
+- **A2. Backfill** — for every era, run the existing `resolveClipAxes` ONCE and write its result into the
+  new columns. **Idempotent + re-runnable** (safe to run repeatedly).
+- **A3. Parity** — a script/test asserting **materialized columns == `resolveClipAxes` output** for every
+  era (proves the backfill); unit-test the materialize path.
+- **A4. Reads → columns, with a shadow-compare** — route reads through the new columns, but keep calling
+  the old resolver and **log any mismatch** (don't fail). **Done-bar A:** zero mismatches over a soak →
+  the resolver is provably redundant.
+
+### Phase B — one discover feed (additive · flag-gated parallel)
+- **B1.** Build the unified discover feed over the canonical clip **alongside** the legacy
+  windowed/tiled/`?at=` feeds, behind a flag (default OFF).
+- **B2. Shadow-compare** the unified feed vs the legacy feeds (same pins/counts). **Done-bar B:** parity
+  clean → flag-flippable. *(Flip = a human call later.)*
+
+### Phase C — DESTRUCTIVE collapse (HUMAN-GATED — NOT autonomous)
+Collapse `Clip`+`ClipRange`+`DirectiveRange`+`ClipTrack` → one **`Clip = range + 7 axes over Track`**;
+drop the resolver + legacy feeds + dead columns (`locDisplayPrecision`/`locationPrecision`, bool
+`attributed`, `lane`, `splitPoints`, `motion`/`temp`); the clean rename; final backfill. Run **with a
+human** (like the cutover), only after A4 + B2 are shadow-clean over a soak. *(This is effectively the
+CU4→CU5 boundary.)*
+
+### DO / DON'T for the unattended run
+- **DO:** ship A1→A2→A3→A4 then B1→B2, a commit per sub-step; keep the old resolver/feeds as the
+  shadow oracle; make every backfill idempotent; keep the flag-off path byte-identical.
+- **DON'T:** run Phase C (any drop/rename/table-merge); delete the resolver/legacy feeds; trust the new
+  columns/feed before shadow-compare is clean; touch the `CU3_RETAIN_ONLY` cutover (separate gate).
+- **App side (Ben, parallel — not Aaron's):** the canonical clip type finish (`src/types/clip.ts`
+  adapters + the remaining surface migrations) tracks A; no coordination needed for tonight.
