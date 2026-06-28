@@ -565,7 +565,10 @@ wall-clock timestamps (`startMs`/`endMs` — when it was printed); the source se
   lane-drag + the structural ops). Every other surface is read-only.
 - **READ → select, then read current.** A **selector** finds the clip (`clipAt(t)` for a past/live
   instant, or the clip itself); the axes are then read as the clip's **current** values. **No
-  resolution chain** — the `Clip` is the sole home.
+  resolution chain** — the `Clip` is the sole home. *(✅ Implementation LOCKED 2026-06-28: **resolve-at-write
+  / materialized segments** — every era is ONE full standalone rule object with all 7 axes concrete (no
+  `null`/inherit, even identical neighbours stay distinct objects); a read is a plain column read, the
+  resolver collapses away. This is the CU4 schema — supersedes the interim resolve-at-read/fallback.)*
 - **RENDER → one resolver** feeds every surface; every edit invalidates every surface's query.
 
 **7. The time-machine rule (selection vs. value — keeps replay honest about edits).** Two times are

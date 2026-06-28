@@ -1146,20 +1146,31 @@ unified directive model. Then all 7 axes are equal (title/tags/visibility/identi
   + U3 edge-relative save stay as-is (they work; CU3 unifies their write path, not their behaviour).
 
 ### CU4 — Structural collapse (clip ≡ segment) + clean rename
-Deferred until CU3 proves the model on device. **Aaron:** schema collapse (`Clip` + `ClipRange` +
-`DirectiveRange` + `ClipTrack` → one `Clip = range + axes` over `Track`); one discover feed (retire the
-legacy/windowed/tiled split); the rename (`precision`/`identity`/`keep`/`source`/`Track`; drop
-`locDisplayPrecision`/`locationPrecision`, bool `attributed`, `lane`, `splitPoints`, stale
-`motion`/`temp`); backfill. **Ben (app, dep-free prep can start now):** the **one canonical clip type**
+Deferred until CU3 proves the model on device. **✅ SCHEMA LOCKED (2026-06-28): materialized segments
+/ resolve-at-write — ONE full standalone rule object per era** (see the LOCKED banner above). So the
+collapse target is concrete:
+- **Aaron — schema collapse:** `Clip` + `ClipRange` + `DirectiveRange` + `ClipTrack` → one
+  **`Clip = range + the 7 axes (all concrete, NO null/inherit) over `Track`**. **No resolver:**
+  `resolveClipAxes` collapses to a plain column read (drop the directive→clip→stream→default fallback
+  chain + the `null`-inherit columns). **Snip = copy** the era's rule object into two (ranges split);
+  **mend = pick a winner wholesale**. One discover feed (retire the legacy/windowed/tiled split). The
+  rename (`precision`/`identity`/`keep`/`source`/`Track`; drop `locDisplayPrecision`/`locationPrecision`,
+  bool `attributed`, `lane`, `splitPoints`, stale `motion`/`temp`). **Backfill = materialize** every
+  existing clip's *inherited* values into concrete per-era objects (the one-time resolve-at-write pass).
+  **Generalises D2** (already writes the opening rule object at go-live for saved-lane) → always write a
+  full opening rule object, every broadcast, split on snip. Footage stays SHARED under the recording
+  (segments are time-ranges *pointing into* the same files; snip/mend move ZERO bytes).
+- **Ben (app, dep-free prep can start now):** the **one canonical clip type**
 — collapse `LaneClip`/`SavedClip`/`ClipPin`/`BufferPin`/`ClipDetail` toward one canonical `Clip` + 7-axis
 `ResolvedAxes` + per-surface adapters, so "same element everywhere" is type-enforced. Done as a contained
 slice (define the type + adapters, migrate one surface to prove it), NOT a big-bang. The shared
 `clipDirectives` core + `resolvePinAxes` are the first pieces of this consolidation.
 
-> **💡 CU4 design option to weigh before locking the schema — "materialized segments / resolve-at-write" (Ben, 2026-06-26, LIGHT log).**
-> Instead of CU4's *resolve-at-read* (a clip's axes may be `null` → inherit the go-live default via a
-> fallback chain), make every **Segment fully self-contained**: all 7 axes carry concrete values, no
-> nulls, no inherit. Then:
+> **✅ LOCKED — CU4 SCHEMA = "materialized segments / resolve-at-write" (Ben + Aaron confirmed 2026-06-28).**
+> This is the decided CU4 model, no longer a candidate. **One full standalone rule object per era**
+> (range + all 7 axes, every value concrete — no `null`, no inherit). Instead of CU4's old *resolve-at-read*
+> (a clip's axes may be `null` → inherit the go-live default via a fallback chain), make every **Segment
+> fully self-contained**: all 7 axes carry concrete values, no nulls, no inherit. Then:
 > - **the resolver disappears** — a read is just `segment.field` (no `resolveClipAxes`, no fallback);
 > - **kills the `null`-inherit bug class** (the CU3 D1 shadowing bug was exactly an inherit/coverage issue);
 > - **snip = copy** the segment into two (ranges split); **mend = pick a winner WHOLESALE** (not per-field;
