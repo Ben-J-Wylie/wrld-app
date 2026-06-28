@@ -2295,3 +2295,29 @@ Evicted content must DISAPPEAR from every representation. Two backend surfaces, 
 buffer report (`survivingRegions` splits) and (b) the discover feed (intervals ∩ surviving regions). Pairs
 with Gap 1 (directive GC) + Gap 3 (telemetry cull) — all the "make eviction visible/consistent everywhere"
 family. App render is ready for (a); (b) is purely backend. No app change owed pending the diagnostic.
+
+## ⮕ CU LIFECYCLE BACKLOG — AARON (consolidated index, 2026-06-28)
+All surfaced from Ben's device testing during the CU4 soak. **All backend** (reaper / recorder / discover /
+thumb layers) — **independent of the CU4 manifest-resolution flag** (which is flipped + clean) and distinct
+from CU4 **Phase C** (the destructive collapse) + the CU3 close-out. Suggested priority top→bottom:
+
+1. **Recorder data-track persistence — TOP, CONFIRMED.** Telemetry relays to viewers but isn't written to
+   the buffer `.jsonl` → ALL data tracks (torch/location/chat) record empty → saved clips carry no data
+   tracks (C6 playback + "every source saves" are dark). Verified by the torch disambiguation test (lamp
+   reacts live, disk empty). Fix the recorder sink + verify the `ts/t` data-sample fix is deployed + the
+   "report armed-empty data tracks" marker. → **detail: "Gap 4 — RESOLVED to a single BACKEND bug" (L2222)**
+2. **Telemetry cull on eviction — PRIVACY.** Reaper evicts media but leaves the telemetry `.jsonl`, so a
+   reaped unkept era's location/chat/sensor data persists on disk (retention leak). Cull the shared chunked
+   store (delete fully-evicted chunks; rewrite a straddler). → **detail: "Gap 3" (L2141)**
+3. **Eviction representation (grid + time machine) — VISIBLE.** Evicted eras still render: (a) `GET
+   /buffer/me` `survivingRegions` doesn't split at interior holes → grid ghost (app render is verified
+   ready; needs ≥2 regions); (b) discover feeds don't intersect pin intervals with surviving regions →
+   time-machine ghost pin. → **detail: "Eviction representation gap" (L2275)**
+4. **Directive GC/trim on eviction — CRUFT.** Reaper leaves `DirectiveRange` rows for fully-evicted
+   reapable eras (delete fully-inside; trim a straddler). → **detail: "Gap 1" (L2115)**
+5. **Per-era thumbnails — ENHANCEMENT.** Per-session poster today; per-era needs the server frame pipeline
+   (client `generateThumbnailsAsync` hangs on `-c:v copy`). App consumer trivial once URLs exist. →
+   **detail: "Gap 2" (L2129)**
+
+**Decision (settled, don't re-litigate):** per-era telemetry json REJECTED — keep ONE shared chunked store
++ cull (#2 above); thumbnails ARE per-era (derived). → **"Decision … per-era telemetry json REJECTED" (L2166)**
