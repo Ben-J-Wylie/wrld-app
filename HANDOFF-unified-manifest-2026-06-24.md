@@ -1169,6 +1169,18 @@ slice (define the type + adapters, migrate one surface to prove it), NOT a big-b
 > segment stores its own 7 scalars (negligible). **Boundary:** footage stays SHARED under the recording —
 > segments are time-ranges *pointing into* the same files; **snip/mend move ZERO bytes** (pure metadata).
 > Net: the cleanest end-state — drop the inherit columns + the resolver. Revisit at the CU4 schema-lock.
+>
+> **Sharper framing (Ben, 2026-06-27) — "one full standalone rule object per era, always":** the rules
+> layer mirrors the data layer per-era — **every era has its own complete on-disk rule object** (the 7
+> flags), created at go-live and split on snip. **No snips → ONE rule object; one snip → two eras → two
+> rule objects, even if their flags are identical** (no coalescing-away of identical neighbours; that's
+> the whole standalone point). Each is cheap (just flags). Caveats: rules are NOT a continuous
+> byte-stream like footage — it's one small row per era (the open era's end tracks the live edge; a snip
+> mints the second). This **generalises D2** (which already writes the opening `retain` directive at
+> go-live, but only for saved-lane) to: **always write a full opening rule object at go-live, for every
+> broadcast, split on snip.** Complements but does NOT substitute for the reaper's interior-eviction fix
+> (the reaper already knows per-era reap; materialising the rules doesn't punch the footage hole — see
+> "D3 RE-GATE FINDINGS").
 
 > **💡 Possible future simplification (beyond CU4) — "live gates = the live-time read of the same rules" (Ben, 2026-06-26, LIGHT log).**
 > Today `Stream.subscribersOnly` (who may watch LIVE) and a clip's `visibility` (who may watch the
