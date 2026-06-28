@@ -1331,6 +1331,45 @@ as the required next piece.
   flip flag OFF (human) → lock the Library decision → I build D3 backend + Ben wires app un-save →
   re-gate → flip ON for good.
 
+### D3 RE-GATE FINDINGS — interior eviction (the "saved-segment dam") + surviving-regions (Ben+Aaron device, 2026-06-27, flag ON)
+On-device re-test with the unified write (step 1) + flag **ON**. Setup: one buffer go-live, snipped into
+4 segments; **#2 + #4 dragged to saved** (retain via the unified `patchDirectives` path); **#1 + #3 left
+buffer**; #4 prefs → city/anon; reaper run.
+
+**✅ Confirmed working:** step 1 (drag-to-save via `patchDirectives` → #2/#4 saved + protected + in the
+time machine), eras carry through + the pin label updates as you scroll the clock, **no double-flash** on
+save. #1 evicted (disk-confirmed gone).
+
+**🔴 The bug — the reaper does NOT evict an INTERIOR unretained segment (a DATA-layer mechanics gap):**
+#3 (buffer, no retain, past-window, between saved #2 and #4) **was not evicted** — disk-confirmed still
+present; it genuinely plays; it wrongly shows in the time machine. The reaper **already knows #3 is
+reapable** (retain-only checks per-range; #3 is in no `retain:true` range). The gap is the eviction
+*action*: the rolling buffer **trims contiguously from the oldest end and stops at the first retained
+segment** — it evicted #1, hit the #2 "dam," and never deleted #3. **Saving an interior segment thus
+protects everything behind it from eviction** (unbounded growth behind any saved era) — can't be intended.
+
+**🔑 LAYER FRAMING (decided with Ben 2026-06-27 — look here, Aaron):**
+- This is a **DATA-layer reaper *capability*** gap, NOT a rules-resolution gap. The reaper must learn to
+  **evict an interior segment = punch a HOLE** in a session's footage (delete middle segment files while
+  keeping the retained neighbours), and then **report surviving footage as a LIST of regions**
+  (`survivingRegions: [{start,end}, …]`), not a single `survivingStartMs/EndMs` window (which can't
+  represent a hole). Needed regardless of how the rules are stored.
+- Distinct from the **RULES-layer materialization** (the CU4 "materialized segments / resolve-at-write"
+  idea — each era a complete standalone rule set). That cleanup makes "reap this middle era" unambiguous
+  and pushes the implementation toward holes-as-first-class, but it is **not** what fixes this bug — the
+  reaper already has the per-era reap info; it just can't punch the hole. *(So: don't reach for rule
+  resolution; fix the eviction mechanics.)*
+
+**🔴 Also (same family): the `#1` ghost — surviving range didn't advance on head eviction.** #1's footage
+is gone (disk) but its box redrew, so the session's `survivingStartMs` did **not** advance after the
+contiguous head trim. Folds into the **surviving-regions list** above (once that lands, the app renders a
+block per region with interior gaps — my queued render follow-on).
+
+**Owner split:** **Aaron (reaper, DATA layer):** (1) evict interior unretained segments (holes); (2)
+advance/maintain surviving footage as a **regions list** (covers both #3 and the #1 ghost). **Ben (app
+render):** consume `survivingRegions` → draw a block per region with interior gaps (extends the
+single-window ghost fix to N regions) — waits on Aaron's list.
+
 ### ⮕ AARON — START HERE (next steps, readiness)
 - **D2 — go-live `lane` → opening-range `retain` directive. ✅ DONE + DEPLOYED (2026-06-26,
   `wrld-backend 10f9349`).** A saved-lane go-live (`allocate`) writes its opening era `[start, OPEN]`
