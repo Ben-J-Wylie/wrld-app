@@ -1733,3 +1733,20 @@ reflected up the stack:**
   wrap-around in the clips clock/pin label.
 
 **Eras still pass.** Step 1 (save) + step 1b (whole-clip un-save) were not the focus this run.
+
+#### Run #2 (inverted: saved #1/#3, buffer #2/#4, + distinct visual cues) — the gap CORRUPTS playback
+- **Eviction works (disk):** #2 + #4 (buffer) evicted, #1 + #3 (saved) survive. ✅
+- **Head+tail trims reflected, interior NOT:** grid drops #4 (tail, via `survivingEndMs`) but #2
+  (interior, between saved #1/#3) **ghosts** → confirms `survivingRegions` is still ONE region spanning
+  the interior hole (combined with run #1's head case: single window reflects head+tail; interior holes
+  don't). 
+- **🔴🔴 Stale manifest CORRUPTS time-machine playback (new, worse than a cosmetic ghost):** with
+  distinct per-segment cues, #2 **plays #3's content**, #3 is a **stalled thumbnail**, #4 shows **#1's
+  thumbnail (stalled)**. The deleted interior segments are **still listed in the served playlist**, so
+  the player's **time→segment mapping is shifted** by the missing data → seeks land on the wrong
+  footage + stall. So this isn't just a ghost block — **it scrambles what plays.**
+- **Sharpened fix (Aaron):** **prune deleted interior segments from the served playlist/manifest** (and
+  the `survivingRegions` walk + clips/buffer discover). That single fix resolves all of it — the render
+  gap (`survivingRegions` → 2 regions), the ghost+serve, AND the seek mis-alignment/stalls. Head/tail
+  pruning already happens; interior doesn't. Higher priority than thought (corrupts playback, not just UI).
+- App render unchanged (correct + ready; draws the gap once `survivingRegions` splits).
