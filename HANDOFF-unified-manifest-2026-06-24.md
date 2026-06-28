@@ -1628,9 +1628,13 @@ derive from ONE surviving-segment-extent walk, so they can't disagree. **Additiv
 single contiguous footage ⟹ one region == `[survivingStartMs, survivingEndMs]`; a data-only or
 legacy/no-PDT-anchor session ⟹ `survivingRegions: []` (fall back to the single window).
 
-**➡️ Ben — over to you (render half):** draw a **block per region**, with the gaps between regions
-as interior holes and the head/tail as edges; keep the single-window path as the fallback when
-`survivingRegions` is empty. This extends the existing one-window ghost fix to N regions.
+**✅ Ben — render half DONE (`wrld-app 21a004a`).** `BufferSession.survivingRegions[]` consumed in
+`ClipsScreen`: `reapedClaims` = the gaps BETWEEN a session's surviving regions, subtracted in the buffer
+carve (`carveClaims = claims + reapedClaims`) → the block splits into one piece per region with an
+eviction gap between (the interior #3 hole). Head/tail still via `sessionStartMs/EndMs`. `<2 regions` /
+empty → `carveClaims === claims` (byte-identical fallback, zero regression). **Will SHOW the #3 gap once
+your eviction-MECHANICS fix actually evicts #3** (today the pad still bridges it, so `survivingRegions`
+is one region). Owes an on-device pass at the re-gate.
 
 ### 🔬 (1) The eviction MECHANICS — the handoff's model was slightly off; here's the real cause
 The handoff framed the dam as "the rolling buffer **trims contiguously from the oldest end and
