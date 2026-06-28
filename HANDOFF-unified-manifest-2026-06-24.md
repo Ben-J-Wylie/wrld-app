@@ -1901,3 +1901,64 @@ CU4→CU5 boundary.)*
   columns/feed before shadow-compare is clean; touch the `CU3_RETAIN_ONLY` cutover (separate gate).
 - **App side (Ben, parallel — not Aaron's):** the canonical clip type finish (`src/types/clip.ts`
   adapters + the remaining surface migrations) tracks A; no coordination needed for tonight.
+
+---
+
+## CU4 PHASE A — DONE + DEPLOYED (autonomous run, Aaron, 2026-06-28 night)
+
+Ran the sequenced CU4 backlog. **Phase A (A1–A4) is complete, additive, and live; prod reads are
+UNCHANGED** (the column is the shadow oracle's target, not yet authoritative). **Phase B is blocked on
+a human decision surfaced below; Phase C stays human-gated.** Four commits, per sub-step:
+
+- **A1 (`fd2d6dd`)** — `DirectiveRange.materializedAxes Json?` + migration `20260628010000` (applied;
+  column verified live) + pure `materializeAxes(dir, fallback)` (an era is its own cover → the full
+  concrete `ResolvedAxes`). +5 resolver tests. *Chose one JSON column over 7 parallel columns: 5 of the
+  §5 names collide with existing DirectiveRange columns; a JSON blob keeps the oracle columns untouched
+  (clean shadow-compare) + is trivially reversible. Phase C explodes it into the named columns + rename.*
+- **A2/A3 (`9a08709`)** — `materializeDirectiveAxes` (NULL-only, idempotent) + `verifyMaterializedAxes`
+  (recompute vs stored, canonical key-sorted compare). Runs one-shot on api startup (fire-and-forget,
+  never blocks boot). **Ran on prod: 25/25 authority rows materialized** (verified in DB). +7 DB tests.
+- **A4 shadow (`e45acae`)** — the SAFE half: verify separates DRIFT (non-null disagreeing → signal)
+  from UNMATERIALIZED (NULL pending backfill). Startup logs a WARN on any drift; **clean on deploy
+  (0 NULL, 0 drift)**. +1 test. 390 tests green throughout.
+
+**Canonical fallback = the originating Stream's go-live defaults** (`title` + `locationPrecision`),
+matching the DISCOVER surface (the most complete reader).
+
+### 🔴 DECISION NEEDED before A4-read-routing + Phase B — the per-surface fallback divergence
+The literal A4 ("route reads through the columns") and Phase B (a unified feed compared to the legacy
+feeds) are **NOT mechanically safe**, because the read surfaces pass **different fallbacks** to
+`resolveClipAxes` for a null-field era:
+- **Discover / buffer-me / saved-clip** fall back `precision` → **`stream.locationPrecision`**.
+- **`GET /buffer/session/:id`** falls back `precision` → **`'exact'`** (no stream precision in its
+  fallback; `resolveClipAxes([...], at, { title: stream.title })`).
+So a null-precision era resolves DIFFERENTLY per surface today. The materialized column bakes the
+**stream.locationPrecision** value (the discover/most-complete reading). Routing `/buffer/session`
+through the column therefore **changes its precision output** for those eras — a behavior change, and
+exactly the inconsistency CU4 is meant to unify. **This is a human call:** unify on
+`stream.locationPrecision` (almost certainly correct — honor the go-live precision everywhere) and
+accept `/buffer/session`'s output shift, OR special-case it. Until decided:
+- **A4 read-routing** stays off (column is shadow-only).
+- **Phase B** is blocked: a unified feed reading the column would diverge from the legacy feeds at
+  precisely these eras, so B2 ("parity clean") is unreachable without the unification decision. B is
+  not premature-caution — it's genuinely gated on this.
+
+### Soak + the one not-yet-wired piece
+- The startup **backfill + drift-verify** is the soak instrument: each boot fills any NULL authority
+  rows and WARNs on drift. Watch the logs over a few days — clean = the resolver is provably redundant
+  (A4 done-bar).
+- **Resolve-at-write on EDIT is not wired** into the directive write paths (patchDirectives / snip /
+  D2-allocate): an edited era's fresh row is NULL until the next boot's backfill catches it. Harmless
+  in phase A (no read consumes the column), but **before the column becomes authoritative** (A4/C) the
+  write paths must set `materializedAxes` on write. That's the next additive step — left for the
+  session that takes the A4 routing decision (it's write-path surgery that wants the fallback wired in,
+  same call as the divergence decision).
+
+### Phase C (DESTRUCTIVE — unchanged, human-gated)
+Collapse `Clip`+`ClipRange`+`DirectiveRange`+`ClipTrack` → one `Clip = range + 7 concrete axes over
+Track`; promote `materializedAxes` → named columns + the rename; drop the resolver + legacy feeds +
+dead columns. Run with a human after the A4 decision + a clean soak. Not started (correctly).
+
+**Net:** the materialization foundation is in prod, idempotent, drift-monitored, fully reversible
+(drop one column). The next move is a 5-minute human decision (unify precision on
+`stream.locationPrecision`?) — that unblocks A4-routing → B → the Phase C cutover.
