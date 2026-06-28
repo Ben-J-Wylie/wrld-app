@@ -2199,3 +2199,22 @@ boundary so its track is self-contained + non-empty. Status:
   samples (location/sensors included).
 **Both want a cross-repo pass:** confirm what was armed in the test, that Aaron's first-state/armed-empty
 work is deployed, then wire the location initial fix (app) + verify the chat marker (backend).
+
+#### Gap 4 — SHARPENED (Ben, 2026-06-28): torch was ARMED and still empty → all armed data tracks empty
+Correction to the table above: torch's go-live baseline IS coded but produced an empty folder **even when
+armed** — so the prior "✅ if armed" is wrong. With **location + chat + torch ALL empty** (dirs created, no
+samples), this looks systemic, not three separate causes. Two candidates:
+- **(A) app — fire-and-forget drop (secondary):** `signalingClient.sendTelemetry` / `sendLocationUpdate`
+  use `trySend`, which **silently no-ops when the WS isn't OPEN** ("telemetry is lossy by nature"). A
+  one-shot baseline (torch, an initial location fix) dropped at go-live is gone forever (torch only
+  re-emits on toggle). The WS is usually open by `in-room`, so this is a robustness edge (esp. a
+  reconnect), not the obvious cause. *App fix if implicated: gate/retry the baselines on WS-open, not just
+  `isLiveBroadcast`.*
+- **(B) backend — recorder not writing data tracks (PRIMARY hypothesis):** all data tracks empty matches
+  the known **"ts/t data-sample fix, without which ALL data tracks — location/chat/telemetry — promoted
+  empty."** Likely the recorder relays telemetry to viewers but isn't persisting to the buffer `.jsonl`,
+  or that fix isn't **deployed**. Backend (Aaron) + the **"report armed-empty data tracks"** marker as the
+  robust backstop (server writes an initial marker per armed data track regardless of app emits).
+- **DISAMBIGUATION TEST:** broadcast w/ torch armed → a viewer switches to the torch source + watch the
+  lamp as you toggle. **Reacts** ⇒ emit+relay OK ⇒ it's the recorder/deploy (B, Aaron). **No react** ⇒
+  emit/relay broken (A). Run this first; it splits app-vs-backend with no code spelunking.
