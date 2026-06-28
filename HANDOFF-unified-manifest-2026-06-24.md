@@ -2137,3 +2137,28 @@ one-store.
   inside `[startMs, endMs]`, e.g. the era's start or midpoint).
 - **App consumer (Ben, trivial once URLs exist):** the grid blocks / cards / `SegmentPreview` already
   take a thumbnail/poster URL — feed the per-era thumb URL into the same prop (only the source changes).
+
+### Gap 3 — the reaper must CULL telemetry `.jsonl` data to match media eviction (Aaron, backend) — DEVICE-CONFIRMED + PRIVACY-BEARING
+**Device test (Ben, 2026-06-28):** broadcast → snip into 4 eras → 1 & 3 unkept, 2 & 4 kept → reap. The
+**media segments (camera/audio/screen) for eras 1 & 3 evict correctly**, but the **telemetry `.jsonl`
+data for those eras is NOT culled** — it survives on disk. (Corrects an earlier optimistic note that data
+chunks "evict like segments" — they currently don't; the reaper doesn't touch data tracks at all.)
+
+**This is a retention / privacy bug, not just cruft.** A reaped unkept era is supposed to be GONE; leaving
+its location trail / chat / sensor samples on disk breaks the "this expires" promise for everything but
+the video. (Not a display bug — the app filters telemetry by `ts`/era so a reaped era won't render — purely
+persistence/leak.)
+
+**Fix stays one-store (cull the ONE shared file; do NOT split into per-era files):**
+- Telemetry is a **wall-clock-chunked** `.jsonl` (`<kind>/<sessionId>/<chunkMs>.jsonl`) with a legacy flat
+  `<sessionId>.jsonl` fallback. The reaper already computes the evicted range for media — apply the SAME
+  range to the data tracks:
+  - **chunk fully inside the evicted range** → delete the chunk file (like a segment),
+  - **chunk straddling a retain boundary, or a flat single file** → **rewrite it**, dropping samples whose
+    `ts` ∈ the evicted range, keeping the rest. (This rewrite is the part with no media analogue — you
+    can't delete half a file — which is why it was skipped; it's required.)
+- Same pass as Gap 1 (directive GC/trim on eviction): evict media → cull data tracks → reconcile
+  directives. The data cull is keyed off the identical evicted-range computation.
+
+**Lane:** Aaron (`bufferService` reaper + the data-track storage). No app change — the app reads whatever
+the data route serves; correct culling just removes the on-disk leak.
