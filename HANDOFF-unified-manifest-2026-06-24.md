@@ -1838,3 +1838,19 @@ object). **Gated on CU3 proving on device** — i.e. this re-gate going green + 
 good. Once you confirm the re-gate, say the word and I'll start CU4 (it wants a focused joint window —
 schema migration touches all read/write paths). Until then CU3 is complete on my side pending your
 on-device confirmation.
+
+### 🟡 RE-GATE #3 (Ben device, 2026-06-28, after the 248b6ff prune) — playback FIXED; ~2s slivers + discover pins remain
+Setup: saved #1/#3, buffer #2/#4; #2/#4 evicted (disk-confirmed).
+- **✅ PLAYBACK FIXED** — #1/#3 play the CORRECT footage (no scramble/stalls). Aaron's served-manifest
+  prune (`248b6ff`) cured the corruption. The worst bug is closed.
+- **🟡 Buffer lane still shows ~2s entries for #2/#4.** Size is the tell (~2s = one HLS segment, not the
+  full width): most likely **boundary segments** kept by overlap-retain (a segment straddling the
+  saved↔buffer edge overlaps the retained range → kept → its buffer-side shows as a ~2s sliver). The
+  bulk of #2/#4 IS evicted. So this is segment-granularity / safe-side, not a full ghost; the render is
+  correctly showing genuinely-surviving footage. **CONFIRM via `GET /buffer/me` survivingRegions:** two
+  regions `[#1+~2s],[~2s+#3]` ⟹ slivers (decide: Aaron tightens overlap to drop pure-buffer boundary
+  segments, or accept) · one region ⟹ walk still not splitting (Aaron). My `reapedClaims` is correct
+  either way.
+- **🟡 Time machine shows all 4 (should have holes).** = the discover-pin-during-a-hole follow-up Aaron
+  flagged in `248b6ff` (cosmetic; playback no longer scrambles). Fix = intersect clips/buffer discover
+  intervals with per-session surviving regions (Aaron, adds per-pin disk I/O — tracked).
