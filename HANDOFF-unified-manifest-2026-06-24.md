@@ -1397,24 +1397,26 @@ single-window ghost fix to N regions) — waits on Aaron's list.
 
 ### ⮕ AARON — START HERE (next steps, readiness)
 
-> **🔴 CURRENT TOP PRIORITY (2026-06-28) — prune interior-deleted segments from the served playlist.**
-> The interior-eviction MECHANICS are ✅ proven on device (twice): an interior unretained segment is
-> deleted from disk. But the **REPORT/SERVE layer doesn't reflect it** — and re-gate #2 (run-2) showed
-> it **corrupts playback**, not just the UI: the deleted segments are still **listed in the served HLS
-> playlist**, so `survivingRegions` stays one region (no gap → grid ghost) AND the player's
-> media-time↔segment mapping shifts → a clip plays the WRONG footage / stalls. **Fix:** when an interior
-> media segment is evicted, **remove it from the served playlist** (and have the `survivingRegions` walk
-> + clips/buffer discover reflect actual on-disk survival, not the playlist as-written). Head/tail
-> pruning already happens; interior doesn't. **One fix resolves all three** (render gap · ghost+serve ·
-> seek mis-alignment). Full evidence: "RE-GATE #2 RESULT" below. Then **re-gate → flip `CU3_RETAIN_ONLY`
-> ON for good**. *(Ben's render is correct + ready — it draws the gap the instant `survivingRegions`
-> reports two regions; nothing owed app-side for this.)*
-> Confirm first via `GET /buffer/me`: that session's `survivingRegions` = **1 region** (expected → your
-> fix) vs **2** (→ Ben's `reapedClaims`).
+> **✅ CU3 CORE DONE — closing out. (updated 2026-06-28)** Interior eviction works at disk (re-gate
+> ×3); the served-manifest prune (`248b6ff`) **fixed the playback corruption** — #1/#3 play correct
+> footage. The reaper-safety + playback are PROVEN. **CU3-close checklist (Aaron):**
+> 1. **Cutover — flip `CU3_RETAIN_ONLY` ON for good** (eviction+playback proven → safe; heed
+>    "no-flip-back once real retain-only saves exist"). The two remainders below are **cosmetic** and
+>    don't block the flip.
+> 2. **Drop the bespoke `saveClip`/`unsaveClip`** — the app saves + whole-clip-un-saves via
+>    `patchDirectives` now. *(`patchClip` stays — it's the general clip edit; the piece-trim un-save +
+>    step 2 render-by-keep are Ben's follow-ups for finding #4, not blockers.)*
+> 3. **🟡 ~2s buffer slivers for evicted #2/#4** (re-gate #3) — likely boundary segments overlap-retain
+>    keeps. **Confirm via `GET /buffer/me` survivingRegions** (two regions `[#1+~2s],[~2s+#3]` ⟹ slivers
+>    → decide: tighten overlap to drop pure-buffer boundary segments, or accept; one region ⟹ walk not
+>    splitting). Cosmetic.
+> 4. **🟡 Discover pins during a hole's instant** — your flagged follow-up: intersect clips/buffer
+>    discover intervals with per-session surviving regions. Cosmetic.
 >
-> **After that lands:** drop the bespoke `saveClip`/`unsaveClip` (the app's on `patchDirectives` for
-> save + whole-clip un-save now); then Ben builds step 2 (render-by-keep) + the piece-trim to close
-> finding #4. *(The items below this banner are the DONE D2/D3 history, kept for context.)*
+> **➡️ CU4 is GO (schema LOCKED — materialized segments, see the LOCKED banner).** After the cutover,
+> start the CU4 collapse: `Clip`+`ClipRange`+`DirectiveRange`+`ClipTrack` → one `Clip = range + 7
+> concrete axes over Track`; resolver → column read; snip=copy, mend=pick-winner; backfill=materialize;
+> one discover feed; the rename. No open decision gates it. *(Below this banner = the DONE D2/D3 history.)*
 
 - **D2 — go-live `lane` → opening-range `retain` directive. ✅ DONE + DEPLOYED (2026-06-26,
   `wrld-backend 10f9349`).** A saved-lane go-live (`allocate`) writes its opening era `[start, OPEN]`
