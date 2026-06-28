@@ -2041,3 +2041,46 @@ named columns + the rename; that's where saved-clip column-routing + dropping th
 
 **Net:** the decision is live (precision unified everywhere), the column is fresh + consistent +
 drift-monitored, done-bar A is met. Next is the soak → Phase B → human-gated Phase C.
+
+---
+
+## CU4 — soak instrument + Phase B (unified discover) shipped, flag-gated (Aaron, 2026-06-28)
+
+Did "option 2 then 1": made the column trustworthy with a real soak signal, then built Phase B
+behind a default-OFF flag. Both deployed; served behaviour unchanged.
+
+**✅ Soak instrument (`wrld-backend 50ac64a`).** The boot-only verify was a weak soak (never
+re-checked between deploys). Now:
+- **Hourly** interval: backfill any NULL authority eras (self-heal a missed resolve-at-write path)
+  + verify the column hasn't DRIFTED from the resolver → WARN on drift (logs ids).
+- **`GET /admin/cu4/materialized-axes`** (requireAdmin, read-only) → `{ checked, unmaterialized,
+  drift, sample }` for on-demand inspection. Currently clean (25/25 materialized, 0 drift).
+- Drift 0 + unmaterialized 0 sustained ⟹ the resolver is provably redundant in practice.
+
+**✅ Phase B — unified discover (`wrld-backend ce3cbbd`, flag `CU4_UNIFIED_DISCOVER`, default OFF).**
+When ON, the discover buffer-pin feeds (windowed · tiled · `?at=`) resolve each pin's 7 axes from
+the canonical **materialized column** (`resolveAxesUnified`) instead of the inline resolver; OFF =
+byte-for-byte today. This is the "serve from the one canonical representation" path the Phase C
+cutover makes permanent.
+- **B2 parity is by construction:** `resolveAxesUnified` returns the era's materialized column, and
+  the soak verify proves column == resolver per era → flag-on output == flag-off output. So
+  "parity clean" reduces to "drift-verify clean over a soak."
+- **Scope:** the session-fallback **buffer-pin** path only (the live time-machine content). The
+  saved-clip `clips[]` path keeps its **clip-level** fallback — that only collapses in Phase C when
+  the clip gets its own materialised columns (the caveat I flagged last turn).
+
+### ➡️ The path from here (all human-gated)
+1. **Soak:** watch `GET /admin/cu4/materialized-axes` (or the hourly WARN) over a few days of real
+   broadcasts/snips/edits. Clean = the column tracks the resolver through real writes.
+2. **Flip `CU4_UNIFIED_DISCOVER` ON** (a human config flip, like the CU3 cutover). Since output is
+   provably identical, this is safe once the soak is clean — it just moves the discover feeds onto
+   the canonical column. Watch for the unlikely drift WARN.
+3. **Phase C (destructive, human + me, focused session):** collapse `Clip`+`ClipRange`+
+   `DirectiveRange`+`ClipTrack` → one `Clip = range + 7 concrete axes over Track`; promote
+   `materializedAxes` → named columns + the rename; route the saved-clip path onto its own columns;
+   drop the resolver + legacy feeds. The soak + the flag flip are the gates that de-risk it.
+
+**Net:** CU4 phase A (materialize) and phase B (unified-feed-behind-a-flag) are in prod, additive,
+drift-monitored; the resolver is provably redundant once the soak is clean. Remaining is two human
+flips (soak → `CU4_UNIFIED_DISCOVER` ON) then the Phase C cutover session. Nothing of mine is
+blocking.
