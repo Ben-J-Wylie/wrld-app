@@ -99,38 +99,13 @@ export function AuthModal({ visible, onClose, onSuccess }: Props) {
         setError('Sign in could not be completed.')
       }
     } catch (err) {
-      // The account may be an abandoned sign-up whose email was never verified —
-      // Clerk can't sign that in. Resume the pending sign-up, resend the code, and
-      // drop the user into the verify step so they can finish.
-      if (await tryResumeVerification()) return
+      // No account / wrong password. We do NOT auto-resume a sign-up here: an
+      // unverified sign-up is indistinguishable from an unknown email at sign-in,
+      // so resuming would silently send a code to any address. Finishing an
+      // abandoned sign-up happens on the Sign up tab (which resumes + resends).
       setError(clerkError(err, 'Sign in failed'))
     } finally {
       setLoading(false)
-    }
-  }
-
-  // Returns true if a pending verification was (re)started or completed.
-  async function tryResumeVerification(): Promise<boolean> {
-    if (!signUpLoaded) return false
-    try {
-      const su = await signUp!.create({ emailAddress: email, password })
-      if (su.status === 'complete') {
-        await setActiveSignUp!({ session: su.createdSessionId })
-        reset()
-        onSuccess()
-        return true
-      }
-      if (su.unverifiedFields?.includes('email_address')) {
-        await su.prepareEmailAddressVerification({ strategy: 'email_code' })
-        setTab('signup')
-        setSignUpStep('verify')
-        return true
-      }
-      return false
-    } catch {
-      // form_identifier_exists (verified account → wrong password) → show the
-      // original sign-in error instead.
-      return false
     }
   }
 
