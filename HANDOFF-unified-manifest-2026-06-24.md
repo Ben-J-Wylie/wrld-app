@@ -419,6 +419,24 @@ Beyond the backend contracts, these are the **app** gaps between today's build a
 Each lists the principle it serves, the guardrail, and its dependency. Sequencing note: #3 + #5
 **dissolve** once backend (2c) lands; #1 + #2 are the real moves; #4 is the structural backstop.
 
+> **🧹 STRIPPED FROM ACTIVE TO-DOS (Ben, 2026-06-28) — all five below are POST-CU-DELIVERY; do NOT
+> start them pre-soak/flag-flip/Phase-C.** Each would either produce WRONG RESULTS now or DISSOLVE with
+> CU, so none are tracked as current app work — they're CU consequences, done as part of (or after)
+> the cutover / Phase C:
+> - **Bad results if done now:** **#2 Lane-as-axis** (retain-in-place isn't the live model → saves
+>   wouldn't persist), **#3 Retire dual-write** (library/viewer read the `Clip` row until `2c` →
+>   deleting `patchClip` hides edits there), **step-2 render-by-keep** (`keep` not authoritative
+>   pre-cutover → mis-renders the saved lane), **piece-trim un-save** (needs Aaron's Phase-C
+>   re-materialise edge).
+> - **Dissolves / reworks with CU:** **#5 title-default** (becomes a one-field read after `2c`),
+>   **#1 one-drawer** + **#4 canonical-type** (built against the pre-rename shapes Phase C collapses —
+>   "do once the model stops moving").
+>
+> **The ONLY genuine, CU-independent app to-dos safe to do now:** (a) the **orphan prune**
+> (`SaveClipSheet` + `ClipToolRail` + gallery/DESIGN.md) finishing the editor retirement; (b) the
+> **clock-label-wrap** UI fix. (Post-deploy on-device verification passes are separate, and wait on the
+> box deploy + the flag flip.) The list below is the POST-CU backlog, kept for when the model lands.
+
 1. **One drawer, not two** *(invariant 1)*. The clips-page drawer (`SegmentSettingsSheet`) and the
    library/profile drawer (`SavedClipSettingsSheet`) are two components → unify into one host both
    surfaces feed identically, so "the same clip shows the same drawer" is literal, not by
