@@ -9,6 +9,8 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "postinstall": "patch-package"
   },
   "dependencies": {
@@ -59,7 +61,8 @@
     "@types/react": "~19.1.10",
     "@types/react-native": "^0.72.8",
     "patch-package": "^8.0.1",
-    "typescript": "~5.9.2"
+    "typescript": "~5.9.2",
+    "vitest": "^4.1.9"
   },
   "description": "",
   "repository": {
