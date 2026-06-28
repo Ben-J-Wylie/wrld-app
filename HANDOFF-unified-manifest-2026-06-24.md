@@ -1901,3 +1901,17 @@ CU4→CU5 boundary.)*
   columns/feed before shadow-compare is clean; touch the `CU3_RETAIN_ONLY` cutover (separate gate).
 - **App side (Ben, parallel — not Aaron's):** the canonical clip type finish (`src/types/clip.ts`
   adapters + the remaining surface migrations) tracks A; no coordination needed for tonight.
+
+### ✅ Clip-editor retirement (Ben greenlit, 2026-06-28) — app CU consolidation
+The old **`ClipEditScreen`** (2179-line buffer-trim/bracket editor behind the `[Clips|Editor]` pager;
+its own header noted saves were "still R3 ... in-session/non-durable") is **superseded by the Clips
+grid + `SegmentSettingsSheet`** (double-tap → per-segment settings + preview) and has been removed:
+- Deleted `src/components/screens/ClipEditScreen.tsx` + the `app/(app)/clip-editor.tsx` route.
+- Removed the `[Clips|Editor]` `PageTabs` from `ClipsScreen` (+ the now-dead `styles.pager` + the unused
+  `PageTabs`/`router` imports) and the `clip-editor` `Tabs.Screen` from `app/(app)/_layout.tsx`.
+- **tsc clean** (only the pre-existing `stream/${string}` + `ppv/[id]/rate` route-template errors remain).
+- **Now-orphaned (gallery-only, nothing breaks):** `SaveClipSheet` + `ClipToolRail` were
+  ClipEditScreen-only and are now referenced solely by the dev FeatureGallery. Left in place (no compile
+  break) — a small **design-system prune** (component + gallery entry + DESIGN.md Section 3) for Ben when
+  convenient. All other composed components (`BufferTimeline`/`BufferTransport`/`SavedClipRow`/the
+  `Source*` visualizers/etc.) stay — they're shared by `SegmentPreview`/`ClipsScreen`/the stream rails.

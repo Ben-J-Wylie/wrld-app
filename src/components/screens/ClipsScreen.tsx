@@ -16,14 +16,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { router, useFocusEffect } from 'expo-router'
+import { useFocusEffect } from 'expo-router'
 import { Alert, StyleSheet, View } from 'react-native'
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useAuth } from '@clerk/clerk-expo'
 import { theme } from '@/tokens/theme'
 import { ScreenHeader } from '@/components/sections/ScreenHeader'
-import { PageTabs } from '@/components/features/navigation/PageTabs'
 import { Text } from '@/components/primitives/Text'
 import { Icon } from '@/components/primitives/Icon'
 import { Pressable } from '@/components/primitives/Pressable'
@@ -2104,17 +2103,6 @@ export const ClipsScreen = () => {
     <View style={styles.root}>
       <View style={[styles.header, { paddingTop: insets.top + theme.spacing.sm }]}>
         <ScreenHeader title="Clips" />
-        <PageTabs
-          tabs={[
-            { key: 'grid', label: 'Clips' },
-            { key: 'editor', label: 'Editor' },
-          ]}
-          value="grid"
-          onChange={(k) => {
-            if (k === 'editor') router.navigate('/(app)/clip-editor')
-          }}
-          style={styles.pager}
-        />
         {/* Sticky viewer for the selected clip — above the buffered/saved bar. Padded
             wrapper gives equal L/R margins (a full-width frame + marginHorizontal would
             overflow the right edge). */}
@@ -2378,9 +2366,6 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.bg.primary,
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border.subtle,
-  },
-  pager: {
-    marginTop: theme.spacing.sm,
   },
   viewerWrap: {
     paddingHorizontal: theme.spacing.lg,
