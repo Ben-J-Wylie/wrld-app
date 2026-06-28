@@ -1710,3 +1710,26 @@ leave #1/#3 buffer → (tighten the tier window to force a reap) → reap. Expec
 If green: keep `CU3_RETAIN_ONLY` ON for good (heed "no-flip-back once real retain-only saves
 exist"). **Both the eviction MECHANICS and the surviving-footage REPORT are now mine-complete** —
 the dam bug is closed pending your on-device confirmation at the flip.
+
+### 🔴 RE-GATE #2 RESULT (Ben+Aaron device, 2026-06-28, flag ON) — eviction WORKS at disk; REPORT/SERVE doesn't reflect interior deletions
+**🎯 Win: the interior eviction MECHANICS landed — #3 (interior, between saved #2/#4) is EVICTED FROM
+DISK** (disk-confirmed; #1 also gone). The dam is cured in the reaper. **But the eviction isn't
+reflected up the stack:**
+- **In the grid: #3 still renders** in the buffer lane (#1 IS gone). So `survivingRegions` is still
+  **ONE region spanning #3** — no gap → my render has nothing to draw. The **HEAD trim IS reflected**
+  (`survivingStartMs` advanced → #1 gone); the **INTERIOR deletion is NOT**.
+- **#3 still PLAYS**, and the **time machine shows + plays all 4** (incl. the disk-evicted #1/#3).
+- **Diagnosis (Aaron's lane — REPORT/SERVE half):** the surviving-segment walk + the served buffer
+  manifest read the **playlist**. A head-trim prunes the playlist's leading entries (reflected); the
+  interior eviction **deletes #3's files but doesn't remove #3 from the playlist** → the walk still
+  counts #3 (one region, no gap) and the served manifest still lists #3 (plays cached/404, shows in
+  discovery). **→ make `survivingRegions` + the served manifest + clips/buffer discover reflect actual
+  on-disk survival of INTERIOR segments** (skip/prune deleted interior entries, not just the head).
+- **App render is correct + READY** — `reapedClaims` draws the #3 gap the instant `survivingRegions`
+  reports two regions; no grid change needed.
+- **Confirming diagnostic:** `GET /buffer/me` survivingRegions for that session — **1 region** ⟹
+  Aaron's report gap (expected); **2 regions** ⟹ Ben's `reapedClaims`. (Strong expectation: 1.)
+- **Minor (Ben, low-pri):** scrolling the clock past #4 flashes #1's title/id — a label-resolution
+  wrap-around in the clips clock/pin label.
+
+**Eras still pass.** Step 1 (save) + step 1b (whole-clip un-save) were not the focus this run.
