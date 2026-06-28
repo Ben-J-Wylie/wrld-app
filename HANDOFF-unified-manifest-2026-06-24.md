@@ -1604,3 +1604,64 @@ carry `retain`, save creates the Library `Clip` and un-save removes it + reaps �
 
 **Next move:** Ben runs the D1 cutover gate; when it's green we take the quick D3/U3 Library call and I
 start D3. Until then CU3 is safely paused at "engine writes the one model, nothing cut over yet."
+
+---
+
+## CU3 D3 re-gate — interior-eviction 'dam': REPORT half shipped, eviction MECHANICS diagnosed (Aaron, 2026-06-27)
+
+Picked up `handoff(D3 re-gate): interior-eviction 'dam' bug`. The owner-split assigned me both
+**(2) report surviving footage as a regions LIST** and **(1) evict the interior unretained segment
+(punch the hole)**. I shipped (2) and pinned down (1) precisely. (Note: I'd wiped the buffer +
+its DB rows at Aaron's request just before this, so there's no live footage to reproduce against —
+the re-gate runs on fresh broadcasts regardless.)
+
+### ✅ (2) `survivingRegions` — DONE + DEPLOYED (`wrld-backend 3ff2cac`, health 200)
+`GET /buffer/me` now returns, per session, **`survivingRegions: [{ startMs, endMs }]`** (absolute
+ms) — the maximal contiguous runs of the playable track's **surviving on-disk segments**. This is
+exactly what the single `survivingStartMs/EndMs` window can't express:
+- an **interior hole** (an evicted segment between two retained neighbours) shows as a **gap
+  BETWEEN two regions** — not a block drawn over reaped footage (the #3 ghost);
+- a **head trim** advances the **first region's start** (the #1 ghost folds in for free).
+
+Built on a pure `contiguousRegions(segs, maxGapMs)` (6 unit tests; splits on a gap below one
+segment's ~2s length so even a single-segment hole separates, while absorbing PDT/EXTINF jitter).
+The three time-model outputs (`mediaDurationSec`, `mediaStartOffsetMs`, `survivingRegions`) now all
+derive from ONE surviving-segment-extent walk, so they can't disagree. **Additive / back-compat:**
+single contiguous footage ⟹ one region == `[survivingStartMs, survivingEndMs]`; a data-only or
+legacy/no-PDT-anchor session ⟹ `survivingRegions: []` (fall back to the single window).
+
+**➡️ Ben — over to you (render half):** draw a **block per region**, with the gaps between regions
+as interior holes and the head/tail as edges; keep the single-window path as the fallback when
+`survivingRegions` is empty. This extends the existing one-window ghost fix to N regions.
+
+### 🔬 (1) The eviction MECHANICS — the handoff's model was slightly off; here's the real cause
+The handoff framed the dam as "the rolling buffer **trims contiguously from the oldest end and
+stops at the first retained segment**." On reading the reaper, the age-trim is actually **per-leaf**
+(`for (lf of leaves) { if (isProtected(lf) || lf.mtime >= cutoff) continue; unlink }`) — it deletes
+*any* unprotected past-window leaf regardless of position, so it already punches holes for
+non-tiny interior segments. The real "dam" is **`RETAIN_PAD_MS` (4s) bridging a SHORT interior
+unretained segment**: `coveredByRetain` keeps a segment whose mtime is within 4s of a retained
+range's edge, so a `<~8s` #3 sitting between saved #2 and #4 is within 4s of **both** (#2's end-pad
+AND #4's start-pad) → protected → never evicted. The pad exists to keep a retained range's boundary
+*segments*; for a short interior gap the two ranges' pads meet and bridge it.
+
+**The correct fix is overlap-based retain:** a segment is kept iff its time-range `[start, end]`
+**overlaps a retained range** (not "mtime within range ± pad"). That keeps boundary segments (they
+overlap), evicts any interior unretained segment (it doesn't), and is **provably safe for retained
+footage** (a segment overlapping a retained range is never evicted — same guarantee the pad gives,
+without the bridge). It needs per-segment durations in the reaper (it currently walks mtime-only
+leaves) — i.e. reusing the same PDT/EXTINF segment-extent walk I just added for the regions list.
+A pad *reduction* only mitigates (interior gaps ≤ 2×pad still bridge), so it's not the answer.
+
+I deliberately did **not** ship that reaper retain-protection change blind this turn: it's a
+data-sensitive prod path and — with the buffer wiped — it can only be honestly verified against
+**fresh** footage at the re-gate. So:
+
+**Re-gate plan (when there's footage again):** flip `CU3_RETAIN_ONLY` ON (it is now), broadcast →
+snip into ≥4 segments → save #2 + #4, leave #1 + #3 buffer → tighten the tier window → reap, then
+confirm via `GET /buffer/me` that the session's `survivingRegions` shows **two regions with a gap
+where #3 was** (and #1 gone from the head). If #3 is still present (the pad bridged it because it's
+short), that's the signal to land the overlap-based retain fix — which I'll do as the (1) follow-up.
+
+**Net:** the regions LIST is live and unblocks your render now; the interior-eviction MECHANICS fix
+(overlap-based retain) is queued for the re-gate where it can be verified with real footage.
