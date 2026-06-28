@@ -83,14 +83,19 @@ export function invalidateClipReads(qc: QueryClient): void {
 }
 
 // The single persist path: write a session's full per-range directive list, then invalidate every
-// read. Used by both edit hosts. Swallows errors (optimistic UI already reflects the change).
+// read. Used by both edit hosts. `onError` lets a caller surface a failure (e.g. the keep axis's
+// `409 storage_cap` on a save) + revert its optimistic state; omitted → errors are swallowed (a
+// metadata edit already reflects optimistically and is low-stakes).
 export function persistDirectives(
   qc: QueryClient,
   sessionId: string,
   ranges: SettingsRange[],
+  onError?: (err: unknown) => void,
 ): void {
   bufferApi
     .patchDirectives(sessionId, rangesToDirectives(ranges, sessionId))
     .then(() => invalidateClipReads(qc))
-    .catch(() => {})
+    .catch((e) => {
+      if (onError) onError(e)
+    })
 }

@@ -1627,6 +1627,27 @@ export const ClipsScreen = () => {
   // error) instead of swallowing them — silent failure is why a save "won't stick".
   // Drag a buffered remainder right → save just its window. Optimistically carve it out +
   // placeholder it in the saved lane; the real Clip prunes the placeholder when it lands.
+  // CU3 D3 — the unified save/un-save WRITE: set the keep axis over the clip's range via the directive
+  // path (authoritative-replace). Aaron's `patchDirectives` side-effect reconciles the retain-in-place
+  // Clip to the delta (materialise on 'kept' / remove on 'reapable') + charges/reclaims storage; a
+  // net-new over-quota save → `409 storage_cap` (whole PATCH rejected). `onError` reverts + surfaces it.
+  // Edge-relative save is expressed as the range (the backend clamps to [earliest, now]).
+  const keepWrite = useCallback(
+    (clip: LaneClip, keep: 'kept' | 'reapable', onError?: (err: unknown) => void) => {
+      const sid = clip.sourceSessionId
+      if (!sid || sid === OPT_LIVE_SESSION) return
+      setSettingsRanges((prev) => {
+        const next = applySetting(prev, { sessionId: sid, startMs: clip.startMs, endMs: clip.endMs }, { keep })
+        persistDirectives(qc, sid, next, (e) => {
+          setSettingsRanges(prev) // revert the keep edit on failure
+          onError?.(e)
+        })
+        return next
+      })
+    },
+    [qc],
+  )
+
   const saveClip = useCallback(
     (clip: LaneClip) => {
       // A DRAFT block → materialise it (saveDraft); optimistically carve it remains carved.
@@ -1654,55 +1675,39 @@ export const ClipsScreen = () => {
       // Can't save the optimistic live placeholder — it has no real footage on the backend yet.
       // (It's replaced by the real session within seconds; save then.)
       if (sessionId === OPT_LIVE_SESSION) return
-      // The backend requires a non-empty `kinds` — resolve from the covered session(s).
-      const kindSet = new Set<string>()
-      for (const s of sessions) {
-        if (sessionEndMs(s) > clip.startMs && sessionStartMs(s) < clip.endMs) s.kinds.forEach((k) => kindSet.add(k))
-      }
-      const kinds = kindSet.size ? [...kindSet] : ['camera']
       const tempId = `pending:${clip.id}`
       setPendingSaves((prev) => [
         ...prev,
         { tempId, sessionId, startMs: clip.startMs, endMs: clip.endMs, label: clip.label, posterUrl: clip.posterUrl, manifestUrl: clip.manifestUrl },
       ])
-      // U3 edge-relative save: a clip whose start has reached the reaper edge is being evicted →
-      // `fromReaperEdge` so the server clamps the start to ITS current earliest ("save the
-      // remainder"); the live block (the still-growing session) → `toNow` so the end clamps to the
-      // server's `now`. The numeric bounds stay best-effort; the server re-clamps to [earliest, now].
-      const fromReaperEdge = windowStartMs != null && clip.startMs <= windowStartMs
+      // CU3 D3 — unified write: set keep:'kept' over the range; Aaron's patchDirectives side-effect
+      // materialises the retain-in-place Clip + charges storage. The optimistic `pendingSaves` carves
+      // it into the saved lane until the real Clip lands (pruned on refetch). `toNow` (the live span)
+      // drives the storage-cap lane-flip. Replaces the bespoke `saveClip` endpoint (CU3 single path).
       const toNow = sessionId === realLiveSessionId
-      const payload = { startAtMs: Math.round(clip.startMs), endAtMs: Math.round(clip.endMs), name: clip.label, kinds, fromReaperEdge, toNow }
-      bufferApi
-        .saveClip(payload)
-        .then((res) => {
-          // Tag the placeholder with the real id so it's pruned by EXACT id when the clip lands
-          // (not just by bounds, which the backend may snap) — otherwise it lingers as a duplicate.
-          setPendingSaves((prev) => prev.map((p) => (p.tempId === tempId ? { ...p, realClipId: res.clipId } : p)))
-          refetchSavedSoon()
-        })
-        .catch((err: unknown) => {
-          setPendingSaves((prev) => prev.filter((p) => p.tempId !== tempId)) // revert the optimistic carve
-          const e = err as { response?: { status?: number; data?: { message?: string; error?: string; usedBytes?: number; quotaBytes?: number } }; message?: string }
-          // U3 storage cap: the save is rejected because saved storage is full. Warn, and — if this
-          // was the LIVE saved-lane span — flip the dashboard's go-live lane back to buffer (the
-          // broadcast keeps printing to buffer). A retrospective save just fails (no lane to flip).
-          if (e.response?.status === 409 && e.response.data?.error === 'storage_cap') {
-            const d = e.response.data
-            const gb = (n?: number) => (n != null ? `${(n / 1_073_741_824).toFixed(1)} GB` : null)
-            const detail = d.quotaBytes != null ? ` (${gb(d.usedBytes)} of ${gb(d.quotaBytes)} used)` : ''
-            if (toNow) {
-              loadCaptureConfig().then((c) => (c.lane === 'saved' ? saveCaptureConfig({ ...c, lane: 'buffer' }) : undefined))
-              Alert.alert('Storage full', `Your saved-clip storage is full${detail}. Recording continues to the buffer instead.`)
-            } else {
-              Alert.alert('Storage full', `Your saved-clip storage is full${detail}. Free up space or delete some saved clips to save this one.`)
-            }
-            return
+      keepWrite(clip, 'kept', (err: unknown) => {
+        setPendingSaves((prev) => prev.filter((p) => p.tempId !== tempId)) // revert the optimistic carve
+        const e = err as { response?: { status?: number; data?: { message?: string; error?: string; usedBytes?: number; quotaBytes?: number } }; message?: string }
+        // Storage cap: the save is rejected because saved storage is full. Warn, and — if this was the
+        // LIVE saved-lane span — flip the dashboard's go-live lane back to buffer (broadcast keeps
+        // printing to buffer). A retrospective save just fails (no lane to flip).
+        if (e.response?.status === 409 && e.response.data?.error === 'storage_cap') {
+          const d = e.response.data
+          const gb = (n?: number) => (n != null ? `${(n / 1_073_741_824).toFixed(1)} GB` : null)
+          const detail = d.quotaBytes != null ? ` (${gb(d.usedBytes)} of ${gb(d.quotaBytes)} used)` : ''
+          if (toNow) {
+            loadCaptureConfig().then((c) => (c.lane === 'saved' ? saveCaptureConfig({ ...c, lane: 'buffer' }) : undefined))
+            Alert.alert('Storage full', `Your saved-clip storage is full${detail}. Recording continues to the buffer instead.`)
+          } else {
+            Alert.alert('Storage full', `Your saved-clip storage is full${detail}. Free up space or delete some saved clips to save this one.`)
           }
-          const msg = e.response?.data?.message ?? e.response?.data?.error ?? e.message ?? 'Could not save clip'
-          Alert.alert('Save failed', msg)
-        })
+          return
+        }
+        Alert.alert('Save failed', e.response?.data?.message ?? e.response?.data?.error ?? e.message ?? 'Could not save clip')
+      })
+      refetchSavedSoon()
     },
-    [sessions, refetchSavedSoon, qc, windowStartMs, realLiveSessionId],
+    [refetchSavedSoon, realLiveSessionId, keepWrite],
   )
 
   // Drag a SAVED clip up → un-save. A WHOLE clip is deleted; a scissor PIECE only trims that range
