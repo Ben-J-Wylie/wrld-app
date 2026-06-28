@@ -459,6 +459,33 @@ export const ClipsScreen = () => {
     return out
   }, [realSavedData, draftsData, pendingNotReal, pendingUnsave])
 
+  // CU3 D3 re-gate — INTERIOR reaped holes: the gaps BETWEEN a session's `survivingRegions` (the
+  // footage the reaper evicted from the middle, e.g. the "#3 dam"). Carved out of the buffer lane like
+  // a claim — but they go NOWHERE (not to the saved lane), so the block splits into one piece per
+  // surviving region with an eviction gap between. Head/tail trims are already handled by
+  // sessionStartMs/EndMs (the single window); this adds the interior holes a single window can't show.
+  // < 2 regions → no interior hole. Empty/absent `survivingRegions` (data-only/legacy) → nothing here.
+  const reapedClaims = useMemo<Claim[]>(() => {
+    const out: Claim[] = []
+    for (const s of sessions) {
+      const regions = s.survivingRegions
+      if (!regions || regions.length < 2) continue
+      const sorted = [...regions].sort((a, b) => a.startMs - b.startMs)
+      for (let i = 0; i < sorted.length - 1; i++) {
+        if (sorted[i + 1]!.startMs > sorted[i]!.endMs) {
+          out.push({ sessionId: s.id, startMs: sorted[i]!.endMs, endMs: sorted[i + 1]!.startMs })
+        }
+      }
+    }
+    return out
+  }, [sessions])
+  // The buffer carve subtracts saved ranges (claims) + interior reaped holes (reapedClaims). One memo
+  // so the carve memos stay referentially stable; no new array when there are no holes (the common case).
+  const carveClaims = useMemo<Claim[]>(
+    () => (reapedClaims.length ? [...claims, ...reapedClaims] : claims),
+    [claims, reapedClaims],
+  )
+
   // #1 INSTANT live build — ONE persistent live block, present the WHOLE time we're live. It spans
   // [liveSince → now] from the instant of go-live (liveSince is stamped then), so the clip appears
   // immediately and NEVER disappears. The bug before: I dropped the optimistic clip the moment the
@@ -500,7 +527,7 @@ export const ClipsScreen = () => {
     const carveSessions = (realLiveSessionId ? sessions.filter((s) => s.id !== realLiveSessionId) : sessions).filter(
       (s) => s.lane !== 'saved',
     )
-    const base = [...applySplits(carveBuffer(carveSessions, claims), effectiveSplits), ...drafts]
+    const base = [...applySplits(carveBuffer(carveSessions, carveClaims), effectiveSplits), ...drafts]
     // The live block is ONE [liveSince → now] piece, but a snip on it divides it like any other clip:
     // applySplits cuts at the live session's split points so the EARLIER (bounded) pieces become normal
     // draggable/saveable clips, while only the LAST piece reaches `now` (the still-growing frontier,
@@ -511,9 +538,9 @@ export const ClipsScreen = () => {
     // the snip points.
     // The live block goes to the buffered lane UNLESS this go-live is saved-lane (then savedLaneSessions
     // carries it).
-    if (liveClip && realLiveSession?.lane !== 'saved') base.push(...applySplits(carveLiveBlock(liveClip, claims), effectiveSplits))
+    if (liveClip && realLiveSession?.lane !== 'saved') base.push(...applySplits(carveLiveBlock(liveClip, carveClaims), effectiveSplits))
     return base
-  }, [sessions, claims, drafts, effectiveSplits, liveClip, realLiveSessionId, realLiveSession])
+  }, [sessions, carveClaims, drafts, effectiveSplits, liveClip, realLiveSessionId, realLiveSession])
 
   // U1 — saved-lane SESSIONS (retained from go-live; not yet materialised into durable Clips, so they
   // live in `sessions` with `lane:'saved'`, not in savedLaneReal). Carve them like buffer sessions but
@@ -521,10 +548,10 @@ export const ClipsScreen = () => {
   // savedLane below. Gated on `lane === 'saved'` → no effect on existing (buffer/absent-lane) data.
   const savedLaneSessions = useMemo<LaneClip[]>(() => {
     const ended = sessions.filter((s) => s.lane === 'saved' && s.id !== realLiveSessionId)
-    const out = applySplits(carveBuffer(ended, claims), effectiveSplits)
-    if (liveClip && realLiveSession?.lane === 'saved') out.push(...applySplits(carveLiveBlock(liveClip, claims), effectiveSplits))
+    const out = applySplits(carveBuffer(ended, carveClaims), effectiveSplits)
+    if (liveClip && realLiveSession?.lane === 'saved') out.push(...applySplits(carveLiveBlock(liveClip, carveClaims), effectiveSplits))
     return out
-  }, [sessions, claims, effectiveSplits, liveClip, realLiveSessionId, realLiveSession])
+  }, [sessions, carveClaims, effectiveSplits, liveClip, realLiveSessionId, realLiveSession])
   // Window the timeline to the buffer window: drop anything fully older than the reaper boundary
   // (removes SAVED clips older than the window). Clips straddling the boundary stay full-extent —
   // the timeline draws an advancing reaper MASK over their reaped part (smooth, on the UI thread),

@@ -47,6 +47,12 @@ export type BufferSession = {
   // backend → the grid falls back to the full media bounds (mediaStartOffsetMs/mediaDurationSec).
   survivingStartMs?: number | null
   survivingEndMs?: number | null
+  // CU3 D3 re-gate — surviving footage as a LIST of contiguous on-disk regions (`wrld-backend
+  // 3ff2cac`). The single window above can't express an INTERIOR hole (an evicted segment between two
+  // retained neighbours — the "#3 dam"); this can. A hole = a gap BETWEEN regions; a head trim →
+  // first region's start. The grid carves the gaps between regions out of the buffer lane (interior
+  // eviction edges). `[]` / absent (data-only / legacy / older backend) → fall back to the single window.
+  survivingRegions?: { startMs: number; endMs: number }[]
   kinds: BufferTrackKind[]
   playableKind: BufferTrackKind | null
   manifestUrl: string | null // tokenized HLS (unused by the thumbnail field, kept for later)
