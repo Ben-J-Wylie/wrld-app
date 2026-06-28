@@ -88,3 +88,14 @@ export async function saveCaptureConfig(config: CaptureConfig): Promise<void> {
     // Persistence is best-effort — a failed write shouldn't break arming.
   }
 }
+
+// Drop the persisted config so the next account on this device starts from
+// DEFAULT_CAPTURE_CONFIG. Called on sign-out — arming + the title are
+// device-local and must not leak between users.
+export async function clearCaptureConfig(): Promise<void> {
+  try {
+    await AsyncStorage.removeItem(KEY)
+  } catch {
+    // best-effort
+  }
+}

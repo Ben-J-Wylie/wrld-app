@@ -22,6 +22,7 @@ import { Text } from '@/components/primitives/Text'
 import { ScreenHeader } from '@/components/sections/ScreenHeader'
 import { useAuthStore } from '@/stores/authStore'
 import { usersApi } from '@/api/users'
+import { clearCaptureConfig } from '@/lib/captureConfig'
 import { theme } from '@/tokens/theme'
 import * as Notifications from 'expo-notifications'
 
@@ -85,6 +86,8 @@ export function SettingsScreen({ embedded = false }: { embedded?: boolean } = {}
     }
     clearWrldUser()
     qc.clear()
+    // Device-local arming + title must not carry to the next account on this device.
+    clearCaptureConfig().catch(() => {})
     router.navigate('/(app)/globe')
     try {
       await signOut()
