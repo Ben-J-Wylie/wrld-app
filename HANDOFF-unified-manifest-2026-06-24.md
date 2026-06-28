@@ -2162,3 +2162,40 @@ persistence/leak.)
 
 **Lane:** Aaron (`bufferService` reaper + the data-track storage). No app change — the app reads whatever
 the data route serves; correct culling just removes the on-disk leak.
+
+### Decision (Ben, 2026-06-28) — per-era telemetry json REJECTED; keep ONE shared chunked store + cull
+Considered: one `.jsonl` per era (each file only that era's samples; evict = delete the file, like a
+per-era thumbnail). **Rejected — keep the one shared, wall-clock-chunked store; the reaper culls it
+(Gap 3).** Rationale (don't re-litigate):
+1. **Eras don't exist at capture time** — the recorder streams samples live, before any snip (snips are
+   later, often retroactive). Per-era files would force a **re-cut on every snip** → moves rewrites from
+   background-reap to the interactive edit path (backwards).
+2. **Breaks zero-bytes snip/mend** — per-era = split a file on snip, concat on mend; chunked-views move
+   zero bytes (metadata only).
+3. **Couples the immutable data substrate to the mutable rules layer + splits the model** (media stays
+   chunked-views; telemetry would become per-era → two storage models, two reap paths). One-store keeps
+   **one eviction computation applied uniformly to every track**.
+**Thumbnails are different — per-era IS right** (a derived ~10KB label, not the substrate; deriving one
+per era on snip doesn't touch the data). Knob to make Gap 3's straddler-rewrites negligible: **chunk
+telemetry finely** (near segment cadence) → almost all reaped chunks are whole-file deletes.
+
+### Gap 4 — every ARMED data source must write an INITIAL STATE at go-live + each snip (DEVICE-CONFIRMED)
+**Device test (Ben, 2026-06-28):** after a broadcast, the **chat / location** folders (armed by default)
+were **empty** (and torch, if armed). Per §5.2 every armed source should register an initial state at each
+boundary so its track is self-contained + non-empty. Status:
+- **sensors (gyro/accel/speed/compass) — ✅ done:** `useTelemetryCapture.reemit` emits a baseline at
+  go-live + each snip.
+- **torch — ✅ if armed:** a `torchBaselineRef` baseline fires on go-live when torch is armed (torch is
+  NOT in the default air set, so an empty torch folder most likely = not armed).
+- **location — ⚠️ APP GAP (Ben's lane):** `sendLocationUpdate` is **fix-driven** (StreamScreen
+  ~1172/1254 — fires when a GPS update arrives), with no guaranteed initial emit. **Fix:** on go-live (and
+  at each snip) call `Location.getCurrentPositionAsync()` once → `sendLocationUpdate(...)` so the track
+  seeds immediately even when stationary. **Do NOT** add location to `useTelemetryCapture.reemit` (SP5 —
+  that double-fans/double-records; seed via the existing `sendLocationUpdate` path instead).
+- **chat — ⚠️ BACKEND GAP (Aaron):** the broadcaster never writes chat (it's viewer-sourced), so an armed
+  chat with no messages stays empty unless the recorder writes an **initial empty-thread marker** — Aaron's
+  "chat initial empty-thread / report armed-empty data tracks" work. Empty folder ⇒ not deployed/firing;
+  the "report armed-empty data tracks" safety net should also backstop any armed track that gets no app
+  samples (location/sensors included).
+**Both want a cross-repo pass:** confirm what was armed in the test, that Aaron's first-state/armed-empty
+work is deployed, then wire the location initial fix (app) + verify the chat marker (backend).
