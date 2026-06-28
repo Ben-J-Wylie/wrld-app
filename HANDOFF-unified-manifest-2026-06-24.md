@@ -1667,3 +1667,46 @@ short), that's the signal to land the overlap-based retain fix — which I'll do
 
 **Net:** the regions LIST is live and unblocks your render now; the interior-eviction MECHANICS fix
 (overlap-based retain) is queued for the re-gate where it can be verified with real footage.
+
+---
+
+## CU3 D3 — interior-eviction MECHANICS fix shipped (the dam is closed) — Aaron, 2026-06-27
+
+Followed `handoff: CU3_RETAIN_ONLY confirmed OFF`. With Ben's render half done and the report
+half (`survivingRegions`) shipped last turn, this closes the other half I'd diagnosed: the reaper
+now actually **evicts the interior unretained segment** (punches the hole), so `survivingRegions`
+will show it.
+
+**✅ Fix DONE + DEPLOYED-INERT (`wrld-backend 0b32c4d`, health 200).** The dam was
+`coveredByRetain`'s ±4s pad bridging a short interior segment (it's within both saved neighbours'
+edge-pads). The reaper now retains **media segments by PDT-extent OVERLAP**, not the padded mtime
+point: a segment is kept iff its `[start,end]` intersects a retained range — boundary segments
+overlap (kept), an interior unretained segment overlaps neither (**evicted**). It uses the
+segment's PDT extent (the same absolute-ms axis the retain ranges live on), which also removes the
+mtime↔PDT skew the pad was masking. Data `.jsonl` chunks, legacy/no-PDT segments, and the flag-off
+path keep the padded mtime test, so **nothing is ever newly under-protected** (overlap can only
+stop protecting an unretained segment, never evict a retained one).
+
+**🔒 Gated to the `CU3_RETAIN_ONLY` (single-authority) path — NO new flag.** With the flag OFF
+(its current state) the reaper is byte-for-byte unchanged, so deploy is inert. The fix activates
+together with the cutover when you flip `CU3_RETAIN_ONLY` ON at the re-gate — which is exactly the
+flip you're already gating. (Per Aaron's no-flag-clutter preference, I bundled it into the existing
+flag rather than add `CU3_OVERLAP_RETAIN`.)
+
+**Proof (the wiped buffer is why):** `cu3InteriorEviction.test.ts` writes a real on-disk 5-segment
+HLS session, saves #2 + #4, leaves #1/#3/#5 buffer, and asserts after a reap that **#3 is evicted
+while #2/#4 survive** — with #3's mtime deliberately inside the OLD ±4s pad of both neighbours (so
+the padded test *would* have bridged it; the overlap test is what evicts it). A second case proves
+a fully-retained run survives intact. 371 tests green.
+
+### ➡️ The re-gate (now turnkey — both halves are in)
+Flip **`CU3_RETAIN_ONLY` ON**, then on device: broadcast → snip into ≥4 segments → save #2 + #4,
+leave #1/#3 buffer → (tighten the tier window to force a reap) → reap. Expect:
+1. `GET /buffer/me` → the session's `survivingRegions` shows **two regions with a gap where #3 was**
+   (and #1 gone from the head) — and your render draws that interior hole.
+2. #3 is **gone from disk** (the eviction, not just the report).
+3. #2 + #4 (and the live tail) survive; the over-quota path still 409s.
+
+If green: keep `CU3_RETAIN_ONLY` ON for good (heed "no-flip-back once real retain-only saves
+exist"). **Both the eviction MECHANICS and the surviving-footage REPORT are now mine-complete** —
+the dam bug is closed pending your on-device confirmation at the flip.
