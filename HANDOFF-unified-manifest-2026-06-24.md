@@ -2271,3 +2271,27 @@ column, not the resolver. Parity-by-construction (soak was drift 0), so expected
 - **Owed:** Ben device sanity (globe live pins + a time-machine past-scrub render correctly — should be
   identical). Then let the flag-on read path soak a day or two clean → **Phase C** (the human-gated
   destructive collapse) is the next + final CU4 step.
+
+### Eviction representation gap — evicted eras still SHOWN in grid + time machine (Ben, post-flip 2026-06-28)
+Post-CU4-flip device check: time-machine PINS resolve correctly (parity holds ✓), but **evicted eras still
+appear** — ghost block in the clips grid + ghost pin in the time machine — where reaped content used to be.
+Evicted content must DISAPPEAR from every representation. Two backend surfaces, both predate the flag:
+
+- **Grid ghost — `survivingRegions` not splitting at interior holes (Aaron).** App render is **verified
+  correct**: `reapedClaims` (ClipsScreen) computes the hole between surviving regions, `carveClaims` adds
+  it, `carveBuffer` subtracts it → the block disappears AUTOMATICALLY **iff `survivingRegions` has ≥2
+  regions**. A persistent ghost ⇒ the GET /buffer/me surviving-regions walk is returning **1 region across
+  the evicted interior** (not splitting). Despite the 248b6ff claim that the walk existsSync-filters, the
+  device shows it isn't reflecting interior holes. **Diagnostic:** read `survivingRegions` for the ghosted
+  session — **1 region ⇒ backend (the walk)**; 2+ ⇒ ping Ben (app data-flow). Strong expectation: 1.
+- **Time-machine ghost — discover not clipping to surviving regions (Aaron).** The
+  windowed/tiled/`?at=`/cell discover feeds return a pin at an instant whose footage is evicted because
+  pin intervals aren't **intersected with per-session surviving regions** — exactly the follow-up flagged
+  in 248b6ff. (The app can't fix this client-side: for OTHER users' clips it has no surviving-region data;
+  the feed must clip.) **Do:** intersect each pin's visible interval with the session's surviving regions;
+  drop/clip the evicted spans. Adds per-pin disk awareness to the discover hot path (the noted cost).
+
+**One requirement, two reads:** the eviction the reaper performs on disk must be reflected in (a) the
+buffer report (`survivingRegions` splits) and (b) the discover feed (intervals ∩ surviving regions). Pairs
+with Gap 1 (directive GC) + Gap 3 (telemetry cull) — all the "make eviction visible/consistent everywhere"
+family. App render is ready for (a); (b) is purely backend. No app change owed pending the diagnostic.
