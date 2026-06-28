@@ -3791,61 +3791,17 @@ descriptor exposes a real chat track (Aaron's lane) — falls back to a self-con
 when `messages` is empty, so the gallery and the pre-track editor render. Pairs with the
 dashboard **Chat** flag (CHAT / NO CHAT multistate, same row shape as Identity/Location).
 
-###### `ClipToolRail`
-
-- **Tier:** feature (composes `Pressable` + `Icon`)
-- **Location:** `src/components/features/clip/ClipToolRail.tsx` *(built 2026-06-10)*
-- **Variants:** `rail` (default — 30px icons in a translucent-ink **column** overlaid on the field edge) · `shelf` (horizontal **row** of light 40×32 icon buttons on the page background — used on the clip editor's sticky bottom tools shelf)
-- **States:** per-item default / **warn** (destructive — accent icon) / disabled (dimmed, inert)
-- **Props:** `tools` (`ClipToolItem[]` = `{ key, iconName, label, onPress, disabled?, tone? }`), `variant?` (`rail` | `shelf`), `style?`
-
-**Code does:** An **action** rail (vs `SourceRail`'s view switch) — the buffer editor's
-clip tools: **select current clip · set in · set out · delete · trim · save · clear (✕)**.
-As of 2026-06-10 it renders on the editor's **sticky bottom tools shelf** (`variant="shelf"`,
-above the transport shelf + clock); the `rail` variant remains for an over-field column.
-Each button fires `onPress`; destructive tools (`tone: 'warn'`)
-tint the icon accent; disabled tools grey out. The parent (`ClipEditScreen`) owns the
-in/out bracket logic: select = bracket to the clip under the playhead; set-in/out = move
-that edge to the playhead (out-before-in pulls the in back); delete/trim = confirm →
-**backend buffer mutation (Aaron)**; save = opens the `SaveClipSheet`; clear = drop the
-bracket. These replace the old below-field New clip / Reset / Save buttons.
-
-###### `SaveClipSheet`
-
-- **Tier:** feature (composes `Input` + `Button` + `Text` in a `Modal` + `KeyboardAvoidingView`)
-- **Location:** `src/components/features/clip/SaveClipSheet.tsx` *(built 2026-06-10)*
-- **Props:** `visible`, `defaultName?`, `durationLabel?`, `onSave(name)`, `onCancel`
-
-**Code does:** The name-this-clip modal — a keyboard-aware bottom sheet opened by the tool
-rail's **Save** (replacing the persistent below-field name input). Auto-focuses the name
-field so the keyboard rises and the sheet floats above it (the `AuthModal` Modal +
-`KeyboardAvoidingView` pattern); optional duration line under the title; Save confirms,
-Cancel / backdrop dismisses. The **`ClipSourcesDrawer` save-set is retired from the editor**
-— a saved clip just carries the sources its footage captured (derived at save time).
+> **`ClipToolRail` + `SaveClipSheet` — RETIRED 2026-06-28.** Both were `ClipEditScreen`-only
+> (the bracket-trim editor that was retired with the grid + `SegmentSettingsSheet` taking over).
+> Components, gallery entries, and these Section-3 rows deleted in the editor-retirement prune.
 
 ---
 
 **Screen assemblies (screens tier — not Section-3 component rows):**
 
-- **`ClipEditScreen`** *(built 2026-06-06 · route `app/(app)/clip-editor.tsx`,
-  reached from **Me → Clip editor**)*: `ScreenHeader` ("Clip editor", back
-  chevron) + `ScreenScroll` + a `PageTabs` pager (**Editor ↔ Saved clips**).
-  Editor page = `BufferScrubField` + `BufferTimeline`
-  (+ `ClipBracket` / `SavedClipRegion` / `GapMarker` / `TimelineScrollbar`) +
-  New-clip/Reset + Sources buttons + name `Input` + `SaveClipButton`
-  + `ClipSourcesDrawer`; Saved page =
-  `SavedClipRow` list with empty state. The **time-machine `TimeScrubber` is
-  overlaid at the field's bottom as the buffer clock** — expand it to spin-scrub the
-  buffer; the field swipe and the timeline scrub drive the same value. All three
-  share one `offsetMs` (0 = live head; a 1s tick keeps the timeline playhead in
-  lockstep with the clock). Field + timeline are full-bleed so the clock's six
-  wheels fit. **While the clock is expanded the screen scroll is locked** (so the
-  wheels spin without the page scrolling — via `ScreenScroll`'s `scrollEnabled`);
-  touching the image or anything below the clock collapses it (`collapseSignal`) and
-  restores scroll. Save = private draft, appends a `SavedClipRegion` + auto-advances
-  to the Saved page. **Runs on mock buffer data**
-  (a clearly-marked `MOCK SEAM` / `useMockBuffer` — Aaron's C1 substrate swaps in
-  there).
+- **`ClipEditScreen`** — **RETIRED 2026-06-28.** The buffer-trim/bracket editor (the
+  `[Clips|Editor]` pager) was superseded by the **Clips grid + `SegmentSettingsSheet`**
+  (double-tap → per-segment settings + preview) and deleted along with its route + the pager.
 - **`LibraryScreen`** *(reskinned 2026-06-06 · existing route, Me → Library)*:
   the real recordings list (`useRecordings` / `recordingsApi`, unchanged) now
   renders each `Recording` as a `SavedClipRow` (date→title, status→tags, meta line,

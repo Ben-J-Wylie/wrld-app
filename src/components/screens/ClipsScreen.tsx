@@ -1037,7 +1037,11 @@ export const ClipsScreen = () => {
   // (so play still starts from the centre playhead) — so while a selection is held and we're idle,
   // show it. Playing / scrubbing / a blurred selection → show the clip at the PLAYHEAD.
   const showSelection = !!selectedClip && !playing && !scrubbing
-  const displayClip = showSelection ? selectedClip : (clipAtPlayhead ?? viewerClip)
+  // In a gap / past the last clip, `clipAtPlayhead` is null. Hold the last-played clip (`playerClip`,
+  // which the player already keeps) instead of `viewerClip` — `viewerClip` is center-based and could
+  // resolve to the FIRST clip, flashing #1's title/id when scrolling the clock past the last clip.
+  // `viewerClip` stays the final fallback (before any scrub, when `playerClip` is still null).
+  const displayClip = showSelection ? selectedClip : (clipAtPlayhead ?? playerClip ?? viewerClip)
 
   // Riding the now edge while broadcasting → show the ACTUAL live camera feed (same as the stream
   // page), not the buffer VOD (whose live edge trails real-time by seconds). The moment you scrub

@@ -76,8 +76,6 @@ import { BufferTimeline, type TimelineLane } from '@/components/features/clip/Bu
 import { BufferScrubField } from '@/components/features/clip/BufferScrubField'
 import { BufferTransport } from '@/components/features/clip/BufferTransport'
 import { SourceRail, type SourceRailItem } from '@/components/features/clip/SourceRail'
-import { ClipToolRail, type ClipToolItem } from '@/components/features/clip/ClipToolRail'
-import { SaveClipSheet } from '@/components/features/clip/SaveClipSheet'
 import { SourceWaveform } from '@/components/features/clip/SourceWaveform'
 import { SourceTelemetryGraph } from '@/components/features/clip/SourceTelemetryGraph'
 import { SourceLocationTrail } from '@/components/features/clip/SourceLocationTrail'
@@ -1523,22 +1521,6 @@ export function FeatureGallery() {
         </Row>
       </Section>
 
-      <Section title="ClipToolRail">
-        <Row label="rail — dark ink column overlaid on the field edge">
-          <View style={{ backgroundColor: '#1a1612', padding: theme.spacing.md, borderRadius: theme.radius.md }}>
-            <ClipToolRail tools={CLIP_TOOL_DEMO} />
-          </View>
-        </Row>
-        <Row label="shelf — horizontal light row for a bottom shelf">
-          <ClipToolRail tools={CLIP_TOOL_DEMO} variant="shelf" />
-        </Row>
-      </Section>
-
-      <Section title="SaveClipSheet">
-        <Row label="keyboard-aware name modal (opens from the tool rail's Save)">
-          <SaveClipSheetDemo />
-        </Row>
-      </Section>
 
       <Section title="GapMarker">
         <Row label="10px collapsed-gap break (no label)">
@@ -2138,44 +2120,6 @@ const MOCK_TRAIL: [number, number][] = Array.from({ length: 22 }, (_, i) => [
   51.5074 + 0.0006 * Math.sin(i * 0.5),
 ])
 const VIEWER_PROGRESS = 0.6
-
-const CLIP_TOOL_DEMO: ClipToolItem[] = [
-  { key: 'select', iconName: 'crop', label: 'Select current clip', onPress: () => {} },
-  { key: 'in', iconName: 'log-in', label: 'Set in point', onPress: () => {} },
-  { key: 'out', iconName: 'log-out', label: 'Set out point', onPress: () => {} },
-  { key: 'delete', iconName: 'trash-2', label: 'Delete selected', onPress: () => {}, tone: 'warn' },
-  { key: 'trim', iconName: 'scissors', label: 'Trim selected', onPress: () => {}, tone: 'warn', disabled: true },
-  { key: 'save', iconName: 'save', label: 'Save clip', onPress: () => {}, disabled: true },
-  { key: 'clear', iconName: 'x', label: 'Clear selection', onPress: () => {} },
-]
-
-function SaveClipSheetDemo() {
-  const [open, setOpen] = useState(false)
-  return (
-    <View>
-      <Pressable
-        variant="default"
-        onPress={() => setOpen(true)}
-        style={{
-          alignSelf: 'flex-start',
-          paddingHorizontal: theme.spacing.md,
-          paddingVertical: theme.spacing.sm,
-          borderRadius: theme.radius.md,
-          borderWidth: 1,
-          borderColor: theme.colors.border.strong,
-        }}
-      >
-        <Text variant="bodyEmphasized">Open save sheet</Text>
-      </Pressable>
-      <SaveClipSheet
-        visible={open}
-        durationLabel="0:18 clip"
-        onSave={() => setOpen(false)}
-        onCancel={() => setOpen(false)}
-      />
-    </View>
-  )
-}
 
 function BufferSourceViewerDemo() {
   const [view, setView] = useState('camera')
