@@ -1781,3 +1781,60 @@ reflected up the stack:**
   gap (`survivingRegions` → 2 regions), the ghost+serve, AND the seek mis-alignment/stalls. Head/tail
   pruning already happens; interior doesn't. Higher priority than thought (corrupts playback, not just UI).
 - App render unchanged (correct + ready; draws the gap once `survivingRegions` splits).
+
+---
+
+## CU3 D3 re-gate — REPORT/SERVE fix shipped: interior deletions now reflected (Aaron, 2026-06-28)
+
+Took the CURRENT TOP PRIORITY (prune interior-deleted segments from the served playlist) and the
+re-gate #2 evidence. The interior-eviction MECHANICS were already proven on disk; this closes the
+report/serve half so disk reality reaches the grid, the player, and (for playback) the time machine.
+
+**✅ DONE + DEPLOYED (`wrld-backend 248b6ff`, health 200, NOT flag-gated).** The reaper deletes
+evicted segment FILES but never edits the on-disk `stream.m3u8` (R1b-final still lists them), and the
+served per-session manifest route was doing a **naive rewrite of every line** → the player 404s on
+the deleted segments AND its media-time↔segment mapping shifts → a clip plays the WRONG footage /
+stalls (the run-2 corruption). Fixed:
+- New pure `src/lib/hlsManifest.ts` `rewriteSurvivingPlaylist` (6 unit tests): the served manifest is
+  rebuilt from **surviving segments only** (existsSync per segment), and each hole (interior, head, or
+  tail) drops its tags + inserts an **`#EXT-X-DISCONTINUITY`** before the next kept segment so the
+  player bridges the gap cleanly (surviving segments keep their original PDT + decode times).
+  `GET /buffer/stream/:sessionId/:kind/index.m3u8` now routes through it. (The private path already
+  pruned via `buildDraftPlaylist`; a saved clip's range has no interior holes by definition.)
+- `survivingStart/EndMs` now derive from the surviving **regions** — `end = LAST region end` (was
+  `start + sum-of-durations`, which under-reported across a hole → cut the tail). Head-only / no-hole
+  sessions are byte-identical.
+- The `survivingRegions` walk already existsSync-filters (shipped 3ff2cac) → the grid gap + the served
+  manifest now both reflect on-disk survival.
+- **Not flag-gated**: pruning only ever drops would-be-404 segments, so it's strictly safer and also
+  fixes the head-reaped 404s on the legacy (flag-OFF) path today.
+
+**On the "1 vs 2 regions" you flagged:** the walk has existsSync, so once the reaper has actually
+deleted #3, `survivingRegions` is **2** and your `reapedClaims` draws the gap — if you saw 1, it was
+likely read **before** that reap pass completed (reaper runs every 30s; the window has to be tight
+enough to drop #3 in-window). Re-check `GET /buffer/me` a beat after the reap.
+
+**➡️ Re-gate, now turnkey (flag ON):** broadcast → snip ≥4 → save #2/#4, leave #1/#3 → tight window →
+reap, then expect: (1) `survivingRegions` = **2 regions with the #3 gap** → grid draws the hole;
+(2) the buffer/time-machine **plays correct footage** (no wrong-segment/stall — the manifest is
+pruned + discontinuity-bridged); (3) #1 gone from the head, #2/#4 + live tail survive. If green →
+**flip `CU3_RETAIN_ONLY` ON for good** ("no-flip-back once real retain-only saves exist"), then drop
+the bespoke `saveClip`/`unsaveClip` (app's on `patchDirectives` now).
+
+**Known residual (cosmetic, low-pri):** clips/buffer **discover** still shows a *pin* during a hole's
+instant — but tapping it now plays the **pruned** manifest, so it no longer scrambles. Making discover
+intervals reflect holes needs per-pin surviving-region disk reads on the hot discover path; deferred
+unless it bites. (The run-2 "shows + plays all 4" → after this, it may still *show* #1/#3 pins but
+won't *misplay*.)
+
+### On `docs(CU4): LOCK the schema` — read + ready
+I've absorbed the locked CU4 model: **materialized segments / resolve-at-write** — one full
+standalone rule object per era (all 7 axes concrete, no null/inherit), `Clip` + `ClipRange` +
+`DirectiveRange` + `ClipTrack` → one `Clip = range + 7 axes over Track`, `resolveClipAxes` collapses
+to a plain column read, snip = copy-the-rule-object, mend = pick-a-winner, one discover feed, the
+rename, and a backfill that materializes every existing clip's inherited values. My lane is the
+schema collapse + the resolve-at-write backfill (it generalises D2 — always write a full opening rule
+object). **Gated on CU3 proving on device** — i.e. this re-gate going green + `CU3_RETAIN_ONLY` ON for
+good. Once you confirm the re-gate, say the word and I'll start CU4 (it wants a focused joint window —
+schema migration touches all read/write paths). Until then CU3 is complete on my side pending your
+on-device confirmation.
