@@ -2102,3 +2102,38 @@ cutover makes permanent.
 drift-monitored; the resolver is provably redundant once the soak is clean. Remaining is two human
 flips (soak → `CU4_UNIFIED_DISCOVER` ON) then the Phase C cutover session. Nothing of mine is
 blocking.
+
+## CU model gaps surfaced 2026-06-28 (materialized-segments lifecycle) — Aaron backend + 1 app consumer
+Two things the materialized "one standalone rule object per era" model IMPLIES but the build doesn't do
+yet. Both confirmed against the code. Neither blocks the soak; do alongside/after Phase C.
+
+> **The principle (the lens for both):** per era you get a **rules object** (metadata) + *should* get a
+> **thumbnail** (a derived artifact). But **footage AND telemetry are shared, wall-clock-chunked files**
+> the era is a time-slice *view* over — never per-era copies (one-store / retain-in-place; snip + save
+> move zero bytes). So data files are NOT per-era; rules + thumb ARE.
+
+### Gap 1 — the reaper must GC / trim DirectiveRange rows on eviction (Aaron, backend)
+A reapable era whose footage is fully evicted governs nothing → its rule is dead and should be
+**deleted**; if eviction lands mid-era, the rule should be **trimmed** to the surviving edge (mirror
+`survivingRegions`). Only reapable eras ever evict (retained eras are pinned), so the rule "delete the
+directive when its footage is gone" is exactly the reapable set — safe (moderation holds are a separate
+copy; saved clips are retained so their rules persist).
+- **Today:** `bufferService` reaper deletes segments + reconciles byte/earliest counters but **does NOT
+  touch `DirectiveRange` rows** — they only vanish when the WHOLE session cascade-reaps. Partially-reaped
+  sessions accumulate dead/over-long directive rows (low-harm metadata cruft, but wrong per the model).
+- **Do:** after evicting a range, delete the `clipId=null` directive eras fully inside the evicted span +
+  trim the start of an era straddling the eviction edge. Ordering: evict → then reconcile directives
+  (never delete a directive the retain decision still needs). Same pass that already computes
+  `survivingRegions`.
+
+### Gap 2 — per-era thumbnails (Aaron backend pipeline + Ben app consumer)
+Today the thumbnail is **per-session** (one camera poster, `/buffer/stream/:sessionId/camera/thumb.jpg`),
+so after a snip both eras share it. Each era should show a representative frame **from within its own
+range**. A thumbnail is a tiny DERIVED artifact (not a footage copy), so per-era thumbs do NOT violate
+one-store.
+- **Blocked on the server frame pipeline (Aaron's stacked item):** client `generateThumbnailsAsync`
+  HANGS on the `-c:v copy` HLS VOD (confirmed dead, gated off). Needs server-side interval JPEGs / a
+  sprite. Once that exists: "on snip, pick a frame from each era's range" is cheap (choose an instant
+  inside `[startMs, endMs]`, e.g. the era's start or midpoint).
+- **App consumer (Ben, trivial once URLs exist):** the grid blocks / cards / `SegmentPreview` already
+  take a thumbnail/poster URL — feed the per-era thumb URL into the same prop (only the source changes).
