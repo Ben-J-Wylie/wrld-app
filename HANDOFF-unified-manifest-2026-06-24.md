@@ -1992,3 +1992,52 @@ dead columns. Run with a human after the A4 decision + a clean soak. Not started
 **Net:** the materialization foundation is in prod, idempotent, drift-monitored, fully reversible
 (drop one column). The next move is a 5-minute human decision (unify precision on
 `stream.locationPrecision`?) — that unblocks A4-routing → B → the Phase C cutover.
+
+---
+
+## CU4 — precision decision IMPLEMENTED + resolve-at-write wired (Aaron, 2026-06-28)
+
+Took the resolved decision (unify on `stream.locationPrecision`). Steps 1 + the substance of 2 are
+DONE + DEPLOYED (`wrld-backend acada7f`, health 200, 25/25 materialized, 0 drift). Steps 3/4 status
+below.
+
+**✅ Step 1 — resolve-at-write.** Every authority (clipId=null) directive write now bakes
+`materializedAxes` at write time with the session's canonical fallback (stream go-live defaults), so
+the column is always fresh — never NULL until the next boot's backfill. Wired into all four writers:
+`patchDirectives` (per-segment edit), `snip` (snip-at-now), internal `allocate` (D2 opening retain
+era), internal `source-snip` (D4 AV toggle). New `sessionAxisFallback` + `materializedAxesValue`
+helpers. +1 DB test (a resolve-at-write row is verifier-drift-free).
+
+**✅ Step 2 — the behavior change (the decision itself).** `GET /buffer/session/:id` dropped its
+`precision='exact'` special-case and now falls back to `stream.locationPrecision`, matching
+discover/buffer-me. A null-precision era resolves IDENTICALLY on every surface → the resolver + the
+materialized column agree everywhere; **the per-surface divergence is gone** (done-bar A reached:
+the resolver is provably redundant — column == resolver on every surface). *(Owner-editor output
+shift is the accepted, decided one; on-device spot-check owed.)*
+
+**🟡 Step 2 — the LITERAL "route reads through the column" — deliberately NOT done, here's why.**
+After the fallback unification, replacing each `resolveClipAxes(...)` call with a raw column read is
+now **behavior-neutral for the session-fallback surfaces** (discover ×3 · buffer/session ·
+buffer-me buffer-pins) — pure mechanical refactor. BUT the **saved-clip read** (`GET /buffer/me/clips`)
+resolves over the session's clipId=null directives with a **CLIP-level fallback** (the clip's own
+clipId-SET carry-through + `c.title`/`c.locDisplayPrecision`/`c.attributed`), which the
+session-directive's `materializedAxes` (baked with the STREAM fallback) does NOT capture. Routing
+saved clips through that column would change their title/precision/identity for null-session-field
+eras (clip-level → stream-level) — a behavior change beyond the precision decision. That only resolves
+cleanly in **Phase C**, when the clip gets its OWN materialized columns. So the literal column-routing
+is a Phase-C move; the fallback-unification already delivers done-bar A without it. (Routing just the
+session-fallback surfaces now would be safe but buys nothing — they already equal the column.)
+
+**🟢 Step 3 — Phase B is now UNBLOCKED (recommend a short soak first).** The divergence is gone, so a
+unified feed reading the materialized column will parity-match the legacy feeds → B2 reachable. It's a
+substantial build (one feed replacing the windowed/tiled/`?at=` split) behind a default-OFF flag.
+**Recommendation:** let the startup **drift-verify soak** a few days first (it WARNs on any
+column≠resolver drift each boot) to bank confidence that resolve-at-write keeps the column honest
+across real edits, THEN build B. I didn't start B unattended on freshly-deployed resolve-at-write —
+it wants the soak + is the right size for a focused session. Say the word and I'll build it.
+
+**Step 4 — Phase C** stays human-gated (the destructive collapse + promoting `materializedAxes` →
+named columns + the rename; that's where saved-clip column-routing + dropping the resolver land).
+
+**Net:** the decision is live (precision unified everywhere), the column is fresh + consistent +
+drift-monitored, done-bar A is met. Next is the soak → Phase B → human-gated Phase C.
