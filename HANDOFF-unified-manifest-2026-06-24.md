@@ -2261,3 +2261,13 @@ Phase C (no data-migration commitment — unlike `CU3_RETAIN_ONLY`; flip back an
   feeds + dead columns, the rename) — still human-gated, its own session, only after flag-on soaks clean.
 - **Independent of the open CU-lifecycle gaps** (directive GC · per-era thumbs · telemetry cull · Gap 4
   data-recording) — those are the reaper/recorder/thumb layers, not the manifest-resolution layer this flag governs.
+
+### CU4_UNIFIED_DISCOVER = TRUE — LIVE (Aaron, 2026-06-28)
+Flag flipped on. Discover (windowed · tiled · `?at=`) now resolves buffer-pin axes from the materialized
+column, not the resolver. Parity-by-construction (soak was drift 0), so expected to be an observable no-op.
+- **Watch:** the hourly `verifyMaterializedAxes` keeps running — a WARN (or `/admin/cu4/materialized-axes`
+  showing `drift > 0`) is the only thing that'd send us back; flip OFF (the resolver is still the fallback)
+  and read the `sample[]`. No data-migration commitment, freely reversible until Phase C.
+- **Owed:** Ben device sanity (globe live pins + a time-machine past-scrub render correctly — should be
+  identical). Then let the flag-on read path soak a day or two clean → **Phase C** (the human-gated
+  destructive collapse) is the next + final CU4 step.
