@@ -1778,19 +1778,26 @@ export const ClipsScreen = () => {
             .catch(revert)
         return
       }
+      // CU3 D3 step 1b — un-save a WHOLE clip via the unified keep path: keep:'reapable' over its range
+      // → Aaron's patchDirectives side-effect removes the overlapping retain-in-place Clip + reclaims
+      // storage; the reaper then evicts the footage (flag ON). Same optimistic `pendingDelete` hide.
+      // Copied legacy clips (no buffer session — their /media copy isn't a retain directive) keep the
+      // legacy delete. (The scissor-PIECE trim path above stays on `patchClip` for now — its partial-
+      // region retain delta has a re-materialise edge that's an Aaron-side follow-up.)
       setPendingDelete((prev) => new Set(prev).add(clip.id))
-      bufferApi
-        .deleteSavedClip(clip.id)
-        .then(() => qc.invalidateQueries({ queryKey: ['buffer', 'clips'] }))
-        .catch(() =>
-          setPendingDelete((prev) => {
-            const next = new Set(prev)
-            next.delete(clip.id)
-            return next
-          }),
-        )
+      const revertDelete = () =>
+        setPendingDelete((prev) => {
+          const next = new Set(prev)
+          next.delete(clip.id)
+          return next
+        })
+      if (clip.sourceSessionId) {
+        keepWrite(clip, 'reapable', revertDelete)
+      } else {
+        bufferApi.deleteSavedClip(clip.id).then(() => qc.invalidateQueries({ queryKey: ['buffer', 'clips'] })).catch(revertDelete)
+      }
     },
-    [qc, realSavedData, pendingUnsave],
+    [qc, realSavedData, pendingUnsave, keepWrite],
   )
 
   // On focus (e.g. returning from the editor after an edit/save), refresh all sources so the
