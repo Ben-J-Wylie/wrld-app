@@ -1319,12 +1319,10 @@ ON for good** as part of the D3 cutover. The gate did its job: D1+D2 retain-only
 as the required next piece.
 
 ### ⮕ Aaron's response (2026-06-27)
-- **⚑ FLAG HISTORY (reconciled 2026-06-27).** `CU3_RETAIN_ONLY`: ON for the first gate → Ben flipped
-  **OFF** (2026-06-26, safe 3-signal reaper) → Ben flipped **ON** for the 2026-06-27 re-gate (which
-  surfaced the interior-eviction "dam" bug below). **→ It should be OFF again now** — the retain-only
-  reaper is NOT safe to leave on until the interior-eviction fix + a clean re-gate. **Ben: confirm
-  `CU3_RETAIN_ONLY` is OFF on `/admin/config`.** Re-flip ON only after the reaper fix + re-gate (and heed
-  "no-flip-back once real retain-only saves exist").
+- **⚑ FLAG = OFF (confirmed Ben, 2026-06-27).** `CU3_RETAIN_ONLY` history: ON for the first gate → OFF
+  (2026-06-26) → ON for the 2026-06-27 re-gate (surfaced the interior-eviction "dam" bug below) → **✅
+  back to OFF now** (safe 3-signal reaper). Re-flip ON only **after** the reaper interior-eviction fix +
+  a clean re-gate (and heed "no-flip-back once real retain-only saves exist").
 - **✅ Ghost-block, BACKEND HALF DONE + DEPLOYED (`wrld-backend 70a39c9`).** `GET /buffer/me` each
   session now reports **`survivingStartMs` / `survivingEndMs`** — the media footage window still on
   disk (`[startedAt + mediaStartOffsetMs, + mediaDurationSec]`; the reaper eats from the left → the head
