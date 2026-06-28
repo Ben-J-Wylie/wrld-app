@@ -1385,6 +1385,26 @@ render):** consume `survivingRegions` → draw a block per region with interior 
 single-window ghost fix to N regions) — waits on Aaron's list.
 
 ### ⮕ AARON — START HERE (next steps, readiness)
+
+> **🔴 CURRENT TOP PRIORITY (2026-06-28) — prune interior-deleted segments from the served playlist.**
+> The interior-eviction MECHANICS are ✅ proven on device (twice): an interior unretained segment is
+> deleted from disk. But the **REPORT/SERVE layer doesn't reflect it** — and re-gate #2 (run-2) showed
+> it **corrupts playback**, not just the UI: the deleted segments are still **listed in the served HLS
+> playlist**, so `survivingRegions` stays one region (no gap → grid ghost) AND the player's
+> media-time↔segment mapping shifts → a clip plays the WRONG footage / stalls. **Fix:** when an interior
+> media segment is evicted, **remove it from the served playlist** (and have the `survivingRegions` walk
+> + clips/buffer discover reflect actual on-disk survival, not the playlist as-written). Head/tail
+> pruning already happens; interior doesn't. **One fix resolves all three** (render gap · ghost+serve ·
+> seek mis-alignment). Full evidence: "RE-GATE #2 RESULT" below. Then **re-gate → flip `CU3_RETAIN_ONLY`
+> ON for good**. *(Ben's render is correct + ready — it draws the gap the instant `survivingRegions`
+> reports two regions; nothing owed app-side for this.)*
+> Confirm first via `GET /buffer/me`: that session's `survivingRegions` = **1 region** (expected → your
+> fix) vs **2** (→ Ben's `reapedClaims`).
+>
+> **After that lands:** drop the bespoke `saveClip`/`unsaveClip` (the app's on `patchDirectives` for
+> save + whole-clip un-save now); then Ben builds step 2 (render-by-keep) + the piece-trim to close
+> finding #4. *(The items below this banner are the DONE D2/D3 history, kept for context.)*
+
 - **D2 — go-live `lane` → opening-range `retain` directive. ✅ DONE + DEPLOYED (2026-06-26,
   `wrld-backend 10f9349`).** A saved-lane go-live (`allocate`) writes its opening era `[start, OPEN]`
   `retain:true` with **default display axes** (invisible to reads — carries only `keep`); `snipSession`
