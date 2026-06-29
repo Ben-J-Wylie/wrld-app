@@ -320,3 +320,39 @@ retained sub-ranges): a deliberate reaper enhancement — the design avoided tri
 mid-file (unsafe under append), but a sealed chunk could be filtered. Scoped, not started — Aaron's lane
 (`wrld-backend bufferService.reapBuffers`), no app/CU4 dependency. Flagging for the backlog; flag if you
 want it prioritized.
+
+---
+
+## ⮕ Ben → Aaron, 2026-06-29 — VERIFIED this session + YOUR PENDING QUEUE
+
+**Verified on device (closed):**
+- **Gap 4 — recorder data-track persistence ✅ CLOSED.** Torch/location/chat/sensors now print to the
+  server (your race-flush `04b6f60` + chain-isolation `7f658a0` work).
+- **CU4-c ✅ working** — era-preference edits proliferate to every surface (canonical read path live;
+  the app adapter flip `57fd72f` + your `cd77ea9` surface). *(Assumes `cd77ea9` deployed — the app falls
+  back to legacy safely if not; confirm it's on the box.)*
+
+**Your pending queue (priority):**
+
+1. **🔴 Eviction representation (ghosts) — TOP, device-confirmed.** Evicted eras still render in the
+   **timeline + time machine**. Two backend surfaces (app render is verified-ready, no app change owed):
+   - **(a) grid:** `GET /buffer/me` `survivingRegions` must **split at interior holes** (Ben's
+     `reapedClaims`→`carveBuffer` auto-removes the block once it returns ≥2 regions). **Diagnostic:** read
+     `survivingRegions` for a ghosted session — **1 region = the walk isn't splitting** (strong expectation).
+   - **(b) time machine:** the discover feeds (`?at=`/windowed/tiled/cell) must **intersect each pin's
+     interval with the session's surviving regions** (drop/clip evicted spans).
+   - Detail: `HANDOFF-unified-manifest-2026-06-24.md` → "Eviction representation gap" + backlog #3. (Also
+     subsumes the re-gate-#3 ~2s boundary slivers — same surviving-regions accuracy.)
+2. **🔴 Telemetry cull on eviction — PRIVACY.** Reaper evicts media but leaves the telemetry `.jsonl`, so
+   a reaped unkept era's location/chat/sensors persist on disk. Cull the shared chunked store. → backlog #2.
+3. **🟡 Directive GC/trim on eviction — cruft.** Reaper leaves `DirectiveRange` rows for fully-evicted
+   reapable eras. → backlog #4.
+4. **🟡 Per-era thumbnails — enhancement.** Needs the server frame pipeline (client gen hangs on
+   `-c:v copy`). App consumer trivial once URLs exist. → backlog #5.
+5. **CU4-d — the structural collapse (joint, when you're ready).** Fold `ClipRange`+`ClipTrack` into the
+   canonical range-with-axes row + one discover feed; `resolveClipAxes` collapses to a column read. Open
+   questions (table name · one-feed shape · destructive backfill order) at the top of this doc — needs a
+   joint kickoff (Ben in lockstep for the app types). Then CU5 deletes the old + the flags.
+
+App lane is clean — nothing owed from Ben until the grid `survivingRegions` returns ≥2 (auto-draws) or
+the CU4-d kickoff. Ben can device-spot-check C6 (scrub a saved clip → data source replays) anytime.
