@@ -16,8 +16,14 @@ import { useLegalDoc } from '@/hooks/useLegalDoc'
 import { theme } from '@/tokens/theme'
 
 export function LegalDocScreen() {
-  const { slug } = useLocalSearchParams<{ slug: string }>()
+  const { slug, from } = useLocalSearchParams<{ slug: string; from?: string }>()
   const { data: doc, isLoading, isError, refetch, isRefetching } = useLegalDoc(String(slug))
+
+  // legal/[slug] is a tab screen (href: null), so router.back() is a no-op here
+  // (same gotcha as stream/[id]) — navigate to the origin explicitly. Defaults to
+  // Settings; the creator-onboarding TOS step passes ?from=onboarding.
+  const goBack = () =>
+    router.navigate(from === 'onboarding' ? '/(app)/creator-onboarding' : '/(app)/settings')
 
   // The header shows the document title, so drop a leading `# Title` H1 from the
   // body to avoid showing it twice.
@@ -25,7 +31,7 @@ export function LegalDocScreen() {
 
   return (
     <ScreenScroll
-      header={<ScreenHeader title={doc?.title ?? 'Legal'} onBack={() => router.back()} />}
+      header={<ScreenHeader title={doc?.title ?? 'Legal'} onBack={goBack} />}
       contentContainerStyle={styles.content}
     >
       {isLoading ? (
