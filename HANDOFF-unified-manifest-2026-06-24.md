@@ -2301,11 +2301,14 @@ All surfaced from Ben's device testing during the CU4 soak. **All backend** (rea
 thumb layers) — **independent of the CU4 manifest-resolution flag** (which is flipped + clean) and distinct
 from CU4 **Phase C** (the destructive collapse) + the CU3 close-out. Suggested priority top→bottom:
 
-1. **Recorder data-track persistence — TOP, CONFIRMED.** Telemetry relays to viewers but isn't written to
-   the buffer `.jsonl` → ALL data tracks (torch/location/chat) record empty → saved clips carry no data
-   tracks (C6 playback + "every source saves" are dark). Verified by the torch disambiguation test (lamp
-   reacts live, disk empty). Fix the recorder sink + verify the `ts/t` data-sample fix is deployed + the
-   "report armed-empty data tracks" marker. → **detail: "Gap 4 — RESOLVED to a single BACKEND bug" (L2222)**
+1. **Recorder data-track persistence — ✅ FIXED IN CODE (Aaron 2026-06-29), ⏳ PENDING DEPLOY + RE-TEST.**
+   Root cause refined: not "sink never runs" — a **recording-start race** (recorder starts ~5s after
+   go-live; one-shot baselines emitted in that window are fanned to viewers but dropped from the record →
+   lamp reacts live, disk empty) **+** a **chain-teardown bug** (a starved chain, e.g. audio no-RTP, tore
+   down ALL tracks mid-broadcast). Fixes: `wrld-mediasoup 04b6f60` (stash latest sample per kind on the
+   room, flush as initial state at `startRecording`) + `7f658a0` (isolate a dead chain's ffmpeg exit).
+   **NOT yet deployed** (restart interrupts live broadcasts — run by hand). **Re-test after deploy:** arm
+   torch/location/chat → go live → folders fill. → **detail: "Gap 4 — RESOLVED to a single BACKEND bug" (L2222)**
 2. **Telemetry cull on eviction — PRIVACY.** Reaper evicts media but leaves the telemetry `.jsonl`, so a
    reaped unkept era's location/chat/sensor data persists on disk (retention leak). Cull the shared chunked
    store (delete fully-evicted chunks; rewrite a straddler). → **detail: "Gap 3" (L2141)**
