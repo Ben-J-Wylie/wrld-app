@@ -30,6 +30,7 @@ import { AvatarPicker } from '@/components/features/user/AvatarPicker'
 import { RulesChecklist, type Rule } from '@/components/features/onboarding/RulesChecklist'
 import { ConsentRow } from '@/components/features/onboarding/ConsentRow'
 import { LegalLinkList } from '@/components/sections/LegalLinkList'
+import { LegalDocSheet } from '@/components/sections/LegalDocSheet'
 import { theme } from '@/tokens/theme'
 import { usersApi } from '@/api/users'
 import { useAuthStore } from '@/stores/authStore'
@@ -60,7 +61,8 @@ export function OnboardingScreen() {
   const setWrldUser = useAuthStore((s) => s.setWrldUser)
   const setCurrentUser = useSetCurrentUser()
 
-  const [step, setStep] = useState<Step>('handle')
+  const [step, setStep] = useState<Step>('legal')
+  const [legalSheet, setLegalSheet] = useState<string | null>(null)
   const [handle, setHandle] = useState('')
   const [handleError, setHandleError] = useState('')
   const [handleLoading, setHandleLoading] = useState(false)
@@ -141,7 +143,7 @@ export function OnboardingScreen() {
         setAvatarLoading(false)
       }
     }
-    setStep('legal')
+    setStep('choice')
   }
 
   const displayForAvatar = wrldUser?.displayName ?? 'You'
@@ -150,7 +152,7 @@ export function OnboardingScreen() {
     return (
       <WizardShell
         total={4}
-        current={1}
+        current={2}
         heading="Choose your handle"
         body="This is how others find and mention you. You can change it once every 30 days."
         ctaLabel="Continue"
@@ -182,7 +184,7 @@ export function OnboardingScreen() {
     return (
       <WizardShell
         total={4}
-        current={2}
+        current={3}
         heading="Add a photo"
         body="Put a face to the handle. You can always update this later."
         ctaLabel={avatarUri ? 'Done' : 'Skip for now'}
@@ -202,43 +204,46 @@ export function OnboardingScreen() {
 
   if (step === 'legal') {
     return (
-      <WizardShell
-        total={4}
-        current={3}
-        heading="Agree to the essentials"
-        body="Please review and accept these to continue."
-        ctaLabel="Agree & continue"
-        onCta={() => setStep('choice')}
-        ctaDisabled={!(acceptTos && acceptPrivacy && acceptRules)}
-      >
-        <View style={styles.tosBlock}>
-          <ConsentRow
-            title="Terms of Service"
-            description="I agree to the Terms of Service"
-            on={acceptTos}
-            onToggle={setAcceptTos}
+      <>
+        <WizardShell
+          total={4}
+          current={1}
+          heading="Agree to the essentials"
+          body="Please review and accept these to continue."
+          ctaLabel="Agree & continue"
+          onCta={() => setStep('handle')}
+          ctaDisabled={!(acceptTos && acceptPrivacy && acceptRules)}
+        >
+          <View style={styles.tosBlock}>
+            <ConsentRow
+              title="Terms of Service"
+              description="I agree to the Terms of Service"
+              on={acceptTos}
+              onToggle={setAcceptTos}
+            />
+            <ConsentRow
+              title="Privacy Policy"
+              description="I have read the Privacy Policy"
+              on={acceptPrivacy}
+              onToggle={setAcceptPrivacy}
+            />
+            <ConsentRow
+              title="Community Rules"
+              description="I agree to follow the Community Rules"
+              on={acceptRules}
+              onToggle={setAcceptRules}
+            />
+          </View>
+          <LegalLinkList
+            docs={[
+              { id: 'tos', label: 'Read terms of service', onPress: () => setLegalSheet('terms') },
+              { id: 'privacy', label: 'Read privacy policy', onPress: () => setLegalSheet('privacy') },
+              { id: 'rules', label: 'Read community rules', onPress: () => setLegalSheet('community') },
+            ]}
           />
-          <ConsentRow
-            title="Privacy Policy"
-            description="I have read the Privacy Policy"
-            on={acceptPrivacy}
-            onToggle={setAcceptPrivacy}
-          />
-          <ConsentRow
-            title="Community Rules"
-            description="I agree to follow the Community Rules"
-            on={acceptRules}
-            onToggle={setAcceptRules}
-          />
-        </View>
-        <LegalLinkList
-          docs={[
-            { id: 'tos', label: 'Read terms of service', onPress: () => router.push('/(app)/legal/terms?from=signup') },
-            { id: 'privacy', label: 'Read privacy policy', onPress: () => router.push('/(app)/legal/privacy?from=signup') },
-            { id: 'rules', label: 'Read community rules', onPress: () => router.push('/(app)/legal/community?from=signup') },
-          ]}
-        />
-      </WizardShell>
+        </WizardShell>
+        {legalSheet && <LegalDocSheet slug={legalSheet} onClose={() => setLegalSheet(null)} />}
+      </>
     )
   }
 

@@ -16,17 +16,13 @@ import { useLegalDoc } from '@/hooks/useLegalDoc'
 import { theme } from '@/tokens/theme'
 
 export function LegalDocScreen() {
-  const { slug, from } = useLocalSearchParams<{ slug: string; from?: string }>()
+  const { slug } = useLocalSearchParams<{ slug: string }>()
   const { data: doc, isLoading, isError, refetch, isRefetching } = useLegalDoc(String(slug))
 
-  // legal/[slug] is a tab screen (href: null), so router.back() is a no-op here
-  // (same gotcha as stream/[id]) — navigate to the origin explicitly. Defaults to
-  // Settings; signup onboarding passes ?from=signup, creator setup ?from=creator.
-  const goBack = () => {
-    if (from === 'signup') router.navigate('/onboarding')
-    else if (from === 'creator') router.navigate('/(app)/creator-onboarding')
-    else router.navigate('/(app)/settings')
-  }
+  // Reached only from Settings (the onboarding wizards read docs in an in-flow
+  // sheet, not by navigating here). This screen is a tab (href: null), so
+  // router.back() is a no-op — navigate to Settings explicitly.
+  const goBack = () => router.navigate('/(app)/settings')
 
   // The header shows the document title, so drop a leading `# Title` H1 from the
   // body to avoid showing it twice.
