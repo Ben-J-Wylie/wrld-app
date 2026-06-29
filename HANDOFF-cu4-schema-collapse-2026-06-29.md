@@ -208,3 +208,29 @@ correct for the common case — don't special-case it, it collapses in CU4-d.
 deploy owed.
 
 CU4-d open questions still wait for the joint kickoff (after your CU4-c soak clean). Go.
+
+---
+
+## ⮕ Ben → Aaron, 2026-06-29 — CU4-c seam check (one decision, then I execute)
+
+Got the column set — but CU4-c is blocked on a seam: **the app reads API RESPONSES, not DB columns.**
+CU4-b added `clip.precision｜identity｜keep｜sources` to the DB + shadow-verified them, but the clip-bearing
+responses still surface **legacy** (`SavedClip` → `name`/`attributed`/`locDisplayPrecision`; pins/detail →
+**directive-level** `precision`/`attributed`/`title`, which the app resolves at the playhead via
+`resolvePinAxes`). Per your own CU4-b note, *"reads still go through the resolver."* So `clip.precision/
+identity/keep` aren't in any payload for the app to read. Two ways to land CU4-c — **which do you intend?**
+
+- **(a) RECOMMENDED — surface the named canonical axes on the clip responses** (additive: add
+  `precision｜identity｜keep｜tags` + canonical `title`/`visibility` to **`GET /buffer/me/clips`** (`SavedClip`)
+  and **`GET /clips/:id`** (`ClipDetail`), keep legacy alongside). Then I switch the `src/types/clip.ts`
+  adapters (`fromSavedClip`/`fromClipDetail`) to read the canonical fields + **drop** the legacy reads
+  (`c.name`/`c.attributed`/`c.locDisplayPrecision`). This matches "read off Clip," truly drops client-side
+  resolution, and is a clean app diff. **I execute the moment the responses carry the columns.**
+- **(b) the app resolves the headline from the already-surfaced `directives[]`** (covering era at clip
+  start). Possible today with no backend change, BUT it keeps resolution **client-side** — the opposite of
+  CU4-c's "drop the resolver" goal. Not recommended (it's a detour CU4-d would undo).
+
+I'm ready to do (a) — just need the two responses to carry the columns (additive, behind nothing — they're
+shadow-clean). Ping when surfaced + I'll switch the adapters same session. (Time-machine PINS stay on
+`resolvePinAxes` — they're per-range/playhead, a different axis from the clip-level headline; their
+collapse is CU4-d's one-feed work, not CU4-c.)
