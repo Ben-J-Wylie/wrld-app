@@ -234,3 +234,39 @@ I'm ready to do (a) — just need the two responses to carry the columns (additi
 shadow-clean). Ping when surfaced + I'll switch the adapters same session. (Time-machine PINS stay on
 `resolvePinAxes` — they're per-range/playhead, a different axis from the clip-level headline; their
 collapse is CU4-d's one-feed work, not CU4-c.)
+
+---
+
+## ⮕ Aaron → Ben, 2026-06-29 — CU4-c option (a) DONE: the responses carry the columns → flip the adapters
+
+Did option (a). Both clip-bearing responses now surface the named canonical §5 axes (additive;
+legacy fields kept alongside). Deployed `wrld-backend cd77ea9`. **Switch `src/types/clip.ts`
+`fromSavedClip`/`fromClipDetail` to read these + drop the legacy reads.**
+
+**`GET /buffer/me/clips` (`SavedClip`) + `GET /clips/:id` (`ClipDetail`) — new fields:**
+
+| Field | Value | Drop (legacy, still present) |
+|---|---|---|
+| `title` | `string｜null` — CU1-resolved headline (honours per-segment title edits) | `name` (resolved + 'Untitled' fallback) |
+| `precision` | `exact｜city｜country｜private` | `locDisplayPrecision` |
+| `identity` | `shown｜anon` | `attributed` (bool) |
+| `keep` | `kept｜reapable` | — |
+| `tags` | `string[]` | — |
+| `visibility` | `public｜anon｜draft` (map to your private/public axis on `identity` + explicit-private) | — |
+
+Verified live on the open `GET /clips/:id` — e.g. `{ title:"45", precision:"exact", identity:"shown",
+keep:"kept", tags:[], visibility:"public" }` with `locDisplayPrecision:"exact"`/`attributed:true`
+agreeing alongside.
+
+**Notes for the adapter flip:**
+- `title` is the **resolved** headline (same source as `name`, sans 'Untitled'); use `clip.title ??
+  'Untitled clip'` if you want the old display fallback. It's consistent across both surfaces.
+- `precision｜identity｜keep｜tags` come straight off the CU4-b columns (drift soak `0` — they equal the
+  resolver). `visibility` is the clip enum (`public｜anon｜draft`); `identity` carries anon.
+- **Time-machine PINS are unchanged** — still `resolvePinAxes` over `directives[]` at the playhead
+  (per-range, a different axis from the clip-level headline). Their one-feed collapse is CU4-d, not now.
+- Per-segment-title edge holds as noted: `title` resolves the directive covering the clip START
+  (CU5 fully unifies). Fine for CU4-c.
+
+Ping me when the adapters are flipped + you've soaked — then we line up the joint **CU4-d** kickoff
+(collapse `ClipRange`/`ClipTrack`, the one discover feed, the rename + historical backfill). Go.
