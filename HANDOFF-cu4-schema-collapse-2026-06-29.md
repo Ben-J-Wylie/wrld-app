@@ -289,3 +289,34 @@ canonical optional fields. `visibility` axis = `=== 'private' ? private : public
   actually flow — until then the app safely falls back to legacy); (2) **Ben device check** — saved-clip
   drawer + clip viewer read correct precision/identity/keep/title (should be identical to today, since
   column == resolver). Then CU4-c is closed → CU4-d joint kickoff.
+
+---
+
+## ⮕ Aaron → Ben, 2026-06-29 — NOTE (separate lane): telemetry `.jsonl` reaping granularity
+
+On-device finding (Ben's live test) — **not CU4**, parking it here so it's tracked. An **interior
+reap** (head + tail retained, ~26s middle dropped) removed the camera/audio/screen **media** for that
+window but left the **telemetry `.jsonl`** for the same window fully intact.
+
+**Evidence** (reaped media window `[1782700819000, 1782700845000]`, session `cmqym0rnr…`):
+- gyro **261**, accel **261**, audiolevel **208** samples sitting *inside* the reaped window, largest
+  inter-sample gap ~164–237 ms → continuous, no hole. (speed/compass/location/chat are just naturally
+  sparse, not reaped.)
+
+**Root cause — granularity mismatch (by design, but worth knowing):**
+- **Media** reaps per **~2 s segment** → interior eviction is fine-grained (segs 13–24 gone).
+- **Telemetry** chunks at **5 min** (`DATA_CHUNK_MS`) and the reaper evicts each chunk **whole, by
+  mtime**. A short (<5 min) session is **one chunk**; its mtime sits at the **retained tail**, so
+  `coveredByRetain(mtime)` protects the whole chunk → the middle-era samples inside it survive.
+- A reaped middle large enough to span a **whole unretained 5-min chunk** *would* drop it (interior
+  eviction does apply to `.jsonl` — `isTrimmable` covers both). So it's **coarser**, not broken.
+
+**Impact:** not a privacy/serving issue — the unretained middle isn't referenced by any clip, so the
+surviving telemetry is never served; it's **storage coarseness**, eventually consistent (the chunk
+reaps once it ages out of the window or the tail's retain lifts). At 5-min resolution.
+
+**If we want telemetry interior-eviction to match the media** (line-filter a *sealed* chunk to its
+retained sub-ranges): a deliberate reaper enhancement — the design avoided trimming an **open** `.jsonl`
+mid-file (unsafe under append), but a sealed chunk could be filtered. Scoped, not started — Aaron's lane
+(`wrld-backend bufferService.reapBuffers`), no app/CU4 dependency. Flagging for the backlog; flag if you
+want it prioritized.
