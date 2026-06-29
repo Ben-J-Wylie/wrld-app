@@ -2301,7 +2301,10 @@ All surfaced from Ben's device testing during the CU4 soak. **All backend** (rea
 thumb layers) — **independent of the CU4 manifest-resolution flag** (which is flipped + clean) and distinct
 from CU4 **Phase C** (the destructive collapse) + the CU3 close-out. Suggested priority top→bottom:
 
-1. **Recorder data-track persistence — ✅ FIXED IN CODE (Aaron 2026-06-29), ⏳ PENDING DEPLOY + RE-TEST.**
+1. **Recorder data-track persistence — ✅✅ FIXED + VERIFIED ON DEVICE (Ben, 2026-06-29).** "Everything
+   printing to the server fantastically" — torch/location/chat/sensors now persist to the buffer. CLOSED.
+   *(Follow-on spot-check: scrub a saved clip over that window → the data source replays — C6.)* Also
+   verified same session: **CU4-c proliferation** (era-preference edits show on every surface). History:
    Root cause refined: not "sink never runs" — a **recording-start race** (recorder starts ~5s after
    go-live; one-shot baselines emitted in that window are fanned to viewers but dropped from the record →
    lamp reacts live, disk empty) **+** a **chain-teardown bug** (a starved chain, e.g. audio no-RTP, tore
