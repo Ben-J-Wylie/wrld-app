@@ -18,8 +18,9 @@
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
 import { Text } from '@/components/primitives/Text'
 import { theme } from '@/tokens/theme'
+import type { StrengthScore } from '@/lib/passwordStrength'
 
-export type StrengthScore = 0 | 1 | 2 | 3
+export type { StrengthScore }
 
 type Props = {
   score: StrengthScore
@@ -33,7 +34,7 @@ type Props = {
 const DEFAULT_HELPER: Record<StrengthScore, string> = {
   0: '8 CHARACTERS MINIMUM',
   1: 'TOO WEAK — ADD LENGTH OR A NUMBER/SYMBOL',
-  2: 'ADD A NUMBER OR SYMBOL',
+  2: 'GOOD — LONGER IS STRONGER',
   3: 'STRONG',
 }
 

@@ -23,6 +23,7 @@ import { Icon } from '@/components/primitives/Icon'
 import { Button } from '@/components/primitives/Button'
 import { Pressable } from '@/components/primitives/Pressable'
 import { clerkError } from '@/lib/clerkError'
+import { passwordMeetsMinimum } from '@/lib/passwordStrength'
 
 type Tab = 'signin' | 'signup'
 type SignUpStep = 'form' | 'verify'
@@ -121,6 +122,10 @@ export function AuthModal({ visible, onClose, onSuccess }: Props) {
 
   async function handleSignUp() {
     if (!signUpLoaded) return
+    if (!passwordMeetsMinimum(password)) {
+      setError('Password must be at least 8 characters with a number, symbol, or capital letter.')
+      return
+    }
     setLoading(true)
     setError(null)
     try {

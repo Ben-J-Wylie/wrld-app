@@ -19,24 +19,10 @@ import { Icon } from '@/components/primitives/Icon'
 import { Text } from '@/components/primitives/Text'
 import { BrandMark } from '@/components/primitives/BrandMark'
 import { ScreenScroll } from '@/components/sections/ScreenScroll'
-import {
-  PasswordStrengthMeter,
-  type StrengthScore,
-} from '@/components/features/auth/PasswordStrengthMeter'
+import { PasswordStrengthMeter } from '@/components/features/auth/PasswordStrengthMeter'
 import { theme } from '@/tokens/theme'
 import { clerkError } from '@/lib/clerkError'
-
-function scorePassword(p: string): StrengthScore {
-  if (p.length === 0) return 0
-  const hasLower = /[a-z]/.test(p)
-  const hasUpper = /[A-Z]/.test(p)
-  const hasNumber = /\d/.test(p)
-  const hasSymbol = /[^a-zA-Z0-9]/.test(p)
-  const classes = [hasLower, hasUpper, hasNumber, hasSymbol].filter(Boolean).length
-  if (p.length < 8 || classes <= 1) return 1
-  if (p.length >= 12 && classes >= 3) return 3
-  return 2
-}
+import { scorePassword, passwordMeetsMinimum } from '@/lib/passwordStrength'
 
 export function SignupScreen() {
   const { signUp, setActive, isLoaded } = useSignUp()
@@ -54,6 +40,7 @@ export function SignupScreen() {
 
   const handleSignup = async () => {
     if (!isLoaded) return
+    if (!passwordMeetsMinimum(password)) return
     setLoading(true)
     try {
       await signUp.create({ emailAddress: email, password })
@@ -122,6 +109,7 @@ export function SignupScreen() {
   }
 
   const score = scorePassword(password)
+  const passwordOk = passwordMeetsMinimum(password)
   // Precise reason so an 8+ char password never reads "too short" — score 1 means
   // either too short OR too few character types, and we know which here.
   const passwordHelper =
@@ -162,7 +150,7 @@ export function SignupScreen() {
         }
       />
       {password.length > 0 && <PasswordStrengthMeter score={score} helper={passwordHelper} />}
-      <Button label="Sign up" onPress={handleSignup} loading={loading} />
+      <Button label="Sign up" onPress={handleSignup} loading={loading} disabled={!passwordOk} />
       <Link href="/(auth)/login" asChild>
         <Pressable accessibilityRole="link" accessibilityLabel="Sign in">
           <Text variant="caption" color={theme.colors.accent.default} style={styles.link}>
