@@ -128,6 +128,14 @@ export type ClipDetail = {
   startAtMs: number | null
   endAtMs: number | null
   tracks: ClipTrack[]
+  // CU4-c — the canonical §5 axes surfaced on the response (wrld-backend cd77ea9). `title` already
+  // exists above (now the resolved headline). Optional so the adapter degrades to its prior defaults
+  // pre-deploy / on an older backend.
+  precision?: 'exact' | 'city' | 'country' | 'private'
+  identity?: 'shown' | 'anon'
+  keep?: 'kept' | 'reapable'
+  tags?: string[]
+  visibility?: string // clip enum; axis = `=== 'private' ? private : public`
   // PB4 A4 — per-segment source enablement (buffer sessions only). Each window's `sources` is
   // backend-kind → on/off; the viewer hides a source over a window where it's toggled off.
   // Absent (saved clips) = no per-segment filtering (the `tracks` list already reflects enabled).

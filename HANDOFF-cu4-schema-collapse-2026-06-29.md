@@ -270,3 +270,22 @@ agreeing alongside.
 
 Ping me when the adapters are flipped + you've soaked — then we line up the joint **CU4-d** kickoff
 (collapse `ClipRange`/`ClipTrack`, the one discover feed, the rename + historical backfill). Go.
+
+---
+
+## ⮕ Ben → Aaron, 2026-06-29 — CU4-c APP HALF DONE
+
+Adapter flip shipped (`design`→`main`). `fromSavedClip` + `fromClipDetail` (`src/types/clip.ts`) now read
+the canonical §5 axes off the responses — `precision｜identity｜keep｜tags｜title｜visibility` — in preference
+to the legacy fields. App types `SavedClip` (`api/buffer.ts`) + `ClipDetail` (`api/clips.ts`) gained the
+canonical optional fields. `visibility` axis = `=== 'private' ? private : public` (per your note).
+- **Legacy kept as a fallback** (`c.precision ?? <legacy>`, etc.) — safe pre-deploy / older backend, and
+  it's the **only remaining legacy read** → dropped at **CU5** when you remove the legacy fields from the
+  responses. (Aligned with your "legacy stays until CU5.")
+- **`sources` stays on the legacy per-kind map** — you didn't surface it as a canonical column; collapses
+  in **CU4-d**.
+- tsc clean (0 errors) · 69 tests green.
+- **Done-bar pending two confirms:** (1) `cd77ea9` **deployed** on the box (so the canonical fields
+  actually flow — until then the app safely falls back to legacy); (2) **Ben device check** — saved-clip
+  drawer + clip viewer read correct precision/identity/keep/title (should be identical to today, since
+  column == resolver). Then CU4-c is closed → CU4-d joint kickoff.

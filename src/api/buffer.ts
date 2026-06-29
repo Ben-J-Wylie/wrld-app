@@ -278,6 +278,15 @@ export type SavedClip = {
   sources: Record<string, boolean>
   attributed: boolean
   locDisplayPrecision: string | null
+  // CU4-c — the canonical §5 axes surfaced on the response (wrld-backend cd77ea9), read in
+  // preference to the legacy `name`/`attributed`/`locDisplayPrecision` above (which stay until
+  // CU5). Optional so the adapter degrades to legacy pre-deploy / on an older backend.
+  title?: string | null
+  precision?: 'exact' | 'city' | 'country' | 'private'
+  identity?: 'shown' | 'anon'
+  keep?: 'kept' | 'reapable'
+  tags?: string[]
+  visibility?: string // clip enum (public｜anon｜draft｜private); axis = `=== 'private' ? private : public`
 }
 
 export type ClipLane = 'saved' | 'draft' | 'all'
