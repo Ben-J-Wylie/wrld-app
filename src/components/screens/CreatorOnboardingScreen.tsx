@@ -151,8 +151,7 @@ export function CreatorOnboardingScreen() {
   const [notifLoading, setNotifLoading] = useState(false)
 
   // ToS step
-  const [tosChecked, setTosChecked] = useState(false)
-  const [rulesChecked, setRulesChecked] = useState(false)
+  const [guidelinesChecked, setGuidelinesChecked] = useState(false)
   const [saving, setSaving] = useState(false)
 
   useFocusEffect(
@@ -514,29 +513,20 @@ export function CreatorOnboardingScreen() {
         body="Quick read of how Wrld works and how creators keep things safe."
         ctaLabel="Agree & Continue"
         onCta={handleComplete}
-        ctaDisabled={!tosChecked || !rulesChecked}
+        ctaDisabled={!guidelinesChecked}
         ctaLoading={saving}
       >
         <View style={styles.tosBlock}>
           <ConsentRow
-            title="Terms of service"
-            description="I agree to the terms of service"
-            on={tosChecked}
-            onToggle={setTosChecked}
-          />
-          <ConsentRow
-            title="Community rules"
-            description="I agree to follow the community rules"
-            on={rulesChecked}
-            onToggle={setRulesChecked}
+            title="Creator guidelines"
+            description="I agree to follow the creator guidelines"
+            on={guidelinesChecked}
+            onToggle={setGuidelinesChecked}
           />
         </View>
         <LegalLinkList
           docs={[
-            { id: 'tos', label: 'Read terms of service', onPress: () => router.push('/(app)/legal/terms?from=onboarding') },
-            { id: 'rules', label: 'Read community rules', onPress: () => router.push('/(app)/legal/community?from=onboarding') },
-            { id: 'guidelines', label: 'Read creator guidelines', onPress: () => router.push('/(app)/legal/creator?from=onboarding') },
-            { id: 'privacy', label: 'Read privacy policy', onPress: () => router.push('/(app)/legal/privacy?from=onboarding') },
+            { id: 'guidelines', label: 'Read creator guidelines', onPress: () => router.push('/(app)/legal/creator?from=creator') },
           ]}
         />
       </WizardShell>

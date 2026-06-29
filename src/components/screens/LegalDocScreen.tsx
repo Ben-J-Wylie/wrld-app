@@ -21,9 +21,12 @@ export function LegalDocScreen() {
 
   // legal/[slug] is a tab screen (href: null), so router.back() is a no-op here
   // (same gotcha as stream/[id]) — navigate to the origin explicitly. Defaults to
-  // Settings; the creator-onboarding TOS step passes ?from=onboarding.
-  const goBack = () =>
-    router.navigate(from === 'onboarding' ? '/(app)/creator-onboarding' : '/(app)/settings')
+  // Settings; signup onboarding passes ?from=signup, creator setup ?from=creator.
+  const goBack = () => {
+    if (from === 'signup') router.navigate('/onboarding')
+    else if (from === 'creator') router.navigate('/(app)/creator-onboarding')
+    else router.navigate('/(app)/settings')
+  }
 
   // The header shows the document title, so drop a leading `# Title` H1 from the
   // body to avoid showing it twice.
