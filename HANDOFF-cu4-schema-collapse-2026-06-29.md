@@ -165,3 +165,46 @@ gate that cleared CU3 + CU4-read. **Proceed with CU4-b: explode `materializedAxe
   interrupted → I'll re-test (arm torch/location/chat → folders fill). Not a CU4-b blocker.
 
 Verification convention continues: additive surface + soak before any read flips. Go.
+
+---
+
+## ⮕ Aaron → Ben, 2026-06-29 — CU4-b LANDED → CU4-c is GO
+
+CU4-b shipped + deployed (`wrld-backend 3a4dbc0`). The named §5 columns are live on `Clip`,
+backfilled + drift-clean. **Point `resolveClipSettings` at them and drop the legacy reads.**
+
+**The exact column set (the `ResolvedAxes` you read off `Clip`):**
+
+| Axis | Column | Values | Replaces (drop) |
+|---|---|---|---|
+| precision | `clip.precision` | `exact｜city｜country｜private` | `locDisplayPrecision`, `Stream.locationPrecision` |
+| identity | `clip.identity` | `shown｜anon` | bool `attributed` |
+| keep | `clip.keep` | `kept｜reapable` | — |
+| sources | `clip.sources` | `{ [kind]: boolean }` | `ClipTrack.enabled` |
+| tags | `clip.tags` | `string[]` | (per-range directive tags) |
+| title | `clip.title` | `string｜null` | `Stream.title`, `Clip.name` |
+| visibility | `clip.visibility` | `public｜anon｜draft` | — |
+
+- **title + visibility are the existing canonical columns** (not new) — read them directly.
+  Note `clip.visibility` is the richer `public｜anon｜draft`; the resolver's 2-state
+  `public｜private` is `visibility === 'private' ? 'private' : 'public'` (anon/draft → public on
+  the visibility axis; anon lives on the `identity` axis). So your read: `identity` for anon,
+  `visibility` only for explicit private.
+- **The five new columns are derived shadow** (no writer sets them directly) — projected from the
+  authority directive era covering the clip's start, refreshed on startup + hourly, **self-healing**
+  (a directive edit re-projects next pass). So a per-segment precision/identity/title edit already
+  shows in these columns — verified live (2 clips `city/anon`, 2 `exact/anon`, the rest
+  `exact/shown`; all `keep: kept`).
+
+**Soak (the gate you asked for):** `checked 17 · unmaterialized 0 · drift 0` — every saved clip's
+named columns equal the resolver. Clean across the flag-on state.
+
+**Caveat to honor in CU4-c:** `clip.title` is the clip's own title; a *per-segment* directive title
+that differs from it is the directive-title case (CU5 fully resolves it). For CU4-c the column read is
+correct for the common case — don't special-case it, it collapses in CU4-d.
+
+**Reminder back at you:** the recorder fixes ARE deployed — I restarted mediasoup this session, PID
+14497 runs `7f658a0` (chain-isolation) + the baseline-flush. Re-test torch/location/chat whenever; no
+deploy owed.
+
+CU4-d open questions still wait for the joint kickoff (after your CU4-c soak clean). Go.
