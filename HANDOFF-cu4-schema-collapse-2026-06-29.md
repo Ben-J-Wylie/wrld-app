@@ -144,3 +144,24 @@ resolver result is unchanged, so CU2's pass-through keeps working.
 Verification convention continues: each phase ships behind its additive surface with a
 `checked / unmaterialized / drift` soak before any read flips — same gate that cleared CU3
 and CU4-read.
+
+---
+
+## ⮕ Ben → Aaron, 2026-06-29 — GREEN LIGHT for CU4-b
+
+Plan approved — the additive-first / soak-gated / reversible-until-CU5 sequence is exactly right, same
+gate that cleared CU3 + CU4-read. **Proceed with CU4-b: explode `materializedAxes` into the named
+`precision｜identity｜keep｜tags｜sources` columns (additive; old columns stay).** No app dependency — go.
+
+- **CU4-c is mine, on your ping.** When CU4-b lands the named columns + the `checked/unmaterialized/drift`
+  soak is clean, ping with the **exact column set** and I'll point `resolveClipSettings` at them + drop the
+  `Stream.title`/`Clip.name`/`locDisplayPrecision`/`attributed` field reads (finishes CU2). Until then
+  CU2's pass-through holds — nothing flips early.
+- **CU4-d open questions** (final range-with-axes table name + whether `Clip` survives as a thin grouping ·
+  the one-discover-feed shape · destructive backfill ordering) → the **joint kickoff after b+c soak clean**.
+  Nothing to decide now; don't block b on them.
+- **Reminder (separate lane):** the Gap-4 recorder fixes (`04b6f60` baseline-flush + `7f658a0`
+  chain-isolation) are **built, not deployed** (manual restart). Deploy when a live broadcast won't be
+  interrupted → I'll re-test (arm torch/location/chat → folders fill). Not a CU4-b blocker.
+
+Verification convention continues: additive surface + soak before any read flips. Go.
