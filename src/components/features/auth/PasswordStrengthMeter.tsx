@@ -27,9 +27,12 @@ type Props = {
   style?: StyleProp<ViewStyle>
 }
 
+// Score 1 covers both "too short" and "long but one character type", so the
+// default for it must not claim "too short" (the consumer can pass a more
+// specific `helper` when it knows the exact reason — see SignupScreen).
 const DEFAULT_HELPER: Record<StrengthScore, string> = {
   0: '8 CHARACTERS MINIMUM',
-  1: 'TOO SHORT — 8 CHARACTERS MINIMUM',
+  1: 'TOO WEAK — ADD LENGTH OR A NUMBER/SYMBOL',
   2: 'ADD A NUMBER OR SYMBOL',
   3: 'STRONG',
 }

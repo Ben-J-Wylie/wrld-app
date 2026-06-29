@@ -60,6 +60,12 @@ export const usersApi = {
     return res.data.user
   },
 
+  // Record acceptance of the legal docs (ToS + Privacy + Community Rules) at
+  // signup. The backend gates onboarding completion (first real handle) on this.
+  acceptLegal: async (): Promise<void> => {
+    await apiClient.post('/users/me/legal-acceptance')
+  },
+
   // ─── Account deletion (soft delete + grace-period reactivation) ───────────
   // DELETE schedules deletion (sets deletedAt; Clerk + PII survive until the
   // anonymise job runs after the grace period), so the user can still sign in and

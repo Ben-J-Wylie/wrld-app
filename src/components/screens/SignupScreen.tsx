@@ -122,6 +122,16 @@ export function SignupScreen() {
   }
 
   const score = scorePassword(password)
+  // Precise reason so an 8+ char password never reads "too short" — score 1 means
+  // either too short OR too few character types, and we know which here.
+  const passwordHelper =
+    password.length === 0
+      ? undefined
+      : password.length < 8
+        ? 'TOO SHORT — 8 CHARACTERS MINIMUM'
+        : score === 1
+          ? 'ADD A NUMBER, SYMBOL, OR CAPITAL'
+          : undefined
 
   return (
     <ScreenScroll contentContainerStyle={styles.content}>
@@ -151,7 +161,7 @@ export function SignupScreen() {
           </Pressable>
         }
       />
-      {password.length > 0 && <PasswordStrengthMeter score={score} />}
+      {password.length > 0 && <PasswordStrengthMeter score={score} helper={passwordHelper} />}
       <Button label="Sign up" onPress={handleSignup} loading={loading} />
       <Link href="/(auth)/login" asChild>
         <Pressable accessibilityRole="link" accessibilityLabel="Sign in">

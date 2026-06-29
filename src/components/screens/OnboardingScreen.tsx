@@ -63,6 +63,7 @@ export function OnboardingScreen() {
 
   const [step, setStep] = useState<Step>('legal')
   const [legalSheet, setLegalSheet] = useState<string | null>(null)
+  const [legalSaving, setLegalSaving] = useState(false)
   const [handle, setHandle] = useState('')
   const [handleError, setHandleError] = useState('')
   const [handleLoading, setHandleLoading] = useState(false)
@@ -127,6 +128,18 @@ export function OnboardingScreen() {
       const asset = result.assets[0]
       setAvatarUri(asset.uri)
       setAvatarMime(asset.mimeType ?? 'image/jpeg')
+    }
+  }
+
+  async function acceptLegalAndContinue() {
+    setLegalSaving(true)
+    try {
+      await usersApi.acceptLegal()
+      setStep('handle')
+    } catch {
+      Alert.alert('Could not continue', 'Please try again.')
+    } finally {
+      setLegalSaving(false)
     }
   }
 
@@ -211,8 +224,9 @@ export function OnboardingScreen() {
           heading="Agree to the essentials"
           body="Please review and accept these to continue."
           ctaLabel="Agree & continue"
-          onCta={() => setStep('handle')}
+          onCta={acceptLegalAndContinue}
           ctaDisabled={!(acceptTos && acceptPrivacy && acceptRules)}
+          ctaLoading={legalSaving}
         >
           <View style={styles.tosBlock}>
             <ConsentRow
