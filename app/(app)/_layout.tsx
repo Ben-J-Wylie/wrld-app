@@ -293,6 +293,7 @@ export default function AppLayout() {
             `clips` grid tab). Reached from a historical clip pin on the globe. */}
         <Tabs.Screen name="clip/[id]" options={{ href: null }} />
         <Tabs.Screen name="profile/[handle]" options={{ href: null }} />
+        <Tabs.Screen name="legal/[slug]" options={{ href: null }} />
         <Tabs.Screen name="settings" options={{ href: null }} />
         <Tabs.Screen name="subscription" options={{ href: null }} />
         <Tabs.Screen name="monetize" options={{ href: null }} />

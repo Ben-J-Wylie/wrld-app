@@ -417,6 +417,38 @@ export function SettingsScreen({ embedded = false }: { embedded?: boolean } = {}
         />
       </SettingsGroup>
 
+      <SettingsGroup title="LEGAL">
+        <SettingsRow
+          iconName="file-text"
+          title="Terms of Service"
+          value="How WRLD works and the rules of use"
+          arrow
+          showBorderTop={false}
+          onPress={() => router.push('/(app)/legal/terms')}
+        />
+        <SettingsRow
+          iconName="file-text"
+          title="Privacy Policy"
+          value="What we collect and how we use it"
+          arrow
+          onPress={() => router.push('/(app)/legal/privacy')}
+        />
+        <SettingsRow
+          iconName="file-text"
+          title="Community Rules"
+          value="Keeping WRLD safe for everyone"
+          arrow
+          onPress={() => router.push('/(app)/legal/community')}
+        />
+        <SettingsRow
+          iconName="file-text"
+          title="Creator Guidelines"
+          value="Broadcasting, clips & earning"
+          arrow
+          onPress={() => router.push('/(app)/legal/creator')}
+        />
+      </SettingsGroup>
+
       {__DEV__ && (
         <SettingsGroup title="DEVELOPMENT">
           <SettingsRow

@@ -533,10 +533,10 @@ export function CreatorOnboardingScreen() {
         </View>
         <LegalLinkList
           docs={[
-            { id: 'tos', label: 'Read terms of service', onPress: () => {} },
-            { id: 'rules', label: 'Read community rules', onPress: () => {} },
-            { id: 'guidelines', label: 'Read creator guidelines', onPress: () => {} },
-            { id: 'privacy', label: 'Read privacy policy', onPress: () => {} },
+            { id: 'tos', label: 'Read terms of service', onPress: () => router.push('/(app)/legal/terms') },
+            { id: 'rules', label: 'Read community rules', onPress: () => router.push('/(app)/legal/community') },
+            { id: 'guidelines', label: 'Read creator guidelines', onPress: () => router.push('/(app)/legal/creator') },
+            { id: 'privacy', label: 'Read privacy policy', onPress: () => router.push('/(app)/legal/privacy') },
           ]}
         />
       </WizardShell>
