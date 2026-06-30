@@ -113,10 +113,25 @@ export function SettingsScreen({ embedded = false }: { embedded?: boolean } = {}
     }
   }
 
-  function confirmDeleteAccount() {
+  async function confirmDeleteAccount() {
+    let storeNote = ''
+    try {
+      // A store-managed (App Store / Play, via RevenueCat) tier can't be cancelled
+      // by deleting WRLD — warn the user to cancel it in their store settings.
+      const { managedExternally } = await usersApi.getTierSubscription()
+      if (managedExternally === 'app_store') {
+        storeNote =
+          '\n\nNote: you subscribed to WRLD Plus/Pro through the App Store / Google Play. ' +
+          'Deleting your account does NOT cancel that subscription — cancel it in your store ' +
+          "settings or you'll keep being charged."
+      }
+    } catch {
+      /* best-effort — don't block the delete confirm on this lookup */
+    }
     Alert.alert(
       'Delete account?',
-      'Your account will be scheduled for deletion. You have 30 days to change your mind — sign back in and reactivate, and everything returns. After 30 days your profile, clips, and balances are permanently removed.',
+      'Your account will be scheduled for deletion. You have 30 days to change your mind — sign back in and reactivate, and everything returns. After 30 days your profile, clips, and balances are permanently removed.' +
+        storeNote,
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Delete account', style: 'destructive', onPress: handleDeleteAccount },

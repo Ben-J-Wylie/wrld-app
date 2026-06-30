@@ -90,6 +90,19 @@ export const usersApi = {
     return res.data
   },
 
+  // Platform-tier subscription state. `managedExternally: 'app_store'` means the
+  // tier came through an IAP (RevenueCat) the backend can't cancel — used to warn
+  // on the delete flow that deleting WRLD won't stop store billing.
+  getTierSubscription: async (): Promise<{
+    tier: string
+    managedExternally: 'app_store' | 'wrld_grant' | null
+  }> => {
+    const res = await apiClient.get<{ tier: string; managedExternally: 'app_store' | 'wrld_grant' | null }>(
+      '/users/me/tier/subscription',
+    )
+    return res.data
+  },
+
   uploadAvatar: async (uri: string, mimeType: string): Promise<User> => {
     const ext = mimeType.split('/')[1] ?? 'jpg'
     const formData = new FormData()
