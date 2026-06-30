@@ -5,7 +5,7 @@
 // deletion) or sign out. Driven by authStore.deletionPendingUntil, set either right
 // after a self-delete or on boot via GET /users/me/account-status.
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Alert, StyleSheet, View } from 'react-native'
 import { router } from 'expo-router'
 import { useClerk } from '@clerk/clerk-expo'
@@ -25,6 +25,15 @@ export function AccountReactivationGate() {
   const { signOut } = useClerk()
   const qc = useQueryClient()
   const [busy, setBusy] = useState(false)
+
+  // This gate is a persistent root overlay — it never unmounts, it just renders
+  // null when there's nothing pending. So `busy` survives a sign-out→sign-in
+  // cycle (handleSignOut sets it and navigates away without resetting). Reset it
+  // every time the gate (re)appears so a freshly-shown gate is always pressable
+  // and can never be stuck on "Please wait…".
+  useEffect(() => {
+    if (until) setBusy(false)
+  }, [until])
 
   if (!until) return null
 
