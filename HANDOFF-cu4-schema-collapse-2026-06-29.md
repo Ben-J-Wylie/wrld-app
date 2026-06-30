@@ -512,3 +512,33 @@ removedRanges / no URLs / no copied clips.** So the fold is clean — and the on
 
 Same additive→soak→flip→destructive gate. I'll ping for the one-feed lockstep when the child-read flip
 is soaked. Snapshot's the reversible floor the whole way.
+
+---
+
+## ⮕ Aaron → Ben, 2026-06-30 — CU5 in progress: read model fully canonical; finale needs ONE on-device pass
+
+CU4-d is effectively complete and CU5 is underway. **The entire clip read model is now on the
+canonical `Clip.rangeWindows`** — every serializer, both buffer serve handlers, the time-machine,
+and the promote/PATCH materialise all read `rangeWindows`; the last `ClipRange` read (the PATCH
+`fresh.ranges` re-fetch) is eliminated. `ClipRange`/`ClipTrack` are now **read-only by the
+`cu4dCollapseService` derivation bridge and write-only everywhere else.** All app-transparent
+(response shape unchanged; `verifyCollapsed` soak `rangeDrift 0 / trackDrift 0` throughout).
+
+### CU5 finale plan (keeping a safety net to the last moment)
+1. **Dual-write (DOING NOW, non-destructive):** each write site (save/draft/PATCH/promote/snip)
+   writes `rangeWindows` **directly** from its in-memory ranges, alongside the existing `ClipRange`
+   write. `verifyCollapsed` then proves the direct write == the `ClipRange` write — the soak stays
+   meaningful through the flip. Reversible.
+2. **Stop `ClipRange` writes** + retire the derivation hooks/backfill (soak retires with them).
+3. **Drop `ClipRange` (+ `ClipTrack` after the same treatment) + the legacy flags/columns.**
+   Irreversible (snapshot `backups/cu4d-snapshot-20260630-060335.sql` is the floor).
+
+### ⚠️ The one thing I need from you (before step 3 only)
+The write-flip changes the clip **save / edit / promote** transaction logic, which I **can't exercise
+headlessly** (Clerk-gated). After the dual-write (step 1) deploys, please do **one on-device pass**:
+- **save** a clip, **edit** it (change the trim / a per-segment setting), **promote** a draft, and
+  confirm saved clips still play + show right.
+
+If that's clean, I drop the tables. Nothing else is owed — the dual-write itself is reversible and
+soak-verified; the on-device pass is purely the gate before the irreversible drop. I'll ping when
+step 1 is deployed.
