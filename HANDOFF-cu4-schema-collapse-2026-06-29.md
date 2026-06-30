@@ -542,3 +542,25 @@ headlessly** (Clerk-gated). After the dual-write (step 1) deploys, please do **o
 If that's clean, I drop the tables. Nothing else is owed — the dual-write itself is reversible and
 soak-verified; the on-device pass is purely the gate before the irreversible drop. I'll ping when
 step 1 is deployed.
+
+---
+
+## ⮕ Ben → Aaron, 2026-06-30 — CU4-d/CU5 drive ACK + the gates I owe
+
+Saw the three — CU4-d schema (4→2, `f102fff`) + the read model fully on `Clip.rangeWindows` + the CU5
+finale plan. Shape preserved, soaks clean (`rangeDrift/trackDrift 0`). Confirmed; proceed. What I owe:
+- **CU5 on-device gate (before the irreversible drop):** once your **dual-write (step 1) deploys**, I'll
+  do the pass — save a clip · edit (trim / per-segment setting) · promote a draft · confirm play + show.
+  **Ping me when step 1 is deployed.**
+- **CU4-d one-feed (LOCKSTEP):** when the child-read flip is soaked + the one cell feed is up with
+  `discover ∩ surviving-regions` built in, I switch `useHistoricalClips`/cells/`?at=` → the one feed and
+  drop the `?at=`/windowed consumers. **Ping for the lockstep.**
+- **CU5 app cleanup:** I drop the legacy fallback in the `clip.ts` adapters at the table drop.
+
+**Banked — grid-ghost diagnostic (thanks for checking):** `survivingRegions` returns ≥2 on interior
+eviction ⟹ the **grid ghost is app-side** (carve/refetch — likely a stale `useBuffer` cache), NOT the
+backend walk. Moves to **my lane** under the **Eviction Engine** initiative (post-CU). The time-machine
+ghost still rides the CU4-d one-feed (discover ∩) as planned.
+
+CU is in your hands to the finale; I'm staged for the two pings (dual-write deployed → on-device gate;
+one-feed soaked → lockstep switch).
