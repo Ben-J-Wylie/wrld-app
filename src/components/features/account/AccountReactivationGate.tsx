@@ -5,7 +5,7 @@
 // deletion) or sign out. Driven by authStore.deletionPendingUntil, set either right
 // after a self-delete or on boot via GET /users/me/account-status.
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Alert, StyleSheet, View } from 'react-native'
 import { router } from 'expo-router'
 import { useClerk } from '@clerk/clerk-expo'
@@ -26,6 +26,15 @@ export function AccountReactivationGate() {
   const qc = useQueryClient()
   const [busy, setBusy] = useState(false)
 
+  // This gate is a persistent root overlay — it never unmounts, it just renders
+  // null when there's nothing pending. So `busy` survives a sign-out→sign-in
+  // cycle (handleSignOut sets it and navigates away without resetting). Reset it
+  // every time the gate (re)appears so a freshly-shown gate is always pressable
+  // and can never be stuck on "Please wait…".
+  useEffect(() => {
+    if (until) setBusy(false)
+  }, [until])
+
   if (!until) return null
 
   const anonymizeDate = (() => {
@@ -39,14 +48,24 @@ export function AccountReactivationGate() {
     setBusy(true)
     try {
       await usersApi.reactivateAccount()
-      const user = await usersApi.getMe()
-      setWrldUser(user)
-      setDeletionPending(null)
-      qc.invalidateQueries()
     } catch {
       Alert.alert('Error', 'Could not reactivate — try again, or contact support@wrld.cam.')
       setBusy(false)
+      return
     }
+    // Reactivation succeeded — the account is active again. Drop the gate now,
+    // regardless of the follow-up profile refresh: if getMe() hangs or fails we
+    // must NOT leave the user stuck on "Please wait…" (the account is restored,
+    // and RootNavigator's /auth/me poll will refill the store).
+    setDeletionPending(null)
+    try {
+      const user = await usersApi.getMe()
+      setWrldUser(user)
+    } catch {
+      // best-effort — the 30s /auth/me poll refreshes the store
+    }
+    qc.invalidateQueries()
+    setBusy(false)
   }
 
   async function handleSignOut() {
@@ -81,7 +100,9 @@ export function AccountReactivationGate() {
               variant="primary"
               disabled={busy}
             />
-            <Button label="Sign out" onPress={handleSignOut} variant="secondary" disabled={busy} />
+            {/* Never disabled — this is the escape hatch if reactivate stalls.
+                handleSignOut clears the gate synchronously before any await. */}
+            <Button label="Sign out" onPress={handleSignOut} variant="secondary" />
           </View>
         </View>
       </SafeAreaView>

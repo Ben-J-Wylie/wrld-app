@@ -50,6 +50,7 @@ import Mapbox, {
   LineLayer,
   FillLayer,
   Atmosphere,
+  Images,
 } from '@rnmapbox/maps'
 import { consumeStreamSignal } from '@/lib/streamSignals'
 import { returnToActiveBroadcast } from '@/lib/activeBroadcast'
@@ -92,9 +93,12 @@ import type { Stream } from '@/types'
 
 Mapbox.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '')
 
-const PIN_RED = '#FF3B5C'
-const PIN_PURPLE = '#A855F7'
-const PIN_BLACK = '#111111' // the viewer's own stream pin (tap → return to it)
+const PIN_AMBER = '#F5B400'   // exact-location pins (precision colour)
+const PIN_RED = '#FF3B5C'     // city-location pins (precision colour)
+const PIN_DARKRED = '#9B1C31' // country-location pins (precision colour)
+const PIN_MAGENTA = '#E0218A' // external-cam pins (overrides precision colour)
+const PIN_PURPLE = '#A855F7'  // (cluster only — subscriber-only aggregate)
+const PIN_BLACK = '#111111'   // the viewer's own stream pin (tap → return to it)
 const PIN_BORDER = '#FFFFFF'
 
 // Globe zoom FLOOR — the furthest you can pinch out. CRITICAL: this must keep the
@@ -1362,8 +1366,15 @@ export function GlobeScreenMapbox() {
       subscribersOnly: stream.subscribersOnly,
       subscriptionPriceUsd: stream.host?.subscriptionPriceUsd,
       ppvEvent: stream.ppvEvent,
+      // Broadcast location for the card (server-gated by precision: country always,
+      // city + local time only at exact/city).
+      city: stream.city,
+      countryCode: stream.countryCode,
+      timezone: stream.timezone,
       // Clip / buffer pins (Time Machine) → "Watch" → replay viewer; live → "Join".
       kind: clip ? 'clip' : 'stream',
+      // External cams hide the synthetic handle and show "N viewers" instead.
+      isExternal: stream.isExternal,
       ctaLabel: clip ? 'Watch' : 'Join',
       onJoin: clip ? () => watchHistorical(stream.id) : () => joinStream(stream),
     }
@@ -1397,6 +1408,10 @@ export function GlobeScreenMapbox() {
               handle: s.host?.handle ?? 'unknown',
               sources: (s.sources ?? []).join(','),
               precision: planet.id === 'earth' ? (s.locationPrecision ?? 'exact') : 'exact',
+              // ISO alpha-2 (lowercased for the flag image name); '' until resolved.
+              countryCode: (s.countryCode ?? '').toLowerCase(),
+              // External cams (bar cams / relays) get a magenta pin regardless of precision.
+              isExternal: s.isExternal === true,
               subscribersOnly: s.subscribersOnly === true,
               ppv: s.ppvEvent != null,
               isSelf: treatAsSelf(s),
@@ -1410,6 +1425,21 @@ export function GlobeScreenMapbox() {
   // ROLLBACK: GLOBE_RENDER_OPT=false → rebuild the GeoJSON every render (old behaviour).
   const geoJSONMemo = useMemo(buildGeoJSON, [buildGeoJSON])
   const geoJSON = GLOBE_RENDER_OPT ? geoJSONMemo : buildGeoJSON()
+
+  // Country-flag images for the country-precision pins. Keyed by lowercased ISO
+  // alpha-2 (matching the feature's `countryCode` property), sourced as raster
+  // images from flagcdn so they render identically on Android/iOS (unicode flag
+  // emoji don't render on Android). Only Earth has country pins.
+  const flagImages = useMemo(() => {
+    const imgs: Record<string, { uri: string }> = {}
+    if (planet.id !== 'earth') return imgs
+    for (const s of planetPins) {
+      if (s.locationPrecision !== 'country') continue
+      const code = (s.countryCode ?? '').toLowerCase()
+      if (code && !imgs[code]) imgs[code] = { uri: `https://flagcdn.com/w40/${code}.png` }
+    }
+    return imgs
+  }, [planetPins, planet])
 
   // Count bubbles (low zoom): one per populated tile, drawn at the cluster
   // centroid the server snapped to a real pin. Empty in pins mode.
@@ -1789,6 +1819,11 @@ export function GlobeScreenMapbox() {
               />
             </ShapeSource>
 
+            {/* Country-flag raster images for the country-precision pins, keyed by
+            lowercased ISO alpha-2. onImageMissing is a no-op so a not-yet-loaded
+            flag degrades to "no flag" rather than a console warning. */}
+            <Images images={flagImages} onImageMissing={() => {}} />
+
             <ShapeSource
               id="streams"
               ref={sourceRef}
@@ -1853,16 +1888,10 @@ export function GlobeScreenMapbox() {
                   ] as any
                 }
                 style={{
-                  circleColor: [
-                    'case',
-                    ['get', 'isSelf'],
-                    PIN_BLACK,
-                    ['get', 'ppv'],
-                    PIN_RED,
-                    ['get', 'subscribersOnly'],
-                    PIN_PURPLE,
-                    PIN_RED,
-                  ] as any,
+                  // External cams = magenta (any precision); else the viewer's own
+                  // stream is black; else precision colour (exact = amber).
+                  // Subscriber-only / PPV are marked by the ★ / "PPV" labels below.
+                  circleColor: ['case', ['get', 'isExternal'], PIN_MAGENTA, ['get', 'isSelf'], PIN_BLACK, PIN_AMBER] as any,
                   circleRadius: 14,
                   circleStrokeWidth: 2,
                   circleStrokeColor: PIN_BORDER,
@@ -1879,31 +1908,12 @@ export function GlobeScreenMapbox() {
                   ] as any
                 }
                 style={{
-                  circleColor: [
-                    'case',
-                    ['get', 'isSelf'],
-                    PIN_BLACK,
-                    ['get', 'ppv'],
-                    PIN_RED,
-                    ['get', 'subscribersOnly'],
-                    PIN_PURPLE,
-                    PIN_RED,
-                  ] as any,
-                  circleRadius: 44,
-                  circleOpacity: 0.35,
-                  circleBlur: 0.85,
-                  circleStrokeWidth: 1,
-                  circleStrokeColor: [
-                    'case',
-                    ['get', 'isSelf'],
-                    PIN_BLACK,
-                    ['get', 'ppv'],
-                    PIN_RED,
-                    ['get', 'subscribersOnly'],
-                    PIN_PURPLE,
-                    PIN_RED,
-                  ] as any,
-                  circleStrokeOpacity: 0.6,
+                  // City precision = a solid red pin (external cams override magenta).
+                  circleColor: ['case', ['get', 'isExternal'], PIN_MAGENTA, ['get', 'isSelf'], PIN_BLACK, PIN_RED] as any,
+                  circleRadius: 14,
+                  circleStrokeWidth: 2,
+                  circleStrokeColor: PIN_BORDER,
+                  circleOpacity: 0.95,
                 }}
               />
               <CircleLayer
@@ -1916,20 +1926,35 @@ export function GlobeScreenMapbox() {
                   ] as any
                 }
                 style={{
-                  circleColor: [
-                    'case',
-                    ['get', 'isSelf'],
-                    PIN_BLACK,
-                    ['get', 'ppv'],
-                    PIN_RED,
-                    ['get', 'subscribersOnly'],
-                    PIN_PURPLE,
-                    PIN_RED,
-                  ] as any,
-                  circleRadius: 72,
-                  circleOpacity: 0.25,
-                  circleBlur: 1,
-                  circleStrokeWidth: 0,
+                  // Country precision = a larger solid dark-red pin at the country
+                  // centroid (external cams override magenta); the country flag is
+                  // drawn beside it by the single-country-flag SymbolLayer below.
+                  circleColor: ['case', ['get', 'isExternal'], PIN_MAGENTA, ['get', 'isSelf'], PIN_BLACK, PIN_DARKRED] as any,
+                  circleRadius: 18,
+                  circleStrokeWidth: 2,
+                  circleStrokeColor: PIN_BORDER,
+                  circleOpacity: 0.95,
+                }}
+              />
+              {/* Country flag drawn just to the right of the blue country pin. */}
+              <SymbolLayer
+                id="single-country-flag"
+                filter={
+                  [
+                    'all',
+                    ['!', ['has', 'point_count']],
+                    ['==', ['get', 'precision'], 'country'],
+                    ['!=', ['get', 'countryCode'], ''],
+                  ] as any
+                }
+                style={{
+                  iconImage: ['get', 'countryCode'] as any,
+                  iconSize: 0.6,
+                  iconAnchor: 'left',
+                  // Shift the flag right of the pin (screen px, zoom-independent).
+                  iconTranslate: [24, 0],
+                  iconAllowOverlap: true,
+                  iconIgnorePlacement: true,
                 }}
               />
               {/* "PPV" label on unclustered pay-per-view pins. */}

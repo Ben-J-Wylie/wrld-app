@@ -50,6 +50,7 @@ import { DOBWheel } from '@/components/features/onboarding/DOBWheel'
 import { PermissionPrePromptCard } from '@/components/features/permissions/PermissionPrePromptCard'
 import { ConsentRow } from '@/components/features/onboarding/ConsentRow'
 import { LegalLinkList } from '@/components/sections/LegalLinkList'
+import { LegalDocSheet } from '@/components/sections/LegalDocSheet'
 
 type PermStatus = 'idle' | 'granted' | 'denied'
 type StepName =
@@ -151,8 +152,8 @@ export function CreatorOnboardingScreen() {
   const [notifLoading, setNotifLoading] = useState(false)
 
   // ToS step
-  const [tosChecked, setTosChecked] = useState(false)
-  const [rulesChecked, setRulesChecked] = useState(false)
+  const [guidelinesChecked, setGuidelinesChecked] = useState(false)
+  const [legalSheet, setLegalSheet] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
   useFocusEffect(
@@ -507,39 +508,33 @@ export function CreatorOnboardingScreen() {
 
   if (currentStep === 'tos') {
     return (
-      <WizardShell
-        total={total}
-        current={currentIndexForProgress}
-        heading="One last thing"
-        body="Quick read of how Wrld works and how creators keep things safe."
-        ctaLabel="Agree & Continue"
-        onCta={handleComplete}
-        ctaDisabled={!tosChecked || !rulesChecked}
-        ctaLoading={saving}
-      >
-        <View style={styles.tosBlock}>
-          <ConsentRow
-            title="Terms of service"
-            description="I agree to the terms of service"
-            on={tosChecked}
-            onToggle={setTosChecked}
+      <>
+        <WizardShell
+          total={total}
+          current={currentIndexForProgress}
+          heading="One last thing"
+          body="Quick read of how Wrld works and how creators keep things safe."
+          ctaLabel="Agree & Continue"
+          onCta={handleComplete}
+          ctaDisabled={!guidelinesChecked}
+          ctaLoading={saving}
+        >
+          <View style={styles.tosBlock}>
+            <ConsentRow
+              title="Creator guidelines"
+              description="I agree to follow the creator guidelines"
+              on={guidelinesChecked}
+              onToggle={setGuidelinesChecked}
+            />
+          </View>
+          <LegalLinkList
+            docs={[
+              { id: 'guidelines', label: 'Read creator guidelines', onPress: () => setLegalSheet('creator') },
+            ]}
           />
-          <ConsentRow
-            title="Community rules"
-            description="I agree to follow the community rules"
-            on={rulesChecked}
-            onToggle={setRulesChecked}
-          />
-        </View>
-        <LegalLinkList
-          docs={[
-            { id: 'tos', label: 'Read terms of service', onPress: () => {} },
-            { id: 'rules', label: 'Read community rules', onPress: () => {} },
-            { id: 'guidelines', label: 'Read creator guidelines', onPress: () => {} },
-            { id: 'privacy', label: 'Read privacy policy', onPress: () => {} },
-          ]}
-        />
-      </WizardShell>
+        </WizardShell>
+        {legalSheet && <LegalDocSheet slug={legalSheet} onClose={() => setLegalSheet(null)} />}
+      </>
     )
   }
 

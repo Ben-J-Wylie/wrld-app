@@ -42,6 +42,7 @@ export type ClientMessage =
   | { type: 'telemetry'; payload: TelemetryPayload }
   | { type: 'tip'; amount: number; message?: string; idempotencyKey?: string }
   | { type: 'gift'; giftType: string; idempotencyKey?: string }
+  | { type: 'ping' }
 
 export type ServerMessage =
   | { type: 'authenticated'; clerkUserId: string }
@@ -76,12 +77,25 @@ export type ServerMessage =
   | { type: 'giftFailed'; message: string }
   | { type: 'adminEnded' }
   | { type: 'adminWarning'; message: string }
+  | { type: 'pong' }
   | { type: 'error'; message: string }
+
+// App-level WS heartbeat. The RN WebSocket can't observe the server's protocol
+// ping/pong, so we send our own `ping` and expect a `pong`. If the server goes
+// silent for HEARTBEAT_MAX_MISSES cycles the socket is half-open (the peer is
+// gone but TCP never delivered a close, so readyState stays OPEN) — we
+// force-close it so the app stops believing it's live and a fresh go-live can
+// start. Detection ≈ HEARTBEAT_INTERVAL_MS * (HEARTBEAT_MAX_MISSES + 1) ≈ 21s,
+// matching the server's own ~20s zombie-connection reap.
+const HEARTBEAT_INTERVAL_MS = 7000
+const HEARTBEAT_MAX_MISSES = 2
 
 class MediasoupSignalingClient {
   private ws: WebSocket | null = null
   private msgCbs = new Set<(msg: ServerMessage) => void>()
   private closeCbs = new Set<(code: number) => void>()
+  private hbTimer: ReturnType<typeof setInterval> | null = null
+  private hbMisses = 0
 
   connect(url: string): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -89,16 +103,29 @@ class MediasoupSignalingClient {
         this.ws.onclose = null
         this.ws.close()
       }
+      this.stopHeartbeat()
 
       const ws = new WebSocket(url)
       this.ws = ws
 
-      ws.onopen = () => resolve()
+      ws.onopen = () => {
+        this.startHeartbeat()
+        resolve()
+      }
       ws.onerror = () => reject(new Error('WebSocket connection failed'))
-      ws.onclose = (event) => this.closeCbs.forEach((cb) => cb((event as CloseEvent).code ?? 1006))
+      ws.onclose = (event) => {
+        this.stopHeartbeat()
+        this.closeCbs.forEach((cb) => cb((event as CloseEvent).code ?? 1006))
+      }
       ws.onmessage = (event: MessageEvent) => {
         try {
           const msg: ServerMessage = JSON.parse(event.data as string)
+          // A pong proves the link is alive — reset the miss counter and don't
+          // fan it out (it's transport-level liveness, not an app event).
+          if (msg.type === 'pong') {
+            this.hbMisses = 0
+            return
+          }
           this.msgCbs.forEach((cb) => cb(msg))
         } catch {
           // ignore malformed messages
@@ -108,8 +135,35 @@ class MediasoupSignalingClient {
   }
 
   disconnect() {
+    this.stopHeartbeat()
     this.ws?.close()
     this.ws = null
+  }
+
+  private startHeartbeat(): void {
+    this.stopHeartbeat()
+    this.hbMisses = 0
+    this.hbTimer = setInterval(() => {
+      const ws = this.ws
+      if (!ws || ws.readyState !== WebSocket.OPEN) return // a real close fires onclose
+      if (this.hbMisses >= HEARTBEAT_MAX_MISSES) {
+        // No pong across several cycles → half-open socket. Force-close so onclose
+        // fires (the hook resets status out of 'in-room'); otherwise a dead
+        // broadcast looks live and go-live wedges until a full app reload.
+        try { ws.close(4002, 'heartbeat timeout') } catch { /* already closing */ }
+        return
+      }
+      this.hbMisses++
+      this.trySend({ type: 'ping' })
+    }, HEARTBEAT_INTERVAL_MS)
+  }
+
+  private stopHeartbeat(): void {
+    if (this.hbTimer) {
+      clearInterval(this.hbTimer)
+      this.hbTimer = null
+    }
+    this.hbMisses = 0
   }
 
   get isConnected(): boolean {

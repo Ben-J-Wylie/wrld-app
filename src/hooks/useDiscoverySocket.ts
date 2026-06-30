@@ -64,7 +64,16 @@ export function useDiscoverySocket(): Stream[] {
       case 'location_updated':
         setStreams(prev => prev.map(s =>
           s.mediasoupRoomId === event.mediasoupRoomId
-            ? { ...s, lat: event.lat as number, lng: event.lng as number }
+            ? {
+                ...s,
+                lat: event.lat as number,
+                lng: event.lng as number,
+                // countryCode/city/timezone resolve async and arrive on this
+                // event — merge them so the flag + card location can render.
+                ...(event.countryCode != null ? { countryCode: event.countryCode as string } : {}),
+                ...(event.city !== undefined ? { city: event.city as string | null } : {}),
+                ...(event.timezone !== undefined ? { timezone: event.timezone as string | null } : {}),
+              }
             : s,
         ))
         break

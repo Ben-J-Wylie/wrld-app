@@ -16,7 +16,7 @@
 //     anonymous-viewer flow.
 
 import { useState } from 'react'
-import { Alert } from 'react-native'
+import { Alert, StyleSheet, View } from 'react-native'
 import { Filter as ProfanityFilter } from 'bad-words'
 import { foldLeetspeak } from '@/lib/profanity'
 
@@ -28,11 +28,15 @@ import { Input } from '@/components/primitives/Input'
 import { HelpText } from '@/components/primitives/HelpText'
 import { AvatarPicker } from '@/components/features/user/AvatarPicker'
 import { RulesChecklist, type Rule } from '@/components/features/onboarding/RulesChecklist'
+import { ConsentRow } from '@/components/features/onboarding/ConsentRow'
+import { LegalLinkList } from '@/components/sections/LegalLinkList'
+import { LegalDocSheet } from '@/components/sections/LegalDocSheet'
+import { theme } from '@/tokens/theme'
 import { usersApi } from '@/api/users'
 import { useAuthStore } from '@/stores/authStore'
 import { useSetCurrentUser } from '@/hooks/useCurrentUser'
 
-type Step = 'handle' | 'avatar' | 'choice'
+type Step = 'handle' | 'avatar' | 'legal' | 'choice'
 
 const HANDLE_RE = /^[a-z0-9_]+$/
 
@@ -57,13 +61,19 @@ export function OnboardingScreen() {
   const setWrldUser = useAuthStore((s) => s.setWrldUser)
   const setCurrentUser = useSetCurrentUser()
 
-  const [step, setStep] = useState<Step>('handle')
+  const [step, setStep] = useState<Step>('legal')
+  const [legalSheet, setLegalSheet] = useState<string | null>(null)
+  const [legalSaving, setLegalSaving] = useState(false)
   const [handle, setHandle] = useState('')
   const [handleError, setHandleError] = useState('')
   const [handleLoading, setHandleLoading] = useState(false)
   const [avatarUri, setAvatarUri] = useState<string | null>(null)
   const [avatarMime, setAvatarMime] = useState<string>('image/jpeg')
   const [avatarLoading, setAvatarLoading] = useState(false)
+  // Legal acceptance step (everyone, at signup).
+  const [acceptTos, setAcceptTos] = useState(false)
+  const [acceptPrivacy, setAcceptPrivacy] = useState(false)
+  const [acceptRules, setAcceptRules] = useState(false)
 
   async function submitHandle() {
     const trimmed = handle.trim().toLowerCase()
@@ -121,6 +131,18 @@ export function OnboardingScreen() {
     }
   }
 
+  async function acceptLegalAndContinue() {
+    setLegalSaving(true)
+    try {
+      await usersApi.acceptLegal()
+      setStep('handle')
+    } catch {
+      Alert.alert('Could not continue', 'Please try again.')
+    } finally {
+      setLegalSaving(false)
+    }
+  }
+
   async function finishAvatar() {
     if (avatarUri) {
       setAvatarLoading(true)
@@ -142,8 +164,8 @@ export function OnboardingScreen() {
   if (step === 'handle') {
     return (
       <WizardShell
-        total={3}
-        current={1}
+        total={4}
+        current={2}
         heading="Choose your handle"
         body="This is how others find and mention you. You can change it once every 30 days."
         ctaLabel="Continue"
@@ -174,8 +196,8 @@ export function OnboardingScreen() {
     const previewName = wrldUser?.displayName ?? displayForAvatar
     return (
       <WizardShell
-        total={3}
-        current={2}
+        total={4}
+        current={3}
         heading="Add a photo"
         body="Put a face to the handle. You can always update this later."
         ctaLabel={avatarUri ? 'Done' : 'Skip for now'}
@@ -193,10 +215,56 @@ export function OnboardingScreen() {
     )
   }
 
+  if (step === 'legal') {
+    return (
+      <>
+        <WizardShell
+          total={4}
+          current={1}
+          heading="Agree to the essentials"
+          body="Please review and accept these to continue."
+          ctaLabel="Agree & continue"
+          onCta={acceptLegalAndContinue}
+          ctaDisabled={!(acceptTos && acceptPrivacy && acceptRules)}
+          ctaLoading={legalSaving}
+        >
+          <View style={styles.tosBlock}>
+            <ConsentRow
+              title="Terms of Service"
+              description="I agree to the Terms of Service"
+              on={acceptTos}
+              onToggle={setAcceptTos}
+            />
+            <ConsentRow
+              title="Privacy Policy"
+              description="I have read the Privacy Policy"
+              on={acceptPrivacy}
+              onToggle={setAcceptPrivacy}
+            />
+            <ConsentRow
+              title="Community Rules"
+              description="I agree to follow the Community Rules"
+              on={acceptRules}
+              onToggle={setAcceptRules}
+            />
+          </View>
+          <LegalLinkList
+            docs={[
+              { id: 'tos', label: 'Read terms of service', onPress: () => setLegalSheet('terms') },
+              { id: 'privacy', label: 'Read privacy policy', onPress: () => setLegalSheet('privacy') },
+              { id: 'rules', label: 'Read community rules', onPress: () => setLegalSheet('community') },
+            ]}
+          />
+        </WizardShell>
+        {legalSheet && <LegalDocSheet slug={legalSheet} onClose={() => setLegalSheet(null)} />}
+      </>
+    )
+  }
+
   return (
     <WizardShell
-      total={3}
-      current={3}
+      total={4}
+      current={4}
       heading="What brings you to Wrld?"
       body="You can always change this later."
       ctaLabel="Watch live streams"
@@ -208,3 +276,9 @@ export function OnboardingScreen() {
     </WizardShell>
   )
 }
+
+const styles = StyleSheet.create({
+  tosBlock: {
+    gap: theme.spacing.xs,
+  },
+})

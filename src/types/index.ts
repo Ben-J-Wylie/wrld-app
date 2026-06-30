@@ -189,6 +189,12 @@ export type Stream = {
   ppvEvent?: { id: string; title: string; status: string } | null
   // 'off' = PRIVATE — discoverable only on the Haven planet, with no real coords.
   locationPrecision?: 'exact' | 'city' | 'country' | 'off'
+  // ISO 3166-1 alpha-2 (e.g. 'GB') of the broadcaster's country, resolved async
+  // server-side. Drives the country-precision pin's flag. Null until resolved.
+  countryCode?: string | null
+  // City name — shown on the watch card / stream view. Withheld (null) by the
+  // server at 'country'/'off' precision. (timezone, above, is gated the same way.)
+  city?: string | null
   distanceKm?: number
   distanceMeters?: number
   // External cams (ext-<slug>) have no mediasoup room — they're watched as a live

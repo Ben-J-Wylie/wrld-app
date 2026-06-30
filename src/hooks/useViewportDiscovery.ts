@@ -136,7 +136,13 @@ export function useViewportDiscovery(opts?: {
         break
       case 'location_updated':
         for (const s of m.values())
-          if (s.mediasoupRoomId === event.mediasoupRoomId) { s.lat = event.lat as number; s.lng = event.lng as number }
+          if (s.mediasoupRoomId === event.mediasoupRoomId) {
+            s.lat = event.lat as number; s.lng = event.lng as number
+            // countryCode/city/timezone resolve async + arrive here.
+            if (event.countryCode != null) s.countryCode = event.countryCode as string
+            if (event.city !== undefined) s.city = event.city as string | null
+            if (event.timezone !== undefined) s.timezone = event.timezone as string | null
+          }
         break
       case 'viewer_count_updated':
         for (const s of m.values())

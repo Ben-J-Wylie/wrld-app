@@ -66,6 +66,7 @@ import { SourceRail } from '@/components/features/clip/SourceRail'
 import { SOURCE_META, SOURCE_RAIL_ORDER, KIND_TO_FEEDKIND, pickDefaultView } from '@/components/features/stream/sourceMeta'
 import { SourceStage, type SourceRender } from '@/components/sections/SourceStage'
 import { useBroadcasterClock } from '@/hooks/useBroadcasterClock'
+import { placeLabel } from '@/lib/location'
 import { useStreamTelemetry } from '@/hooks/useStreamTelemetry'
 import { useLocalTelemetry } from '@/hooks/useLocalTelemetry'
 import { useLocationTrail } from '@/hooks/useLocationTrail'
@@ -416,6 +417,7 @@ export function StreamScreen() {
   }
   // Broadcaster's local time, shown to viewers next to their identity.
   const broadcasterLocalTime = useBroadcasterClock(streamData?.timezone)
+  const broadcasterPlace = placeLabel(streamData?.city, streamData?.countryCode)
   const [activeSource, setActiveSource] = useState<FeedKind | null>(null)
   const [controlsVisible, setControlsVisible] = useState(false)
   const [hopError, setHopError] = useState<string | null>(null)
@@ -1031,21 +1033,34 @@ export function StreamScreen() {
       if (isNew) {
         setAdminEnded(false)
         const s = statusRef.current
-        // Already live or mid-connect → just show it; don't re-init.
-        if (s === 'in-room' || s === 'connecting' || s === 'connected' || s === 'authenticated') {
-          return () => { isFocusedRef.current = false } // keep the live broadcast running
-        }
-        // Load the latest arming, then either go live immediately (dashboard
-        // Go Live, go=1) or start the camera preview (center stream tab).
+        // An explicit Go Live (dashboard, go=1) ALWAYS (re)starts from a clean
+        // slate — it must never bail on a lingering session. A stale 'in-room'
+        // (e.g. a half-open zombie the server already reaped, whose close frame
+        // never reached us so the status never reset) would otherwise wedge
+        // go-live until a full app reload. The dashboard only navigates with
+        // go=1 from an idle state, so a genuinely-live broadcast won't hit this.
         if (paramGoRef.current === '1') {
-          if (s !== 'idle') cleanup() // reset a stale dropped/errored session
+          if (s !== 'idle') cleanup() // reset a stale dropped/errored/wedged session
           // rec=1 (dashboard Record) → also start recording once live.
           pendingRecordRef.current = paramRecRef.current === '1'
           loadCaptureConfig().then((c) => {
             setCfg(c)
             handleGoLiveRef.current(c)
           })
-        } else if (s === 'idle') {
+        } else if ((s === 'in-room' && signalingClient.isConnected) || s === 'connecting' || s === 'connected' || s === 'authenticated') {
+          // Returning to a genuinely-live / mid-connect broadcast → just show it;
+          // keep the live broadcast running (in-app nav must not end it). A
+          // half-open 'in-room' (socket dead, status never reset) fails the
+          // isConnected check and falls through to a clean re-init below — the
+          // heartbeat also force-closes such a socket within ~20s.
+          return () => { isFocusedRef.current = false }
+        } else {
+          // idle, dropped, errored, or a dead 'in-room' → reset any stale session
+          // and start the camera preview cleanly (preview is local, pre-go-live).
+          if (s !== 'idle') {
+            cleanup()
+            disconnect() // drop the dead socket + reset status → 'idle'
+          }
           loadCaptureConfig().then((c) => {
             setCfg(c)
             startPreview(avSourcesFromConfig(c))
@@ -1878,6 +1893,11 @@ export function StreamScreen() {
                     @{broadcaster.handle}
                     {broadcasterLocalTime ? ` · ${broadcasterLocalTime}` : ''}
                   </Text>
+                  {broadcasterPlace && (
+                    <Text variant="monoCaption" color={theme.colors.text.muted} numberOfLines={1}>
+                      {broadcasterPlace}
+                    </Text>
+                  )}
                   {ppvTitle !== undefined && <PpvBadge />}
                 </View>
               ) : undefined
