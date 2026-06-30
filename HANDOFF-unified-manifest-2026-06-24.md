@@ -2348,6 +2348,16 @@ The eviction/cull work surfaced during CU testing is a **separate concern** (rea
 layer) from CU (the manifest unification). **Decision: complete CU as pure manifest work (CU4-d + CU5);
 carve the eviction work into its own "Buffer Eviction Engine" initiative** so CU4-d/CU5 stay clean.
 
+> **⭐ This is the NECESSARY successor to CU, not optional polish.** The residual timeline/time-machine
+> anomalies — **grid ghost blocks · time-machine ghost pins · stale head/reaper-edge labels · boundary
+> slivers** — are all **contingent on clean eviction, NOT on the manifest.** CU (axes/identity) never
+> touches what's culled or how it's reported, so **these survive CU untouched** and resolve **only** when
+> the Eviction Engine lands. Clean eviction = two layers, both required: **(1) precise cull** (the unified
+> straddle rewriter — `ts`-precise for data, whole-delete + lossless keyframe re-cut for AV) **+ (2)
+> accurate reporting** (`survivingRegions` splits at holes · discover ∩ surviving-regions · edge labels
+> read the true frontier). Principle elevated to **CONTENT.md → "Clean eviction = honest representation."**
+> Sequence it right after CU (build against the collapsed CU4-d shapes).
+
 **The one piece that rides INTO CU (coupling):**
 - **Time-machine ghost = discover ∩ surviving-regions → do it in CU4-d.** CU4-d builds the ONE discover
   feed; intersect pin intervals with surviving regions *there* (once), not by patching the legacy

@@ -835,6 +835,34 @@ Code anchors (the spine — read these first when resuming): `src/lib/serverCloc
 (`effScrollSv` derivation, the magnetic frontiers, the reaper mask, the gesture
 backstop). The matching git tag `clips-timeline-clock-v1` marks the exact tree.
 
+### Clean eviction = honest representation (the principled follow-on to CU)
+
+The clock saga solved the timeline's **live/now edge**. The **other edge — the eviction
+frontier — and the ghosts/slivers are the symmetric, still-open half**: a surface is only
+truthful if it represents what has *actually been evicted*. This is contingent on **eviction**,
+**not** the manifest — so the **Canonical Unification (CU) does not fix it, and the residual
+anomalies survive CU untouched**:
+
+- grid **ghost blocks**, time-machine **ghost pins**, **stale head / reaper-edge labels** (the
+  head label *is* the eviction frontier), and boundary **slivers** are all surfaces reading an
+  eviction state that is **imprecisely culled and/or inaccurately reported**. CU (manifest/axes)
+  never touches eviction, so none of these are CU bugs — they resolve only when eviction is clean.
+
+Clean eviction has **two layers, both required**:
+1. **Precise cull** — the bytes/samples are genuinely gone: a **unified straddle rewriter** —
+   `ts`-precise rewrite for data tracks; whole-segment delete + (preferably) **lossless keyframe
+   re-cut** for AV (no transcode). Frame-accurate boundaries straddle a chunk/segment of *any* size,
+   so the rewriter is mandatory, not a chunk-size workaround.
+2. **Accurate reporting** — `survivingRegions` splits at interior holes; discover ∩ surviving-regions;
+   edge labels read the true frontier.
+
+**THE FOLLOW-ON (do this after CU): a principled Eviction Engine initiative** — one evicted-range →
+a per-track **cull strategy** (data rewrite · AV delete+report) + accurate surviving-regions
+reporting, with the **unified straddle rewriter** at its core. Build it **after CU** (against the
+collapsed CU4-d schema/feed, so CU stays clean and the engine targets the final shapes). It is the
+**necessary successor to CU**, not optional polish — the timeline + time machine are only honest once
+it lands. Full scope: `HANDOFF-unified-manifest-2026-06-24.md` → "Eviction Engine — its OWN initiative."
+
 ### The universal wall clock — read it, never keep your own
 
 The most-violated principle in this codebase, stated plainly so we stop
