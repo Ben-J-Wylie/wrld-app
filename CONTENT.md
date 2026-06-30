@@ -635,6 +635,34 @@ identity + access; the planet is derived. One home per fact, rendered everywhere
 > `HANDOFF-unified-manifest-2026-06-24.md` → **"CU1 — THE PEDANTIC DETAIL."** That's the CU1
 > work-order; this section is the principle.
 
+### Vocabulary — the unified words (adopted 2026-06-30; retire the legacy ones)
+
+The model has one set of words. Use these in discussion + docs; the **code** still speaks legacy
+(`Clip.saved`, `splitPoints`, `attributed`, `saveDraft`, `ClipTrack.enabled`…) until CU5 + the rename —
+bridge when touching code ("`saveDraft` = set `keep: kept`").
+
+| Use this | Retire this | What it is |
+|---|---|---|
+| **Clip** | — | a thin **grouping** of segments (id + provenance + housekeeping) |
+| **Segment** | `DirectiveRange`, "range" | a wall-clock range **+ the 7 axes** — the spine |
+| **the 7 axes** | scattered columns | `title · tags · visibility · identity · precision · sources · keep` |
+| **footage** | `ClipTrack`, "the clip's file" | buffer segments referenced by `(session, time-range)` — **no copy** |
+| **snip** | "trim", split, `splitPoints` | add a boundary → two segments |
+| **mend** | — | remove a boundary → one segment |
+| **delete** | — | permanent removal (the only destructive op) |
+| **keep: kept** | "saved" | retained — survives eviction |
+| **keep: reapable** | the not-durable half of "draft" | will evict |
+| **visibility: private** | the private half of "draft", "hidden" | not public |
+| **identity: shown \| anon** | "attributed" (bool) | host shown vs anonymous |
+| **precision: exact\|city\|country\|private** | `locDisplayPrecision`, "off"/"hidden" | location display |
+| **sources: {kind: bool}** | `ClipTrack.enabled` | per-source on/off |
+| *"set keep: kept"* | "promote a draft", "save durably" | make a segment durable |
+| *"snip + keep: reapable"* | "trim" | cut a piece that then expires |
+
+So: **a "draft" is a segment that's `keep: reapable` + `visibility: private`; "promoting" it is just
+`keep: kept`; "trim" is `snip` + `keep: reapable`.** Primitives = **snip / mend / delete + axis edits** —
+nothing else. "Draft", "trim", "saved", "promote" are legacy composites, all sayable in those terms.
+
 ---
 
 ## 6. Content representation (how it's shown, honestly)
