@@ -130,7 +130,7 @@ export function SettingsScreen({ embedded = false }: { embedded?: boolean } = {}
     }
     Alert.alert(
       'Delete account?',
-      'Your account will be scheduled for deletion. You have 30 days to change your mind — sign back in and reactivate, and everything returns. After 30 days your profile, clips, and balances are permanently removed.' +
+      'Your account will be scheduled for deletion. You have 30 days to change your mind — sign back in and reactivate, and everything returns. During this time your clips won’t be findable or watchable by anyone. After 30 days your profile, clips, and balances are permanently removed.' +
         storeNote,
       [
         { text: 'Cancel', style: 'cancel' },
