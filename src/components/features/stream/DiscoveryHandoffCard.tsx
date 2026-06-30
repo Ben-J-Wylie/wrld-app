@@ -52,6 +52,9 @@ export type DiscoveryStream = {
   // 'clip' (Time Machine replay) vs the default live 'stream'. A clip shows the
   // `ctaLabel` ("Watch") instead of "Join", no LivePill, and a "replay" caption.
   kind?: 'stream' | 'clip'
+  // External cams (bar cams / relays) have a synthetic ext_* handle that means
+  // nothing to viewers — the card hides it and shows just "N viewers".
+  isExternal?: boolean
   ctaLabel?: string
   onJoin: () => void
 }
@@ -104,7 +107,9 @@ function SingleCard({ stream, onDismiss, style }: SingleProps) {
             {stream.title}
           </Text>
           <Text variant="monoCaption" color={theme.colors.text.muted} numberOfLines={1}>
-            @{stream.handle} · {stream.kind === 'clip' ? 'replay' : `${formatViewers(stream.viewerCount)} watching`}
+            {stream.isExternal
+              ? `${formatViewers(stream.viewerCount)} viewers`
+              : `@${stream.handle} · ${stream.kind === 'clip' ? 'replay' : `${formatViewers(stream.viewerCount)} watching`}`}
           </Text>
           {(place || localTime) && (
             <View style={styles.lockRow}>

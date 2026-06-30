@@ -1373,6 +1373,8 @@ export function GlobeScreenMapbox() {
       timezone: stream.timezone,
       // Clip / buffer pins (Time Machine) → "Watch" → replay viewer; live → "Join".
       kind: clip ? 'clip' : 'stream',
+      // External cams hide the synthetic handle and show "N viewers" instead.
+      isExternal: stream.isExternal,
       ctaLabel: clip ? 'Watch' : 'Join',
       onJoin: clip ? () => watchHistorical(stream.id) : () => joinStream(stream),
     }
