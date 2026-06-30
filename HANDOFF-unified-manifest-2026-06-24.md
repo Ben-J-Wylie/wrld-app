@@ -2342,3 +2342,43 @@ from CU4 **Phase C** (the destructive collapse) + the CU3 close-out. Suggested p
 
 **Decision (settled, don't re-litigate):** per-era telemetry json REJECTED — keep ONE shared chunked store
 + cull (#2 above); thumbnails ARE per-era (derived). → **"Decision … per-era telemetry json REJECTED" (L2166)**
+
+## Eviction Engine — its OWN initiative; the CU scope boundary (Ben + decision, 2026-06-29)
+The eviction/cull work surfaced during CU testing is a **separate concern** (reaper / cull / representation
+layer) from CU (the manifest unification). **Decision: complete CU as pure manifest work (CU4-d + CU5);
+carve the eviction work into its own "Buffer Eviction Engine" initiative** so CU4-d/CU5 stay clean.
+
+**The one piece that rides INTO CU (coupling):**
+- **Time-machine ghost = discover ∩ surviving-regions → do it in CU4-d.** CU4-d builds the ONE discover
+  feed; intersect pin intervals with surviving regions *there* (once), not by patching the legacy
+  `?at=`/windowed/tiled feeds CU4-d is retiring.
+
+**The Buffer Eviction Engine initiative (separate; most pieces reaper-independent → parallelizable):**
+- **Unified cull engine (the abstraction):** reaper computes ONE evicted range → dispatches a per-track
+  **cull strategy** → one surviving-regions output (feeds grid + discover). Strategies:
+  - **data (JSON):** `ts`-precise straddle **rewrite** (drop `ts ∈ evicted`; keep rest). Gap 3.
+  - **AV (camera/screen/audio):** **delete-whole-segments + keep the boundary segment + REPORT** the
+    surviving region (NO re-cut — `-c:v copy`; the sliver is the price of no-transcode). The grid ghost is
+    fixed by **`survivingRegions` reporting the sliver accurately**, not by deleting it.
+  - (future AV upgrade — see the segment note below.)
+- **Grid ghost — `survivingRegions` split at interior holes** (reaper-level, CU-independent; can start now).
+- **Telemetry cull — the ts-precise straddle-rewrite** (reaper-level, CU-independent; privacy; see the
+  "straddle-rewrite is MANDATORY" decision under Gap 3).
+- **Directive GC/trim — AFTER CU4-d** (targets `DirectiveRange`, which CU4-d collapses — write it against
+  the final table).
+- **Out of this initiative:** per-era thumbnails (needs the server frame pipeline) · the segment idea below.
+
+### Future design note (OUT of CU + out of the near-term eviction work) — larger AV segments + lossless keyframe re-cut
+A unified straddle tool decouples AV **segment size** from **eviction granularity** (today segments are kept
+small *for* clean eviction). With the tool, segments can be **much larger → 10–30× fewer files** for the
+buffer; live latency is unaffected (live = WebRTC; segment size only touches VOD seek granularity, which
+tolerant seeking absorbs). Two AV re-cut flavors:
+- **Lossless keyframe re-cut (NO transcode — preferred):** large segments + a **fine GOP** (e.g. 30s
+  segments, 2s keyframe interval); eviction splits at an *internal keyframe* near the boundary by byte-copy.
+  Keeps `-c:v copy`, ~2s (GOP) eviction granularity, far fewer files. The sweet spot.
+- **Re-encode (frame-accurate, transcode):** only for *sub-GOP* precision — reverses no-transcode (G4) +
+  codec-discontinuity risk. Not needed for eviction (GOP granularity is fine). Avoid.
+**Scope:** recorder/buffer segment architecture (Aaron's deep lane), **overlaps the adaptive-streaming
+design proposal** (`wrld-mediasoup/docs/design/adaptive-streaming-and-buffer-recording.md`) — evaluate the
+two together, NOT inside CU and not in the near-term eviction work. The unified engine's strategy-dispatch
+shape makes this a clean future plug-in (swap the AV strategy from "delete-whole+report" → "keyframe re-cut").
