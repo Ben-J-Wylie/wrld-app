@@ -2163,6 +2163,21 @@ persistence/leak.)
 **Lane:** Aaron (`bufferService` reaper + the data-track storage). No app change — the app reads whatever
 the data route serves; correct culling just removes the on-disk leak.
 
+> **DECIDED (Ben, 2026-06-29) — the straddle-rewrite is MANDATORY; chunk size is just a file-count knob.**
+> Eviction boundaries = retain boundaries = frame-accurate/**arbitrary** instants, so they'll straddle a
+> chunk of ANY size (5 min, 1 min, even ~segment-size). You can't chunk your way out of the rewrite — so
+> build a **reliable straddle-rewrite** rather than chasing finer chunks. Consequences/clarifications:
+> - **It's an EVICTION op, not a snip op.** A snip is manifest-only (a `ts` in the directive; zero bytes
+>   moved — one-store); reads filter by `ts`, already frame-accurate. The rewrite lives in the **reaper**,
+>   keyed off the retain/evicted-range boundary, on **closed** chunks (never the live-writing chunk —
+>   eviction is at the old edge / past interior, hours from the now-edge write head → no write-collision).
+> - **Telemetry eviction is `ts`-PRECISE** (drop exactly the evicted samples) — *better* than AV, which
+>   keeps a boundary sliver because `-c:v copy` can't re-cut. Once the rewrite exists, data culls cleaner
+>   than video.
+> - **Cost is trivial** (KB of JSON: parse → drop `ts ∈ evicted` lines → write back). So chunk size is
+>   chosen purely for file-count/inode balance (keep the existing 5-min, or finer — doesn't change the
+>   need). **Implement as part of the CU initiative** (this Gap 3 cull), not a chunk-size workaround.
+
 ### Decision (Ben, 2026-06-28) — per-era telemetry json REJECTED; keep ONE shared chunked store + cull
 Considered: one `.jsonl` per era (each file only that era's samples; evict = delete the file, like a
 per-era thumbnail). **Rejected — keep the one shared, wall-clock-chunked store; the reaper culls it
