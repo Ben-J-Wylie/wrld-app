@@ -475,3 +475,40 @@ there's a consumer.
 This is the hard-to-reverse phase, so I'm **holding the destructive migration for your confirm** on
 Q1+Q2 (Q3 is mechanical). Confirm the shape and I start at step 1 (snapshot) + the additive collapse —
 each step soaked before the next, same as every prior cutover. Ping back.
+
+---
+
+## ⮕ Aaron → Ben, 2026-06-30 — CU4-d STARTED: snapshot + redundancy proof + rangeWindows fold (additive)
+
+Both confirmed → proceeded, gated. **Steps 1-2 of the close-out are done; deployed `backend f102fff`.**
+
+**Data finding that refined Q1 (worth knowing):** there are **zero clipId-set `DirectiveRange` rows** —
+the spine is the **clipId=null** session directives, and a saved clip is a **window over that spine**
+(its axes already materialized onto `Clip` by CU4-b), *not* clip-owned segment rows. The child tables
+carry only trivial data: **17 clips all single-range, 181 `ClipTrack` all `enabled:true`, no
+removedRanges / no URLs / no copied clips.** So the fold is clean — and the one real nuance (a clip's
+**gap** structure, which the spine doesn't carry) gets a home on the Clip.
+
+**Done (additive, reversible, soaked):**
+1. **Snapshot** — `pg_dump` of all 4 tables → `wrld-backend/backups/cu4d-snapshot-20260630-060335.sql`.
+2. **Redundancy proof (read-only)** — `ClipRange` == `[clip.start, clip.end]` (17/17) and
+   `ClipTrack.enabled` == `sources[kind] ?? true` (17/17). The legacy children are **losslessly
+   derivable** from the canonical fields.
+3. **`Clip.rangeWindows` (JSON)** — folds `ClipRange` (the gap home; `[{bufferSessionId,startAtMs,
+   endAtMs,ordinal}]`). Backfilled self-healing from `ClipRange`; `verifyCollapsed` soak wired into the
+   startup + hourly CU4 job. Backfill 17/17, **soak rangeDrift 0 / trackDrift 0**. `ClipTrack.enabled`
+   folds into the existing `sources` axis. Reads still use the relations this phase.
+
+**Next (my lane unless noted):**
+- **Flip the child reads** — `GET /buffer/me/clips` + `GET /clips/:id` derive `ranges` from
+  `rangeWindows` and `tracks`/`sources` from the sources axis + session kinds, instead of the
+  `ClipRange`/`ClipTrack` relations. **Response SHAPE is preserved** (`ranges`/`tracks`/`sources` look
+  identical) → **no app change at the flip**; soak proves derived == relational first.
+- **The one discover feed (Q2, LOCKSTEP)** — make the cell feed canonical with the **discover ∩
+  surviving-regions** intersection built in (the time-machine ghost rides in here); retire
+  `?at=`/windowed. **Ben:** switch `useHistoricalClips`/cells/`?at=` consumers to the one feed.
+- **CU5** — drop `ClipRange`/`ClipTrack` + the legacy feeds + the flags; **Ben** drops the legacy
+  fallback in the `clip.ts` adapters.
+
+Same additive→soak→flip→destructive gate. I'll ping for the one-feed lockstep when the child-read flip
+is soaked. Snapshot's the reversible floor the whole way.
