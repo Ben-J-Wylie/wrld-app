@@ -2392,3 +2392,15 @@ tolerant seeking absorbs). Two AV re-cut flavors:
 design proposal** (`wrld-mediasoup/docs/design/adaptive-streaming-and-buffer-recording.md`) — evaluate the
 two together, NOT inside CU and not in the near-term eviction work. The unified engine's strategy-dispatch
 shape makes this a clean future plug-in (swap the AV strategy from "delete-whole+report" → "keyframe re-cut").
+
+### Eviction-representation — concrete device repro (Ben, 2026-06-30, post dual-write deploy)
+4 segments recorded; **1 & 3 saved, 2 & 4 reaped**. Observed (all = the known eviction-representation gap,
+post-CU Eviction Engine — NOT a CU/dual-write regression; CU doesn't touch eviction):
+- **Grid:** ghost of **2** (interior, between saved 1 & 3); 4 (tail) correctly gone → **tail-trim works,
+  interior gap doesn't**. ⟹ app-side carve/refetch (Aaron confirmed `survivingRegions` splits ≥2; likely
+  stale `useBuffer` cache or the carve not subtracting the interior reaped gap). **Ben's lane.**
+- **Time machine:** ghosts of **both 2 & 4** ⟹ discover not intersecting pins with surviving regions ⟹
+  **CU4-d one-feed** (`discover ∩ surviving-regions`, backend).
+- **Stale labels:** head-of-1 + tail-of-4 ⟹ edge labels reading a stale eviction frontier ⟹ accurate
+  frontier reporting, **Eviction Engine**.
+These don't block the CU finale (eviction representation ≠ the manifest/save path the dual-write changed).
