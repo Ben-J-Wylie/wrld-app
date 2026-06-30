@@ -498,19 +498,52 @@ gaps are tracked as gaps, not silently lived with:
 
 ### Target architecture (north star) — the done state
 
-> **What this is:** the destination model — clean-slate, fully named. Today's schema has three
-> levels (`Stream`/`Clip`/`DirectiveRange`) with duplicated, inconsistently-named fields and a
-> resolution chain; the dual-write + fallback we run now is the **bridge** toward this. This is
-> *not* current reality — it's the shape the migration (the R4 collapse) heads to. Canonized
-> 2026-06-25 so the target is fixed and nothing drifts. *(See "Conformance status" above for how
-> close the build is; the §12 bridge table below maps current → target.)*
+> **What this is:** the destination model — clean-slate, fully named. **Refined + re-canonized
+> 2026-06-30 to the ONE-OBJECT form** (supersedes the earlier `Track`/`Clip`/`Stream` and the interim
+> `Clip`+`Segment` framings). Not current reality — the shape CU4-d/CU5 collapse toward. *(Conformance +
+> the §12 bridge map current → target. **Naming bridge:** the one rules object is the **`Era`**; where
+> later subsections still say "`Clip`" they mean this same `Era`, and "`Track`"/"`Stream`" mean
+> `Recording` — the rename lands with the collapse.)*
 
-**1. Three entities (named by role).**
-- **`Track`** — captured per-source footage. The immutable substrate.
-- **`Clip`** — the **one** manifest unit: a wall-clock range over the Tracks + the 7 axes. Snip →
-  two clips; mend → one. (*Clip ≡ segment.*)
-- **`Stream`** — the live broadcast's **identity + access only** (host, coords, `subscribersOnly`,
-  `ppvEventId`, `contentRating`). Holds **no** settings axis.
+**1. Two entities — and exactly ONE rules object.**
+- **`Recording`** — the **data**, one per broadcast: the captured per-source footage (camera/audio/
+  location/chat/… on disk, addressed by `(recordingId, source, time-range)`) **+** the broadcast's fixed
+  facts — `hostId`, `startedAt`/`endedAt`, the **real** `lat`/`lng`, and access (`subscribersOnly`/
+  `ppvEventId`/`contentRating`). The immutable substrate; folds in the old `Track` (per-source footage) +
+  `Stream` (live identity/access).
+- **`Era`** — the **one self-contained rules object**: a `[startAtMs, endAtMs)` over a `Recording`,
+  carrying the **7 axes** (`title · tags · visibility · identity · precision · sources · keep`) as
+  independent **values**, plus its own `thumbnailUrl` / `viewCount` / `createdAt`. **snip** splits one
+  `Era` into **two of the same type**; **mend** merges two; **delete** removes one. **Nothing spans a snip.**
+
+**There is exactly ONE rules object type.** `keep`, `title`, `visibility`, … are **values it carries, not
+types.** `keep` is existence/lifespan — `kept` persists past the reaper; `reapable` is eventually reaped
+(ceases to exist) — it changes *how long* an `Era` lives, **not what it is**. So **"clip", "segment",
+"draft", "saved", "private moment", "buffer slice" are NOT types** — they're informal labels for an `Era`
+with particular axis values. A kept-titled-public `Era` is the *same kind of object* as a
+reapable-nameless-private one. The 7 axes are **orthogonal**: every combination is valid (kept×private,
+reapable×public, …); no axis implies another. A "clip" is just an `Era` you set `keep: kept` on (usually
++ a `title`) — it doesn't become a different thing.
+
+**The shape, concretely** (one 10-min broadcast, snipped into 3 eras; all the *same type*):
+
+```text
+Recording  id=rec_8f3kq2  hostId=usr_ben  startedAt=14:00  endedAt=14:10
+           lat/lng=<real>  access={subscribersOnly:false}  footage: {camera,audio,location,chat}
+
+Era  id      recordingId  start  end    title         visibility identity precision sources                keep      thumb views
+     era_a1  rec_8f3kq2   14:00  14:04  "Sunset run"  public     shown    city      {cam,aud,loc:T chat:F} kept      ✓     142
+     era_b2  rec_8f3kq2   14:04  14:05  null          private    anon     private   {cam:T aud,loc,chat:F} reapable  —     0
+     era_c3  rec_8f3kq2   14:05  14:10  null          public     shown    city      {cam,aud,loc,chat:T}   reapable  —     0
+```
+
+All three are the **identical type** — same columns, no `isClip`/type flag, no second rules table. `era_a1`
+is what you'd casually call "a saved clip" (just `keep:kept` + a title); `era_b2` a private moment that'll
+expire; `era_c3` default public buffer footage. Flip `era_a1.keep` → `reapable` and it's the *same row*,
+now destined to be reaped. **Operations are plain row ops:** **snip** = UPDATE end + INSERT (the new row
+inherits the axes); **edit** = UPDATE an axis column (the row IS the truth everywhere → no projection,
+no staleness); **reap** = DELETE `reapable` rows past the window + free their footage. (`startAtMs`/`endAtMs`
+are absolute UTC ms; shown as wall-clock for readability.)
 
 **2. The substrate — what's recorded (10 sources; 9 live, screen pending).** Each captured
 **source** is stored as a **`Track`** (drop "kind" — a source *is* the track's identity), with an
@@ -531,8 +564,8 @@ initial-state sample at every boundary (go-live + each snip) so it always regist
 
 *Not tracks:* **identity** is an axis (a flag), not recorded data; `temp` is deprecated (no sensor).
 
-**3. The manifest — the 7 axes (columns on `Clip`, all equal).** One name, one home (`Clip`), one
-vocabulary each. Written only on the `Clip`:
+**3. The manifest — the 7 axes (columns on `Era`, all equal).** One name, one home (the `Era` row), one
+vocabulary each. They are independent **values** (orthogonal — any combination), not types:
 
 | Axis | Column | Values |
 |---|---|---|
@@ -609,15 +642,18 @@ decides shown-vs-anon. **Compose inputs** (dashboard + stream-preview title fiel
 to stored clip data. *(If a creator ever picks a planet explicitly, that becomes its own `realm`
 axis beside `precision` — not inside it. Today it's fully derived, so no `realm` axis yet.)*
 
-**10. The count.** 3 entities · 10 sources/Tracks (9 live) · 7 equal axes · 3 structural ops · 1
-read · 1 write (2 writers) · 1 resolver. No second copy of any fact → no resolution chain, no name
-collision, no vocab tangle. The naming enforces it: there's nowhere else to put a `title`.
+**10. The count.** **2 entities** (`Recording` · `Era`) · 10 sources (9 live) · 7 equal axes · 3
+structural ops · 1 read · 1 write · **1 rules-object type**. No second copy of any fact, no second rules
+table → no resolution chain, no name collision, no vocab tangle. The naming enforces it: there's nowhere
+else to put a `title`.
 
-**11. The one-line model.** A **`Clip`** is a wall-clock range over the footage **`Track`s**,
-carrying seven axes — `title` · `tags` · `visibility` · `identity` · `precision` · `sources` ·
-`keep`. `snip`/`mend`/`delete` change its shape; `editClip` changes its axes; a selector
-(`t`/`now`/the clip) finds it and every axis is read **current**; the **`Stream`** is just live
-identity + access; the planet is derived. One home per fact, rendered everywhere.
+**11. The one-line model.** An **`Era`** is a `[startAtMs, endAtMs)` over a **`Recording`**'s footage,
+carrying seven axes as values — `title` · `tags` · `visibility` · `identity` · `precision` · `sources` ·
+`keep`. `snip`/`mend`/`delete` change its shape; an axis edit changes a value (the row IS the truth — no
+projection); a selector (`t`/`now`/the era) finds it and every axis is read **current**. There is one
+rules-object type — "clip"/"draft"/"saved" are values, not types; the `Recording` holds the footage +
+fixed broadcast facts (host, real coords, access); the planet is derived. One home per fact, rendered
+everywhere.
 
 **12. North-star vs. built (the bridge — so this isn't mistaken for reality).**
 
@@ -643,10 +679,11 @@ bridge when touching code ("`saveDraft` = set `keep: kept`").
 
 | Use this | Retire this | What it is |
 |---|---|---|
-| **Clip** | — | a thin **grouping** of segments (id + provenance + housekeeping) |
-| **Segment** | `DirectiveRange`, "range" | a wall-clock range **+ the 7 axes** — the spine |
-| **the 7 axes** | scattered columns | `title · tags · visibility · identity · precision · sources · keep` |
-| **footage** | `ClipTrack`, "the clip's file" | buffer segments referenced by `(session, time-range)` — **no copy** |
+| **Era** | `Clip`, `Segment`, `DirectiveRange`, "range" | the ONE self-contained rules object — `[start,end)` over a `Recording` + the 7 axes as values + its own thumb/views. The **only** rules type. |
+| **Recording** | `Track` (per-source), `Stream`, `BufferSession` | the **data**: one per broadcast — per-source footage + fixed facts (host · real coords · access) |
+| **the 7 axes** | scattered columns | `title · tags · visibility · identity · precision · sources · keep` — independent **values**, not types |
+| **footage** | `ClipTrack`, "the clip's file" | a `Recording`'s per-source tracks on disk, addressed by `(recording, source, time-range)` — **no copy** |
+| **"clip"/"segment"/"draft"/"saved"** | these as **types** | NOT types — informal labels for an `Era` with certain axis *values* |
 | **snip** | "trim", split, `splitPoints` | add a boundary → two segments |
 | **mend** | — | remove a boundary → one segment |
 | **delete** | — | permanent removal (the only destructive op) |
@@ -659,9 +696,10 @@ bridge when touching code ("`saveDraft` = set `keep: kept`").
 | *"set keep: kept"* | "promote a draft", "save durably" | make a segment durable |
 | *"snip + keep: reapable"* | "trim" | cut a piece that then expires |
 
-So: **a "draft" is a segment that's `keep: reapable` + `visibility: private`; "promoting" it is just
+So: **a "draft" is an `Era` that's `keep: reapable` + `visibility: private`; "promoting" it is just
 `keep: kept`; "trim" is `snip` + `keep: reapable`.** Primitives = **snip / mend / delete + axis edits** —
-nothing else. "Draft", "trim", "saved", "promote" are legacy composites, all sayable in those terms.
+nothing else. "Draft", "trim", "saved", "promote", and even "clip"/"segment" are legacy composites/labels,
+all sayable as one `Era` with particular axis values — **none is a distinct type.**
 
 ---
 

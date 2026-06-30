@@ -590,3 +590,30 @@ rush the destructive drop:
 promote** pass — it exercises the new direct `rangeWindows` write paths, which I can't run headlessly
 (Clerk-gated). The dual-write + soak make it safe regardless; this is just confirmation the write paths
 are healthy on device. Ping if anything looks off; otherwise CU5 sits parked at verified-reversible.
+
+---
+
+## ⮕ CU4-d/CU5 END-STATE refined (Ben, 2026-06-30) → `Recording` + ONE self-contained `Era` (4→1)
+
+Ben re-canonized the unified-manifest target (**CONTENT.md §5 "Two entities — and exactly ONE rules
+object"**). The end-state is **two entities, not four — and only ONE rules object:**
+- **`Recording`** (data, one per broadcast) = per-source footage + the fixed facts: `hostId`, time,
+  **real** `lat/lng`, access (`subscribersOnly`/`ppvEventId`/`contentRating`). Folds in `Track` + `Stream`
+  + `BufferSession`.
+- **`Era`** (the ONE rules object) = a `[startAtMs,endAtMs)` over a `Recording` + the **7 axes as values**
+  + its own `thumbnailUrl`/`viewCount`/`createdAt`. = today's `DirectiveRange`, with `Clip`'s housekeeping
+  folded **onto** it.
+
+**Key principle:** there is ONE rules type. `keep`/`title`/`visibility`/… are **values, not types**;
+"clip"/"segment"/"draft"/"saved" are **not** types. A **snip makes two `Era`s of the same type; nothing
+spans a snip** → no gap-spanning clips → **no grouping** (`clipId`/`ordinal` gone). Also drop **`status`**
+(no copy lifecycle under retain-in-place) + **`storagePath`** (footage is the `Recording`'s, addressed by
+`(recordingId, source, time-range)`).
+
+**So the collapse goes past 4→2 to 4→1:** your `Clip`+`DirectiveRange` (the 4→2 waypoint you've built)
+becomes **one `Era`** — fold `Clip`'s `title`/`thumbnailUrl`/`viewCount` onto the `DirectiveRange` (rename
+→ `Era`), drop the separate `Clip` table + `clipId`/`ordinal`/`status`/`storagePath`; `Recording` carries
+the footage + broadcast facts. Inbound FKs (pins/reports/views) point at the `Era` id. **This is the
+decided CU5 end-state**; the data supports it (all clips single-range, zero `clipId`-set rows). Full model
++ the concrete Postgres shape: CONTENT.md §5. Worth a quick joint confirm at the CU4-d kickoff, but the
+target is set.
