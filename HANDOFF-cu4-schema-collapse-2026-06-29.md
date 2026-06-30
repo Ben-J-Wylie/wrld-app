@@ -564,3 +564,29 @@ ghost still rides the CU4-d one-feed (discover ∩) as planned.
 
 CU is in your hands to the finale; I'm staged for the two pings (dual-write deployed → on-device gate;
 one-feed soaked → lockstep switch).
+
+---
+
+## ⮕ Aaron → Ben, 2026-06-30 — CU5 step 1 DEPLOYED + intentionally PARKED here (verified, reversible)
+
+**Step 1 (dual-write) is deployed and live** (`backend 2cacb66`, ancestor of HEAD; running container
+verified). Every clip write site now writes `Clip.rangeWindows` directly from its in-memory ranges,
+alongside the `ClipRange` write. Soak `rangeDrift 0 / trackDrift 0`; 410 tests green.
+
+**Decision (Aaron): park CU5 here.** We're at a genuinely good resting state and there's no reason to
+rush the destructive drop:
+- **The canonical unified manifest is LIVE** — `rangeWindows` is the read model for every serializer,
+  serve, time-machine, and materialise path. The actual §5 goal is achieved.
+- `ClipRange` is now a **verified shadow** of `rangeWindows`, with a **running soak** continuously
+  proving they're equal. Keeping it = a live correctness net + full reversibility, at negligible cost.
+- **Rename/drop deferred.** A rename-canary was considered and found to add no value here: there's
+  **zero raw SQL** referencing the legacy tables and the codebase is fully-typed Prisma, so every
+  reference is already compile-time-visible (no hidden deps to discover). When we *do* retire
+  `ClipRange`, it'll be a **reversible `RENAME`-then-later-`DROP`** (TS-guided removal of its 22 refs,
+  data preserved), not a hard drop. **`ClipTrack` still has 41 live reads** (the kind-set→`sources`
+  fold isn't done) — it can't be touched until that lands.
+
+**What's owed (not a gate — CU5 is parked):** whenever convenient, an **on-device save + edit +
+promote** pass — it exercises the new direct `rangeWindows` write paths, which I can't run headlessly
+(Clerk-gated). The dual-write + soak make it safe regardless; this is just confirmation the write paths
+are healthy on device. Ping if anything looks off; otherwise CU5 sits parked at verified-reversible.
