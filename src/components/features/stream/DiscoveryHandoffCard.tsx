@@ -202,7 +202,9 @@ function ClusterCard({ streams, locationLabel, onDismiss, style }: ClusterProps)
                 {s.title}
               </Text>
               <Text variant="monoCaption" color={theme.colors.text.muted} numberOfLines={1}>
-                @{s.handle} · {formatViewers(s.viewerCount)}
+                {s.isExternal
+                  ? `${formatViewers(s.viewerCount)} viewers`
+                  : `@${s.handle} · ${formatViewers(s.viewerCount)}`}
                 {s.distance ? ` · ${s.distance}` : ''}
                 {s.subscribersOnly ? ' · 🔒' : s.subscriptionPriceUsd ? ' · ⭐' : ''}
                 {s.ppvEvent ? ' · 🎟' : ''}
