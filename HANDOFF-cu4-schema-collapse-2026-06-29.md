@@ -356,3 +356,60 @@ want it prioritized.
 
 App lane is clean — nothing owed from Ben until the grid `survivingRegions` returns ≥2 (auto-draws) or
 the CU4-d kickoff. Ben can device-spot-check C6 (scrub a saved clip → data source replays) anytime.
+
+---
+
+## ⮕ Ben → Aaron, 2026-06-29 — COMPLETE THE REMAINING CU (CU4-d + CU5)
+
+Everything through **CU4-c is done + verified on device** (Gap 4 data persists; era-preference edits
+proliferate to every surface). The remaining CU deliverables are **CU4-d** (structural collapse) + **CU5**
+(delete the old). Close-out plan below. Keep CU **pure manifest work** — the eviction engine is a separate
+initiative (scope guard at the bottom).
+
+### Status
+| Phase | State |
+|---|---|
+| CU1 — one authority + resolver + reaper-retain | ✅ deployed (drift soak 0) |
+| CU2 — app: one resolver / render / drawer | ✅ |
+| CU3 — lane-as-axis + live edges (D1–D4), `CU3_RETAIN_ONLY` on | ✅ |
+| CU4-a — `Clip` shadow axes | ✅ |
+| CU4-b — named §5 columns (additive) | ✅ |
+| CU4-c — responses surface canonical + app reads them | ✅ verified on device |
+| **CU4-d — collapse tables + one discover feed** | ⬜ remaining |
+| **CU5 — delete the old + the flags** | ⬜ remaining |
+
+### CU4-d — structural collapse (Aaron schema + Ben types, LOCKSTEP)
+Target (CONTENT.md §5): fold `ClipRange` + `ClipTrack` into the canonical **range-with-axes** row
+(`DirectiveRange` is the spine) → one **`Clip = range + 7 axes over Track`**; `resolveClipAxes` collapses
+to a **column read** (no fallback chain); **ONE discover feed** (retire legacy `?at=`/windowed/tiled).
+Backfill historical (small — ~17 clips / ~44 directives), **snapshot first**.
+- **The ONE eviction piece that rides IN:** **discover ∩ surviving-regions** (the time-machine ghost) —
+  CU4-d builds the one feed, so do the intersection there, once (don't patch the feeds you're retiring).
+- **Settle at the joint kickoff before the destructive migration:** (1) final range-with-axes **table
+  name** + whether `Clip` survives as a thin grouping (id/name/provenance) over range rows or folds
+  entirely; (2) the **one-feed shape** that retires `?at=`/windowed/tiled; (3) **backfill ordering**
+  (snapshot first).
+- **Ben (app, lockstep):** consolidate the surface types toward the **one canonical clip type**
+  (`src/types/clip.ts` is the start); switch the historical consumers (`useHistoricalClips` / cells /
+  `?at=`) to the one feed; the adapters already read canonical (CU4-c) — they just shed the legacy
+  fallback at CU5.
+
+### CU5 — delete the old (both)
+Drop the legacy tables/columns/feeds/dual-writes + the now-redundant flags (`CU3_RETAIN_ONLY`,
+`CU4_UNIFIED_DISCOVER`, `PB*`). **App:** drop the legacy fallback in the `clip.ts` adapters
+(`c.precision ?? <legacy>` → `c.precision`), retire `resolvePinAxes` client-side resolution if the one
+feed resolves server-side, collapse the surface types to the one canonical clip. **Done-bar:** one home
+per fact — one read, one write, one render.
+
+### Scope guard (don't mud the waters)
+- **Buffer Eviction Engine** (the ghosts / cull / unified straddle rewriter / `survivingRegions` split /
+  directive-GC) = a **SEPARATE initiative AFTER CU** — see "Eviction Engine — its OWN initiative" + the
+  CONTENT.md "Clean eviction = honest representation" principle. **Only `discover ∩` rides into CU4-d**;
+  **directive-GC waits** until after CU4-d (it targets the collapsed table).
+- Per-era thumbnails + larger-AV-segments = their own future things (the latter with adaptive-streaming).
+
+### Kickoff
+CU4-d is the one explicitly-coordinated, hard-to-reverse phase → a **joint session** (Aaron schema + Ben
+types in lockstep). Same additive→prove(soak)→flip→then-destructive gate as every prior cutover. **Ping me
+to kick off** — settle the three open questions, snapshot, collapse additively, verify, flip reads, then
+CU5 deletes. That closes CU; the Eviction Engine is the principled successor.
