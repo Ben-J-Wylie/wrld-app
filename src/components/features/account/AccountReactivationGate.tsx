@@ -39,14 +39,24 @@ export function AccountReactivationGate() {
     setBusy(true)
     try {
       await usersApi.reactivateAccount()
-      const user = await usersApi.getMe()
-      setWrldUser(user)
-      setDeletionPending(null)
-      qc.invalidateQueries()
     } catch {
       Alert.alert('Error', 'Could not reactivate — try again, or contact support@wrld.cam.')
       setBusy(false)
+      return
     }
+    // Reactivation succeeded — the account is active again. Drop the gate now,
+    // regardless of the follow-up profile refresh: if getMe() hangs or fails we
+    // must NOT leave the user stuck on "Please wait…" (the account is restored,
+    // and RootNavigator's /auth/me poll will refill the store).
+    setDeletionPending(null)
+    try {
+      const user = await usersApi.getMe()
+      setWrldUser(user)
+    } catch {
+      // best-effort — the 30s /auth/me poll refreshes the store
+    }
+    qc.invalidateQueries()
+    setBusy(false)
   }
 
   async function handleSignOut() {
@@ -81,7 +91,9 @@ export function AccountReactivationGate() {
               variant="primary"
               disabled={busy}
             />
-            <Button label="Sign out" onPress={handleSignOut} variant="secondary" disabled={busy} />
+            {/* Never disabled — this is the escape hatch if reactivate stalls.
+                handleSignOut clears the gate synchronously before any await. */}
+            <Button label="Sign out" onPress={handleSignOut} variant="secondary" />
           </View>
         </View>
       </SafeAreaView>
