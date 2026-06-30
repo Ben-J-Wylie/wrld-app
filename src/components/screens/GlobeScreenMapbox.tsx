@@ -93,11 +93,12 @@ import type { Stream } from '@/types'
 
 Mapbox.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '')
 
-const PIN_RED = '#FF3B5C'    // exact-location pins (precision colour)
-const PIN_YELLOW = '#F5B400' // city-location pins (precision colour)
-const PIN_BLUE = '#2E7CF6'   // country-location pins (precision colour)
-const PIN_PURPLE = '#A855F7' // (cluster only — subscriber-only aggregate)
-const PIN_BLACK = '#111111'  // the viewer's own stream pin (tap → return to it)
+const PIN_AMBER = '#F5B400'   // exact-location pins (precision colour)
+const PIN_RED = '#FF3B5C'     // city-location pins (precision colour)
+const PIN_DARKRED = '#9B1C31' // country-location pins (precision colour)
+const PIN_MAGENTA = '#E0218A' // external-cam pins (overrides precision colour)
+const PIN_PURPLE = '#A855F7'  // (cluster only — subscriber-only aggregate)
+const PIN_BLACK = '#111111'   // the viewer's own stream pin (tap → return to it)
 const PIN_BORDER = '#FFFFFF'
 
 // Globe zoom FLOOR — the furthest you can pinch out. CRITICAL: this must keep the
@@ -1407,6 +1408,8 @@ export function GlobeScreenMapbox() {
               precision: planet.id === 'earth' ? (s.locationPrecision ?? 'exact') : 'exact',
               // ISO alpha-2 (lowercased for the flag image name); '' until resolved.
               countryCode: (s.countryCode ?? '').toLowerCase(),
+              // External cams (bar cams / relays) get a magenta pin regardless of precision.
+              isExternal: s.isExternal === true,
               subscribersOnly: s.subscribersOnly === true,
               ppv: s.ppvEvent != null,
               isSelf: treatAsSelf(s),
@@ -1883,10 +1886,10 @@ export function GlobeScreenMapbox() {
                   ] as any
                 }
                 style={{
-                  // Precision drives colour (exact = red); the viewer's own stream
-                  // stays black. Subscriber-only / PPV are marked by the ★ / "PPV"
-                  // label layers below, not by pin colour.
-                  circleColor: ['case', ['get', 'isSelf'], PIN_BLACK, PIN_RED] as any,
+                  // External cams = magenta (any precision); else the viewer's own
+                  // stream is black; else precision colour (exact = amber).
+                  // Subscriber-only / PPV are marked by the ★ / "PPV" labels below.
+                  circleColor: ['case', ['get', 'isExternal'], PIN_MAGENTA, ['get', 'isSelf'], PIN_BLACK, PIN_AMBER] as any,
                   circleRadius: 14,
                   circleStrokeWidth: 2,
                   circleStrokeColor: PIN_BORDER,
@@ -1903,8 +1906,8 @@ export function GlobeScreenMapbox() {
                   ] as any
                 }
                 style={{
-                  // City precision = a solid yellow pin (no longer a fuzzy blob).
-                  circleColor: ['case', ['get', 'isSelf'], PIN_BLACK, PIN_YELLOW] as any,
+                  // City precision = a solid red pin (external cams override magenta).
+                  circleColor: ['case', ['get', 'isExternal'], PIN_MAGENTA, ['get', 'isSelf'], PIN_BLACK, PIN_RED] as any,
                   circleRadius: 14,
                   circleStrokeWidth: 2,
                   circleStrokeColor: PIN_BORDER,
@@ -1921,10 +1924,10 @@ export function GlobeScreenMapbox() {
                   ] as any
                 }
                 style={{
-                  // Country precision = a larger solid blue pin sitting at the
-                  // country centroid (obfuscated server-side); the country flag is
+                  // Country precision = a larger solid dark-red pin at the country
+                  // centroid (external cams override magenta); the country flag is
                   // drawn beside it by the single-country-flag SymbolLayer below.
-                  circleColor: ['case', ['get', 'isSelf'], PIN_BLACK, PIN_BLUE] as any,
+                  circleColor: ['case', ['get', 'isExternal'], PIN_MAGENTA, ['get', 'isSelf'], PIN_BLACK, PIN_DARKRED] as any,
                   circleRadius: 18,
                   circleStrokeWidth: 2,
                   circleStrokeColor: PIN_BORDER,
