@@ -136,7 +136,11 @@ export function useViewportDiscovery(opts?: {
         break
       case 'location_updated':
         for (const s of m.values())
-          if (s.mediasoupRoomId === event.mediasoupRoomId) { s.lat = event.lat as number; s.lng = event.lng as number }
+          if (s.mediasoupRoomId === event.mediasoupRoomId) {
+            s.lat = event.lat as number; s.lng = event.lng as number
+            // countryCode resolves async + arrives here — merge for the flag.
+            if (event.countryCode != null) s.countryCode = event.countryCode as string
+          }
         break
       case 'viewer_count_updated':
         for (const s of m.values())

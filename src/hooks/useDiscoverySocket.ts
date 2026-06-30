@@ -64,7 +64,14 @@ export function useDiscoverySocket(): Stream[] {
       case 'location_updated':
         setStreams(prev => prev.map(s =>
           s.mediasoupRoomId === event.mediasoupRoomId
-            ? { ...s, lat: event.lat as number, lng: event.lng as number }
+            ? {
+                ...s,
+                lat: event.lat as number,
+                lng: event.lng as number,
+                // The country-precision flag's countryCode resolves async and
+                // arrives on this event — merge it so the flag can render.
+                ...(event.countryCode != null ? { countryCode: event.countryCode as string } : {}),
+              }
             : s,
         ))
         break
