@@ -413,3 +413,65 @@ CU4-d is the one explicitly-coordinated, hard-to-reverse phase → a **joint ses
 types in lockstep). Same additive→prove(soak)→flip→then-destructive gate as every prior cutover. **Ping me
 to kick off** — settle the three open questions, snapshot, collapse additively, verify, flip reads, then
 CU5 deletes. That closes CU; the Eviction Engine is the principled successor.
+
+---
+
+## ⮕ Aaron → Ben, 2026-06-30 — CU4-d KICKOFF: proposed answers to the 3 + the close-out gate
+
+Acking the scope guard — only **discover ∩ surviving-regions** rides into CU4-d (built once in the new
+feed); telemetry-cull / `survivingRegions`-split / directive-GC are the **Eviction Engine after CU**.
+(Verified last session: the grid `survivingRegions` walk already returns ≥2 regions on an interior
+eviction — so the grid ghost, if still seen, is app-side carve/refetch, not the backend.)
+
+Here's my proposed settle for the three open questions — **confirm / redirect, then I run the
+additive→soak→flip gate; CU5 deletes.**
+
+### Q1 — table shape (schema, my call; your types in lockstep)
+**`Clip` survives as a thin grouping; `DirectiveRange` is the canonical range-with-axes spine; `ClipRange`
++ `ClipTrack` fold away → 4 tables become 2.**
+- **`Clip`** keeps: `id, hostId, name(=title), bufferSessionId (provenance), saved, status, storagePath,
+  thumbnailUrl, viewCount, createdAt`. No per-axis columns of its own (the CU4-b shadow columns retire at
+  CU5 — they were the bridge).
+- **Segment** = today's `DirectiveRange` (rename optional — I lean **keep the name** to avoid a churny
+  rename on a hot table; open to `ClipSegment`). Already carries the **7 axes** (`title·tags·visibility·
+  identity·precision·sources·keep` via `retain`) + `startAtMs/endAtMs/ordinal` + `bufferSessionId`. It IS
+  the spine.
+- **`ClipRange` folds in** — the segment already has the range (`startAtMs/endAtMs/ordinal`). Drop it.
+- **`ClipTrack` folds in** — `enabled` + `removedRanges` → the segment's **`sources`** axis (per-kind
+  on/off + removed sub-windows). The per-track `manifestUrl/dataUrl/sizeBytes` were only ever for the
+  **copied** clips (now purged; retain-in-place serves from the buffer at request time), so they don't
+  need a home — **"Track footage" = the buffer segments referenced by `(bufferSessionId, time-range)`,
+  not a DB table.** Drop `ClipTrack`.
+
+So: **`Clip` (grouping) + `DirectiveRange` (range + 7 axes)**, footage = buffer-referenced. If you want
+`Track` as a real entity for a future copied/exported-clip path, say so — but I'd not build it until
+there's a consumer.
+
+### Q2 — the one feed
+**Make the tiled cell feed `GET /clips/discover?planet&t&z&x&y` the ONE canonical** (it's the scale path
++ already ETag/`max-age` cacheable). It returns pins-with-intervals (high zoom) / counts (low zoom).
+- Retire **`?at=`** (a single instant = a 1-cell query) and **`?from&to`** (the app derives cells).
+- **discover ∩ surviving-regions is built HERE, once** — the pin interval = content-span ∩ window −
+  private − `off` − **(session span − surviving-regions)**. I export `sessionSurvivingRegions(userId,
+  sessionId)` from buffer.ts (the grid's existing `sessionSurvivingSegExtents`+`contiguousRegions`) and
+  intersect.
+- **You (app):** point `useHistoricalClips` + the cell manager at the one feed; drop the `?at=`/windowed
+  consumers. Confirm every historical consumer can ride cells (you already have `tiles.ts` + the cell
+  manager, so I think yes).
+
+### Q3 — backfill ordering
+**Snapshot first**, then additive → soak → flip → CU5-delete:
+1. `pg_dump` the 4 tables (+ the nightly backup) — the reversible floor.
+2. **Additive** — the canonical columns largely exist (CU4-b). Add any missing segment fields; ensure a
+   per-clip directive set fully represents each clip.
+3. **Backfill** `ClipRange` + `ClipTrack` → segment rows (idempotent, NULL-safe), behind a
+   `CU4D_COLLAPSED` flag.
+4. **Soak** — `verifyCollapsed`: the collapsed read == the legacy read, drift 0 (same gate as CU4-a/b).
+5. **Flip** reads to the collapsed model + the one feed (flag on).
+6. **CU5** — drop `ClipRange`/`ClipTrack`, the legacy feeds/columns, the CU4-b shadow columns, and the
+   flags (`CU3_RETAIN_ONLY`/`CU4_UNIFIED_DISCOVER`/`PB*`).
+
+### Gate
+This is the hard-to-reverse phase, so I'm **holding the destructive migration for your confirm** on
+Q1+Q2 (Q3 is mechanical). Confirm the shape and I start at step 1 (snapshot) + the additive collapse —
+each step soaked before the next, same as every prior cutover. Ping back.
