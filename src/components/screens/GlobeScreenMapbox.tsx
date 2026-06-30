@@ -1365,6 +1365,11 @@ export function GlobeScreenMapbox() {
       subscribersOnly: stream.subscribersOnly,
       subscriptionPriceUsd: stream.host?.subscriptionPriceUsd,
       ppvEvent: stream.ppvEvent,
+      // Broadcast location for the card (server-gated by precision: country always,
+      // city + local time only at exact/city).
+      city: stream.city,
+      countryCode: stream.countryCode,
+      timezone: stream.timezone,
       // Clip / buffer pins (Time Machine) → "Watch" → replay viewer; live → "Join".
       kind: clip ? 'clip' : 'stream',
       ctaLabel: clip ? 'Watch' : 'Join',

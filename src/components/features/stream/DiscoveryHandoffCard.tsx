@@ -24,6 +24,8 @@ import { Icon } from '@/components/primitives/Icon'
 import { Button } from '@/components/primitives/Button'
 import { StreamStrip, type StreamStripLayer } from '@/components/sections/StreamStrip'
 import { LivePill } from './LivePill'
+import { placeLabel } from '@/lib/location'
+import { useBroadcasterClock } from '@/hooks/useBroadcasterClock'
 import { theme } from '@/tokens/theme'
 
 type IconName = ComponentProps<typeof Icon>['name']
@@ -36,7 +38,11 @@ export type DiscoveryStream = {
   avatarUrl?: string | null
   viewerCount: number
   isLive?: boolean
-  city?: string
+  city?: string | null
+  // ISO alpha-2; country name is derived client-side. Local time ticks from the
+  // IANA timezone. Both city + timezone are server-gated to exact/city precision.
+  countryCode?: string | null
+  timezone?: string | null
   distance?: string
   layers?: StreamStripLayer[]
   subscribersOnly?: boolean
@@ -82,6 +88,8 @@ function SingleCard({ stream, onDismiss, style }: SingleProps) {
   const priceLabel = stream.subscriptionPriceUsd
     ? `$${(stream.subscriptionPriceUsd / 100).toFixed(2)}/mo`
     : null
+  const place = placeLabel(stream.city, stream.countryCode)
+  const localTime = useBroadcasterClock(stream.timezone)
 
   return (
     <View style={[styles.card, style]}>
@@ -98,6 +106,14 @@ function SingleCard({ stream, onDismiss, style }: SingleProps) {
           <Text variant="monoCaption" color={theme.colors.text.muted} numberOfLines={1}>
             @{stream.handle} · {stream.kind === 'clip' ? 'replay' : `${formatViewers(stream.viewerCount)} watching`}
           </Text>
+          {(place || localTime) && (
+            <View style={styles.lockRow}>
+              {place && <Icon name="map-pin" size="sm" color={theme.colors.text.muted} />}
+              <Text variant="monoCaption" color={theme.colors.text.muted} numberOfLines={1}>
+                {[place, localTime].filter(Boolean).join(' · ')}
+              </Text>
+            </View>
+          )}
           {priceLabel != null && (
             <View style={styles.lockRow}>
               <Icon

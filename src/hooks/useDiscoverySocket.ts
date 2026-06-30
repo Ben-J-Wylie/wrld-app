@@ -68,9 +68,11 @@ export function useDiscoverySocket(): Stream[] {
                 ...s,
                 lat: event.lat as number,
                 lng: event.lng as number,
-                // The country-precision flag's countryCode resolves async and
-                // arrives on this event — merge it so the flag can render.
+                // countryCode/city/timezone resolve async and arrive on this
+                // event — merge them so the flag + card location can render.
                 ...(event.countryCode != null ? { countryCode: event.countryCode as string } : {}),
+                ...(event.city !== undefined ? { city: event.city as string | null } : {}),
+                ...(event.timezone !== undefined ? { timezone: event.timezone as string | null } : {}),
               }
             : s,
         ))

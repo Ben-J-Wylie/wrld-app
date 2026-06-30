@@ -66,6 +66,7 @@ import { SourceRail } from '@/components/features/clip/SourceRail'
 import { SOURCE_META, SOURCE_RAIL_ORDER, KIND_TO_FEEDKIND, pickDefaultView } from '@/components/features/stream/sourceMeta'
 import { SourceStage, type SourceRender } from '@/components/sections/SourceStage'
 import { useBroadcasterClock } from '@/hooks/useBroadcasterClock'
+import { placeLabel } from '@/lib/location'
 import { useStreamTelemetry } from '@/hooks/useStreamTelemetry'
 import { useLocalTelemetry } from '@/hooks/useLocalTelemetry'
 import { useLocationTrail } from '@/hooks/useLocationTrail'
@@ -416,6 +417,7 @@ export function StreamScreen() {
   }
   // Broadcaster's local time, shown to viewers next to their identity.
   const broadcasterLocalTime = useBroadcasterClock(streamData?.timezone)
+  const broadcasterPlace = placeLabel(streamData?.city, streamData?.countryCode)
   const [activeSource, setActiveSource] = useState<FeedKind | null>(null)
   const [controlsVisible, setControlsVisible] = useState(false)
   const [hopError, setHopError] = useState<string | null>(null)
@@ -1891,6 +1893,11 @@ export function StreamScreen() {
                     @{broadcaster.handle}
                     {broadcasterLocalTime ? ` · ${broadcasterLocalTime}` : ''}
                   </Text>
+                  {broadcasterPlace && (
+                    <Text variant="monoCaption" color={theme.colors.text.muted} numberOfLines={1}>
+                      {broadcasterPlace}
+                    </Text>
+                  )}
                   {ppvTitle !== undefined && <PpvBadge />}
                 </View>
               ) : undefined
