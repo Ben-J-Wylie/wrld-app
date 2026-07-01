@@ -59,12 +59,8 @@ import { theme } from '@/tokens/theme'
 import { useAuthStore } from '@/stores/authStore'
 import { useLocation } from '@/hooks/useLocation'
 import { useViewportDiscovery, type TileCount } from '@/hooks/useViewportDiscovery'
-import { useHistoricalClips } from '@/hooks/useHistoricalClips'
-import { useHistoricalAvailability } from '@/hooks/useHistoricalAvailability'
-import { useHistoricalCells } from '@/hooks/useHistoricalCells'
-import type { Interval } from '@/api/clips'
-import { resolvePinAxes, type ClipPin, type BufferPin } from '@/api/clips'
-import { fromClipPin, fromBufferPin, precisionToEditable, type CanonicalClip } from '@/types/clip'
+import { useDiscover } from '@/hooks/useDiscover'
+import type { DiscoverPin, Interval } from '@/types/era'
 import { useDiscoverySocket } from '@/hooks/useDiscoverySocket'
 import { usePublicConfig, configNumber, configBool } from '@/hooks/usePublicConfig'
 import { PIN_ZOOM_THRESHOLD, COUNT_MIN_ZOOM } from '@/lib/tiles'
@@ -438,54 +434,38 @@ type BannerData =
 // Stable empty pin arrays — so an absent historical feed doesn't hand a fresh `[]`
 // each render into the memo chain (which would defeat the referential-stability the
 // card-sync effects rely on).
-const EMPTY_CLIPS: ClipPin[] = []
-const EMPTY_BUFFER: BufferPin[] = []
-// The placeholder host a pin resolves to when the playhead lands in an anon range (CU1
-// completeness #1). Mirrors the backend's anonymous host so the card reads "Anonymous".
+const EMPTY_PINS: DiscoverPin[] = []
+// The placeholder host an anon pin shows (the backend returns host=null when identity=anon).
 const ANON_PIN_HOST = { id: '', handle: 'anonymous', displayName: 'Anonymous', avatarUrl: null }
 
-// Time Machine — map a CanonicalClip (the one clip shape, CU4) into the Stream shape the globe's
-// pin renderer + card already consume, so historical pins reuse the whole live path. Clips are
-// recorded (isLive false, no room, no viewers); their clip-ness is recovered by `clipPinById.has(id)`,
-// which drives the "Watch" CTA + replay caption. Behaviour-preserving over the prior per-type
-// mappers: title default by source ('Clip'/'Buffer'); the buffer host's `subscriptionPriceUsd`
-// comes from the `access` projection (clip pins carry no access price → key omitted, as before);
-// precision maps back to the Stream vocab ('private'→'off', though pins never carry 'private').
-function canonicalToStream(c: CanonicalClip): Stream {
-  const priceKey = c.access && 'subscriptionPriceUsd' in c.access
+// Time Machine (clean-cut) — map one DiscoverPin (an Era alive at the playhead) into the Stream
+// shape the globe's pin renderer + card already consume, so historical pins reuse the whole live
+// path. A pin is recorded (isLive false, no room, no viewers); its era-ness is recovered by
+// `pinById.has(id)`, which drives the "Watch" CTA + replay caption. The backend already resolved
+// title/identity/precision to the era's CURRENT values (no client-side axis resolution), and coords
+// are display-obfuscated per precision. Anon → host null → the ANON_PIN_HOST placeholder.
+function pinToStream(p: DiscoverPin): Stream {
+  const host = p.host ?? ANON_PIN_HOST
   return {
-    id: c.id,
-    hostId: c.host?.id ?? '',
-    host: c.host
-      ? {
-          id: c.host.id,
-          handle: c.host.handle,
-          displayName: c.host.displayName,
-          avatarUrl: c.host.avatarUrl,
-          ...(priceKey ? { subscriptionPriceUsd: c.access!.subscriptionPriceUsd } : {}),
-        }
-      : undefined,
-    title: c.axes.title ?? (c.source === 'buffer' ? 'Buffer' : 'Clip'),
-    lat: c.lat,
-    lng: c.lng,
-    startedAt: new Date(c.startAtMs).toISOString(),
+    id: p.eraId,
+    hostId: host.id,
+    host: {
+      id: host.id,
+      handle: host.handle,
+      displayName: host.displayName,
+      avatarUrl: host.avatarUrl,
+    },
+    title: p.title ?? 'Clip',
+    lat: p.lat,
+    lng: p.lng,
+    startedAt: new Date(p.startAtMs).toISOString(),
     viewerCount: 0,
     isLive: false,
     sources: [],
     mediasoupRoomId: null,
-    subscribersOnly: c.subscribersOnly,
-    locationPrecision: precisionToEditable(c.axes.precision),
+    subscribersOnly: p.access.subscribersOnly,
+    locationPrecision: p.precision === 'private' ? 'off' : p.precision,
   }
-}
-// Module-level + pure so the memoised `pins` stays referentially stable. Both pin kinds now route
-// through the one CanonicalClip → Stream projection (CU4 prep — one shape feeds discovery too).
-function clipToStream(c: ClipPin): Stream {
-  return canonicalToStream(fromClipPin(c))
-}
-// PB1 — a public/gated buffer session. A subscriber/ppv tier reads as `subscribersOnly` so the card
-// shows the locked treatment; owner-private sessions never reach here.
-function bufferPinToStream(b: BufferPin): Stream {
-  return canonicalToStream(fromBufferPin(b))
 }
 
 export function GlobeScreenMapbox() {
@@ -561,97 +541,40 @@ export function GlobeScreenMapbox() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [Math.round(sunInstantMs / 30000)],
   )
-  // PB3.5 — the time-machine pin feed. Two paths, chosen by the AVAILABILITY_FEED flag:
-  //  • OFF (legacy): per-instant `discover?at=T` (re-queried each tick) — returns only the
-  //    pins alive at T (server-sampled). Kept live until the windowed feed deploys.
-  //  • ON (windowed): `discover?from&to` returns every pin in the window + its public
-  //    `intervals`; we resolve visibility LOCALLY here (`playhead ∈ interval`) — no
-  //    per-tick query, no bucket, no stale-pin (kills the blink / half-missing anomalies).
-  // Both hooks are called every render (hooks rules); only the active one is enabled.
-  const availabilityEnabled = configBool(config, 'AVAILABILITY_FEED', false)
-  // PB4 Lane B — the SCALABLE feed: subscribe to the viewport×scrub-time cells + push, instead of
-  // the ±12h window. Supersedes the windowed feed when on. Time-machine is an Earth concept, so the
-  // cells query Earth. High zoom → pins (resolved locally below); low zoom → count bubbles.
-  const tilesEnabled = configBool(config, 'AVAILABILITY_TILES', false)
-  const legacyHist = useHistoricalClips(historicalMode && !availabilityEnabled && !tilesEnabled ? playheadMs : 0)
-  const windowedHist = useHistoricalAvailability(playheadMs, historicalMode && availabilityEnabled && !tilesEnabled)
-  const cellsHist = useHistoricalCells({
+  // The ONE time-machine feed (clean-cut). `useDiscover` subscribes to the viewport×scrub-time cells
+  // `(planet,t,z,x,y)`; high zoom → resolved DiscoverPins (Eras alive in the hour, already intersected
+  // with surviving footage + resolved to the era's CURRENT title/identity/precision server-side), low
+  // zoom → count bubbles. Replaces useHistoricalClips/Availability/Cells + the feed flags. Time-machine
+  // is an Earth concept, so the cells query Earth (Haven/Venus historical → no pins).
+  // Time-machine is an Earth concept (cells query Earth). Gated on historicalMode only — `planetPins`
+  // already ignores these pins on Haven (it shows the live private feed there), so a stray Earth-cell
+  // fetch while viewing Haven is harmless.
+  const discover = useDiscover({
     planet: 'earth',
     playheadMs,
-    active: historicalMode && tilesEnabled,
+    active: historicalMode,
     pinZoomThreshold,
     countMinZoom,
   })
-  const publicBufferEnabled = configBool(config, 'PUBLIC_BUFFER_ENABLED', false)
-  // The historical cell feed shares the map's viewport; pushViewport drives its setView too.
-  const cellsSetViewRef = useRef(cellsHist.setView)
-  cellsSetViewRef.current = cellsHist.setView
+  const discoverSetViewRef = useRef(discover.setView)
+  discoverSetViewRef.current = discover.setView
+  // In the count regime (globe overview) there are no individual pins — bubbles only.
+  const discoverCountMode = discover.mode === 'counts'
 
-  // Both the windowed feed and the tiles feed carry per-pin `intervals` (resolved locally by
-  // playhead ∈ interval); legacy `?at=` is already alive-at-T.
-  const withIntervals = availabilityEnabled || tilesEnabled
-  // In the tiles feed's COUNT regime (globe overview) there are no individual pins — bubbles only.
-  const cellsCountMode = tilesEnabled && cellsHist.mode === 'counts'
-
-  // Source pin sets (stable query refs).
-  const srcClips =
-    (tilesEnabled
-      ? cellsCountMode
-        ? EMPTY_CLIPS
-        : cellsHist.clips
-      : availabilityEnabled
-        ? windowedHist.data?.clips
-        : legacyHist.data?.clips) ?? EMPTY_CLIPS
-  const srcBuffer = !publicBufferEnabled
-    ? EMPTY_BUFFER
-    : (tilesEnabled
-        ? cellsCountMode
-          ? EMPTY_BUFFER
-          : cellsHist.bufferPins
-        : availabilityEnabled
-          ? windowedHist.data?.bufferPins
-          : legacyHist.data?.bufferPins) ?? EMPTY_BUFFER
   const inInterval = (intervals?: Interval[]) =>
     !!intervals && intervals.some((iv) => playheadMs >= iv.startMs && playheadMs < iv.endMs)
-  // CU1 completeness #1 — resolve each visible pin's display TITLE + IDENTITY at the PLAYHEAD
-  // from its per-range `directives`, so a clips-page edit on a LATER range proliferates to the
-  // time-machine pin + card. `?at=`/un-edited pins carry no directives → `resolvePinAxes`
-  // returns the pin-level value (zero change). PRECISION + coords stay pin-level (server-
-  // obfuscated — see Aaron's note in the handoff); identity only ever HIDES (anon era →
-  // Anonymous host). Returns the SAME object when nothing changed so the memo stays stable.
-  const resolveClip = (c: ClipPin): ClipPin => {
-    const r = resolvePinAxes(c.directives, playheadMs, { title: c.title })
-    if (r.title === c.title && !r.anonymous) return c
-    return { ...c, title: r.title, host: r.anonymous ? ANON_PIN_HOST : c.host }
-  }
-  const resolveBuffer = (b: BufferPin): BufferPin => {
-    const r = resolvePinAxes(b.directives, playheadMs, { title: b.title })
-    if (r.title === b.title && !r.anonymous) return b
-    return { ...b, title: r.title, host: r.anonymous ? ANON_PIN_HOST : b.host }
-  }
-  // Windowed: resolve the visible set LOCALLY (playhead ∈ interval, then per-range title/identity).
-  // The set/values genuinely change as the playhead crosses an interval or directive edge, but we
-  // keep `clipPins`/`bufferPins` REFERENTIALLY STABLE between renders unless the visible set OR a
-  // resolved axis actually changes (memo keyed on a signature that encodes both, not on playheadMs)
-  // — so the card-sync effects don't loop on the 1s ticker. Legacy: the server already returned
-  // only alive-at-T pins, resolved server-side (no directives → stable).
-  const resolvedClips = (withIntervals ? srcClips.filter((c) => inInterval(c.intervals)) : srcClips).map(resolveClip)
-  const resolvedBuffer = (withIntervals ? srcBuffer.filter((b) => inInterval(b.intervals)) : srcBuffer).map(resolveBuffer)
-  const clipSig = resolvedClips.map((c) => `${c.id}:${c.title ?? ''}:${c.host.id}`).join(',')
-  const bufferSig = resolvedBuffer.map((b) => `${b.sessionId}:${b.title ?? ''}:${b.host.id}`).join(',')
-  const clipPins = useMemo(
-    () => resolvedClips,
-    [clipSig], // eslint-disable-line react-hooks/exhaustive-deps
+  // Narrow the hour-tile's pins to those alive at the exact playhead instant (the server already
+  // intersected each pin with its surviving footage → `intervals`). Keep `discoverPins` REFERENTIALLY
+  // STABLE between renders unless the visible set actually changes (memo keyed on a signature, not
+  // playheadMs) so the card-sync effects don't loop on the 1s ticker. No client-side axis resolution —
+  // the Era IS the truth, resolved by /discover.
+  const visiblePins = discoverCountMode ? EMPTY_PINS : discover.pins.filter((p) => inInterval(p.intervals))
+  const pinSig = visiblePins.map((p) => `${p.eraId}:${p.title ?? ''}:${p.host?.id ?? ''}`).join(',')
+  const discoverPins = useMemo(
+    () => visiblePins,
+    [pinSig], // eslint-disable-line react-hooks/exhaustive-deps
   )
-  const bufferPins = useMemo(
-    () => resolvedBuffer,
-    [bufferSig], // eslint-disable-line react-hooks/exhaustive-deps
-  )
-  const clipPinById = useMemo(() => new Map(clipPins.map((c) => [c.id, c] as const)), [clipPins])
-  const bufferPinById = useMemo(
-    () => new Map(bufferPins.map((b) => [b.sessionId, b] as const)),
-    [bufferPins],
-  )
+  const pinById = useMemo(() => new Map(discoverPins.map((p) => [p.eraId, p] as const)), [discoverPins])
   // Bumped whenever any overlay UI (not the globe, not the clock) is touched,
   // so the TimeScrubber blurs + collapses. Spinning/zooming the globe doesn't.
   const [clockCollapseSignal, setClockCollapseSignal] = useState(0)
@@ -667,11 +590,8 @@ export function GlobeScreenMapbox() {
   // screen, but `pins` only changes when the live feed or the clip set changes),
   // which keeps the card-sync effects from looping.
   const pins: Stream[] = useMemo(
-    () =>
-      historicalMode
-        ? [...clipPins.map(clipToStream), ...bufferPins.map(bufferPinToStream)]
-        : streams,
-    [historicalMode, clipPins, bufferPins, streams],
+    () => (historicalMode ? discoverPins.map(pinToStream) : streams),
+    [historicalMode, discoverPins, streams],
   )
   // A clip pin is never treated as the viewer's own live stream (no black self-pin,
   // no return-to-broadcast on tap) even when it's their own clip.
@@ -962,7 +882,7 @@ export function GlobeScreenMapbox() {
         const [[east, north], [west, south]] = b as [[number, number], [number, number]]
         const bounds = { west, south, east, north }
         setViewRef.current(bounds, mapZoomRef.current)
-        cellsSetViewRef.current(bounds, mapZoomRef.current) // PB4 Lane B — same viewport, time feed
+        discoverSetViewRef.current(bounds, mapZoomRef.current) // time-machine cells — same viewport
       })
       .catch(() => {})
   }, [])
@@ -1322,38 +1242,27 @@ export function GlobeScreenMapbox() {
     })
   }
 
-  // Open a historical clip OR public buffer session in the replay viewer, seeking to
-  // the playhead instant. `source` routes the viewer's fetch (clips/:id vs
-  // buffer/session/:id).
+  // Open a historical era in the replay viewer (GET /eras/:id), seeking to the playhead instant.
   function watchHistorical(id: string) {
-    const clip = clipPinById.get(id)
-    const buf = bufferPinById.get(id)
-    const pin = clip ?? buf
+    const pin = pinById.get(id)
     if (!pin) return
-    // Seek to the exact playhead within the content: playhead − the pin's content start.
-    // Computed client-side (works for both feeds; the windowed feed carries no per-instant
-    // `seekOffsetSec`). Clamped ≥ 0.
-    const contentStartMs = clip ? clip.clipStartMs : buf!.sessionStartMs
-    const seekSec = Math.max(0, Math.floor((playheadMs - contentStartMs) / 1000))
+    // Seek to the exact playhead within the era: playhead − the era's start. Clamped ≥ 0.
+    const seekSec = Math.max(0, Math.floor((playheadMs - pin.startAtMs) / 1000))
     setSelectedStream(null)
     setSelectedClusterStreams(null)
     router.push({
       pathname: '/(app)/clip/[id]',
       params: {
         id,
-        source: buf ? 'buffer' : 'clip',
         seekSec: String(seekSec),
-        // CU1 #3 — the absolute instant being watched; the viewer reads resolve title/identity/
-        // precision AT this instant (clamped server-side) so a later-segment edit shows.
-        at: String(Math.round(playheadMs)),
         title: pin.title ?? '',
-        handle: pin.host.handle,
+        handle: pin.host?.handle ?? '',
       },
     })
   }
 
   function toDiscovery(stream: Stream): DiscoveryStream {
-    const clip = clipPinById.get(stream.id) ?? bufferPinById.get(stream.id)
+    const clip = pinById.get(stream.id)
     return {
       id: stream.id,
       title: stream.title,
@@ -1446,10 +1355,10 @@ export function GlobeScreenMapbox() {
     () => ({
       type: 'FeatureCollection' as const,
       // In the past, the tiles feed (Lane B) provides per-minute count bubbles at low zoom
-      // (cellsHist.counts); the legacy/windowed feeds don't, so they show none. On Haven the
-      // tile feed is geographic + irrelevant. Only Earth-live has real viewport tile counts.
+      // (discover.counts); on Haven the tile feed is geographic + irrelevant. Only Earth-live has
+      // real viewport tile counts.
       features: (
-        historicalMode ? (cellsCountMode ? cellsHist.counts : []) : planet.id !== 'earth' ? [] : counts
+        historicalMode ? (discoverCountMode ? discover.counts : []) : planet.id !== 'earth' ? [] : counts
       ).map((c: TileCount) => ({
         type: 'Feature' as const,
         geometry: { type: 'Point' as const, coordinates: [c.lng, c.lat] },
@@ -1461,7 +1370,7 @@ export function GlobeScreenMapbox() {
         },
       })),
     }),
-    [historicalMode, cellsCountMode, cellsHist.counts, planet, counts],
+    [historicalMode, discoverCountMode, discover.counts, planet, counts],
   )
   // ROLLBACK: GLOBE_RENDER_OPT=false → rebuild the count GeoJSON every render (old behaviour).
   const countsGeoJSONMemo = useMemo(buildCountsGeoJSON, [buildCountsGeoJSON])
@@ -2142,7 +2051,8 @@ export function GlobeScreenMapbox() {
           // availability for it (windowed feed only) — so another viewer's edit to that
           // moment is reflected the instant you scrub to it, not just on the 60s poll.
           onScrubEnd={() => {
-            if (availabilityEnabled) windowedHist.refetch()
+            // The cell feed (useDiscover) auto-refreshes on staleness + the 1s playhead tick;
+            // no manual refetch needed on scrub-end.
           }}
         />
       </Animated.View>
