@@ -35,4 +35,10 @@ export const erasApi = {
   delete: async (id: string): Promise<void> => {
     await apiClient.delete(`/eras/${id}`)
   },
+
+  // Report → the Report Centre copies the era to the platform moderation hold (CONTENT.md §3).
+  // Auth-gated; no snapshot (the hold copies the footage itself).
+  report: async (id: string, reason: string): Promise<void> => {
+    await apiClient.post(`/eras/${id}/report`, { reason })
+  },
 }

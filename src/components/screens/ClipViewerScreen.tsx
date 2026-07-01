@@ -32,7 +32,6 @@ import {
   SOURCE_META,
   SOURCE_RAIL_ORDER,
   KIND_TO_FEEDKIND,
-  FEEDKIND_TO_KIND,
   pickDefaultView,
 } from '@/components/features/stream/sourceMeta'
 import type { FeedKind } from '@/components/features/broadcast/FeedThumb'
@@ -41,8 +40,7 @@ import { useMutes } from '@/hooks/useMutes'
 import { sampleAt, recentUpTo, torchStateAt, trailUpTo, chatUpTo } from '@/lib/dataTrackRender'
 import { TimeScrubber } from '@/components/features/discovery/TimeScrubber'
 import { serverNow } from '@/lib/serverClock'
-import { clipsApi } from '@/api/clips'
-import { fromClipDetail } from '@/types/clip'
+import { erasApi } from '@/api/eras'
 import { REPORT_REASONS } from '@/lib/reportReasons'
 import { theme } from '@/tokens/theme'
 
@@ -63,34 +61,39 @@ export function ClipViewerScreen() {
   const params = useLocalSearchParams<{
     id?: string
     seekSec?: string
-    at?: string
     title?: string
     handle?: string
-    source?: string
   }>()
   const id = typeof params.id === 'string' ? params.id : undefined
   const seekSec = params.seekSec ? Math.max(0, Math.floor(Number(params.seekSec)) || 0) : 0
-  // CU1 #3 — the absolute instant being watched (the time-machine playhead at tap). Drives the
-  // server's per-instant axis resolution (title/identity/precision) so a later-segment edit shows.
-  const atMs = params.at ? Number(params.at) : undefined
-  const atKey = atMs != null && Number.isFinite(atMs) ? Math.round(atMs) : undefined
   const paramTitle = typeof params.title === 'string' ? params.title : undefined
   const paramHandle = typeof params.handle === 'string' ? params.handle : undefined
-  // 'buffer' → a public buffer session (PB1, GET /buffer/session/:id); else a saved
-  // clip (GET /clips/:id). Both normalise to ClipDetail, so the rest is source-agnostic.
-  const source = params.source === 'buffer' ? 'buffer' : 'clip'
 
+  // The clean-cut viewer: one Era (GET /eras/:id) — its concrete values + recording + per-source
+  // footage URLs. No per-instant resolution (an era is uniform), no buffer/clip split.
   const {
-    data: clip,
+    data: detail,
     isLoading,
     isError,
     error,
   } = useQuery({
-    queryKey: ['clip', source, id, atKey],
-    queryFn: () => (source === 'buffer' ? clipsApi.getBufferSession(id!, atKey) : clipsApi.get(id!, atKey)),
+    queryKey: ['era', id],
+    queryFn: () => erasApi.get(id!),
     enabled: !!id,
     retry: 1,
   })
+
+  // Primary video = the camera track (else audio). Per-source URLs come off `detail.sources`.
+  const era = detail?.era
+  const host = detail?.host ?? undefined
+  const eraSources = detail?.sources ?? []
+  const primaryManifest = useMemo(
+    () =>
+      eraSources.find((s) => s.kind === 'camera')?.manifestUrl ??
+      eraSources.find((s) => s.kind === 'audio')?.manifestUrl ??
+      null,
+    [eraSources],
+  )
 
   const isForbidden = (error as any)?.response?.status === 403
 
@@ -100,14 +103,13 @@ export function ClipViewerScreen() {
   })
   const seekedRef = useRef(false)
 
-  // Load the clip's primary manifest once the row arrives (camera, else audio).
+  // Load the era's primary manifest once the row arrives (camera, else audio).
   useEffect(() => {
-    const url = clip?.manifestUrl
-    if (!url) return
+    if (!primaryManifest) return
     seekedRef.current = false
     setPhase('loading')
-    player.replaceAsync({ uri: url, contentType: 'hls' }).catch(() => setPhase('error'))
-  }, [clip?.manifestUrl, player])
+    player.replaceAsync({ uri: primaryManifest, contentType: 'hls' }).catch(() => setPhase('error'))
+  }, [primaryManifest, player])
 
   // On first ready, land on the playhead instant and play.
   useEffect(() => {
@@ -194,62 +196,37 @@ export function ClipViewerScreen() {
     if (!id) return
     setReportVisible(false)
     try {
-      await clipsApi.report(id, reason)
+      await erasApi.report(id, reason)
       Alert.alert('Reported', "Thanks for letting us know. We'll review this clip.")
     } catch {
       Alert.alert('Error', 'Could not submit report. Please try again.')
     }
   }
 
-  // CU4 prep — read the chrome's title/host through the one CanonicalClip adapter (the same shape
-  // every surface projects to) rather than raw `clip` fields. Behaviour-preserving: `fromClipDetail`
-  // maps `clip.title`→`axes.title` and passes `clip.host` straight through. Falls back to the nav
-  // params while the clip row is still loading.
-  const canon = clip ? fromClipDetail(clip) : null
-  const host = canon?.host ?? undefined
+  // Chrome reads the era's concrete values directly (no adapter, no per-instant resolution — the
+  // Era IS the truth). Falls back to the nav params while the era row is still loading.
   const handle = host?.handle ?? paramHandle ?? 'unknown'
-  const title = canon?.axes.title ?? paramTitle ?? 'Clip'
-  const hasMedia = !!clip?.manifestUrl
-  const startAtMs = clip?.startAtMs ?? null
+  const title = era?.title ?? paramTitle ?? 'Clip'
+  const hasMedia = !!primaryManifest
+  const startAtMs = era?.startAtMs ?? null
   const playheadMs = startAtMs != null ? startAtMs + currentMs : 0
 
-  // ── Source rail: the clip's captured sources, replaying at the playhead ──────
-  // PB4 A4 — the per-segment source window covering the playhead (buffer sessions only).
-  // `find` returns the live array element, so the reference is stable within a window
-  // (it only changes when the playhead crosses a boundary) — no per-tick rail churn.
-  const activeWindow = useMemo(
-    () => clip?.sourceWindows?.find((w) => playheadMs >= w.startAtMs && playheadMs < w.endAtMs) ?? null,
-    [clip?.sourceWindows, playheadMs],
-  )
-  // The rail shows only CAPTURED sources (the clip's enabled tracks), mapped to
-  // FeedKind + ordered like the dashboard; identity is always present.
+  // ── Source rail: the era's exposed sources, replaying at the playhead ────────
+  // An era is uniform (nothing spans a snip), so the rail is the era's `sources` — no per-window
+  // filtering. `detail.sources[]` is the enabled/included kinds with their footage URLs.
   const availableViews = useMemo<FeedKind[]>(() => {
     const set = new Set<FeedKind>()
-    for (const t of clip?.tracks ?? []) {
-      const fk = KIND_TO_FEEDKIND[t.kind]
+    for (const s of eraSources) {
+      const fk = KIND_TO_FEEDKIND[s.kind]
       if (fk) set.add(fk)
     }
-    // The audiolevel companion track means the audio waveform can replay even on a
-    // clip with no separate 'audio' media kind.
-    if ((clip?.tracks ?? []).some((t) => t.kind === 'audiolevel')) set.add('audio')
-    // The primary manifest is always a camera (or audio) track, so the camera view
-    // is always switchable — even before the per-source tracks list is available
-    // (the GET /clips/:id tracks include needs deploying for the rest of the rail).
-    if (hasMedia) set.add('cam')
+    // The audiolevel companion track means the audio waveform can replay even on an
+    // era with no separate 'audio' media kind.
+    if (eraSources.some((s) => s.kind === 'audiolevel')) set.add('audio')
+    if (hasMedia) set.add('cam') // primary manifest is always camera/audio → cam view switchable
     set.add('profile') // identity always
-    let views = SOURCE_RAIL_ORDER.filter((k) => set.has(k))
-    // PB4 A4 — over a window where the creator toggled a source OFF, hide it from the rail
-    // (first-cut: app-side rail filtering; full manifest exclusion is the deferred A4 cut).
-    // Identity is its own axis, never a per-source toggle, so it's always kept.
-    if (activeWindow) {
-      views = views.filter((k) => {
-        if (k === 'profile') return true
-        const bk = FEEDKIND_TO_KIND[k]
-        return !bk || activeWindow.sources[bk] !== false
-      })
-    }
-    return views
-  }, [clip?.tracks, hasMedia, activeWindow])
+    return SOURCE_RAIL_ORDER.filter((k) => set.has(k))
+  }, [eraSources, hasMedia])
 
   const [view, setView] = useState<FeedKind>('cam')
   useEffect(() => {
@@ -260,9 +237,9 @@ export function ClipViewerScreen() {
 
   const dataUrlByKind = useMemo(() => {
     const m: Record<string, string> = {}
-    for (const t of clip?.tracks ?? []) if (t.dataUrl) m[t.kind] = t.dataUrl
+    for (const s of eraSources) if (s.dataUrl) m[s.kind] = s.dataUrl
     return m
-  }, [clip?.tracks])
+  }, [eraSources])
 
   const isVideoView = view === 'cam' || view === 'screen'
   const currentDataUrl = isVideoView
@@ -345,7 +322,7 @@ export function ClipViewerScreen() {
   const blocked =
     isForbidden ||
     (isError && !isForbidden) ||
-    (!isLoading && !isError && clip && !hasPlayable)
+    (!isLoading && !isError && detail && !hasPlayable)
 
   if (blocked) {
     return (
