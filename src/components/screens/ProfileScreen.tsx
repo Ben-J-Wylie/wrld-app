@@ -13,9 +13,9 @@
 //     profile flex move; MetaStrip would flatten it
 //   • FollowButton (for other profiles) / Button (for own profile)
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ActivityIndicator, Alert, AppState, Image, Linking, Pressable, StyleSheet, View } from 'react-native'
-import { useLocalSearchParams, router } from 'expo-router'
+import { useLocalSearchParams, router, useFocusEffect } from 'expo-router'
 import { useAuth } from '@clerk/clerk-expo'
 import { theme } from '@/tokens/theme'
 import { ScreenScroll } from '@/components/sections/ScreenScroll'
@@ -209,6 +209,18 @@ export function ProfileScreen() {
     })
     return () => sub.remove()
   }, [isSignedIn, isOwnProfile, profile?.subscriptionEnabled, refetchSubStatus])
+
+  // Refetch subscription status every time the profile regains focus (the global
+  // QueryClient has refetchOnWindowFocus off + a 30s staleTime, so opening the
+  // profile could otherwise show a stale "Subscribed" state after the sub was
+  // cancelled elsewhere — in-app, on the web, or by an admin).
+  useFocusEffect(
+    useCallback(() => {
+      if (isSignedIn && !isOwnProfile && profile?.subscriptionEnabled) {
+        refetchSubStatus()
+      }
+    }, [isSignedIn, isOwnProfile, profile?.subscriptionEnabled, refetchSubStatus]),
+  )
 
   const { data: ppvEvents } = useQuery({
     queryKey: ['ppv-events-profile', handle],
