@@ -142,11 +142,9 @@ export function MeProfileTab() {
     .flatMap((r) => r.eras.filter((e) => e.keep === 'kept').map((era) => ({ era, kinds: r.kinds })))
     .sort((a, b) => b.era.startAtMs - a.era.startAtMs)
   // Divider: kept eras still inside the rolling-buffer window vs those the reaper has moved past
-  // (kept only because they were saved). The clean-cut /me/recordings doesn't expose windowHours
-  // yet, so the divider is off until it does (graceful: one list). TODO(aaron): add windowHours.
-  const windowFloorMs: number | null = null
-  const _serverNow = serverNow() // reserved for the divider once windowHours lands
-  void _serverNow
+  // (kept only because they were saved). Floor = now − bufferWindowHours (the per-tier window from
+  // /auth/me, server-aligned clock). Absent → no divider (one list).
+  const windowFloorMs = user.bufferWindowHours ? serverNow() - user.bufferWindowHours * 3_600_000 : null
   const inWindow = windowFloorMs == null ? feed : feed.filter((c) => c.era.startAtMs >= windowFloorMs)
   const postReaper = windowFloorMs == null ? [] : feed.filter((c) => c.era.startAtMs < windowFloorMs)
 

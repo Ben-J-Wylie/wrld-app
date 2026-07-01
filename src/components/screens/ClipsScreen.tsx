@@ -99,23 +99,27 @@ export const ClipsScreen = () => {
   const liveMirror = useBroadcastStore((s) => s.liveMirror)
   const qc = useQueryClient()
   const { data: recordings, refetch: refetchRecordings } = useMyRecordings(!!isSignedIn, isLive)
+  // The signed-in user carries the per-tier rolling-buffer window (`bufferWindowHours`) on /auth/me —
+  // the reaper's window, matching the backend `reapRecordings` tier read. Drives the predictive
+  // reaper window UI (edge + "clears in X" countdown + window-floor filtering).
+  const { data: currentUser } = useCurrentUser()
 
-  // ── now clock ── server-aligned (serverClock is fed elsewhere; /me/recordings carries no
-  // serverNowMs). Ticks 1s so the JS window boundary + live-block extent track the wall clock.
+  // ── now clock ── server-aligned (serverClock is fed by the globe/discovery feed; falls back to the
+  // device clock). Ticks 1s so the JS window boundary + live-block extent track the wall clock.
   const [nowMs, setNowMs] = useState(() => serverNow())
   useEffect(() => {
     const id = setInterval(() => setNowMs(serverNow()), 1_000)
     return () => clearInterval(id)
   }, [])
 
-  // ── reaper window (degraded) ── the clean-cut /me/recordings no longer exposes windowHours /
-  // serverNowMs, so the PREDICTIVE reaper window (leading "clears in X" countdown, window-floor
-  // divider, the timeline's advancing reaper mask) has no inputs → off. Actual eviction still shows:
-  // recording.survivingRegions has the on-disk spans, so an evicted head/interior renders as a gap.
-  // (TODO aaron: re-expose windowHours + serverNowMs on /me/recordings to bring the prediction back.)
-  const windowMs = 0
-  const windowStartMs: number | null = null
-  const reaperEdgeNow = useCallback((): number | null => null, [])
+  // ── reaper window ── the per-tier rolling-buffer window from /auth/me. `windowStartMs` (now −
+  // window) is the eviction boundary the timeline draws the advancing reaper edge + countdown at;
+  // actual eviction still shows via survivingRegions. 0/absent → no window (external/legacy).
+  const windowMs = (currentUser?.bufferWindowHours ?? 0) * 3_600_000
+  const windowStartMs = windowMs > 0 ? nowMs - windowMs : null
+  const windowMsRef = useRef(0)
+  windowMsRef.current = windowMs
+  const reaperEdgeNow = useCallback((): number | null => (windowMsRef.current > 0 ? serverNow() - windowMsRef.current : null), [])
 
   // ── lanes: one LaneClip per era, split at interior eviction holes; lane = keep ──
   // An Era is a block. keep:'kept' → saved lane, keep:'reapable' → buffered lane. Snips are
@@ -298,7 +302,6 @@ export const ClipsScreen = () => {
   // through the SAME live `SourceStage` visualizers (circle compass, gyro, accel xyz, speed dial,
   // torch lamp, location trail, chat log) — fed the recorded sample AT THE PLAYHEAD (time-accurate
   // via each sample's wall-clock `ts`), so the past replays exactly as it was captured.
-  const { data: currentUser } = useCurrentUser()
   const [view, setView] = useState<FeedKind>('cam')
   // The rail shows ONLY what THIS clip CAPTURED (Ben 2026-06-17) — so it varies per clip. Identity is
   // always present. We union the session's `kinds` AND its recorded `dataUrls` keys, because the
@@ -1181,15 +1184,16 @@ export const ClipsScreen = () => {
     return () => clearInterval(id)
   }, [isTrailingCard, isReaperCard])
 
-  // Reaper edge — degraded: /me/recordings exposes no windowHours, so there's no predictive window
-  // (windowStartMs null). Actual eviction still shows via survivingRegions (interior gaps). The lane
-  // of the oldest clip drives the timeline's edge icon.
+  // Reaper edge = the buffer-window boundary (windowStartMs). When the OLDEST clip reaches it the
+  // window is full → that lane's edge is being reaped (no leading gap); the lane picks the colour
+  // (buffer = red sickle, saved = black save). Otherwise there's room → a LEADING gap whose card
+  // counts down to when the current oldest footage ages out (reapAtMs).
   const oldestClip = orderedClips[0] ?? null
-  const reaping = false
+  const reaping = windowStartMs != null && oldestClip != null && oldestClip.startMs <= windowStartMs + 1
   const reaperLane: 'buffered' | 'saved' =
     oldestClip != null && savedLane.some((c) => c.id === oldestClip.id) ? 'saved' : 'buffered'
-  const reaperBoundaryMs: number | null = null
-  const reapAtMs: number | null = null
+  const reaperBoundaryMs: number | null = windowStartMs != null && !reaping ? windowStartMs : null
+  const reapAtMs: number | null = oldestClip != null && windowMs > 0 ? oldestClip.startMs + windowMs : null
   const reapAtRef = useRef<number | null>(null)
   reapAtRef.current = reapAtMs
 
