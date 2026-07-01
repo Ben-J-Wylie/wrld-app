@@ -22,14 +22,19 @@ import { Pressable } from '@/components/primitives/Pressable'
 import { Divider } from '@/components/primitives/Divider'
 import { AccountIDPill } from '@/components/features/user/AccountIDPill'
 import { SavedClipRow } from '@/components/features/clip/SavedClipRow'
-import { SavedClipSettingsSheet } from '@/components/features/clip/SavedClipSettingsSheet'
+import { EraSettingsSheet } from '@/components/features/clip/EraSettingsSheet'
+import { KIND_TO_FEEDKIND } from '@/components/features/stream/sourceMeta'
+import type { FeedKind } from '@/components/features/broadcast/FeedThumb'
 import { usersApi } from '@/api/users'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
 import { useUserProfile } from '@/hooks/useUserProfile'
-import { useSavedClips } from '@/hooks/useSavedClips'
-import { useBuffer } from '@/hooks/useBuffer'
-import type { SavedClip } from '@/api/buffer'
+import { useMyRecordings } from '@/hooks/useMyRecordings'
+import { serverNow } from '@/lib/serverClock'
+import type { Era } from '@/types/era'
 import type { User } from '@/types'
+
+// A kept era + its recording's captured kinds (for the settings drawer's per-source rows).
+type FeedItem = { era: Era; kinds: string[] }
 
 function formatCount(n: number): string {
   if (n >= 10_000) return `${Math.floor(n / 1000)}k`
@@ -80,20 +85,22 @@ const TIER_LABEL: Record<User['tier'], string> = {
 // One saved-lane clip (a durable Clip) as a feed row. Tapping opens the per-clip settings drawer
 // in place (edit this clip's preferences — title / location / identity / sources / delete); it does
 // NOT navigate away.
-function FeedRow({ clip, onOpen }: { clip: SavedClip; onOpen: (clip: SavedClip) => void }) {
-  const durSec = Math.max(0, Math.round((clip.endAtMs - clip.startAtMs) / 1000))
-  const meta = [formatDate(clip.startAtMs), formatTime(clip.startAtMs), formatDuration(durSec)]
+function FeedRow({ item, onOpen }: { item: FeedItem; onOpen: (item: FeedItem) => void }) {
+  const { era } = item
+  const end = era.endAtMs ?? era.startAtMs
+  const durSec = Math.max(0, Math.round((end - era.startAtMs) / 1000))
+  const meta = [formatDate(era.startAtMs), formatTime(era.startAtMs), formatDuration(durSec)]
     .filter(Boolean)
     .join('  ·  ')
 
   return (
     <SavedClipRow
-      name={clip.name?.trim() || formatDate(clip.startAtMs)}
+      name={era.title?.trim() || formatDate(era.startAtMs)}
       capturedAt={meta}
       durationSec={durSec}
-      thumbnailUrl={clip.thumbnailUrl}
+      thumbnailUrl={era.thumbnailUrl}
       showPlayGlyph
-      onToggleExpand={() => onOpen(clip)}
+      onToggleExpand={() => onOpen(item)}
     />
   )
 }
@@ -103,8 +110,7 @@ export function MeProfileTab() {
   // Follower / following / gifts live on the public profile endpoint, not
   // /auth/me — fetch our own profile to surface them.
   const { data: profile } = useUserProfile(user?.handle ?? null)
-  const { data: savedClips, isLoading: clipsLoading } = useSavedClips(!!user)
-  const { data: buffer } = useBuffer(!!user)
+  const { data: recordings, isLoading: clipsLoading } = useMyRecordings(!!user)
   // Who's subscribed to me — creators only (non-creators always get []).
   const { data: subscribers = [] } = useQuery({
     queryKey: ['my-subscribers'],
@@ -115,29 +121,34 @@ export function MeProfileTab() {
 
   // The settings drawer for a tapped saved clip (opened in place; `sheetVisible` drives the
   // open/close animation independently of mount so the close animates like the open).
-  const [sheetClip, setSheetClip] = useState<SavedClip | null>(null)
+  const [sheetItem, setSheetItem] = useState<FeedItem | null>(null)
   const [sheetVisible, setSheetVisible] = useState(false)
-  const openSheet = (clip: SavedClip) => {
-    setSheetClip(clip)
+  const openSheet = (item: FeedItem) => {
+    setSheetItem(item)
     setSheetVisible(true)
   }
   const closeSheet = () => {
     setSheetVisible(false)
-    setTimeout(() => setSheetClip(null), 270)
+    setTimeout(() => setSheetItem(null), 270)
   }
 
   if (!user) return null
 
   const gifts = profile?.giftsReceived ?? []
   const totalGifts = gifts.reduce((sum, g) => sum + g.count, 0)
-  // Saved-lane feed: the user's durable saved clips, newest first.
-  const feed = [...(savedClips ?? [])].sort((a, b) => b.startAtMs - a.startAtMs)
-  // Divider: clips whose footage is still inside the rolling-buffer window vs clips the reaper has
-  // moved past (kept only because they were saved). Floor = now − windowHours (server clock).
-  const nowMs = buffer?.serverNowMs ?? Date.now()
-  const windowFloorMs = buffer?.windowHours ? nowMs - buffer.windowHours * 3_600_000 : null
-  const inWindow = windowFloorMs == null ? feed : feed.filter((c) => c.startAtMs >= windowFloorMs)
-  const postReaper = windowFloorMs == null ? [] : feed.filter((c) => c.startAtMs < windowFloorMs)
+  // Saved-lane feed: every KEPT era across the user's recordings, newest first. A clip is an era
+  // whose keep === 'kept'; carry the recording's kinds for the settings drawer's per-source rows.
+  const feed: FeedItem[] = [...(recordings ?? [])]
+    .flatMap((r) => r.eras.filter((e) => e.keep === 'kept').map((era) => ({ era, kinds: r.kinds })))
+    .sort((a, b) => b.era.startAtMs - a.era.startAtMs)
+  // Divider: kept eras still inside the rolling-buffer window vs those the reaper has moved past
+  // (kept only because they were saved). The clean-cut /me/recordings doesn't expose windowHours
+  // yet, so the divider is off until it does (graceful: one list). TODO(aaron): add windowHours.
+  const windowFloorMs: number | null = null
+  const _serverNow = serverNow() // reserved for the divider once windowHours lands
+  void _serverNow
+  const inWindow = windowFloorMs == null ? feed : feed.filter((c) => c.era.startAtMs >= windowFloorMs)
+  const postReaper = windowFloorMs == null ? [] : feed.filter((c) => c.era.startAtMs < windowFloorMs)
 
   return (
     <View style={styles.root}>
@@ -263,7 +274,7 @@ export function MeProfileTab() {
             {/* Newest first. Above the divider: still inside the rolling-buffer window. Below:
                 saved clips the reaper has moved past (kept only because they were saved). */}
             {inWindow.map((c) => (
-              <FeedRow key={c.id} clip={c} onOpen={openSheet} />
+              <FeedRow key={c.era.id} item={c} onOpen={openSheet} />
             ))}
             {postReaper.length > 0 && (
               <View style={styles.reaperDivider}>
@@ -274,13 +285,28 @@ export function MeProfileTab() {
               </View>
             )}
             {postReaper.map((c) => (
-              <FeedRow key={c.id} clip={c} onOpen={openSheet} />
+              <FeedRow key={c.era.id} item={c} onOpen={openSheet} />
             ))}
           </View>
         )}
       </View>
 
-      <SavedClipSettingsSheet clip={sheetClip} visible={sheetVisible} onClose={closeSheet} />
+      {sheetItem && (
+        <EraSettingsSheet
+          visible={sheetVisible}
+          onClose={closeSheet}
+          era={sheetItem.era}
+          rangeLabel={`${formatTime(sheetItem.era.startAtMs)}–${formatTime(sheetItem.era.endAtMs ?? sheetItem.era.startAtMs)}`}
+          dateLabel={formatDate(sheetItem.era.startAtMs)}
+          manifestUrl={null}
+          posterUrl={sheetItem.era.thumbnailUrl}
+          availableSources={
+            sheetItem.kinds.map((k) => KIND_TO_FEEDKIND[k]).filter(Boolean) as FeedKind[]
+          }
+          showLane
+          onDeleted={closeSheet}
+        />
+      )}
     </View>
   )
 }
