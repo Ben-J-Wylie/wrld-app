@@ -126,3 +126,47 @@ clean-cut rather than retrofitted.
 ## Supersedes
 `HANDOFF-cu4-schema-collapse-2026-06-29.md` (the additive CU4-d/CU5) and the migration-scaffolding parts of
 `HANDOFF-unified-manifest-2026-06-24.md`. Those stay as history; **this is the live plan.**
+
+---
+
+## ✅ Contract LOCKED (Ben + Aaron, 2026-06-30) → Phase 2 parallel rewrite is GO
+
+### Ben / app-side rewrite scope (the full surface)
+Layered — types/API first (the contract in TS), then hooks, then consumers, then delete the dead:
+
+**Types + API client** (the contract embodied)
+- `src/api/buffer.ts` + `src/api/clips.ts` → collapse to **`api/recordings.ts` + `api/eras.ts`**: the
+  `Recording` + `Era` types + the endpoints (`/discover`, `/eras/:id`, `/me/recordings`, `PATCH /eras/:id`,
+  `snip`/`mend`/`delete`). Drop `SavedClip`/`ClipDetail`/`ClipPin`/`BufferSession`/`BufferTrack`/`ClipRange`.
+- `src/types/clip.ts` → **delete the adapters** (`fromClipPin`/…/`resolvePinAxes`) — there are no
+  surface-specific shapes to adapt anymore; `Era` is the one type. Keep the vocab bridge only if still used.
+
+**Hooks**
+- `useBuffer`/`useRecordings`/`useSavedClips`/`useDrafts` → one **`useMyRecordings`** (the owner timeline:
+  recordings + eras + `survivingRegions`).
+- `useHistoricalClips`/`useHistoricalCells`/`useHistoricalAvailability` → one **`useDiscover`** (the single
+  `/discover` cell feed, live + time-machine).
+- `useDataTrack` stays (footage data track by `recording`/`kind`).
+
+**Consumers** (the bulk)
+- `ClipsScreen` (grid) — the big one: render `Era`s over `Recording`s; snip/mend/keep/edit → the new ops.
+- `ClipViewerScreen` — play an `Era` (`/eras/:id`), source rail from `era.sources`.
+- `GlobeScreenMapbox` — one `/discover` feed (drop `?at=`/windowed/cell duplication); pins = `Era`s.
+- `SegmentSettingsSheet` + `SavedClipSettingsSheet` → **one `EraSettingsSheet`** (edit any `Era` value;
+  access/rating rows now included).
+- `MeProfileTab` (saved feed) · `DashboardScreen`/`StreamScreen` (go-live → a `Recording` + opening `Era`;
+  `captureConfig` seeds the first era's values).
+
+**Lib**
+- `clipDirectives` + `segmentSettings` → **simplify/retire**: an edit is a direct `PATCH /eras/:id`; no
+  directive-range mapping, no coalesce/inherit (values are concrete on the `Era`). `dataTrackRender` stays.
+
+**Delete:** `resolvePinAxes`, the `clip.ts` legacy fallbacks, the `?at=`/windowed discover consumers, the
+`Clip`/`Segment` adapter machinery.
+
+### Sequencing (de-risk the 30-file swap)
+The type swap breaks every consumer (tsc), so the app rewrite is one atomic change **and untestable
+without the backend**. So: **Aaron's backend is the critical path.** Ben **pre-stages the foundation now**
+(new `api/eras.ts`/`api/recordings.ts` + the `Era`/`Recording` types, as *new* modules — non-breaking,
+tsc stays green, validates the contract in TS), then does the **big consumer swap against Aaron's running
+backend** (so it's testable) rather than blind. Both land in the coordinated deploy.
