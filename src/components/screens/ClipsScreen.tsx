@@ -31,8 +31,7 @@ import { ClipsTimeline, type ClipsTimelineHandle } from '@/components/features/c
 import { ClipViewer } from '@/components/features/clip/ClipViewer'
 import { SourceRail } from '@/components/features/clip/SourceRail'
 import { SourceStage, type SourceRender } from '@/components/sections/SourceStage'
-import { SOURCE_META, SOURCE_RAIL_ORDER, KIND_TO_FEEDKIND, pickDefaultView } from '@/components/features/stream/sourceMeta'
-import { wirePatch, wireSourcesToFeed, persistDirectives } from '@/lib/clipDirectives'
+import { SOURCE_META, SOURCE_RAIL_ORDER, KIND_TO_FEEDKIND, FEEDKIND_TO_KIND, pickDefaultView } from '@/components/features/stream/sourceMeta'
 import { useLocalTelemetry } from '@/hooks/useLocalTelemetry'
 import { useLocationTrail } from '@/hooks/useLocationTrail'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
@@ -43,24 +42,13 @@ import { useDataTrack } from '@/hooks/useDataTrack'
 import { sampleAt, trailUpTo, chatUpTo, recentUpTo, torchStateAt } from '@/lib/dataTrackRender'
 import { useVideoPlayer, VideoView } from 'expo-video'
 import { RTCView } from 'react-native-webrtc'
-import { useBuffer } from '@/hooks/useBuffer'
-import { useSavedClips } from '@/hooks/useSavedClips'
-import { useDrafts } from '@/hooks/useDrafts'
+import { useMyRecordings } from '@/hooks/useMyRecordings'
+import { erasApi } from '@/api/eras'
+import type { Era, MyRecording } from '@/types/era'
+import { EraSettingsSheet } from '@/components/features/clip/EraSettingsSheet'
 import { useBroadcastStore } from '@/stores/broadcastStore'
-import { loadCaptureConfig, saveCaptureConfig } from '@/lib/captureConfig'
-import { serverNow, feedServerNow } from '@/lib/serverClock'
-import { usePublicConfig, configBool } from '@/hooks/usePublicConfig'
-import {
-  applySetting,
-  settingsAt,
-  settingsEqual,
-  isEmptySettings,
-  coalesce,
-  type SettingsRange,
-  type SegSettings,
-} from '@/lib/segmentSettings'
-import { SegmentSettingsSheet } from '@/components/features/clip/SegmentSettingsSheet'
-import { bufferApi, type BufferSession, type BufferTrackKind, type ClipPatch } from '@/api/buffer'
+import { serverNow } from '@/lib/serverClock'
+import { useQuery } from '@tanstack/react-query'
 
 const FRAME_MS = 1000 / 30 // one frame at the 30fps capture (transport frame-step)
 const GAP_RUSH_MS = 3000 // real-time duration to "rush" the clock across an unbroadcasted-time gap
@@ -73,45 +61,12 @@ const DRIFT_TOL_S = 0.4 // only re-seek the (follower) video if it drifts more t
 const SEAM_GAP_MS = 500
 
 
-const MATCH_TOL_MS = 2000 // window tolerance matching an optimistic save to its real Clip
-const MIN_REMAINDER_MS = 1000 // don't show carved remainders shorter than this
+const MIN_REMAINDER_MS = 1000 // don't show footage pieces shorter than this
 // The optimistic live clip — synthesized from go-live so the build is INSTANT, before the backend
-// creates the real buffer session (~seconds). Its synthetic session id marks it as the live tail so
-// the timeline extends it to nowUI; it's dropped the moment the real session appears.
+// creates the real Recording+Era (~seconds). Its synthetic id marks it as the live tail so the
+// timeline extends it to nowUI; it's dropped the moment the real open era appears.
 const OPT_LIVE_SESSION = 'live:optimistic'
 const OPT_LIVE_ID = 'live:optimistic'
-
-// ── source switching (the viewer's source rail) ── `cam` is the video frame (ClipViewer's
-// frameSlot); every other captured source replays via the live SourceStage visualizers, fed the
-// recorded sample at the playhead. This maps each rail FeedKind to its backing buffer track kind
-// (audio's DATA is the `audiolevel` companion, handled specially below; profile has no track).
-const FEEDKIND_TO_BUFFER: Partial<Record<FeedKind, BufferTrackKind>> = {
-  cam: 'camera',
-  audio: 'audio',
-  loc: 'location',
-  compass: 'compass',
-  gyro: 'gyro',
-  accel: 'accel',
-  speed: 'speed',
-  chat: 'chat',
-  screen: 'screen',
-}
-
-// The full MEDIA start, from go-live metadata (before any reaping).
-const mediaStartMs = (s: BufferSession) => Date.parse(s.startedAt) + (s.mediaStartOffsetMs ?? 0)
-// CU3 ghost-block fix — render the buffer block only over the footage STILL ON DISK. The reaper eats
-// from the head, so `survivingStartMs` advances as footage is evicted; using it turns the reaped head
-// into a gap (no ghost block — the carve fills the space between blocks). Falls back to the full media
-// start on an older backend (`survivingStartMs` absent) or a data-only session (`null`).
-const sessionStartMs = (s: BufferSession) => s.survivingStartMs ?? mediaStartMs(s)
-// A session's length: its flushed MEDIA when there is media (camera/audio — the footage length, which
-// trails wall-clock by encoder warm-up/latency), else its WALL-CLOCK span (`durationSec`). Without the
-// fallback a DATA-ONLY session (location/sensors, no camera) has mediaDurationSec 0 → zero width → it
-// vanishes from the timeline once the broadcast stops (Ben 2026-06-17). `?? 0` for a brand-new live
-// session that has both fields undefined. Prefer `survivingEndMs` (the on-disk tail) when present.
-const sessionEndMs = (s: BufferSession) =>
-  s.survivingEndMs ??
-  mediaStartMs(s) + ((s.mediaDurationSec ?? 0) > 0 ? s.mediaDurationSec! : (s.durationSec ?? 0)) * 1000
 
 function clamp(v: number, lo: number, hi: number) {
   return Math.max(lo, Math.min(hi, v))
@@ -131,141 +86,6 @@ function fmtDur(sec: number) {
   return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`
 }
 
-// ── carve: the buffer lane shows footage MINUS the saved ranges ──────────────
-// A saved (possibly trimmed) clip carves its range out of its source session; the leading /
-// trailing remainder stay as buffer entries you can still clip. Whole-session save → nothing
-// remains (the "move" case). Backend keeps the buffer footage on save (verified), so this is
-// a pure display computation.
-type Claim = { sessionId: string; startMs: number; endMs: number }
-// An in-flight drag-to-save: carves its range out + shows a saved-lane placeholder until the
-// real Clip lands (then it's pruned and the real clip takes over seamlessly). `realClipId` is set
-// once the save POST resolves — pruning matches on that EXACT id (robust), not just on bounds (the
-// backend may snap the saved range to segment boundaries, so a bounds-only match can miss and leave
-// the placeholder forever = a duplicate of the clip in the saved lane).
-type PendingSave = { tempId: string; sessionId: string; startMs: number; endMs: number; label: string; posterUrl?: string | null; manifestUrl?: string | null; realClipId?: string }
-// CU2 (HANDOFF "CU1 COMPLETENESS" #2): the buffer-lane label resolves the title from the session's
-// `clipId=null` directives (the CU1 authority, shipped on `GET /buffer/me`) at the segment instant —
-// not raw `s.title` (the immutable go-live title) — so a clips-page edit proliferates to this lane
-// + the viewer title (which reads the block's label) too. Segments auto-split on settings
-// boundaries, so a block is title-uniform; resolving at `a` (block start) is exact.
-function sessionTitleAt(s: BufferSession, atMs: number): string | undefined {
-  const ranges: SettingsRange[] = (s.directives ?? [])
-    .filter((d) => d.title != null && d.title !== '')
-    .map((d) => ({ sessionId: s.id, startMs: d.startAtMs, endMs: d.endAtMs, settings: { title: d.title! } }))
-  if (!ranges.length) return undefined
-  return settingsAt(ranges, s.id, atMs).title
-}
-function bufEntry(s: BufferSession, a: number, b: number): LaneClip {
-  return {
-    id: `${s.id}~${Math.round(a)}`,
-    startMs: a,
-    endMs: b,
-    label: (sessionTitleAt(s, a) ?? s.title?.trim()) || fmtTime(a),
-    sublabel: fmtDur((b - a) / 1000),
-    posterUrl: s.thumbnailUrl,
-    manifestUrl: s.manifestUrl,
-    sourceSessionId: s.id, // the session this footage belongs to
-  }
-}
-// ── scissor split ────────────────────────────────────────────────────────────
-// A cut at the playhead is front-end METADATA: a {sessionId, atMs} split point. It doesn't
-// touch footage — it just subdivides the buffer entry so each piece is an independently
-// draggable clip. Saving a piece persists it (the backend's metadata response); the split
-// itself is local until a piece is saved. (Aaron can later persist splits as draft manifests.)
-type SplitPoint = { sessionId: string; atMs: number }
-// markParent: tag each piece with its origin SAVED clip id so a drag-up trims the parent's ranges.
-function splitPiece(e: LaneClip, a: number, b: number, markParent: boolean): LaneClip {
-  return {
-    ...e,
-    id: `${e.sourceSessionId}~${Math.round(a)}`,
-    startMs: a,
-    endMs: b,
-    sublabel: fmtDur((b - a) / 1000),
-    parentSavedId: markParent ? e.id : e.parentSavedId,
-  }
-}
-function applySplits(entries: LaneClip[], splits: SplitPoint[], markParent = false): LaneClip[] {
-  if (!splits.length) return entries
-  const out: LaneClip[] = []
-  for (const e of entries) {
-    const raw = splits
-      .filter((s) => s.sessionId === e.sourceSessionId && s.atMs > e.startMs + MIN_REMAINDER_MS && s.atMs < e.endMs - MIN_REMAINDER_MS)
-      .map((s) => s.atMs)
-      .sort((x, y) => x - y)
-    // Collapse coincident splits — a snip and a settings boundary often land at the SAME instant;
-    // two splits at one point would make a zero-width piece (a gap + a duplicate React key, since
-    // a piece's id is keyed on its start). Keep points ≥ MIN_REMAINDER_MS apart.
-    const pts: number[] = []
-    for (const p of raw) if (!pts.length || p - pts[pts.length - 1]! > MIN_REMAINDER_MS) pts.push(p)
-    if (!pts.length) {
-      out.push(e)
-      continue
-    }
-    let cursor = e.startMs
-    for (const p of pts) {
-      out.push(splitPiece(e, cursor, p, markParent))
-      cursor = p
-    }
-    out.push(splitPiece(e, cursor, e.endMs, markParent))
-  }
-  return out
-}
-// Subtract a [start,end] hole from a set of claim ranges (splitting any range that straddles it).
-function subtractRange(claims: Claim[], hole: { startMs: number; endMs: number }): Claim[] {
-  const out: Claim[] = []
-  for (const c of claims) {
-    if (hole.endMs <= c.startMs || hole.startMs >= c.endMs) {
-      out.push(c)
-      continue
-    }
-    if (hole.startMs > c.startMs) out.push({ ...c, endMs: hole.startMs })
-    if (hole.endMs < c.endMs) out.push({ ...c, startMs: hole.endMs })
-  }
-  return out
-}
-function carveBuffer(sessions: BufferSession[], claims: Claim[]): LaneClip[] {
-  const out: LaneClip[] = []
-  for (const s of sessions) {
-    const sStart = sessionStartMs(s)
-    const sEnd = sessionEndMs(s)
-    if (sEnd - sStart < MIN_REMAINDER_MS) continue
-    const cuts = claims
-      .filter((c) => c.sessionId === s.id)
-      .map((c) => [Math.max(sStart, c.startMs), Math.min(sEnd, c.endMs)] as [number, number])
-      .filter(([a, b]) => b > a)
-      .sort((x, y) => x[0] - y[0])
-    let cursor = sStart
-    for (const [a, b] of cuts) {
-      if (a - cursor > MIN_REMAINDER_MS) out.push(bufEntry(s, cursor, a))
-      cursor = Math.max(cursor, b)
-    }
-    if (sEnd - cursor > MIN_REMAINDER_MS) out.push(bufEntry(s, cursor, sEnd))
-  }
-  return out
-}
-// Carve the saved/pending ranges out of the LIVE block too (the live-session analog of carveBuffer).
-// The live block bypasses carveBuffer (it's built from `nowMs`, not a session's recorded duration), so
-// without this, saving a piece of the ongoing broadcast leaves its buffered copy behind = a DUPLICATE
-// beside the new saved block. Subtract the live session's claims from [liveSince, now] → the unsaved
-// remainder pieces; the last still reaches `now` (the frontier is non-saveable, so no claim covers it).
-function carveLiveBlock(live: LaneClip, claims: Claim[]): LaneClip[] {
-  const sid = live.sourceSessionId
-  const cuts = claims
-    .filter((c) => c.sessionId === sid)
-    .map((c) => [Math.max(live.startMs, c.startMs), Math.min(live.endMs, c.endMs)] as [number, number])
-    .filter(([a, b]) => b > a)
-    .sort((x, y) => x[0] - y[0])
-  if (!cuts.length) return [live]
-  const out: LaneClip[] = []
-  let cursor = live.startMs
-  for (const [a, b] of cuts) {
-    if (a - cursor > MIN_REMAINDER_MS) out.push({ ...live, id: `${sid}~${Math.round(cursor)}`, startMs: cursor, endMs: a })
-    cursor = Math.max(cursor, b)
-  }
-  if (live.endMs - cursor > MIN_REMAINDER_MS) out.push({ ...live, id: `${sid}~${Math.round(cursor)}`, startMs: cursor, endMs: live.endMs })
-  return out
-}
-
 export const ClipsScreen = () => {
   const insets = useSafeAreaInsets()
   const { isSignedIn } = useAuth()
@@ -278,503 +98,126 @@ export const ClipsScreen = () => {
   const liveAudioLevel = useBroadcastStore((s) => s.liveAudioLevel)
   const liveMirror = useBroadcastStore((s) => s.liveMirror)
   const qc = useQueryClient()
-  const { data: buffer, refetch: refetchBuffer } = useBuffer(!!isSignedIn, isLive)
-  const { data: savedData, refetch: refetchSaved } = useSavedClips(!!isSignedIn)
-  const { data: draftsData, refetch: refetchDrafts } = useDrafts(!!isSignedIn)
+  const { data: recordings, refetch: refetchRecordings } = useMyRecordings(!!isSignedIn, isLive)
 
-  // ── lanes: buffer = footage minus saved ranges (carve); saved = the saved clips ──
-  const sessions = useMemo(() => buffer?.sessions ?? [], [buffer])
-  // The open (still-recording) session → its footage block builds smoothly to "now" while
-  // broadcasting (the timeline extends it to nowUI). Gate on `isLive` (broadcastStore — immediate)
-  // AND `endedAt == null`: the buffer's `endedAt` lags by a refetch, so on STOP it would otherwise
-  // keep the tail extending and suppress the trailing gap for ~15s. `isLive` flips the instant you
-  // stop → the tail freezes and the "since last broadcast" gap forms right away.
-  //
-  // Pick the NEWEST open session, not the first. The backend can leave a stale ghost (a 0-duration
-  // session, hours old, whose `endedAt` was never set) earlier in the chronological list; `find`
-  // returned that ghost as "live", so liveTailId never matched the real recording (liveIdx stayed −1
-  // → extendLive never ran → the clip stepped on refetch instead of building smoothly).
-  const realLiveSession = useMemo(() => {
-    if (!isLive) return null
-    for (let i = sessions.length - 1; i >= 0; i--) if (sessions[i]!.endedAt == null) return sessions[i]!
-    return null
-  }, [isLive, sessions])
-  const realLiveSessionId = realLiveSession?.id ?? null
-
-  // ── server-clock alignment (the skew-free "now") ── the UNIVERSAL wall clock lives in
-  // `@/lib/serverClock` (CONTENT.md §6) so every surface reads the SAME clock; this screen feeds it
-  // the backend's `serverNowMs` and reads `serverNow()` like everyone else. The downstream nowUI
-  // clamp is monotonic, so a backward correction never snaps the edge — easing keeps it tiny.
-
-  // ── time reference (now / reaper window) ── now ticks every 1s so the JS-side window boundary
-  // (`windowStartMs`, which drives clip-drops + the reaper edge re-anchor) tracks the wall clock
-  // closely. The reaper MASK glides continuously on the UI thread (real time); if `nowMs` only
-  // ticked every 10s, the mask would run up to 10s ahead and the boundary would then lurch forward
-  // in one step — a clip drop + re-anchor you can see as a stall-then-pop. At 1s the smooth mask and
-  // the discrete drop reconcile within a frame's worth of footage (sub-pixel), so consumption reads
-  // as one continuous wall-clock motion. (The network refetch stays at 15s — see below.)
+  // ── now clock ── server-aligned (serverClock is fed elsewhere; /me/recordings carries no
+  // serverNowMs). Ticks 1s so the JS window boundary + live-block extent track the wall clock.
   const [nowMs, setNowMs] = useState(() => serverNow())
   useEffect(() => {
     const id = setInterval(() => setNowMs(serverNow()), 1_000)
     return () => clearInterval(id)
   }, [])
-  // Re-measure + ease the server offset on each fetch, and apply it immediately (don't wait for the
-  // 1s tick). First measurement snaps; later ones ease (0.25) to absorb per-fetch latency jitter.
-  useEffect(() => {
-    if (buffer?.serverNowMs == null) return
-    feedServerNow(buffer.serverNowMs)
-    setNowMs(serverNow())
-  }, [buffer?.serverNowMs])
-  const windowMs = (buffer?.windowHours ?? 0) * 3_600_000
-  const windowStartMs = windowMs > 0 ? nowMs - windowMs : null
-  // The LIVE reaper boundary (now − window), read off the continuous wall clock — not the 1s `nowMs`
-  // state, which lags the advancing edge by up to a second. The playhead instant must never sit behind
-  // this (it's the eviction edge); `windowMsRef` lets callbacks read the current window.
-  const windowMsRef = useRef(0)
-  windowMsRef.current = windowMs
-  const reaperEdgeNow = useCallback(() => (windowMsRef.current > 0 ? serverNow() - windowMsRef.current : null), [])
 
-  // Un-save: optimistically drop a clip being deleted (its range un-carves → back to buffer).
-  const [pendingDelete, setPendingDelete] = useState<Set<string>>(new Set())
-  // In-flight drag-to-save: carved out + placeholdered until the real Clip lands.
-  const [pendingSaves, setPendingSaves] = useState<PendingSave[]>([])
-  // Scissor cuts at the playhead — local split points subdivide a clip in EITHER lane into pieces.
-  const [splitPoints, setSplitPoints] = useState<SplitPoint[]>([])
-  // When the playhead is over a (same-lane-healable) snip, the scissor becomes a bandaid → un-snip.
-  const [unsnip, setUnsnip] = useState<SplitPoint | null>(null)
-  // PB4(a) — the session's per-segment SETTINGS as a non-overlapping, coalesced list of override
-  // ranges (multi-axis: visibility · location precision · identity · per-source on/off). Every axis
-  // is first-class; a gap = inherit the go-live value. Declared up here so the DISPLAY segmentation
-  // derives blocks from every settings boundary. Seeded from the server + edited via the sheet.
-  const [settingsRanges, setSettingsRanges] = useState<SettingsRange[]>([])
-  // Display segmentation = the user's snips UNION every settings boundary, so a segment is always
-  // uniform across ALL axes (the "auto-split blocks" UX — a differing sub-range becomes its own
-  // block, which structurally kills the straddle + makes a per-segment toggle exact). Settings
-  // boundaries are display-only: they're NOT added to `splitPoints` (the user's explicit snip set).
-  const settingBoundaries = useMemo<SplitPoint[]>(
-    () =>
-      settingsRanges.flatMap((r) => [
-        { sessionId: r.sessionId, atMs: r.startMs },
-        { sessionId: r.sessionId, atMs: r.endMs },
-      ]),
-    [settingsRanges],
-  )
-  const effectiveSplits = useMemo(
-    () => [...splitPoints, ...settingBoundaries],
-    [splitPoints, settingBoundaries],
-  )
-  // In-flight un-save of a saved PIECE: the piece's range is optimistically punched out of its
-  // parent's claim (→ returns to buffer) while the parent is trimmed on the backend.
-  const [pendingUnsave, setPendingUnsave] = useState<{ id: string; parentId: string; startMs: number; endMs: number }[]>([])
+  // ── reaper window (degraded) ── the clean-cut /me/recordings no longer exposes windowHours /
+  // serverNowMs, so the PREDICTIVE reaper window (leading "clears in X" countdown, window-floor
+  // divider, the timeline's advancing reaper mask) has no inputs → off. Actual eviction still shows:
+  // recording.survivingRegions has the on-disk spans, so an evicted head/interior renders as a gap.
+  // (TODO aaron: re-expose windowHours + serverNowMs on /me/recordings to bring the prediction back.)
+  const windowMs = 0
+  const windowStartMs: number | null = null
+  const reaperEdgeNow = useCallback((): number | null => null, [])
 
-  const realSavedData = useMemo(() => (savedData ?? []).filter((c) => !pendingDelete.has(c.id)), [savedData, pendingDelete])
+  // ── lanes: one LaneClip per era, split at interior eviction holes; lane = keep ──
+  // An Era is a block. keep:'kept' → saved lane, keep:'reapable' → buffered lane. Snips are
+  // server-side (adjacent eras), so there's no local carve/split machinery. Interior eviction holes
+  // come from the recording's survivingRegions (the era window ∩ the on-disk spans).
+  const eraById = useMemo(() => {
+    const m = new Map<string, { era: Era; rec: MyRecording }>()
+    for (const r of recordings ?? []) for (const e of r.eras) m.set(e.id, { era: e, rec: r })
+    return m
+  }, [recordings])
+  // The open (still-recording) era = the live tail (its LaneClip extends to nowUI). Newest wins.
+  const openEra = useMemo(() => {
+    let found: { era: Era; rec: MyRecording } | null = null
+    for (const r of recordings ?? []) for (const e of r.eras) if (e.endAtMs == null) found = { era: e, rec: r }
+    return isLive ? found : found // an ended era's endAtMs is concrete; a stale open era is harmless here
+  }, [recordings, isLive])
+  const realLiveSessionId = openEra?.era.id ?? null
 
-  // Saved-lane clips. Prefer the clip's own durable poster/manifest; fall back to the source
-  // session's while it survives.
-  const savedLaneReal = useMemo<LaneClip[]>(
-    () =>
-      realSavedData.map((c) => {
-        const src = sessions.find((s) => s.id === c.bufferSessionId)
-        return {
-          id: c.id,
-          startMs: c.startAtMs,
-          endMs: c.endAtMs,
-          label: c.name?.trim() || fmtTime(c.startAtMs),
-          sublabel: fmtDur((c.endAtMs - c.startAtMs) / 1000),
-          posterUrl: c.thumbnailUrl ?? src?.thumbnailUrl ?? null,
-          manifestUrl: c.manifestUrl ?? src?.manifestUrl ?? null,
-          sourceSessionId: c.bufferSessionId,
-        }
-      }),
-    [realSavedData, sessions],
+  const eraToLaneClips = useCallback(
+    (era: Era, rec: MyRecording): LaneClip[] => {
+      const start = era.startAtMs
+      const end = era.endAtMs ?? nowMs
+      const regions = rec.survivingRegions?.length ? rec.survivingRegions : [{ startMs: start, endMs: end }]
+      const pieces = regions
+        .map((rg) => ({ a: Math.max(start, rg.startMs), b: Math.min(end, rg.endMs) }))
+        .filter((p) => p.b - p.a > MIN_REMAINDER_MS)
+        .sort((x, y) => x.a - y.a)
+      if (!pieces.length) return []
+      return pieces.map((p) => ({
+        id: pieces.length === 1 ? era.id : `${era.id}~${Math.round(p.a)}`,
+        startMs: p.a,
+        endMs: p.b,
+        label: era.title?.trim() || fmtTime(p.a),
+        sublabel: fmtDur((p.b - p.a) / 1000),
+        posterUrl: era.thumbnailUrl,
+        manifestUrl: null, // fetched per-era on selection (see playerEraDetail)
+        sourceSessionId: era.id, // the era: playback manifest + snip/patch target
+      }))
+    },
+    [nowMs],
   )
 
-  // A pending save stays "pending" until its real saved clip arrives. Match on the EXACT clip id the
-  // save POST returned (robust — survives the backend snapping the saved range to segment boundaries);
-  // fall back to a bounds match for the window before the POST resolves (and the draft path).
-  const matchesReal = useCallback(
-    (ps: PendingSave) =>
-      (ps.realClipId != null && realSavedData.some((c) => c.id === ps.realClipId)) ||
-      realSavedData.some(
-        (c) => c.bufferSessionId === ps.sessionId && Math.abs(c.startAtMs - ps.startMs) < MATCH_TOL_MS && Math.abs(c.endAtMs - ps.endMs) < MATCH_TOL_MS,
-      ),
-    [realSavedData],
-  )
-  const pendingNotReal = useMemo(() => pendingSaves.filter((ps) => !matchesReal(ps)), [pendingSaves, matchesReal])
-
-  const savedLaneAll = useMemo<LaneClip[]>(() => {
-    const unsavedIds = new Set(pendingUnsave.map((h) => h.id))
-    return [
-      ...applySplits(savedLaneReal, effectiveSplits, true).filter((p) => !unsavedIds.has(p.id)),
-      ...pendingNotReal.map((ps) => ({
-        id: ps.tempId,
-        startMs: ps.startMs,
-        endMs: ps.endMs,
-        label: ps.label,
-        sublabel: fmtDur((ps.endMs - ps.startMs) / 1000),
-        posterUrl: ps.posterUrl,
-        manifestUrl: ps.manifestUrl,
-        sourceSessionId: ps.sessionId,
-      })),
-    ]
-  }, [savedLaneReal, pendingNotReal, effectiveSplits, pendingUnsave])
-
-  // Drafts (edited-but-unsaved manifests) — shown in the buffer lane as draft blocks; they
-  // carve their range out of the raw session too (so a draft + its remainder tile the session).
-  const drafts = useMemo<LaneClip[]>(
-    () =>
-      (draftsData ?? []).map((c) => ({
-        id: c.id,
-        startMs: c.startAtMs,
-        endMs: c.endAtMs,
-        label: c.name?.trim() || fmtTime(c.startAtMs),
-        sublabel: `DRAFT · ${fmtDur((c.endAtMs - c.startAtMs) / 1000)}`,
-        posterUrl: c.thumbnailUrl ?? sessions.find((s) => s.id === c.bufferSessionId)?.thumbnailUrl ?? null,
-        manifestUrl: c.manifestUrl ?? sessions.find((s) => s.id === c.bufferSessionId)?.manifestUrl ?? null,
-        sourceSessionId: c.bufferSessionId,
-        draftId: c.id,
-      })),
-    [draftsData, sessions],
-  )
-
-  // Carve: subtract the saved + draft ranges (real + pending) from each session → remaining footage.
-  // A pending-unsaved piece punches a hole in its parent's claim, so that range returns to buffer.
-  const claims = useMemo<Claim[]>(() => {
-    const out: Claim[] = []
-    for (const c of realSavedData) {
-      let ranges: Claim[] = c.ranges?.length
-        ? c.ranges.map((r) => ({ sessionId: r.bufferSessionId, startMs: r.startAtMs, endMs: r.endAtMs }))
-        : c.bufferSessionId
-          ? [{ sessionId: c.bufferSessionId, startMs: c.startAtMs, endMs: c.endAtMs }]
-          : []
-      for (const h of pendingUnsave) if (h.parentId === c.id) ranges = subtractRange(ranges, h)
-      out.push(...ranges)
-    }
-    for (const c of draftsData ?? []) {
-      if (c.ranges?.length) for (const r of c.ranges) out.push({ sessionId: r.bufferSessionId, startMs: r.startAtMs, endMs: r.endAtMs })
-      else if (c.bufferSessionId) out.push({ sessionId: c.bufferSessionId, startMs: c.startAtMs, endMs: c.endAtMs })
-    }
-    for (const ps of pendingNotReal) out.push({ sessionId: ps.sessionId, startMs: ps.startMs, endMs: ps.endMs })
-    return out
-  }, [realSavedData, draftsData, pendingNotReal, pendingUnsave])
-
-  // CU3 D3 re-gate — INTERIOR reaped holes: the gaps BETWEEN a session's `survivingRegions` (the
-  // footage the reaper evicted from the middle, e.g. the "#3 dam"). Carved out of the buffer lane like
-  // a claim — but they go NOWHERE (not to the saved lane), so the block splits into one piece per
-  // surviving region with an eviction gap between. Head/tail trims are already handled by
-  // sessionStartMs/EndMs (the single window); this adds the interior holes a single window can't show.
-  // < 2 regions → no interior hole. Empty/absent `survivingRegions` (data-only/legacy) → nothing here.
-  const reapedClaims = useMemo<Claim[]>(() => {
-    const out: Claim[] = []
-    for (const s of sessions) {
-      const regions = s.survivingRegions
-      if (!regions || regions.length < 2) continue
-      const sorted = [...regions].sort((a, b) => a.startMs - b.startMs)
-      for (let i = 0; i < sorted.length - 1; i++) {
-        if (sorted[i + 1]!.startMs > sorted[i]!.endMs) {
-          out.push({ sessionId: s.id, startMs: sorted[i]!.endMs, endMs: sorted[i + 1]!.startMs })
-        }
+  const lanesRaw = useMemo(() => {
+    const buffered: LaneClip[] = []
+    const saved: LaneClip[] = []
+    for (const r of recordings ?? []) {
+      for (const e of r.eras) {
+        const clips = eraToLaneClips(e, r)
+        ;(e.keep === 'kept' ? saved : buffered).push(...clips)
       }
     }
-    return out
-  }, [sessions])
-  // The buffer carve subtracts saved ranges (claims) + interior reaped holes (reapedClaims). One memo
-  // so the carve memos stay referentially stable; no new array when there are no holes (the common case).
-  const carveClaims = useMemo<Claim[]>(
-    () => (reapedClaims.length ? [...claims, ...reapedClaims] : claims),
-    [claims, reapedClaims],
-  )
+    return { buffered, saved }
+  }, [recordings, eraToLaneClips])
 
-  // #1 INSTANT live build — ONE persistent live block, present the WHOLE time we're live. It spans
-  // [liveSince → now] from the instant of go-live (liveSince is stamped then), so the clip appears
-  // immediately and NEVER disappears. The bug before: I dropped the optimistic clip the moment the
-  // real session id arrived (~2s) — but the real HLS footage hasn't flushed yet (zero-width for
-  // ~5–7s), so the screen fell back to "No clips yet" until it caught up. Now the SAME block carries
-  // the real session's manifest/poster once that session exists (gaining playability without changing
-  // geometry), and its sourceSessionId binds to the real session so saving targets real footage. The
-  // timeline's extendLive grows endMs to nowUI per-frame (smooth build). Dropped only when NOT live —
-  // then the real session's normal carved clip (now full-duration) takes over as a past clip.
-  const liveClip = useMemo<LaneClip | null>(() => {
-    if (!isLive || liveSince == null) return null
-    // Anchor the start to the REAL footage start once the session exists, NOT the optimistic go-live
-    // instant (liveSince). The backend session starts a beat after go-live, so [liveSince, realStart]
-    // is a no-footage region — anchoring there left a phantom buffered sliver before the start when
-    // saving a piece that includes it (the real saved range begins at realStart) and could fail the
-    // save outright ("No playable footage in the selected range"). Before the real session lands,
-    // liveSince still drives the instant build (no real footage to save yet anyway → save is blocked).
-    const startMs = realLiveSession ? sessionStartMs(realLiveSession) : liveSince
+  // Optimistic live block before the real open era lands (instant build on go-live). Dropped the
+  // moment the real open era appears (then eraToLaneClips renders it, extending to now).
+  const optimisticLive = useMemo<LaneClip | null>(() => {
+    if (!isLive || liveSince == null || openEra) return null
     return {
       id: OPT_LIVE_ID,
-      startMs,
+      startMs: liveSince,
       endMs: nowMs,
       label: 'Live',
-      sublabel: fmtDur(Math.max(0, nowMs - startMs) / 1000),
-      posterUrl: realLiveSession?.thumbnailUrl ?? null,
-      manifestUrl: realLiveSession?.manifestUrl ?? null,
-      sourceSessionId: realLiveSessionId ?? OPT_LIVE_SESSION,
+      sublabel: fmtDur(Math.max(0, nowMs - liveSince) / 1000),
+      posterUrl: null,
+      manifestUrl: null,
+      sourceSessionId: OPT_LIVE_SESSION,
     }
-  }, [isLive, liveSince, nowMs, realLiveSession, realLiveSessionId])
-  // The live tail the timeline extends to nowUI: the live block's session (real once it exists, else
-  // the synthetic placeholder), else null (not broadcasting).
-  const liveSessionId = liveClip ? liveClip.sourceSessionId : null
+  }, [isLive, liveSince, openEra, nowMs])
 
-  const bufferedLaneRaw = useMemo(() => {
-    // While live, the real open session IS the single persistent liveClip — exclude it from the normal
-    // carve so it isn't drawn twice (a zero-width-then-growing duplicate beside the live block).
-    // Saved-lane sessions (U1, `lane:'saved'`) are retained from go-live → they render in the SAVED
-    // lane (savedLaneSessions), so exclude them from the buffered carve.
-    const carveSessions = (realLiveSessionId ? sessions.filter((s) => s.id !== realLiveSessionId) : sessions).filter(
-      (s) => s.lane !== 'saved',
-    )
-    const base = [...applySplits(carveBuffer(carveSessions, carveClaims), effectiveSplits), ...drafts]
-    // The live block is ONE [liveSince → now] piece, but a snip on it divides it like any other clip:
-    // applySplits cuts at the live session's split points so the EARLIER (bounded) pieces become normal
-    // draggable/saveable clips, while only the LAST piece reaches `now` (the still-growing frontier,
-    // which the timeline detects as the live tail and renders non-draggable). No snips → one piece, as
-    // before. (CONTENT.md §6: editing the model is orthogonal to playing it — snip the live stream too.)
-    // carveLiveBlock first removes any saved/pending ranges (so saving a live piece doesn't leave a
-    // duplicate buffered copy beside the new saved block), then applySplits divides the remainder at
-    // the snip points.
-    // The live block goes to the buffered lane UNLESS this go-live is saved-lane (then savedLaneSessions
-    // carries it).
-    if (liveClip && realLiveSession?.lane !== 'saved') base.push(...applySplits(carveLiveBlock(liveClip, carveClaims), effectiveSplits))
-    return base
-  }, [sessions, carveClaims, drafts, effectiveSplits, liveClip, realLiveSessionId, realLiveSession])
-
-  // U1 — saved-lane SESSIONS (retained from go-live; not yet materialised into durable Clips, so they
-  // live in `sessions` with `lane:'saved'`, not in savedLaneReal). Carve them like buffer sessions but
-  // render them in the SAVED lane, plus the live block when this go-live is saved-lane. Merged into
-  // savedLane below. Gated on `lane === 'saved'` → no effect on existing (buffer/absent-lane) data.
-  const savedLaneSessions = useMemo<LaneClip[]>(() => {
-    const ended = sessions.filter((s) => s.lane === 'saved' && s.id !== realLiveSessionId)
-    const out = applySplits(carveBuffer(ended, carveClaims), effectiveSplits)
-    if (liveClip && realLiveSession?.lane === 'saved') out.push(...applySplits(carveLiveBlock(liveClip, carveClaims), effectiveSplits))
-    return out
-  }, [sessions, carveClaims, effectiveSplits, liveClip, realLiveSessionId, realLiveSession])
-  // Window the timeline to the buffer window: drop anything fully older than the reaper boundary
-  // (removes SAVED clips older than the window). Clips straddling the boundary stay full-extent —
-  // the timeline draws an advancing reaper MASK over their reaped part (smooth, on the UI thread),
-  // so the consumption looks as fluid as the playhead, with no per-tick layout shift.
-  const inWindow = useCallback((c: LaneClip) => windowStartMs == null || c.endMs > windowStartMs, [windowStartMs])
-  const bufferedLane = useMemo(() => bufferedLaneRaw.filter(inWindow), [bufferedLaneRaw, inWindow])
-  const savedLane = useMemo(
-    () => [...savedLaneAll, ...savedLaneSessions].filter(inWindow),
-    [savedLaneAll, savedLaneSessions, inWindow],
+  const bufferedLane = useMemo(
+    () => (optimisticLive ? [...lanesRaw.buffered, optimisticLive] : lanesRaw.buffered),
+    [lanesRaw.buffered, optimisticLive],
   )
+  const savedLane = lanesRaw.saved
   const allClips = useMemo(() => [...bufferedLane, ...savedLane], [bufferedLane, savedLane])
   const hasAny = allClips.length > 0
-
-  // Prune pending saves once the real list has caught up.
-  useEffect(() => {
-    setPendingSaves((prev) => {
-      const next = prev.filter((ps) => !matchesReal(ps))
-      return next.length === prev.length ? prev : next
-    })
-  }, [matchesReal])
-
-  // Prune un-save holes once the parent's real ranges no longer cover them (the trim landed) or
-  // the parent is gone.
-  useEffect(() => {
-    setPendingUnsave((prev) => {
-      const next = prev.filter((h) => {
-        const parent = realSavedData.find((c) => c.id === h.parentId)
-        if (!parent) return false
-        const ranges = parent.ranges?.length ? parent.ranges : [{ startAtMs: parent.startAtMs, endAtMs: parent.endAtMs }]
-        return ranges.some((r) => r.startAtMs < h.endMs && r.endAtMs > h.startMs) // keep while still covered
-      })
-      return next.length === prev.length ? prev : next
-    })
-  }, [realSavedData])
+  // The live tail the timeline extends to nowUI (real open era, else the optimistic placeholder).
+  const liveSessionId = openEra ? openEra.era.id : optimisticLive ? OPT_LIVE_SESSION : null
 
   // ── sticky viewer selection ──
   // `selectedId` = the tapped clip (red highlight). Scrolling the timeline while paused BLURS the
-  // selection (selectedId → null); the viewer then follows whatever clip is under the centre
-  // playhead (`centerClipId`). Viewer + player key off `viewerClip` = selected ?? centered.
+  // selection; the viewer then follows the clip under the centre playhead (`centerClipId`).
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [centerClipId, setCenterClipId] = useState<string | null>(null)
   const selectedClip = useMemo(() => allClips.find((c) => c.id === selectedId) ?? null, [allClips, selectedId])
-  const viewerClip = useMemo(() => selectedClip ?? allClips.find((c) => c.id === centerClipId) ?? null, [selectedClip, allClips, centerClipId])
+  const viewerClip = useMemo(
+    () => selectedClip ?? allClips.find((c) => c.id === centerClipId) ?? null,
+    [selectedClip, allClips, centerClipId],
+  )
 
-  // ── PB3: per-segment public/private (public-buffer initiative) — SCABBED IN ─────
-  // Gated on PB3_PER_RANGE (not in the public /config allowlist until Aaron's team flip,
-  // so this is dormant until then). A selected BUFFER segment gets a public/private
-  // toggle by the scissor; marking private writes a wall-clock directive range. We track
-  // only PRIVATE ranges (public = default/omitted) and PATCH the session's full private
-  // list. NOTE (scab-in): no GET-directives yet, so marks don't survive a reload — the
-  // ENFORCEMENT (discover/serve) is real; only the local UI reflection is ephemeral. The
-  // shape is full-suite-ready (precision/identity slot into the same PATCH later).
-  const { config: publicConfig } = usePublicConfig()
-  const pb3Enabled = configBool(publicConfig, 'PB3_PER_RANGE', false)
-  const SEG_TOL = 1000 // ms tolerance locating the segments either side of a snip (mend)
-  // PB4(a) — the session's PRIVATE ranges as a coalesced authoritative set (public = the
-  // omitted complement). Interval arithmetic (privacyRanges.ts) — not the old free-form
-  // exact-match list — so "mark one half of an already-private clip public" SUBTRACTS
-  // correctly and snip/mend never accumulate overlapping ranges.
-  // (privRanges declared above, near splitPoints, so the display segmentation can use it.)
-  // Rehydrate from the server on first load (Aaron folded `directives[]` into GET /buffer/me):
-  // seed + coalesce once when sessions first arrive so marks survive a reload. Local state
-  // owns afterward (a toggle PATCHes the recomputed set); seed-once avoids fighting an
-  // in-flight optimistic edit on a later buffer refetch.
-  const seededPrivateRef = useRef(false)
-  useEffect(() => {
-    if (seededPrivateRef.current || sessions.length === 0) return
-    const seeded: SettingsRange[] = []
-    for (const s of sessions) {
-      for (const d of s.directives ?? []) {
-        const settings: SegSettings = {}
-        if (d.visibility) settings.visibility = d.visibility
-        if (d.precision) settings.precision = d.precision // 'off' is a real precision; null/absent = inherit
-        if (d.attributed != null) settings.identity = d.attributed ? 'attributed' : 'anon'
-        if (d.sources) settings.sources = d.sources
-        if (d.title) settings.title = d.title
-        if (d.tags && d.tags.length) settings.tags = d.tags
-        // CU3 D3 — seed the keep axis from the directive's retain so a per-axis edit round-trips it
-        // (the authoritative-replace PATCH would otherwise drop an existing retain → un-retain on flip).
-        if (d.retain) settings.keep = 'kept'
-        if (!isEmptySettings(settings)) seeded.push({ sessionId: s.id, startMs: d.startAtMs, endMs: d.endAtMs, settings })
-      }
-    }
-    seededPrivateRef.current = true
-    if (seeded.length) setSettingsRanges(seeded) // server sends a coalesced authoritative list
-  }, [sessions])
-  // PB4 A1 — seed snips from the server (Aaron's `session.snips`) once, so user snips survive a
-  // reload. Local state owns afterward (snip/mend PATCH `/snips`). Merge (don't clobber any local).
-  const seededSnipsRef = useRef(false)
-  useEffect(() => {
-    if (seededSnipsRef.current || sessions.length === 0) return
-    const seeded: SplitPoint[] = []
-    for (const s of sessions) for (const sn of s.snips ?? []) seeded.push({ sessionId: s.id, atMs: sn.atMs })
-    seededSnipsRef.current = true
-    if (seeded.length)
-      setSplitPoints((prev) => {
-        const have = new Set(prev.map((p) => `${p.sessionId}~${Math.round(p.atMs)}`))
-        const add = seeded.filter((s) => !have.has(`${s.sessionId}~${Math.round(s.atMs)}`))
-        return add.length ? [...prev, ...add] : prev
-      })
-  }, [sessions])
-  // Persist a session's snips (authoritative replace) after a snip/mend.
-  const persistSnips = useCallback((sessionId: string, splits: SplitPoint[]) => {
-    bufferApi
-      .patchSessionSnips(sessionId, splits.filter((s) => s.sessionId === sessionId).map((s) => ({ atMs: Math.round(s.atMs) })))
-      .catch(() => {})
-  }, [])
-  // The resolved settings AT a segment (the covering override merged over the go-live defaults).
-  // Used by the sheet (to show current values) and the mend differ-guard (to compare neighbours).
-  const settingsForSeg = useCallback(
-    (c: LaneClip): SegSettings => {
-      const sid = c.sourceSessionId
-      if (!sid) return {}
-      return settingsAt(settingsRanges, sid, (c.startMs + c.endMs) / 2)
-    },
-    [settingsRanges],
-  )
-  // PATCH the authoritative (coalesced) per-segment directive list for one session. Each override
-  // range carries every set axis; an omitted range = the go-live default. AUTHORITATIVE replace.
-  // Persist a session's recomputed authoritative directive list + invalidate every read path. The
-  // wire mapping + invalidate set live in the shared `clipDirectives` core (also used by the
-  // library/profile drawer host) — one place, no drift.
-  const patchSessionDirectives = useCallback(
-    (sessionId: string, ranges: SettingsRange[]) => persistDirectives(qc, sessionId, ranges),
-    [qc],
-  )
-  // Apply a partial settings patch over a segment's span (split-merge-coalesce via segmentSettings),
-  // then PATCH the recomputed authoritative list. The single edit path for the settings sheet.
-  const applySegSetting = useCallback(
-    (c: LaneClip, patch: SegSettings) => {
-      const sid = c.sourceSessionId
-      if (!sid) return
-      // The sheet keys `sources` by FeedKind; the wire (directives) keys by backend kind. Convert.
-      const wire = wirePatch(patch)
-      setSettingsRanges((prev) => {
-        const next = applySetting(prev, { sessionId: sid, startMs: c.startMs, endMs: c.endMs }, wire)
-        patchSessionDirectives(sid, next)
-        return next
-      })
-    },
-    [patchSessionDirectives],
-  )
-  // The captured sources (FeedKinds) for a segment's session → drives the sheet's per-source rows.
-  // Identity is its own axis ('profile'), and location has its own precision axis (incl. OFF), so
-  // both are excluded from the per-source on/off rows.
-  const sourcesForSession = useCallback(
-    (sessionId?: string | null): FeedKind[] => {
-      const s = sessions.find((x) => x.id === sessionId)
-      if (!s) return []
-      const set = new Set<FeedKind>()
-      for (const k of [...(s.kinds ?? []), ...Object.keys(s.dataUrls ?? {})]) {
-        const fk = KIND_TO_FEEDKIND[k]
-        if (fk && fk !== 'profile' && fk !== 'loc') set.add(fk)
-      }
-      return SOURCE_RAIL_ORDER.filter((k) => set.has(k))
-    },
-    [sessions],
-  )
-  // PB4 A2 — the per-segment settings sheet (double-tap a segment → this; supersedes the grid
-  // editor + the scab-in eye/lock toggle). Holds the segment whose settings are being edited.
+  // ── settings sheet ── double-tap a segment → the self-contained EraSettingsSheet (edit any era
+  // value; patch/delete/invalidate live in the sheet). `sheetVisible` drives the open/close animation
+  // independently of mount so the close animates like the open.
   const [sheetClip, setSheetClip] = useState<LaneClip | null>(null)
-  // `sheetVisible` drives the open/close ANIMATION independently of mount: on close we flip it
-  // false (BottomSheet animates out), then unmount after the exit (so the close animates like the
-  // open, instead of vanishing). `sheetData` (from sheetClip) stays alive through the animation.
   const [sheetVisible, setSheetVisible] = useState(false)
   const sheetCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // Resolved settings (override over the go-live defaults) + captured sources for the sheet.
-  const sheetData = useMemo(() => {
-    if (!sheetClip?.sourceSessionId) return null
-    const sid = sheetClip.sourceSessionId
-    const override = settingsAt(settingsRanges, sid, (sheetClip.startMs + sheetClip.endMs) / 2)
-    const avail = sourcesForSession(sid)
-    const baseSources: Record<string, boolean> = {}
-    for (const k of avail) baseSources[k] = true
-    // Override sources are backend-kind keyed (wire) → convert to FeedKind for the sheet.
-    const overrideSources = wireSourcesToFeed(override.sources ?? {})
-    const t = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
-    const dateLabel = new Date(sheetClip.startMs).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })
-    // Pre-fill the title input with the segment's CURRENT title so the box reads "test12" (the
-    // broadcast/clip name), not the placeholder. Prefer a per-range directive override; then the
-    // SAVED clip's canonical name (reflects a rename via patchClip after refetch); then the session's
-    // go-live title. ('Untitled clip' = the library's no-title fallback → treat as no title so the
-    // placeholder still shows for a genuinely untitled segment.)
-    const mid = (sheetClip.startMs + sheetClip.endMs) / 2
-    const savedName = savedLane.find((x) => x.sourceSessionId === sid && mid >= x.startMs && mid < x.endMs)?.label
-    const realSaved = savedName && savedName !== 'Untitled clip' ? savedName : undefined
-    const sessTitle = sessions.find((s) => s.id === sid)?.title?.trim() || undefined
-    return {
-      avail,
-      rangeLabel: `${t(sheetClip.startMs)}–${t(sheetClip.endMs)}`,
-      dateLabel,
-      settings: {
-        visibility: override.visibility ?? ('public' as const),
-        precision: override.precision ?? ('exact' as const),
-        identity: override.identity ?? ('attributed' as const),
-        sources: { ...baseSources, ...overrideSources },
-        title: override.title ?? realSaved ?? sessTitle,
-        tags: override.tags,
-      },
-    }
-  }, [sheetClip, settingsRanges, sourcesForSession, savedLane, sessions])
   const closeSheet = useCallback(() => {
-    setSheetVisible(false) // animate out (BottomSheet slides down + fades the scrim)
+    setSheetVisible(false)
     if (sheetCloseTimer.current) clearTimeout(sheetCloseTimer.current)
-    sheetCloseTimer.current = setTimeout(() => setSheetClip(null), 270) // unmount after the 250ms exit
+    sheetCloseTimer.current = setTimeout(() => setSheetClip(null), 270)
   }, [])
-  // Stable onChange — depends only on the open segment (changes on open/close, not per playhead tick),
-  // so the memoised sheet doesn't re-render (and cancel taps) while the screen churns.
-  const onSheetChange = useCallback(
-    (patch: SegSettings) => {
-      if (!sheetClip) return
-      // CU2 (Canonical Unification): write ONLY the per-range `clipId=null` directive — the single
-      // authority CU1's `resolveClipAxes` reads on every path (time-machine pin + viewer, library,
-      // clips page, live globe), so an edit proliferates everywhere identically. The old `patchClip`
-      // dual-write (syncing the `Clip.*` row, needed pre-CU1 when each feed read the Clip row raw) is
-      // DELETED — `Clip.*` is now a read-fallback only. `applySegSetting` → `patchSessionDirectives`
-      // owns the write + the invalidations.
-      applySegSetting(sheetClip, patch)
-    },
-    [sheetClip, applySegSetting],
-  )
-  // No auto-selection on open — the page defaults to RIDING THE NOW EDGE (below), so the viewer
-  // follows the live/now edge rather than highlighting a past clip. (Tapping a clip still selects it.)
-
   // ── playback ──
   // The PLAYER plays `playerClip`; the VIEWER poster shows `viewerClip`. They're the same EXCEPT
   // while scrubbing during playback: the player stays frozen on its clip (audio keeps running)
@@ -785,19 +228,26 @@ export const ClipsScreen = () => {
   const playerClip = useMemo(() => allClips.find((c) => c.id === playerId) ?? null, [allClips, playerId])
   const clipStart = playerClip?.startMs ?? 0
   const clipEnd = playerClip?.endMs ?? 0
-  const manifestUrl = playerClip?.manifestUrl ?? null
 
-  // The player's CONTINUOUS VOD range in wall-clock — playback flows across this whole span
-  // (snips inside it are display-only and play through unbroken). Buffer/draft → the source
-  // SESSION's range; a saved piece → its parent saved clip's range; a whole saved clip → itself.
-  const playerInSaved = useMemo(() => savedLane.some((c) => c.id === playerId), [savedLane, playerId])
-  const playerSession = useMemo(() => sessions.find((s) => s.id === playerClip?.sourceSessionId), [sessions, playerClip])
-  const playerParent = useMemo(
-    () => (playerClip?.parentSavedId ? realSavedData.find((c) => c.id === playerClip.parentSavedId) : null),
-    [playerClip, realSavedData],
+  // The era backing the player — its stitched manifest + recorded source URLs (GET /eras/:id). All
+  // LaneClip pieces of one era (eviction-hole splits) share it, so crossing a hole is a seek, not a
+  // reload. `currentTime 0 ≈ era.startAtMs`, so the era window IS the continuous VOD range.
+  const playerEraId = playerClip?.sourceSessionId ?? null
+  const { data: playerEra, refetch: refetchPlayerEra } = useQuery({
+    queryKey: ['era', playerEraId],
+    queryFn: () => erasApi.get(playerEraId!),
+    enabled: !!playerEraId && playerEraId !== OPT_LIVE_SESSION,
+    staleTime: 30_000,
+  })
+  const manifestUrl = useMemo(
+    () =>
+      playerEra?.sources.find((s) => s.kind === 'camera')?.manifestUrl ??
+      playerEra?.sources.find((s) => s.kind === 'audio')?.manifestUrl ??
+      null,
+    [playerEra],
   )
-  const vodStart = playerInSaved ? (playerParent ? playerParent.startAtMs : clipStart) : playerSession ? sessionStartMs(playerSession) : clipStart
-  const vodEnd = playerInSaved ? (playerParent ? playerParent.endAtMs : clipEnd) : playerSession ? sessionEndMs(playerSession) : clipEnd
+  const vodStart = playerEra ? playerEra.era.startAtMs : clipStart
+  const vodEnd = playerEra ? playerEra.era.endAtMs ?? nowMs : clipEnd
   const vodStartRef = useRef(0)
   vodStartRef.current = vodStart
   // Clips in wall-clock order — the transport clock walks this; `locateAt` resolves footage/gap/end.
@@ -855,36 +305,42 @@ export const ClipsScreen = () => {
   // backend may list a recorded source in one but not the other (e.g. data tracks under dataUrls).
   // camera: only if camera was captured (NOT just any manifest — an audio-only clip has an audio
   // manifest); an evicted saved clip (no session) falls back to the manifest playing video.
+  // The played era's per-source footage URLs (from GET /eras/:id), keyed by backend kind.
+  const dataUrlByKind = useMemo(() => {
+    const m: Record<string, string> = {}
+    for (const s of playerEra?.sources ?? []) if (s.dataUrl) m[s.kind] = s.dataUrl
+    return m
+  }, [playerEra])
   const availableViews = useMemo<FeedKind[]>(() => {
     const set = new Set<FeedKind>(['profile']) // identity always
-    const kinds = playerSession?.kinds ?? []
-    const dataKeys = Object.keys(playerSession?.dataUrls ?? {})
-    if (playerSession ? kinds.includes('camera') : !!manifestUrl) set.add('cam')
-    if (kinds.includes('audio') || dataKeys.includes('audiolevel') || dataKeys.includes('audio')) set.add('audio')
-    for (const k of [...kinds, ...dataKeys]) {
+    const srcKinds = (playerEra?.sources ?? []).map((s) => s.kind)
+    if (srcKinds.includes('camera')) set.add('cam')
+    else if (!playerEra && manifestUrl) set.add('cam') // optimistic / fallback before the detail loads
+    if (srcKinds.includes('audio') || srcKinds.includes('audiolevel')) set.add('audio')
+    for (const k of srcKinds) {
       const fk = KIND_TO_FEEDKIND[k]
       if (fk) set.add(fk)
     }
     return SOURCE_RAIL_ORDER.filter((k) => set.has(k))
-  }, [playerSession, manifestUrl])
+  }, [playerEra, manifestUrl])
   // When the held view isn't in this clip's set, fall back to the most important captured source
   // (default-view priority — camera first, … location, identity last).
   useEffect(() => {
     if (!availableViews.includes(view)) setView(pickDefaultView(availableViews))
   }, [availableViews, view])
   const isCameraView = view === 'cam'
-  // The buffer track kind backing the viewed source (null = no recorded track for this kind).
-  const bufferKindForView = FEEDKIND_TO_BUFFER[view]
+  // The recorded track kind backing the viewed source (null = no recorded track for this kind).
+  const bufferKindForView = FEEDKIND_TO_KIND[view]
 
-  // Fetch the viewed data track for the played session ([] while camera / loading / evicted). The
-  // AUDIO view reads the `audiolevel` companion track (its `{ts, level}` envelope) — not the `audio`
-  // HLS — so the clip audio WAVEFORM replays (SP6a item 4, Aaron's recorder).
+  // Fetch the viewed data track for the played era ([] while camera / loading / evicted). The AUDIO
+  // view reads the `audiolevel` companion track (its `{ts, level}` envelope) — not the `audio` HLS —
+  // so the clip audio WAVEFORM replays.
   const currentDataUrl = isCameraView
     ? null
     : view === 'audio'
-      ? playerSession?.dataUrls?.audiolevel
+      ? dataUrlByKind['audiolevel']
       : bufferKindForView
-        ? playerSession?.dataUrls?.[bufferKindForView]
+        ? dataUrlByKind[bufferKindForView]
         : null
   const dataSamples = useDataTrack(currentDataUrl)
 
@@ -893,11 +349,11 @@ export const ClipsScreen = () => {
   // isn't on) → the session END, so the readout shows the full captured extent instead of an empty
   // placeholder. (The samples' ts are session wall-clock; the playhead can sit on another clip.)
   const sampledMs = useMemo(() => {
-    if (!playerSession) return playheadMs
-    const a = sessionStartMs(playerSession)
-    const b = sessionEndMs(playerSession)
+    if (!playerEra) return playheadMs
+    const a = playerEra.era.startAtMs
+    const b = playerEra.era.endAtMs ?? nowMs
     return playheadMs >= a && playheadMs <= b ? playheadMs : b
-  }, [playerSession, playheadMs])
+  }, [playerEra, playheadMs, nowMs])
 
   // The RECORDED source picture — the live `SourceRender` shape, sampled at `sampledMs`, rendered by
   // SourceStage (same visualizers as live). camera is the frameSlot video.
@@ -1132,8 +588,9 @@ export const ClipsScreen = () => {
   const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null) // fallback pause if no readyToPlay fires
   const manifestUrlRef = useRef<string | null>(null)
   manifestUrlRef.current = manifestUrl
-  const refetchBufferRef = useRef(refetchBuffer)
-  refetchBufferRef.current = refetchBuffer
+  // Recovery refetches the played era (fresh tokenized manifest) — covers a token expiry mid-scrub.
+  const refetchBufferRef = useRef(refetchPlayerEra)
+  refetchBufferRef.current = refetchPlayerEra
 
   const flushSeek = useCallback(() => {
     if (seekTimerRef.current) {
@@ -1638,186 +1095,73 @@ export const ClipsScreen = () => {
   const [clockExpanded, setClockExpanded] = useState(false)
   const [collapseSignal, setCollapseSignal] = useState(0)
 
-  // A just-saved clip is processed async (status:'processing' → 'ready'), so it
-  // doesn't appear in the list immediately. Invalidate now + a few times after, so
-  // it lands in the saved lane once ready. (Replace with Aaron's ready push later.)
+  // Refetch the owner timeline a few times after a mutation (the backend may materialise async).
   const refetchSavedSoon = useCallback(() => {
-    qc.invalidateQueries({ queryKey: ['buffer', 'clips'] })
-    const t1 = setTimeout(() => qc.invalidateQueries({ queryKey: ['buffer', 'clips'] }), 3000)
-    const t2 = setTimeout(() => qc.invalidateQueries({ queryKey: ['buffer', 'clips'] }), 8000)
+    qc.invalidateQueries({ queryKey: ['me', 'recordings'] })
+    const t1 = setTimeout(() => qc.invalidateQueries({ queryKey: ['me', 'recordings'] }), 3000)
+    const t2 = setTimeout(() => qc.invalidateQueries({ queryKey: ['me', 'recordings'] }), 8000)
     return () => {
       clearTimeout(t1)
       clearTimeout(t2)
     }
   }, [qc])
 
-  // Drag a BUFFERED clip right → save a durable copy of its window. The POST is
-  // synchronous server-side (returns once the clip is `ready`), so on success the
-  // clip appears on the next refetch. Surface failures (quota / no-footage / promote
-  // error) instead of swallowing them — silent failure is why a save "won't stick".
-  // Drag a buffered remainder right → save just its window. Optimistically carve it out +
-  // placeholder it in the saved lane; the real Clip prunes the placeholder when it lands.
-  // CU3 D3 — the unified save/un-save WRITE: set the keep axis over the clip's range via the directive
-  // path (authoritative-replace). Aaron's `patchDirectives` side-effect reconciles the retain-in-place
-  // Clip to the delta (materialise on 'kept' / remove on 'reapable') + charges/reclaims storage; a
-  // net-new over-quota save → `409 storage_cap` (whole PATCH rejected). `onError` reverts + surfaces it.
-  // Edge-relative save is expressed as the range (the backend clamps to [earliest, now]).
+  // Save / un-save = the `keep` axis on the era (PATCH /eras/:id { keep }). An era is one block, so a
+  // save keeps the WHOLE era (to keep part, snip first). Invalidate → the lane flips on refetch. A
+  // net-new over-quota save may return 409 storage_cap (surfaced below).
   const keepWrite = useCallback(
     (clip: LaneClip, keep: 'kept' | 'reapable', onError?: (err: unknown) => void) => {
-      const sid = clip.sourceSessionId
-      if (!sid || sid === OPT_LIVE_SESSION) return
-      setSettingsRanges((prev) => {
-        const next = applySetting(prev, { sessionId: sid, startMs: clip.startMs, endMs: clip.endMs }, { keep })
-        persistDirectives(qc, sid, next, (e) => {
-          setSettingsRanges(prev) // revert the keep edit on failure
-          onError?.(e)
-        })
-        return next
-      })
+      const eraId = clip.sourceSessionId
+      if (!eraId || eraId === OPT_LIVE_SESSION) return
+      erasApi
+        .patch(eraId, { keep })
+        .then(() => qc.invalidateQueries({ queryKey: ['me', 'recordings'] }))
+        .catch((e) => onError?.(e))
     },
     [qc],
   )
 
   const saveClip = useCallback(
     (clip: LaneClip) => {
-      // A DRAFT block → materialise it (saveDraft); optimistically carve it remains carved.
-      if (clip.draftId) {
-        const draftId = clip.draftId
-        setPendingSaves((prev) => [
-          ...prev,
-          { tempId: `pending:${draftId}`, sessionId: clip.sourceSessionId ?? '', startMs: clip.startMs, endMs: clip.endMs, label: clip.label.replace(/^DRAFT · /, ''), posterUrl: clip.posterUrl, manifestUrl: clip.manifestUrl },
-        ])
-        bufferApi
-          .saveDraft(draftId)
-          .then(() => {
-            qc.invalidateQueries({ queryKey: ['buffer', 'clips'] })
-            refetchSavedSoon()
-          })
-          .catch((err: unknown) => {
-            setPendingSaves((prev) => prev.filter((p) => p.tempId !== `pending:${draftId}`))
-            const e = err as { response?: { data?: { message?: string } }; message?: string }
-            Alert.alert('Save failed', e.response?.data?.message ?? e.message ?? 'Could not save clip')
-          })
-        return
-      }
-      const sessionId = clip.sourceSessionId
-      if (!sessionId) return
-      // Can't save the optimistic live placeholder — it has no real footage on the backend yet.
-      // (It's replaced by the real session within seconds; save then.)
-      if (sessionId === OPT_LIVE_SESSION) return
-      const tempId = `pending:${clip.id}`
-      setPendingSaves((prev) => [
-        ...prev,
-        { tempId, sessionId, startMs: clip.startMs, endMs: clip.endMs, label: clip.label, posterUrl: clip.posterUrl, manifestUrl: clip.manifestUrl },
-      ])
-      // CU3 D3 — unified write: set keep:'kept' over the range; Aaron's patchDirectives side-effect
-      // materialises the retain-in-place Clip + charges storage. The optimistic `pendingSaves` carves
-      // it into the saved lane until the real Clip lands (pruned on refetch). `toNow` (the live span)
-      // drives the storage-cap lane-flip. Replaces the bespoke `saveClip` endpoint (CU3 single path).
-      const toNow = sessionId === realLiveSessionId
+      const eraId = clip.sourceSessionId
+      if (!eraId || eraId === OPT_LIVE_SESSION) return
       keepWrite(clip, 'kept', (err: unknown) => {
-        setPendingSaves((prev) => prev.filter((p) => p.tempId !== tempId)) // revert the optimistic carve
         const e = err as { response?: { status?: number; data?: { message?: string; error?: string; usedBytes?: number; quotaBytes?: number } }; message?: string }
-        // Storage cap: the save is rejected because saved storage is full. Warn, and — if this was the
-        // LIVE saved-lane span — flip the dashboard's go-live lane back to buffer (broadcast keeps
-        // printing to buffer). A retrospective save just fails (no lane to flip).
         if (e.response?.status === 409 && e.response.data?.error === 'storage_cap') {
           const d = e.response.data
           const gb = (n?: number) => (n != null ? `${(n / 1_073_741_824).toFixed(1)} GB` : null)
           const detail = d.quotaBytes != null ? ` (${gb(d.usedBytes)} of ${gb(d.quotaBytes)} used)` : ''
-          if (toNow) {
-            loadCaptureConfig().then((c) => (c.lane === 'saved' ? saveCaptureConfig({ ...c, lane: 'buffer' }) : undefined))
-            Alert.alert('Storage full', `Your saved-clip storage is full${detail}. Recording continues to the buffer instead.`)
-          } else {
-            Alert.alert('Storage full', `Your saved-clip storage is full${detail}. Free up space or delete some saved clips to save this one.`)
-          }
+          Alert.alert('Storage full', `Your saved-clip storage is full${detail}. Free up space or delete some saved clips to save this one.`)
           return
         }
         Alert.alert('Save failed', e.response?.data?.message ?? e.response?.data?.error ?? e.message ?? 'Could not save clip')
       })
       refetchSavedSoon()
     },
-    [refetchSavedSoon, realLiveSessionId, keepWrite],
+    [refetchSavedSoon, keepWrite],
   )
 
-  // Drag a SAVED clip up → un-save. A WHOLE clip is deleted; a scissor PIECE only trims that range
-  // out of its parent (PATCH the parent's manifest to the kept ranges → the piece returns to
-  // buffer, the rest stays saved). Optimistic; revert on failure.
+  // Drag a SAVED clip up → un-save (keep:'reapable' → the reaper may evict it once outside the window).
   const unsaveClip = useCallback(
     (clip: LaneClip) => {
-      if (clip.id.startsWith('pending:')) return // an optimistic placeholder, not a real clip yet
-      // Returning footage to the buffer keeps its boundaries as SNIPS, so it stays a distinct piece
-      // beside adjacent footage (it doesn't silently merge) — survives until mended.
-      const snipSession = clip.sourceSessionId
-      if (snipSession) {
-        setSplitPoints((prev) => {
-          const next = [...prev]
-          for (const atMs of [clip.startMs, clip.endMs]) {
-            if (!next.some((s) => s.sessionId === snipSession && Math.abs(s.atMs - atMs) < 1)) next.push({ sessionId: snipSession, atMs })
-          }
-          return next.length === prev.length ? prev : next
-        })
-      }
-      if (clip.parentSavedId) {
-        const parentId = clip.parentSavedId
-        const parent = realSavedData.find((c) => c.id === parentId)
-        if (!parent) return
-        const hole = { id: clip.id, parentId, startMs: clip.startMs, endMs: clip.endMs }
-        // Kept ranges = the parent's full ranges minus every hole (existing pending + this one).
-        let kept: Claim[] = parent.ranges?.length
-          ? parent.ranges.map((r) => ({ sessionId: r.bufferSessionId, startMs: r.startAtMs, endMs: r.endAtMs }))
-          : parent.bufferSessionId
-            ? [{ sessionId: parent.bufferSessionId, startMs: parent.startAtMs, endMs: parent.endAtMs }]
-            : []
-        for (const h of [...pendingUnsave.filter((p) => p.parentId === parentId), hole]) kept = subtractRange(kept, h)
-        setPendingUnsave((prev) => [...prev, hole])
-        const revert = () => setPendingUnsave((prev) => prev.filter((p) => p.id !== hole.id))
-        const done = () => qc.invalidateQueries({ queryKey: ['buffer', 'clips'] })
-        if (!kept.length) bufferApi.deleteSavedClip(parentId).then(done).catch(revert)
-        else
-          bufferApi
-            .patchClip(parentId, { ranges: kept.map((r) => ({ bufferSessionId: r.sessionId, startAtMs: Math.round(r.startMs), endAtMs: Math.round(r.endMs) })) })
-            .then(done)
-            .catch(revert)
-        return
-      }
-      // CU3 D3 step 1b — un-save a WHOLE clip via the unified keep path: keep:'reapable' over its range
-      // → Aaron's patchDirectives side-effect removes the overlapping retain-in-place Clip + reclaims
-      // storage; the reaper then evicts the footage (flag ON). Same optimistic `pendingDelete` hide.
-      // Copied legacy clips (no buffer session — their /media copy isn't a retain directive) keep the
-      // legacy delete. (The scissor-PIECE trim path above stays on `patchClip` for now — its partial-
-      // region retain delta has a re-materialise edge that's an Aaron-side follow-up.)
-      setPendingDelete((prev) => new Set(prev).add(clip.id))
-      const revertDelete = () =>
-        setPendingDelete((prev) => {
-          const next = new Set(prev)
-          next.delete(clip.id)
-          return next
-        })
-      if (clip.sourceSessionId) {
-        keepWrite(clip, 'reapable', revertDelete)
-      } else {
-        bufferApi.deleteSavedClip(clip.id).then(() => qc.invalidateQueries({ queryKey: ['buffer', 'clips'] })).catch(revertDelete)
-      }
+      keepWrite(clip, 'reapable', () => Alert.alert('Error', 'Could not un-save this clip. Please try again.'))
+      refetchSavedSoon()
     },
-    [qc, realSavedData, pendingUnsave, keepWrite],
+    [keepWrite, refetchSavedSoon],
   )
 
-  // On focus (e.g. returning from the editor after an edit/save), refresh all sources so the
-  // carve + drafts reflect any change. A periodic buffer refetch keeps the oldest footage shrinking
-  // in step with the backend reaper (so you can watch a clip get eaten, not just on focus).
-  const refetchRef = useRef({ refetchBuffer, refetchSaved, refetchDrafts })
-  refetchRef.current = { refetchBuffer, refetchSaved, refetchDrafts }
+  // On focus (returning from elsewhere) + every 15s, refetch the owner timeline so the lanes reflect
+  // edits + the oldest footage shrinks in step with the backend reaper.
+  const refetchRef = useRef(refetchRecordings)
+  refetchRef.current = refetchRecordings
   useFocusEffect(
     useCallback(() => {
       setNowMs(serverNow())
-      refetchRef.current.refetchBuffer()
-      refetchRef.current.refetchSaved()
-      refetchRef.current.refetchDrafts()
-    }, [serverNow]),
+      refetchRef.current()
+    }, []),
   )
   useEffect(() => {
-    const id = setInterval(() => refetchRef.current.refetchBuffer(), 15_000)
+    const id = setInterval(() => refetchRef.current(), 15_000)
     return () => clearInterval(id)
   }, [])
   const axisTop = useMemo(() => {
@@ -1826,9 +1170,8 @@ export const ClipsScreen = () => {
     return newest
   }, [allClips, nowMs])
   nowEdgeRef.current = axisTop
-  // The gap card is the TRAILING gap when its FROM is the newest clip's end → reads "since last
-  // broadcast" (counts up). The leading (reaper) gap ends at the oldest clip → counts down. Keyed off
-  // the clips' own edges (NOT axisTop, which drifts on the 10s tick — that flipped the card off too soon).
+  // The gap card is the TRAILING gap when its FROM is the newest clip's end → "since last broadcast"
+  // (counts up). The leading (reaper) gap ends at the oldest clip → counts down.
   const isTrailingCard = !!gapCard && lastEnd > 0 && gapCard.fromMs >= lastEnd - 1
   const isReaperCard = !!gapCard && firstStart > 0 && gapCard.toMs <= firstStart + 1
   const [, setSecondTick] = useState(0)
@@ -1838,186 +1181,84 @@ export const ClipsScreen = () => {
     return () => clearInterval(id)
   }, [isTrailingCard, isReaperCard])
 
-  // Reaper edge = the buffer-window boundary (`windowStartMs`). When the OLDEST clip reaches it the
-  // window is full → that lane's edge is being reaped (no leading gap); the lane decides the colour
-  // (buffer = red sickle, saved = black save). Otherwise there's room → a LEADING gap whose card
-  // counts down to when the current oldest footage ages out (`reapAtMs`).
+  // Reaper edge — degraded: /me/recordings exposes no windowHours, so there's no predictive window
+  // (windowStartMs null). Actual eviction still shows via survivingRegions (interior gaps). The lane
+  // of the oldest clip drives the timeline's edge icon.
   const oldestClip = orderedClips[0] ?? null
-  const reaping = windowStartMs != null && oldestClip != null && oldestClip.startMs <= windowStartMs + 1
-  const reaperLane: 'buffered' | 'saved' = oldestClip != null && savedLane.some((c) => c.id === oldestClip.id) ? 'saved' : 'buffered'
-
-  // PB4 sheet — the open segment's lane (drives the Lane toggle). Changing the toggle saves /
-  // un-saves it. Membership is RANGE-based, NOT id-based: saving the buffer segment creates a NEW-id
-  // saved clip (+ an optimistic pending placeholder) covering the SAME footage range, so an id match
-  // would never see it → the toggle would snap back to BUFFERED and each tap would save another copy.
-  // Match by session + the segment's midpoint inside a saved clip's span instead.
-  const savedCoveringSheet = useMemo(() => {
-    if (!sheetClip?.sourceSessionId) return null
-    const mid = (sheetClip.startMs + sheetClip.endMs) / 2
-    return (
-      savedLane.find((c) => c.sourceSessionId === sheetClip.sourceSessionId && mid >= c.startMs && mid < c.endMs) ?? null
-    )
-  }, [sheetClip, savedLane])
-  const sheetLane: 'buffered' | 'saved' = savedCoveringSheet ? 'saved' : 'buffered'
-  // U3 — the lane toggle STAYS enabled during reap (the earlier guard hid it for the being-reaped
-  // oldest clip). Saving a being-reaped clip is now valid: `saveClip` sends `fromReaperEdge`, so the
-  // server retains [current reaper edge → end] — "save the remainder."
-  const sheetShowLane = !!sheetClip
-  const onSheetLaneChange = useCallback(
-    (next: 'buffered' | 'saved') => {
-      if (!sheetClip) return
-      if (next === 'saved') {
-        if (!savedCoveringSheet) saveClip(sheetClip) // guard: never save a copy of an already-saved span
-      } else if (savedCoveringSheet) {
-        unsaveClip(savedCoveringSheet)
-      }
-    },
-    [sheetClip, savedCoveringSheet, saveClip, unsaveClip],
-  )
-  // Permanent delete — drops the clip from the server + reclaims (a copy survives only via the
-  // reporting path, per CONTENT.md §3). Saved clips have an endpoint today (deleteSavedClip); a
-  // buffered clip's explicit permanent-delete + per-source track delete are backend TODOs (Aaron —
-  // flagged in the handoff). Confirmed before any destructive call.
-  const onDeleteClip = useCallback(() => {
-    if (!sheetClip) return
-    Alert.alert('Delete clip?', 'This removes it from the server and frees the storage. This can’t be undone.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: () => {
-          if (savedCoveringSheet) {
-            bufferApi
-              .deleteSavedClip(savedCoveringSheet.id)
-              .then(() => {
-                qc.invalidateQueries({ queryKey: ['buffer', 'clips'] })
-                refetchSavedSoon()
-              })
-              .catch(() => Alert.alert('Error', 'Could not delete the clip. Please try again.'))
-            closeSheet()
-          } else {
-            // Buffered footage: no explicit permanent-delete endpoint yet (it ages out via the reaper).
-            Alert.alert('Coming soon', 'Permanent delete of buffered footage needs the backend — for now it clears as it ages out.')
-          }
-        },
-      },
-    ])
-  }, [sheetClip, savedCoveringSheet, qc, refetchSavedSoon, closeSheet])
-  const onDeleteSource = useCallback((kind: FeedKind) => {
-    Alert.alert('Delete source?', `Permanently remove the ${kind.toUpperCase()} track from this clip. This can’t be undone.`, [
-      { text: 'Cancel', style: 'cancel' },
-      // Per-source track delete needs a backend endpoint (Aaron — flagged). UI is wired + ready.
-      { text: 'Delete', style: 'destructive', onPress: () => Alert.alert('Coming soon', 'Per-source delete needs the backend.') },
-    ])
-  }, [])
-
-  const reaperBoundaryMs = windowStartMs != null && !reaping ? windowStartMs : null
-  const reapAtMs = oldestClip != null && windowMs > 0 ? oldestClip.startMs + windowMs : null
+  const reaping = false
+  const reaperLane: 'buffered' | 'saved' =
+    oldestClip != null && savedLane.some((c) => c.id === oldestClip.id) ? 'saved' : 'buffered'
+  const reaperBoundaryMs: number | null = null
+  const reapAtMs: number | null = null
   const reapAtRef = useRef<number | null>(null)
   reapAtRef.current = reapAtMs
-  // PB4 A2 — double-tap a segment → the settings sheet (the decided UX; supersedes navigating to
-  // the bracket-trim grid editor, which retires under the snip + per-segment-shelf model).
+
+  // Double-tap a segment → the self-contained EraSettingsSheet (edit any era value: lane/keep,
+  // visibility, identity, precision, access, per-source, title, tags, delete).
   const openClip = useCallback((clip: LaneClip, _kind: 'buffered' | 'saved') => {
-    // The optimistic live placeholder has no real footage / session yet — nothing to edit.
-    if (clip.sourceSessionId === OPT_LIVE_SESSION || !clip.sourceSessionId) return
-    if (sheetCloseTimer.current) clearTimeout(sheetCloseTimer.current) // re-open before unmount
+    if (clip.sourceSessionId === OPT_LIVE_SESSION || !clip.sourceSessionId) return // live placeholder — nothing to edit yet
+    if (sheetCloseTimer.current) clearTimeout(sheetCloseTimer.current)
     setSheetClip(clip)
     setSheetVisible(true)
   }, [])
 
-  // Poll the playhead → when it's over a snip whose two pieces are still in the SAME lane, the
-  // scissor turns into a bandaid (un-snip). Reads lanes via a ref so the interval stays stable.
-  const laneRefs = useRef({ buffered: bufferedLane, saved: savedLane, splits: splitPoints })
-  laneRefs.current = { buffered: bufferedLane, saved: savedLane, splits: splitPoints }
+  // ── snip / mend ── snips are server-side era splits. A "mendable boundary" is where two adjacent
+  // eras of one recording meet (era.endAtMs === next.startAtMs). Over such a boundary the scissor
+  // becomes a bandaid (mend → merge the two eras, left keeps its values). Elsewhere it snips at the
+  // playhead (split the covering era in two; the right inherits the values).
+  const eraBoundaries = useMemo(() => {
+    const out: { recordingId: string; atMs: number }[] = []
+    for (const r of recordings ?? []) {
+      for (const e of r.eras) {
+        if (e.endAtMs != null && r.eras.some((o) => o.startAtMs === e.endAtMs)) {
+          out.push({ recordingId: r.id, atMs: e.endAtMs })
+        }
+      }
+    }
+    return out
+  }, [recordings])
+  const eraBoundariesRef = useRef(eraBoundaries)
+  eraBoundariesRef.current = eraBoundaries
+  const [unsnip, setUnsnip] = useState<{ recordingId: string; atMs: number } | null>(null)
   useEffect(() => {
-    if (!splitPoints.length) {
+    if (!eraBoundaries.length) {
       setUnsnip(null)
       return
     }
-    const sameLane = (lane: LaneClip[], s: SplitPoint) =>
-      lane.some((x) => x.sourceSessionId === s.sessionId && Math.abs(x.endMs - s.atMs) < 4) &&
-      lane.some((x) => x.sourceSessionId === s.sessionId && Math.abs(x.startMs - s.atMs) < 4)
     const id = setInterval(() => {
       const c = timelineRef.current?.getCenter()
       if (!c || c.pxPerMs <= 0) return
-      const tolMs = 16 / c.pxPerMs // ~16px proximity to the mark, zoom-correct
-      const { buffered, saved, splits } = laneRefs.current
-      const hit = splits.find((s) => Math.abs(s.atMs - c.timeMs) < tolMs && (sameLane(buffered, s) || sameLane(saved, s))) ?? null
-      setUnsnip((prev) => (prev?.atMs === hit?.atMs && prev?.sessionId === hit?.sessionId ? prev : hit))
+      const tolMs = 16 / c.pxPerMs // ~16px proximity to the boundary, zoom-correct
+      const hit = eraBoundariesRef.current.find((b) => Math.abs(b.atMs - c.timeMs) < tolMs) ?? null
+      setUnsnip((prev) => (prev?.atMs === hit?.atMs && prev?.recordingId === hit?.recordingId ? prev : hit))
     }, 150)
     return () => clearInterval(id)
-  }, [splitPoints.length])
+  }, [eraBoundaries.length])
 
-  // Scissor / bandaid. Over a healable snip → remove the split point (rejoin, metadata only).
-  // Otherwise → cut the clip under the static playhead in two (a local split point).
+  // Scissor / bandaid. Over a mendable era boundary → mend (merge). Otherwise → snip the covering era
+  // at the playhead. Both are server ops; refetch reflects the new era set.
   const handleScissor = useCallback(() => {
     if (unsnip) {
-      const sid = unsnip.sessionId
-      const removeSnip = () => {
-        const next = laneRefs.current.splits.filter((s) => !(s.sessionId === sid && s.atMs === unsnip.atMs))
-        setSplitPoints(next)
-        persistSnips(sid, next)
-      }
-      // PB4 mend differ-guard: un-snipping merges the two pieces at the snip. If their SETTINGS
-      // differ on ANY axis (visibility/precision/identity/sources), prompt-to-pick which side the
-      // merged span keeps (keeping it snipped is always an option — just cancel). Same/none → merge
-      // silently. (Note: even after the snip is removed, differing settings keep an auto-split
-      // boundary — so the only way to truly merge two blocks is to make their settings equal.)
-      const left = bufferedLane.find((c) => c.sourceSessionId === sid && Math.abs(c.endMs - unsnip.atMs) < SEG_TOL)
-      const right = bufferedLane.find((c) => c.sourceSessionId === sid && Math.abs(c.startMs - unsnip.atMs) < SEG_TOL)
-      const lSet = left ? settingsForSeg(left) : {}
-      const rSet = right ? settingsForSeg(right) : {}
-      // Replace the merged span [left.start, right.end] with one side's settings, fully: split at the
-      // edges, DROP any inside overrides, insert the chosen settings, coalesce. (A merge of the
-      // sources maps would leak the other side's per-source flags — a true replace is correct.)
-      const mergeWith = (chosen: SegSettings) => {
-        if (left && right) {
-          const span = { sessionId: sid, startMs: left.startMs, endMs: right.endMs }
-          setSettingsRanges((prev) => {
-            const out: SettingsRange[] = []
-            for (const r of prev) {
-              if (r.sessionId !== sid || r.endMs <= span.startMs || r.startMs >= span.endMs) { out.push(r); continue }
-              if (r.startMs < span.startMs) out.push({ sessionId: sid, startMs: r.startMs, endMs: span.startMs, settings: { ...r.settings } })
-              if (r.endMs > span.endMs) out.push({ sessionId: sid, startMs: span.endMs, endMs: r.endMs, settings: { ...r.settings } })
-            }
-            if (!isEmptySettings(chosen)) out.push({ sessionId: sid, startMs: span.startMs, endMs: span.endMs, settings: { ...chosen } })
-            const next = coalesce(out)
-            patchSessionDirectives(sid, next)
-            return next
-          })
-        }
-        removeSnip()
-        setUnsnip(null)
-      }
-      if (left && right && !settingsEqual(lSet, rSet)) {
-        const sum = (s: SegSettings) => {
-          const p: string[] = [s.visibility === 'private' ? 'Private' : 'Public']
-          if (s.precision && s.precision !== 'exact') p.push(s.precision)
-          if (s.identity === 'anon') p.push('Anon')
-          return p.join(' · ')
-        }
-        Alert.alert('Segments differ', 'Keep the merged clip as:', [
-          { text: `Left · ${sum(lSet)}`, onPress: () => mergeWith(lSet) },
-          { text: `Right · ${sum(rSet)}`, onPress: () => mergeWith(rSet) },
-          { text: 'Cancel', style: 'cancel' },
-        ])
-        return
-      }
-      removeSnip()
+      erasApi
+        .mend(unsnip.recordingId, Math.round(unsnip.atMs))
+        .then(() => qc.invalidateQueries({ queryKey: ['me', 'recordings'] }))
+        .catch(() => Alert.alert('Error', 'Could not mend here. Please try again.'))
       setUnsnip(null)
       return
     }
     const c = timelineRef.current?.getCenter()
     if (!c?.clipId) return
     const clip = allClips.find((x) => x.id === c.clipId)
-    const sessionId = clip?.sourceSessionId
-    if (!clip || !sessionId) return
+    const eraId = clip?.sourceSessionId
+    if (!clip || !eraId || eraId === OPT_LIVE_SESSION) return
     if (c.timeMs <= clip.startMs + MIN_REMAINDER_MS || c.timeMs >= clip.endMs - MIN_REMAINDER_MS) return // not strictly inside
-    if (laneRefs.current.splits.some((s) => s.sessionId === sessionId && Math.abs(s.atMs - c.timeMs) < 1)) return
-    const next = [...laneRefs.current.splits, { sessionId, atMs: c.timeMs }]
-    setSplitPoints(next)
-    persistSnips(sessionId, next)
-  }, [unsnip, allClips, bufferedLane, settingsForSeg, patchSessionDirectives, persistSnips])
+    const recordingId = eraById.get(eraId)?.rec.id
+    if (!recordingId) return
+    erasApi
+      .snip(recordingId, Math.round(c.timeMs))
+      .then(() => qc.invalidateQueries({ queryKey: ['me', 'recordings'] }))
+      .catch(() => Alert.alert('Error', 'Could not snip here. Please try again.'))
+  }, [unsnip, allClips, eraById, qc])
 
   // ── transport navigation: smooth-scroll the timeline so a boundary lands on the playhead ──
   // Boundaries = every clip head + tail; plus the reaper (oldest) and now (live) edges.
@@ -2334,28 +1575,35 @@ export const ClipsScreen = () => {
         </View>
       ) : null}
 
-      {/* PB4 A2 — per-segment settings sheet (double-tap a segment). Multi-axis; PATCHes directives. */}
-      {pb3Enabled && sheetClip && sheetData && (
-        <SegmentSettingsSheet
-          key={sheetClip.id}
-          visible={sheetVisible}
-          onClose={closeSheet}
-          rangeLabel={sheetData.rangeLabel}
-          dateLabel={sheetData.dateLabel}
-          lane={sheetLane}
-          onLaneChange={onSheetLaneChange}
-          showLane={sheetShowLane}
-          manifestUrl={sheetClip.manifestUrl ?? null}
-          posterUrl={sheetClip.posterUrl ?? null}
-          startMs={sheetClip.startMs}
-          endMs={sheetClip.endMs}
-          settings={sheetData.settings}
-          availableSources={sheetData.avail}
-          onChange={onSheetChange}
-          onDelete={onDeleteClip}
-          onDeleteSource={onDeleteSource}
-        />
-      )}
+      {/* Per-segment settings sheet (double-tap a segment) — the self-contained EraSettingsSheet
+          edits every era value (lane/keep, visibility, identity, precision, access, sources, title,
+          tags, delete) via erasApi.patch/delete + invalidate. */}
+      {sheetClip &&
+        (() => {
+          const entry = sheetClip.sourceSessionId ? eraById.get(sheetClip.sourceSessionId) : null
+          if (!entry) return null
+          const t = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+          const avail = entry.rec.kinds.map((k) => KIND_TO_FEEDKIND[k]).filter(Boolean) as FeedKind[]
+          return (
+            <EraSettingsSheet
+              key={sheetClip.id}
+              visible={sheetVisible}
+              onClose={closeSheet}
+              era={entry.era}
+              rangeLabel={`${t(entry.era.startAtMs)}–${t(entry.era.endAtMs ?? nowMs)}`}
+              dateLabel={new Date(entry.era.startAtMs).toLocaleDateString([], {
+                weekday: 'short',
+                month: 'short',
+                day: 'numeric',
+              })}
+              manifestUrl={null}
+              posterUrl={entry.era.thumbnailUrl}
+              availableSources={avail}
+              showLane
+              onDeleted={closeSheet}
+            />
+          )
+        })()}
     </View>
   )
 }
