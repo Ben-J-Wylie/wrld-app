@@ -93,8 +93,6 @@ import { ClipViewer } from '@/components/features/clip/ClipViewer'
 import { ClipsTimeline } from '@/components/features/clip/ClipsTimeline'
 import { FilmStrip } from '@/components/features/clip/FilmStrip'
 import { SegmentPreview } from '@/components/features/clip/SegmentPreview'
-import { SegmentSettingsSheet } from '@/components/features/clip/SegmentSettingsSheet'
-import type { SegSettings, Visibility, Precision, Identity } from '@/lib/segmentSettings'
 import type { FeedKind } from '@/components/features/broadcast/FeedThumb'
 import { DiscoveryHandoffCard } from '@/components/features/stream/DiscoveryHandoffCard'
 import { LegalAcceptanceCard } from '@/components/features/onboarding/LegalAcceptanceCard'
@@ -1449,12 +1447,6 @@ export function FeatureGallery() {
         </Row>
       </Section>
 
-      <Section title="SegmentSettingsSheet (double-tap a segment)">
-        <Row label="all controls as ordered multistate toggles — lane · visibility · identity · location · sources · tags">
-          <SegmentSettingsSheetDemo />
-        </Row>
-      </Section>
-
       <Section title="ClipBlock (clips grid)">
         <Row label="buffered · saved · compact">
           <View style={{ flexDirection: 'row', gap: theme.spacing.sm, height: 120 }}>
@@ -2261,58 +2253,6 @@ function SegmentPreviewDemo() {
         onClose={() => {}}
       />
     </View>
-  )
-}
-
-function SegmentSettingsSheetDemo() {
-  const [open, setOpen] = useState(false)
-  const [lane, setLane] = useState<'buffered' | 'saved'>('buffered')
-  const now = useMemo(() => Date.now(), [])
-  const [settings, setSettings] = useState<{
-    visibility: Visibility
-    precision: Precision
-    identity: Identity
-    sources: Record<string, boolean>
-    title?: string
-    tags?: string[]
-  }>({
-    visibility: 'public',
-    precision: 'exact',
-    identity: 'attributed',
-    sources: { cam: true, audio: true, chat: true, compass: false, gyro: true },
-    title: 'Morning ride',
-    tags: ['ride', 'sunrise'],
-  })
-  const onChange = (patch: SegSettings) =>
-    setSettings((s) => ({
-      ...s,
-      ...patch,
-      sources: patch.sources ? { ...s.sources, ...patch.sources } : s.sources,
-    }))
-  return (
-    <>
-      <Pressable variant="default" onPress={() => setOpen(true)} style={galleryStyles.openBtn}>
-        <Text variant="bodyEmphasized">Open segment shelf</Text>
-      </Pressable>
-      <SegmentSettingsSheet
-        visible={open}
-        onClose={() => setOpen(false)}
-        rangeLabel="3:04–3:05 PM"
-        dateLabel="Sat, Jun 14"
-        lane={lane}
-        onLaneChange={setLane}
-        showLane
-        manifestUrl={null}
-        posterUrl="https://picsum.photos/seed/wrldseg2/240/240"
-        startMs={now - 60_000}
-        endMs={now}
-        settings={settings}
-        availableSources={['cam', 'audio', 'chat', 'compass', 'gyro'] as FeedKind[]}
-        onChange={onChange}
-        onDelete={() => Alert.alert('Delete clip (demo)')}
-        onDeleteSource={(k) => Alert.alert(`Delete ${k} (demo)`)}
-      />
-    </>
   )
 }
 

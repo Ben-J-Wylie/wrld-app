@@ -53,7 +53,7 @@ import { GoLiveSignedOut } from '@/components/features/broadcast/GoLiveSignedOut
 import { LaneToggle } from '@/components/features/broadcast/LaneToggle'
 import { LiveClockBar } from '@/components/features/discovery/LiveClockBar'
 import { useBroadcastStore } from '@/stores/broadcastStore'
-import type { SnipSettings } from '@/api/buffer'
+import type { SnipSettings } from '@/types/era'
 import { useAuth } from '@clerk/clerk-expo'
 import { useLocation } from '@/hooks/useLocation'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
