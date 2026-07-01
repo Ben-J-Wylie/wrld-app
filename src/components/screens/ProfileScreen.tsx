@@ -13,8 +13,8 @@
 //     profile flex move; MetaStrip would flatten it
 //   • FollowButton (for other profiles) / Button (for own profile)
 
-import { useState } from 'react'
-import { ActivityIndicator, Alert, Image, Linking, Pressable, StyleSheet, View } from 'react-native'
+import { useEffect, useRef, useState } from 'react'
+import { ActivityIndicator, Alert, AppState, Image, Linking, Pressable, StyleSheet, View } from 'react-native'
 import { useLocalSearchParams, router } from 'expo-router'
 import { useAuth } from '@clerk/clerk-expo'
 import { theme } from '@/tokens/theme'
@@ -178,6 +178,37 @@ export function ProfileScreen() {
     queryFn: () => usersApi.getSubscriptionStatus(handle!),
     enabled: !!isSignedIn && !isOwnProfile && !!profile?.subscriptionEnabled,
   })
+
+  // The subscribe button opens the web checkout in the system browser
+  // (Linking.openURL resolves on launch, NOT on return), and the subscription
+  // activates asynchronously server-side via the Stripe invoice.paid webhook.
+  // So we refetch status when the app returns to the foreground. When the user
+  // just launched checkout (justSubscribedRef), poll a few times to cover the
+  // webhook lag; otherwise a single refetch is enough.
+  const justSubscribedRef = useRef(false)
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') return
+      if (!isSignedIn || isOwnProfile || !profile?.subscriptionEnabled) return
+      let tries = 0
+      const maxTries = justSubscribedRef.current ? 6 : 1
+      const tick = async () => {
+        tries++
+        const res = await refetchSubStatus()
+        if (res.data?.subscribed) {
+          justSubscribedRef.current = false
+          return
+        }
+        if (tries < maxTries) {
+          setTimeout(tick, 1500)
+        } else {
+          justSubscribedRef.current = false
+        }
+      }
+      tick()
+    })
+    return () => sub.remove()
+  }, [isSignedIn, isOwnProfile, profile?.subscriptionEnabled, refetchSubStatus])
 
   const { data: ppvEvents } = useQuery({
     queryKey: ['ppv-events-profile', handle],
@@ -405,9 +436,11 @@ export function ProfileScreen() {
                 // Fall back to the legacy Stripe-hosted-checkout redirect if an older
                 // backend doesn't return webUrl yet.
                 const { url, webUrl } = await usersApi.createSubscribeSession(profile.handle)
+                // Poll status hard when the app returns to the foreground (the
+                // AppState listener above) — the payment + webhook activation happen
+                // while we're backgrounded in the browser.
+                justSubscribedRef.current = true
                 await Linking.openURL(webUrl ?? url)
-                // Refetch status when app regains focus after browser payment
-                refetchSubStatus()
               } catch {
                 Alert.alert('Error', 'Could not open subscription page')
               }
