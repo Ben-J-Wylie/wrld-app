@@ -1,3 +1,8 @@
+> **⛔ SUPERSEDED 2026-06-30 by the CLEAN-CUT → `HANDOFF-cleancut-recording-era-2026-06-30.md`.**
+> Testing mode, nothing to preserve → wipe + build the target (`Recording` + one self-contained `Era`,
+> 4→1) directly, skipping the additive migration below (dual-write / soak / backfill / flags). **Aaron:
+> stop the additive CU4-d/CU5 scaffolding; switch to the clean-cut.** This doc stays as history.
+
 # HANDOFF — CU4: the structural collapse (clip ≡ range + axes) → schema + app-types
 
 > **Aaron → Ben, 2026-06-29.** CU1–CU3 (behavioural unification) + the CU4 *discover*

@@ -1,3 +1,9 @@
+> **▲ 2026-06-30 — model refined + migration approach changed.** Canonical model is now **`Recording`
+> (data) + one self-contained `Era`** (4→1; access/rating are per-era `Era` values) — `CONTENT.md` §5.
+> And since we're pre-launch with disposable data, the migration is a **CLEAN-CUT**, not the additive
+> path — **live plan: `HANDOFF-cleancut-recording-era-2026-06-30.md`.** The CU1–CU4-c history + the
+> Eviction-Engine notes below still inform the rewrite; the additive-migration mechanics are retired.
+
 # HANDOFF — the unified manifest model (live = editing) → backend + mediasoup
 
 **Canonical principle: `CONTENT.md` §5** ("The manifest model" → *Clip ≡ segment* · *Snips —

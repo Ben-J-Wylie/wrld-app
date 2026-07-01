@@ -506,44 +506,58 @@ gaps are tracked as gaps, not silently lived with:
 > `Recording` — the rename lands with the collapse.)*
 
 **1. Two entities — and exactly ONE rules object.**
-- **`Recording`** — the **data**, one per broadcast: the captured per-source footage (camera/audio/
-  location/chat/… on disk, addressed by `(recordingId, source, time-range)`) **+** the broadcast's fixed
-  facts — `hostId`, `startedAt`/`endedAt`, the **real** `lat`/`lng`, and access (`subscribersOnly`/
-  `ppvEventId`/`contentRating`). The immutable substrate; folds in the old `Track` (per-source footage) +
-  `Stream` (live identity/access).
+- **`Recording`** — the **data**, one per broadcast: **pure captured facts, nothing editable** — `hostId`,
+  `startedAt`/`endedAt`, the **real** `lat`/`lng`, `kinds[]`, and the per-source footage on disk. Folds in
+  the old `Track` (per-source footage) + `Stream`. **Storage is recording-first:**
+  `buffers/<userId>/<recordingId>/<kind>/…` (+ `thumbs/`), created at go-live — the recording folder owns
+  its kinds (see §"Storage layout" below).
 - **`Era`** — the **one self-contained rules object**: a `[startAtMs, endAtMs)` over a `Recording`,
-  carrying the **7 axes** (`title · tags · visibility · identity · precision · sources · keep`) as
-  independent **values**, plus its own `thumbnailUrl` / `viewCount` / `createdAt`. **snip** splits one
-  `Era` into **two of the same type**; **mend** merges two; **delete** removes one. **Nothing spans a snip.**
+  carrying **every per-era, editable-after-the-fact value** — the **7 representation axes**
+  (`title · tags · visibility · identity · precision · sources · keep`) **plus access & rating**
+  (`subscribersOnly · ppvEventId · contentRating`) — as independent **values**, plus its own
+  `thumbnailUrl` / `viewCount` / `createdAt`. **snip** splits one `Era` into **two of the same type**;
+  **mend** merges two; **delete** removes one. **Nothing spans a snip.**
 
-**There is exactly ONE rules object type.** `keep`, `title`, `visibility`, … are **values it carries, not
-types.** `keep` is existence/lifespan — `kept` persists past the reaper; `reapable` is eventually reaped
-(ceases to exist) — it changes *how long* an `Era` lives, **not what it is**. So **"clip", "segment",
-"draft", "saved", "private moment", "buffer slice" are NOT types** — they're informal labels for an `Era`
-with particular axis values. A kept-titled-public `Era` is the *same kind of object* as a
-reapable-nameless-private one. The 7 axes are **orthogonal**: every combination is valid (kept×private,
-reapable×public, …); no axis implies another. A "clip" is just an `Era` you set `keep: kept` on (usually
-+ a `title`) — it doesn't become a different thing.
+**There is exactly ONE rules object type.** `keep`, `title`, `visibility`, `subscribersOnly`, … are
+**values it carries, not types.** `keep` is existence/lifespan — `kept` persists past the reaper;
+`reapable` is eventually reaped (ceases to exist) — it changes *how long* an `Era` lives, **not what it
+is**. So **"clip", "segment", "draft", "saved", "private moment", "buffer slice" are NOT types** — they're
+informal labels for an `Era` with particular values. A kept-titled-public `Era` is the *same kind of
+object* as a reapable-nameless-private one. Every per-era value is **orthogonal + independently editable
+after the fact** (open an era to non-subscribers later, PPV-gate it, re-rate it, blur it, keep it — any
+combination); no value implies another. A "clip" is just an `Era` you set `keep: kept` on (usually + a
+`title`) — it doesn't become a different thing. *(This supersedes the 2026-06-26 "access is a projection,
+not an axis" call — access/rating are now per-era `Era` values, editable like the rest.)*
 
 **The shape, concretely** (one 10-min broadcast, snipped into 3 eras; all the *same type*):
 
 ```text
-Recording  id=rec_8f3kq2  hostId=usr_ben  startedAt=14:00  endedAt=14:10
-           lat/lng=<real>  access={subscribersOnly:false}  footage: {camera,audio,location,chat}
+Recording  id=rec_8f3kq2  hostId=usr_ben  startedAt=14:00  endedAt=14:10  lat/lng=<real>
+           kinds={camera,audio,location,chat}  →  buffers/usr_ben/rec_8f3kq2/{camera,audio,location,chat,thumbs}/
 
-Era  id      recordingId  start  end    title         visibility identity precision sources                keep      thumb views
-     era_a1  rec_8f3kq2   14:00  14:04  "Sunset run"  public     shown    city      {cam,aud,loc:T chat:F} kept      ✓     142
-     era_b2  rec_8f3kq2   14:04  14:05  null          private    anon     private   {cam:T aud,loc,chat:F} reapable  —     0
-     era_c3  rec_8f3kq2   14:05  14:10  null          public     shown    city      {cam,aud,loc,chat:T}   reapable  —     0
+Era (all recordingId=rec_8f3kq2)
+  id      start  end    title         vis      identity precision sources                keep      access  rating   thumb views
+  era_a1  14:00  14:04  "Sunset run"  public   shown    city      {cam,aud,loc:T chat:F} kept      all     general  ✓     142
+  era_b2  14:04  14:05  null          private  anon     private   {cam:T aud,loc,chat:F} reapable  all     general  —     0
+  era_c3  14:05  14:10  null          public   shown    city      {cam,aud,loc,chat:T}   reapable  subs    general  —     0
 ```
+(`access`: all | subs | ppv:<eventId> — the `subscribersOnly`/`ppvEventId` values; `rating`: general | adult.)
 
 All three are the **identical type** — same columns, no `isClip`/type flag, no second rules table. `era_a1`
 is what you'd casually call "a saved clip" (just `keep:kept` + a title); `era_b2` a private moment that'll
-expire; `era_c3` default public buffer footage. Flip `era_a1.keep` → `reapable` and it's the *same row*,
-now destined to be reaped. **Operations are plain row ops:** **snip** = UPDATE end + INSERT (the new row
-inherits the axes); **edit** = UPDATE an axis column (the row IS the truth everywhere → no projection,
-no staleness); **reap** = DELETE `reapable` rows past the window + free their footage. (`startAtMs`/`endAtMs`
-are absolute UTC ms; shown as wall-clock for readability.)
+expire; `era_c3` default public buffer footage, later flipped `subscribersOnly`. Flip `era_a1.keep` →
+`reapable` and it's the *same row*, now destined to be reaped. **Operations are plain row ops:** **snip** =
+UPDATE end + INSERT (the new row inherits the values); **edit** = UPDATE a value column (the row IS the
+truth everywhere → no projection, no staleness); **reap** = DELETE `reapable` rows past the window + free
+their footage. (`startAtMs`/`endAtMs` are absolute UTC ms; shown as wall-clock for readability.)
+
+**Storage layout — recording-first.** Footage on disk mirrors the model: the recording owns its kinds.
+**`buffers/<userId>/<recordingId>/<kind>/…`** — created at go-live, each armed kind nested under the
+recording (`camera`/`audio`/`screen` = HLS segments `init.mp4`+`*.m4s`; `location`/`chat`/`gyro`/… =
+`<chunkMs>.jsonl`; **`thumbs/`** = per-era frames, time-keyed so they survive re-snips). The recording's
+`kinds[]` = exactly the subfolders present. *(Supersedes the old kind-first
+`buffers/<userId>/<kind>/<sessionId>/…`, which nested the recording inside the kind — backwards, since
+`kinds` is an attribute of the recording.)*
 
 **2. The substrate — what's recorded (10 sources; 9 live, screen pending).** Each captured
 **source** is stored as a **`Track`** (drop "kind" — a source *is* the track's identity), with an
@@ -629,11 +643,13 @@ selected by `t`/`now` for time-indexed surfaces, or the clip directly otherwise:
 | Time-machine clip viewer | chrome | (✓) | access gate\* | host ✓ | location chrome | source rail | — |
 | Analytics — top clips | ✓ | — | — | — | — | — | — |
 
-\* **Access** (`subscribersOnly`/`ppvEventId`) + the **host avatar/@handle** are **`Stream`-level**,
-not clip axes — `visibility` only decides public/private (→ listed + which planet); `identity` only
-decides shown-vs-anon. **Compose inputs** (dashboard + stream-preview title fields) read/write
-`captureConfig.title` — the *next* clip's title at go-live, the one legitimate title input that isn't
-`clip.title`.
+\* **Access** (`subscribersOnly`/`ppvEventId`) + **`contentRating`** are **per-era `Era` values**
+(editable after the fact — 2026-06-30, supersedes the earlier "`Stream`-level projection"): the access
+gate/badge + planet gating read them off the era. The **host avatar/@handle** come from the
+`Recording.hostId` (a captured fact, not an era value). `visibility` still only decides public/private (→
+listed); `identity` only shown-vs-anon. **Compose inputs** (dashboard + stream-preview title fields)
+read/write `captureConfig.title` — the *next* era's title at go-live, the one legitimate title input that
+isn't `era.title`.
 
 **9. Planet / realm — derived routing, not a precision value.** Which globe a clip lands on is a
 **read-time discovery decision** over single-meaning axes, never baked into `precision`:
