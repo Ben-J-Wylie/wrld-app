@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type { SourceType } from '@/types'
-import type { SnipSettings } from '@/api/buffer'
+import type { SnipSettings } from '@/types/era'
 import { serverNow } from '@/lib/serverClock'
 
 // Global broadcast state shared across screens so the Go Live / Record

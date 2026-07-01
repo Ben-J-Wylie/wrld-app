@@ -71,8 +71,8 @@ import { useStreamTelemetry } from '@/hooks/useStreamTelemetry'
 import { useLocalTelemetry } from '@/hooks/useLocalTelemetry'
 import { useLocationTrail } from '@/hooks/useLocationTrail'
 import { useTelemetryCapture } from '@/hooks/useTelemetryCapture'
-import { useBuffer } from '@/hooks/useBuffer'
-import { bufferApi } from '@/api/buffer'
+import { useMyRecordings } from '@/hooks/useMyRecordings'
+import { erasApi } from '@/api/eras'
 import { useAudioLevelCapture } from '@/hooks/useAudioLevelCapture'
 import type { FeedKind } from '@/components/features/broadcast/FeedThumb'
 import { Avatar } from '@/components/primitives/Avatar'
@@ -111,7 +111,6 @@ import { loadCaptureConfig, saveCaptureConfig, DEFAULT_CAPTURE_CONFIG, type Capt
 import { streamsApi } from '@/api/streams'
 import { ppvApi } from '@/api/ppvEvents'
 import { onPpvSocketEvent } from '@/lib/ppvSocketEvents'
-import { recordingsApi } from '@/api/recordings'
 import { usersApi } from '@/api/users'
 import { REPORT_REASONS } from '@/lib/reportReasons'
 import { useSignaling } from '@/hooks/useSignaling'
@@ -452,17 +451,16 @@ export function StreamScreen() {
   // behaviour change until the viewer mutes.
   const { isFullscreen, enter: enterFullscreen, exit: exitFullscreen } = useFullscreenVideo()
   const [muted, setMuted] = useState(false)
+  // "Record" in the clean-cut = the keep axis on the OPEN era (recording is continuous while live;
+  // Record keeps the current era, Stop lets it stay reapable). `isRecording` reflects that toggle.
   const [isRecording, setIsRecording] = useState(false)
-  const [activeRecordingId, setActiveRecordingId] = useState<string | null>(null)
-  const stoppedByUserRef = useRef(false)
+  const openRecordingIdRef = useRef<string | null>(null)
+  const openEraIdRef = useRef<string | null>(null)
 
   function stopActiveRecording() {
-    stoppedByUserRef.current = true
-    if (activeRecordingId) {
-      recordingsApi.stop(activeRecordingId).catch(() => {})
-    }
+    const eraId = openEraIdRef.current
+    if (eraId) erasApi.patch(eraId, { keep: 'reapable' }).catch(() => {})
     setIsRecording(false)
-    setActiveRecordingId(null)
     useBroadcastStore.getState().setRecording(false)
   }
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -1163,21 +1161,41 @@ export function StreamScreen() {
   // after go-live), in which case the snip is dropped (no footage yet to snip).
   const pendingSnip = useBroadcastStore((s) => s.pendingSnip)
   const snipNonce = useBroadcastStore((s) => s.snipNonce)
-  const { data: bufferForSnip } = useBuffer(isNew && isLiveBroadcast, isLiveBroadcast)
-  const openSessionRef = useRef<string | null>(null)
-  openSessionRef.current = bufferForSnip?.sessions.find((s) => !s.endedAt)?.id ?? null
+  // The owner's recordings while live → the OPEN recording (has an era with endAtMs null): its id is
+  // the snip target, its open era is what "Record" keeps. null until the recorder creates it (~secs).
+  const { data: myRecordings } = useMyRecordings(isNew && isLiveBroadcast, isLiveBroadcast)
+  const openRec = useMemo(
+    () => myRecordings?.find((r) => r.eras.some((e) => e.endAtMs == null)) ?? null,
+    [myRecordings],
+  )
+  openRecordingIdRef.current = openRec?.id ?? null
+  openEraIdRef.current = openRec?.eras.find((e) => e.endAtMs == null)?.id ?? null
   // Last GPS fix (set by the broadcaster location watcher below) so a snip can re-seed location's
   // first state without waiting for the next movement-triggered update.
   const lastLocationRef = useRef<{ lat: number; lng: number } | null>(null)
   useEffect(() => {
     if (!isNew || !pendingSnip) return
-    const sid = openSessionRef.current
-    if (!sid) {
+    const recId = openRecordingIdRef.current
+    if (!recId) {
       useBroadcastStore.getState().consumeSnip()
       return
     }
-    bufferApi
-      .snipSession(sid, pendingSnip)
+    const settings = pendingSnip
+    erasApi
+      // Snip the OPEN era at now (it covers Date.now()); the right (new) era inherits the values, then
+      // we PATCH the dashboard's metadata edits onto it (mapping the dashboard vocab → era vocab).
+      .snip(recId, Date.now())
+      .then(({ eras }) => {
+        const rightId = eras[1]
+        const patch: import('@/types/era').EraPatch = {}
+        if (settings.visibility) patch.visibility = settings.visibility
+        if (settings.precision) patch.precision = settings.precision === 'off' ? 'private' : settings.precision
+        if (settings.attributed != null) patch.identity = settings.attributed ? 'shown' : 'anon'
+        if (settings.sources) patch.sources = settings.sources
+        if (settings.title != null) patch.title = settings.title
+        if (settings.tags) patch.tags = settings.tags
+        if (rightId && Object.keys(patch).length) return erasApi.patch(rightId, patch)
+      })
       .then(() => {
         // Per-snip initial state — re-emit EVERY armed source's current value so the new era is
         // self-contained (U2 contract). `reemitTelemetry` covers compass/gyro/accel/speed; location +
@@ -1273,31 +1291,6 @@ export function StreamScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isNew, status])
 
-  // Watch the recordings query cache for server-side status changes on the
-  // active recording. The recording_updated WS push keeps this cache current
-  // so no polling is needed — this effect just reacts when the cache updates.
-  const { data: liveRecordings } = useQuery({
-    queryKey: ['recordings'],
-    queryFn: recordingsApi.list,
-    enabled: isRecording && !!activeRecordingId,
-  })
-  useEffect(() => {
-    if (!isRecording || !activeRecordingId || !liveRecordings) return
-    const rec = liveRecordings.find(r => r.id === activeRecordingId)
-    if (!rec || rec.status === 'recording') return
-    if (!stoppedByUserRef.current) {
-      setIsRecording(false)
-      setActiveRecordingId(null)
-      Alert.alert(
-        'Recording stopped',
-        rec.status === 'failed'
-          ? 'The recording encountered an error and was stopped. Your stream continues.'
-          : 'You\'ve reached your storage limit. Your stream continues.',
-      )
-    }
-    stoppedByUserRef.current = false
-  }, [liveRecordings, activeRecordingId, isRecording])
-
   async function handleGoLive(configOverride?: CaptureConfig) {
     // Going live requires creator onboarding (age gate + ToS + camera
     // permission). The dashboard already walls this off; the center-tab preview
@@ -1327,7 +1320,6 @@ export function StreamScreen() {
     const recordedSources = recordedSourcesFromConfig(c)
 
     setIsRecording(false)
-    setActiveRecordingId(null)
 
     const precisionMap: Record<string, 'exact' | 'city' | 'country' | 'off'> = {
       exact: 'exact',
@@ -1394,30 +1386,41 @@ export function StreamScreen() {
     router.navigate('/(app)/dashboard')
   }
 
+  // Record = keep the OPEN era (recording is continuous while live). If the open era hasn't been
+  // created yet (~secs after go-live), reflect the intent in the UI + flip captureConfig.lane to
+  // 'saved' so the recorder retains from the start; the keep patch fires once the era resolves.
   async function startRecording() {
     if (!streamId || isRecording) return
+    setIsRecording(true)
+    useBroadcastStore.getState().setRecording(true)
+    const eraId = openEraIdRef.current
     try {
-      const { recordingId } = await recordingsApi.start(streamId)
-      setActiveRecordingId(recordingId)
-      setIsRecording(true)
-      useBroadcastStore.getState().setRecording(true)
+      if (eraId) {
+        await erasApi.patch(eraId, { keep: 'kept' })
+      } else {
+        const c = cfgRef.current ?? (await loadCaptureConfig())
+        if (c.lane !== 'saved') await saveCaptureConfig({ ...c, lane: 'saved' })
+      }
     } catch (err: unknown) {
+      setIsRecording(false)
+      useBroadcastStore.getState().setRecording(false)
       const serverMsg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message
       Alert.alert('Storage full', serverMsg ?? 'Could not start recording')
     }
   }
 
   async function stopRecording() {
-    if (!isRecording || !activeRecordingId) return
+    if (!isRecording) return
+    setIsRecording(false)
+    useBroadcastStore.getState().setRecording(false)
+    const eraId = openEraIdRef.current
     try {
-      await recordingsApi.stop(activeRecordingId)
+      if (eraId) await erasApi.patch(eraId, { keep: 'reapable' })
+      const c = cfgRef.current ?? (await loadCaptureConfig())
+      if (c.lane === 'saved') await saveCaptureConfig({ ...c, lane: 'buffer' })
     } catch (err) {
       Alert.alert('Error', err instanceof Error ? err.message : 'Could not stop recording')
-      return
     }
-    setIsRecording(false)
-    setActiveRecordingId(null)
-    useBroadcastStore.getState().setRecording(false)
   }
 
   // Record from the preview: go live first, then start recording once the

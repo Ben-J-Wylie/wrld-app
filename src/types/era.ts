@@ -29,6 +29,17 @@ export type EraValues = {
 // A partial edit sent to PATCH /eras/:id (any subset of the values). "save" = { keep: 'kept' }.
 export type EraPatch = Partial<EraValues>
 
+// The live-snip payload (dashboard metadata edits applied at a snip). Uses the dashboard's vocab
+// (`precision` includes 'off', `attributed`); StreamScreen maps it to an EraPatch on the new era.
+export type SnipSettings = {
+  visibility?: 'public' | 'private'
+  precision?: 'exact' | 'city' | 'country' | 'off'
+  attributed?: boolean
+  sources?: Record<string, boolean>
+  title?: string
+  tags?: string[]
+}
+
 // An Era row (owner timeline + the viewer's era block). `endAtMs` null = live (the open era).
 export type Era = EraValues & {
   id: string
