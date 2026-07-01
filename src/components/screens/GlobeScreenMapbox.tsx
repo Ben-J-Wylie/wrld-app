@@ -97,7 +97,6 @@ const PIN_AMBER = '#F5B400'   // exact-location pins (precision colour)
 const PIN_RED = '#FF3B5C'     // city-location pins (precision colour)
 const PIN_DARKRED = '#9B1C31' // country-location pins (precision colour)
 const PIN_MAGENTA = '#E0218A' // external-cam pins (overrides precision colour)
-const PIN_PURPLE = '#A855F7'  // (cluster only — subscriber-only aggregate)
 const PIN_BLACK = '#111111'   // the viewer's own stream pin (tap → return to it)
 const PIN_BORDER = '#FFFFFF'
 
@@ -1832,12 +1831,13 @@ export function GlobeScreenMapbox() {
               clusterRadius={50}
               clusterMaxZoomLevel={14}
               clusterProperties={{
-                // sum of 1s for each subscription (NOT PPV) stream in the cluster —
-                // PPV streams are red, so they don't pull a cluster purple.
-                subscriberCount: [
-                  '+',
-                  ['case', ['all', ['get', 'subscribersOnly'], ['!', ['get', 'ppv']]], 1, 0],
-                ],
+                // Cluster colour reflects its members (matches single-pin colouring):
+                // all-external → magenta; else the people's precision colour
+                // (exact > city > country wins). External cams aren't "people".
+                personCount: ['+', ['case', ['get', 'isExternal'], 0, 1]],
+                exactCount: ['+', ['case', ['all', ['!', ['get', 'isExternal']], ['==', ['get', 'precision'], 'exact']], 1, 0]],
+                cityCount: ['+', ['case', ['all', ['!', ['get', 'isExternal']], ['==', ['get', 'precision'], 'city']], 1, 0]],
+                countryCount: ['+', ['case', ['all', ['!', ['get', 'isExternal']], ['==', ['get', 'precision'], 'country']], 1, 0]],
                 // sum of 1s for the viewer's own stream(s) — subtracted from the
                 // displayed count so a streamer is never counted in their cluster.
                 selfCount: ['+', ['case', ['get', 'isSelf'], 1, 0]],
@@ -1848,12 +1848,16 @@ export function GlobeScreenMapbox() {
                 id="cluster-circles"
                 filter={['has', 'point_count']}
                 style={{
-                  // purple if every stream in cluster is subscriber-only, red otherwise
+                  // Cluster colour = its members: all external cams → magenta; else the
+                  // people's precision colour (exact > city > country). Subscriber/PPV
+                  // are pin labels (★/PPV), not colour.
                   circleColor: [
                     'case',
-                    ['==', ['get', 'subscriberCount'], ['get', 'point_count']],
-                    PIN_PURPLE,
-                    PIN_RED,
+                    ['==', ['get', 'personCount'], 0], PIN_MAGENTA,   // all external cams
+                    ['>', ['get', 'exactCount'], 0], PIN_AMBER,       // any exact-location person → amber
+                    ['>', ['get', 'cityCount'], 0], PIN_RED,          // else city → red
+                    ['>', ['get', 'countryCount'], 0], PIN_DARKRED,   // else country → dark red
+                    PIN_AMBER,
                   ] as any,
                   circleRadius: ['step', ['get', 'point_count'], 18, 5, 22, 15, 26] as any,
                   circleStrokeWidth: 2,
