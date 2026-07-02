@@ -64,6 +64,7 @@ import type { DiscoverPin, Interval } from '@/types/era'
 import { useDiscoverySocket } from '@/hooks/useDiscoverySocket'
 import { usePublicConfig, configNumber, configBool } from '@/hooks/usePublicConfig'
 import { PIN_ZOOM_THRESHOLD, COUNT_MIN_ZOOM } from '@/lib/tiles'
+import { env } from '@/lib/env'
 import { Text } from '@/components/primitives/Text'
 import { Pill } from '@/components/primitives/Pill'
 import { ScreenHeader } from '@/components/sections/ScreenHeader'
@@ -95,6 +96,10 @@ const PIN_DARKRED = '#9B1C31' // country-location pins (precision colour)
 const PIN_MAGENTA = '#E0218A' // external-cam pins (overrides precision colour)
 const PIN_BLACK = '#111111'   // the viewer's own stream pin (tap → return to it)
 const PIN_BORDER = '#FFFFFF'
+// The ISS cam: a satellite glyph centred on its (moving) pin. The image is the
+// same PNG served for the web/admin maps; a SymbolLayer targets the ISS room id.
+const ISS_ROOM = 'ext-yt-iss-live'
+const ISS_IMAGES = { 'iss-icon': { uri: `${env.apiBaseUrl}/media/iss.png` } }
 
 // Globe zoom FLOOR — the furthest you can pinch out. CRITICAL: this must keep the
 // globe at least filling its MapView viewport (globeBox = 1.4× screen). Below the
@@ -1731,6 +1736,7 @@ export function GlobeScreenMapbox() {
             lowercased ISO alpha-2. onImageMissing is a no-op so a not-yet-loaded
             flag degrades to "no flag" rather than a console warning. */}
             <Images images={flagImages} onImageMissing={() => {}} />
+            <Images images={ISS_IMAGES} />
 
             <ShapeSource
               id="streams"
@@ -1900,6 +1906,17 @@ export function GlobeScreenMapbox() {
                   textColor: PIN_BORDER,
                   textAllowOverlap: true,
                   textIgnorePlacement: true,
+                }}
+              />
+              {/* ISS satellite glyph centred on the (moving) ISS pin. */}
+              <SymbolLayer
+                id="single-iss"
+                filter={['all', ['!', ['has', 'point_count']], ['==', ['get', 'mediasoupRoomId'], ISS_ROOM]] as any}
+                style={{
+                  iconImage: 'iss-icon',
+                  iconSize: 0.5,
+                  iconAllowOverlap: true,
+                  iconIgnorePlacement: true,
                 }}
               />
             </ShapeSource>
