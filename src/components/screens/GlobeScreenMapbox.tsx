@@ -1344,7 +1344,10 @@ export function GlobeScreenMapbox() {
   // images from flagcdn so they render identically on Android/iOS (unicode flag
   // emoji don't render on Android). Only Earth has country pins.
   const flagImages = useMemo(() => {
-    const imgs: Record<string, { uri: string }> = {}
+    // Register ALL map images in one <Images> — multiple <Images> components can
+    // clobber each other in RNMapbox, so the ISS satellite icon lives here too
+    // (always, on every planet) alongside the country flags.
+    const imgs: Record<string, { uri: string }> = { 'iss-icon': ISS_IMAGES['iss-icon'] }
     if (planet.id !== 'earth') return imgs
     for (const s of planetPins) {
       if (s.locationPrecision !== 'country') continue
@@ -1736,7 +1739,6 @@ export function GlobeScreenMapbox() {
             lowercased ISO alpha-2. onImageMissing is a no-op so a not-yet-loaded
             flag degrades to "no flag" rather than a console warning. */}
             <Images images={flagImages} onImageMissing={() => {}} />
-            <Images images={ISS_IMAGES} />
 
             <ShapeSource
               id="streams"
