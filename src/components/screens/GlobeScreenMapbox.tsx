@@ -64,7 +64,6 @@ import type { DiscoverPin, Interval } from '@/types/era'
 import { useDiscoverySocket } from '@/hooks/useDiscoverySocket'
 import { usePublicConfig, configNumber, configBool } from '@/hooks/usePublicConfig'
 import { PIN_ZOOM_THRESHOLD, COUNT_MIN_ZOOM } from '@/lib/tiles'
-import { env } from '@/lib/env'
 import { Text } from '@/components/primitives/Text'
 import { Pill } from '@/components/primitives/Pill'
 import { ScreenHeader } from '@/components/sections/ScreenHeader'
@@ -99,7 +98,9 @@ const PIN_BORDER = '#FFFFFF'
 // The ISS cam: a satellite glyph centred on its (moving) pin. The image is the
 // same PNG served for the web/admin maps; a SymbolLayer targets the ISS room id.
 const ISS_ROOM = 'ext-yt-iss-live'
-const ISS_IMAGES = { 'iss-icon': { uri: `${env.apiBaseUrl}/media/iss.png` } }
+// Bundled asset (not a remote {uri}) so RNMapbox has the image synchronously — a
+// literal iconImage doesn't repaint if a remote image finishes loading late.
+const ISS_IMAGES = { 'iss-icon': require('../../../assets/images/iss.png') }
 
 // Globe zoom FLOOR — the furthest you can pinch out. CRITICAL: this must keep the
 // globe at least filling its MapView viewport (globeBox = 1.4× screen). Below the
